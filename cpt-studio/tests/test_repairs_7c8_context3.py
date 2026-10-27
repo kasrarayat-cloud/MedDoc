@@ -456,3 +456,47 @@ class FieldAboveOrPhraseAfterRequestTests(EndToEnd):
                 encounter_id = self.finished(HEAD + 'Colonoscopy report\n' + lines + '\n' + COLO_BODY)
                 self.assertEqual(self.dates_sent(encounter_id), [[]])
                 self.assertNotEqual(self.bucket(encounter_id, '45385'), 'excluded')
+
+
+class LetterDateBesideTheEncounterLineTests(DateAssertions, SimpleTestCase):
+    """sk:6 (c2:7's letter, claimed fixed in round 2): a letter's 'Date:' still won over a dated line naming the encounter
+    unless that line was headed 'Re:', 'Regarding:' or 'Subject:' - 'Procedure: Colonoscopy on 10/14/2026', 'Regarding
+    your colonoscopy of 10/14/2026', a sentence ending with the date. The letter's date was sent and the snare
+    polypectomy done on 10/14 was excluded as historical. A bare 'Date:' line names no encounter: a dated line naming
+    the service beside it (one that ends with its date, or with its date and a full stop) makes the date a question."""
+
+    CASES = (HEAD + 'Date: 10/27/2026\nProcedure: Colonoscopy on 10/14/2026\nDear Dr. Synthetic,\n' + COLO_PLAIN,
+             HEAD + 'Date: 10/27/2026\nRegarding your colonoscopy of 10/14/2026\n' + COLO_PLAIN,
+             HEAD + 'Date: 10/27/2026\nDear Dr. Synthetic,\nYour patient underwent colonoscopy on 10/14/2026.\n'
+             + COLO_PLAIN)
+
+    def test_the_letter_s_date_is_a_question(self):
+        for text in self.CASES:
+            with self.subTest(text=text.splitlines()[2][:50]):
+                self.assert_never(text, '2026-10-27')
+                self.assert_conflict(text, '2026-10-27', '2026-10-14')
+
+    def test_alone_a_sentence_ending_with_the_service_s_date_is_kept_as_evidence(self):
+        text = HEAD + 'Your patient underwent colonoscopy on 10/14/2026.\n' + COLO_PLAIN
+        self.assert_asked(text, 'colonoscopy on 10/14/2026')
+        self.assert_member_date(text, '2026-10-14')
+
+    def test_controls(self):
+        self.assert_document(HEAD + 'Date: 10/14/2026\nProcedure: Colonoscopy on 10/14/2026\n' + COLO_PLAIN, '2026-10-14')
+        self.assert_document(HEAD + 'Colonoscopy report - 10/14/2026\nProcedure: Colonoscopy on 10/14/2026\n'
+                             + COLO_PLAIN, '2026-10-14')
+        self.assert_document(HEAD + 'Date: 10/14/2026\nNext colonoscopy: 10/14/2029\n' + COLO_PLAIN, '2026-10-14')
+        self.assert_document(HEAD + 'Date: 10/14/2026\nLast colonoscopy on 05/01/2019.\n' + COLO_PLAIN, '2026-10-14')
+
+
+class LetterDateBesideTheEncounterLineRequestTests(EndToEnd):
+    """sk:6 end to end (E3): the letter's date is never sent; the member's choice of the colonoscopy's date is."""
+
+    def test_e3(self):
+        text = HEAD + 'Date: 10/27/2026\nProcedure: Colonoscopy on 10/14/2026\nDear Dr. Synthetic,\n' + COLO_BODY
+        encounter_id = self.finished(text)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.assertNotEqual(self.bucket(encounter_id, '45385'), 'excluded')
+        self.set_context(encounter_id, {'service_date': '2026-10-14'})
+        self.assertEqual(self.dates_sent(encounter_id), [[], ['Date of service: 2026-10-14']])
+        self.assertNotEqual(self.bucket(encounter_id, '45385'), 'excluded')

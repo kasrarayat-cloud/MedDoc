@@ -303,6 +303,9 @@ class _Candidate:
     # candidate keeps holds no date but its own value (refutation round 3, sk:1), so the dates its evidence reads are the
     # dates it states.
     extra: tuple[Span, ...] = ()
+    # A "Date:" line with no title word (refutation round 3, sk:6): it names no encounter - a letter's or a document's
+    # date - so a dated line naming the service beside it ('line') questions it.
+    bare: bool = False
 
     @property
     def spans(self) -> tuple[Span, ...]:
@@ -769,7 +772,7 @@ def _title_candidates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
             heading = reading == 'own' and form == 'read'
         else:
             reading, source = ('aside' if qualified else 'own' if heading else 'unplaced'), 'title'
-        out.append(_Candidate(span, value, source, reading, form))
+        out.append(_Candidate(span, value, source, reading, form, bare=m is not None and not keyword and not field))
     return tuple(out)
 
 
@@ -783,7 +786,9 @@ def _title_qualified(text: str, ls: int, le: int, m) -> bool:
 
 
 # A date that ends a line near the top ("Colonoscopy - 10/14/2026", "EGD 10/14/2026"): read by _dated_service_line.
-_LINE_END_DATE = cues.rx(r'(?<![\w/-])(?:' + _FULL_DATE + r'|(?P<unread>' + DATE_SHAPE + r'))[ \t]*+$')
+# A sentence's full stop may end the line after the date ("Your patient underwent colonoscopy on 10/14/2026.";
+# refutation round 3, sk:6).
+_LINE_END_DATE = cues.rx(r'(?<![\w/-])(?:' + _FULL_DATE + r'|(?P<unread>' + DATE_SHAPE + r'))[ \t]*+\.?+[ \t]*+$')
 
 
 # A letter's subject line opening a line ("Re: ", "Regarding: ", "Subject: "): the structure is the subject line naming
@@ -794,13 +799,18 @@ _SUBJECT_FIELD = cues.rx(r'[ \t]*+(?:re|regarding|subject|subj)\.?[ \t]*+:[ \t]*
 def _dated_service_line(text: str, ls: int, le: int) -> Optional[_Candidate]:
     """A line near the top that ends with a date and names a service this release codes, but carries no title word
     ("Colonoscopy - 10/14/2026", "EGD 10/14/2026"): documented date text the title grammar does not read. It is never the
-    date and never questions one ('aside'), but when the note gives no usable date of its own it is kept as the
-    evidence a member date must agree with (refutation round 2, rule A: such a line kept nothing, so a member's date
-    became the date and was sent). A line qualified as another occurrence's ("Last colonoscopy 05/01/2019") is not one,
-    and a line naming no service ("Date of birth: ...") is not one. A letter's subject line naming the service ("Re:
-    Colonoscopy on 10/14/2026") names the encounter as a "Re:" title does: a candidate a letter's "Date:" and the note's
-    own labelled date must agree with ('unplaced', as a field title), whatever its qualifier. Any other field naming the
-    service ("Procedure: Colonoscopy ... 2026-10-01", "Indication: ... colonoscopy 2023-05-02") is only evidence."""
+    date and never questions the note's own labelled date or titled heading ('aside', source 'line'), but when the note
+    gives no usable date of its own it is kept as the evidence a member date must agree with (refutation round 2, rule
+    A: such a line kept nothing, so a member's date became the date and was sent). A line qualified as another
+    occurrence's ("Last colonoscopy 05/01/2019") is not one, and a line naming no service ("Date of birth: ...") is not
+    one. A letter's subject line naming the service ("Re: Colonoscopy on 10/14/2026") names the encounter as a "Re:"
+    title does: a candidate a letter's "Date:" and the note's own labelled date must agree with ('unplaced', as a field
+    title), whatever its qualifier. Any other field naming the service ("Procedure: Colonoscopy ... 2026-10-01",
+    "Indication: ... colonoscopy 2023-05-02") is only evidence - beside the note's own labelled date or titled heading.
+    Beside a bare "Date:" line, which names no encounter, every such line is a candidate that date must agree with
+    (refutation round 3, sk:6: "Date: 10/27/2026" won over "Procedure: Colonoscopy on 10/14/2026", "Regarding your
+    colonoscopy of 10/14/2026" or a sentence ending "... colonoscopy on 10/14/2026.", so a letter's date was sent and a
+    snare polypectomy done on 10/14 excluded as historical; only a "Re:", "Regarding:" or "Subject:" line questioned it)."""
     m = _LINE_END_DATE.search(text, ls, le)
     if m is None or m.start() - ls > 80 or not any(p.search(text, ls, m.start()) for p in _THIS_SERVICE):
         return None
@@ -810,7 +820,7 @@ def _dated_service_line(text: str, ls: int, le: int) -> Optional[_Candidate]:
     elif _title_qualified(text, ls, le, None):
         return None
     else:
-        source, reading = 'title', 'aside'
+        source, reading = 'line', 'aside'
     day = None if m.group('unread') is not None else date_from_match(m)
     form = 'read' if day else ('unread' if m.group('unread') is not None else 'invalid')
     # refutation round 3, sk:1: a date before the line's own ("Synthetic, Alex DOB 01/01/1998 Colonoscopy 10/14/26") is
@@ -888,7 +898,10 @@ def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
 
     Every set here is kept by identity, never by a list membership test: that compared each pair of candidates, so
     the fact was quadratic in the note's labelled dates (refutation round 3, sk:3: 'DOS: 10/14/2026' 24,000 times, under
-    the paste cap, overran the analyze stage's 60 s, and 12,000 a member's POST /context)."""
+    the paste cap, overran the analyze stage's 60 s, and 12,000 a member's POST /context).
+
+    A dated line naming the service ('line', _dated_service_line) questions only a bare "Date:" line, which names no
+    encounter (refutation round 3, sk:6: a letter's "Date:" won over "Procedure: Colonoscopy on 10/14/2026")."""
     labels = [c for c in found if c.source == 'label']
     own = [c for c in labels if c.reading == 'own' and c.form == 'read']
     if own:
@@ -898,8 +911,10 @@ def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
     else:
         own = [c for c in found if c.source == 'title' and c.reading == 'own' and c.form == 'read']
         own_ids = {id(c) for c in own}
+        bare = bool(own) and all(c.bare for c in own)
         speaks = [c for c in found if id(c) not in own_ids
-                  and (c.source != 'title' or c.reading in ('own', 'unplaced', 'other'))]
+                  and (c.source not in ('title', 'line') or c.reading in ('own', 'unplaced', 'other')
+                       or (bare and c.source == 'line'))]
         support = [c for c in speaks if c.reading != 'aside']  # never another occurrence's label that agrees
     values = {c.value for c in own}
     unusable = [c for c in (speaks if own else found) if c.form != 'read']
