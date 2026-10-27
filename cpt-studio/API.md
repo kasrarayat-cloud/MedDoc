@@ -177,6 +177,17 @@ is extracted, or when the revision's analysis never finished (it overran its
 limits, the document names procedures more often than the service reads, or it
 failed): nothing is ever sent for a document that could not be read.
 
+## POST /api/encounters/{id}/second-review
+
+Asks for the one bounded second review of the current assessment
+(ARCHITECTURE 5.11); owners and reviewers only (403 otherwise). 201
+`{"second_review": "queued"}`, or 409 with the reason a bound stands (the
+same reason the encounter view's `second_review.reason` shows). The encounter
+view carries `"second_review": {"available": bool, "reason": "...", "items":
+["<unresolved item>", ...], "can_request": bool}`; `items` is empty when no
+documented service is left without a supported proposal. An assessment never
+queues a second review (owner decision 2026-10-27).
+
 ## POST /api/encounters/{id}/stop · /resume · /reconcile
 
 Stop: records an encounter-level Stop; queued stages are cancelled, no further

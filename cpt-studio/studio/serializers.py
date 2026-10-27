@@ -237,6 +237,7 @@ ACTIVITY_SUMMARIES = {
     'revision.addendum': 'Addendum added', 'context.changed': 'Encounter context changed',
     'provider.sending': 'Provider request sent', 'provider.finished': 'Provider response recorded',
     'provider.reused': 'Retained provider result reused (no new request)',
+    'provider.second_review_requested': 'Second provider review requested by a reviewer',
     'provider.reconciled': 'Unknown provider outcome reconciled', 'assessment.created': 'Checks completed',
     'decision.recorded': 'Review decision recorded', 'report.generated': 'Report generated',
     'pipeline.stopped': 'Processing stopped', 'pipeline.resumed': 'Processing resumed',
@@ -255,7 +256,7 @@ def _activity_json(event):
 
 
 def encounter_detail(encounter, membership):
-    from .jobs import busy  # local import: jobs imports this module's peers
+    from .jobs import busy, second_review_status  # local import: jobs imports this module's peers
 
     assessment, clarifications = _assessment_json(encounter, membership)
     revision = encounter.current_revision
@@ -275,6 +276,8 @@ def encounter_detail(encounter, membership):
                      'stages': [{'kind': j.kind, 'state': j.state, 'error': j.error,
                                  'finished_at': _iso(j.finished_at)} for j in jobs]},
         'provider_runs': [_provider_run_json(r) for r in encounter.provider_runs.order_by('created_at')],
+        'second_review': {**second_review_status(encounter),
+                          'can_request': membership.can_review},
         'assessment': assessment,
         'clarifications': [_clarification_json(c) for c in clarifications],
         'decisions': {'history': [_decision_json(d) for d in encounter.decisions.select_related(

@@ -16,6 +16,7 @@ urlpatterns = [
     path('api/encounters/<uuid:encounter_id>/stop', api.stop),
     path('api/encounters/<uuid:encounter_id>/resume', api.resume),
     path('api/encounters/<uuid:encounter_id>/reconcile', api.reconcile),
+    path('api/encounters/<uuid:encounter_id>/second-review', api.second_review),
     path('api/encounters/<uuid:encounter_id>/reports', api.create_report),
     path('api/encounters/<uuid:encounter_id>/original', api.original),
     path('api/reports/<uuid:report_id>/download', api.download_report),

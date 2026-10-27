@@ -312,6 +312,20 @@ def resume(request, encounter_id):
 
 @require_POST
 @api_view
+def second_review(request, encounter_id):
+    """Ask for the one bounded second review of the current assessment (ARCHITECTURE 5.11): a workspace owner or
+    reviewer asks; an assessment never queues one (owner decision 2026-10-27)."""
+    encounter, membership = scoped_encounter(request.user, encounter_id)
+    _require_reviewer(membership)
+    try:
+        jobs.request_second_review(encounter, request.user)
+    except jobs.Refused as exc:
+        raise ApiError(409, str(exc))
+    return JsonResponse({'second_review': 'queued'}, status=201)
+
+
+@require_POST
+@api_view
 def reconcile(request, encounter_id):
     data = _payload(request)
     encounter, membership = scoped_encounter(request.user, encounter_id)

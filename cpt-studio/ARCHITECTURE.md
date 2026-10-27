@@ -1560,10 +1560,20 @@ stay distinct: only practitioner sources are connected.
 ### 5.11 The bounded second review
 
 When an assessment leaves a documented service (or act) of a supported family
-without a supported proposal, the assess stage queues ONE `review2` job
-(idempotency key `review2:<revision>:<service date>`): never while the
-encounter is stopped, never for a revision and date that already had one,
-whatever its outcome, only after the primary request succeeded. It sends the
+without a supported proposal, the encounter offers ONE second review, and a
+workspace owner or reviewer asks for it (`POST .../second-review`,
+`jobs.request_second_review`; the encounter view's `second_review` says whether
+it can be asked for and why not). An assessment never queues one: owner
+decision 2026-10-27 (narrow, install-first), after refutation r1 found the
+reader's misreadings each turning into an automatic paid request. The request
+queues ONE `review2` job (idempotency key `review2:<revision>:<assessment>`)
+under the bounds the automatic one kept (`jobs._second_review_blocker`): never
+while a stage is queued or running, never for a revision and date that already
+had one, whatever its outcome (a reconciled unknown one releases another), only
+for the current assessment of a primary request that succeeded and was not
+refused whole, only with a known, agreed service date, never while an outcome
+is unknown, never when its request repeats one the provider already answered;
+`stage_review2` checks them again when it runs. It sends the
 provider the text that documents those services (the services' report parts,
 ≤ 20,000 characters) with the date line, under the same send discipline as
 predict (`jobs._send`: single-flight advisory lock, the run written reserved

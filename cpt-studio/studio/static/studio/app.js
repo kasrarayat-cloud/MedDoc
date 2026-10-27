@@ -622,7 +622,19 @@ function documentedServices(doc) {
   });
   const attributions = (inventory.attributions || []).map(item => item.role);
   if (attributions.length) items.push(checkItem('muted', 'info', 'Another provider\'s services', `The document attributes ${attributions.join(', ')} services to their own providers; they are never coded for the performing physician.`));
-  return `${sectionHeading('Documented services', services.length)}<div class="check-list-card">${items.join('')}</div>`;
+  return `${sectionHeading('Documented services', services.length)}<div class="check-list-card">${items.join('')}${secondReviewItem(doc)}</div>`;
+}
+
+// The bounded second review is asked for by a reviewer, never queued by an assessment (owner decision 2026-10-27).
+function secondReviewItem(doc) {
+  const second = doc.second_review;
+  const items = Array.isArray(second?.items) ? second.items : [];
+  if (!items.length) return '';
+  const what = items.join('; ');
+  if (!second.available) return checkItem('muted', 'info', 'Second provider review', `${second.reason || 'Not available now.'} Unresolved: ${what}.`);
+  const body = `One more provider request, sent with only the text that documents ${items.length === 1 ? 'this item' : 'these items'}: ${what}. It is made once for this document and date; its codes fill only these items and each still needs a reviewer's decision.`;
+  const button = doc.permissions?.can_review && second.can_request ? `<div class="progress-actions"><button type="button" class="button secondary" data-action="second-review">Ask the provider once more</button></div>` : '';
+  return checkItem('pending', 'info', 'Second provider review available', body, button);
 }
 
 function unsupportedSection(assessment) {
@@ -1465,6 +1477,20 @@ function resumeProcessing(button) {
   });
 }
 
+function requestSecondReview(button) {
+  if (!state.doc) return undefined;
+  return guarded('second-review', async () => {
+    setBusy(button, true);
+    try {
+      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/second-review`, { method: 'POST', json: {} });
+      await afterChange('Second review requested.');
+    } catch (error) {
+      toast(error.message);
+      setBusy(button, false);
+    }
+  });
+}
+
 function submitReconcile(form) {
   if (!state.doc) return undefined;
   const note = $('#reconcileNote').value.trim();
@@ -1585,6 +1611,7 @@ function onClick(event) {
     addendum: () => openAddendum(action.dataset.clarification),
     stop: () => stopProcessing(action),
     resume: () => resumeProcessing(action),
+    'second-review': () => requestSecondReview(action),
     retry: route,
   })[action.dataset.action]?.();
 }

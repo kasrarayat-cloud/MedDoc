@@ -1,7 +1,9 @@
 """The bounded second review (ARCHITECTURE 5.11), end to end through the pipeline with an in-process provider.
 
-Once per revision and service date, only for a documented service left without a supported proposal, under the same
-send discipline as the primary request; its codes fill only unresolved items. Synthetic data, no network.
+Asked for by a workspace owner or reviewer, never queued by an assessment (owner decision 2026-10-27, narrow
+install-first). Once per revision and service date, only for a documented service left without a supported proposal,
+under the same send discipline as the primary request; its codes fill only unresolved items. Synthetic data, no
+network.
 """
 import hashlib
 import json
@@ -25,6 +27,23 @@ The colonoscope was advanced to the cecum and the examination was completed.
 A 6 mm polyp in the rectum was removed with a cold snare.
 A separate 10 mm flat lesion in the transverse colon was sampled with cold biopsy forceps; it was not removed.
 """
+
+
+def ask(client, encounter_id):
+    """A reviewer asks for the one bounded second review: 201 queued, 409 refused with the reason."""
+    return client.post(f'/api/encounters/{encounter_id}/second-review')
+
+
+def drain_and_ask(client, encounter_id):
+    """The pipeline, then a reviewer's request for the second review whenever the encounter offers one, then the
+    pipeline again: what the automatic second review did before the owner's decision, now by a reviewer's hand."""
+    drain()
+    offered = client.get(f'/api/encounters/{encounter_id}').json()['second_review']
+    if offered['available']:
+        reply = ask(client, encounter_id)
+        assert reply.status_code == 201, reply.content
+    drain()
+    return offered
 
 
 def response(context, quotes):
@@ -87,6 +106,15 @@ class SecondReviewTests(TestCase):
     def test_one_second_review_fills_the_unresolved_biopsy(self):
         encounter_id = self.create()
         drain()
+        self.assertEqual(len(self.provider.requests), 1)  # the assessment queues nothing
+        self.assertFalse(models.Job.objects.filter(encounter_id=encounter_id, kind='review2').exists())
+        offered = self.client.get(f'/api/encounters/{encounter_id}').json()['second_review']
+        self.assertTrue(offered['available'], offered)
+        self.assertTrue(offered['can_request'])
+        self.assertEqual(len(offered['items']), 1)
+        self.assertIn('biopsy', offered['items'][0])
+        self.assertEqual(ask(self.client, encounter_id).status_code, 201)
+        drain()
         runs = list(models.ProviderRun.objects.filter(encounter_id=encounter_id).order_by('created_at'))
         self.assertEqual([(r.purpose, r.state) for r in runs], [('primary', 'succeeded'), ('second_review', 'succeeded')])
         second = runs[1]
@@ -104,15 +132,37 @@ class SecondReviewTests(TestCase):
         for span in codes['45380'].evidence:  # moved from the excerpt to the revision, and exact there
             self.assertEqual(text[span['start']:span['end']], span['text'])
         self.assertEqual(assessment.completeness['unresolved_items'], [])
+        refused = ask(self.client, encounter_id)
+        self.assertEqual(refused.status_code, 409, refused.content)
         drain()
         self.assertEqual(len(self.provider.requests), 2)  # bounded: never a third
+        events = list(models.AuditEvent.objects.filter(encounter_id=encounter_id,
+                                                       event='provider.second_review_requested'))
+        self.assertEqual([e.actor_id for e in events], [self.reviewer.pk])
+
+    def test_a_viewer_cannot_ask_and_an_assessment_never_queues_one(self):
+        """Owner decision 2026-10-27 (narrow install-first): the one bounded second review is a reviewer's request.
+        A member who cannot review is refused; re-assessing (a metadata change) queues nothing either."""
+        encounter_id = self.create()
+        drain()
+        viewer = f.member(self.ws, f.user('viewer'), role=models.Membership.VIEWER)
+        other = Client(enforce_csrf_checks=False)
+        other.force_login(viewer)
+        self.assertFalse(other.get(f'/api/encounters/{encounter_id}').json()['second_review']['can_request'])
+        self.assertEqual(ask(other, encounter_id).status_code, 403)
+        reply = self.client.post(f'/api/encounters/{encounter_id}/context', data=json.dumps({'setting': 'asc'}),
+                                 content_type='application/json')
+        self.assertIn(reply.status_code, (200, 201), reply.content)
+        drain()
+        self.assertFalse(models.Job.objects.filter(encounter_id=encounter_id, kind='review2').exists())
+        self.assertEqual(len(self.provider.requests), 1)
 
     def test_a_refused_second_review_response_is_a_failed_check_and_never_reported_used(self):
         """A second-review response the adapter refuses whole (here over its selection cap) decides nothing: its check
         fails, as provider.status does for a refused primary (round 7 bypass:1), and the report never calls it used."""
         self.provider.later = [('45380', 'was sampled with cold biopsy forceps')] * 65
         encounter_id = self.create()
-        drain()
+        drain_and_ask(self.client, encounter_id)
         encounter = models.Encounter.objects.get(pk=encounter_id)
         assessment = encounter.current_assessment
         check = next(c for c in assessment.encounter_checks if c['id'] == 'provider.second_review')
@@ -133,6 +183,9 @@ class SecondReviewTests(TestCase):
         self.provider.first = [('45385', 'was removed with a cold snare')] * 65
         encounter_id = self.create()
         drain()
+        reply = ask(self.client, encounter_id)
+        self.assertEqual(reply.status_code, 409, reply.content)
+        drain()
         runs = list(models.ProviderRun.objects.filter(encounter_id=encounter_id))
         self.assertEqual([(r.purpose, r.state) for r in runs], [('primary', 'succeeded')])
         self.assertEqual(len(self.provider.requests), 1)
@@ -142,26 +195,29 @@ class SecondReviewTests(TestCase):
         time: no second review is paid for until the date is known."""
         encounter_id = self.create(REPORT.replace('Date of service: 2026-10-16\n', ''))
         drain()
+        reply = ask(self.client, encounter_id)
+        self.assertEqual(reply.status_code, 409, reply.content)
+        self.assertIn('date of service', reply.json()['error'])
+        drain()
         runs = list(models.ProviderRun.objects.filter(encounter_id=encounter_id))
         self.assertEqual([(r.purpose, r.service_date) for r in runs], [('primary', None)])
         self.assertEqual(len(self.provider.requests), 1)
 
     def test_no_second_review_once_one_was_made_for_the_revision_and_date(self):
         encounter_id = self.create()
-        drain()
+        drain_and_ask(self.client, encounter_id)
         reply = self.client.post(f'/api/encounters/{encounter_id}/context', data=json.dumps({'setting': 'asc'}),
                                  content_type='application/json')
         self.assertIn(reply.status_code, (200, 201), reply.content)
+        drain()
+        self.assertEqual(ask(self.client, encounter_id).status_code, 409)
         drain()
         self.assertEqual(len(self.provider.requests), 2)
 
     def test_a_stop_before_it_runs_sends_nothing_and_resume_runs_it_once(self):
         encounter_id = self.create()
-        while True:  # through the first assess, which queues the second review
-            job = jobs.claim_next()
-            jobs.run_job(job)
-            if job.kind == models.Job.ASSESS:
-                break
+        drain()
+        self.assertEqual(ask(self.client, encounter_id).status_code, 201)
         self.assertTrue(models.Job.objects.filter(encounter_id=encounter_id, kind='review2', state='queued').exists())
         self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/stop').status_code, 200)
         drain()
@@ -174,7 +230,7 @@ class SecondReviewTests(TestCase):
     def test_an_unknown_second_review_blocks_every_further_send(self):
         self.provider.outcomes = ['succeeded', 'unknown']
         encounter_id = self.create()
-        drain()
+        drain_and_ask(self.client, encounter_id)
         runs = list(models.ProviderRun.objects.filter(encounter_id=encounter_id).order_by('created_at'))
         self.assertEqual([r.state for r in runs], ['succeeded', 'unknown'])
         encounter = models.Encounter.objects.get(pk=encounter_id)
@@ -182,6 +238,8 @@ class SecondReviewTests(TestCase):
         self.assertIsNone(encounter.current_assessment.second_run_id)
         reply = self.client.post(f'/api/encounters/{encounter_id}/context', data=json.dumps({'setting': 'asc'}),
                                  content_type='application/json')
+        drain()
+        self.assertEqual(ask(self.client, encounter_id).status_code, 409)
         drain()
         self.assertEqual(len(self.provider.requests), 2)
 
@@ -191,13 +249,18 @@ class SecondReviewTests(TestCase):
         text = REPORT[REPORT.index('Colonoscopy report'):]
         encounter_id = self.create(text)
         drain()
+        offered = self.client.get(f'/api/encounters/{encounter_id}').json()['second_review']
+        self.assertFalse(offered['available'])
+        self.assertIn('already answered', offered['reason'])
+        self.assertEqual(ask(self.client, encounter_id).status_code, 409)
+        drain()
         self.assertEqual(len(self.provider.requests), 1)
         runs = list(models.ProviderRun.objects.filter(encounter_id=encounter_id).values_list('purpose', 'sent'))
         self.assertEqual(runs, [('primary', True)])
 
     def test_an_excerpt_pasted_as_its_own_note_reuses_the_answered_request(self):
         first = self.create()
-        drain()
+        drain_and_ask(self.client, first)
         excerpt = models.ProviderRun.objects.get(encounter_id=first, purpose='second_review').contexts[0]
         self.assertEqual(len(self.provider.requests), 2)
         second = self.create(excerpt)
@@ -212,7 +275,7 @@ class SecondReviewTests(TestCase):
         identical primary result; the second review made for it is used again, never lost and never paid twice."""
         import json
         encounter_id = self.create()
-        drain()
+        drain_and_ask(self.client, encounter_id)
         self.assertEqual(len(self.provider.requests), 2)
         for value in ('2026-10-22', ''):
             with self.captureOnCommitCallbacks(execute=True):
@@ -236,7 +299,7 @@ class SecondReviewTests(TestCase):
         self.provider.first = []
         self.provider.later = [('43239', 'The mucosa was normal throughout.')]
         encounter_id = self.create(text)
-        drain()
+        drain_and_ask(self.client, encounter_id)
         self.assertEqual(len(self.provider.requests), 2)
         assessment = models.Encounter.objects.get(pk=encounter_id).current_assessment
         self.assertFalse(assessment.proposals.filter(bucket='selected', code='43239').exists())
@@ -246,14 +309,18 @@ class SecondReviewTests(TestCase):
     def test_no_second_review_when_every_documented_service_is_accounted_for(self):
         self.provider.first = [('45385', 'was removed with a cold snare'),
                                ('45380', 'was sampled with cold biopsy forceps')]
-        self.create()
+        encounter_id = self.create()
+        drain()
+        offered = self.client.get(f'/api/encounters/{encounter_id}').json()['second_review']
+        self.assertEqual((offered['available'], offered['items']), (False, []))
+        self.assertEqual(ask(self.client, encounter_id).status_code, 409)
         drain()
         self.assertEqual(len(self.provider.requests), 1)
 
     def test_reconciling_the_unknown_second_review_allows_one_more(self):
         self.provider.outcomes = ['succeeded', 'unknown']
         encounter_id = self.create()
-        drain()
+        drain_and_ask(self.client, encounter_id)
         unknown = models.ProviderRun.objects.get(encounter_id=encounter_id, state='unknown')
         self.assertEqual(unknown.purpose, 'second_review')
         reply = self.client.post(f'/api/encounters/{encounter_id}/reconcile',
@@ -261,6 +328,9 @@ class SecondReviewTests(TestCase):
                                                   'note': 'Checked the provider console: no response was recorded.'}),
                                  content_type='application/json')
         self.assertIn(reply.status_code, (200, 201), reply.content)
+        drain()
+        self.assertEqual(len(self.provider.requests), 2)  # reconciling releases one more; a reviewer asks for it
+        self.assertEqual(ask(self.client, encounter_id).status_code, 201)
         drain()
         runs = list(models.ProviderRun.objects.filter(encounter_id=encounter_id).order_by('created_at'))
         sent = [r for r in runs if r.sent]
@@ -329,7 +399,7 @@ class NoSecondReviewForWhatWasNotDoneTests(TestCase):
         with mock.patch('studio.jobs.get_provider', return_value=provider):
             reply = self.client.post('/api/encounters', {'text': text, 'synthetic_attestation': 'yes'})
             self.assertEqual(reply.status_code, 201, reply.content)
-            drain()
+            drain_and_ask(self.client, reply.json()['id'])  # a reviewer asks whenever one is offered
         purposes = list(models.ProviderRun.objects.filter(encounter_id=reply.json()['id'])
                         .order_by('created_at').values_list('purpose', flat=True))
         return len(provider.requests), purposes

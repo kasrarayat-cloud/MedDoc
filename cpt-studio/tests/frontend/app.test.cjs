@@ -522,3 +522,25 @@ test('the review dialog takes its attestation from attestationText (the server e
   assert.ok(source.includes("$('#reviewAckText').textContent = attestationText(state.session);"));
   assert.equal(source.split("$('#reviewAckText').textContent =").length - 1, 1, 'one writer of the attestation text');
 });
+
+test('the bounded second review is offered to a reviewer as a request, never shown as made', () => {
+  const service = { id: 'S1', family: 'gi.colonoscopy', kind: 'colonoscopy', status: 'performed', acts: [] };
+  const base = { assessment: { services: { services: [service] }, completeness: { unresolved_items: [
+    { service: 'S1', label: 'forceps biopsy of the <b>lesion</b>', reason: 'not_covered', second_review: true }] } } };
+  const offered = { available: true, reason: '', items: ['forceps biopsy of the <b>lesion</b>'], can_request: true };
+  const reviewer = app.documentedServices({ ...base, permissions: { can_review: true }, second_review: offered });
+  assert.equal(count(reviewer, 'data-action="second-review"'), 1);
+  assert.ok(reviewer.includes('Second provider review available'));
+  assert.ok(reviewer.includes('&lt;b&gt;lesion&lt;/b&gt;') && !reviewer.includes('<b>lesion</b>'));
+  const viewer = app.documentedServices({ ...base, permissions: { can_review: false },
+    second_review: { ...offered, can_request: false } });
+  assert.equal(count(viewer, 'data-action="second-review"'), 0);
+  const refused = app.documentedServices({ ...base, permissions: { can_review: true },
+    second_review: { available: false, reason: 'A second review was already made for this document and date.',
+      items: offered.items, can_request: true } });
+  assert.equal(count(refused, 'data-action="second-review"'), 0);
+  assert.ok(refused.includes('already made for this document and date'));
+  const none = app.documentedServices({ ...base, permissions: { can_review: true },
+    second_review: { available: false, reason: '', items: [], can_request: true } });
+  assert.ok(!none.includes('Second provider review'));
+});

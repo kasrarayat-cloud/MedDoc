@@ -573,13 +573,11 @@ def stage_assess(job):
                                                second_run=second)
     except ValueError as exc:
         raise StageFailure(f'The assessment was not recorded: {exc}') from exc
-    queued = _maybe_second_review(job, encounter, revision, context, run, assessment, second,
-                                  usable=normalized is not None and not normalized.refused)
+    # The bounded second review is never queued here: a workspace owner or reviewer asks for it
+    # (request_second_review; owner decision 2026-10-27, narrow install-first).
     out = {'assessment': str(assessment.pk), 'provider_status': provider_status}
     if second is not None:
         out['second_review'] = str(second.pk)
-    if queued is not None:
-        out['second_review_queued'] = str(queued.pk)
     return out
 
 
@@ -642,31 +640,90 @@ def _second_inputs(second):
                               normalized.problems, normalized.refused)
 
 
-def _maybe_second_review(job, encounter, revision, context, run, assessment, second, usable=True):
-    """Queue ONE bounded second review when the assessment leaves a documented, profiled service without a supported
-    proposal: once per revision and service date, whatever its outcome, only after the primary request succeeded, never
-    while the encounter is stopped, and never again for a revision that already had one."""
-    # Never for a primary response that was refused whole (its proposals were not used: there is nothing to fill),
-    # nor without a known service date (every proposal waits on the date question, and a dated passage cannot be
-    # placed in time: a second review would be paid for a service the date may show was not today's).
-    if not usable or run is None or run.service_date is None:
-        return None
-    if second is not None or run is None or run.state != models.ProviderRun.SUCCEEDED \
-            or run.purpose != models.ProviderRun.PRIMARY or is_stopped(encounter.pk) or get_provider() is None:
-        return None
+def _second_review_blocker(encounter, revision, context, assessment):
+    """Why the one bounded second review cannot be asked for now, or '' when it can (5.11). The bounds are the ones the
+    automatic second review kept (interpretations 10, 19, 22): once per revision and service date whatever its outcome
+    (only a reconciled unknown one releases another), only for the current assessment of a usable primary response,
+    only with a known, unconflicted service date, never while a request has an unknown outcome. stage_review2 checks
+    them again when it runs. Cheap checks first: the encounter view reads this on every refresh."""
+    if busy(encounter):
+        return 'Wait for processing to finish (or stop it) before asking for a second review.'
+    if (assessment is None or revision is None or context is None or assessment.revision_id != revision.pk
+            or assessment.context_id != context.pk):
+        return 'There is no current assessment to review again.'
     items, span = _second_review_items(assessment)
-    if not items or span is None or span[1] - span[0] > SECOND_REVIEW_MAX_CHARS:
-        return None
+    if not items:
+        return 'No documented service is left without a supported proposal.'
+    if span is None or span[1] - span[0] > SECOND_REVIEW_MAX_CHARS:
+        return (f'The text that documents the unresolved services is longer than a second review sends '
+                f'({SECOND_REVIEW_MAX_CHARS:,} characters).')
+    run = assessment.provider_run
+    if run is None or run.state != models.ProviderRun.SUCCEEDED or run.purpose != models.ProviderRun.PRIMARY:
+        return 'Only a successful provider response can be reviewed again.'
+    if run.service_date is None or context_service_date(context) != run.service_date:
+        return 'A second review needs a known, agreed date of service: answer the date question first.'
+    if _second_run_for(revision, run) is not None:
+        return 'A second review was already made for this document and date.'
     earlier = models.ProviderRun.objects.filter(revision=revision, purpose=models.ProviderRun.SECOND_REVIEW,
                                                 service_date=run.service_date)
-    released = earlier.filter(state=models.ProviderRun.UNKNOWN, reconciled_at__isnull=False).count()
     if earlier.exclude(state=models.ProviderRun.UNKNOWN, reconciled_at__isnull=False).exists():
-        return None  # one per revision and date, whatever its outcome; only a reconciled unknown one releases another
-    job2 = enqueue(Job.REVIEW2, encounter=encounter, revision=revision, context=context, provider_run=run,
-                   key=f'review2:{revision.pk}:{run.service_date or "none"}' + (f':after-reconcile:{released}'
-                                                                                 if released else ''),
-                   requested_by=job.requested_by)
-    return job2 if job2.state == Job.QUEUED else None
+        return 'A second review was already requested for this document and date.'
+    if _unreconciled_unknown(encounter):
+        return 'A previous request has an unknown outcome; reconcile it before asking again.'
+    provider = get_provider()
+    if provider is None:
+        return 'The provider is not configured on this installation.'
+    try:
+        _, normalized = _provider_inputs(run)
+    except StageFailure as exc:
+        return str(exc)
+    if normalized is None or normalized.refused:
+        return 'The provider refused the request whole, so a second review has nothing to fill.'
+    try:
+        request = provider.build_request(revision.text[span[0]:span[1]], run.service_date)
+    except ProviderUnavailable:
+        return ''  # stage_review2 records the not-sent run and its reason
+    if request.canonical_sha256 == run.request_sha256 or models.ProviderRun.objects.filter(
+            encounter__workspace=encounter.workspace, provider=provider.name, adapter_version=provider.adapter_version,
+            request_sha256=request.canonical_sha256, state=models.ProviderRun.SUCCEEDED,
+            purpose=models.ProviderRun.PRIMARY).exists():
+        return ('The text that documents the unresolved services is a request the provider already answered, so a '
+                'second review would ask nothing new.')
+    return ''
+
+
+def second_review_status(encounter):
+    """What the encounter view shows about the bounded second review: whether one can be asked for now, why not, and
+    the unresolved items it would ask about."""
+    revision, context, assessment = (encounter.current_revision, encounter.current_context,
+                                     encounter.current_assessment)
+    items = _second_review_items(assessment)[0] if assessment is not None else []
+    reason = _second_review_blocker(encounter, revision, context, assessment) if items else ''
+    return {'available': bool(items) and not reason, 'reason': reason,
+            'items': [item.get('label', '') for item in items][:8]}
+
+
+def request_second_review(encounter, user):
+    """Queue the ONE bounded second review for the current assessment, asked for by a workspace owner or reviewer
+    (owner decision 2026-10-27: never queued by an assessment). Refused with the reason when a bound stands."""
+    with transaction.atomic():
+        encounter = _locked(encounter)
+        revision, context, assessment = (encounter.current_revision, encounter.current_context,
+                                         encounter.current_assessment)
+        reason = _second_review_blocker(encounter, revision, context, assessment)
+        if reason:
+            raise Refused(reason)
+        items, _ = _second_review_items(assessment)
+        clear_stop(encounter)
+        job = enqueue(Job.REVIEW2, encounter=encounter, revision=revision, context=context,
+                      provider_run=assessment.provider_run, key=f'review2:{revision.pk}:{assessment.pk}',
+                      requested_by=user)
+        if job.state != Job.QUEUED:
+            raise Refused('A second review was already requested for this assessment.')
+        audit.record(encounter.workspace, 'provider.second_review_requested', encounter=encounter, actor=user,
+                     items=[item.get('label', '') for item in items][:8])
+        review.refresh_state(encounter)
+    return job
 
 
 def stage_review2(job):
