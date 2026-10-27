@@ -926,7 +926,9 @@ class NegationScopeTests(SimpleTestCase):
                         ('The polyp was neither biopsied nor removed.', 'biopsy'),
                         ('Biopsy not obtained given incomplete exam.', 'biopsy'),
                         ('Polypectomy not performed due to discontinuation of the procedure.', 'snare'),
-                        ('The polyp was not biopsied, nor was it snared.', 'snare')):
+                        ('The polyp was not biopsied, nor was it snared.', 'snare'),
+                        ('Snare polypectomy of the polyp, since it appeared deeply invasive, was not performed.',
+                         'snare')):
             with self.subTest(x=x):
                 colon = one(read(self.REPORT.format(x=x))[1], 'gi.colonoscopy')
                 self.assertIn(kind, kinds(colon, 'negated'))
@@ -935,6 +937,7 @@ class NegationScopeTests(SimpleTestCase):
     def test_a_negation_of_another_predicate_leaves_the_act_done(self):
         for x, kind in (('No bleeding was seen after the polyp was snared.', 'snare'),
                         ('The polyp was snared and no bleeding was seen.', 'snare'),
-                        ('No polyps were seen, and biopsies were taken from the rectum.', 'biopsy')):
+                        ('No polyps were seen, and biopsies were taken from the rectum.', 'biopsy'),
+                        ('Cold snare polypectomy was performed because the polyp did not appear invasive.', 'snare')):
             with self.subTest(x=x):
                 self.assertIn(kind, kinds(one(read(self.REPORT.format(x=x))[1], 'gi.colonoscopy')))

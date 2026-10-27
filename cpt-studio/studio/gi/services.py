@@ -261,7 +261,12 @@ def _not_on_another_predicate(text: str, neg: int, end: int) -> bool:
     if neg < end:
         return False  # the negation precedes or covers the mention ("did not undergo EGD", "not biopsied")
     between = text[end:neg]
-    if SUBORDINATOR.search(between):
+    sub = SUBORDINATOR.search(between)
+    # a subordinate clause the negation lies inside ("... if intake does not improve"), never one set off by commas
+    # that closes before the act's own negated predicate ("Snare polypectomy of the polyp, since it appeared deeply
+    # invasive, was not performed": refutation r1, read as a done snare)
+    if sub and not (re.search(r'^[^,]*,\s*,?\s*$|,\s*(?:(?:it|this|which)\s+)?$', between[sub.end():])
+                    and between[:sub.start()].rstrip().endswith(',')):
         return True
     return bool(COORDINATED_PREDICATE.fullmatch(between)) and bool(re.search(r'ed\Z', text[:end]))
 # "without (any) complication(s) (at all)" ending its clause at a stop, a semicolon, a colon or the line's end ("The
