@@ -340,6 +340,11 @@ REVIEW_OF_RECORDS = _rx(r'\breview(?:ed|ing)?\s+(?:of\s+)?(?:the\s+)?(?:prior|pr
 # "seen", "noted", "held") with nothing closing its phrase - is that event's, unless the mention is inside it: it
 # leaves the act's time in doubt (OTHER_TIME_CUE: held, never excluded - engine._select), never dates it.
 BIRTH_LABEL = _rx(r'(?:\bDOB|\bD\.O\.B\.?|\bdate\s+of\s+birth|\bbirth\s*date|\bborn(?:\s+(?:on|in))?)[ \t]*[:#=-]?[ \t]*$')
+# The date that stamps when text was written - the app's own addendum header ("ADDENDUM (revision 2, added 2026-10-27
+# 08:15 UTC)", jobs.addendum_block_text), a signature's or a dictation's date - is the document's time, never an act's
+# (refutation r1, negtime-10: the stamp had made the act an addendum adds "planned" and excluded its code).
+STAMP_LABEL = _rx(r'(?:\badded|\b(?:e-?|electronically\s+|co-?)?signed|\bdictated|\btranscribed|\bamended|\baddended|'
+                  r'\bfaxed|\bprinted)(?:\s+(?:on|at))?[ \t]*[:#=-]?[ \t]*$')
 CLOCK_TIME = _rx(r'(?:\bat|@)[ \t]*$')
 OTHER_EVENT = _rx(r'\b(?:after|before|when|whenever|once|until|because|since|while|whereas|although|if|unless|which|who|'
                   r'whom|whose|where|whereby)\b|\b(?P<event>found|seen|noted|identified|detected|diagnosed|shown|'
@@ -1411,10 +1416,11 @@ def _elsewhere_time_words(text: str, cs: int, ce: int, pos: int) -> dict[int, st
 
 def _date_owner(text: str, d, cs: int, pos: int) -> str:
     """Whose time the date ``d`` in the clause starting at ``cs`` is, for the mention at ``pos``: '' the clause's own
-    (it dates the act), 'none' no act's (a birth date, a clock time), 'other' another clause's or event's (BIRTH_LABEL,
-    CLOCK_TIME, OTHER_EVENT). Bounded: the clause up to the date, once."""
+    (it dates the act), 'none' no act's (a birth date, a documentation stamp, a clock time), 'other' another clause's or
+    event's (BIRTH_LABEL, STAMP_LABEL, CLOCK_TIME, OTHER_EVENT). Bounded: the clause up to the date, once."""
     head = text[max(cs, d.start - 30):d.start]
-    if BIRTH_LABEL.search(head) or (d.precision == 'year' and d.bare and CLOCK_TIME.search(head)):
+    if BIRTH_LABEL.search(head) or STAMP_LABEL.search(head) \
+            or (d.precision == 'year' and d.bare and CLOCK_TIME.search(head)):
         return 'none'
     opener = None
     for m in OTHER_EVENT.finditer(text, cs, d.start):

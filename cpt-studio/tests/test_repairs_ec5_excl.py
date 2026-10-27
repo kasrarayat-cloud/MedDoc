@@ -317,3 +317,47 @@ class BothReadersAgreeTests(SimpleTestCase):
         # nothing in the passage is read as done today
         line = 'Hemostasis will be achieved with hemoclips at the next EGD if the ulcer bleeds.'
         self.assertEqual(proposal(assessed(EGD.format(x=line), [('43255', line)]), '43255').bucket, 'excluded')
+
+
+class DocumentationStampTests(SimpleTestCase):
+    """negtime-10: the date that stamps when text was written - the app's own addendum header ("ADDENDUM (revision 2,
+    added <stamp>)"), a signature's or a dictation's date - is the document's time, never an act's: the act the addendum
+    adds reads by its own words, and its code is never excluded on the stamp."""
+
+    NOTES = (
+        (HEAD + 'Procedure date: 10/14/2026\nPROCEDURE NOTE: EGD\nIndication: Dyspepsia.\nTechnique: The upper endoscope '
+                'was advanced to the second portion of the duodenum.\nFindings: The esophagus was normal.\nImpression: '
+                'Normal.\n', 'Cold forceps biopsies were also taken from the duodenum to exclude celiac disease.', 'biopsy',
+         '43239'),
+        (HEAD + 'Procedure date: 10/14/2026\nPROCEDURE NOTE: Colonoscopy\nTechnique: The colonoscope was advanced to the '
+                'cecum.\nFindings: The colon was normal.\nImpression: Normal.\n',
+         'A 5 mm sigmoid polyp was also removed with a cold snare.', 'snare', '45385'),
+    )
+
+    @staticmethod
+    def _with_addendum(note, sentence):
+        from datetime import datetime, timezone
+        from studio.jobs import addendum_block_text
+        block = addendum_block_text(2, datetime(2026, 10, 27, 8, 15, tzinfo=timezone.utc), sentence)
+        return note + block, block.strip().splitlines()[0]
+
+    def test_an_addendum_stamp_never_dates_the_act_it_adds(self):
+        for note, sentence, kind, code in self.NOTES:
+            text, header = self._with_addendum(note, sentence)
+            with self.subTest(sentence=sentence):
+                self.assertEqual(statuses(text, kind), ['performed'])
+                for quote in (sentence, header + '\n' + sentence, header):
+                    self.assertNotEqual(proposal(assessed(text, [(code, quote)]), code).bucket, 'excluded')
+
+    def test_a_signature_or_dictation_date_is_no_acts_time(self):
+        for line in ('A 6 mm sigmoid polyp was removed with a cold snare (dictated 10/16/2026).',
+                     'A 6 mm sigmoid polyp was removed with a cold snare, electronically signed 10/16/2026.'):
+            with self.subTest(line=line):
+                self.assertEqual(statuses(COLONOSCOPY.format(x=line), 'snare'), ['performed'])
+
+    def test_controls_an_addendum_s_own_time_still_dates_its_act(self):
+        note, _, _, _ = self.NOTES[1]
+        text, _ = self._with_addendum(note, 'Repeat colonoscopy with polypectomy is planned on 11/20/2026.')
+        self.assertEqual(statuses(text, 'snare'), ['planned'])
+        text, _ = self._with_addendum(note, 'The 5 mm sigmoid polyp had been removed with a cold snare on 09/03/2026.')
+        self.assertEqual(statuses(text, 'snare'), ['historical'])
