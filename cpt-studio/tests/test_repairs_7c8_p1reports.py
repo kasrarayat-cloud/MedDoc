@@ -713,3 +713,72 @@ class UnresolvedCheckNamesTheUnlistedVisitTests(Harness):
         self.assertEqual(check['status'], 'warn')
         self.assertTrue(check['detail'].endswith('No code is added for them and no alternative is promoted.'),
                         check['detail'])
+
+
+# --- skeptic of the first repair, reports-1: the UNRESOLVED closing line over a reading read in part ---------------
+
+PROBLEM_TAIL = ('the documented-service reading reported a problem, listed under DOCUMENTED SERVICES, so a service or act '
+                'in the part it did not read is not listed')
+EXCEPT_VISIT = f', except {UNLISTED_VISIT}, which no proposal accounts for and which is not listed as unresolved'
+
+
+class UnresolvedSectionNamesTheUnlistedVisitTests(Harness):
+    """Skeptic of the reports-1 repair (bc261aee3): the repair named the unlisted visit only on the closing line of a
+    fully reconciled reading. Over a reading read in part (the visit, then a findings sentence of 1,315 characters),
+    _unresolved_section returned the partial-reading line first, so UNRESOLVED read only "none among what was read: the
+    documented-service reading reported a problem, ... so a service or act in the part it did not read is not listed" -
+    that nothing READ lacks a supported proposal - while the visit was read, has none and coding completeness named it.
+    Every closing line names the documented services no proposal accounts for that are not listed."""
+
+    def assessed(self, text, *selections):
+        from tests.test_pipeline_api import FakeProvider
+        self.use(FakeProvider(selections=list(selections)))
+        encounter_id = self.create(text)
+        drain()
+        return encounter_id
+
+    def unresolved(self, encounter_id, kind='draft'):
+        return section(self.txt(encounter_id, kind), 'UNRESOLVED')
+
+    def test_a_reading_read_in_part_names_the_visit_it_read_on_its_closing_line(self):
+        encounter_id = self.assessed(visit_beside_findings_read_in_part(), CECUM)
+        self.assertEqual([n['label'] for n in self.assessment(encounter_id).completeness['not_listed']],
+                         [UNLISTED_VISIT])
+        self.assertEqual(self.detail(encounter_id)['coding']['state'], 'incomplete')
+        expected = f'  - none among what was read{EXCEPT_VISIT}: {PROBLEM_TAIL}'
+        self.assertEqual(self.unresolved(encounter_id), expected)
+        self.decide(encounter_id, '45378', 'approve')
+        self.assertEqual(self.unresolved(encounter_id, 'reviewed'), expected)
+        self.assertNotIn('[', expected)  # never read as an unresolved item by the download verifier
+
+    def test_an_item_listed_beside_the_visit_keeps_the_visit_named(self):
+        read_in_part = visit_beside_findings_read_in_part().replace(
+            'Procedure: Colonoscopy\n', 'Procedure: Colonoscopy\n' + FLAT_LESION_BIOPSY)
+        for name, text, closing in (
+                ('read in part', read_in_part, f'  - no other among what was read{EXCEPT_VISIT}: {PROBLEM_TAIL}'),
+                ('read whole', EM_AND_COLONOSCOPY + FLAT_LESION_BIOPSY,
+                 '  - no other: every other documented act the catalogue reconciles has a selected proposal or is not '
+                 f'separately reported{EXCEPT_VISIT}')):
+            with self.subTest(name):
+                self.fresh(f'Synthetic workspace {name}')
+                encounter_id = self.assessed(text, CECUM)
+                completeness = self.assessment(encounter_id).completeness
+                self.assertEqual(len(completeness['unresolved_items']), 1)
+                self.assertEqual([n['label'] for n in completeness['not_listed']], [UNLISTED_VISIT])
+                lines = self.unresolved(encounter_id).split('\n')
+                self.assertTrue(lines[0].startswith('  - forceps biopsy'), lines)
+                self.assertTrue(lines[0].endswith('[not_covered]'), lines)
+                self.assertEqual(lines[-1], closing)
+                self.assertNotIn(' [', closing)
+
+    def test_control_without_an_unlisted_service_the_closing_lines_stay_as_they_were(self):
+        from tests.test_repairs_ec5_reportfacts import LONG_FINDINGS
+        read_in_part = COLONOSCOPY_ALONE.replace('No polyps were seen.\n', LONG_FINDINGS + '\n')
+        encounter_id = self.assessed(read_in_part, CECUM)
+        self.assertEqual(self.assessment(encounter_id).completeness['not_listed'], [])
+        self.assertEqual(self.unresolved(encounter_id), f'  - none among what was read: {PROBLEM_TAIL}')
+        self.fresh('Synthetic workspace listed')
+        listed = self.assessed(COLONOSCOPY_ALONE + FLAT_LESION_BIOPSY, CECUM)
+        lines = self.unresolved(listed).split('\n')
+        self.assertTrue(lines[0].endswith('[not_covered]'), lines)
+        self.assertFalse(any(line.startswith('  - no other') for line in lines), lines)

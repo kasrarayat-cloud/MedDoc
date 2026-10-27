@@ -753,20 +753,23 @@ NOT_ESTABLISHED = {
 }
 NO_EXACT_PASSAGE = 'no passage matches the revision text exactly'
 # A reading that recorded a problem (a cap, a sentence read in part) speaks only for what it read - which can be part of
-# a service it read, so the closing line never says only whole services can be missing (refutation r1, report-8).
-READ_IN_PART = ('among what was read: the documented-service reading reported a problem, listed under DOCUMENTED '
-                'SERVICES, so a service or act in the part it did not read is not listed',
-                'among what was read: the documented-service reading reported a problem')
+# a service it read, so the closing line never says only whole services can be missing (refutation r1, report-8). It
+# reads "<none|no other> among what was read[, except ...]: <why>".
+READ_IN_PART = ('the documented-service reading reported a problem, listed under DOCUMENTED SERVICES, so a service or '
+                'act in the part it did not read is not listed',
+                'the documented-service reading reported a problem')
 
 
-def _unestablished(documented, which, lines):
+def _unestablished(documented, which, lines, unlisted=''):
     """The closing line of UNRESOLVED (which=0) or CONFLICTS (which=1) when no reconciliation stands behind 'none';
-    None when one does."""
+    None when one does. ``unlisted``: UNRESOLVED's clause naming the documented services no proposal accounts for that
+    are not listed, so the line over a reading read in part never says that a service it read without a proposal is
+    absent (skeptic of refutation 7c8 reports-1: "none among what was read" beside an office visit it had read)."""
     state = documented.get('reconciliation', 'missing')
     if state in NOT_ESTABLISHED:
         return f'  - {NOT_ESTABLISHED[state][which]}'
     if state == 'partial':
-        return f'  - {"no other" if lines else "none"} {READ_IN_PART[which]}'
+        return f'  - {"no other" if lines else "none"} among what was read{unlisted}: {READ_IN_PART[which]}'
     return None
 
 
@@ -779,13 +782,17 @@ def _unresolved_section(snap):
         if item.get('unmatched_evidence'):
             lines.append(f'      ({item["unmatched_evidence"]} passage(s) did not match the revision text exactly '
                          'and are not shown)')
-    closing = _unestablished(documented, 0, lines)
-    if closing:
-        return lines + [closing]
     # A documented service no proposal accounts for that is not listed as unresolved (an office visit beside a same-day
-    # procedure) is named, never covered by "every documented act" (refutation 7c8, reports-1)
+    # procedure) is named on every closing line, never covered by "every documented act" (refutation 7c8, reports-1)
+    # nor by "none among what was read", and beside listed items too (its skeptic)
     others = (', except ' + ', '.join(documented['not_listed']) + ', which no proposal accounts for and which is not '
               'listed as unresolved') if documented.get('not_listed') else ''
+    closing = _unestablished(documented, 0, lines, others)
+    if closing:
+        return lines + [closing]
+    if lines and others:
+        return lines + ['  - no other: every other documented act the catalogue reconciles has a selected proposal or '
+                        f'is not separately reported{others}']
     return lines or ['  - none: every documented act the catalogue reconciles has a selected proposal or is not '
                      f'separately reported{others}']
 
