@@ -1194,6 +1194,19 @@ def _span(text: str, start: int, end: int) -> Span:
 
 # --- clause reading -------------------------------------------------------------------------------------------------
 
+# What a coordinated, relative or absolute predicate with a time of its own is made of (_CLAUSE_CUT's own_time, 7c8
+# skeptic sk:2): its opener, one word of it (an abbreviation's period allowed: "H. pylori"; possessive, so a long word is
+# read once), a plan or cancel participle, never one after "as" ("as planned" is the booking an act kept, cues.
+# AS_BOOKED_BEFORE), and the predicate itself.
+_OWN_TIME_OPENER = r'(?:\s++and\s++|,\s*+(?:and\s++)?(?:(?:which|that|where)\s++)?|\s++(?:which|that|where)\s++)'
+_OWN_TIME_WORD = r"[\w'/-]++\.?\s++"
+_OWN_TIME_NOT_AS = r'(?!as\b)'
+_OWN_TIME_PLAN = r'(?:cancel(?:l)?ed|declined|refused|deferred|postponed|planned|scheduled|recommended|arranged)'
+_OWN_TIME_PREDICATE = (r'(?:' + _OWN_TIME_WORD + r'){0,4}?(?:will|shall|should|may|might|must)\b'
+                       r'|(?:' + _OWN_TIME_WORD + r'){0,4}?(?:was|were|is|are|has\s+been|have\s+been)\s+(?:[\w-]+ly\s+)?'
+                       + _OWN_TIME_PLAN + r'\b'
+                       r'|(?:' + _OWN_TIME_NOT_AS + _OWN_TIME_WORD + r'){1,3}?' + _OWN_TIME_PLAN + r'\b'
+                       r'|(?:we|I|they)\s+(?:plan|plans|intend|intends|recommend|recommends)\b')
 _CLAUSE_CUT = _rx(r';|\s+but\s+|\s+whereas\s+|\s+although\s+|,\s+while\s+'
                   r'|\s+and\s+(?=(?:was|were|is|are)(?:\s+(?:not|never)|' + NEG_CONTRACTION + r')\b)'
                   # "Biopsies were obtained and dilation was not performed": a coordinated subject with its own negated
@@ -1209,9 +1222,13 @@ _CLAUSE_CUT = _rx(r';|\s+but\s+|\s+whereas\s+|\s+although\s+|,\s+while\s+'
                   # its word never dates the act the first predicate states done ("Cold forceps biopsies were obtained
                   # from the antrum and will be sent to pathology" had excluded 43239 as planned). Only after an act
                   # predicate stated before it (clauses()): "Biopsy and polypectomy will be performed" stays one clause.
-                  r'|(?P<own_time>\s+and\s+(?=(?:(?:the|a|an|this|that|its|their|she|he|they|we|I)\s+)?(?:[\w-]+\s+){0,3}?'
-                  r'(?:will|shall)\b|(?:[\w-]+\s+){1,4}?(?:was|were|is|are|has\s+been|have\s+been)\s+(?:[\w-]+ly\s+)?'
-                  r'(?:cancel(?:l)?ed|declined|refused|deferred|postponed|planned|scheduled|recommended|arranged)\b))')
+                  # 7c8 skeptic, sk:2: by its structure, not two wordings - opened by "and", a comma, a relative word or
+                  # an absolute "with" (_OWN_TIME_OPENER), it is a modal of its own ("and results should be available
+                  # next week", ", which will be sent", "and H. pylori treatment will depend"), an auxiliary and a plan
+                  # or cancel participle ("and are scheduled"), a participle with its own subject and no auxiliary ("and
+                  # dilation deferred", "with repeat colonoscopy recommended") or a pronoun's plan ("and we plan").
+                  r'|(?P<own_time>' + _OWN_TIME_OPENER + r'(?=' + _OWN_TIME_PREDICATE + r')'
+                  r'|\s++with\s++(?=(?:' + _OWN_TIME_NOT_AS + _OWN_TIME_WORD + r'){1,3}?' + _OWN_TIME_PLAN + r'\b))')
 
 
 def _bounded_clause(text: str, clause: tuple[int, int], pos: int, end: int) -> tuple[int, int]:

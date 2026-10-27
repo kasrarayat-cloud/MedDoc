@@ -110,3 +110,51 @@ class NegationListEndsAtANewClauseTests(SimpleTestCase):
                 (EGD, 'No biopsies were taken after the dilation.', 'biopsy')):
             with self.subTest(line=line):
                 self.assertEqual(statuses(template.format(x=line), kind), ['negated'])
+
+
+class AnotherPredicatesTimeTests(SimpleTestCase):
+    """sk:2 (negtime-4, claimed fixed by 06eb17aa8): the cut gave a coordinated predicate its own time only in two
+    wordings ("and" with a subject and "will", or "and" with one to four words, an auxiliary and a plan or cancel
+    participle), so a relative "which will", an absolute "with ... recommended", a verbless "and dilation deferred",
+    "and are scheduled", "and we plan", "and results should be available next week" and "and H. pylori treatment will"
+    still dated the act the sentence states done, and its code was excluded. After an act predicate stated done, a
+    coordinated, relative or absolute predicate with a plan, future or cancel word of its own is its own clause."""
+
+    CASES = (
+        (EGD, 'Cold forceps biopsies were obtained from the antrum, which will be sent to pathology.', 'biopsy', '43239'),
+        (EGD, 'Biopsies were taken from the antrum and results should be available next week.', 'biopsy', '43239'),
+        (EGD, 'Biopsies of the distal esophageal stricture were obtained and dilation deferred until pathology '
+              'returns.', 'biopsy', '43239'),
+        (EGD, 'Cold forceps biopsies were obtained from the antrum and are scheduled for pathology review.', 'biopsy',
+         '43239'),
+        (EGD, 'Cold forceps biopsies were obtained from the antrum and we plan to review the results at the next '
+              'visit.', 'biopsy', '43239'),
+        (EGD, 'Biopsies were taken from the antrum and H. pylori treatment will depend on pathology.', 'biopsy',
+         '43239'),
+        (COLONOSCOPY, 'A 6 mm sigmoid polyp was removed with a cold snare with repeat colonoscopy recommended in 3 '
+                      'years.', 'snare', '45385'),
+        (COLONOSCOPY, 'A 6 mm sigmoid polyp was removed with a cold snare, repeat colonoscopy planned in 3 years.',
+         'snare', '45385'),
+    )
+
+    def test_the_act_reads_by_its_own_predicate_and_is_never_excluded(self):
+        for template, line, kind, code in self.CASES:
+            with self.subTest(line=line):
+                text = template.format(x=line)
+                self.assertEqual(statuses(text, kind), ['performed'])
+                _not_excluded(self, text, code, line)
+
+    def test_controls_an_acts_own_plan_or_cancel_word_still_dates_it(self):
+        for template, line, kind, status in (
+                (EGD, 'Biopsies will be obtained, which will be sent to pathology.', 'biopsy', 'planned'),
+                (EGD, 'Biopsies were deferred and will be taken at the next EGD.', 'biopsy', 'cancelled'),
+                (COLONOSCOPY, 'Polypectomy is planned with a cold snare at the next colonoscopy.', 'snare', 'planned'),
+                (COLONOSCOPY, 'Cold snare polypectomy will be performed, with biopsies recommended.', 'snare',
+                 'planned'),
+                (COLONOSCOPY, 'A polyp was seen and will be removed with a cold snare at the next colonoscopy.', 'snare',
+                 'planned'),
+                # the act in the coordinated predicate reads by that predicate's own time
+                (EGD, 'The esophagus was dilated with a 15 mm balloon, and biopsies will be taken at the next EGD.',
+                 'biopsy', 'planned')):
+            with self.subTest(line=line, kind=kind):
+                self.assertEqual(statuses(template.format(x=line), kind), [status])
