@@ -189,10 +189,15 @@ class VisitTitleIsTheNotesOwnTests(DateAssertions, SimpleTestCase):
     heading; another discipline's document is a report or a note."""
 
     def test_the_title_s_date_is_documented(self):
+        # Refutation round 3, sk:4: a title naming another discipline is never the note's heading, whatever its title
+        # word - reading every visit or consultation title as the note's own made "Surgical pathology consultation:
+        # 10/17/2026" the documented date, sent, and an act done on 10/14 excluded against it. These two name a nurse and
+        # a CT, so they are asked (an over-hold, a known limit; this pin had them documented): the title's date is the
+        # evidence, the member's 1998-01-01 a member conflict, and the member's 2026-10-20 settles it.
         for title in ('Nurse practitioner visit - 10/20/2026', 'Anemia and abnormal CT consultation - 10/20/2026'):
             with self.subTest(title=title):
                 text = HEAD + title + '\n' + OFFICE_BODY
-                self.assert_document(text, '2026-10-20')
+                self.assert_asked(text, title)
                 self.assert_member_conflict(text, ELENA_DATE)
                 self.assert_member_date(text, '2026-10-20')
 
@@ -535,8 +540,12 @@ class RequestDateTests(TestCase):
     def test_c2_3_a_member_date_never_replaces_a_visit_title_s_date(self):
         text = HEAD + 'Nurse practitioner visit - 10/20/2026\n' + OFFICE_BODY
         self.assert_held(self.finished(text, service_date=ELENA_DATE))
+        # refutation round 3, sk:4: the title names a nurse, so its date is asked (this pin had it sent): a dateless
+        # request, then the member's choice of the title's date is sent
         encounter_id = self.finished(text)
-        self.assertEqual(self.dates_sent(encounter_id), [['Date of service: 2026-10-20']])
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.set_context(encounter_id, {'service_date': '2026-10-20'})
+        self.assertEqual(self.dates_sent(encounter_id), [[], ['Date of service: 2026-10-20']])
 
     def test_c2_5_a_letter_or_title_date_is_never_sent_for_the_labelled_one(self):
         for text in (HEAD + 'Date: 10/16/2026\nDate of service: 10/14/2026 (recall due in 3 years)\n' + COLO_PLAIN,

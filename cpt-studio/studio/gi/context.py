@@ -655,16 +655,19 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
 
 def _title_names(words: str, keyword: Optional[str]) -> str:
     """What a dated title names (refutation round 2, c2:3 and c2:7): 'own' - this note's heading: an encounter (a visit,
-    encounter or consultation title, whoever saw the patient and whatever it was for), a bare "Date:", a note no other
-    discipline writes, or a report of a service this release codes; 'other' - another discipline's document or a report
-    this reader cannot place ("Biopsy report", "Laboratory report"). A service name speaks only for the words it covers:
-    "Colonoscopy pathology report" names a pathology report, "Endoscopic ultrasound report" an EUS."""
+    encounter or consultation title, whatever it was for), a bare "Date:", a note, or a report of a service this release
+    codes; 'other' - another discipline's document or a report this reader cannot place ("Biopsy report", "Laboratory
+    report"). A title naming another discipline is never the note's heading, whatever its title word (refutation round
+    3, sk:4: "Surgical pathology consultation: 10/17/2026" was read as the note's own, so 10/17 was sent and a snare
+    polypectomy done on 10/14 was excluded as historical): it is kept as the evidence of the date asked. A service name
+    speaks only for the words it covers: "Colonoscopy pathology report" names a pathology report, "Endoscopic
+    ultrasound report" an EUS."""
     kind = (keyword or '').lower()
-    if kind in ('', 'visit', 'encounter', 'consultation', 'consult'):
-        return 'own'
     covered = [(m.start(), m.end()) for pattern in _THIS_SERVICE for m in pattern.finditer(words)]
     if any(not any(s <= o.start() and o.end() <= e for s, e in covered) for o in _OTHER_DOCUMENT.finditer(words)):
         return 'other'
+    if kind in ('', 'visit', 'encounter', 'consultation', 'consult'):
+        return 'own'
     return 'other' if kind == 'report' and not covered else 'own'
 
 

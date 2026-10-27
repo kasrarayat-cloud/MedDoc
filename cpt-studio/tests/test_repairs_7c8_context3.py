@@ -331,3 +331,54 @@ class QualifierInAnotherFieldRequestTests(EndToEnd):
         encounter_id = self.finished(HEAD + 'GI office visit\nAppointment: scheduled Visit Date: 11/24/2026\n'
                                      + OFFICE_BODY)
         self.assertEqual(self.dates_sent(encounter_id), [[]])
+
+
+class AnotherDisciplineTitleTests(DateAssertions, SimpleTestCase):
+    """sk:4 (a regression of 0e639e79f's _title_names): every visit, encounter, consultation or consult title was the
+    note's own heading, whatever discipline it named, so 'Surgical pathology consultation: 10/17/2026' above a
+    colonoscopy gave the documented date 10/17; it was sent and the snare polypectomy done on 10/14 was excluded as
+    historical. A title naming another discipline is never the note's heading, whatever its title word: it is kept as
+    the evidence of the date asked, as 'Colonoscopy pathology report' already was."""
+
+    TITLES = ('Surgical pathology consultation: 10/17/2026', 'Pathology consultation: 10/17/2026',
+              'Pathology consult - 10/17/2026', 'Path consult: 10/17/2026', 'Pathology encounter - 10/17/2026',
+              'Histology visit - 10/17/2026', 'Radiology consultation - 10/09/2026',
+              'Anesthesia consultation - 10/13/2026', 'Surgical pathology consultation report: 10/17/2026')
+
+    def test_the_other_discipline_s_date_is_never_documented(self):
+        for title in self.TITLES:
+            with self.subTest(title=title):
+                text = HEAD + title + '\nSpecimen A: sigmoid polyp - tubular adenoma.\n\n' + COLO_BODY
+                self.assert_never(text, '2026-10-17', '2026-10-09', '2026-10-13')
+                self.assert_asked(text, title)
+
+    def test_a_visit_title_naming_a_role_or_a_finding_of_another_discipline_is_asked(self):
+        # an over-hold (a known limit; round 2 read these as the note's own): the member's date the title reads settles it
+        for title in ('Nurse practitioner visit - 10/20/2026', 'Anemia and abnormal CT consultation - 10/20/2026'):
+            with self.subTest(title=title):
+                text = HEAD + title + '\n' + OFFICE_BODY
+                self.assert_asked(text, title)
+                self.assert_member_date(text, '2026-10-20')
+
+    def test_controls_this_service_s_encounter_titles(self):
+        for title, value in (('GI visit - 10/20/2026', '2026-10-20'), ('GI consultation - 10/20/2026', '2026-10-20'),
+                             ('Office visit - 10/20/2026', '2026-10-20'),
+                             ('Hepatology consult: 10/20/2026', '2026-10-20'),
+                             ('Endoscopic ultrasound report: 10/14/2026', '2026-10-14'),
+                             ('Colonoscopy encounter - 10/14/2026', '2026-10-14')):
+            with self.subTest(title=title):
+                text = HEAD + title + '\n' + VISIT_BODY
+                self.assert_document(text, value)
+                self.assert_member_conflict(text, ELENA_DATE)
+
+
+class AnotherDisciplineTitleRequestTests(EndToEnd):
+    """sk:4 end to end (E4): the pathology consultation's date is never sent and the snare polypectomy done on the
+    colonoscopy's date is never excluded against it."""
+
+    def test_e4_a_surgical_pathology_consultation_above_the_colonoscopy(self):
+        text = (HEAD + 'Surgical pathology consultation: 10/17/2026\nSpecimen A: sigmoid polyp - tubular adenoma.\n\n'
+                + COLO_BODY)
+        encounter_id = self.finished(text)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.assertNotEqual(self.bucket(encounter_id, '45385'), 'excluded')
