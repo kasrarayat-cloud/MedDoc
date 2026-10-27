@@ -586,7 +586,9 @@ const CODING_TONES = { incomplete: 'pending', pending_review: '', reviewed: '', 
 function codingBanner(doc) {
   const coding = doc.coding;
   if (!coding || !coding.statement) return '';
-  const title = lookup({ incomplete: 'Coding for this encounter is incomplete', pending_review: 'Every documented service has a proposal to review', reviewed: 'Every documented service has a reviewed decision', not_established: 'Coding completeness not established' }, coding.state, 'Coding completeness');
+  // pending_review is also a decided set waiting on a context change or processing: its title never says a proposal
+  // is left to review, and the statement says what is missing (refutation 7c8, reports-3).
+  const title = lookup({ incomplete: 'Coding for this encounter is incomplete', pending_review: 'Every documented service has a proposal; the review is not complete', reviewed: 'Every documented service has a reviewed decision', not_established: 'Coding completeness not established' }, coding.state, 'Coding completeness');
   return `<div class="check-list-card">${checkItem(lookup(CODING_TONES, coding.state, 'pending'), coding.state === 'incomplete' ? 'info' : 'shield', title, coding.statement)}</div>`;
 }
 

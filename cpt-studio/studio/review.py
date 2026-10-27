@@ -642,13 +642,35 @@ def _assessment_blockers(encounter, assessment):
     return blockers
 
 
+def _decisions_waiting(assessment):
+    """(waiting, reviewable): the proposals a reviewer decides, and those of them with no decision that stands - counted
+    as readiness counts them (_assessment_blockers)."""
+    current = current_decisions(assessment)
+    waiting = reviewable = 0
+    for proposal in assessment.proposals.all():
+        decision = current.get(proposal.pk)
+        if not _reviewable(proposal, decision):
+            continue
+        reviewable += 1
+        if decision is None or decision.action not in (APPROVE, REJECT, CONFIRM):
+            waiting += 1
+    return waiting, reviewable
+
+
+def _sentence(text):
+    plain = str(text).strip()
+    return plain if not plain or plain.endswith(('.', '!', '?')) else f'{plain}.'
+
+
 def coding_completeness(encounter):
     """Whether the ENCOUNTER's coding is complete - kept apart from whether one proposal is ready for review.
 
     'incomplete' while a documented service has no supported proposal, a conflict in the record is unanswered, or a
-    question is open; 'pending_review' when every documented service has a proposal but decisions are missing;
-    'reviewed' when the reviewed report could be produced. Never 'verified': code-set membership and NCCI edits are not
-    connected, and the documented-service reading can miss wording it does not recognise."""
+    question is open; 'pending_review' when every documented service has a proposal and the reviewed report cannot be
+    produced yet - its statement counts the decisions missing, or, when every proposal is decided, names what readiness
+    still waits for (refutation 7c8, reports-3); 'reviewed' when the reviewed report could be produced. Never 'verified':
+    code-set membership and NCCI edits are not connected, and the documented-service reading can miss wording it does
+    not recognise."""
     assessment = live_assessment(encounter)
     if assessment is None:
         return {'state': 'not_established', 'statement': 'The current revision has not been assessed yet.',
@@ -668,12 +690,25 @@ def coding_completeness(encounter):
         return {'state': 'incomplete', 'reasons': reasons,
                 'statement': 'Coding for this encounter is incomplete: ' + '; '.join(reasons) + '. Supported proposals '
                              'stay available for review. ' + standing}
-    if readiness(encounter)['reviewed']:
+    ready = readiness(encounter)
+    if ready['reviewed']:
         return {'state': 'reviewed', 'reasons': [],
                 'statement': 'Every documented service has a proposal with a reviewer\'s decision. This is reviewed, '
                              'not verified, coding. ' + standing}
+    # A decision is said to be missing only of the proposals that have none: a decided set waiting on a context change,
+    # processing or a gate is told what it waits for (refutation 7c8, reports-3: "each still needs a reviewer's
+    # decision" beside current approvals that carried unchanged once the re-assessment ran).
+    waiting, reviewable = _decisions_waiting(assessment)
+    if waiting:
+        missing = ('each still needs a reviewer\'s decision' if waiting == reviewable else
+                   f'{waiting} of {reviewable} still need{"s" if waiting == 1 else ""} a reviewer\'s decision')
+        return {'state': 'pending_review', 'reasons': [],
+                'statement': f'Every documented service has a proposal; {missing}. ' + standing}
+    lead = ('Every documented service has a proposal with a reviewer\'s decision' if reviewable
+            else 'No proposal waits for a reviewer\'s decision')
     return {'state': 'pending_review', 'reasons': [],
-            'statement': 'Every documented service has a proposal; each still needs a reviewer\'s decision. ' + standing}
+            'statement': f'{lead}, but the review is not complete. '
+                         + ''.join(f'{_sentence(blocker)} ' for blocker in ready['blockers']) + standing}
 
 
 def readiness(encounter):

@@ -358,3 +358,72 @@ class DocumentedVisitWithoutAProposalTests(Harness):
         closing = section(self.txt(alone, 'reviewed'), 'UNRESOLVED')
         self.assertEqual(closing, '  - none: every documented act the catalogue reconciles has a selected proposal or '
                                   'is not separately reported')
+
+
+# --- reports-3: "each still needs a reviewer's decision" -------------------------------------------------------------
+
+STILL_NEEDS = "each still needs a reviewer's decision"
+DECIDED = "Every documented service has a proposal with a reviewer's decision, but the review is not complete."
+CONTEXT_PENDING = 'The encounter context changed; re-assessment has not finished.'
+
+
+class PendingReviewSaysWhatIsMissingTests(Harness):
+    """reports-3: both proposals approved, then a context change (the re-assessment queued) and a Stop. Coding
+    completeness said "Every documented service has a proposal; each still needs a reviewer's decision" in the draft
+    TXT, the draft CSV row, the API and the banner, while every proposal carried a current approval - which carried
+    unchanged once resumed. pending_review names a missing decision only for the proposals that have none (counted as
+    readiness counts them); when every proposal is decided it says what readiness still waits for."""
+
+    def approved(self, *codes):
+        from tests.test_pipeline_api import FakeProvider
+        self.use(FakeProvider(selections=[SNARE, BIOPSY]))
+        encounter_id = self.create(COLONOSCOPY)
+        drain()
+        for code in codes:
+            self.decide(encounter_id, code, 'approve')
+        return encounter_id
+
+    def coding_row(self, encounter_id):
+        (row,) = [line for line in self.csv_text(encounter_id).split('\r\n') if '"coding_completeness"' in line]
+        return row
+
+    def test_every_proposal_decided_is_never_told_it_needs_a_decision(self):
+        encounter_id = self.approved('45385', '45380')
+        self.assertEqual(self.detail(encounter_id)['coding']['state'], 'reviewed')
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context',
+                                   {'setting': 'hospital_outpatient'}).status_code, 201)
+        for step in ('queued', 'stopped'):
+            if step == 'stopped':
+                self.assertEqual(self.post(f'/api/encounters/{encounter_id}/stop').status_code, 200)
+            with self.subTest(step=step):
+                detail = self.detail(encounter_id)
+                coding = detail['coding']
+                self.assertEqual(coding['state'], 'pending_review')
+                self.assertNotIn(STILL_NEEDS, coding['statement'])
+                self.assertTrue(coding['statement'].startswith(DECIDED), coding['statement'])
+                self.assertIn(CONTEXT_PENDING, coding['statement'])
+                self.assertIn(coding['statement'], section(self.txt(encounter_id), 'CODING COMPLETENESS'))
+                self.assertNotIn(STILL_NEEDS, self.coding_row(encounter_id))
+                self.assertIn(DECIDED, self.coding_row(encounter_id))
+                codes = page(detail)['codes'].replace('&#x27;', "'")
+                self.assertNotIn(STILL_NEEDS, codes)
+                self.assertNotIn('Every documented service has a proposal to review', codes)
+                self.assertIn('Every documented service has a proposal; the review is not complete', codes)
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'stopped')
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
+        drain()
+        self.assertEqual(self.detail(encounter_id)['coding']['state'], 'reviewed')  # the approvals carried unchanged
+
+    def test_a_partly_decided_set_counts_what_still_needs_a_decision(self):
+        coding = self.detail(self.approved('45385'))['coding']
+        self.assertEqual(coding['state'], 'pending_review')
+        self.assertNotIn(STILL_NEEDS, coding['statement'])
+        self.assertTrue(coding['statement'].startswith(
+            "Every documented service has a proposal; 1 of 2 still needs a reviewer's decision."), coding['statement'])
+
+    def test_control_an_undecided_set_still_needs_each_decision(self):
+        encounter_id = self.approved()
+        coding = self.detail(encounter_id)['coding']
+        self.assertEqual(coding['state'], 'pending_review')
+        self.assertTrue(coding['statement'].startswith(f'Every documented service has a proposal; {STILL_NEEDS}.'))
+        self.assertIn(STILL_NEEDS, self.coding_row(encounter_id))
