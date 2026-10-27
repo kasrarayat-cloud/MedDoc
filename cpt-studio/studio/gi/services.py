@@ -759,18 +759,38 @@ def _time_parts(text: str, plist: Sequence[_Part]) -> tuple[_Part, ...]:
               if s.kind == 'indication']
     marks = {m for start, end, _ in timed for m in (start, end)}
     ends = {}
+    # Every lookup below is a bisection over sorted starts (refutation r1, cost: scanning every section, mark and timed
+    # section for each part and piece was quadratic: 195,000 characters of "History:/Plan:" took 42 s).
+    section_starts = [s.start for s in lay.sections]
     for p in plist:
         if p.kind in ('history', 'plan') and p.role == 'physician':
             # this module's own heading opened it: it ends where the layout opens another section
-            ends[p.start] = next((s.start for s in lay.sections if p.start < s.start < p.end), p.end)
+            at = bisect.bisect_right(section_starts, p.start)
+            ends[p.start] = section_starts[at] if at < len(section_starts) and section_starts[at] < p.end else p.end
             marks.add(ends[p.start])
     marks = sorted(marks)
+    timed_sorted = sorted(timed)
+    timed_starts = [start for start, _, _ in timed_sorted]
+
+    def timed_kind(pos: int) -> str:
+        """The kind of the timed section holding ``pos`` ('' for none): the layout's sections never overlap."""
+        at = bisect.bisect_right(timed_starts, pos) - 1
+        while at >= 0:  # sections that start at the same place: the first whose span holds pos, in list order
+            start, end, kind = timed_sorted[at]
+            if start <= pos < end:
+                return kind
+            if at == 0 or timed_starts[at - 1] != start:
+                return ''
+            at -= 1
+        return ''
+
     out: list[_Part] = []
     for p in plist:
-        edges = [p.start] + [m for m in marks if p.start < m < p.end] + [p.end]
+        lo, hi = bisect.bisect_right(marks, p.start), bisect.bisect_left(marks, p.end)
+        edges = [p.start] + marks[lo:hi] + [p.end]
         pieces: list[_Part] = []
         for a, b in zip(edges, edges[1:]):
-            kind = _time_kind(p, a, timed, ends.get(p.start))
+            kind = _time_kind(p, a, timed_kind, ends.get(p.start))
             if pieces and pieces[-1].kind == kind:
                 pieces[-1] = replace(pieces[-1], end=b)
             else:
@@ -836,10 +856,10 @@ def _paragraph_end(text: str, section) -> int:
     return section.end
 
 
-def _time_kind(p: _Part, pos: int, timed, own_end: Optional[int]) -> str:
+def _time_kind(p: _Part, pos: int, timed_kind, own_end: Optional[int]) -> str:
     if p.role != 'physician' or p.kind == 'role':
         return p.kind
-    kind = next((k for start, end, k in timed if start <= pos < end), '')
+    kind = timed_kind(pos)
     if kind == 'history':
         return 'history'
     if kind == 'plan':
@@ -898,13 +918,17 @@ def _sentences(text: str) -> list[tuple[int, int]]:
             while j < n and text[j] in ' \t':
                 j += 1
             if j >= n or text[j] == '\n' or text[j].isupper() or text[j].isdigit() or text[j] in '"(“[':
-                word = re.search(r'([A-Za-z.]{1,6})$', text[start:i])
-                if not (word and word.group(1).rstrip('.') in abbreviations and ch == '.'):
-                    if not (ch == '.' and i > 0 and text[i - 1].isdigit() and j < n and text[j].isdigit()):
-                        cut = i + 1
+                # the word before the stop, read from at most its last seven characters (refutation r1, cost: reading
+                # the whole sentence at every stop that does not end it - "7.45 7.46 ..." - was quadratic)
+                decimal = ch == '.' and i > 0 and text[i - 1].isdigit() and j < n and text[j].isdigit()
+                word = None if decimal else re.search(r'([A-Za-z.]{1,6})$', text[max(start, i - 7):i])
+                if not decimal and not (word and word.group(1).rstrip('.') in abbreviations and ch == '.'):
+                    cut = i + 1
         elif ch == '\n':
             nxt = text[i + 1:i + 40]
-            prev_line_text = text[max(text.rfind('\n', max(0, i - 400), i) + 1, start):i]
+            # the line the newline ends, never the sentence before it (refutation r1, cost: after a line longer than
+            # 400 characters this was the whole sentence so far, read again at every newline)
+            prev_line_text = text[max(text.rfind('\n', 0, i) + 1, start):i]
             ended = text[text.rfind('\n', 0, i) + 1:i].strip()
             in_block = bool(_sections.FORM_BLOCK.fullmatch(ended)) or (in_block and bool(ended))
             if in_block:
@@ -1367,6 +1391,20 @@ def _row_label(text: str, line_start: int, pos: int) -> Optional[str]:
             or any(pattern.search(words) for _, _, pattern in SERVICES):
         return None
     return words
+
+
+def mention_count(text: str, limit: int) -> int:
+    """How many times the text names a service or an act in this reader's own vocabulary (SERVICES, ACTS), counted up to
+    just past ``limit``: what the analyze stage bounds besides routing's count (refutation r1, cost: a note naming a
+    service only this reader knows - "HRM" 24,000 times - or an act thousands of times passed routing's cap and then
+    took the assess stage past its limit). Bounded: one pass of each pattern, stopping once past the limit."""
+    count = 0
+    for pattern in [p for _, _, p in SERVICES] + [p for _, p in ACTS]:
+        for _ in pattern.finditer(text):
+            count += 1
+            if count > limit:
+                return count
+    return count
 
 
 def _row_hold(reading: Reading) -> bool:
@@ -2602,7 +2640,34 @@ def _dedupe_attributions(items: Sequence[Attribution]) -> tuple[Attribution, ...
     return tuple(out.values())
 
 
-def _same_subject(done: Act, denied: Act, service_acts: Sequence[Act]) -> bool:
+class _DoneIndex:
+    """The performed acts of one service, counted by kind for _same_subject: by lesion, and those with anatomy and no
+    lesion. Built once per service, so a pair of statements is compared in constant time (refutation r1, cost: the scan
+    of every act for every pair of statements was cubic and took the assess stage past its limit)."""
+
+    def __init__(self, acts: Sequence[Act]):
+        self.by_lesion: dict[str, dict[str, int]] = {}
+        self.lesioned: dict[str, int] = {}
+        self.sited: dict[str, int] = {}
+        for a in acts:
+            if a.status != 'performed':
+                continue
+            if a.lesion:
+                kinds = self.by_lesion.setdefault(a.kind, {})
+                kinds[a.lesion] = kinds.get(a.lesion, 0) + 1
+                self.lesioned[a.kind] = self.lesioned.get(a.kind, 0) + 1
+            elif a.anatomy:
+                self.sited[a.kind] = self.sited.get(a.kind, 0) + 1
+
+    def elsewhere(self, done: Act, denied: Act) -> bool:
+        """Whether another act of done's kind is documented at another lesion, or at a site with no lesion."""
+        other_lesions = self.lesioned.get(done.kind, 0) - self.by_lesion.get(done.kind, {}).get(denied.lesion, 0) \
+            - (1 if done.lesion and done.lesion != denied.lesion else 0)
+        other_sites = self.sited.get(done.kind, 0) - (1 if not done.lesion and done.anatomy else 0)
+        return other_lesions > 0 or other_sites > 0
+
+
+def _same_subject(done: Act, denied: Act, index: _DoneIndex) -> bool:
     """Whether a statement that an act was done and one that it was not are about the same act of one service:
     - both about lesions: the same lesion;
     - the denial about the service as a whole ("no tattoo was placed"): any act of that kind done, unless both name
@@ -2615,9 +2680,7 @@ def _same_subject(done: Act, denied: Act, service_acts: Sequence[Act]) -> bool:
     if done.anatomy and denied.anatomy and not set(done.anatomy) & set(denied.anatomy):
         return False
     if denied.lesion and not done.lesion:
-        elsewhere = [a for a in service_acts if a.status == 'performed' and a.kind == done.kind and a is not done
-                     and ((a.lesion and a.lesion != denied.lesion) or (not a.lesion and a.anatomy))]
-        return not elsewhere
+        return not index.elsewhere(done, denied)
     return True
 
 
@@ -2634,11 +2697,12 @@ def _conflicts(services: Sequence[DocumentedService]) -> tuple[Conflict, ...]:
     for service in services:
         done = [a for a in service.acts if a.status == 'performed']
         denied = [a for a in service.acts if a.status in ('negated', 'cancelled')]
+        index = _DoneIndex(service.acts)
         for d_act in done:
             kinds = RELATED_KINDS.get(d_act.kind, (d_act.kind,))
             if d_act.kind == 'specimen' and any(a.kind in TISSUE_KINDS for a in done):
                 continue  # a specimen beside a documented biopsy or removal: that act's specimen
-            against = [n for n in denied if n.kind in kinds and _same_subject(d_act, n, service.acts)]
+            against = [n for n in denied if n.kind in kinds and _same_subject(d_act, n, index)]
             if not against:
                 continue
             subject = 'tattoo' if 'tattoo' in kinds else 'biopsy' if d_act.kind == 'specimen' else d_act.kind

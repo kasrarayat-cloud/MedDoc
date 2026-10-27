@@ -1690,6 +1690,12 @@ rule, never a sentence patch). The rules this added, by module:
 - Reader, refutation r1: a "can/could be" possibility governed by a time still to come ("once anticoagulation is
   held", "at a repeat colonoscopy") stays a possibility; a check-box run under a label that sits directly under an empty
   plan heading ("Plan:" / "Procedure:" / "[x] ...") lists what is planned.
+- Cost, refutation r1 (cost lens): the sentence splitter reads the word before a stop from its last seven characters
+  and a newline's previous line only (a numeric appendix had been quadratic and failed the assess stage); conflicts
+  compare a pair of statements through a per-service index of performed acts (cubic before); the time parts look up
+  sections, marks and timed sections by bisection (quadratic before); and the analyze stage's mention cap also counts
+  this reader's own service and act vocabulary (`services.mention_count`), so a note naming "HRM" or "biopsy" thousands
+  of times is refused before it is read. Pinned by `tests/test_services_cost_r1.py`.
 - Upgrade, refutation r1 (migrate lens): a context the installed revision recorded (`gi-context@1`, which kept a
   member's value as plain metadata) is remade under the current rules - bounded, as a member's change does - before any
   stage sends or assesses with it (`jobs._remade_context`, audit `context.remade`); a second review never runs on it.

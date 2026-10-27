@@ -184,6 +184,9 @@ def _analyze_child(text, user_values, mention_limit):
     mention is read in its list window, and a long list of one service's name overran the stage). Every later stage
     reads only a revision this stage read."""
     named = gi_detect.service_mention_count(text)
+    if named <= mention_limit:  # and the documented-service reader's own vocabulary, which is wider (refutation r1)
+        from .gi import services as gi_services
+        named = max(named, gi_services.mention_count(text, mention_limit))
     if named > mention_limit:
         return named
     document_facts = gi_context.extract_context(text)
