@@ -427,3 +427,65 @@ class PendingReviewSaysWhatIsMissingTests(Harness):
         self.assertEqual(coding['state'], 'pending_review')
         self.assertTrue(coding['statement'].startswith(f'Every documented service has a proposal; {STILL_NEEDS}.'))
         self.assertIn(STILL_NEEDS, self.coding_row(encounter_id))
+
+
+# --- reports-4: passages of a support that was not checked ---------------------------------------------------------
+
+SNARE_ONLY = SYNTHETIC + """Colonoscopy report (fictional)
+Date of service: 2026-10-16
+Procedure: Colonoscopy
+The colonoscope was advanced to the cecum and the examination was completed.
+A 6 mm polyp in the rectum was removed with a cold snare.
+"""
+SHOWS_THE_ACT = 'Source passages that show the coded act'
+SERVICE_PASSAGES = 'Passages of the documented service (not checked against the coded act)'
+
+
+def mark_title(html, text):
+    """The title of the source panel's highlight around exactly ``text`` (None when it is not highlighted)."""
+    import re
+    found = re.search(r'title="([^"]*)">' + re.escape(text) + '</button>', html)
+    return found.group(1) if found else None
+
+
+class NotCheckedPassagesAreNeverEvidenceTests(Harness):
+    """reports-4: a biopsy code proposed for a colonoscopy where no biopsy is documented is held (act_missing); its stored
+    support says "Not checked: the documented service or act is not established as performed" and keeps the service's
+    passages as its source. The card labelled them "Source passages that show the coded act" and the source panel
+    marked them "Evidence for 45380". A support that was not checked is shown as the documented service's passages,
+    not checked, and never as evidence for the code; its provider passages carry no check result either."""
+
+    def held(self, text, *selections):
+        from tests.test_pipeline_api import FakeProvider
+        self.use(FakeProvider(selections=list(selections)))
+        encounter_id = self.create(text)
+        drain()
+        return encounter_id
+
+    def test_a_not_checked_support_never_says_its_passages_show_the_coded_act(self):
+        encounter_id = self.held(SNARE_ONLY, SNARE, ('45380', 'A 6 mm polyp in the rectum was removed with a cold snare.'))
+        biopsy = self.assessment(encounter_id).proposals.get(code='45380')
+        self.assertEqual((biopsy.status, biopsy.support['status'], biopsy.support['reason']),
+                         ('needs_clarification', 'not_applicable', 'act_missing'))
+        sources = [s['text'] for s in biopsy.support['source']]
+        self.assertIn('Colonoscopy report (fictional)', sources)  # stored as it was: the documented service's passages
+        html = page(self.detail(encounter_id))['codes']
+        self.assertNotIn(SHOWS_THE_ACT, html)
+        self.assertIn(SERVICE_PASSAGES, html)
+        self.assertNotIn('does not show the coded act', html)
+        title = mark_title(html, 'Colonoscopy report (fictional)')
+        self.assertIsNotNone(title, 'the service passage is still highlighted for the reviewer')
+        self.assertNotIn('Evidence for', title)
+        self.assertIn('45380', title)
+
+    def test_control_a_checked_support_still_shows_the_passage_that_shows_the_act(self):
+        text = SNARE_ONLY + 'A separate 10 mm flat lesion in the transverse colon was sampled with cold biopsy forceps.\n'
+        encounter_id = self.held(text, SNARE, ('45380', 'The colonoscope was advanced to the cecum'))
+        biopsy = self.assessment(encounter_id).proposals.get(code='45380')
+        self.assertEqual(biopsy.support['status'], 'warn')
+        html = page(self.detail(encounter_id))['codes']
+        self.assertIn(SHOWS_THE_ACT, html)
+        self.assertNotIn(SERVICE_PASSAGES, html)
+        self.assertIn('cited by the provider; does not show the coded act', html)
+        sampled = 'A separate 10 mm flat lesion in the transverse colon was sampled with cold biopsy forceps.'
+        self.assertEqual(mark_title(html, sampled), 'Evidence for 45380')

@@ -392,31 +392,44 @@ function messageView(title, detail, retry = false) {
   return `<section class="view-entrance"><a class="back-link" href="#documents">${icon('arrow')}All documents</a><div class="check-list-card"><p class="empty-state"><strong>${escapeHtml(title)}</strong><br>${escapeHtml(detail)}</p>${retry ? '<p class="empty-state"><button type="button" class="button secondary" data-action="retry">Try again</button></p>' : ''}</div></section>`;
 }
 
+// A support that was not checked (status not_applicable: the documented service or act is not established as performed)
+// says nothing either way about its passages (refutation 7c8, reports-4).
+function supportChecked(proposal) {
+  return proposal?.support?.status !== 'not_applicable';
+}
+
 function documentLayout(doc) {
   const spans = [];
   const codes = new Map();
+  const unchecked = new Set();
   for (const proposal of proposalsIn(doc.assessment, 'selected')) {
     (proposal.evidence || []).forEach((evidence, index) => {
       const key = `${proposal.id}:${index}`;
       spans.push({ ...evidence, key });
       codes.set(key, proposal.code);
     });
-    // Source passages CPT Studio selected because the provider's passages do not show the coded act.
+    // Source passages CPT Studio selected because the provider's passages do not show the coded act - or, for a support
+    // that was not checked, the documented service's passages, which are never marked as evidence for the code.
     (proposal.support?.source || []).forEach((evidence, index) => {
       const key = `${proposal.id}:s${index}`;
       spans.push({ ...evidence, key });
       codes.set(key, proposal.code);
+      if (!supportChecked(proposal)) unchecked.add(key);
     });
   }
   const layout = layoutDocument(doc.revision?.text || '', doc.revision?.pages, spans);
-  return { pages: layout.pages, unlocated: new Set(layout.unlocated), codes };
+  return { pages: layout.pages, unlocated: new Set(layout.unlocated), codes, unchecked };
 }
 
 function renderPieces(pieces, layout) {
   return pieces.map(piece => {
     if (!piece.keys) return escapeHtml(piece.text);
-    const codes = [...new Set(piece.keys.map(key => layout.codes.get(key)))].join(', ');
-    return `<button type="button" class="evidence-mark" data-evidence="${escapeHtml(piece.keys[0])}" data-keys="${escapeHtml(piece.keys.join(' '))}" title="${escapeHtml(`Evidence for ${codes}`)}">${escapeHtml(piece.text)}</button>`;
+    const unchecked = layout.unchecked || new Set();
+    const codesOf = keys => [...new Set(keys.map(key => layout.codes.get(key)))].join(', ');
+    const evidence = piece.keys.filter(key => !unchecked.has(key));
+    const service = piece.keys.filter(key => unchecked.has(key));
+    const title = [evidence.length ? `Evidence for ${codesOf(evidence)}` : '', service.length ? `Passage of the documented service for ${codesOf(service)}, not checked against the coded act` : ''].filter(Boolean).join('; ');
+    return `<button type="button" class="evidence-mark" data-evidence="${escapeHtml(piece.keys[0])}" data-keys="${escapeHtml(piece.keys.join(' '))}" title="${escapeHtml(title)}">${escapeHtml(piece.text)}</button>`;
   }).join('');
 }
 
@@ -507,7 +520,9 @@ function modifierNote(proposal) {
 }
 
 function evidenceChips(proposal, layout) {
-  const unrelated = new Set(Array.isArray(proposal.support?.unrelated) ? proposal.support.unrelated : []);
+  // A support that was not checked gives no check result for the provider's passages either (refutation 7c8, reports-4).
+  const checked = supportChecked(proposal);
+  const unrelated = new Set(checked && Array.isArray(proposal.support?.unrelated) ? proposal.support.unrelated : []);
   const provider = (proposal.evidence || []).map((evidence, index) => {
     const key = `${proposal.id}:${index}`;
     if (layout.unlocated.has(key)) return `<span class="evidence-chip unlocated">${icon('info')}<span>${escapeHtml(`“${evidence?.text ?? ''}” — not found at this position in the current revision, so it is not highlighted.`)}</span></span>`;
@@ -517,9 +532,9 @@ function evidenceChips(proposal, layout) {
   const source = (proposal.support?.source || []).map((evidence, index) => {
     const key = `${proposal.id}:s${index}`;
     if (layout.unlocated.has(key)) return '';
-    return `<button type="button" class="evidence-chip" data-evidence="${escapeHtml(key)}">${icon('link')}<span>${escapeHtml(`“${evidence.text}” — selected from the source by CPT Studio`)}</span></button>`;
+    return `<button type="button" class="evidence-chip" data-evidence="${escapeHtml(key)}">${icon('link')}<span>${escapeHtml(`“${evidence.text}” — selected from the source by CPT Studio${checked ? '' : '; not checked against the coded act'}`)}</span></button>`;
   });
-  const sourceLabel = source.some(Boolean) ? groupLabel('Source passages that show the coded act') : '';
+  const sourceLabel = source.some(Boolean) ? groupLabel(checked ? 'Source passages that show the coded act' : 'Passages of the documented service (not checked against the coded act)') : '';
   return provider.join('') + sourceLabel + source.join('');
 }
 

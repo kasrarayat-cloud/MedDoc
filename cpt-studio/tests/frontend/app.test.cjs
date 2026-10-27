@@ -649,3 +649,31 @@ test('the provider-failed card gives the reason of the run the state reads (stat
   assert.ok(unnamed.includes('<p>The provider did not return proposals.</p>'));
   assert.ok(!unnamed.includes('<p>Error:'));
 });
+
+// refutation 7c8, reports-4: a support that was not checked (not_applicable) keeps the documented service's passages as
+// its source; they are never "passages that show the coded act" nor marked as evidence for the code, and its provider
+// passages carry no check result either.
+test('the passages of a support that was not checked are never shown as showing the coded act', () => {
+  const ready = fixture('encounter-ready.json');
+  const text = ready.revision.text;
+  const { key, exact, ...heading } = cpSpan(text, 'UPPER ENDOSCOPY', 'x');
+  const withSupport = support => {
+    const proposals = ready.assessment.proposals.map((proposal, index) => (index ? proposal : { ...proposal, support }));
+    return { ...ready, assessment: { ...ready.assessment, proposals } };
+  };
+  const notChecked = withSupport({ status: 'not_applicable', reason: 'act_missing', supporting: [], unrelated: [0], source: [heading],
+    detail_support: 'Not checked: the documented service or act is not established as performed.' });
+  const html = render(notChecked);
+  assert.ok(!html.includes('Source passages that show the coded act'), 'never "passages that show the coded act"');
+  assert.ok(html.includes('Passages of the documented service (not checked against the coded act)'));
+  assert.ok(html.includes('“UPPER ENDOSCOPY” — selected from the source by CPT Studio; not checked against the coded act'));
+  assert.ok(!html.includes('cited by the provider; does not show the coded act'), 'no check result for a passage not checked');
+  assert.ok(html.includes('title="Passage of the documented service for 43239, not checked against the coded act">UPPER ENDOSCOPY</button>'));
+  assert.ok(!html.includes('title="Evidence for 43239">UPPER ENDOSCOPY</button>'));
+  // control: a checked support whose provider passage does not show the act still says so, and marks what does
+  const checked = render(withSupport({ status: 'warn', supporting: [], unrelated: [0], source: [heading] }));
+  assert.ok(checked.includes('Source passages that show the coded act'));
+  assert.ok(checked.includes('cited by the provider; does not show the coded act'));
+  assert.ok(checked.includes('title="Evidence for 43239">UPPER ENDOSCOPY</button>'));
+  assert.ok(!checked.includes('not checked against the coded act'));
+});
