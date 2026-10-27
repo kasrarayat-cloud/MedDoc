@@ -1379,13 +1379,21 @@ COMMON_STAGE_KINDS = ('analyze', 'assess', 'extract', 'predict')
 # rollback goes back to. {encounter id: reasons}:
 #   unknown  - a provider outcome still unknown: its reconcile requests the current context under its rules (a member
 #              date conflict read as no date, so a request without one; never asking whether that request failed).
-#   outcome  - its run in use (the newest finished run, whatever it was made for) is a hold or a second review - rows
-#              only this revision writes, neither the outcome of the encounter's request - while that outcome (the
-#              newest primary request recorded) failed or was not sent: its metadata save sends that request again.
+#   outcome  - a request of the current revision that failed, or was not sent though it went through the send, to
+#              which no answer is retained that it would reuse, and that its next metadata save or Resume could make
+#              again (round-7c8 skeptic, sk:0/sk:1: after a rollback such a request was re-sent byte-identical behind a
+#              setting save, which neither revision alone does). A metadata save requests the member's date when one is
+#              set, else its own reading of the document's date - which this image cannot know, so any of them - and
+#              sends it unless its run in use (the newest finished run, whatever it was made for: a hold and a second
+#              review included) carries that request; a Resume of a stopped predict (or of a stopped assess of an
+#              earlier context) requests the current context's stored date, and of a stopped extract or analyze what a
+#              fresh reading gives, without that comparison.
 #   conflict - the current context holds a member date conflict and the latest stage is a stopped predict, or a stopped
 #              assess of an earlier context: its Resume requests the current context, which it reads as having no date.
 UNDO_HAZARDS = '''
 def undo_hazards():
+    import datetime
+    import re
     from django.db.models import Q
     from studio import models, review
     from studio.gi import context as gi_context
@@ -1395,18 +1403,45 @@ def undo_hazards():
         found.setdefault(str(pk), set()).add('unknown')
     finished = (Run.SUCCEEDED, Run.FAILED, Run.NOT_SENT, Run.UNKNOWN)
     swept = Q(state=Run.NOT_SENT) & Q(started_at__isnull=True) & ~Q(request_sha256='')
+
+    def request(run):
+        return (run.provider, run.adapter_version, run.request_sha256)
+
+    def day(value, *, member=False):  # a date as 057a7d39 reads one, else None: a member's value must also be
+        try:                            # written YYYY-MM-DD (its merge_user_values); a stored one need not be
+            if member and not re.fullmatch('[0-9]{4}-[0-9]{2}-[0-9]{2}', value):
+                return None
+            return datetime.date.fromisoformat(value)
+        except (TypeError, ValueError):
+            return None
     for encounter in models.Encounter.objects.filter(current_revision__isnull=False).select_related('current_context'):
         runs = (Run.objects.filter(revision_id=encounter.current_revision_id, state__in=finished).exclude(swept)
                 .order_by('-created_at', '-pk'))
-        older = runs.first()
-        if older is not None and (older.purpose != Run.PRIMARY or 'held' in (older.scope or {})):
-            outcome = runs.filter(purpose=Run.PRIMARY).exclude(scope__has_key='held').first()
-            if outcome is not None and outcome.request_sha256 and outcome.state in (Run.FAILED, Run.NOT_SENT):
-                found.setdefault(str(encounter.pk), set()).add('outcome')
+        in_use = runs.first()  # 057a7d39's run in use: the newest finished run, whatever it was made for
+        if in_use is not None and in_use.state == Run.UNKNOWN and in_use.reconciled_at is not None:
+            in_use = None  # a reconciled unknown outcome no longer stands: the next request is made, whatever it is
+        answered = request(in_use) if in_use is not None and in_use.request_sha256 else None
+        # the requests it would send again: failed, or not sent through the send, and no answer retained that its
+        # predict reuses (a SUCCEEDED run of the same request anywhere in the workspace, not itself a reuse)
+        again = [run for run in runs.filter(purpose=Run.PRIMARY, state__in=(Run.FAILED, Run.NOT_SENT))
+                 .exclude(request_sha256='')
+                 if not Run.objects.filter(encounter__workspace_id=encounter.workspace_id, provider=run.provider,
+                                           adapter_version=run.adapter_version, request_sha256=run.request_sha256,
+                                           state=Run.SUCCEEDED, reused_from__isnull=True).exists()]
+        member = (encounter.user_values or {}).get('service_date')
+        member = day(member.strip(), member=True) if isinstance(member, str) and member.strip() else None
         context, latest = encounter.current_context, review.latest_job(encounter)
-        if (context is not None and gi_context.is_member_conflict((context.facts or {}).get('service_date'))
-                and latest is not None and latest.state == Job.CANCELLED and review.can_resume(encounter)
-                and (latest.kind == Job.PREDICT or (latest.kind == Job.ASSESS and latest.context_id != context.pk))):
+        resumed = latest is not None and latest.state == Job.CANCELLED and review.can_resume(encounter)
+        current = resumed and context is not None and (
+            latest.kind == Job.PREDICT or (latest.kind == Job.ASSESS and latest.context_id != context.pk))
+        fact = ((context.facts or {}).get('service_date') or {}) if context is not None else {}
+        stored = day(fact.get('value')) if fact.get('origin') in ('document', 'user') else None
+        if (any(request(run) != answered and (member is None or run.service_date == member) for run in again)
+                or (current and any(run.service_date == stored for run in again))
+                or (resumed and latest.kind in (Job.EXTRACT, Job.ANALYZE)
+                    and any(member is None or run.service_date == member for run in again))):
+            found.setdefault(str(encounter.pk), set()).add('outcome')
+        if (current and gi_context.is_member_conflict((context.facts or {}).get('service_date'))):
             found.setdefault(str(encounter.pk), set()).add('conflict')
     return {pk: sorted(reasons) for pk, reasons in sorted(found.items())}
 '''

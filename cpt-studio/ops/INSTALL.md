@@ -196,11 +196,17 @@ failure path of `app` read them as it reads the rows):
   current context under its rules: without a date when that context holds a
   member's conflicting service date, and whether or not that request failed
   before.
-- **outcome**: a hold (nothing sent while a member's service date conflicts
-  with the document) or a bounded second review that is newer than the
-  encounter's last request, when that request failed or was not sent. It takes
-  the hold or second review for that request's outcome, so its metadata save
-  sends the request again.
+- **outcome**: a request of the document's current revision that failed (or
+  was not sent although it went through the send), with no answer to it
+  retained that it would reuse, and that it could make again. A metadata save
+  requests the member's service date when one is set, otherwise its own
+  reading of the document's date - which can differ from this revision's and
+  which this revision cannot read, so then every such request counts - and
+  sends that request unless its run in use (the newest finished run, a hold or
+  a bounded second review included) carries it. A Resume of a stopped predict,
+  or of a stopped assess of an earlier context, requests the current context's
+  date, and of a stopped extract or analyze what a fresh reading gives, without
+  that check. Either sends the failed request again.
 - **conflict**: a member's conflicting service date in the current context,
   while the latest stage is a stopped predict, or a stopped assess of an
   earlier context. Its Resume requests the context, which it reads as having
@@ -210,12 +216,13 @@ failure path of `app` read them as it reads the rows):
 
 `rollback-app` closes the last as failed, and refuses, naming the encounters,
 while any of the first three exists. They are cleared on this revision's web:
-reconcile each unknown outcome; answer the date question (correct or clear the
-metadata date), after which this revision makes the request for the agreed date
-(re-assessing with, or re-using, a recorded answer to it where one exists); or
-Resume the stopped stage. Where the agreed request is the one that failed,
-nothing newer is recorded for it: only an addendum (a newer request) clears the
-encounter, or this revision stays installed. So, before reinstalling an older
+reconcile each unknown outcome; Resume the stopped stage, or answer the date
+question (correct or clear the metadata date), after which this revision makes
+the request for the agreed date (re-assessing with, or re-using, a recorded
+answer to it where one exists). A request that failed or was not sent stays
+recorded on its revision, so only an addendum (a newer revision, whose own
+request then stands) clears an encounter a metadata save would send it again
+for, or this revision stays installed. So, before reinstalling an older
 revision over this one:
 
 1. Clear those records on this revision's web.
@@ -232,10 +239,13 @@ Records this revision made stay as they are and are read by the older code as
 it reads them: its reports do not mark a bounded second review as used, and its
 re-assessment does not read one (a code only the second review proposed leaves
 the decision set at the encounter's next re-assessment there); it reads a hold
-as a provider request that failed; and it requests a member's service date that
+as a provider request that failed; it requests a member's service date that
 differs from the document's as the date (its own rule, which this revision
-holds). Encounter list states stay as this revision last derived them until an
-action on each encounter recomputes them.
+holds); and where it reads the document's date otherwise than this revision
+does, its next metadata save requests its own reading (a first request, sent;
+one that failed or was not sent before is named above). Encounter list states
+stay as this revision last derived them until an action on each encounter
+recomputes them.
 
 ## Recovery notes
 

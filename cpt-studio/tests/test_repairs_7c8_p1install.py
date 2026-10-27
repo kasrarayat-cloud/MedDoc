@@ -14,6 +14,17 @@ Every document opens with the synthetic banner.
   run in use, so a member's metadata save there re-sent the byte-identical request that had FAILED.
 - migrate-2: the upgrade never recomputed the stored list state, so an encounter whose provider outcome 057a7d39 left
   unknown (and unreconciled) stayed 'Reviewed' and off the review queue under this revision's rule.
+
+The round-7c8 skeptic of that repair (cross-revision probes with 057a7d398's real code):
+- sk:0: the two revisions read a report's service date differently (its title's date here, a labelled outside
+  procedure's date there); 057a7d39's request for its own reading had FAILED, this revision's succeeded and became
+  057a7d39's run in use, and nothing was named - so its next metadata save re-sent the byte-identical FAILED request.
+- sk:1: a hold over a SUCCEEDED request, while the member's date (which 057a7d39 requests as the date) is an older
+  request that FAILED: not named either (only the newest primary was compared), and the setting save re-sent it.
+- sk:2: the migrate-2 refusal also refused a same-revision `app` re-run (a provider-mode switch in an incident) and the
+  reinstall the failure path's receipt asks for, until a member reconciled on the running web - a released, paid send.
+- sk:3: a code only the bounded second review selected left the decision set at 057a7d39's next re-assessment,
+  without a reviewer's decision, and nothing refused the rollback.
 """
 import datetime as dt
 import hashlib
@@ -28,13 +39,23 @@ from studio.types import RawExchange
 from tests.support import factories as f
 from tests.test_pipeline_api import OFFICE_NOTE, drain
 from tests.test_repairs_r1_m import NEW_REVISION, OLD_REVISION, DockerWorld, install, run_app_script
-from tests.test_services_second_review import LIVE, REPORT, TwoPassProvider
+from tests.test_services_second_review import LIVE, REPORT, TwoPassProvider, response
 
 VISIT = ('99213', 'Total time on the date of the encounter was 24 minutes.')
 SNARE = ('45385', 'was removed with a cold snare')
 BIOPSY = ('45380', 'was sampled with cold biopsy forceps')
 UNDATED_NOTE = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
 MEMBER_CONFLICT = '2026-09-01'  # differs from OFFICE_NOTE's documented 2026-10-20
+# sk:0's document: this revision reads its service date from the title (2026-10-14); the installed revision 057a7d39
+# read the labelled outside procedure's date (2026-09-03) - proven with its real code by the skeptic's probe.
+OUTSIDE = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Colonoscopy report - 10/14/2026
+Outside procedure date: 09/03/2026
+Place of service: Hospital outpatient department
+The colonoscope was advanced to the cecum and the examination was completed.
+A 6 mm polyp in the rectum was removed with a cold snare.
+"""
+OUTSIDE_THIS, OUTSIDE_INSTALLED = '2026-10-14', '2026-09-03'
 NOTE = 'Closed by the installer: undone (revision aaaaaaaaaaaa), so this stage will not run.'
 OLD_IMAGE, NEW_IMAGE = 'sha256:' + 'b' * 64, 'sha256:' + 'a' * 64
 
@@ -106,6 +127,52 @@ class Base(TestCase):
     def runs(self, encounter_id):
         return list(models.ProviderRun.objects.filter(encounter_id=encounter_id).order_by('created_at'))
 
+    def addendum(self, encounter_id):
+        """An addendum on this revision's web: a newer revision, processed (its own request, or its hold)."""
+        reply = self.post(f'/api/encounters/{encounter_id}/addenda',
+                          {'text': 'Addendum (synthetic): no change to the plan.', 'synthetic_attestation': 'yes'})
+        self.assertEqual(reply.status_code, 201, reply.content)
+        drain()
+
+    def installed_request(self, day, *, member, text=OFFICE_NOTE, state=models.ProviderRun.FAILED, encounter=None):
+        """The rows the installed revision 057a7d39 leaves when it requests ``day`` for ``text``: its gi-context@1 row
+        (``day`` as the member's value, kept as plain metadata when ``member``, else as its own reading of the
+        document's date), the routing it made, and its request carrying that date, which the provider answered with
+        HTTP 500 (FAILED) or answered (SUCCEEDED). With ``encounter``, a further request of that encounter's current
+        revision (the member changed the date there). Returns (encounter id, run)."""
+        from datetime import date
+
+        from studio.gi import context as gi_context
+        from studio.types import to_jsonable
+        if encounter is None:
+            encounter = f.encounter(self.ws, self.reviewer)
+            revision = f.pasted_revision(encounter, self.reviewer, text)
+        else:
+            encounter = self.encounter(encounter)
+            revision = encounter.current_revision
+        when = date.fromisoformat(day)
+        facts = {name: to_jsonable(fact) for name, fact in gi_context.extract_context(revision.text).items()}
+        facts['service_date'] = {'name': 'service_date', 'value': day, 'origin': 'user' if member else 'document',
+                                 'evidence': [], 'note': gi_context.USER_NOTE if member else ''}
+        values = {'service_date': day} if member else {}
+        context = models.EncounterContext.objects.create(
+            encounter=encounter, revision=revision, facts=facts, user_values=values, version='gi-context@1',
+            sha256=hashlib.sha256(f'{encounter.pk}:{day}:{member}'.encode()).hexdigest())
+        jobs._record_routing(revision, jobs._route_child(revision.text, when), when)
+        models.Encounter.objects.filter(pk=encounter.pk).update(current_context=context, user_values=values)
+        request = self.provider.build_request(revision.text, when)
+        self.provider.requests.append(request)  # it was sent: counted as the installed revision's send
+        answered = state == models.ProviderRun.SUCCEEDED
+        data = response(revision.text, []) if answered else b'{"error":"synthetic internal server error"}'
+        run = models.ProviderRun.objects.create(
+            encounter=encounter, revision=revision, provider=self.provider.name,
+            adapter_version=self.provider.adapter_version, request_sha256=request.canonical_sha256,
+            request_body=request.body, contexts=list(request.contexts), state=state, sent=True,
+            http_status=200 if answered else 500, response_bytes=data, response_sha256=hashlib.sha256(data).hexdigest(),
+            requested_by=self.reviewer, service_date=when, started_at=timezone.now(), finished_at=timezone.now(),
+            error='' if answered else 'HTTP 500 from the provider (synthetic).')
+        return str(encounter.pk), run
+
 
 # --- security-0: a stage of a kind the next worker cannot run is closed whichever pair created it --------------------
 
@@ -166,9 +233,9 @@ class SecondReviewStoppedUnderAnEarlierPairTests(Base):
 class UndoHazardsTests(Base):
     """Refutation p1, migrate-0 and migrate-1. The installer reads, with this revision's image, every encounter whose
     records the installed revision 057a7d39 would act on under its own rules: an unreconciled unknown outcome (its
-    reconcile requests the current context, without a date when that holds a member date conflict), and a hold or
-    second review it would take for the outcome where this revision's outcome is a request that failed or was not sent
-    (its metadata save sends that request again)."""
+    reconcile requests the current context, without a date when that holds a member date conflict), and a request that
+    failed or was not sent which its next metadata save or Resume could make again (round-7c8 skeptic, sk:0/sk:1: not
+    only where a hold or second review stands over the newest primary request)."""
 
     def test_migrate0_an_unknown_outcome_under_a_member_date_conflict_is_named_until_it_is_reconciled_here(self):
         self.provider.outcomes = ['unknown']
@@ -189,7 +256,7 @@ class UndoHazardsTests(Base):
         self.assertEqual(self.sent(), 1)
         self.assertEqual(self.hazards(), {})
 
-    def test_migrate1_a_hold_over_a_failed_request_is_named_until_a_newer_request_stands(self):
+    def test_migrate1_a_hold_over_a_failed_request_is_named_once_a_metadata_save_would_make_it_again(self):
         self.provider.outcomes = ['failed']
         encounter_id = self.create(OFFICE_NOTE)
         drain()
@@ -199,9 +266,12 @@ class UndoHazardsTests(Base):
         hold = self.runs(encounter_id)[-1]
         self.assertEqual((hold.state, hold.request_sha256, hold.scope), (models.ProviderRun.NOT_SENT, '',
                                                                           {'held': 'member_date_conflict'}))
-        self.assertEqual(self.hazards(), {encounter_id: ['outcome']})
+        # the installed revision's save requests the member's date (its own rule: a first send, documented) - never
+        # the documented date's request that failed (proven with its real code, round-7c8 probe d_member: D1)
+        self.assertEqual(self.hazards(), {})
         # answered with the documented date: the request is the one that failed, so this revision re-assesses with it
-        # and records nothing newer - the hold still stands newest, and is still named
+        # and records nothing newer - the hold still stands newest, and the installed revision's save, now requesting
+        # its own reading of the document's date, would send that failed request again (probe d_member: D2)
         self.set_context(encounter_id, service_date='')
         self.assertEqual(self.sent(), 1)
         self.assertEqual(self.runs(encounter_id)[-1].pk, hold.pk)
@@ -215,52 +285,27 @@ class UndoHazardsTests(Base):
         self.assertEqual(self.sent(), 2)
         self.assertEqual(self.hazards(), {})
 
-    def test_migrate1_the_findings_shape_is_named_until_the_agreed_request_is_made_here(self):
+    def test_migrate1_the_findings_shape_is_named_until_an_addendum_makes_a_newer_request(self):
         # the finding's rows: the installed revision sent the member's date and it FAILED (HTTP 500); a member's
-        # setting save here holds the conflict over it; clearing the member's date makes the request for the
-        # documented date, which is newer than the hold
-        encounter_id, failed = self.installed_failed_request_for_the_member_date()
+        # setting save here holds the conflict over it
+        encounter_id, failed = self.installed_request(MEMBER_CONFLICT, member=True)
         self.set_context(encounter_id, setting='office')
         hold = self.runs(encounter_id)[-1]
         self.assertEqual((hold.state, hold.request_sha256, hold.scope),
                          (models.ProviderRun.NOT_SENT, '', {'held': 'member_date_conflict'}))
         self.assertEqual(self.sent(), 1)  # the installed revision's own request only
         self.assertEqual(self.hazards(), {encounter_id: ['outcome']})
+        # clearing the member's date makes the request for the documented date, newer than the hold; the request that
+        # failed stays named: with no member date the installed revision's save requests its OWN reading of the
+        # document's date, which this image cannot know (sk:0: the two revisions can read it differently)
         self.set_context(encounter_id, service_date='')
         self.assertEqual(self.sent(), 2)
         self.assertEqual(self.provider.requests[-1].contexts[1:], ('Date of service: 2026-10-20',))
         self.assertNotEqual(self.runs(encounter_id)[-1].pk, hold.pk)
+        self.assertEqual(self.hazards(), {encounter_id: ['outcome']})
+        self.addendum(encounter_id)
+        self.assertEqual(self.sent(), 3)
         self.assertEqual(self.hazards(), {})
-
-    def installed_failed_request_for_the_member_date(self):
-        """The rows 057a7d39 leaves for OFFICE_NOTE uploaded with the member's MEMBER_CONFLICT: its gi-context@1 row
-        (the member's value kept as plain metadata), the routing it made, and its request carrying that date, which
-        the provider answered with HTTP 500."""
-        from datetime import date
-
-        from studio.gi import context as gi_context
-        from studio.types import to_jsonable
-        encounter = f.encounter(self.ws, self.reviewer)
-        revision = f.pasted_revision(encounter, self.reviewer, OFFICE_NOTE)
-        member = date.fromisoformat(MEMBER_CONFLICT)
-        facts = {name: to_jsonable(fact) for name, fact in gi_context.extract_context(revision.text).items()}
-        facts['service_date'] = {'name': 'service_date', 'value': MEMBER_CONFLICT, 'origin': 'user', 'evidence': [],
-                                 'note': gi_context.USER_NOTE}
-        context = models.EncounterContext.objects.create(
-            encounter=encounter, revision=revision, facts=facts, user_values={'service_date': MEMBER_CONFLICT},
-            version='gi-context@1', sha256='0' * 64)
-        jobs._record_routing(revision, jobs._route_child(revision.text, member), member)
-        models.Encounter.objects.filter(pk=encounter.pk).update(current_context=context,
-                                                                user_values={'service_date': MEMBER_CONFLICT})
-        request = self.provider.build_request(revision.text, member)
-        self.provider.requests.append(request)  # it was sent: counted as the installed revision's send
-        failed = models.ProviderRun.objects.create(
-            encounter=encounter, revision=revision, provider=self.provider.name,
-            adapter_version=self.provider.adapter_version, request_sha256=request.canonical_sha256,
-            request_body=request.body, contexts=list(request.contexts), state=models.ProviderRun.FAILED, sent=True,
-            http_status=500, requested_by=self.reviewer, service_date=member, started_at=timezone.now(),
-            finished_at=timezone.now(), error='HTTP 500 from the provider (synthetic).')
-        return str(encounter.pk), failed
 
     def test_controls_a_hold_over_a_succeeded_request_a_second_review_and_a_first_hold_are_not_named(self):
         # a second review newer than its primary, which succeeded (a second review is only ever made for one)
@@ -269,7 +314,8 @@ class UndoHazardsTests(Base):
         self.assertEqual(self.post(f'/api/encounters/{reviewed}/second-review').status_code, 201)
         drain()
         self.assertEqual(self.runs(reviewed)[-1].purpose, models.ProviderRun.SECOND_REVIEW)
-        # a hold over a request that succeeded: the installed revision's save reuses that answer (nothing sent)
+        # a hold over a request that succeeded: the installed revision's save requests the member's date (its own
+        # rule, a first send - documented), never a request that failed
         succeeded = self.create(OFFICE_NOTE)
         drain()
         self.set_context(succeeded, service_date=MEMBER_CONFLICT)
@@ -296,6 +342,94 @@ class UndoHazardsTests(Base):
                            requested_by=self.reviewer)
         models.Job.objects.filter(pk=job.pk).update(state=models.Job.CANCELLED)
         self.assertEqual(self.hazards(), {encounter_id: ['conflict']})
+
+
+class OutcomeIsARequestTheOlderRevisionWouldMakeAgainTests(Base):
+    """Round-7c8 skeptic of the first repair, sk:0 and sk:1 (migrate-1's class: after a rollback a request that FAILED
+    is re-sent byte-identical behind a metadata save, and neither revision alone would send it). 'outcome' names every
+    request of the current revision that failed or was not sent through the send, with no retained answer the installed
+    revision would reuse, that its next metadata save could make while its run in use - the newest finished run,
+    whatever it was made for - carries another request: the member's date when one is set (it requests that date), else
+    any (it requests its own reading of the document's date, which this image cannot know); and every such request its
+    Resume of a stopped predict makes for the current context's stored date, which it does not compare."""
+
+    def test_sk0_the_installed_revisions_reading_failed_and_this_revisions_request_stands_newest(self):
+        # 057a7d39 read OUTSIDE's labelled outside procedure date and its request FAILED (probe a_dates); this revision
+        # reads the title's date, and a member's setting save here sends that request, which succeeds and is newest
+        encounter_id, failed = self.installed_request(OUTSIDE_INSTALLED, member=False, text=OUTSIDE)
+        self.set_context(encounter_id, setting='asc')
+        self.assertEqual(self.sent(), 2)
+        self.assertEqual(self.provider.requests[-1].contexts[1:], (f'Date of service: {OUTSIDE_THIS}',))
+        newest = self.runs(encounter_id)[-1]
+        self.assertEqual((newest.state, newest.purpose), (models.ProviderRun.SUCCEEDED, models.ProviderRun.PRIMARY))
+        self.assertEqual(self.hazards(), {encounter_id: ['outcome']})
+        self.assertEqual(self.close(timezone.now())['hazards'], {encounter_id: ['outcome']})
+        self.addendum(encounter_id)  # a newer revision, whose own request then stands
+        self.assertEqual(self.sent(), 3)
+        self.assertEqual(self.hazards(), {})
+
+    def test_sk0_control_the_installed_revisions_failed_request_standing_alone_is_not_named(self):
+        # the skeptic's control A1c: the same rows, untouched here - the failed request is its run in use, which its
+        # save compares with the request it makes (nothing sent)
+        self.installed_request(OUTSIDE_INSTALLED, member=False, text=OUTSIDE)
+        self.assertEqual(self.hazards(), {})
+
+    def test_sk1_a_hold_over_a_succeeded_request_while_the_members_date_is_a_request_that_failed(self):
+        # the skeptic's rows (b_hold): the installed revision sent the member's date and it FAILED; with the date
+        # cleared the documented date's request succeeded; here the member enters the same date again, which this
+        # revision holds - the hold is the installed revision's run in use, and its setting save would request the
+        # member's date: the request that failed
+        encounter_id, failed = self.installed_request(MEMBER_CONFLICT, member=True)
+        self.set_context(encounter_id, service_date='')
+        self.assertEqual(self.runs(encounter_id)[-1].state, models.ProviderRun.SUCCEEDED)
+        self.set_context(encounter_id, service_date=MEMBER_CONFLICT)
+        self.assertEqual(self.runs(encounter_id)[-1].scope, {'held': 'member_date_conflict'})
+        self.assertEqual(self.sent(), 2)
+        self.assertEqual(self.hazards(), {encounter_id: ['outcome']})
+        self.assertEqual(self.close(timezone.now())['hazards'], {encounter_id: ['outcome']})
+        self.addendum(encounter_id)  # a newer revision: the member's date is held there, and nothing failed
+        self.assertEqual(self.sent(), 2)
+        self.assertEqual(self.hazards(), {})
+
+    def test_controls_the_members_own_date_answered_by_its_run_in_use_and_a_retained_answer(self):
+        # the installed revision's own date change: the member's first date FAILED, the second succeeded and stands -
+        # its save requests the member's (second) date, which that run answers; the first is made again only by a
+        # member's date change, as on the installed revision alone
+        changed, _ = self.installed_request(MEMBER_CONFLICT, member=True)
+        self.installed_request('2026-09-02', member=True, state=models.ProviderRun.SUCCEEDED, encounter=changed)
+        # a failed request whose identical request another encounter has since had answered: it reuses that answer
+        retained, _ = self.installed_request(OUTSIDE_INSTALLED, member=False, text=OUTSIDE)
+        self.set_context(retained, setting='asc')  # this revision's request stands newer than the failed one
+        self.assertEqual(self.hazards(), {retained: ['outcome']})
+        self.installed_request(OUTSIDE_INSTALLED, member=False, text=OUTSIDE, state=models.ProviderRun.SUCCEEDED)
+        self.assertEqual(self.hazards(), {})
+
+    def test_a_stopped_predict_whose_resume_makes_a_request_that_failed_is_named(self):
+        # the installed revision's Resume of a stopped predict sends the current context's request without asking its
+        # run in use: here that is the request that failed, although the failed run itself is the newest
+        encounter_id, failed = self.installed_request('2026-10-20', member=False)
+        self.assertEqual(self.hazards(), {})  # its save compares, and the failed run answers: nothing sent
+        self.stopped(encounter_id, models.Job.PREDICT)
+        self.assertEqual(self.hazards(), {encounter_id: ['outcome']})
+        # control: a stopped assess of the current context is re-assessed with its own run (nothing sent)
+        other_id, other = self.installed_request('2026-10-20', member=False,
+                                                 text=OFFICE_NOTE.replace('(fictional)', '(fictional) C'))
+        self.stopped(other_id, models.Job.ASSESS, provider_run=other)
+        self.assertEqual(self.hazards(), {encounter_id: ['outcome']})
+        # a stopped analyze: its Resume reads the document afresh and requests that reading, also without comparing
+        read_id, _ = self.installed_request('2026-10-20', member=False,
+                                            text=OFFICE_NOTE.replace('(fictional)', '(fictional) D'))
+        self.stopped(read_id, models.Job.ANALYZE)
+        self.assertEqual(self.hazards(), {encounter_id: ['outcome'], read_id: ['outcome']})
+
+    def stopped(self, encounter_id, kind, provider_run=None):
+        """A stage of ``kind`` for the current context, stopped as the latest (what a Resume runs again)."""
+        encounter = self.encounter(encounter_id)
+        job = jobs.enqueue(kind, encounter=encounter, revision=encounter.current_revision,
+                           context=encounter.current_context, provider_run=provider_run,
+                           key=f'{kind}:{encounter.current_context_id}:stopped', requested_by=self.reviewer)
+        models.Job.objects.filter(pk=job.pk).update(state=models.Job.CANCELLED)
+        self.assertTrue(review.can_resume(self.encounter(encounter_id)))
 
 
 # --- migrate-2: no pair is installed over an unknown provider outcome ------------------------------------------------
