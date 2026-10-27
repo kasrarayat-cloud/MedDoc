@@ -3455,9 +3455,13 @@ def _sentence_index(an: Analysis, pos: int) -> int:
 
 
 def _clauses_in(an: Analysis, s: int, e: int) -> list[tuple[int, int]]:
+    """The clauses inside [s, e), read from the first one at s by index (refutation r1 cost lens, ec5 cost: a slice
+    from there copied every later clause of the document at each call - a list of 133,000 "A," lines, each its own
+    clause, took the analyze stage past its limit)."""
     clauses = an.lay.clauses
     found = []
-    for c in clauses[bisect.bisect_left(clauses, (s, -1)):]:
+    for i in range(bisect.bisect_left(clauses, (s, -1)), len(clauses)):
+        c = clauses[i]
         if c[0] >= e:
             break
         if c[1] <= e:

@@ -22,10 +22,15 @@ cost-2 / cost-4 (the lesion vocabulary; the analyze stage's count since WIP 8k r
 cost-4 (the instrument vocabulary) - each unnamed "endoscope" read its sentence's anatomy again to tell whether only
   upper GI anatomy names it (in the instrument pass and in passes 2 and 3): 39,000 in one sentence took the assess
   stage to 56 s of its 120. The anatomy is read once per sentence.
+new:clause-slice (routing, studio/gi/detect.py; noted by the r1 cost-0 verifier, older than this branch) - routing's
+  _clauses_in sliced the document's clause list from the first clause it wanted, copying every later clause at each
+  call: a list of 133,000 "A," lines (399,232 characters, each line its own clause) took the analyze stage past its
+  60 s limit, and 99,750 "Ab," lines to 41 s. The clauses are read by index from that first one.
 
 Each cost pin runs the stage's own code under a deadline well under the stage's and far over what the repaired code
 takes; the reading pins compare with the code before the repair. Synthetic data only; no network.
 """
+import bisect
 import random
 import re
 import time
@@ -384,3 +389,75 @@ class UnnamedEndoscopeTests(SimpleTestCase):
             inv, _ = self.anatomy_reads(text)
             with self.subTest(text=text[len(HEAD):80]):
                 self.assertEqual([(s.family, s.status) for s in inv.services if s.family != 'gi.office_em'], expected)
+
+
+# --- new:clause-slice: routing reads a window's clauses by index -----------------------------------------------------
+
+def shipped_clauses_in(an, s, e):
+    """Routing's _clauses_in before the repair."""
+    clauses = an.lay.clauses
+    found = []
+    for c in clauses[bisect.bisect_left(clauses, (s, -1)):]:
+        if c[0] >= e:
+            break
+        if c[1] <= e:
+            found.append(c)
+    return found
+
+
+class _CountedClauses:
+    """A clause list that counts the clauses it hands out, one by one or in slices."""
+
+    def __init__(self, items):
+        self.items, self.handed = items, 0
+
+    def __len__(self):
+        return len(self.items)
+
+    def __getitem__(self, key):
+        got = self.items[key]
+        self.handed += len(got) if isinstance(key, slice) else 1
+        return got
+
+
+class _Analysis:
+    def __init__(self, clauses):
+        self.lay = type('Lay', (), {'clauses': clauses})()
+
+
+def comma_rows(lines):
+    rows = '\n'.join('ABCDEFGH'[i % 8] + ',' for i in range(lines))
+    return (HEAD + 'UPPER ENDOSCOPY REPORT\nDate of service: 2026-10-14\nEsophagogastroduodenoscopy was performed to '
+            'the second portion of the duodenum.\n\nGrid:\n' + rows + '\nand nothing else of note.\n')
+
+
+class RoutingClauseWindowTests(SimpleTestCase):
+    def test_a_window_hands_out_only_its_own_clauses(self):
+        clauses = _CountedClauses(tuple((3 * i, 3 * i + 2) for i in range(100_000)))
+        an = _Analysis(clauses)
+        for i in range(1000):
+            detect._clauses_in(an, 3 * i, 3 * i + 7)
+        # the bisection's probes and the window's own clauses; about 100 million before (every later clause, each call)
+        self.assertLess(clauses.handed, 50_000)
+
+    def test_the_clauses_are_the_ones_the_slice_found(self):
+        rnd = random.Random(1027)
+        for _ in range(300):
+            starts = sorted(rnd.sample(range(5000), rnd.randint(0, 60)))
+            clauses = tuple((a, a + rnd.randint(1, 120)) for a in starts)
+            an = _Analysis(clauses)
+            for _ in range(10):
+                s, e = sorted((rnd.randint(0, 5200), rnd.randint(0, 5200)))
+                with self.subTest(s=s, e=e):
+                    self.assertEqual(detect._clauses_in(an, s, e), shipped_clauses_in(an, s, e))
+
+    def test_a_long_list_of_comma_rows_is_routed_within_the_analyze_limit(self):
+        """133,000 "A," lines at the paste limit: the analyze stage's child, under the stage's own limits."""
+        text = comma_rows(133_000)
+        self.assertLessEqual(len(text), settings.MAX_PASTE_CHARS)
+        detect._analysis.cache_clear()
+        facts, service_date, data = bounded.run_bounded(
+            jobs._analyze_child, text, {}, settings.MAX_SERVICE_MENTIONS,
+            seconds=settings.JOB_DEADLINE_SECONDS['analyze'], memory_bytes=settings.BOUNDED_MEMORY_BYTES)
+        self.assertEqual(service_date, DAY)
+        self.assertIn('gi.egd', [f['family'] for f in data['findings']])
