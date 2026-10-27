@@ -142,3 +142,66 @@ class CoordinatedPredicateTimeTests(SimpleTestCase):
             with self.subTest(line=line):
                 result = assessed(EGD.format(x=line), [('43239', quote)])
                 self.assertEqual(proposal(result, '43239').bucket, 'excluded')
+
+
+class DateOwnershipTests(SimpleTestCase):
+    """negtime-7: a date dates an act only as the act's own time. A birth date or a clock time is no act's time; a date
+    of another clause or event (a subordinate or relative clause with a predicate of its own, a finding "found on
+    barium swallow on <date>", a drug "held on <date>") leaves the act's time in doubt: its code is held with a
+    question, never excluded on that date."""
+
+    def test_a_birth_date_or_a_clock_time_is_no_acts_time(self):
+        for template, line, kind in (
+                (COLONOSCOPY, 'Ms. Alex Synthetic (DOB 03/04/1961) underwent colonoscopy today with cold snare '
+                              'polypectomy of a 6 mm sigmoid polyp.', 'snare'),
+                (COLONOSCOPY, 'Ms. Alex Synthetic (DOB 03/04/1961) underwent colonoscopy on 10/14/2026 with cold snare '
+                              'polypectomy of a 6 mm sigmoid polyp.', 'snare'),
+                (EGD, 'Patient Alex Synthetic, born 04-Mar-1961, underwent EGD with biopsies of the antrum.', 'biopsy'),
+                (EGD, 'Biopsies were obtained from the antrum (patient born 1961).', 'biopsy'),
+                (EGD, 'A 1 cm duodenal bulb ulcer with a visible vessel was found. Hemostasis was achieved with two '
+                      'hemoclips at 2015.', 'bleeding_control'),
+                (EGD, 'Two hemoclips were placed on the visible vessel at 2015 with hemostasis.', 'clip'),
+                (EGD, 'Two hemoclips were placed at 2040 with hemostasis.', 'clip'),
+                (COLONOSCOPY, 'A 6 mm polyp was removed at 1955 with a cold snare.', 'snare')):
+            with self.subTest(line=line):
+                self.assertEqual(statuses(template.format(x=line), kind), ['performed'])
+        text = EGD.format(x='Patient Alex Synthetic, born 04-Mar-1961, underwent EGD with biopsies of the antrum.')
+        self.assertNotEqual(proposal(assessed(text, [('43239', 'underwent EGD with biopsies of the antrum')]),
+                                     '43239').bucket, 'excluded')
+        text = EGD.format(x='Hemostasis was achieved with two hemoclips at 2015.')
+        self.assertNotEqual(proposal(assessed(text, [('43255', 'Hemostasis was achieved with two hemoclips at 2015.')]),
+                                     '43255').bucket, 'excluded')
+
+    def test_another_events_date_holds_the_act_never_excludes_it(self):
+        for template, line, kind, code in (
+                (EGD, 'Upper endoscopy with balloon dilation was performed for the stricture found on barium swallow on '
+                      '09/22/2026.', 'dilation', '43249'),
+                (EGD, 'The stricture found on barium swallow on 09/22/2026 was dilated with a 15 mm through-the-scope '
+                      'balloon.', 'dilation', '43249'),
+                (COLONOSCOPY, 'A polyp seen on CT on 09/22/2026 was removed with a cold snare.', 'snare', '45385'),
+                (COLONOSCOPY, 'A 6 mm sigmoid polyp was removed with a cold snare after apixaban was held on '
+                              '10/12/2026.', 'snare', '45385'),
+                (COLONOSCOPY, 'Biopsies were obtained from the ulcer noted on 09/30/2026 in the cecum.', 'biopsy',
+                 '45380')):
+            with self.subTest(line=line):
+                text = template.format(x=line)
+                self.assertEqual(statuses(text, kind), ['uncertain'])
+                held = proposal(assessed(text, [(code, line)]), code)
+                self.assertEqual((held.bucket, held.status), ('selected', 'needs_clarification'))
+
+    def test_controls_the_acts_own_date_still_dates_it(self):
+        for line, kind, status in (
+                ('A 6 mm sigmoid polyp was removed with a cold snare on 09/03/2026.', 'snare', 'historical'),
+                ('On 09/03/2026 a 6 mm sigmoid polyp was removed with a cold snare.', 'snare', 'historical'),
+                ('A 6 mm sigmoid polyp was removed with a cold snare in 2019.', 'snare', 'historical'),
+                ('A 6 mm sigmoid polyp will be removed with a cold snare on 11/20/2026.', 'snare', 'planned'),
+                # the date inside the relative clause is the snare's own; the biopsy outside it is held
+                ('Biopsies were taken from the polyp, which was removed with a cold snare on 09/03/2026.', 'snare',
+                 'historical'),
+                ('Biopsies were taken from the polyp, which was removed with a cold snare on 09/03/2026.', 'biopsy',
+                 'uncertain')):
+            with self.subTest(line=line, kind=kind):
+                self.assertEqual(statuses(COLONOSCOPY.format(x=line), kind), [status])
+        text = COLONOSCOPY.format(x='A 6 mm sigmoid polyp was removed with a cold snare on 09/03/2026.')
+        self.assertEqual(proposal(assessed(text, [('45385', 'A 6 mm sigmoid polyp was removed with a cold snare')]),
+                                  '45385').bucket, 'excluded')

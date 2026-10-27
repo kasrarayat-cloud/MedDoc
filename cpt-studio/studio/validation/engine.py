@@ -414,9 +414,12 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     if found is not None:
         # Engine @4: the documented service and act decide the code's status; its passages are verified against them.
         found = _second_opinion(outcome, found, code, text, inventory, routing)
-        if found.reason == 'act_missing' and outcome.state == 'not_performed':
+        if found.reason == 'act_missing' and outcome.state == 'not_performed' \
+                and not _time_in_doubt(code, found.service):
             # The inventory documents no such act and the code's own passage reads it as not performed today (a
             # planned repeat, an earlier procedure): the inventory has nothing to add, and the exclusion stands.
+            # Never when the inventory states the act done and holds only its time in doubt (a date or a time word in
+            # its clause is something else's): both readers must agree before a code is excluded, so it is held.
             found = None
         elif found.reason == 'service_uncertain' and outcome.state == 'not_performed' \
                 and _own_passage_decides(outcome) and gi_services.doubted_by_routing_alone(found.service) \
@@ -551,6 +554,16 @@ def _own_passage_decides(outcome: checks.StatusOutcome) -> bool:
     return decisive is not None and decisive.origin == 'evidence' and decisive.start is not None \
         and decisive.status == 'negated' and any(cue.startswith(OWN_MARK_DENIALS) for cue in decisive.cues) \
         and not any(cue.startswith('performed') for cue in decisive.cues)
+
+
+def _time_in_doubt(code: str, service) -> bool:
+    """Whether the inventory states an act ``code`` accounts for as done in ``service`` and holds only its time in
+    doubt: an act read uncertain because a time in its clause is something else's (services.OTHER_TIME_CUE; refutation
+    r1, negtime-5 and negtime-7). The routing-era reading alone never excludes such a code (ec5, cluster EXCL)."""
+    profile = reconcile.catalogue.code_profile(code)
+    kinds = set(profile.covers) if profile is not None else set()
+    return any(a.kind in kinds and a.status == 'uncertain'
+               and any(cue.startswith(gi_services.OTHER_TIME_CUE) for cue in a.cues) for a in service.acts)
 
 
 def _act_documented(code: str, service, inventory) -> bool:

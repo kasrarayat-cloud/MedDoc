@@ -309,6 +309,21 @@ PLAN_WORDS = _rx(r'\b(?:will(?:\s+be)?|plan(?:s|ned)?|schedul(?:e|ed|ing)|future
 REVIEW_OF_RECORDS = _rx(r'\breview(?:ed|ing)?\s+(?:of\s+)?(?:the\s+)?(?:prior|previous|old|outside|earlier)\s+'
                         r'(?:records?|notes?|results?|reports?|imaging|studies|labs?|pathology|colonoscopy|endoscopy|'
                         r'charts?)\b')
+# Whose time a date in an act's clause is (refutation r1, negtime-7: "(DOB 03/04/1961) underwent colonoscopy today", "two
+# hemoclips at 2015" and "dilation was performed for the stricture found on barium swallow on 09/22/2026" had dated
+# today's act and excluded its code). A birth date (its label: "DOB", "born") or a clock time ("at 2015") is no act's
+# time. A date in another clause or event - after a subordinator or a relative word whose clause has a predicate of its
+# own ("after apixaban was held on ...", "which was removed on ..."), or after another event's participle ("found",
+# "seen", "noted", "held") with nothing closing its phrase - is that event's, unless the mention is inside it: it
+# leaves the act's time in doubt (OTHER_TIME_CUE: held, never excluded - engine._select), never dates it.
+BIRTH_LABEL = _rx(r'(?:\bDOB|\bD\.O\.B\.?|\bdate\s+of\s+birth|\bbirth\s*date|\bborn(?:\s+(?:on|in))?)[ \t]*[:#=-]?[ \t]*$')
+CLOCK_TIME = _rx(r'(?:\bat|@)[ \t]*$')
+OTHER_EVENT = _rx(r'\b(?:after|before|when|whenever|once|until|because|since|while|whereas|although|if|unless|which|who|'
+                  r'whom|whose|where|whereby)\b|\b(?P<event>found|seen|noted|identified|detected|diagnosed|shown|'
+                  r'demonstrated|described|reported|documented|visuali[sz]ed|observed|imaged|confirmed|suspected|'
+                  r'admitted|discharged|referred|hospitali[sz]ed|held|stopped|started|resumed|restarted|discontinued)\b')
+OTHER_EVENT_PREDICATE = _rx(r'\b(?:was|were|is|are|been|has|have|had|did|does)\b|\b[a-z]{3,}ed\b')
+OTHER_TIME_CUE = 'uncertain: a time in its clause is something else\u2019s: '
 HEDGE_WORDS = _rx(r'\?|\b(?:possibl[ey]|probabl[ey]|questionabl[ey]|likely|unlikely|uncertain|unclear|may\s+have|might\s+have'
                   r'|presumed|presumably|suspected|apparently'
                   r'|(?<!first\s)(?<!second\s)(?<!third\s)(?<!fourth\s)(?<!initial\s)(?<!final\s)attempt(?:ed)?)\b')
@@ -1329,6 +1344,26 @@ def _consent_object(text: str, cs: int, ce: int, pos: int, end: int) -> bool:
     return not (own and consent_said)
 
 
+def _date_owner(text: str, d, cs: int, pos: int) -> str:
+    """Whose time the date ``d`` in the clause starting at ``cs`` is, for the mention at ``pos``: '' the clause's own
+    (it dates the act), 'none' no act's (a birth date, a clock time), 'other' another clause's or event's (BIRTH_LABEL,
+    CLOCK_TIME, OTHER_EVENT). Bounded: the clause up to the date, once."""
+    head = text[max(cs, d.start - 30):d.start]
+    if BIRTH_LABEL.search(head) or (d.precision == 'year' and d.bare and CLOCK_TIME.search(head)):
+        return 'none'
+    opener = None
+    for m in OTHER_EVENT.finditer(text, cs, d.start):
+        opener = m
+    if opener is None or opener.start() <= pos < d.start:
+        return ''  # no other clause or event before it, or the mention is inside that clause: the date is its own
+    phrase = text[opener.end():d.start]
+    if re.search(r'[,;:()\n]', phrase):
+        return ''  # the other clause or event closed before the date
+    if opener.group('event') is None and not OTHER_EVENT_PREDICATE.search(phrase):
+        return ''  # "since 2019": a phrase, not a clause of its own
+    return 'other'
+
+
 def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, service_date: Optional[date], dates,
                 part: _Part, in_today_report: bool) -> Reading:
     """The status a clause gives the thing named at [pos, end) in it, read within CLAUSE_REACH of the mention."""
@@ -1429,8 +1464,14 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         return Reading('negated', (REPLACED_CUE,))
     if CANCEL_WORDS.search(whole):
         return Reading('cancelled', ('cancelled: ' + CANCEL_WORDS.search(whole).group(0).lower(),))
-    # Time: a date in the clause.
+    # Time: a date in the clause - the act's own; a date of something else never dates it (_date_owner).
+    other_time = ''
     for d in _dates_in(dates, cs, ce):
+        owner = _date_owner(text, d, cs, pos)
+        if owner:
+            if owner == 'other' and not other_time:
+                other_time = f'{text[d.start:d.end]} is dated by another clause or event'
+            continue
         if service_date is None:
             if d.precision == 'year' and HISTORY_WORDS.search(whole):
                 return Reading('historical', (f'historical: {text[d.start:d.end]} with a history word',))
@@ -1478,6 +1519,9 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         return answered
     if ACT_VERB.search(whole) or BARE_PARTICIPLE.search(after) or BARE_PARTICIPLE.search(before[-40:]) \
             or BARE_PARTICIPLE.fullmatch(text[pos:end].strip()) or _nominal_act(text, before, pos):
+        if other_time and not TODAY_WORDS.search(whole):
+            # stated done, but a time in its clause is something else's: its own time is not established (held)
+            return Reading('uncertain', (OTHER_TIME_CUE + other_time,))
         if in_today_report or TODAY_WORDS.search(whole) or part.kind == 'report':
             return Reading('performed', ('performed: an act predicate in a current report',))
         return Reading('performed', ('performed: an act predicate',))
