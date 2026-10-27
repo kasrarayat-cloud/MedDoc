@@ -741,7 +741,8 @@ function stateCards(doc) {
   if (doc.pipeline?.busy) cards.push(progressCard(doc));
   const runs = doc.provider_runs || [];
   const stages = doc.pipeline?.stages || [];
-  if (doc.state === 'provider_unknown') cards.push(reconcileCard(doc));
+  // Any unreconciled unknown outcome, the second review's included: nothing is sent again until it is reconciled.
+  if (doc.state === 'provider_unknown' || runs.some(run => run.state === 'unknown' && !run.reconciled)) cards.push(reconcileCard(doc));
   if (doc.state === 'extraction_failed') {
     cards.push(infoCard('The text could not<br>be read.', ['No CPT proposals were requested because no text could be extracted; the reasons are listed above the document. Upload another copy, or paste the text instead.'], `<button type="button" class="button primary" data-action="upload">${icon('plus')}New document</button>`));
   }

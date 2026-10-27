@@ -35,7 +35,7 @@ SNARE = 'Cold snare polypectomy of two transverse polyps.'
 BIOPSY = 'Cold forceps biopsy of a rectal lesion.'
 PLANNED = 'Plan: upper endoscopy is scheduled next month.'
 LABELS = {'45': ('gi.colonoscopy', 'Colonoscopy', 'COLONOSCOPY'),
-          '43': ('gi.egd', 'Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)', 'UPPER GI ENDOSCOPY')}
+          '43': ('gi.egd', 'Upper GI endoscopy (EGD, esophagoscopy, POEM)', 'UPPER GI ENDOSCOPY')}
 
 
 def span(passage, **extra):

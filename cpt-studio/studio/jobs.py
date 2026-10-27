@@ -34,7 +34,7 @@ from .validation.engine import assess as run_assessment
 
 log = logging.getLogger(__name__)
 
-CONTEXT_VERSION = 'gi-context@1'
+CONTEXT_VERSION = 'gi-context@2'
 PROVIDER_LOCK_KEY = 0x435054535455  # 'CPTSTU': CPT Studio's own single-flight key
 QUEUE_DEADLINE = timedelta(minutes=30)  # a job that cannot start within this window expires
 Job = models.Job
@@ -567,11 +567,15 @@ def _maybe_second_review(job, encounter, revision, context, run, assessment, sec
     items, span = _second_review_items(assessment)
     if not items or span is None or span[1] - span[0] > SECOND_REVIEW_MAX_CHARS:
         return None
-    if models.ProviderRun.objects.filter(revision=revision, purpose=models.ProviderRun.SECOND_REVIEW,
-                                         service_date=run.service_date).exists():
-        return None
+    earlier = models.ProviderRun.objects.filter(revision=revision, purpose=models.ProviderRun.SECOND_REVIEW,
+                                                service_date=run.service_date)
+    released = earlier.filter(state=models.ProviderRun.UNKNOWN, reconciled_at__isnull=False).count()
+    if earlier.exclude(state=models.ProviderRun.UNKNOWN, reconciled_at__isnull=False).exists():
+        return None  # one per revision and date, whatever its outcome; only a reconciled unknown one releases another
     job2 = enqueue(Job.REVIEW2, encounter=encounter, revision=revision, context=context, provider_run=run,
-                   key=f'review2:{revision.pk}:{run.service_date or "none"}', requested_by=job.requested_by)
+                   key=f'review2:{revision.pk}:{run.service_date or "none"}' + (f':after-reconcile:{released}'
+                                                                                 if released else ''),
+                   requested_by=job.requested_by)
     return job2 if job2.state == Job.QUEUED else None
 
 

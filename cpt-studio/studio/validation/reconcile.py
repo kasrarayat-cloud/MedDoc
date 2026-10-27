@@ -31,7 +31,7 @@ ACT_LABELS = {
     'band_ligation': 'band ligation', 'dilation': 'dilation', 'stent': 'stent placement', 'foreign_body':
     'foreign-body removal', 'sphincterotomy': 'sphincterotomy', 'stone_extraction': 'stone removal', 'lithotripsy':
     'lithotripsy', 'cholangioscopy': 'cholangioscopy', 'cannulation': 'cannulation', 'peg': 'gastrostomy (PEG) '
-    'placement', 'tube_replacement': 'feeding-tube replacement', 'tube_placement': 'feeding-tube placement',
+    'placement', 'tube_replacement': 'feeding-tube replacement', 'tube_placement': 'tube placement', 'specimen': 'specimen collection',
     'myotomy': 'myotomy', 'decompression': 'decompression', 'fundoplication': 'transoral fundoplication',
     'capsule_study': 'capsule study', 'manometry': 'manometry', 'ph_monitoring': 'pH / impedance monitoring',
     'rectal_sensation': 'rectal sensation and compliance testing', 'moderate_sedation': 'moderate sedation',
@@ -290,13 +290,21 @@ def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]]) 
             continue
         codes = [code for code, family in selected if family == service.family]
         covered[service.id] = codes
-        if not codes:
+        if not codes and service.included_in:
+            pass  # the including service's code covers the examination (an EGD inside an EUS); its own acts still count
+        elif not codes:
             if service.family == 'gi.office_em' and any(s.status in ('performed', 'incomplete') and s.family != service.family
                                                         for s in inventory.services):
                 continue  # never push an office visit beside a same-day procedure
             unresolved.append(Unresolved(service.id, service.family, '', f'{service_label(service)} '
                                          f'(documented as {service.status}) has no supported proposal',
                                          tuple(service.evidence[:2]), 'no_proposal'))
+            for act in service.acts:  # an act no code profile covers is named whatever the service's proposals
+                if act.status == 'performed' and act.role in ('physician', 'unknown') \
+                        and act.kind in catalogue.UNSUPPORTED_ACTS:
+                    unresolved.append(Unresolved(service.id, service.family, act.kind,
+                                                 f'{describe_act(service, act)}: no supported code profile',
+                                                 act.evidence[:1], 'unsupported'))
             continue
         profiles = [catalogue.code_profile(code) for code in codes]
         unknown = any(p is None or p.family != service.family for p in profiles)
@@ -405,7 +413,9 @@ def completeness(inventory: ServiceInventory, unresolved: Sequence[Unresolved], 
 def inventory_check(inventory: ServiceInventory, problems: Sequence[str]) -> Check:
     performed = [s for s in inventory.services if s.status in ('performed', 'incomplete')]
     others = [s for s in inventory.services if s.status not in ('performed', 'incomplete')]
-    names = ', '.join(f'{service_label(s)} ({s.status})' for s in performed) or 'none'
+    names = ', '.join(f'{service_label(s)} ({s.status}' + (f', included in {service_label(inventory.service(s.included_in))}'
+                                                         if s.included_in and inventory.service(s.included_in) else '')
+                      + ')' for s in performed) or 'none'
     detail = f'Documented as done on this encounter: {names}.'
     if others:
         detail += ' Documented but not as done today: ' + ', '.join(f'{service_label(s)} ({s.status})' for s in others) + '.'

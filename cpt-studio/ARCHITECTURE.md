@@ -358,7 +358,7 @@ time readings and in the provider request). Dates read as ISO, US, "October 20,
 ranges used **only for routing**, `required_facts`, `procedure`, and
 `supported` (bool).
 
-`route(text, service_date) -> RoutingResult` (`gi-routing@3`) detects
+`route(text, service_date) -> RoutingResult` (`gi-routing@4`) detects
 documented services per family with: mention span, containing sentence span,
 section (procedure, findings, technique, impression, indication, history,
 plan, assessment, other), status (performed | incomplete | planned |

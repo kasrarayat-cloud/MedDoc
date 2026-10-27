@@ -558,3 +558,14 @@ test('readDom reads a confirmed exclusion from its candidate row in the rendered
   // and the same check fails when the row is missing, as it did when readDom dropped the rows
   assert.deepEqual(vb.checkDecisionDom(made, enc, dom.cards, []).map(r => r.status), ['fail']);
 });
+
+test('a STOP file in the evidence directory stops the batch before the next upload', () => {
+  const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'cpt-verify-stop-'));
+  try {
+    assert.equal(vb.stopRequested(dir), false);
+    fs.writeFileSync(path.join(dir, 'STOP'), '');
+    assert.equal(vb.stopRequested(dir), true);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

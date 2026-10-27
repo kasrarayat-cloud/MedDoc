@@ -226,7 +226,10 @@ def _S2_landmark_field(line: str) -> bool:
     return False
 # The 'other' section of the lines held after such a label (round 4c regression:2, sections:5; see layout).
 _SEC_PLAN_HELD_LABEL = 'line after a plan label with an answer of its own'
-_PREFIX = re.compile(r'[ \t]*(?:#{1,4}[ \t]*|\*{1,2}[ \t]*|(?:\d{1,2}|[A-Za-z])[.)][ \t]+)?', re.A)
+# A numbered part of a document ("PART 2 - PROCEDURE NOTE: ...", "Section B: Findings") is read by the label after
+# its number, so a part never runs on as the section the previous part ended in (its plan, say).
+DOCUMENT_PART = r'(?:PART|Part|part|SECTION|Section|section)[ \t]+(?:\d{1,2}|[IVX]{1,4}|[ivx]{1,4}|[A-Z])[ \t]*[-\u2013\u2014:.)][ \t]*'
+_PREFIX = re.compile(r'[ \t]*(?:#{1,4}[ \t]*|\*{1,2}[ \t]*|(?:\d{1,2}|[A-Za-z])[.)][ \t]+|' + DOCUMENT_PART + r')?', re.A)
 _CLOCK = re.compile(r'[ \t]*\d{1,2}:\d{2}', re.A)
 # An unrecognised bare "Label:" (nothing after the colon) is a heading: a plan or history one
 # when its words say so, otherwise "other". A sentence that ends in a colon is not a label.

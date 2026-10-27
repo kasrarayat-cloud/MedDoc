@@ -381,3 +381,144 @@ What it changes, so a later session does not re-derive it:
   limit (`cpt-studio/ACCURACY-RESIDUALS.md` and the PR body) and does not block.
 - This supersedes interpretation 6's stopping rule for the end of this PR only;
   the hold-only rule and every gate stay as they are.
+
+## Owner directive, 2026-10-27 — repair and expand the shared GI coding core
+
+Received directly from the owner in session meddoc-pro-94 (909be030) on 27 October 2026, as pasted instruction
+text, after the install of revision 2734a6f3 and the owner's own synthetic test of encounter
+cb96adb2-2044-4160-9c69-12dbcbbc8028 ("GI_Complex_Case_Elena_Hartwell"). Recorded by the receiving session before
+the work that depends on it is committed for review. Verbatim:
+
+> Repair and expand CPT Studio’s shared GI coding core at https://cpt.quillmd.com. Carry the work through implementation, installation and meaningful verification. Preserve the approved design and one GI workspace.
+>
+> This is a general engine repair. Do not solve it with patient-name exceptions, document fingerprints, expected-code injection or patches that recognize individual test sentences.
+>
+> 1. Establish the actual installed state
+>
+> Inspect the current revision, active deployment owner, application code, retained documents, raw Corti responses, processing traces and existing tests. Coordinate deployment through one owner.
+>
+> Do not assume the previously reported revision is still current. Preserve the original failures, provider responses, decisions, audit history and downloaded reports. Keep app.quillmd.com, VoiceAssistMain and unrelated server resources unchanged.
+>
+> 2. Diagnose the shared failures before assigning their cause
+>
+> Trace the original ten GI tests and the Elena encounter:
+>
+> cb96adb2-2044-4160-9c69-12dbcbbc8028
+>
+> Its uploaded PDF has SHA256:
+> 861a9940d0509fdf7c8de4745a1d798db5724679e1efd03e840f73538a51aeb5
+>
+> Observed Elena findings:
+> - 43239 was proposed but held; its exported evidence omitted the actual biopsy actions.
+> - 45385 was proposed with an incorrect incomplete-procedure warning despite documentation that the examination was complete and not discontinued.
+> - 45380 was absent despite a separate descending-colon lesion sampled with forceps.
+> - Physician and nursing entries conflict about tattoo injection. Determine whether the application detected this; the CSV alone does not establish that.
+> - The export contains two undecided proposals, twelve informational alternatives and no approvals.
+>
+> Earlier tests also reported current E/M services classified as historical, an omitted EUS suggestion and incomplete clarification questions.
+>
+> For each failure, establish whether it originated in document extraction, Corti, adaptation, evidence selection, local validation or export. Do not blame the provider or application without tracing the actual data.
+>
+> 3. Implement a shared representation of documented services
+>
+> For each service, retain its source document and revision, service date, clinician, setting, anatomy, lesion identity, technique, extent, completion, supporting passages and uncertainty.
+>
+> Distinguish:
+> - Performed, historical, planned, negated and uncertain services.
+> - Complete examinations from incomplete examinations.
+> - Lesions sampled, removed, untreated or scheduled for later treatment.
+> - Separate lesions from multiple actions on the same lesion.
+> - Routine procedure-related work from separately documented E/M.
+> - Endoscopist services from anesthesia, pathology and facility services.
+>
+> Interpret negation and time within the relevant clause and service. An unrelated historical reference must not invalidate a current service. An unresected lesion must not make a completed colonoscopy incomplete.
+>
+> Use validated structured data and bounded extraction. Diagnose schema or validation failures rather than silently discarding unsupported parts of a response.
+>
+> 4. Add evidence and completeness verification
+>
+> Exact quotation matching is necessary but insufficient. Verify that each passage supports the proposed action, anatomy, technique and date.
+>
+> Build a source-based inventory of documented services independently of the proposed code list. Reconcile that inventory with Corti’s suggestions so missing services become visible.
+>
+> If a documented service has no supported proposal, expose it as unresolved and use a bounded second review when justified. Do not invent a code, automatically promote an alternative or repeatedly resend the same request.
+>
+> Ask all materially necessary clarification questions for the affected service. Preserve both sides of genuine conflicts. Keep supported services available for review while clearly showing that the encounter remains incomplete.
+>
+> Separate “this proposal is ready for review” from “the entire encounter has complete, verified coding.”
+>
+> 5. Expand GI coverage through internal service profiles
+>
+> Keep one user-facing GI workspace. Maintain an explicit coverage catalogue for:
+> - Office/outpatient E/M.
+> - EGD, esophagoscopy, colonoscopy and flexible sigmoidoscopy.
+> - EUS and ERCP.
+> - Enteroscopy and capsule studies.
+> - Motility/manometry, pH/impedance and anorectal testing.
+> - Feeding-tube procedures and advanced endoscopic treatments.
+>
+> Define the required documentation, supported interventions, exclusions, clarification requirements and verification evidence for each family.
+>
+> Complete the shared repair across currently supported families. Add broader families through the same architecture, with actual implementation and validation. Clearly identify any remaining unsupported service; do not silently omit it or advertise comprehensive GI coverage before it is established.
+>
+> 6. Connect authoritative rules without inventing verification
+>
+> Inventory the authorized CPT content, guidance and applicable dated CMS/payer references actually available to this product.
+>
+> Apply appropriate code-version, bundling, units, modifier, provider and setting checks. Keep practitioner and facility rules distinct.
+>
+> Do not hardcode unofficial descriptors or claim that code membership, modifiers or rules were verified when the necessary source is unavailable. Keep licensing and source gaps explicit while continuing independent engineering work.
+>
+> Do not sign agreements, buy subscriptions or credits, change payment settings or process real patients.
+>
+> 7. Verify the core across documents and services
+>
+> Use retained responses first to diagnose and test shared logic economically.
+>
+> Add meaningful regressions covering paraphrases, mixed dates, negation, separate lesions, combined procedures, incomplete documentation, conflicting checkboxes, pending pathology and completed versus discontinued examinations. Include Word, digital PDF and scanned/OCR input.
+>
+> Keep expected answers outside the coding input and implementation logic.
+>
+> After installation, perform purposeful fresh synthetic tests through the ordinary HTTPS interface: upload, processing, review, saved decisions, reload and actual report download. Identify automated synthetic approvals accurately.
+>
+> Arrange independent GI-coder adjudication for the accuracy benchmark. If qualified adjudication is unavailable, label expectations provisional and report that limitation rather than claiming clinical validation.
+>
+> Report separately:
+> - Supported procedure families.
+> - Correct complete code-and-modifier sets.
+> - Missed services.
+> - Unsupported additions.
+> - Clarification and conflict handling.
+> - Human-review requirements.
+> - Browser, persistence and export integrity.
+>
+> Do not treat browser passes, exact quotations or file-integrity checks as coding-accuracy percentages. Do not promise 100% accuracy.
+>
+> 8. Execution and delivery
+>
+> Use the existing standing authority for necessary private synthetic testing. Do not reinstate superseded $8.15 or nine/ten-call funding gates. Preserve historical usage, reservations and unknown costs.
+>
+> Use small purposeful batches, finite deadlines, duplicate prevention and a working Stop path. Reconcile unknown execution outcomes before another submission. Actual provider authentication, quota or payment failures remain operational constraints.
+>
+> Deliver the installed revision, demonstrated root causes, general repairs, coverage matrix, fresh acceptance results, preserved failures, measured usage and exact remaining dependencies. Continue through repair and verification; do not stop after producing a plan or passing isolated unit tests.
+
+### Session interpretation, 2026-10-27 — recorded, not owner-ruled
+
+8. **The documented-service inventory is deterministic** (`studio/gi/services.py`, a clause-level reader run in the
+   bounded assess child, its output validated by `services.validate`). No new runtime model, provider, key or
+   account is added: choosing a coding engine stays the owner's separate decision (first brief), and a new key is a
+   class (d) item. The inventory is advisory, like routing.
+9. **Hold-only combination.** The documented service decides a code's status, but the routing-era reading is a
+   second opinion that can only hold: a hedge, denial or cancellation in the code's own passage about that service
+   holds it, a disagreement is never a new exclusion, and routing's own doubt about a family holds its codes. What it
+   no longer does is let a fragment about something else, or a passage about another time, decide (the Elena 43239
+   hold, the gi-01 and gi-05 E/M exclusions).
+10. **The second review is automatic and bounded**: once per revision and service date, only after a successful
+    primary request, only for a documented service of a supported family left without a supported proposal, with the
+    text that documents that service, under the full send discipline. Its codes fill only unresolved items. It is an
+    additional provider request funded by the standing authority; its usage is recorded like any other.
+11. **A member-entered context value that differs from the document's is a conflict** with both sides kept, not an
+    override (the Elena encounter's member-entered 1998-01-01 against a documented 20 October 2026). It is resolved by
+    correcting or clearing the metadata or by an addendum.
+12. **No qualified GI-coder adjudication is available to this session.** Every expectation in the regression corpus
+    and the held-out acceptance set is an author expectation, labelled provisional; no accuracy percentage is claimed.

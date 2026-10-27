@@ -6,7 +6,7 @@
  "service_date": null,
  "families": [
   "Office / outpatient evaluation and management",
-  "Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)"
+  "Upper GI endoscopy (EGD, esophagoscopy, POEM)"
  ],
  "source_kind": "paste",
  "open_clarifications": 1,
@@ -100,7 +100,7 @@
    },
    {
     "family": "gi.egd",
-    "label": "Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)",
+    "label": "Upper GI endoscopy (EGD, esophagoscopy, POEM)",
     "supported": true,
     "status": "planned",
     "mentions": [],
@@ -282,7 +282,7 @@
     "code": "43235",
     "code_kind": "cpt1",
     "family": "gi.egd",
-    "family_label": "Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)",
+    "family_label": "Upper GI endoscopy (EGD, esophagoscopy, POEM)",
     "eyebrow": "UPPER GI ENDOSCOPY",
     "supported": true,
     "profile_version": "gi.egd@1",

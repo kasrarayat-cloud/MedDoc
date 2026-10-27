@@ -466,7 +466,7 @@ class Routing10UnlistedHistoryTests(unittest.TestCase):
                     self.assertNotEqual(proposals['43235'].bucket, 'excluded')
                     self.assertIn('separate_em', clarified(proposals['99214']))
                     _, alone = run_engine(text, [('99214', REFLUX_VISIT)])
-                    self.assertNotIn('Upper GI endoscopy (EGD, esophagoscopy, enteroscopy) is documented as performed',
+                    self.assertNotIn('Upper GI endoscopy (EGD, esophagoscopy, POEM) is documented as performed',
                                      unproposed(alone).detail)
 
     def test_controls(self):

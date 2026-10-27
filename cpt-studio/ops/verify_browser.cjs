@@ -24,7 +24,9 @@
  * desktop (1440x1000) and mobile (390x844) screenshots of the review screen.
  *
  * Nothing is retried: a failure is recorded and the run continues with the next document
- * (or stops with --stop-on-failure). Everything is written to EVIDENCE_DIR/evidence.json,
+ * (or stops with --stop-on-failure). A file named STOP in EVIDENCE_DIR stops the run before
+ * the next upload (the batch's Stop path; a document already uploaded finishes as the
+ * application processes it, and its own Stop is the encounter's Stop button). Everything is written to EVIDENCE_DIR/evidence.json,
  * which ops/verify_downloads.py then re-checks file by file. Exit 0 when every document
  * passed, 1 when anything failed, 2 on a usage error before any upload.
  */
@@ -866,6 +868,11 @@ async function main(argv) {
     const problems = sessionProblems(evidence.session, opts);
     if (problems.length) throw new Error(`refusing to upload: ${problems.join('; ')}`);
     for (const item of inputs.documents) {
+      if (stopRequested(opts.out)) {
+        evidence.run_error = 'stopped: a STOP file is present in the evidence directory; no further upload was made';
+        process.stdout.write(`${evidence.run_error}\n`);
+        break;
+      }
       process.stdout.write(`${item.doc.id} ${item.delivery.format} ... `);
       const record = await verifyDocument(page, opts, inputs.manifest, item, sink);
       evidence.documents.push(record);
@@ -889,8 +896,12 @@ async function main(argv) {
   return complete && evidence.summary.failed === 0 ? 0 : 1;
 }
 
+function stopRequested(outDir) {
+  return fs.existsSync(path.join(outDir, 'STOP'));
+}
+
 module.exports = {
-  parseArgs, UsageError, cpSlice, safeName, sessionProblems, checkPipeline, checkExtraction, checkContext, checkRouting,
+  stopRequested, parseArgs, UsageError, cpSlice, safeName, sessionProblems, checkPipeline, checkExtraction, checkContext, checkRouting,
   checkEvidenceExact, checkMustNotCode, checkClarifications, checkIncomplete, planDecisions, planConfirmations, checkReadiness,
   checkPersistence, checkEvidenceMarks, checkDecisionDom, expectedDownloads, checkDownloads, checkListing, summarize,
   documentResult, readDom,

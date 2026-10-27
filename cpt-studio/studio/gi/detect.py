@@ -48,7 +48,7 @@ from studio.gi import sections as gi_sections
 from studio.gi.sections import Layout, layout
 from studio.types import Fact, FamilyFinding, RoutingResult, ServiceMention, Span
 
-ROUTING_VERSION = 'gi-routing@3'
+ROUTING_VERSION = 'gi-routing@4'
 PROCEDURE_FAMILIES = tuple(f for f in DETECTED_FAMILIES if PROFILES[f].procedure)
 # Within one mention the strongest reading wins; "performed" never beats a doubt.
 STATUS_PRECEDENCE = ('negated', 'historical', 'cancelled', 'incomplete', 'planned', 'uncertain', 'performed')
@@ -5217,6 +5217,19 @@ def _interventions(an: Analysis, attributed: list[Optional[str]], family: str) -
     return _joined('interventions', found)
 
 
+_INSERTED_AT = re.compile(r'\b(?:inserted|introduced|placed|passed)\b[^.;]{0,40}?\b(?:into|in|through|via)\s+(?:the\s+)?'
+                          r'(?:rectum|anus|anal\s+canal|esophagus|oesophagus|mouth|oropharynx)\b'
+                          r'|\bper\s+(?:rectum|anum|os)\b|\b(?:inserted|introduced)\s+(?:transorally|transanally|orally)\b',
+                          re.A | re.I)
+
+
+def _insertion_only(depth: int, span: Span, denials) -> bool:
+    """The deepest landmark reached is the first one, read only from the instrument's insertion ("The colonoscope was
+    inserted into the rectum and advanced under direct vision"), and nothing denies or doubts a deeper reach: the text
+    states where the examination started, not how far it went."""
+    return depth == 1 and not denials and bool(_INSERTED_AT.search(span.text))
+
+
 def _colon_extent(an: Analysis, sentences) -> Optional[Fact]:
     unread, denied, doubted, cut, cut_denials = [], [], [], [], []
     reached, blocked = _landmarks(an, sentences, cues.LOWER_LANDMARKS, unread, denied, doubted, cut=cut,
@@ -5226,6 +5239,8 @@ def _colon_extent(an: Analysis, sentences) -> Optional[Fact]:
     if not reached or withhold:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
+    if depth < cues.CECUM_DEPTH and _insertion_only(depth, span, blocked + denied + doubted):
+        return None  # "inserted into the rectum and advanced": where the examination starts, never how far it went
     if depth < cues.CECUM_DEPTH:
         if _P2_unread_reaches(unread, cues.CECUM_DEPTH) and not _P2_denied_beyond(blocked + denied, depth):
             return None  # round 4c-2 plan:B: an unread label names the cecum or beyond
@@ -5268,6 +5283,8 @@ def _upper_extent(an: Analysis, sentences, incomplete: bool) -> Optional[Fact]:
     if not reached or withhold:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
+    if depth < _expected_upper_depth(an) and not incomplete and _insertion_only(depth, span, blocked + denied + doubted):
+        return None  # "introduced into the esophagus": where the examination starts, never how far it went
     if depth < _expected_upper_depth(an) and _P2_unread_reaches(unread, _expected_upper_depth(an)) \
             and not _P2_denied_beyond(blocked + denied, depth):
         return None  # round 4c-2 plan:B: an unread label names the depth the procedure calls for

@@ -152,3 +152,23 @@ class SecondReviewTests(TestCase):
         self.create()
         drain()
         self.assertEqual(len(self.provider.requests), 1)
+
+    def test_reconciling_the_unknown_second_review_allows_one_more(self):
+        self.provider.outcomes = ['succeeded', 'unknown']
+        encounter_id = self.create()
+        drain()
+        unknown = models.ProviderRun.objects.get(encounter_id=encounter_id, state='unknown')
+        self.assertEqual(unknown.purpose, 'second_review')
+        reply = self.client.post(f'/api/encounters/{encounter_id}/reconcile',
+                                 data=json.dumps({'provider_run_id': str(unknown.pk),
+                                                  'note': 'Checked the provider console: no response was recorded.'}),
+                                 content_type='application/json')
+        self.assertIn(reply.status_code, (200, 201), reply.content)
+        drain()
+        runs = list(models.ProviderRun.objects.filter(encounter_id=encounter_id).order_by('created_at'))
+        sent = [r for r in runs if r.sent]
+        self.assertEqual([(r.purpose, r.state) for r in sent],
+                         [('primary', 'succeeded'), ('second_review', 'unknown'), ('second_review', 'succeeded')])
+        self.assertEqual(len(self.provider.requests), 3)
+        drain()
+        self.assertEqual(len(self.provider.requests), 3)

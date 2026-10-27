@@ -68,7 +68,7 @@ Fields: `file` (PDF/DOCX/TXT) **or** `text` (pasted note); `title` (optional);
       "billing_context": {"value": "not_documented", "origin": "missing", "evidence": [], "note": "..."},
       "patient_status": {"value": "established", "origin": "document", "evidence": [], "note": ""}},
     "user_values": {}},
-  "routing": {"version": "gi-routing@3", "document_kind": "procedure_report", "families": [
+  "routing": {"version": "gi-routing@4", "document_kind": "procedure_report", "families": [
       {"family": "gi.colonoscopy", "label": "Colonoscopy", "supported": true, "status": "performed",
        "mentions": [{"status": "performed", "section": "procedure", "cues": ["..."], "span": {"start": 0, "end": 0, "text": ""}}],
        "facts": [{"name": "extent", "value": "cecum", "origin": "document", "evidence": [], "note": ""}],

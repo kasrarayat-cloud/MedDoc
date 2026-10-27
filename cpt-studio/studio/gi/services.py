@@ -30,12 +30,16 @@ and cannot be complete for open prose, so nothing it decides is final without a 
 from __future__ import annotations
 
 import bisect
+import dataclasses
 import re
 from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Optional, Sequence
 
 from studio.gi import context as gi_context
+from studio.gi import cues as _cues
+from studio.gi import sections as _sections
+from studio.ingest import symbols as _box_symbols
 from studio.types import Span
 
 INVENTORY_VERSION = 'gi-services@1'
@@ -48,6 +52,8 @@ MAX_ACTS = 2000
 MAX_LESIONS_PER_SERVICE = 60
 MAX_SERVICES = 40
 SENTENCE_READ_CHARS = 1200  # a longer sentence is read in its first part for acts, and the rest is a problem
+CLAUSE_REACH = 400  # how far around a mention its clause is read (bounds the work per mention)
+ROW_REACH = 300  # how far around a mention its check-box row is read
 
 SERVICE_STATUSES = ('performed', 'incomplete', 'planned', 'historical', 'cancelled', 'negated', 'uncertain')
 ACT_STATUSES = ('performed', 'negated', 'planned', 'historical', 'cancelled', 'uncertain')
@@ -128,16 +134,22 @@ SERVICES: tuple[tuple[str, str, re.Pattern], ...] = tuple((family, kind, _rx(pat
                                           r'|\banorectal\s+(?:physiology|function)\s+(?:test|testing|study)\b'),
     ('gi.motility', 'manometry', r'\b(?:high[- ]resolution\s+)?esophageal\s+(?:manometry|motility\s+(?:study|testing))\b'
                                  r'|\bHRM\b|\bantroduodenal\s+manometry\b|\b(?:gastric|duodenal|colonic|colon)\s+'
-                                 r'(?:manometry|motility\s+(?:study|testing))\b|\bmanometry\b'),
-    ('gi.feeding_tube', 'feeding_tube', r'\bPEG(?:-J)?\b|\bpercutaneous\s+endoscopic\s+(?:gastrostomy|jejunostomy)\b'
-                                        r'|\bgastrostomy\s+tube\b|\bG-?tube\b|\bjejunostomy\s+tube\b|\bJ-?tube\b'
-                                        r'|\bgastrostomy\s+(?:button|tube)\s+(?:replacement|change|exchange)\b'),
+                                 r'(?:manometry|motility\s+(?:study|testing))\b'),
+    # A feeding-tube service of its own: a tube changed, replaced or repositioned, or placed with imaging. A PEG placed
+    # during an upper endoscopy is that endoscopy's act (its own EGD code), never a second service.
+    ('gi.feeding_tube', 'feeding_tube', r'\b(?:gastrostomy|jejunostomy|gastrojejunostomy|G-?J?|J|PEG)(?:[- ]tube)?\s+'
+                                        r'(?:tube\s+|button\s+)?(?:replacement|change|exchange|reinsertion|repositioning)\b'
+                                        r'|\breplacement\s+of\s+(?:the\s+|a\s+)?(?:gastrostomy|jejunostomy|G-?tube|J-?tube|'
+                                        r'PEG)\b|\b(?:percutaneous\s+)?(?:radiologic(?:al)?|image-guided|fluoroscopic(?:ally)?'
+                                        r'(?:[- ]guided)?)\s+(?:gastrostomy|jejunostomy|gastrojejunostomy)\b'),
     ('gi.enteroscopy', 'enteroscopy', r'\b(?:push\s+|small[- ]bowel\s+|deep\s+|spiral\s+|(?:double|single)[- ]balloon\s+'
                                       r'|balloon[- ]assisted\s+|device[- ]assisted\s+)?enteroscop(?:y|ies|e)\b'),
     ('gi.egd', 'egd', r'\bEGD\b|\besophagogastroduodenoscop(?:y|ies)\b|\bupper\s+(?:GI\s+|gastrointestinal\s+)?'
                       r'endoscop(?:y|ies)\b(?!\s+ultraso)|\bgastroscop(?:y|ies)\b|\bupper[- ]endoscopy\b'),
     ('gi.egd', 'esophagoscopy', r'\b(?:transnasal\s+)?esophagoscop(?:y|ies)\b|\bTNE\b'),
     ('gi.egd', 'poem', r'\bper-?oral\s+endoscopic\s+myotomy\b|\bPOEM\b'),
+    ('gi.egd', 'peg', r'\bpercutaneous\s+endoscopic\s+gastrostomy\b|\bPEG\b(?![- ]?J\b)(?![- ]tube\s+(?:replacement|change|'
+                      r'exchange|reinsertion))'),
     ('gi.colonoscopy', 'colonoscopy', r'\b(?:ileo)?colonoscop(?:y|ies|ic)\b'),
     ('gi.flex_sig', 'flex_sig', r'\b(?<!rigid\s)(?:flexible\s+)?sigmoidoscop(?:y|ies|ic)\b|\bflex(?:ible|\.)?\s+sig\b'),
 ))
@@ -156,7 +168,7 @@ ACTS: tuple[tuple[str, re.Pattern], ...] = tuple((kind, _rx(pattern)) for kind, 
             r'\bneedle\b|\bneedle\s+pass(?:es)?\b|\bEUS-guided\s+(?:tissue\s+acquisition|sampling|biops(?:y|ies))\b'),
     ('hot_biopsy', r'\bhot\s+(?:biopsy\s+)?forceps\b'),
     ('emr', r'\bendoscopic\s+mucosal\s+resection\b|\bEMR\b|\bmucosectomy\b|\blift(?:-|\s+and\s+)(?:cut|snare)\b'),
-    ('esd', r'\bendoscopic\s+submucosal\s+dissection\b|\bESD\b'),
+    ('esd', r'\b(?:endoscopic\s+)?submucosal\s+dissection\b|\bESD\b'),
     ('snare', r'\b(?:cold\s+|hot\s+)?snare(?:d|\s+polypectomy|\s+resection|\s+removal)?\b(?!\s+site)|\bpolypectom(?:y|ies)\b'),
     ('biopsy', r'\bbiops(?:y|ies|ied|ying)\b|\bforceps\b|\btissue\s+samples?\b|\bsampled\b'),
     ('ablation', r'\b(?:radiofrequency\s+)?ablat(?:ion|ed|ive)\b|\bargon\s+plasma\s+coagulation\b|\bAPC\b|\bRFA\b'
@@ -167,9 +179,13 @@ ACTS: tuple[tuple[str, re.Pattern], ...] = tuple((kind, _rx(pattern)) for kind, 
     ('clip', r'\b(?:hemo|endo)?clips?\b|\bclipp(?:ed|ing)\b'),
     ('tattoo', r'\btattoo(?:ed|ing|s)?\b|\bIndia\s+ink\b|\bcarbon\s+particle\s+suspension\b'),
     ('injection', r'\b(?:submucosal\s+)?inject(?:ion|ions|ed)\b'),
-    ('band_ligation', r'\b(?:band(?:ed|ing)?\s+ligation|variceal\s+band(?:ing)?|bands?\s+(?:were|was)\s+(?:placed|applied)'
-                      r'|banded)\b'),
-    ('dilation', r'\bdilat(?:ion|ation|ed|ing)\b|\bbougie\w*\b|\bSavary\b|\bMaloney\b'),
+    ('band_ligation', r'\b(?:band(?:ed|ing)?\s+ligation|variceal\s+band(?:ing)?|bands?\s+(?:were|was)\s+(?:placed|applied|'
+                      r'deployed|fired)|banded)\b|\b(?:placed|applied|deployed|fired)\s+(?:\w+\s+){0,3}?(?:rubber\s+)?bands\b'
+                      r'|\bligated\s+with\s+(?:\w+\s+){0,2}?bands?\b'),
+    ('dilation', r'\bdilat(?:ion|ation|ed|ing|ors?)\b|\bbougie\w*\b|\bSavary\b(?![- ]?(?:guide-?)?wire)|\bMaloney\b'
+                 r'|\b(?:through-the-scope|TTS|CRE|controlled\s+radial\s+expansion|pneumatic)\s+(?:dilation\s+)?balloon\b'
+                 r'|(?<!extraction\s)(?<!occlusion\s)(?<!retrieval\s)\bballoon\s+(?:was\s+)?inflated\s+(?:\w+\s+){0,2}?to\s+'
+                 r'\d{1,2}(?:\.\d)?\s*mm\b'),
     ('stent', r'\bstents?\b'),
     ('foreign_body', r'\bforeign\s+bod(?:y|ies)\b|\bfood\s+(?:bolus|impaction)\b'),
     ('sphincterotomy', r'\b(?:biliary\s+|pancreatic\s+)?(?:sphincterotomy|papillotomy)\b'),
@@ -179,19 +195,26 @@ ACTS: tuple[tuple[str, re.Pattern], ...] = tuple((kind, _rx(pattern)) for kind, 
     ('cannulation', r'\bcannulat(?:ion|ed)\b'),
     ('peg', r'\bPEG(?:-J)?\b|\bpercutaneous\s+endoscopic\s+gastrostomy\b|\bgastrostomy\s+tube\s+(?:was\s+)?placed\b'),
     ('tube_replacement', r'\b(?:gastrostomy|G-?tube|PEG|J-?tube|jejunostomy)\b[^.;]{0,30}\b(?:replace(?:d|ment)|'
-                         r'exchang(?:ed|e)|changed)\b|\breplace(?:d|ment)\s+of\s+(?:the\s+)?(?:gastrostomy|G-?tube)\b'),
+                         r'exchang(?:ed|e)|changed)\b|\breplace(?:d|ment)\s+of\s+(?:the\s+)?(?:gastrostomy|G-?tube)\b'
+                         # a tube passed through the tract that is already there is a replacement, never a new placement
+                         r'|\b(?:inserted|placed|passed|reinserted)\s+(?:\w+\s+){0,3}?through\s+(?:the\s+)?(?:(?:existing|mature|'
+                         r'established|old|healed|well-healed)\s+){1,3}(?:gastrostomy\s+)?(?:tract|stoma)\b'),
     ('myotomy', r'\bmyotom(?:y|ies)\b'),
-    ('decompression', r'\bdecompress(?:ion|ed)\b'),
+    ('tube_placement', r'\b(?:decompression|rectal|colonic)\s+tube\b'),
+    ('decompression', r'\bdecompress(?:ion|ed)\b(?!\s+tube)'),
     ('fundoplication', r'\btransoral\s+(?:incisionless\s+)?fundoplication\b|\bTIF\b'),
     ('capsule_study', r'\bcapsule\b'),
     ('manometry', r'\bmanometr(?:y|ic)\b|\bmotility\s+study\b|\bHRM\b'),
     ('ph_monitoring', r'\bpH\b|\bimpedance\b|\bBravo\b'),
     ('rectal_sensation', r'\brectal\s+(?:sensation|compliance|tone)\b|\bballoon\s+expulsion\b'),
     ('moderate_sedation', r'\bmoderate\s+sedation\b|\bconscious\s+sedation\b'),
+    # a specimen recorded as collected (a nursing or specimen row): tissue was taken by some act; it is never coded
+    ('specimen', r'\bspecimens?\s+(?:were\s+|was\s+)?(?:collected|obtained|taken|sent|submitted|retrieved)\b'),
 ))
 ACT_KINDS = tuple(kind for kind, _ in ACTS)
 # Kinds whose mere naming in a sentence is not an act (they name a thing): they are acts only with an act predicate.
 NOUN_KINDS = frozenset(('stone_extraction', 'stent', 'clip', 'capsule_study', 'ph_monitoring', 'manometry', 'biopsy',
+                        'tube_placement', 'specimen',
                         'injection', 'foreign_body', 'cannulation', 'tattoo', 'rectal_sensation'))
 
 # --- vocabulary: reading words ---------------------------------------------------------------------------------
@@ -200,17 +223,22 @@ ACT_VERB = _rx(r'\b(?:was|were|been|is|are)\s+(?:then\s+|also\s+|successfully\s+
                r'achieved|injected|tattooed|ablated|treated|dilated|banded|clipped|cleared|extracted|swept|sampled|'
                r'biopsied|snared|cannulated|completed|carried\s+out|accomplished|made|used|passed|advanced|'
                r'introduced|reached|intubated|replaced|exchanged|ingested|recorded|positioned|attached|delivered|'
-               r'fragmented|crushed|cut|sent|submitted|marked)\b'
+               r'fragmented|crushed|cut|sent|submitted|marked|administered|given|provided|supervised|closed)\b'
                r'|\b(?:we|I)\s+(?:then\s+)?(?:performed|obtained|took|removed|resected|placed|deployed|injected|ablated|'
-               r'dilated|banded|clipped|extracted|biopsied|snared|sampled|cannulated|passed|advanced|replaced)\b'
+               r'dilated|banded|clipped|extracted|biopsied|snared|sampled|cannulated|passed|advanced|replaced|'
+               r'administered|gave|provided|supervised)\b'
                r'|\bunderwent\b|\bunderwent\s+successful\b')
 # A participle naming the act with no auxiliary ("polyps removed by cold snare", "biopsies taken").
 BARE_PARTICIPLE = _rx(r'\b(?:performed|obtained|taken|removed|resected|retrieved|placed|deployed|injected|ablated|treated|'
-                      r'dilated|banded|clipped|extracted|sampled|biopsied|snared|achieved|done|completed|sent)\b')
+                      r'dilated|banded|clipped|extracted|sampled|biopsied|snared|achieved|done|completed|sent|replaced|'
+                      r'exchanged|reinserted|ligated|administered|decompressed|disrupted|inflated|left\s+in\s+(?:place|situ))\b')
 NEG_LEAD = _rx(r'^(?:[\s\-*•(]*(?:[A-Z]{1,3}\d{1,2}|\d{1,2}[.)])?\s*)*(?:no|neither|none|nor|without|there\s+was\s+no'
                r'|there\s+were\s+no)\b')
 NEG_OTHER = _rx(r'^(?:[\s\-*•(]*(?:[A-Z]{1,3}\d{1,2}|\d{1,2}[.)])?\s*)*(?:no|neither|none|nor|there\s+(?:was|were)\s+no)'
-                r'\s+(?:other|further|additional|more|another|separate|repeat)\b')
+                r'(?:\s+(?:other|further|additional|more|another|separate|repeat)\b'
+                # a limit on acts beyond the documented ones: "No tissue was sampled beyond the three containers"
+                r'|\b[^.;\n]{0,80}?\b(?:beyond|other\s+than|except(?:\s+for)?|apart\s+from|besides|in\s+addition\s+to)\s+'
+                r'(?:the|those|these|what|that|this|its|their|\w+\s+(?:listed|described|documented|noted))\b)')
 NOT_VERB = _rx(r"\b(?:was|were|is|are|been|has|have|had|did|does|could|would|can)\s+(?:not|never|n't)\b(?:\s+be)?"
                r"|\bnot\s+(?:performed|done|obtained|taken|removed|resected|treated|sampled|biopsied|placed|injected|"
                r"attempted|repeated|undertaken|carried\s+out|reached|completed|required|needed|indicated)\b"
@@ -219,7 +247,12 @@ WITHOUT = _rx(r'\b(?:without|w/o)\b')
 CANCEL_WORDS = _rx(r'\b(?:cancel(?:l)?ed|declined|refused|deferred|postponed|aborted\s+before|not\s+attempted)\b')
 HISTORY_WORDS = _rx(r'\b(?:prior|previous(?:ly)?|history\s+of|historical|in\s+the\s+past|ago|earlier|remote|old|formerly'
                     r'|last\s+(?:year|month|week|time|visit|seen)|had\s+(?:a|an|undergone|been|had)|status\s+post|s/p'
-                    r'|prior-record|mentioned\s+in\s+the\s+preprocedure\s+history)\b')
+                    r'|prior-record|mentioned\s+in\s+the\s+preprocedure\s+history)\b'
+                    # another facility's study ("an outside EUS-guided biopsy", "at an outside hospital"), never a margin
+                    # ("an incision outside the marks")
+                    r'|\b(?:an?|the)\s+outside\s+(?:hospital|facility|institution|center|centre|clinic|records?|report|'
+                    r'endoscop\w*|colonoscop\w*|gastroenterolog\w*|EGD|EUS(?:-guided)?|ERCP|procedure|study|biops\w*|'
+                    r'imaging|CT|MRI|physician|practice)\b|\bat\s+an\s+outside\b|\bperformed\s+elsewhere\b')
 PLAN_WORDS = _rx(r'\b(?:will(?:\s+be)?|plan(?:s|ned)?|schedul(?:e|ed|ing)|future|recommend(?:ed|ation)?|may\s+require'
                  r'|might\s+(?:require|need)|may\s+need|consider(?:ed|ation)?|to\s+be\s+(?:arranged|scheduled|done)'
                  r'|arrange(?:d)?|next|upcoming|pending\s+(?:scheduling|authorization)|repeat\s+(?:in|after)|after\s+'
@@ -230,7 +263,11 @@ REVIEW_OF_RECORDS = _rx(r'\breview(?:ed|ing)?\s+(?:of\s+)?(?:the\s+)?(?:prior|pr
                         r'(?:records?|notes?|results?|reports?|imaging|studies|labs?|pathology|colonoscopy|endoscopy|'
                         r'charts?)\b')
 HEDGE_WORDS = _rx(r'\?|\b(?:possibl[ey]|probabl[ey]|questionabl[ey]|likely|unlikely|uncertain|unclear|may\s+have|might\s+have'
-                  r'|presumed|presumably|suspected|apparently|attempt(?:ed)?)\b')
+                  r'|presumed|presumably|suspected|apparently'
+                  r'|(?<!first\s)(?<!second\s)(?<!third\s)(?<!fourth\s)(?<!initial\s)(?<!final\s)attempt(?:ed)?)\b')
+# "placement of a covered stent", "removal of the polyp": a nominal act predicate, read like a verb.
+NOMINAL_ACT = _rx(r'\b(?:placement|insertion|deployment|removal|extraction|retrieval|resection|ablation|dilation|dilatation|'
+                  r'ligation|injection|closure|decompression)\s+of\b')
 TODAY_WORDS = _rx(r'\btoday\b|\bthis\s+(?:session|encounter|procedure|examination|visit)\b|\bduring\s+this\b'
                   r'|\bon\s+the\s+date\s+of\s+(?:the\s+)?(?:encounter|service|visit)\b'
                   r'|\bsame\s+(?:session|procedural\s+encounter|encounter)\b|\bat\s+this\s+(?:session|encounter)\b')
@@ -247,6 +284,10 @@ INCOMPLETE_WORDS = _rx(r'\b(?:incomplete(?:ly)?|discontinu(?:ed|e|ation)|termina
                        r'|unable\s+to\s+(?:advance|reach|pass|traverse|intubate|complete)|could\s+not\s+be\s+(?:advanced|'
                        r'passed|completed)|not\s+(?:reached|completed|advanced\s+beyond)|stopped\s+at|limited\s+to\s+the'
                        r'|precluded|interrupted)\b')
+DEEP_CANNULATION = _rx(r'\b(?:deep(?:ly)?|selective(?:ly)?)\s+(?:\w+\s+){0,2}?cannulat(?:ion|ed)\b|\bcannulat(?:ion|ed)\s+'
+                       r'(?:\w+\s+){0,4}?(?:deep(?:ly)?|selective(?:ly)?)\b')
+DISCONTINUED = _rx(r'\b(?:discontinu(?:ed|e|ation)|terminat(?:ed|ion)|abort(?:ed)?|abandon(?:ed)?|interrupted|stopped\s+'
+                   r'(?:early|prematurely|because|due))\b')
 INTENT_WORDS = (('screening', _rx(r'\bscreening\b')), ('surveillance', _rx(r'\bsurveillance\b')),
                 ('diagnostic', _rx(r'\bdiagnostic\b|\bsymptom-?driven\b')))
 LESION_NOUN = (r'(?:polyps?|lesions?|mass(?:es)?|nodules?|tumou?rs?|ulcers?|adenomas?|stricture|ring|varix|varices|'
@@ -272,7 +313,17 @@ TECHNIQUES = (('cold forceps', _rx(r'\bcold[- ](?:biopsy\s+)?forceps\b')), ('hot
 # --- document parts and roles ----------------------------------------------------------------------------------
 REPORT_TITLE = _rx(r'^[\s\-*#]*(?P<title>[^\n:.]{0,80}?\b(?:procedure\s+report|report|procedure\s+note|operative\s+note'
                    r'|note|record))\s*$')
-PROCEDURE_FIELD = _rx(r'^[\s\-*#]*(?:procedures?(?:\s+performed(?:\s+today)?)?|operation|interventions?)\s*[:\-–]\s*'
+# "SMALL BOWEL CAPSULE ENDOSCOPY: INTERPRETATION AND REPORT", "Colonoscopy - procedure note": a title that names its
+# service before a colon and only report words after it.
+TITLE_REPORT_WORDS = _rx(r'^[\s\-*#]*(?P<title>[^\n:.]{3,80}?)\s*[:\-\u2013]\s*(?:(?:interpretation|procedure|operative|final|'
+                         r'physician|study|and|with)\s+){0,4}(?:report|note|record|interpretation|summary)\s*$')
+# "PROCEDURE NOTE: ESOPHAGOGASTRODUODENOSCOPY WITH BAND LIGATION": a report title that names its service after a colon.
+TITLE_FIELD = _rx(r'^[\s\-*#]*(?:procedure|operative|endoscopy|endoscopic)\s+(?:note|report)\s*[:\-\u2013]\s*'
+                  r'(?P<value>\S[^\n]{0,100})$')
+# A numbered part of the document ("PART 2 - ") is read by the line after its number.
+PART_NUMBER = re.compile(r'[ \t]*' + _sections.DOCUMENT_PART, re.A)
+PROCEDURE_FIELD = _rx(r'^[\s\-*#]*(?:procedures?(?:\s+performed(?:\s+today)?)?|operation|interventions?|stud(?:y|ies)'
+                      r'(?:\s+performed)?|tests?\s+performed)\s*[:\-–]\s*'
                       r'(?P<value>\S[^\n]*)$')
 ROLE_HEADINGS = (('nursing', _rx(r'^[\s\-*#]*(?:nursing|nurse|RN|recovery\s+nurse|procedure\s+checklist|nursing\s+'
                                  r'checklist|pre-?procedure\s+nursing|intra-?procedure\s+nursing)\b[^\n]{0,60}$')),
@@ -288,22 +339,42 @@ ROLE_LABEL = (('physician', _rx(r'^\W*(?:physician|endoscopist|proceduralist|att
                                 r'attestation|addendum|comment))?\s*:')),
               ('nursing', _rx(r'^\W*(?:nurse|nursing|RN|LPN)(?:\s+(?:note|entry|comment))?\s*:')),
               ('anesthesia', _rx(r'^\W*(?:anesthesia|anaesthesia|CRNA|anesthesiologist)(?:\s+(?:note|record))?\s*:')))
-GENERIC_HEADING = _rx(r'^[\s\-*#]*[A-Z][A-Za-z /&,()\-]{1,60}:?\s*$')
+GENERIC_HEADING = _rx(r'^[\s\-*#]*[A-Z0-9][A-Za-z0-9 /&,()\-]{1,60}:?\s*$')
+# Another provider's service, stated in its sentence: anesthesia given by an anesthesia professional, specimens sent to
+# a pathology or cytology service, a facility's or radiology's own billing. A sentence that denies it attributes nothing.
+_ANESTHESIA_WHO = (r'\b(?:anesthesiologist|anaesthetist|anaesthesiologist|CRNA|anesthesiology|anaesthesiology|'
+                   r'(?:certified\s+registered\s+)?nurse\s+an(?:a)?esthetist|an(?:a)?esthesia\s+associates|'
+                   r'anesthesia\s+(?:team|department|care\s+team|service|services|professional|provider|group|record|staff)|'
+                   r'anaesthesia\s+(?:team|department|service|record))\b')
 OTHER_PROVIDER = (
-    ('anesthesia', _rx(r'\b(?:monitored\s+anesthesia\s+care|MAC|general\s+anesthesia|propofol\s+sedation|deep\s+sedation|'
-                       r'anesthesia|anaesthesia)\b[^.;]{0,120}\b(?:by|from|supplied|provided|administered|managed)\b[^.;]{0,80}'
-                       r'\b(?:anesthesia|anaesthesia|anesthesiologist|CRNA|separate|another)\b'
-                       r'|\b(?:anesthesia|anaesthesia)\s+(?:professional|service|team|provider)\s+(?:managed|provided|'
-                       r'administered|supplied|gave)\b')),
-    ('pathology', _rx(r'\bpathology\s+(?:interpretation|service|department|review)\b[^.;]{0,120}\b(?:separate|by\s+the|'
-                      r'will\s+be|reported\s+separately|performed\s+by)\b|\b(?:specimen\s+processing|histology)\b[^.;]{0,80}'
-                      r'\bseparate\s+pathology\b|\bseparate\s+pathology\s+service\b')),
-    ('radiology', _rx(r'\bradiology\s+interpretation\s+is\s+reported\s+separately\b|\bradiologist\b[^.;]{0,60}\bseparately\b'
-                      r'|\bradiology\s+services\s+are\s+billed\s+separately\b')),
-    ('facility', _rx(r'\bfacility\s+(?:services|charges|fees|claim)\b[^.;]{0,120}\b(?:separately|by\s+the|respective|'
-                     r'billed|documented)\b|\bfacility\s+and\s+(?:radiology|anesthesia)\s+services\s+are\s+billed\s+'
-                     r'separately\b')),
+    ('anesthesia', _rx(r'\b(?:monitored\s+anesthesia\s+care|MAC|general\s+(?:endotracheal\s+)?an(?:a)?esthesia|propofol'
+                       r'|deep\s+sedation|an(?:a)?esthesia)\b[^;\n]{0,160}' + _ANESTHESIA_WHO
+                       + r'|' + _ANESTHESIA_WHO + r'[^;\n]{0,120}\b(?:provided|administered|gave|managed|supplied|'
+                       r'delivered)\b[^;\n]{0,40}\b(?:MAC|an(?:a)?esthesia|sedation|propofol)\b'
+                       r'|\ban(?:a)?esthesia\s+(?:services|charges)\s+(?:are|were|will\s+be)\s+(?:billed|reported|documented)'
+                       r'\s+separately\b')),
+    ('pathology', _rx(r'\b(?:specimens?|samples?|biops(?:y|ies)|containers?|jars?|brushings?|tissue|polyps?|pieces|'
+                      r'aspirates?|slides?|cell\s+blocks?|both|all)\b[^.\n]{0,160}?\b(?:sent|submitted|delivered|forwarded|'
+                      r'to)\b[^;\n]{0,80}?\b(?:patholog\w*|cytopatholog\w*|cytology|histolog\w*)\b'
+                      r'|\b(?:interpretation|evaluation)\b[^;\n]{0,80}\b(?:reported|performed|provided|made)\s+by\s+'
+                      r'(?:the\s+)?(?:\w+\s+){0,3}?(?:patholog\w*|cytopatholog\w*)\b'
+                      r'|\bpathology\s+(?:interpretation|service|department|review)\b[^;\n]{0,120}\b(?:separate|by\s+the|'
+                      r'will\s+be|reported\s+separately|performed\s+by)\b|\bseparate\s+pathology\s+service\b')),
+    ('radiology', _rx(r'\bradiology\s+interpretation\s+is\s+reported\s+separately\b|\bradiologist\b[^;\n]{0,60}\bseparately\b'
+                      r'|\bradiology\s+services\s+are\s+billed\s+separately\b'
+                      r'|\b(?:supervision\s+and\s+interpretation|interpretation)\b[^;\n]{0,80}\b(?:reported|billed|performed|'
+                      r'provided)\s+by\s+(?:the\s+)?radiolog\w*\b'
+                      r'|\binterpreted\s+by\b[^;\n]{0,60}\bradiolog(?:y|ist)\b')),
+    ('facility', _rx(r'\bfacility\s+(?:services|charges|fees|claim|component|billing)\b[^;\n]{0,120}\b(?:separately|by|'
+                     r'respective|billed|documented|submitted|reported)\b|\bfacility\s+and\s+(?:radiology|anesthesia)\s+'
+                     r'services\s+are\s+billed\s+separately\b'
+                     r'|\b(?:reports?|bills?|billed|submits?|claims?)\s+the\s+technical\s+component\b'
+                     r'|\btechnical\s+component\b[^;\n]{0,60}\b(?:reported|billed|submitted|claimed)\s+by\b')),
 )
+# A sentence that denies another provider's service ("No anesthesia professional was involved", "no specimens were sent").
+OTHER_PROVIDER_DENIED = _rx(r'\b(?:no|without|not|never|none)\b[^.;\n]{0,40}\b(?:an(?:a)?esthesi\w+|CRNA|MAC|specimens?|'
+                            r'samples?|patholog\w*|radiolog\w*|facility)\b|\b(?:an(?:a)?esthesi\w+|CRNA|specimens?|samples?)\b'
+                            r'[^.;\n]{0,40}\b(?:was|were)\s+not\b')
 SEDATION_BY_ENDOSCOPIST_DENIED = _rx(r'\b(?:endoscopist|performing\s+physician|proceduralist)\s+(?:did\s+not|was\s+not|'
                                      r'never)\s+(?:administer|provide|give|supervise)\w*\b[^.;]{0,60}\bsedation\b'
                                      r'|\bendoscopist\s+did\s+not\s+provide\s+a\s+separately\s+documented\s+'
@@ -311,6 +382,12 @@ SEDATION_BY_ENDOSCOPIST_DENIED = _rx(r'\b(?:endoscopist|performing\s+physician|p
 BOX_ROW = _rx(r'(?P<subject>[A-Za-z][^\[\]\n]{2,80}?)\s*[:\-]?\s*\[(?P<a>[ xX✓✔])\]\s*(?P<la>performed|yes|done)'
               r'\s*\[(?P<b>[ xX✓✔])\]\s*(?P<lb>not\s+performed|no|not\s+done)\b')
 PAGE_HEADER = _rx(r'^[^\n]{0,120}\|\s*[^\n]{0,120}\|\s*[^\n]{0,120}$')
+# Any printed check box or option mark: a row with one is read by routing's hardened box reader (gi/detect.py), never
+# by the clause words around it.
+BOX_MARK = re.compile('(?:' + _box_symbols.BOX_OFF_PATTERN + '|' + _box_symbols.BOX_ON_PATTERN + '|'
+                      + _box_symbols.BOX_UNREAD_PATTERN + ')')
+BOX_STATUS = {'performed': 'performed', 'incomplete': 'performed', 'negated': 'negated', 'cancelled': 'cancelled',
+              'planned': 'planned', 'historical': 'historical', 'uncertain': 'uncertain'}
 # E/M: an evaluation documented as such, a note's own structure, and routine procedure-related work.
 EM_EVALUATED = _rx(r'\b(?:evaluated|seen|examined|assessed|reviewed\s+in\s+clinic)\s+(?:today\s+)?(?:for|in|with)\b'
                    r'|\bpresents?\s+(?:today\s+)?(?:for|with)\b|\bfollow(?:s|ed)?[- ]?up\s+(?:visit|appointment)\b'
@@ -319,6 +396,7 @@ EM_EVALUATED = _rx(r'\b(?:evaluated|seen|examined|assessed|reviewed\s+in\s+clini
 NOTE_STRUCTURE = re.compile(r'^[ \t]*(?:impression|assessment|plan|exam(?:ination)?|physical\s+exam(?:ination)?|history|'
                             r'HPI|chief\s+complaint|ROS|review\s+of\s+systems|medications|allergies)\b[^\n]{0,40}?[:\-]',
                             re.A | re.I | re.M)
+from studio.gi.cues import EM_VISIT  # noqa: E402  (routing's own visit-statement words)
 EM_ROUTINE = _rx(r'\broutine\s+pre-?procedur(?:e|al)\s+(?:history|assessment|evaluation|H&P|update)'
                  r'|\bno\s+separate\s+(?:problem-oriented\s+)?(?:evaluation|E/M|office[- ]visit)'
                  r'|\bnot\s+a\s+separate(?:ly\s+identifiable)?\s+(?:E/M|evaluation|visit)')
@@ -401,6 +479,7 @@ class DocumentedService:
     separate_em: bool = False  # an E/M: the document states a significant, separately identifiable E/M
     scope_start: int = 0  # the text that documents the service: its report part(s), else its own passages
     scope_end: int = 0
+    included_in: str = ''  # another service of this encounter whose code includes this one (an EGD inside an EUS)
 
 
 @dataclass(frozen=True)
@@ -476,7 +555,9 @@ def parts(text: str) -> tuple[_Part, ...]:
             cuts.append((ls, family, role, Span(ls + line.index(stripped), ls + line.index(stripped) + len(stripped),
                                                 stripped), 'role'))
             continue
-        m = REPORT_TITLE.match(line)
+        numbered = PART_NUMBER.match(line)
+        body = line[numbered.end():] if numbered else line
+        m = REPORT_TITLE.match(body) or TITLE_FIELD.match(body) or TITLE_REPORT_WORDS.match(body)
         named, _ = _family_named(line) if m else ('', '')
         field_m = PROCEDURE_FIELD.match(line)
         if m and named and not PLAN_WORDS.search(line) and not HISTORY_WORDS.search(line):
@@ -545,10 +626,17 @@ def _sentences(text: str) -> list[tuple[int, int]]:
                         cut = i + 1
         elif ch == '\n':
             nxt = text[i + 1:i + 40]
-            prev_line_text = text[text.rfind('\n', 0, i) + 1:i]
-            if re.match(r'[ \t]*[A-Z][A-Za-z /&()\-]{1,40}:[ \t]+\S', nxt) \
-                    or re.match(r'[ \t]*[A-Z][A-Za-z /&()\-]{1,40}:[ \t]+\S', prev_line_text):
-                cut = i  # a "Label: value" field line is a sentence of its own
+            prev_line_text = text[max(text.rfind('\n', max(0, i - 400), i) + 1, start):i]
+            if BOX_MARK.search(prev_line_text) or BOX_MARK.search(text, i + 1, min(n, i + 200)) and \
+                    BOX_MARK.search(text[i + 1:text.find('\n', i + 1) if text.find('\n', i + 1, i + 400) >= 0
+                                         else min(n, i + 400)]):
+                cut = i  # a check-box or option row never runs on into the next line, nor another into it
+            elif re.match(r'[ \t]*[A-Z][A-Za-z /&()\-]{1,40}:[ \t]+\S', nxt) \
+                    or (re.match(r'[ \t]*[A-Z][A-Za-z /&()\-]{1,40}:[ \t]+\S', prev_line_text)
+                        and not re.match(r'[ \t]*[a-z(]', nxt)):
+                # a "Label: value" field line is a sentence of its own, unless its value wraps onto a line that
+                # continues it ("Rectum: a separate 4 mm lesion ... biopsy for" / "histology (jar B).")
+                cut = i
             elif re.match(r'\s*\n', nxt) or re.match(r'[ \t]*(?:[A-Z]{1,3}\d{1,2}\s|\d{1,2}[.)]\s|[-*•]\s)', nxt) \
                     or (re.match(r'[ \t]*[A-Z][A-Za-z /&,()\-]{1,60}:?[ \t]*(?:\n|$)', text[i + 1:i + 80])
                         and not text[start:i].rstrip().endswith(',')):
@@ -585,9 +673,22 @@ def _span(text: str, start: int, end: int) -> Span:
 # --- clause reading -------------------------------------------------------------------------------------------------
 
 _CLAUSE_CUT = _rx(r';|\s+but\s+|\s+whereas\s+|\s+although\s+|,\s+while\s+|\s+and\s+(?=(?:was|were|is|are)\s+(?:not|never)\b)'
-                  r'|\s+and\s+(?=(?:the|a|an|this|that|it|she|he|they|we|I|one|two|three|\d+)\b[^.;]{0,60}\b(?:was|were|'
+                  r'|(?<![\d.])\s+and\s+(?=(?:the|a|an|this|that|it|she|he|they|we|I|one|two|three|\d+)\b[^.;]{0,60}\b(?:was|were|'
                   r'is|are|has|have|had|did)\b)|,\s+(?=(?:and\s+)?(?:the|this|that|it|she|he|they|we|I)\s+[^.;,]{0,40}'
                   r'\b(?:was|were|is|are)\b)')
+
+
+def _bounded_clause(text: str, clause: tuple[int, int], pos: int, end: int) -> tuple[int, int]:
+    """The part of a clause within CLAUSE_REACH characters of the mention, cut at whitespace."""
+    cs, ce = clause
+    lo, hi = max(cs, pos - CLAUSE_REACH), min(ce, end + CLAUSE_REACH)
+    if lo > cs:
+        space = text.find(' ', lo, pos)
+        lo = space + 1 if space >= 0 else pos
+    if hi < ce:
+        space = text.rfind(' ', end, hi)
+        hi = space if space >= 0 else end
+    return lo, hi
 
 
 def clauses(text: str, start: int, end: int) -> list[tuple[int, int]]:
@@ -622,14 +723,35 @@ def _dates_in(dates, start: int, end: int):
 
 def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, service_date: Optional[date], dates,
                 part: _Part, in_today_report: bool) -> Reading:
-    """The status a clause gives the thing named at [pos, end) in it."""
-    cs, ce = clause
+    """The status a clause gives the thing named at [pos, end) in it, read within CLAUSE_REACH of the mention."""
+    cs, ce = _bounded_clause(text, clause, pos, end)
     before = text[cs:pos]
     after = text[end:ce]
     whole = text[cs:ce]
     cues: list[str] = []
-    # Check boxes on the row: "[X] Performed [ ] Not performed".
-    for m in BOX_ROW.finditer(text, max(cs, pos - 90), min(len(text), ce + 60)):
+    line_start = max(text.rfind('\n', max(0, pos - ROW_REACH), pos) + 1, pos - ROW_REACH, 0)
+    line_end = text.find('\n', end, end + ROW_REACH)
+    line_end = min(len(text), end + ROW_REACH) if line_end < 0 else line_end
+    has_bracket = '[' in text[line_start:line_end]
+    plain = [m for m in BOX_ROW.finditer(text, line_start, line_end)] if has_bracket else []
+    if len(plain) == 1 and bool(plain[0].group('a').strip()) != bool(plain[0].group('b').strip()) \
+            and plain[0].start() <= pos < plain[0].end():
+        # "<act> [X] Performed [ ] Not performed": one row, exactly one of its two options marked
+        return Reading('performed' if plain[0].group('a').strip() else 'negated',
+                       ('box: performed checked' if plain[0].group('a').strip() else 'box: not performed checked',))
+    if end > pos and BOX_MARK.search(text, line_start, line_end):
+        # Any other boxed row: routing's box reader, hardened over the refutation rounds, decides (strict rows: an
+        # unusual row holds). Its status is the act's.
+        from studio.gi import detect  # local: detect imports context, which this module also imports
+        status, box_cues = detect.status_for_span(text, pos, end, service_date)
+        checked = re.search(_box_symbols.BOX_ON_PATTERN, text[line_start:line_end])
+        if status == 'negated' and not checked and any('unchecked' in cue for cue in box_cues):
+            # no option on the row is marked: an unselected option alone says nothing (the box contract)
+            return Reading('uncertain', ('box: an unselected option alone says nothing',))
+        return Reading(BOX_STATUS.get(status, 'uncertain'), ('box: ' + (box_cues[0] if box_cues else status),)
+                       + tuple(box_cues[1:3]))
+    # Check boxes on the row, never another line's: "[X] Performed [ ] Not performed".
+    for m in BOX_ROW.finditer(text, max(cs, pos - 90, line_start), min(ce + 60, line_end)):
         a, b = m.group('a').strip(), m.group('b').strip()
         if a and not b:
             return Reading('performed', ('box: performed checked',))
@@ -683,13 +805,27 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     if part.kind == 'plan' and not TODAY_WORDS.search(whole):
         return Reading('planned', ('planned: in a plan section',))
     if ACT_VERB.search(whole) or BARE_PARTICIPLE.search(after) or BARE_PARTICIPLE.search(before[-40:]) \
-            or BARE_PARTICIPLE.fullmatch(text[pos:end].strip()):
+            or BARE_PARTICIPLE.fullmatch(text[pos:end].strip()) or _nominal_act(text, before, pos):
         if in_today_report or TODAY_WORDS.search(whole) or part.kind == 'report':
             return Reading('performed', ('performed: an act predicate in a current report',))
         return Reading('performed', ('performed: an act predicate',))
     if in_today_report:
         return Reading('uncertain', ('uncertain: named without an act predicate',))
     return Reading('uncertain', ('uncertain: no performance statement',))
+
+
+# The act's own noun heading its phrase: "En bloc endoscopic submucosal dissection of a 0-IIa lesion", "ligation of
+# two varices".
+NOMINAL_HEAD = _rx(r'(?:[\w-]+\s+){0,4}?(?:dissection|resection|ligation|dilation|dilatation|ablation|polypectomy|'
+                   r'biopsy|biopsies|placement|insertion|extraction|removal|decompression|myotomy|sphincterotomy)\s+of\b')
+
+
+def _nominal_act(text: str, before: str, pos: int) -> bool:
+    """'placement of a covered metal stent' in an impression or a findings or technique section: the nominal form of
+    the act's predicate. Never in an indication, a history or a plan, where it names what was asked for or intended."""
+    if not NOMINAL_ACT.search(before[-60:]) and not NOMINAL_HEAD.match(text, pos, pos + 120):
+        return False
+    return _sections.layout(text).section_at(pos).kind in ('impression', 'findings', 'technique', 'procedure')
 
 
 def current_statement(text: str, start: int, end: int, service_date: Optional[date]) -> bool:
@@ -719,6 +855,7 @@ class _ServiceDraft:
     extent: str = ''
     report_title: Optional[Span] = None
     scopes: list = field(default_factory=list)  # (start, end) of report parts and passages that document it
+    kind_settled: bool = False  # the kind was set by the report title or a performed mention, not a passing one
 
 
 def _anatomy_in(text: str, start: int, end: int) -> list[tuple[str, str, int, int]]:
@@ -758,10 +895,33 @@ def _acts_in(text: str, start: int, end: int) -> list[tuple[str, int, int]]:
     return sorted(found, key=lambda x: x[1])
 
 
-def _family_for_act(kind: str, region: str, part_family: str, present: Sequence[str]) -> str:
+def _family_for_act(kind: str, region: str, part_family: str, present: Sequence[str],
+                    performed: Sequence[str] = ()) -> str:
     """Which service an act belongs to: the report part's own service, else by anatomy where one service fits. An
     act whose anatomy cannot be reached by the part's service (a duodenal biopsy in a colonoscopy part) goes to the
-    present service whose anatomy it is."""
+    present service whose anatomy it is. Where several fit, the one service documented as performed takes it (a stent
+    in an ERCP report that also cites "the outside EUS")."""
+    chosen = _family_for_act_in(kind, region, part_family, present)
+    if chosen or not performed:
+        return chosen
+    narrowed = [f for f in performed if f != 'gi.office_em']
+    if len(narrowed) == 1 and _family_for_act_in(kind, region, '', narrowed):
+        return narrowed[0]
+    return ''
+
+
+# Acts that only one family performs, whatever part of the document names them.
+KIND_FAMILIES = {'ph_monitoring': ('gi.reflux',), 'capsule_study': ('gi.capsule',), 'rectal_sensation': ('gi.anorectal',),
+                 'manometry': ('gi.anorectal', 'gi.motility'), 'tube_replacement': ('gi.feeding_tube',)}
+
+
+def _family_for_act_in(kind: str, region: str, part_family: str, present: Sequence[str]) -> str:
+    if kind in KIND_FAMILIES:
+        options = [f for f in KIND_FAMILIES[kind] if f in present]
+        if kind == 'manometry' and len(options) > 1:
+            options = ['gi.anorectal'] if region in ('rectum', 'anus') else ['gi.motility']
+        if len(options) == 1:
+            return options[0]
     if part_family:
         lower = part_family in ('gi.colonoscopy', 'gi.flex_sig')
         upper = part_family in ('gi.egd',)
@@ -785,10 +945,51 @@ def _family_for_act(kind: str, region: str, part_family: str, present: Sequence[
     return options[0] if len(options) == 1 else ''
 
 
-DILATION_ACT = _rx(r'\b(?:balloon|bougie\w*|Savary|Maloney|dilator|CRE|pneumatic|wire-guided|through-the-scope|TTS)\b'
+# The landmark a family's endpoint is: the duodenum (bulb or beyond) or jejunum for an EGD, the cecum or the terminal
+# ileum for a colonoscopy (routing's landmark tables, cues.UPPER_LANDMARKS / LOWER_LANDMARKS).
+ENDPOINT_LANDMARKS = {
+    'gi.egd': tuple(p for _, depth, p in _cues.UPPER_LANDMARKS if depth >= 3),
+    'gi.colonoscopy': tuple(p for _, depth, p in _cues.LOWER_LANDMARKS if depth >= _cues.CECUM_DEPTH),
+    'gi.capsule': tuple(p for _, depth, p in _cues.LOWER_LANDMARKS if depth >= _cues.CECUM_DEPTH),
+}
+NOT_REACHED = _rx(r'\b(?:short\s+of|unable|failed|could\s+not|cannot|can\s*not|precluded|not\s+(?:reached|intubated|'
+                  r'visuali[sz]ed|seen|examined|entered|identified|possible)|without\s+reaching|did\s+not)\b')
+
+
+def _endpoint_seen(text: str, family: str, start: int, end: int, service_date, dates, part) -> Optional[Span]:
+    """A clause of today's report that states its endpoint landmark examined: reached ("advanced to the appendiceal
+    orifice"), checked ("Extent reached: [X] Cecum") or described as seen ("Duodenum - normal bulb and second portion",
+    "1. Cecum - 3 mm polyp"). Never a denial, an earlier or planned examination, or a doubt."""
+    clause_text = text[start:end]
+    if NOT_REACHED.search(clause_text):
+        return None
+    for pattern in ENDPOINT_LANDMARKS.get(family, ()):
+        m = pattern.search(text, start, end)
+        if m is None:
+            continue
+        reading = read_clause(text, (start, end), m.start(), m.end(), service_date=service_date, dates=dates,
+                              part=part, in_today_report=part.kind == 'report')
+        if reading.status == 'performed' or (reading.status == 'uncertain' and reading.cues and reading.cues[0] in (
+                'uncertain: no performance statement', 'uncertain: named without an act predicate')):
+            return _span(text, *_bounded_clause(text, (start, end), m.start(), m.end()))
+    return None
+
+
+def _upper_only(text: str, start: int, end: int) -> str:
+    """'gi.egd' when a sentence about an unnamed endoscope names only upper GI anatomy, the stomach or duodenum among
+    it ("An ultraslim endoscope ... the stomach and duodenum to the second portion were examined")."""
+    regions = {region for _, region, _, _ in _anatomy_in(text, start, min(end, start + SENTENCE_READ_CHARS))}
+    return 'gi.egd' if regions and regions <= UPPER and regions & {'stomach', 'duodenum'} else ''
+
+
+DILATION_ACT = _rx(r'\b(?:balloon|bougie\w*|Savary|Maloney|dilators?|CRE|pneumatic|wire-guided|through-the-scope|TTS)\b'
                    r'|\b(?:we|I)\s+dilated\b|\bdilat(?:ion|ation)\s+(?:was|were)\s+(?:performed|done|carried\s+out)\b'
                    r'|\b(?:was|were)\s+dilated\s+(?:with|using|by)\b|\bdilated\s+(?:with|using)\s+(?:a|an)\b'
                    r'|\b(?:no|without)\s+dilat(?:ion|ation)\b|\bdilat(?:ion|ation)\s+was\s+not\b')
+# An act noun as the object of a place preposition ("through the newly deployed stent", "across the clips"): the noun
+# names a place, and a denial in its clause is about something else.
+PLACE_OBJECT = _rx(r'\b(?:through|across|into|beyond|past|within|inside|around|over|alongside|via|adjacent\s+to|next\s+to)'
+                   r'\s+(?:the|a|an|this|that|its|their|each)?\s*(?:[\w-]+\s+){0,3}$')
 OBSERVED = _rx(r'\b(?:was|were|is|are)\s+(?:seen|noted|found|identified|visualized|visualised|observed|present|detected|'
                r'appreciated|evident|demonstrated)\b')
 
@@ -817,6 +1018,7 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
     attributions: list[Attribution] = []
     sedation_denied = ''
     present_families: list[str] = []
+    performed_families: list[str] = []  # families with a performed reading (a title, a statement, an instrument)
     encounter_intents: list[str] = []
     routine_em: list[Span] = []
     # Pass 1: services named, other providers' services, encounter-wide statements.
@@ -829,7 +1031,8 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
                     continue
                 named.append((family, kind, m.start(), m.end(), ss, se))
         for role, pattern in OTHER_PROVIDER:
-            if pattern.search(text, ss, se):
+            if pattern.search(text, ss, min(se, ss + SENTENCE_READ_CHARS)) \
+                    and not OTHER_PROVIDER_DENIED.search(text, ss, min(se, ss + SENTENCE_READ_CHARS)):
                 attributions.append(Attribution(role, (_span(text, ss, se),)))
         if SEDATION_BY_ENDOSCOPIST_DENIED.search(text, ss, se):
             sedation_denied = 'denied'
@@ -861,21 +1064,27 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
                                                                                   else len(text)]):
                     reading = Reading('performed', reading.cues + ('performed: listed on the procedure line',))
             d = draft(family, kind)
+            if (title or reading.status == 'performed') and not d.kind_settled:
+                d.kind, d.kind_settled = kind, True  # "Prior upper endoscopy ..." never makes a TNE an EGD
             if part.kind == 'report' and part.family == family:
                 d.scopes.append((part.start, part.end))
             if title and d.report_title is None:
                 d.report_title = part.title
-            d.statuses.append((reading.status, reading.cues, _span(text, *clause)))
+            bounded_span = _span(text, *_bounded_clause(text, clause, ms, me))
+            d.statuses.append((reading.status, reading.cues, bounded_span))
             if reading.status == 'performed':
-                d.evidence.append(_span(text, *clause))
+                d.evidence.append(bounded_span)
             if family not in present_families and reading.status in ('performed', 'uncertain'):
                 present_families.append(family)
+            if family not in performed_families and reading.status == 'performed':
+                performed_families.append(family)
         # Instruments name their service ("The colonoscope was advanced to the cecum").
         for ss, se in sentences:
             part = _part_at(plist, starts, ss)
             for m in INSTRUMENTS.finditer(text, ss, se):
                 word = m.group(0).lower()
-                family = next((f for name, f in INSTRUMENT_FAMILY if name in word), part.family)
+                family = next((f for name, f in INSTRUMENT_FAMILY if name in word), part.family) \
+                    or (_upper_only(text, ss, se) if word == 'endoscope' else '')
                 if not family:
                     continue
                 clause = _clause_for(clauses(text, ss, se), m.start())
@@ -888,10 +1097,13 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
                     draft(family, FAMILY_KINDS.get(family, family.split('.')[-1]))
                     if family not in present_families:
                         present_families.append(family)
+                if reading.status == 'performed' and family not in performed_families:
+                    performed_families.append(family)
                 d = drafts[family]
-                d.statuses.append((reading.status, reading.cues, _span(text, *clause)))
+                bounded_span = _span(text, *_bounded_clause(text, clause, m.start(), m.end()))
+                d.statuses.append((reading.status, reading.cues, bounded_span))
                 if reading.status == 'performed':
-                    d.evidence.append(_span(text, *clause))
+                    d.evidence.append(bounded_span)
         # Pass 2: completion and extent, read in each service's own report part (or a sentence naming only it).
         procedural = [f for f in drafts if f != 'gi.office_em']
         for ss, se in sentences:
@@ -910,9 +1122,14 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
                 clause_text = text[cs:ce]
                 if HISTORY_WORDS.search(clause_text) or re.search(r'\b(?:if|unless|whether)\b', clause_text, FLAGS):
                     continue
-                if COMPLETE_POS.search(clause_text) and not re.search(r'\bnot\s+(?:reached|intubated|complete)',
-                                                                        clause_text, FLAGS):
-                    d.completion_pos.append(_span(text, cs, ce))
+                positive_m = COMPLETE_POS.search(clause_text)
+                if positive_m and not re.search(r'\bnot\s+(?:reached|intubated|complete)', clause_text, FLAGS):
+                    d.completion_pos.append(_span(text, *_bounded_clause(text, (cs, ce), cs + positive_m.start(),
+                                                                         cs + positive_m.end())))
+                elif not positive_m and has_endpoint(fam, d.kind):
+                    reached = _endpoint_seen(text, fam, cs, ce, service_date, dates, part)
+                    if reached is not None:
+                        d.completion_pos.append(reached)
                 for m in INCOMPLETE_WORDS.finditer(text, cs, ce):
                     lead = text[max(cs, m.start() - 60):m.start()].lower()
                     if re.search(r'\b(?:not|never|no|without)\s+(?:\w+\s+)?$', lead) or re.search(
@@ -923,7 +1140,7 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
                         continue
                     if re.search(r'\b(?:lesion|polyp|mass|it)\b[^.;]{0,40}\bnot\s+removed\b', clause_text, FLAGS):
                         continue
-                    d.completion_neg.append(_span(text, cs, ce))
+                    d.completion_neg.append(_span(text, *_bounded_clause(text, (cs, ce), m.start(), m.end())))
                     break
         # Pass 3: lesions and acts.
         act_count = 0
@@ -938,8 +1155,8 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
             lesion_matches = list(LESION.finditer(text, ss, read_end))
             if not mentions and not lesion_matches:
                 continue
-            cls = clauses(text, ss, se)
-            anatomy_all = _anatomy_in(text, ss, se)
+            cls = clauses(text, ss, read_end)
+            anatomy_all = _anatomy_in(text, ss, read_end)
             regions = {region for _, region, _, _ in anatomy_all}
             part_family = part.family if part.family in drafts and part.kind == 'report' else ''
             named_here = sorted({f for f, _, _, _, s2, _ in named if s2 == ss and f in drafts}
@@ -958,7 +1175,7 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
                 if re.match(r'\s+(?:treatment|resection|removal|site|bed|base|margin)', tail):
                     continue
                 region_one = next(iter(regions)) if len(regions) == 1 else ''
-                fam = _family_for_act('biopsy', region_one, part_family, present_families)
+                fam = _family_for_act('biopsy', region_one, part_family, present_families, performed_families)
                 if not fam or fam not in drafts or denies_further:
                     continue
                 d = drafts[fam]
@@ -988,7 +1205,7 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
                                     size=size, morphology=re.sub(r'[\s,]+', ' ', lm.group('morph') or '').strip(),
                                     anatomy=anat[0][0], region=anat[0][1],
                                     specimen=(specimen.group('label') or specimen.group('label2')) if specimen else '',
-                                    evidence=(_span(text, ss, se),))
+                                    evidence=(_span(text, ss, read_end),))
                     d.lesions.append(lesion)
                     sentence_lesions.append(lesion)
                 elif existing is not None:
@@ -1004,7 +1221,7 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
                 clause = _clause_for(cls, ms)
                 anat = [a for a in anatomy_all if clause[0] <= a[2] < clause[1]] or anatomy_all
                 region = anat[0][1] if anat else ''
-                fam = _family_for_act(kind, region, part_family, present_families)
+                fam = _family_for_act(kind, region, part_family, present_families, performed_families)
                 if not fam or fam not in drafts:
                     continue
                 if kind == 'snare' and re.match(r'\s*site\b', text[me:me + 8], FLAGS):
@@ -1013,13 +1230,20 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
                     continue  # "a common bile duct dilated to 11 mm", "upstream duct dilation": a finding
                 reading = read_clause(text, clause, ms, me, service_date=service_date, dates=dates, part=part,
                                       in_today_report=part.kind == 'report')
-                clause_text = text[clause[0]:clause[1]]
-                has_act_verb = bool(ACT_VERB.search(clause_text) or BARE_PARTICIPLE.search(clause_text)
-                                    or BOX_ROW.search(text, max(0, ms - 90), min(len(text), clause[1] + 60)))
+                bc = _bounded_clause(text, clause, ms, me)
+                clause_text = text[bc[0]:bc[1]]
+                row_lo = max(text.rfind('\n', max(0, ms - ROW_REACH), ms) + 1, ms - ROW_REACH, 0)
+                row_hi = text.find('\n', me, me + ROW_REACH)
+                row_hi = min(len(text), me + ROW_REACH) if row_hi < 0 else row_hi
+                boxed = bool(BOX_MARK.search(text, row_lo, row_hi))
+                has_act_verb = bool(ACT_VERB.search(clause_text) or BARE_PARTICIPLE.search(clause_text) or boxed
+                                    or _nominal_act(text, text[bc[0]:ms], ms))
                 if reading.status == 'negated' and not has_act_verb:
                     continue  # a denied finding ("without food impaction", "no stones"), not a denied act
                 if reading.status == 'negated' and OBSERVED.search(clause_text) and not ACT_VERB.search(clause_text):
                     continue  # "No stricture or ring was seen"
+                if reading.status == 'negated' and kind in NOUN_KINDS and PLACE_OBJECT.search(text, bc[0], ms):
+                    continue  # "the scope was not passed through the newly deployed stent": a place, not a denied act
                 if kind in NOUN_KINDS and not has_act_verb and not _on_procedure_line(text, ms, part):
                     continue
                 if reading.status == 'uncertain' and not has_act_verb and not _on_procedure_line(text, ms, part):
@@ -1042,9 +1266,9 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
                     raise _Capped(f'More than {MAX_ACTS:,} acts are documented; the rest were not inventoried.')
                 d.acts.append(Act(id=f'{d.id}-A{len(d.acts) + 1}', service=d.id, kind=kind, status=reading.status,
                                   role=role, anatomy=tuple(dict.fromkeys(a[0] for a in anat)), region=region,
-                                  technique=_technique(text, *clause, near=ms), lesion=lesion.id if lesion else '',
-                                  evidence=(_span(text, *clause),), cues=reading.cues,
-                                  detail=_detail(text, *clause, kind)))
+                                  technique=_technique(text, *bc, near=ms), lesion=lesion.id if lesion else '',
+                                  evidence=(_span(text, *bc),), cues=reading.cues,
+                                  detail=_detail(text, *bc, kind)))
             if sentence_lesions:
                 lesion = sentence_lesions[-1]
                 for f, d in drafts.items():
@@ -1053,7 +1277,7 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
     except _Capped as exc:
         problems.append(str(exc))
     services = [_finish(d, text, routing, context_facts, encounter_intents) for d in drafts.values()]
-    services = [s for s in services if s is not None]
+    services = _included([s for s in services if s is not None])
     em = _em_service(text, routing, context_facts, services, routine_em, sentences, len(services) + 1)
     if em is not None:
         services.append(em)
@@ -1064,11 +1288,37 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
                             sedation_by_endoscopist=sedation_denied)
 
 
+POSITIVE_STATUSES = ('performed', 'incomplete')
+
+
+def _included(services: list) -> list:
+    """An upper endoscopy performed with an EUS in the same session is the EUS's endoscopic portion: the EUS code
+    includes the examination (EGD with EUS), so the EGD is kept, marked included, and asks for no code of its own. How
+    far the ultrasound went never makes the endoscopic examination incomplete. Its own acts are still reconciled."""
+    eus = next((s for s in services if s.family == 'gi.eus' and s.status in POSITIVE_STATUSES), None)
+    if eus is None:
+        return services
+    out = []
+    for s in services:
+        if s.family == 'gi.egd' and s.kind == 'egd' and s.status in POSITIVE_STATUSES:
+            routing_only = s.status == 'incomplete' and any(c == 'incomplete: routing reads the examination as incomplete'
+                                                            for c in s.cues)
+            s = dataclasses.replace(
+                s, included_in=eus.id,
+                status='performed' if routing_only else s.status,
+                completion='unknown' if routing_only else s.completion,
+                cues=tuple(c for c in s.cues if not (routing_only and c.startswith('incomplete:')))
+                + (f'included: the endoscopic portion of {eus.id} (EGD with EUS)',))
+        out.append(s)
+    return out
+
+
 def _instrument_families(text: str, start: int, end: int, drafts) -> set:
     found = set()
     for m in INSTRUMENTS.finditer(text, start, end):
         word = m.group(0).lower()
-        family = next((f for name, f in INSTRUMENT_FAMILY if name in word), '')
+        family = next((f for name, f in INSTRUMENT_FAMILY if name in word), '') \
+            or (_upper_only(text, start, end) if word == 'endoscope' else '')
         if family in drafts:
             found.add(family)
     return found
@@ -1176,6 +1426,22 @@ def _detail(text: str, start: int, end: int, kind: str) -> str:
     return m.group(1) if m else ''
 
 
+# Families whose service has a defined endpoint: the cecum for a colonoscopy or a capsule, beyond the pylorus for an
+# EGD, deep cannulation for an ERCP, the full examination for an EUS. An esophagoscopy, a POEM, an enteroscopy, a
+# flexible sigmoidoscopy, a physiology study or a tube change has none.
+ENDPOINT_FAMILIES = ('gi.colonoscopy', 'gi.ercp', 'gi.eus', 'gi.capsule')
+
+
+def has_endpoint(family: str, kind: str) -> bool:
+    return family in ENDPOINT_FAMILIES or (family == 'gi.egd' and kind in ('egd', 'peg'))
+
+
+def _routing_fact(finding, name: str):
+    if finding is None:
+        return None
+    return next((f for f in finding.facts if f.name == name and f.value), None)
+
+
 def _match_lesion(lesions: Sequence[Lesion], size: str, anatomy: str) -> Optional[Lesion]:
     for lesion in reversed(lesions):
         if size and lesion.size and size.replace(' ', '') == lesion.size.replace(' ', ''):
@@ -1229,20 +1495,62 @@ def _finish(d: _ServiceDraft, text: str, routing, context_facts, encounter_inten
     else:
         return None
     completion = 'unknown'
+    finding = routing.finding(d.family) if routing is not None and hasattr(routing, 'finding') else None
+    routing_status = finding.status if finding is not None else ''
+    reach = _routing_fact(finding, 'extent')
+    stops = [sp for sp in d.completion_neg if DISCONTINUED.search(sp.text)]
+    deep_cannulation = [a for a in d.acts if a.kind == 'cannulation' and a.status == 'performed' and a.evidence
+                        and DEEP_CANNULATION.search(a.evidence[0].text)]
+    completion_spans: list[Span] = []
     if status == 'performed':
-        if d.completion_neg:
+        if not has_endpoint(d.family, d.kind):
+            # No defined endpoint (an esophagoscopy, a POEM, an enteroscopy, a physiology study, a tube change): how far
+            # the instrument went is no completeness; only a documented discontinuation is.
+            if stops:
+                completion, status = 'incomplete', 'incomplete'
+                cues.append('incomplete: ' + stops[0].text[:120])
+                completion_spans = stops
+        elif finding is not None:
+            # A family routing reads: incompleteness is routing's (its reach logic was hardened over the refutation
+            # rounds: "not advanced further" beyond a landmark reached is no incomplete examination), and so is the
+            # extent it reads (the landmark the family calls for, reached); this reader adds the completeness
+            # statements it can show.
+            cannulation = _routing_fact(finding, 'cannulation')
+            if routing_status == 'incomplete':
+                completion, status = 'incomplete', 'incomplete'
+                cues.append('incomplete: routing reads the examination as incomplete')
+                completion_spans = list(d.completion_neg) + (list(reach.evidence) if reach else [])
+            elif d.completion_pos:
+                completion, completion_spans = 'complete', list(d.completion_pos)
+            elif reach is not None and not reach.value.startswith('incomplete'):
+                completion, completion_spans = 'complete', list(reach.evidence)
+                cues.append(f'complete: routing reads the extent as {reach.value}')
+            elif d.family == 'gi.ercp' and cannulation is not None and cannulation.value == 'successful':
+                completion, completion_spans = 'complete', list(cannulation.evidence)
+                cues.append('complete: routing reads the cannulation as successful')
+            elif d.family == 'gi.ercp' and deep_cannulation:
+                completion, completion_spans = 'complete', list(deep_cannulation[0].evidence)
+                cues.append('complete: deep cannulation documented as performed')
+        elif d.completion_neg:
             completion = 'incomplete'
             status = 'incomplete'
             cues.append('incomplete: ' + d.completion_neg[0].text[:120])
+            completion_spans = list(d.completion_neg)
         elif d.completion_pos:
-            completion = 'complete'
-    finding = routing.finding(d.family) if routing is not None and hasattr(routing, 'finding') else None
-    routing_status = finding.status if finding is not None else ''
+            completion, completion_spans = 'complete', list(d.completion_pos)
     if routing_status:
         doubting = [m for m in finding.mentions if m.status == 'uncertain'
                     and not any(c.startswith('uncertain: no performance evidence') for c in m.cues)]
-        if status in POSITIVE and routing_status in ('planned', 'historical', 'cancelled', 'negated'):
-            cues.append(f'uncertain: routing reads the family as {routing_status}')
+        # Routing reads a family from its NAME; its summary of a planned repeat, an earlier examination or a "no prior
+        # colonoscopy" in the indication is about another occurrence, never a doubt about the acts documented today.
+        # A statement in today's own report that the service was not done, or is planned or past, is.
+        contrary = [m for m in finding.mentions
+                    if (m.status in ('negated', 'cancelled') and m.section not in ('history', 'indication', 'plan'))
+                    or (m.status in ('planned', 'historical')
+                        and m.section in ('procedure', 'findings', 'technique', 'impression'))]
+        if status in POSITIVE and routing_status in ('planned', 'historical', 'cancelled', 'negated') and contrary:
+            cues.append(f'uncertain: routing reads the family as {routing_status}: '
+                        + (contrary[0].cues[0] if contrary[0].cues else contrary[0].sentence.text[:80]))
             status = 'uncertain'
         elif status in POSITIVE and routing_status == 'uncertain' and doubting:
             # routing's own doubt about today's service (a hedge, an ambiguous box row, a plan label) holds it
@@ -1251,13 +1559,8 @@ def _finish(d: _ServiceDraft, text: str, routing, context_facts, encounter_inten
         elif status in ('planned', 'historical', 'cancelled', 'negated') and routing_status in POSITIVE:
             cues.append(f'uncertain: routing reads the family as {routing_status}')
             status = 'uncertain'
-        elif status == 'performed' and routing_status == 'incomplete' and completion != 'complete':
-            status, completion = 'incomplete', 'incomplete'
-            cues.append('incomplete: routing reads the examination as incomplete')
-    extent = ''
-    if finding is not None:
-        fact = next((f for f in finding.facts if f.name == 'extent' and f.value), None)
-        extent = fact.value if fact else ''
+
+    extent = reach.value if reach is not None else ''
     own_intents = [i for i in d.intents if not i.startswith('not ')]
     all_intents = own_intents or [i for i in encounter_intents if not i.startswith('not ')]
     intent = all_intents[0] if all_intents else ''
@@ -1268,7 +1571,7 @@ def _finish(d: _ServiceDraft, text: str, routing, context_facts, encounter_inten
         intent = '' if intent in ('screening', 'surveillance') else intent
     lesions = tuple(_disposition(lesion, d.acts) for lesion in d.lesions)
     evidence = tuple(_dedupe_spans(([d.report_title] if d.report_title else []) + [s[2] for s in positive]))[:6]
-    completion_evidence = tuple(_dedupe_spans(d.completion_neg if completion == 'incomplete' else d.completion_pos))[:4]
+    completion_evidence = tuple(_dedupe_spans(completion_spans))[:4]
     spans = list(d.scopes) + [(e.start, e.end) for e in evidence]
     scope_start = min((a for a, _ in spans), default=0)
     scope_end = max((b for _, b in spans), default=0)
@@ -1358,7 +1661,9 @@ def _same_subject(done: Act, denied: Act, service_acts: Sequence[Act]) -> bool:
     return True
 
 
-RELATED_KINDS = {'tattoo': ('tattoo', 'injection'), 'injection': ('injection', 'tattoo')}
+RELATED_KINDS = {'tattoo': ('tattoo', 'injection'), 'injection': ('injection', 'tattoo'), 'specimen': ('biopsy',)}
+# Acts that take tissue: a specimen recorded beside any of them is accounted for.
+TISSUE_KINDS = frozenset(('biopsy', 'hot_biopsy', 'snare', 'emr', 'esd', 'fna', 'foreign_body'))
 
 
 def _conflicts(services: Sequence[DocumentedService]) -> tuple[Conflict, ...]:
@@ -1371,10 +1676,12 @@ def _conflicts(services: Sequence[DocumentedService]) -> tuple[Conflict, ...]:
         denied = [a for a in service.acts if a.status in ('negated', 'cancelled')]
         for d_act in done:
             kinds = RELATED_KINDS.get(d_act.kind, (d_act.kind,))
+            if d_act.kind == 'specimen' and any(a.kind in TISSUE_KINDS for a in done):
+                continue  # a specimen beside a documented biopsy or removal: that act's specimen
             against = [n for n in denied if n.kind in kinds and _same_subject(d_act, n, service.acts)]
             if not against:
                 continue
-            subject = 'tattoo' if 'tattoo' in kinds else d_act.kind
+            subject = 'tattoo' if 'tattoo' in kinds else 'biopsy' if d_act.kind == 'specimen' else d_act.kind
             if any(c.service == service.id and c.subject == subject and c.lesion == d_act.lesion for c in out):
                 continue
             sides: list[ConflictSide] = [ConflictSide(d_act.status, d_act.role, d_act.evidence)]

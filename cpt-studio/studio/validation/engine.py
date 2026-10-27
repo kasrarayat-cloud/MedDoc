@@ -9,6 +9,7 @@ check says exactly why.
 from __future__ import annotations
 
 import bisect
+import re
 from dataclasses import dataclass, replace
 from datetime import date
 from typing import Mapping, Optional, Sequence
@@ -19,14 +20,27 @@ from studio.reference.store import PFS, applied_sources
 from studio.types import (CONTEXT_FACTS, AssessmentResult, Check, ClarificationSpec, CodeReference, EvidenceSpan, Fact,
                           FamilyFinding, NormalizedResponse, PageSpan, ProposalAssessment, ProviderCode,
                           ReferenceLookup, ReferenceSourceInfo, RoutingResult, ServiceMention, sha256_json)
+from studio.gi.detect import DOUBT_PREFIX
 from studio.validation import checks, rationale, reconcile
 
 ENGINE_VERSION = 'cpt-studio-validation@4'
+# The documented-service inventory decides the status of the codes it matches (5.10). Off, every code is judged by the
+# routing-era reading alone - the path the inventory falls back to when its reading is inconsistent; the routing-era
+# unit tests, whose stubbed passage readings describe no real document, run that path.
+READ_DOCUMENTED_SERVICES = True
 PROVIDER_STATUSES = ('succeeded', 'not_run', 'failed', 'unknown')
 EXTRACTION_STATUSES = ('ok', 'partial', 'failed')
 NO_EVIDENCE = 'No exact source evidence'
 MAX_LISTED_CODE = 10  # what a stored proposal code holds; codes are never truncated
 OTHER_GI = 'gi.other'
+# Families gi-profiles@3 carved out of earlier ones. Their codes keep the routing-era reading of the family they were
+# routed to before (gi.other's doubt guards, the upper GI finding), as the second opinion that can only hold.
+LEGACY_FAMILIES = {'gi.capsule': OTHER_GI, 'gi.motility': OTHER_GI, 'gi.reflux': OTHER_GI, 'gi.anorectal': OTHER_GI,
+                   'gi.feeding_tube': OTHER_GI, 'gi.enteroscopy': 'gi.egd'}
+
+
+def legacy_family(family: str) -> str:
+    return LEGACY_FAMILIES.get(family, family)
 
 
 @dataclass(frozen=True)
@@ -118,7 +132,8 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     provider = list(checks.provider_checks(provider_status, response))
     coverage: list[Check] = []
     # The documented-service inventory is read from the text alone, before and independently of the proposals.
-    inventory = gi_services.build(text, service_date=date_state.value, routing=routing, context_facts=context)
+    inventory = (gi_services.build(text, service_date=date_state.value, routing=routing, context_facts=context)
+                 if READ_DOCUMENTED_SERVICES else gi_services.ServiceInventory(version=gi_services.INVENTORY_VERSION))
     problems = gi_services.validate(inventory, text)
     usable = inventory if not problems else None  # an inconsistent reading never decides a status; it is reported
     if response is not None:
@@ -138,7 +153,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
                      + tuple(_alternative(index, item, text, pages, response.provider)
                              for index, item in enumerate(alternatives))
                      + tuple(second_alternatives))
-        reconciled = {s.family for s in selections} | ({s.family for s in usable.services} if usable else set())
+        reconciled = {s.family for s in usable.services if s.status in checks.POSITIVE} if usable else set()
         coverage.append(checks.unproposed_check(*_missed(routing, selections, encounter.procedure_day,
                                                          reconciled if usable else set())))
     active = [(s.code, s.family) for s in selections if not s.excluded]
@@ -281,25 +296,31 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     # Only a family routing detects is read through its routed finding. A gi.other finding gathers different
     # procedures (the shared routing contract), so it never speaks for one code: a gi.other code's status, family
     # check and rationale come from its own passages, as for every family routing does not detect.
-    finding = routing.finding(selection.family) if selection.family in DETECTED_FAMILIES else None
+    legacy = legacy_family(selection.family)
+    finding = routing.finding(legacy) if legacy in DETECTED_FAMILIES else None
     own = checks.evidence_readings(text, kept, day)
     speaks_for: tuple = ()
-    if selection.family == OTHER_GI:
+    if legacy == OTHER_GI:
         # round 4d repair 2: a passage read cancelled only through a detected family's judgement is held, not excluded
         own = checks._V2_judged_away(text, own, day)
         own, speaks_for = _unnamed_other(own, text, routing, day, code)
-    if selection.family in checks.EM_FAMILIES:
+    if legacy in checks.EM_FAMILIES:
         own = _undated_visit(own, routing, text, day)
     families = _VAL_family_index(routing) if any(r.status == 'uncertain' for r in own) else {}
-    own = tuple(replace(r, other_service=True) if _other_service(r, selection.family, families, text) else r
+    own = tuple(replace(r, other_service=True) if _other_service(r, legacy, families, text) else r
                 for r in own)
     outcome = checks.resolve_status(own + checks.routing_readings(finding),
-                                    detectable=selection.family in DETECTED_FAMILIES)
+                                    detectable=legacy in DETECTED_FAMILIES)
     found = reconcile.match(code, inventory, selection.family) if inventory is not None else None
     supported = None
     if found is not None:
         # Engine @4: the documented service and act decide the code's status; its passages are verified against them.
-        found = _second_opinion(outcome, found, code, text)
+        found = _second_opinion(outcome, found, code, text, inventory)
+        if found.reason == 'act_missing' and outcome.state == 'not_performed':
+            # The inventory documents no such act and the code's own passage reads it as not performed today (a
+            # planned repeat, an earlier procedure): the inventory has nothing to add, and the exclusion stands.
+            found = None
+    if found is not None:
         outcome = _service_outcome(found)
         supported = reconcile.support(found, kept, current=lambda span: gi_services.current_statement(
             text, span.start, span.end, day))
@@ -307,7 +328,8 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
                                                      found, supported))
 
 
-def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str, text: str) -> reconcile.Match:
+def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str, text: str,
+                    inventory=None) -> reconcile.Match:
     """The documented service decides the code's status, with the routing-era reading as a second opinion that can
     only hold (ARCHITECTURE 5.10):
     - a hedge, a denial or a cancellation read in the code's OWN passage, when that passage is about the matched
@@ -322,19 +344,85 @@ def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str
     positive = found.state in checks.POSITIVE
     if positive and old.state in ('uncertain', 'not_performed'):
         doubt = old.decisive
-        if (doubt is not None and doubt.origin == 'evidence' and doubt.start is not None
-                and doubt.status in ('negated', 'cancelled', 'uncertain') and not checks._silent(doubt)
-                and _about(doubt, found, code, text)):
+        own = doubt is not None and doubt.origin == 'evidence' and doubt.start is not None
+        holds = (old.state == 'uncertain' and own and _about(doubt, found, code, text)) or (
+            old.state == 'not_performed' and own and doubt.status in ('negated', 'cancelled')
+            and _about(doubt, found, code, text))
+        if holds and old.state == 'uncertain' and _negation_resolved(doubt, found):
+            # The routing-era reader left a negation unresolved ("was complete and was not discontinued") in a passage
+            # the documented-service reader reads, clause by clause, as this service's own positive statement: the doubt
+            # is that reader's, not the document's. A hedge, a denial or a cancellation still holds.
+            return replace(found, detail=f'{found.detail} The routing-era reading left a negation unresolved in '
+                                         f'{checks.cite(doubt)}; the documented-service reader reads that passage as '
+                                         'this service\'s own positive statement.')
+        if holds:
+            # Any hold the routing-era reading makes on a passage about this service stands (a hedge, a doubt guard,
+            # a passage that reads performed only by its section): only a fragment about something else, or a passage
+            # about another time, is overruled by the documented service.
+            reading = 'is not established as performed' if doubt.status in checks.POSITIVE else f'reads as {doubt.status}'
+            name = checks.service_name(PROFILES[legacy_family(found.service.family)], code)
+            why = checks.uncertain_reason(old, name) if old.state == 'uncertain' else checks.exclusion_reason(old, name)
             return replace(found, state='uncertain', reason='readings_disagree', question=(
-                f'Confirm whether {code} is supported: a passage it cites about this service reads as '
-                f'{doubt.status}.'), detail=(f'{found.detail} But a passage the code cites about it reads as '
-                                             f'{doubt.status}: {checks.cite(doubt)}. Held for the reviewer.'))
+                f'Confirm whether {code} is supported: a passage it cites about this service {reading}.'),
+                detail=f'{found.detail} But the routing-era reading of the passage the code cites holds it: {why} '
+                       'Held for the reviewer.')
         return found
-    if found.state == 'not_performed' and old.state in checks.POSITIVE:
+    if found.reason == 'act_missing' and old.state in checks.POSITIVE and old.decisive is not None \
+            and old.decisive.origin == 'evidence' and old.decisive.start is not None \
+            and not _elsewhere(old.decisive, found, inventory):
+        # The documented service is performed and the code's own passage states its act (the routing-era reader reads
+        # it performed: a form row, a check box, a phrasing this reader does not parse); the inventory does not read
+        # that act at all - it neither denies it nor gives the passage to another service - so the code's own reading
+        # stands, and says so.
+        positive_state = 'incomplete' if found.service.status == 'incomplete' else 'performed'
+        return replace(found, state=positive_state, reason='own_passage', question='',
+                       detail=f'The {reconcile.service_label(found.service)} is documented as {found.service.status}; '
+                              f'the act {code} accounts for is read from its own passage by the routing-era reader '
+                              f'({checks.cite(old.decisive)}), not by the documented-service reader.')
+    if found.state == 'not_performed' and old.state != 'not_performed':
+        # Never a new exclusion: the documented service reads as not performed, the routing-era reading does not
+        # exclude the code, so it is held for the reviewer.
         return replace(found, state='uncertain', reason='readings_disagree',
                        question=f'Confirm whether {code} was performed on the date of service.',
-                       detail=f'{found.detail} Its own passages read otherwise; held for the reviewer, not excluded.')
+                       detail=f'{found.detail} Its own passages do not read it as not performed; held for the reviewer, '
+                              'not excluded.')
     return found
+
+
+def _negation_resolved(doubt: checks.Reading, found: reconcile.Match) -> bool:
+    """The doubt is only an unresolved negation, and the passage is part of the service's positive reading (its
+    statement of performance, a performed act, or a completion read as complete), never of anything it denies."""
+    if not any(c.startswith(DOUBT_PREFIX) for c in doubt.cues) or doubt.start is None:
+        return False
+    service = found.service
+    positive = list(service.evidence) if service.status in checks.POSITIVE else []
+    if service.completion == 'complete':
+        positive += list(service.completion_evidence)
+    positive += [ev for a in service.acts if a.status == 'performed' for ev in a.evidence]
+    other = [ev for a in service.acts if a.status != 'performed' for ev in a.evidence]
+
+    def overlaps(spans):
+        return any(doubt.start < t.end and t.start < doubt.end for t in spans)
+    return overlaps(positive) and not overlaps(other)
+
+
+def _elsewhere(reading: checks.Reading, found: reconcile.Match, inventory) -> bool:
+    """Whether the inventory gives the passage to another documented service (an act of another service, or another
+    service's own statement)."""
+    if inventory is None:
+        return False
+    for service in inventory.services:
+        if service.id == found.service.id:
+            continue
+        spans = list(service.evidence) + [ev for a in service.acts for ev in a.evidence]
+        if any(reading.start < t.end and t.start < reading.end for t in spans):
+            return True
+    return False
+
+
+STATUS_WORDS = re.compile(r'\b(?:perform\w*|done|complet\w*|cancel\w*|abort\w*|terminat\w*|discontinu\w*|postpon\w*|'
+                          r'defer\w*|declin\w*|refus\w*|pending|incomplete|attempt\w*|stopp\w*|halt\w*|resched\w*|'
+                          r'called\s+off|on\s+hold|tbd|unknown|requested)\b', re.I)
 
 
 def _about(reading: checks.Reading, found: reconcile.Match, code: str, text: str) -> bool:
@@ -347,6 +435,11 @@ def _about(reading: checks.Reading, found: reconcile.Match, code: str, text: str
     passage = text[reading.start:reading.end]
     if any(family == service.family and pattern.search(passage) for family, _, pattern in gi_services.SERVICES):
         return True
+    if service.family == 'gi.office_em' and (gi_services.EM_EVALUATED.search(passage)
+                                             or gi_services.EM_VISIT.search(passage)):
+        return True  # a visit statement ("Established patient office visit: ...") is about the visit
+    if service.scope_start <= reading.start and reading.end <= service.scope_end and STATUS_WORDS.search(passage):
+        return True  # a bare status statement inside the service's own report ("☒ Not performed", "Aborted ...")
     profile = reconcile.catalogue.code_profile(code)
     kinds = set(profile.covers) if profile is not None else set()
     return any(kind in kinds and pattern.search(passage) for kind, pattern in gi_services.ACTS)
@@ -603,7 +696,7 @@ def _cited(mentions: Sequence[ServiceMention], selections: Sequence[_Selection])
     done = [index for index, m in enumerate(mentions) if m.status in checks.POSITIVE]
     spans = []
     for s in selections:
-        if s.family != OTHER_GI or s.excluded:
+        if legacy_family(s.family) != OTHER_GI or s.excluded:
             continue
         for span in s.evidence:
             start = span.start + len(span.text) - len(span.text.lstrip())
@@ -634,7 +727,8 @@ def _cited(mentions: Sequence[ServiceMention], selections: Sequence[_Selection])
     names = index(lambda m: (m.span.start, m.span.end))
     found = {i for start, end in spans for i in (only(sentences, start, end), only(names, start, end)) if i is not None}
     # round 4d validation:10: and the routed mention that corroborated one of its passages (_Evaluation.speaks_for)
-    corroborated = {span for s in selections if s.family == OTHER_GI and not s.excluded for span in s.evaluation.speaks_for}
+    corroborated = {span for s in selections if legacy_family(s.family) == OTHER_GI and not s.excluded
+                    for span in s.evaluation.speaks_for}
     return found | {i for i in done if (mentions[i].span.start, mentions[i].span.end) in corroborated}
 
 
@@ -649,7 +743,7 @@ def _VAL_named_again(mentions: Sequence[ServiceMention], selections: Sequence[_S
     done = [index for index, m in enumerate(mentions) if m.status in checks.POSITIVE]
     covered: set[int] = set()
     for s in selections:
-        if s.family != OTHER_GI or s.excluded:
+        if legacy_family(s.family) != OTHER_GI or s.excluded:
             continue
         own = _cited(mentions, [s])
         if not own:
@@ -704,8 +798,11 @@ def _encounter(provider, context, routing, sources, date_state, selections) -> _
                        and (reconcile.catalogue.code_profile(t.code) or reconcile.catalogue.CodeProfile('')).covers
                        and t.evaluation is not None and t.evaluation.match is not None
                        and t.evaluation.match.service.id == match.service.id)
-        if others:
-            bases.append((s.code, others))
+        entry = reconcile.catalogue.entry(s.family)
+        reportable = [a for a in match.service.acts if a.status == 'performed' and a.role in ('physician', 'unknown')
+                      and entry is not None and a.kind in entry.acts and not reconcile._bundled(match.service, a)]
+        if others or reportable:
+            bases.append((s.code, others or tuple(sorted({reconcile.act_label(a.kind) for a in reportable}))))
     return _Encounter(bases_included=tuple(bases), provider=provider, context=context, sources=sources,
                       date_state=date_state,
                       pfs_source=pfs_source, active_pfs=rows, procedure_labels=tuple(dict.fromkeys(labels)),
@@ -776,10 +873,14 @@ def _proposal(s: _Selection, key: str, enc: _Encounter) -> ProposalAssessment:
         considerations += _service_considerations(s, m)
     included = dict(enc.bases_included).get(s.code)
     if included and not s.excluded:
-        reason = (f'The documented {reconcile.service_label(m.service) if m else "service"} has interventions that '
-                  f'{", ".join(included)} account for; its diagnostic examination is normally included in them '
-                  '(internal profile rule; NCCI procedure-to-procedure edits are not connected). Held for the reviewer, '
-                  'not excluded.')
+        service_name = reconcile.service_label(m.service) if m else 'service'
+        if all(code[:1].isdigit() for code in included):
+            reason = (f'The documented {service_name} has interventions that {", ".join(included)} account for; its '
+                      'diagnostic examination is normally included in them (internal profile rule; NCCI procedure-to-'
+                      'procedure edits are not connected). Held for the reviewer, not excluded.')
+        else:
+            reason = (f'The documented {service_name} includes {", ".join(included)}, which this diagnostic code does '
+                      'not account for (internal profile rule). Held for the reviewer, not excluded.')
         found.append(Check('services.base_included', 'Diagnostic examination beside its interventions', 'warn', reason,
                            reconcile.SOURCE))
         clarifications.append(ClarificationSpec(scope='proposal', fact='base_included', family=s.family,

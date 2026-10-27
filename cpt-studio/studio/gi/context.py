@@ -40,7 +40,7 @@ _MONTH = (r'(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|
 _FULL_DATE = (r'(?P<iy>\d{4})-(?P<im>\d{2})-(?P<id>\d{2})'
               r'|(?P<um>\d{1,2})/(?P<ud>\d{1,2})/(?P<uy>\d{4})'
               r'|(?P<lm>' + _MONTH + r')\.?[ \t]+(?P<ld>\d{1,2})(?:st|nd|rd|th)?,?[ \t]+(?P<ly>\d{4})'
-              r'|(?P<dd>\d{1,2})(?:st|nd|rd|th)?[ \t]+(?P<dm>' + _MONTH + r')\.?,?[ \t]+(?P<dy>\d{4})')
+              r'|(?P<dd>\d{1,2})(?:st|nd|rd|th)?(?:[ \t]+|-)(?P<dm>' + _MONTH + r')\.?(?:,?[ \t]+|-)(?P<dy>\d{4})')
 FULL_DATE = cues.rx(r'(?<![\w/-])(?:' + _FULL_DATE + r')(?![\w/-])')
 MONTH_YEAR = cues.rx(r'(?<![\w/-])(?:(?P<mm>' + _MONTH + r')\.?,?[ \t]+(?P<my>(?:19|20)\d{2})'
                      r'|(?P<nm>\d{1,2})/(?P<ny>(?:19|20)\d{2}))(?![\w/-])')
@@ -50,8 +50,14 @@ YEAR = cues.rx(r'(?:\b(?P<lead>in|since|from|during|until|by|circa)[ \t]+|(?P<br
 
 SERVICE_DATE = cues.rx(r'(?<![\w/-])(?:date[ \t]+of[ \t]+service|DOS|service[ \t]+date|procedure[ \t]+date'
                        r'|date[ \t]+of[ \t]+procedure|visit[ \t]+date|date[ \t]+of[ \t]+visit|encounter[ \t]+date'
-                       r'|date[ \t]+of[ \t]+encounter)\b[ \t]*(?:\([ \t]*DOS[ \t]*\)[ \t]*)?[:#=\u2013-]?[ \t]*'
+                       r'|date[ \t]+of[ \t]+encounter)\b[ \t]*(?:\([ \t]*DOS[ \t]*\)[ \t]*)?[:#=\u2013|-]?[ \t]*'
                        r'(?:' + _FULL_DATE + r')(?![\w/-])')
+# A note's own dated title line ("GI visit - 10/20/2026", "Colonoscopy report: 14 Oct 2026") or its bare header
+# "Date:" field: read only near the top
+# of the document and only when no labelled service date exists, never in a plan or history section.
+TITLE_DATE = cues.rx(r'[ \t]*(?:[A-Za-z][A-Za-z /&,()]{0,60}?\b(?:visit|encounter|consultation|consult|note|report)'
+                     r'[ \t]*(?:[-\u2013\u2014:|,]|\bon\b|\bof\b)?|date[ \t]*[:|\u2013-])[ \t]*(?:' + _FULL_DATE + r')[ \t]*$')
+TITLE_LINES = 12  # non-empty lines from the top in which a dated title is read
 DATE_QUALIFIER = cues.rx(r'\b(?:previous|prior|last|next|planned|scheduled|future|follow-?up|repeat|anticipated'
                          r'|tentative|proposed|requested|rescheduled|upcoming|due)\b')
 
@@ -240,6 +246,20 @@ def _service_dates(text: str, lay: Layout) -> tuple[list[tuple[str, Span]], list
             invalid.append(span)
         else:
             found.append((value.isoformat(), span))
+    if not found and not invalid:
+        seen = 0
+        for ls, le in ((m.start(), m.end()) for m in re.finditer(r'[^\n]+', text)):
+            if not text[ls:le].strip():
+                continue
+            seen += 1
+            if seen > TITLE_LINES:
+                break
+            m = TITLE_DATE.match(text, ls, le)
+            if m is None or lay.section_at(ls).kind in NOT_CURRENT_SECTIONS or DATE_QUALIFIER.search(text, ls, le):
+                continue
+            value = date_from_match(m)
+            if value is not None:
+                found.append((value.isoformat(), _span(text, ls + len(text[ls:le]) - len(text[ls:le].lstrip()), le)))
     return found, invalid
 
 
