@@ -19,6 +19,9 @@ cost-2 / cost-4 (the lesion vocabulary; the analyze stage's count since WIP 8k r
   assess stage to 55 s of its 120 on a quiet host (twice the cost under the load the r1 verifiers saw is past it). A
   lesion's clause is now read only where its reading decides something: a sized lesion "this", "that" or "the" does
   not name, and a lesion about to be recorded.
+cost-4 (the instrument vocabulary) - each unnamed "endoscope" read its sentence's anatomy again to tell whether only
+  upper GI anatomy names it (in the instrument pass and in passes 2 and 3): 39,000 in one sentence took the assess
+  stage to 56 s of its 120. The anatomy is read once per sentence.
 
 Each cost pin runs the stage's own code under a deadline well under the stage's and far over what the repaired code
 takes; the reading pins compare with the code before the repair. Synthetic data only; no network.
@@ -339,3 +342,45 @@ class LesionReadTests(SimpleTestCase):
         self.assertEqual(len(inv.services[0].lesions), services.MAX_LESIONS_PER_SERVICE)
         self.assertIn(f'More than {services.MAX_LESIONS_PER_SERVICE} lesions are documented for one service; the rest '
                       'were not inventoried.', inv.problems)
+
+
+# --- cost-4: an unnamed endoscope's anatomy is read once per sentence ----------------------------------------------
+
+def endoscopes(n, tail=' was advanced to the stomach and duodenum.'):
+    return HEAD + 'Date of service: 2026-10-14\n' + ' '.join(['endoscope'] * n) + tail + '\n'
+
+
+class UnnamedEndoscopeTests(SimpleTestCase):
+    def anatomy_reads(self, text):
+        calls = []
+        real = services._upper_only
+
+        def counted(*args):
+            calls.append(args[1:])
+            return real(*args)
+
+        with mock.patch.object(services, '_upper_only', counted):
+            inv = services.build(text, service_date=DAY, routing=detect.route(text, DAY),
+                                 context_facts=gi_context.extract_context(text))
+        return inv, calls
+
+    def test_the_anatomy_of_a_sentence_of_unnamed_endoscopes_is_read_once_a_pass(self):
+        inv, calls = self.anatomy_reads(endoscopes(2000))
+        self.assertLessEqual(len(calls), 3)  # the instrument pass, pass 2 and pass 3 (4,000 before)
+
+    def test_a_sentence_of_unnamed_endoscopes_is_assessed_within_the_limit(self):
+        """39,000 "endoscope" in one sentence (390,138 characters): 56 s of the assess stage's 120 before."""
+        started = time.perf_counter()
+        proposals = assess_child(endoscopes(39_000), '43235', 'endoscope')
+        self.assertLess(time.perf_counter() - started, PIN_SECONDS)
+        self.assertIn('43235', proposals)
+
+    def test_an_unnamed_endoscope_is_named_by_its_sentences_anatomy_as_before(self):
+        """The control: upper anatomy alone names the EGD; lower or no anatomy names nothing."""
+        for text, expected in ((HEAD + 'Date of service: 2026-10-14\nThe endoscope was advanced to the second portion of '
+                                'the duodenum and the stomach was examined.\n', [('gi.egd', 'performed')]),
+                               (HEAD + 'Date of service: 2026-10-14\nThe endoscope was advanced to the cecum.\n', []),
+                               (HEAD + 'Date of service: 2026-10-14\nThe endoscope was cleaned.\n', [])):
+            inv, _ = self.anatomy_reads(text)
+            with self.subTest(text=text[len(HEAD):80]):
+                self.assertEqual([(s.family, s.status) for s in inv.services if s.family != 'gi.office_em'], expected)

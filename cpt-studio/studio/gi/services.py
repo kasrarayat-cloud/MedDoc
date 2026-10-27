@@ -2551,10 +2551,13 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
         # Instruments name their service ("The colonoscope was advanced to the cecum").
         for ss, se in sentences:
             part = _part_at(plist, starts, ss)
+            upper = None  # what the sentence's anatomy makes an unnamed endoscope: read once, at its first one
             for m in INSTRUMENTS.finditer(text, ss, se):
                 word = m.group(0).lower()
-                family = next((f for name, f in INSTRUMENT_FAMILY if name in word), part.family) \
-                    or (_upper_only(text, ss, se) if word == 'endoscope' else '')
+                family = next((f for name, f in INSTRUMENT_FAMILY if name in word), part.family)
+                if not family and word == 'endoscope':
+                    upper = _upper_only(text, ss, se) if upper is None else upper
+                    family = upper
                 if not family:
                     continue
                 clause = _clause_for(clauses_of(ss, se), m.start())
@@ -2847,11 +2850,17 @@ def _included(services: list) -> list:
 
 
 def _instrument_families(text: str, start: int, end: int, drafts) -> set:
+    """The drafted families the instruments of [start, end) name. The anatomy an unnamed endoscope is read by is read
+    once (refutation r1, cost-4, the instrument vocabulary: it was read again for each unnamed endoscope - 39,000 in one
+    sentence took the assess stage to 56 s of its 120)."""
     found = set()
+    upper = None
     for m in INSTRUMENTS.finditer(text, start, end):
         word = m.group(0).lower()
-        family = next((f for name, f in INSTRUMENT_FAMILY if name in word), '') \
-            or (_upper_only(text, start, end) if word == 'endoscope' else '')
+        family = next((f for name, f in INSTRUMENT_FAMILY if name in word), '')
+        if not family and word == 'endoscope':
+            upper = _upper_only(text, start, end) if upper is None else upper
+            family = upper
         if family in drafts:
             found.add(family)
     return found
