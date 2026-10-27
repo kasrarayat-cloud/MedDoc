@@ -655,22 +655,103 @@ HISTORY_HEADING = _rx(r'^[\s\-*#]*(?:past\s+(?:medical|surgical|gi|procedural)\s
 # "Last colonoscopy:", "Colonoscopy up to date:"), never a heading that opens a report of the service.
 HEADING_VOCABULARY = _rx(r'\b(?:report|note|notes|procedure|procedures|findings|technique|impression|details|description|'
                          r'summary|narrative|results?|examination|exam|study|section|part|operative|fictional|synthetic)\b')
+# A service's own attributes, which a heading of today's report carries beside its name (refutation r1, cluster S:
+# "EGD (diagnostic):", "Screening colonoscopy:", "EGD performed:", "Colonoscopy to the cecum:" had opened no heading, so
+# in a report of two services the acts under them were read for neither): its intent (the reader's INTENT_WORDS), its
+# performance and its extent (a landmark, routing's own, with the words that lead to it).
+HEADING_ATTRIBUTES = _rx(r'\b(?:screening|surveillance|diagnostic|therapeutic|symptom-?driven|performed|done|completed?|'
+                         r"today(?:['’]s)?|this|to|into|through|the|of)\b")
+LANDMARK_NAMES = tuple(pattern for _, _, pattern in _cues.UPPER_LANDMARKS + _cues.LOWER_LANDMARKS)
+
+# The time a heading gives what it heads (refutation r1, cluster S), read from the heading's label and only where it
+# qualifies the service or the record the heading names: a word of another time in front of it ("Prior colonoscopy",
+# "Last colonoscopy", "Outside report", "Findings at prior colonoscopy", "Most recent screening EGD") or right after it
+# with nothing else ("Colonoscopy due:", "Colonoscopy (prior):", "Colonoscopy history"), a date right after or right
+# before it, alone or among such words ("Colonoscopy (2016)", "Colonoscopy report (2023-05-02)", "Outside report
+# reviewed (03/2023)", "2016 colonoscopy"), a span of earlier time ("in the last 10 years") or "since". A word that
+# qualifies something else on the line ("Colonoscopy at the prior polypectomy site", "Surveillance colonoscopy (adenoma
+# removed 05/2023)") times nothing. A span that can run either way ("Colonoscopy within 10 years:", "in 3 years") asks.
+_SERVICE_NAMES = '|'.join('(?:' + pattern.pattern + ')' for _, _, pattern in SERVICES)
+HEADING_RECORD = (r'(?:reports?|notes?|records?|findings|results?|procedures?|studies|study|examinations?|exams?|summary|'
+                  r'endoscop(?:y|ies)|patholog(?:y|ies))')
+HEADING_EARLIER = (r'(?:prior(?![ \t]+to\b)|previous(?:ly)?|past|last|most[ \t]+recent|recent(?:ly)?|earlier|remote|index|'
+                   r'outside|history[ \t]+of|hx[ \t]+of|h/o|s/p|status[ \t]+post)')
+HEADING_LATER = (r'(?:next|planned|scheduled|future|upcoming|repeat|due|follow-?up|proposed|anticipated|tentative|'
+                 r'requested|rescheduled)')
+_NAMED = r'(?:' + _SERVICE_NAMES + r'|\b' + HEADING_RECORD + r'\b)'
+# the words a heading's own date may stand among ("Prior colonoscopy (outside facility, 2023)", "Outside report
+# reviewed (03/2023)")
+_DATE_COMPANIONS = (r'(?:[ \t,:\-–—(/]+|\b(?:' + HEADING_EARLIER + r'|' + HEADING_LATER
+                    + r'|facility|hospital|center|centre|institution|clinic|elsewhere|reviewed|dated|on|of|from|in|at|'
+                      r'an?|the)\b)')
+_ALONE_AFTER = r'(?:[ \t]+(?:facility|hospital|center|centre|institution|clinic|elsewhere))?[ \t]*(?:[),:]|\Z)'
+HEADING_EARLIER_NAMED = _rx(r'\b' + HEADING_EARLIER + r'\b(?:[ \t]+[\w-]+){0,2}?[ \t]+' + _NAMED
+                            + r'|' + _NAMED + r'[ \t]+(?:history|hx)\b'
+                            + r'|' + _NAMED + r'[ \t,(\-\u2013]+' + HEADING_EARLIER + _ALONE_AFTER + r'|\bsince\b')
+HEADING_LATER_NAMED = _rx(r'\b' + HEADING_LATER + r'\b(?:[ \t]+[\w-]+){0,2}?[ \t]+' + _NAMED
+                          + r'|' + _NAMED + r'[ \t,(\-\u2013]+' + HEADING_LATER + _ALONE_AFTER)
+HEADING_DATE_BEFORE = _rx(_NAMED + _DATE_COMPANIONS + r'*\Z')  # the label up to a date: the date dates what it names
+HEADING_DATE_AFTER = _rx(r'(?:[ \t,:\-–—)]+|\b(?:an?|the)\b)*' + _NAMED)  # a date that leads the name
+# A heading that asks rather than heads ("Colonoscopy up to date:", "Biopsy?"), doubts, cancels or denies: never a
+# heading of today's report.
+HEADING_DOUBT = _rx(r'\?|\b(?:ever|overdue|up[ \t-]+to[ \t-]+date|not|no|never|none|without)\b'
+                    r'|\b(?:in|within|over|during|after|every)[ \t]+(?:the[ \t]+)?(?:(?:last|past|next|previous|preceding)'
+                    r'[ \t]+)?(?:\d{1,3}|a|few|several|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)[ \t]+'
+                    r'(?:years?|months?|weeks?|days?)\b')
 
 
-def _bare_service_heading(line: str) -> bool:
-    """Whether a heading-like label line (one that ends in ":" or "?", parts()) is a service's name, its acts and heading
-    vocabulary only (triage round 2 skeptic: an office note's screening questions about earlier examinations -
-    "Colonoscopy within 10 years:", "Last colonoscopy:" - had opened phantom performed services and paid second
-    reviews). A title with no colon keeps its other words ("ERCP (UNSUCCESSFUL)", "ESOPHAGEAL MANOMETRY REPORT (HIGH
-    RESOLUTION)"). Bounded: one pass of each service pattern and of the vocabulary over at most 100 characters."""
-    rest = line[:100]
+def _heading_time(text: str, ls: int, le: int, service_date: Optional[date], dates, date_starts) -> str:
+    """The time the heading on [ls, le) gives what it heads: 'earlier' (before this encounter), 'later', 'unknown' (a
+    date of its own that cannot be placed - no service date, or a month or year of the service date's own - or a
+    question, a doubt, a cancellation or a denial), 'today' (its own date is the service date) or '' (it names no
+    time). Only its first 100 characters are read, and the document's own date mentions (``dates``, sorted by start,
+    with their ``date_starts``) are looked up by bisection, so the work per heading is bounded."""
+    le = min(le, ls + 100)
+    label = text[ls:le]
+    if HEADING_EARLIER_NAMED.search(label) or EARLIER_SPAN.search(label):
+        return 'earlier'
+    if HEADING_LATER_NAMED.search(label):
+        return 'later'
+    if HEADING_DOUBT.search(label) or HEDGE_WORDS.search(label) or CANCEL_WORDS.search(label):
+        return 'unknown'
+    found = ''
+    for d in dates[bisect.bisect_left(date_starts, ls):]:
+        if d.start >= le:
+            break
+        if not (HEADING_DATE_BEFORE.search(text, ls, d.start) or HEADING_DATE_AFTER.match(text, d.end, le)):
+            continue  # a date of something else on the line ("adenoma removed 05/2023")
+        if service_date is None or d.precision != 'day' and gi_context.compare_to_service(d, service_date) == 0:
+            return 'unknown'
+        rel = gi_context.compare_to_service(d, service_date)
+        if rel:
+            return 'earlier' if rel < 0 else 'later'
+        found = 'today'
+    return found
+
+
+def _bare_service_heading(text: str, ls: int, le: int, family: str, *, service_date: Optional[date], dates, date_starts,
+                          documented: frozenset) -> bool:
+    """Whether a heading-like label line (one that ends in ":" or "?", parts()) naming one service, ``family``, is that
+    service's heading in today's report. Never when it gives another time, asks, doubts, cancels or denies
+    (_heading_time: triage round 2 skeptic - an office note's screening questions about earlier examinations,
+    "Colonoscopy within 10 years:", "Last colonoscopy:", had opened phantom performed services and paid second reviews;
+    refutation r1 - "Colonoscopy report (2023-05-02):", "Colonoscopy (2016):"). Otherwise when it carries the service's
+    name, its acts, heading vocabulary, the service's own attributes and the service date alone; or, whatever else it
+    carries, when the document already lists the service as done on a procedure line or titles its report with it
+    (``documented``), so the heading names no service the document does not document today (refutation r1: "EGD
+    (diagnostic):", "Colonoscopy (screening):"). A title with no colon keeps its other words ("ERCP (UNSUCCESSFUL)",
+    "ESOPHAGEAL MANOMETRY REPORT (HIGH RESOLUTION)"). Bounded: one pass of each pattern over at most 100 characters."""
+    if _heading_time(text, ls, le, service_date, dates, date_starts) not in ('', 'today'):
+        return False
+    rest = text[ls:min(le, ls + 100)]
     for _, _, pattern in SERVICES:
         rest = pattern.sub(' ', rest)
     for _, pattern in ACTS:  # "EGD with biopsy", "Colonoscopy with cold snare polypectomy and tattoo"
         rest = pattern.sub(' ', rest)
-    rest = HEADING_VOCABULARY.sub(' ', rest)
+    for pattern in LANDMARK_NAMES + (HEADING_VOCABULARY, HEADING_ATTRIBUTES, gi_context.FULL_DATE):
+        rest = pattern.sub(' ', rest)  # the date left is the service date (_heading_time)
     rest = re.sub(r'\b(?:with|and|plus|cold|hot|and/or)\b', ' ', rest, flags=re.I)
-    return not re.search(r'[A-Za-z]{2,}', rest)
+    return not re.search(r'[A-Za-z]{2,}', rest) or family in documented
 
 
 EARLIER_SPAN = _rx(r'\b(?:in|within|over|during)\s+the\s+(?:last|past|previous|preceding)\s+'
@@ -680,7 +761,28 @@ PLAN_HEADING = _rx(r'^[\s\-*#]*(?:plan|plans|recommendations?|assessment\s+and\s
                    r'|follow-?up\s+plan)\s*:?\s*$')
 
 
-def parts(text: str) -> tuple[_Part, ...]:
+def _documented_today(text: str, lines, service_date: Optional[date], dates, date_starts) -> frozenset:
+    """The families the document lists as done on a procedure line ("Procedures: EGD and colonoscopy") or titles its
+    report with ("Colonoscopy report"), on a line that gives no other time and outside a plan or history section: a
+    heading naming one of them is that service's heading whatever qualifier it carries (_bare_service_heading). One pass
+    over the lines of at most 100 characters."""
+    lay = _sections.layout(text)
+    found = set()
+    for ls, le in lines:
+        line = text[ls:le]
+        if not line.strip() or len(line.strip()) > 100:
+            continue
+        named = PROCEDURE_FIELD.match(line) or (REPORT_TITLE.match(line) or TITLE_FIELD.match(line)
+                                                or TITLE_REPORT_WORDS.match(line))
+        if not named or PLAN_WORDS.search(line) or HISTORY_WORDS.search(line) \
+                or _heading_time(text, ls, le, service_date, dates, date_starts) not in ('', 'today') \
+                or lay.section_at(ls).kind in ('plan', 'history'):
+            continue
+        found.update(f for f, _, pattern in SERVICES if pattern.search(line))
+    return frozenset(found)
+
+
+def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tuple[_Part, ...]:
     """The document cut into report parts (a part about one service, from its title to the next title), role parts
     (a nursing, anesthesia, pathology or radiology entry, to the next heading) and other text. A history or plan part
     never runs into today's report: a history part ends at the line routing's sections read as a procedure heading
@@ -692,6 +794,9 @@ def parts(text: str) -> tuple[_Part, ...]:
     family, kind_now = '', 'other'
     resume_after_block = None  # the history or plan part an extraction block interrupted
     lines = _lines(text)
+    dates = gi_context.find_dates(text) if dates is None else dates
+    date_starts = [d.start for d in dates]
+    documented = _documented_today(text, lines, service_date, dates, date_starts)
     for index, (ls, le) in enumerate(lines):
         line = text[ls:le]
         stripped = line.strip()
@@ -732,7 +837,9 @@ def parts(text: str) -> tuple[_Part, ...]:
                 and not HISTORY_HEADING.match(line) and not PLAN_HEADING.match(line):
             heading_families = {f for f, _, p in SERVICES if p.search(line)}
             if len(heading_families) == 1 and len(stripped) <= 60 \
-                    and (not stripped.endswith((':', '?')) or _bare_service_heading(line)):
+                    and (not stripped.endswith((':', '?')) or _bare_service_heading(
+                        text, ls, le, next(iter(heading_families)), service_date=service_date, dates=dates,
+                        date_starts=date_starts, documented=documented)):
                 s = ls + line.index(stripped)
                 cuts.append((ls, next(iter(heading_families)), 'physician', Span(s, s + len(stripped), stripped),
                              'section'))
@@ -1970,7 +2077,7 @@ def _restore_spans(obj, text: str):
 def _build(text: str, *, service_date: Optional[date], routing=None, context_facts=None) -> ServiceInventory:
     problems: list[str] = []
     dates = gi_context.find_dates(text)
-    plist = parts(text)
+    plist = parts(text, service_date=service_date, dates=dates)
     starts = [p.start for p in plist]
     sentences = _sentences(text)
     blocks = form_field_blocks(text)
