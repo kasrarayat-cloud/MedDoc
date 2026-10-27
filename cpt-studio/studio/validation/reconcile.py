@@ -14,7 +14,7 @@ Three questions, kept apart on purpose:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional, Sequence
 
 from studio.gi import catalogue
@@ -307,6 +307,31 @@ def _bundled(service: DocumentedService, act: Act) -> Optional[str]:
     return None
 
 
+def _needle_sampling(service: DocumentedService, act: Act) -> Optional[Act]:
+    """A biopsy at an endoscopic ultrasound taken with the needle - or, with no technique stated, of the lesion the
+    service's own fine-needle sampling samples - is that sampling: returned as the fna act it is reconciled as, never
+    a forceps biopsy (refutation r1, report-0: it had been bundled as "read under the upper GI family"). None otherwise."""
+    if service.family != 'gi.eus' or act.kind != 'biopsy':
+        return None
+    sampled = bool(act.lesion) and not act.technique and any(
+        a.kind == 'fna' and a.status == 'performed' and a.lesion == act.lesion for a in service.acts)
+    return replace(act, kind='fna') if 'needle' in act.technique or sampled else None
+
+
+def _read_under(inventory: ServiceInventory, service: DocumentedService, act: Act) -> Optional[str]:
+    """For an act a profile rule reads under ANOTHER family (catalogue.READ_UNDER): '' when a service of that family
+    done at this encounter documents such an act (the rule holds), else that family's label (nothing reads it). None
+    for any other act."""
+    under = catalogue.READ_UNDER.get((service.family, act.kind))
+    if under is None:
+        return None
+    family, label = under
+    reads = any(other.id != service.id and other.family == family and other.status in ('performed', 'incomplete')
+                and any(a.kind == act.kind and a.status == 'performed' for a in other.acts)
+                for other in inventory.services)
+    return '' if reads else label
+
+
 def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]], procedure_day: bool = False
               ) -> tuple[list[Unresolved], list[Bundled], dict[str, list[str]]]:
     """(unresolved items, bundled acts, covered: service id -> codes) for ``selected`` = (code, family) of the selected,
@@ -346,6 +371,7 @@ def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]], 
         for act in service.acts:
             if act.status != 'performed' or act.role not in ('physician', 'unknown'):
                 continue
+            act = _needle_sampling(service, act) or act
             key = (act.kind, act.lesion or ','.join(act.anatomy))
             if key in seen_acts:
                 continue
@@ -356,6 +382,16 @@ def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]], 
                                              act.evidence[:1], 'unsupported'))
                 continue
             why = _bundled(service, act)
+            missing = _read_under(inventory, service, act) if why and why == dict(entry.bundled).get(act.kind) else None
+            if missing:
+                # refutation r1, report-0: a rule that reads the act under another family holds only when a service
+                # of that family documents it; otherwise no code of this encounter can account for it - listed for
+                # the reviewer (never bundled, never sent for a second review: these codes cannot account for it)
+                unresolved.append(Unresolved(service.id, service.family, act.kind,
+                                             f'{describe_act(service, act)} in the {service_label(service)}: no '
+                                             f'{missing} documented at this encounter reads it, and no code profile '
+                                             'of this service accounts for it', act.evidence[:2], 'unsupported'))
+                continue
             if why:
                 bundled.append(Bundled(service.id, act.kind, describe_act(service, act), why))
                 continue

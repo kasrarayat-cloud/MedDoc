@@ -88,3 +88,81 @@ class VisitQuestionNamesADocumentedConflictTests(SimpleTestCase):
         self.assertTrue(reasons[0].startswith('The new or established patient status is in conflict. Encounter '
                                               'metadata entered by a workspace member gives new; the document gives '
                                               'established.'), reasons[0])
+
+
+SYNTHETIC = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
+EUS = (SYNTHETIC + 'Date of service: 2026-10-14\nIndication: EUS for evaluation of a pancreatic head mass.\n'
+       'Procedure: Upper endoscopic ultrasound.\nFindings: The echoendoscope was advanced to the second portion of the '
+       'duodenum. A 2 cm hypoechoic mass in the pancreatic head was sampled by fine-needle aspiration with three '
+       'passes. Cold forceps biopsies were taken from the gastric antrum.\n')
+FNA = 'was sampled by fine-needle aspiration with three passes'
+ANTRUM = ' Cold forceps biopsies were taken from the gastric antrum.'
+UPPER_GI = 'read under the upper GI family'
+
+
+class EusForcepsBiopsyIsNeverHiddenTests(SimpleTestCase):
+    """report-0: in an EUS-only report a forceps biopsy of the gastric antrum was filed as "not separately reported - A
+    forceps biopsy at the same upper examination is read under the upper GI family" although the inventory holds no
+    upper GI service, so nothing read it: UNRESOLVED said none and coding reached "reviewed". The EUS profile's rule is
+    applied only when an upper GI service of the encounter documents such a biopsy; otherwise the biopsy is listed for
+    the reviewer, never bundled. The needle sampling the reader also read as a "biopsy" (technique needle) is the
+    fine-needle aspiration itself, reconciled as that act - never a forceps biopsy read under another family."""
+
+    def assess(self, text, code='43242', quote=FNA):
+        result = run(text, [sel(code, span(text, quote))])
+        return result, result.completeness
+
+    def test_a_forceps_biopsy_with_no_upper_endoscopy_is_listed_for_the_reviewer(self):
+        result, done = self.assess(EUS)
+        self.assertEqual([(s['family'], s['status']) for s in result.services['services']], [('gi.eus', 'performed')])
+        self.assertEqual([(u['service'], u['act'], u['reason']) for u in done['unresolved_items']],
+                         [('S1', 'biopsy', 'unsupported')])
+        self.assertTrue(done['unresolved_items'][0]['label'].startswith(
+            'forceps biopsy at the gastric antrum in the endoscopic ultrasound: '), done['unresolved_items'][0]['label'])
+        self.assertEqual([b for b in done['bundled'] if UPPER_GI in b['why']], [])
+        self.assertEqual(done['state'], 'incomplete')
+        self.assertEqual(next(c for c in result.encounter_checks if c.id == 'services.unresolved').status, 'warn')
+        self.assertEqual(proposal(result, '43242').status, 'ready')  # unchanged: the FNA code reads its own act
+
+    def test_the_needle_sampling_is_the_fine_needle_aspiration_never_a_forceps_biopsy(self):
+        text = EUS.replace(ANTRUM, '')
+        result, done = self.assess(text)
+        self.assertEqual((done['bundled'], done['unresolved_items'], done['state']), ([], [], 'complete_pending_review'))
+        # with no code for the needle sampling, it is listed once, as the fine-needle aspiration
+        result, done = self.assess(text, '43259', 'The echoendoscope was advanced to the second portion of the duodenum')
+        self.assertEqual([(u['act'], u['reason']) for u in done['unresolved_items']], [('fna', 'not_covered')])
+        self.assertTrue(done['unresolved_items'][0]['label'].startswith('fine-needle aspiration or biopsy of the 2 cm '
+                                                                       'hypoechoic mass in the pancreatic head'),
+                        done['unresolved_items'][0]['label'])
+        self.assertEqual(done['bundled'], [])
+
+    def test_control_an_egd_with_the_eus_still_reconciles_the_biopsy_under_the_egd(self):
+        text = EUS.replace('Procedure: Upper endoscopic ultrasound.', 'Procedure: EGD and upper endoscopic ultrasound.')
+        result, done = self.assess(text)
+        self.assertEqual([(s['family'], s['included_in']) for s in result.services['services']],
+                         [('gi.eus', ''), ('gi.egd', 'S1')])
+        self.assertEqual([(u['service'], u['label'], u['reason']) for u in done['unresolved_items']],
+                         [('S2', 'forceps biopsy at the gastric antrum in the upper endoscopy', 'not_covered')])
+
+    def test_the_rule_bundles_only_what_an_upper_gi_service_of_the_encounter_documents(self):
+        from studio.gi.services import Act, DocumentedService, ServiceInventory
+        from studio.validation import reconcile
+        biopsy = Act('S1-A1', 'S1', 'biopsy', 'performed', 'physician', ('gastric antrum',), technique='forceps')
+        fna = Act('S1-A2', 'S1', 'fna', 'performed', 'physician', ('pancreatic head',), technique='needle')
+        eus = DocumentedService('S1', 'gi.eus', 'eus', 'performed', acts=(biopsy, fna))
+        alone = ServiceInventory('test', services=(eus,))
+        unresolved, bundled, _ = reconcile.reconcile(alone, [('43242', 'gi.eus')])
+        self.assertEqual(([(u.act, u.reason) for u in unresolved], bundled), ([('biopsy', 'unsupported')], []))
+        egd_biopsy = Act('S2-A1', 'S2', 'biopsy', 'performed', 'physician', ('gastric body',), technique='forceps')
+        egd = DocumentedService('S2', 'gi.egd', 'egd', 'performed', acts=(egd_biopsy,), included_in='S1')
+        both = ServiceInventory('test', services=(eus, egd))
+        unresolved, bundled, _ = reconcile.reconcile(both, [('43242', 'gi.eus')])
+        self.assertEqual([(b.service, b.act) for b in bundled], [('S1', 'biopsy')])
+        self.assertIn(UPPER_GI, bundled[0].why)
+        self.assertEqual([(u.service, u.act, u.reason) for u in unresolved], [('S2', 'biopsy', 'not_covered')])
+        # an upper GI service that documents no biopsy reads none: the EUS biopsy is listed, never bundled
+        empty = ServiceInventory('test', services=(eus, DocumentedService('S2', 'gi.egd', 'egd', 'performed',
+                                                                          included_in='S1')))
+        unresolved, bundled, _ = reconcile.reconcile(empty, [('43242', 'gi.eus')])
+        self.assertEqual(([(u.service, u.act, u.reason) for u in unresolved], bundled),
+                         ([('S1', 'biopsy', 'unsupported')], []))

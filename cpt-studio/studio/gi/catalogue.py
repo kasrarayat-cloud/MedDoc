@@ -217,14 +217,18 @@ CATALOGUE: dict[str, FamilyEntry] = {e.family: e for e in (
                        'duodenum)', 'the target of any fine-needle aspiration or biopsy and the passes made',
                        'any drainage or injection'),
         acts=('eus_exam', 'fna', 'injection', 'drainage'),
-        bundled=(('biopsy', 'A forceps biopsy at the same upper examination is read under the upper GI family.'),),
+        bundled=(('biopsy', 'A forceps biopsy at the same upper examination is read under the upper GI family when '
+                            'the document records that upper endoscopy with a biopsy of its own; with no such upper '
+                            'endoscopy documented it is listed for the reviewer, never bundled.'),),
         unsupported_acts=(('drainage', 'EUS-guided drainage other than of a pseudocyst (biliary, gallbladder, '
                                        'gastroenterostomy) has no profiled code.'),),
         questions=(('target', 'What was examined, and what (if anything) was sampled with the needle?'),),
         evidence=('the endosonographic examination on the date of service', 'the needle sampling and its target',
                   'the stations examined (whether the examination was limited or full is the reviewer\'s to judge; '
                   'this catalogue does not check it)'),
-        rules=PROCEDURE_RULES),
+        rules=PROCEDURE_RULES,
+        notes=('A biopsy taken with the needle (or, with no technique stated, of the lesion the needle sampled) is the '
+               'fine-needle aspiration or biopsy itself, reconciled as that act.',)),
     FamilyEntry(
         'gi.ercp', 'ERCP', SUPPORTED, ('ercp',),
         documentation=('cannulation (which duct, success or failure)', 'each intervention (sphincterotomy, stone '
@@ -311,6 +315,11 @@ UNSUPPORTED_SERVICES = (
     ('Unlisted GI procedures (43499, 43999, 44799, 45399, 91299)', 'unlisted codes are never reconciled'),
 )
 
+# A profile rule that reads an act under ANOTHER family: (family, act kind) -> (that family, its label). The rule holds
+# only when a service of that family done at the encounter documents such an act; otherwise the act is listed for the
+# reviewer, never bundled (refutation r1, report-0: an EUS-only report's antral forceps biopsy was "read under the upper
+# GI family" though no upper GI service existed, so nothing read it).
+READ_UNDER = {('gi.eus', 'biopsy'): ('gi.egd', 'upper GI endoscopy')}
 # Acts that never need a code of their own, whatever the family (handled by reconciliation rules).
 NOT_REPORTED = frozenset(('clip', 'cannulation'))
 # Acts no profile reconciles: an act of these kinds documented as done is listed as unsupported, never as covered.
