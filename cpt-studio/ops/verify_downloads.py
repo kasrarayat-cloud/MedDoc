@@ -29,9 +29,20 @@ Per report file:
 Exit status: 0 all checks passed; 1 at least one check failed; 2 nothing failed
 but at least one check could not be performed (fail closed).
 
-The report format is studio/reports.py ('cpt-studio-report@3'); the item-list
+The report format is studio/reports.py ('cpt-studio-report@4'); the item-list
 rules below mirror its _list_for. When the format changes, change these
 constants and expected_list with it; never loosen a check to fit.
+
+Format @4 adds, and these are checked only in a file that names that format:
+  TXT      CODING COMPLETENESS states the encounter's coding state the API
+           reports; UNRESOLVED DOCUMENTED SERVICES lists exactly the persisted
+           unresolved items; CONFLICTS IN THE RECORD lists every persisted
+           conflict; every source passage CPT Studio selected quotes the
+           revision text exactly at its offsets
+  CSV      one coding_completeness row with the API's state; one
+           unresolved_service row per persisted unresolved item and one
+           conflict row per persisted conflict; every source passage of a
+           proposal row is the API's and quotes the revision text exactly
 """
 from __future__ import annotations
 
@@ -97,6 +108,8 @@ OPTIONAL_HASHES = ('refetch_sha256', 'header_sha256')  # recorded when the brows
 FORMULA_START = ('=', '+', '-', '@', '\t', '\r')
 FORMULA_START_EXTRA = ('\n', '＝', '＋', '－', '＠')  # LF and fullwidth forms: warned, not required
 ITEM_LISTS = ('approved', 'rejected', 'undecided', 'excluded', 'alternative')
+ENCOUNTER_LISTS = ('coding_completeness', 'unresolved_service', 'conflict')  # rows that are not proposals (@4)
+FORMAT_4 = 'cpt-studio-report@4'
 SELECTED_LISTS = ('approved', 'rejected', 'undecided')
 COLUMN_CANDIDATES = {
     'item_list': ('item_list', 'list', 'disposition'),
@@ -112,6 +125,11 @@ COLUMN_CANDIDATES = {
     'text_sha256': ('text_sha256',),
     'assessment_id': ('assessment_id',),
     'proposal_id': ('proposal_id',),
+    'status': ('status',),
+    'family': ('family',),
+    'documented_service': ('documented_service',),
+    'exclusion_reason': ('exclusion_reason',),
+    'source_passages': ('source_passages',),
 }
 
 
@@ -354,6 +372,53 @@ def check_txt(doc: str, name: str, text: str, kind: str, api: dict | None) -> li
     out.extend(_reviewer_labels(doc, name, text, items, sections, kind))
     listed = [i for i in items.values() if i.item_list == ('approved' if kind == 'reviewed' else 'undecided')]
     out.extend(_txt_passages(doc, name, text, listed, revision_text, sections, kind))
+    if FORMAT_4 in head:
+        out.extend(_txt_documented(doc, name, text, sections, api, revision_text))
+    return out
+
+
+SOURCE_LINE = re.compile(r'^ {7}\+ source passage selected by CPT Studio: ')
+
+
+def _txt_documented(doc, name, text, sections, api, revision_text) -> list[Result]:
+    state, unresolved, conflicts, _ = _documented_expected(api)
+    body = {heading: lines for heading, lines in sections}
+    coding = body.get('CODING COMPLETENESS', [])
+    out = [Result(doc, name, 'txt.coding_completeness',
+                  'pass' if any(line.strip() == f'State: {state}' for line in coding) else 'fail',
+                  f'states the API coding state {state!r}' if any(line.strip() == f'State: {state}' for line in coding)
+                  else f'CODING COMPLETENESS does not state {state!r}')]
+    heading = next((h for h in body if h.startswith('UNRESOLVED DOCUMENTED SERVICES')), None)
+    lines = body.get(heading, []) if heading else []
+    listed = {line[4:].rsplit(' [', 1)[0] for line in lines if line.startswith('  - ') and ' [' in line}
+    expected = {label for _, label in unresolved}
+    ok = heading is not None and listed == expected
+    out.append(Result(doc, name, 'txt.unresolved', 'pass' if ok else 'fail',
+                      f'{len(listed)} unresolved item(s) listed, as persisted' if ok else
+                      f'section {"missing" if heading is None else "differs"}: listed {sorted(listed)}, persisted '
+                      f'{sorted(expected)}'))
+    conflict_lines = body.get('CONFLICTS IN THE RECORD', [])
+    named = {(line.split('(', 1)[1].split(')', 1)[0], line[4:].split(' (', 1)[0].replace(' ', '_'))
+             for line in conflict_lines if line.startswith('  - ') and '(' in line}
+    out.append(Result(doc, name, 'txt.conflicts', 'pass' if named == conflicts else 'fail',
+                      f'{len(named)} conflict(s) listed, as persisted' if named == conflicts else
+                      f'listed {sorted(named)}, persisted {sorted(conflicts)}'))
+    wrong = []
+    for line in text.splitlines():
+        if not SOURCE_LINE.match(line):
+            continue
+        rest = SOURCE_LINE.sub('', line)
+        match = TXT_EVIDENCE_END.search(rest)
+        if match is None:
+            continue  # a passage over several lines: its offsets are checked where the renderer closes it
+        start, end = int(match.group(1)), int(match.group(2))
+        passage = cp_slice(revision_text, start, end)
+        quoted = collapse(rest[:match.start()] + '"') if passage is not None else None
+        if passage is None or quoted != collapse(f'"{txt_shown(passage)}"'):
+            wrong.append(f'{start}-{end}')
+    out.append(Result(doc, name, 'txt.source_passages', 'fail' if wrong else 'pass',
+                      f'source passage offsets that do not quote the revision text: {wrong}' if wrong
+                      else 'every single-line source passage quotes the revision text exactly'))
     return out
 
 
@@ -621,7 +686,10 @@ def check_csv(doc: str, name: str, text: str, kind: str, api: dict | None) -> li
     # A report with no proposals carries exactly one placeholder row (item list 'none') so that the file itself
     # still names its kind and SYNTHETIC; it is never an item.
     placeholder = [row for row in rows if 'item_list' in columns and norm_list(row[columns['item_list']]) == 'none']
-    items_rows = [row for row in rows if not ('item_list' in columns and norm_list(row[columns['item_list']]) == 'none')]
+    encounter_rows = [row for row in rows if 'item_list' in columns
+                      and norm_list(row[columns['item_list']]) in ENCOUNTER_LISTS]
+    items_rows = [row for row in rows if not ('item_list' in columns and norm_list(row[columns['item_list']])
+                                              in ('none',) + ENCOUNTER_LISTS)]
     if placeholder:
         identity = {'report_kind', 'encounter_id', 'revision_number', 'source_sha256', 'text_sha256', 'assessment_id',
                     'item_list', 'not_verified', 'synthetic'}
@@ -641,6 +709,61 @@ def check_csv(doc: str, name: str, text: str, kind: str, api: dict | None) -> li
     out.extend(_csv_items(doc, name, items_rows, columns, items, kind))
     out.extend(_csv_constants(doc, name, rows, columns, api))
     out.extend(_csv_evidence(doc, name, items_rows, columns, items, revision_text))
+    if 'source_passages' in columns:
+        out.extend(_csv_documented(doc, name, encounter_rows, items_rows, columns, api, revision_text))
+    return out
+
+
+def _documented_expected(api: dict):
+    """(coding state, {(service, label)} unresolved, {(service, subject)} conflicts, {proposal id: [source spans]})
+    as the encounter JSON persists them."""
+    assessment = api.get('assessment') or {}
+    completeness = assessment.get('completeness') or {}
+    inventory = assessment.get('services') or {}
+    unresolved = {(u.get('service', ''), u.get('label', '')) for u in completeness.get('unresolved_items') or []}
+    conflicts = {(c.get('service', ''), c.get('subject', '')) for c in inventory.get('conflicts') or []}
+    sources = {p.get('id'): list((p.get('support') or {}).get('source') or []) for p in assessment.get('proposals') or []}
+    return ((api.get('coding') or {}).get('state'), unresolved, conflicts, sources)
+
+
+def _csv_documented(doc, name, encounter_rows, items_rows, columns, api, revision_text) -> list[Result]:
+    state, unresolved, conflicts, sources = _documented_expected(api)
+    coding = [row for row in encounter_rows if norm_list(row[columns['item_list']]) == 'coding_completeness']
+    written_state = [_cell(row, columns, 'status').strip() for row in coding]
+    out = [Result(doc, name, 'csv.coding_completeness', 'pass' if written_state == [state] else 'fail',
+                  f'coding_completeness rows {written_state}; API state {state!r}')]
+    written_unresolved = {(_cell(row, columns, 'documented_service').strip(), _cell(row, columns, 'exclusion_reason'))
+                          for row in encounter_rows if norm_list(row[columns['item_list']]) == 'unresolved_service'}
+    out.append(Result(doc, name, 'csv.unresolved', 'pass' if written_unresolved == unresolved else 'fail',
+                      f'{len(written_unresolved)} unresolved row(s) equal the persisted unresolved items'
+                      if written_unresolved == unresolved else
+                      f'persisted not written: {sorted(unresolved - written_unresolved)}; written not persisted: '
+                      f'{sorted(written_unresolved - unresolved)}'))
+    written_conflicts = {(_cell(row, columns, 'documented_service').strip(), _cell(row, columns, 'status').strip())
+                         for row in encounter_rows if norm_list(row[columns['item_list']]) == 'conflict'}
+    out.append(Result(doc, name, 'csv.conflicts', 'pass' if written_conflicts == conflicts else 'fail',
+                      f'{len(written_conflicts)} conflict row(s) equal the persisted conflicts'
+                      if written_conflicts == conflicts else
+                      f'persisted {sorted(conflicts)}; written {sorted(written_conflicts)}'))
+    wrong, missing = [], []
+    for row in items_rows + [r for r in encounter_rows if norm_list(r[columns['item_list']]) == 'unresolved_service']:
+        cells = [(_cell(row, columns, 'source_passages'))] + (
+            [_cell(row, columns, 'evidence')] if norm_list(row[columns['item_list']]) == 'unresolved_service' else [])
+        for cell in cells:
+            for match in CSV_EVIDENCE_OFFSETS.finditer(cell):
+                start, end = int(match.group(1)), int(match.group(2))
+                passage = cp_slice(revision_text, start, end)
+                if passage is None or not cell[:match.start()].endswith(f'"{escaped(passage)}" '):
+                    wrong.append(f'{start}-{end}')
+    for row in items_rows:
+        pid = _cell(row, columns, 'proposal_id').strip() if 'proposal_id' in columns else ''
+        cell = _cell(row, columns, 'source_passages')
+        for span in sources.get(pid, []):
+            if f'"{escaped(span.get("text", ""))}" [{span.get("start")}-{span.get("end")}]' not in cell:
+                missing.append(f'{pid}[{span.get("start")}:{span.get("end")}]')
+    out.append(Result(doc, name, 'csv.source_passages', 'fail' if (wrong or missing) else 'pass',
+                      f'offsets not quoting the revision text: {wrong}; API source passages missing: {missing}'
+                      if (wrong or missing) else 'every source passage is the API\'s and quotes the revision text'))
     return out
 
 

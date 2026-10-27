@@ -318,12 +318,18 @@ def _check_result(result, text):
         if item.bucket == SELECTED and not exact_evidence(to_jsonable(item.evidence), text):
             raise ValueError(f'Proposal {item.key} ({item.code}) has no exact evidence in this revision; '
                              'it cannot be a selected proposal.')
+        source = (item.support or {}).get('source') or []
+        if any(not (type(sp.get('start')) is int and type(sp.get('end')) is int and 0 <= sp['start'] < sp['end'] <= len(text)
+                    and text[sp['start']:sp['end']] == sp.get('text')) for sp in source):
+            raise ValueError(f'Proposal {item.key} ({item.code}) cites a source passage that does not match this '
+                             'revision; it was not recorded.')
 
 
-def _same_assessment(previous, digest, revision, context, routing_run, provider_run):
+def _same_assessment(previous, digest, revision, context, routing_run, provider_run, second_run=None):
     return (previous is not None and previous.sha256 == digest and previous.revision_id == revision.pk
             and previous.context_id == context.pk and previous.routing_id == routing_run.pk
-            and previous.provider_run_id == (provider_run.pk if provider_run else None))
+            and previous.provider_run_id == (provider_run.pk if provider_run else None)
+            and previous.second_run_id == (second_run.pk if second_run else None))
 
 
 def _clarification(encounter, assessment, spec, proposal):
@@ -505,7 +511,7 @@ def _carry_decisions(previous, assessment, proposals, revision, context):
     return carried, len(ordered) - carried
 
 
-def persist_assessment(*, encounter, revision, context, routing_run, provider_run, result):
+def persist_assessment(*, encounter, revision, context, routing_run, provider_run, result, second_run=None):
     """Record an AssessmentResult as the encounter's current assessment, in one transaction.
 
     Creates the immutable Assessment and Proposal rows and the Clarification
@@ -520,16 +526,17 @@ def persist_assessment(*, encounter, revision, context, routing_run, provider_ru
         revision = SourceRevision.objects.get(pk=revision.pk)
         _check_inputs(locked, revision, context, routing_run, provider_run)
         previous = locked.current_assessment
-        if _same_assessment(previous, digest, revision, context, routing_run, provider_run):
+        if _same_assessment(previous, digest, revision, context, routing_run, provider_run, second_run):
             encounter.state = refresh_state(locked)
             return previous
         _check_result(result, revision.text)
         assessment = Assessment.objects.create(
             encounter=locked, revision=revision, context=context, routing=routing_run, provider_run=provider_run,
-            profiles_version=result.profiles_version, engine_version=result.engine_version,
+            second_run=second_run, profiles_version=result.profiles_version, engine_version=result.engine_version,
             reference_sources=to_jsonable(result.reference_sources),
             encounter_checks=to_jsonable(result.encounter_checks), unsupported=to_jsonable(result.unsupported),
-            summary=to_jsonable(result.summary), sha256=digest)
+            summary=to_jsonable(result.summary), services=to_jsonable(result.services),
+            completeness=to_jsonable(result.completeness), sha256=digest)
         # One INSERT for every proposal (round 6 bounded:5): a row per query held the assess stage in the worker.
         rows = Proposal.objects.bulk_create([
             Proposal(
@@ -539,7 +546,7 @@ def persist_assessment(*, encounter, revision, context, routing_run, provider_ru
                 provider_display=item.provider_display, evidence=to_jsonable(item.evidence),
                 rationale=item.rationale, checks=to_jsonable(item.checks),
                 modifier_considerations=list(item.modifier_considerations), units=item.units,
-                fingerprint=item.fingerprint, position=position)
+                fingerprint=item.fingerprint, position=position, support=to_jsonable(item.support))
             for position, item in enumerate(result.proposals)])
         proposals = {row.key: row for row in rows}
         raised = _create_clarifications(locked, assessment, result, proposals)
@@ -632,6 +639,40 @@ def _assessment_blockers(encounter, assessment):
     return blockers
 
 
+def coding_completeness(encounter):
+    """Whether the ENCOUNTER's coding is complete - kept apart from whether one proposal is ready for review.
+
+    'incomplete' while a documented service has no supported proposal, a conflict in the record is unanswered, or a
+    question is open; 'pending_review' when every documented service has a proposal but decisions are missing;
+    'reviewed' when the reviewed report could be produced. Never 'verified': code-set membership and NCCI edits are not
+    connected, and the documented-service reading can miss wording it does not recognise."""
+    assessment = live_assessment(encounter)
+    if assessment is None:
+        return {'state': 'not_established', 'statement': 'The current revision has not been assessed yet.',
+                'reasons': []}
+    base = dict(assessment.completeness or {})
+    if not base:
+        return {'state': 'not_established', 'reasons': [],
+                'statement': 'This assessment was made before the documented-service reconciliation existed, so its '
+                             'completeness is not established.'}
+    reasons = [r for r in base.get('reasons', []) if 'open question' not in r]
+    open_questions = assessment.clarifications.filter(state=Clarification.OPEN).count()
+    if open_questions:
+        reasons.append(f'{open_questions} open question{"s" if open_questions != 1 else ""}')
+    standing = ('Code-set membership and NCCI edits are not verified (no licensed source is connected), and the '
+                'documented-service reading can miss wording it does not recognise.')
+    if reasons:
+        return {'state': 'incomplete', 'reasons': reasons,
+                'statement': 'Coding for this encounter is incomplete: ' + '; '.join(reasons) + '. Supported proposals '
+                             'stay available for review. ' + standing}
+    if readiness(encounter)['reviewed']:
+        return {'state': 'reviewed', 'reasons': [],
+                'statement': 'Every documented service has a proposal with a reviewer\'s decision. This is reviewed, '
+                             'not verified, coding. ' + standing}
+    return {'state': 'pending_review', 'reasons': [],
+            'statement': 'Every documented service has a proposal; each still needs a reviewer\'s decision. ' + standing}
+
+
 def readiness(encounter):
     """{'draft', 'reviewed', 'blockers'}: a reviewed report needs every selected (or reinstated) proposal
     decided, no open encounter-scoped clarification, a settled provider result and no pending processing."""
@@ -656,11 +697,12 @@ def readiness(encounter):
 def _failed_stage_state(encounter, revision, job):
     if job.kind == Job.EXTRACT:
         return 'extraction_failed'
-    if job.kind != Job.PREDICT:
+    if job.kind not in (Job.PREDICT, Job.REVIEW2):
         return 'processing_failed'
     if job.state == Job.UNKNOWN:
         return 'provider_unknown'
-    run = (encounter.provider_runs.filter(revision=revision, created_at__gte=job.created_at)
+    purpose = ProviderRun.PRIMARY if job.kind == Job.PREDICT else ProviderRun.SECOND_REVIEW
+    run = (encounter.provider_runs.filter(revision=revision, created_at__gte=job.created_at, purpose=purpose)
            .order_by('-created_at', '-pk').first())
     if run is None:
         return 'provider_not_run'

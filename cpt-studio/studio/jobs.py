@@ -1,4 +1,4 @@
-"""Pipeline jobs: extract -> analyze -> predict -> assess (ARCHITECTURE section 5).
+"""Pipeline jobs: extract -> analyze -> predict -> assess [-> review2 -> assess] (ARCHITECTURE section 5).
 
 One worker claims queued jobs with SELECT ... FOR UPDATE SKIP LOCKED. Every
 stage is idempotent (unique idempotency key), must start before its deadline,
@@ -28,7 +28,8 @@ from .providers import get_provider, normalizer_for
 from .providers.base import ProviderUnavailable
 from .reference.store import prefetched_lookup, selected_codes
 from .storage import read_original
-from .types import Fact, PageSpan, ProviderRequest, RoutingResult, from_jsonable, sha256_json, to_jsonable
+from .types import (EvidenceSpan, Fact, NormalizedResponse, PageSpan, ProviderCode, ProviderRequest, RoutingResult,
+                    from_jsonable, sha256_json, to_jsonable)
 from .validation.engine import assess as run_assessment
 
 log = logging.getLogger(__name__)
@@ -190,14 +191,16 @@ def _route_child(text, service_date):
 
 
 def _assess_child(text, service_date, pages, context, normalized, reference, provider_status, extraction_status,
-                  extraction_messages):
+                  extraction_messages, second=None, second_scope=None):
     """The routing for ``service_date`` and the validation assessment that reads it, in one child: validation's span
-    readings reuse the routing analysis the child already made."""
+    readings reuse the routing analysis the child already made. The documented-service inventory is read here too
+    (engine @4), under the same deadline and memory limit."""
     data = to_jsonable(gi_detect.route(text, service_date))
     result = run_assessment(
         text=text, pages=pages, context=context, routing=from_jsonable(RoutingResult, data), normalized=normalized,
         reference=reference, service_date=service_date, provider_status=provider_status,
-        extraction_status=extraction_status, extraction_messages=extraction_messages)
+        extraction_status=extraction_status, extraction_messages=extraction_messages, second=second,
+        second_scope=second_scope)
     return data, result
 
 
@@ -371,6 +374,7 @@ def stage_predict(job):
     prior = models.ProviderRun.objects.filter(
         encounter__workspace=encounter.workspace, provider=provider.name, adapter_version=provider.adapter_version,
         request_sha256=request.canonical_sha256, state=models.ProviderRun.SUCCEEDED, reused_from__isnull=True,
+        purpose=models.ProviderRun.PRIMARY,
     ).order_by('created_at').first()
     if prior is not None:
         run = models.ProviderRun.objects.create(
@@ -388,16 +392,18 @@ def stage_predict(job):
     if _unreconciled_unknown(encounter):
         return {'blocked': 'a previous request has an unknown outcome; reconcile it before sending again'}
 
-    if provider.mode == 'live':
-        if not settings.SYNTHETIC_ONLY or revision.synthetic_attested_at is None:
-            raise StageFailure('Live provider calls require a synthetic-attested document.')
-        if not settings.AUTHORIZATION_REF:
-            raise StageFailure('Live provider calls are not authorized on this installation.')
-        membership = models.Membership.objects.filter(user=job.requested_by, workspace=encounter.workspace,
-                                                      active=True).first()
-        if membership is None or not membership.can_review:
-            raise StageFailure('Only an owner or reviewer of this workspace can start a live provider request.')
+    _live_gate(job, provider, revision, encounter)
 
+    run = _send(job, provider, request, service_date=service_date)
+    next_assess(run)
+    return {'provider': run.state, 'run': str(run.pk)}
+
+
+def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PRIMARY, scope=None):
+    """One provider attempt under the send discipline (ARCHITECTURE 5.4): single-flight by advisory lock, the run
+    written 'reserved' before any network I/O, a Stop observed before sending, no automatic retry, and the outcome -
+    including an unknown one - recorded with the raw bytes and usage."""
+    encounter, revision = job.encounter, job.revision
     with connection.cursor() as cursor:
         cursor.execute('SELECT pg_try_advisory_lock(%s)', [PROVIDER_LOCK_KEY])
         if not cursor.fetchone()[0]:
@@ -407,7 +413,7 @@ def stage_predict(job):
             encounter=encounter, revision=revision, provider=provider.name, adapter_version=provider.adapter_version,
             request_sha256=request.canonical_sha256, request_body=request.body, contexts=list(request.contexts),
             state=models.ProviderRun.RESERVED, authorization_ref=settings.AUTHORIZATION_REF,
-            requested_by=job.requested_by, service_date=service_date)
+            requested_by=job.requested_by, service_date=service_date, purpose=purpose, scope=scope or {})
         job.refresh_from_db(fields=['stop_requested_at'])
         if job.stop_requested_at or is_stopped(encounter.pk):
             run.state = models.ProviderRun.CANCELLED
@@ -420,16 +426,28 @@ def stage_predict(job):
         run.save(update_fields=['state', 'started_at'])
         audit.record(encounter.workspace, 'provider.sending', encounter=encounter, run=str(run.pk),
                      provider=provider.name, mode=provider.mode, request_sha256=request.canonical_sha256,
-                     run_identity=str(run.run_identity))
+                     run_identity=str(run.run_identity), purpose=purpose)
         exchange = provider.send(request, deadline_s=settings.PROVIDER_READ_TIMEOUT_SECONDS + 30)
         _finish_run(run, exchange)
         audit.record(encounter.workspace, 'provider.finished', encounter=encounter, run=str(run.pk),
-                     state=run.state, http_status=run.http_status, usage=run.usage, latency_ms=run.latency_ms)
+                     state=run.state, http_status=run.http_status, usage=run.usage, latency_ms=run.latency_ms,
+                     purpose=purpose)
     finally:
         with connection.cursor() as cursor:
             cursor.execute('SELECT pg_advisory_unlock(%s)', [PROVIDER_LOCK_KEY])
-    next_assess(run)
-    return {'provider': run.state, 'run': str(run.pk)}
+    return run
+
+
+def _live_gate(job, provider, revision, encounter):
+    if provider.mode == 'live':
+        if not settings.SYNTHETIC_ONLY or revision.synthetic_attested_at is None:
+            raise StageFailure('Live provider calls require a synthetic-attested document.')
+        if not settings.AUTHORIZATION_REF:
+            raise StageFailure('Live provider calls are not authorized on this installation.')
+        membership = models.Membership.objects.filter(user=job.requested_by, workspace=encounter.workspace,
+                                                      active=True).first()
+        if membership is None or not membership.can_review:
+            raise StageFailure('Only an owner or reviewer of this workspace can start a live provider request.')
 
 
 class StageCancelled(Exception):
@@ -460,23 +478,170 @@ def stage_assess(job):
         raise StageFailure('The provider result was requested for a different service date than this context; '
                            'it was not used. Change the context again to request proposals for this date.')
     provider_status, normalized = _provider_inputs(run)
-    reference = prefetched_lookup(selected_codes(normalized))
+    second = _second_run_for(revision, run)
+    second_normalized = _second_inputs(second) if second is not None else None
+    reference = prefetched_lookup(tuple(sorted(set(selected_codes(normalized)) | set(selected_codes(second_normalized)))))
     service_date = context_service_date(context)
     data, result = _bounded(
         _assess_child, revision.text, service_date, tuple(PageSpan(**p) for p in revision.pages),
         context_facts(context), normalized, reference, provider_status, revision.extraction_status,
-        tuple(revision.messages), seconds=settings.JOB_DEADLINE_SECONDS['assess'],
-        memory_bytes=settings.ASSESS_MEMORY_BYTES)
+        tuple(revision.messages), second_normalized, dict(second.scope) if second is not None else None,
+        seconds=settings.JOB_DEADLINE_SECONDS['assess'], memory_bytes=settings.ASSESS_MEMORY_BYTES)
     routing_run = _record_routing(revision, data, service_date)
     try:
         assessment = review.persist_assessment(encounter=encounter, revision=revision, context=context,
-                                               routing_run=routing_run, provider_run=run, result=result)
+                                               routing_run=routing_run, provider_run=run, result=result,
+                                               second_run=second)
     except ValueError as exc:
         raise StageFailure(f'The assessment was not recorded: {exc}') from exc
-    return {'assessment': str(assessment.pk), 'provider_status': provider_status}
+    queued = _maybe_second_review(job, encounter, revision, context, run, assessment, second)
+    out = {'assessment': str(assessment.pk), 'provider_status': provider_status}
+    if second is not None:
+        out['second_review'] = str(second.pk)
+    if queued is not None:
+        out['second_review_queued'] = str(queued.pk)
+    return out
 
 
-STAGES = {Job.EXTRACT: stage_extract, Job.ANALYZE: stage_analyze, Job.PREDICT: stage_predict, Job.ASSESS: stage_assess}
+# --- the bounded second review (ARCHITECTURE 5.11) ------------------------------------------------------------------
+
+SECOND_REVIEW_REASONS = ('no_proposal', 'not_covered')
+SECOND_REVIEW_MAX_CHARS = 20_000  # a longer excerpt is not sent (a second review is about one report, not a chart)
+
+
+def _second_review_items(assessment):
+    """(the unresolved documented services a second review may ask about, (start, end) of the text that documents
+    them or None)."""
+    completeness = assessment.completeness or {}
+    items = [u for u in completeness.get('unresolved_items', []) if u.get('reason') in SECOND_REVIEW_REASONS]
+    if not items:
+        return [], None
+    services = {s.get('id'): s for s in (assessment.services or {}).get('services', [])}
+    spans = []
+    for item in items:
+        service = services.get(item.get('service')) or {}
+        if service.get('scope_end', 0) > service.get('scope_start', 0):
+            spans.append((service['scope_start'], service['scope_end']))
+        spans += [(ev['start'], ev['end']) for ev in item.get('evidence', [])]
+    if not spans:
+        return items, None
+    return items, (min(a for a, _ in spans), max(b for _, b in spans))
+
+
+def _second_run_for(revision, run):
+    """The second review made for ``run`` (the primary run in use), if one succeeded."""
+    if run is None or run.state != models.ProviderRun.SUCCEEDED or run.purpose != models.ProviderRun.PRIMARY:
+        return None
+    for second in (models.ProviderRun.objects.filter(revision=revision, purpose=models.ProviderRun.SECOND_REVIEW,
+                                                     state=models.ProviderRun.SUCCEEDED, service_date=run.service_date)
+                   .order_by('-created_at')):
+        if (second.scope or {}).get('primary_run') == str(run.pk):
+            return second
+    return None
+
+
+def _second_inputs(second):
+    """The second review's normalized response with its passages moved from the excerpt to the revision text (the
+    engine re-checks each against the revision, never assumes it)."""
+    provider_status, normalized = _provider_inputs(second)
+    if provider_status != 'succeeded' or normalized is None:
+        return None
+    offset = int((second.scope or {}).get('start', 0))
+
+    def moved(code):
+        spans = tuple(EvidenceSpan(0, e.start + offset, e.end + offset, e.text, e.exact, e.page)
+                      for e in code.evidence if e.context_index == 0)
+        return ProviderCode(code.role, code.system, code.code, code.display, spans, code.parent_code, code.index)
+    return NormalizedResponse(normalized.provider, normalized.adapter_version,
+                              tuple(moved(c) for c in normalized.codes), normalized.internal_context,
+                              normalized.problems, normalized.refused)
+
+
+def _maybe_second_review(job, encounter, revision, context, run, assessment, second):
+    """Queue ONE bounded second review when the assessment leaves a documented, profiled service without a supported
+    proposal: once per revision and service date, whatever its outcome, only after the primary request succeeded, never
+    while the encounter is stopped, and never again for a revision that already had one."""
+    if second is not None or run is None or run.state != models.ProviderRun.SUCCEEDED \
+            or run.purpose != models.ProviderRun.PRIMARY or is_stopped(encounter.pk) or get_provider() is None:
+        return None
+    items, span = _second_review_items(assessment)
+    if not items or span is None or span[1] - span[0] > SECOND_REVIEW_MAX_CHARS:
+        return None
+    if models.ProviderRun.objects.filter(revision=revision, purpose=models.ProviderRun.SECOND_REVIEW,
+                                         service_date=run.service_date).exists():
+        return None
+    job2 = enqueue(Job.REVIEW2, encounter=encounter, revision=revision, context=context, provider_run=run,
+                   key=f'review2:{revision.pk}:{run.service_date or "none"}', requested_by=job.requested_by)
+    return job2 if job2.state == Job.QUEUED else None
+
+
+def stage_review2(job):
+    revision, encounter, context, primary = job.revision, job.encounter, job.context, job.provider_run
+    encounter.refresh_from_db()
+    if encounter.current_revision_id != revision.pk:
+        return {'skipped': 'a newer revision exists; nothing was sent'}
+    if context is None or encounter.current_context_id != context.pk:
+        return {'skipped': 'the context changed; nothing was sent'}
+    assessment = encounter.current_assessment
+    if (assessment is None or assessment.revision_id != revision.pk or assessment.context_id != context.pk
+            or primary is None or assessment.provider_run_id != primary.pk):
+        return {'skipped': 'the assessment changed; nothing was sent'}
+    provider = get_provider()
+    if provider is None:
+        return {'skipped': 'the provider is disabled; nothing was sent'}
+    service_date = context_service_date(context)
+    if service_date != primary.service_date:
+        return {'skipped': 'the service date changed; nothing was sent'}
+    items, span = _second_review_items(assessment)
+    if not items or span is None or span[1] - span[0] > SECOND_REVIEW_MAX_CHARS:
+        return {'skipped': 'nothing to ask about; nothing was sent'}
+    start, end = span
+    scope = {'start': start, 'end': end, 'primary_run': str(primary.pk), 'assessment': str(assessment.pk),
+             'items': [item.get('label', '') for item in items][:8]}
+
+    def next_assess(run):
+        enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=primary,
+                key=f'assess:{context.pk}:{primary.pk}:review2:{run.pk}', requested_by=job.requested_by)
+
+    try:
+        request = provider.build_request(revision.text[start:end], service_date)
+    except ProviderUnavailable as exc:
+        run = models.ProviderRun.objects.create(
+            encounter=encounter, revision=revision, provider=provider.name, adapter_version=provider.adapter_version,
+            request_sha256='', request_body={}, contexts=[], state=models.ProviderRun.NOT_SENT, error=str(exc),
+            authorization_ref=settings.AUTHORIZATION_REF, requested_by=job.requested_by, service_date=service_date,
+            purpose=models.ProviderRun.SECOND_REVIEW, scope=scope, finished_at=timezone.now())
+        next_assess(run)
+        return {'second_review': 'not_sent'}
+    prior = models.ProviderRun.objects.filter(
+        encounter__workspace=encounter.workspace, provider=provider.name, adapter_version=provider.adapter_version,
+        request_sha256=request.canonical_sha256, state=models.ProviderRun.SUCCEEDED, reused_from__isnull=True,
+        purpose=models.ProviderRun.SECOND_REVIEW).order_by('created_at').first()
+    if prior is not None:
+        run = models.ProviderRun.objects.create(
+            encounter=encounter, revision=revision, provider=prior.provider, adapter_version=prior.adapter_version,
+            request_sha256=prior.request_sha256, request_body=prior.request_body, contexts=prior.contexts,
+            state=models.ProviderRun.SUCCEEDED, sent=False, http_status=prior.http_status,
+            provider_request_id=prior.provider_request_id, response_sha256=prior.response_sha256,
+            response_bytes=bytes(prior.response_bytes), usage={}, usage_basis='reused_retained_result_no_new_usage',
+            authorization_ref=settings.AUTHORIZATION_REF, requested_by=job.requested_by, reused_from=prior,
+            service_date=service_date, purpose=models.ProviderRun.SECOND_REVIEW, scope=scope,
+            started_at=timezone.now(), finished_at=timezone.now())
+        audit.record(encounter.workspace, 'provider.reused', encounter=encounter, run=str(run.pk), reused_from=str(prior.pk),
+                     purpose=models.ProviderRun.SECOND_REVIEW)
+        next_assess(run)
+        return {'second_review': 'reused', 'run': str(run.pk)}
+    if _unreconciled_unknown(encounter):
+        return {'blocked': 'a previous request has an unknown outcome; reconcile it before sending again'}
+    _live_gate(job, provider, revision, encounter)
+    run = _send(job, provider, request, service_date=service_date, purpose=models.ProviderRun.SECOND_REVIEW,
+                scope=scope)
+    next_assess(run)
+    return {'second_review': run.state, 'run': str(run.pk)}
+
+
+STAGES = {Job.EXTRACT: stage_extract, Job.ANALYZE: stage_analyze, Job.PREDICT: stage_predict, Job.ASSESS: stage_assess,
+          Job.REVIEW2: stage_review2}
 
 
 # --- worker ------------------------------------------------------------------
@@ -542,15 +707,17 @@ def mark_stale():
             # yet queued) is settled by that run, exactly as the stage would have settled it, so a Resume can
             # never re-send an identical request that already failed. Read before reserved runs are settled below.
             finished = None
-            if job.kind == Job.PREDICT and job.context_id:
+            sends = job.kind in (Job.PREDICT, Job.REVIEW2)
+            if sends and job.context_id:
+                purpose = models.ProviderRun.PRIMARY if job.kind == Job.PREDICT else models.ProviderRun.SECOND_REVIEW
                 finished = (models.ProviderRun.objects
-                            .filter(revision=job.revision, created_at__gte=job.started_at,
+                            .filter(revision=job.revision, created_at__gte=job.started_at, purpose=purpose,
                                     state__in=(models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED,
                                                models.ProviderRun.UNKNOWN, models.ProviderRun.NOT_SENT))
                             .order_by('-created_at').first())
             sending = models.ProviderRun.objects.filter(revision=job.revision, state=models.ProviderRun.SENDING)
             reserved = models.ProviderRun.objects.filter(revision=job.revision, state=models.ProviderRun.RESERVED)
-            unknown = job.kind == Job.PREDICT and sending.exists()
+            unknown = sends and sending.exists()
             for run in sending:
                 run.state, run.error, run.finished_at = (models.ProviderRun.UNKNOWN,
                                                          'The worker stopped while the request was in flight.',
@@ -561,8 +728,10 @@ def mark_stale():
                                                          'The worker stopped before sending.', timezone.now())
                 run.save(update_fields=['state', 'error', 'finished_at'])
             if finished is not None and not unknown:
+                primary = finished if job.kind == Job.PREDICT else job.provider_run
                 enqueue(Job.ASSESS, encounter=job.encounter, revision=job.revision, context=job.context,
-                        provider_run=finished, key=f'assess:{job.context_id}:{finished.pk}',
+                        provider_run=primary, key=f'assess:{job.context_id}:{primary.pk}'
+                        + ('' if job.kind == Job.PREDICT else f':review2:{finished.pk}'),
                         requested_by=job.requested_by)
                 job.state, job.error = Job.SUCCEEDED, ''
                 job.result = {'provider': finished.state, 'run': str(finished.pk),
@@ -733,7 +902,8 @@ def _run_in_use(revision):
                 models.ProviderRun.UNKNOWN)
     reserved_then_swept = (Q(state=models.ProviderRun.NOT_SENT) & Q(started_at__isnull=True)
                            & ~Q(request_sha256=''))
-    run = revision.provider_runs.filter(state__in=finished).exclude(reserved_then_swept).order_by('-created_at').first()
+    run = (revision.provider_runs.filter(state__in=finished, purpose=models.ProviderRun.PRIMARY)
+           .exclude(reserved_then_swept).order_by('-created_at').first())
     if run is None or (run.state == models.ProviderRun.UNKNOWN and run.reconciled_at is not None):
         return None
     return run

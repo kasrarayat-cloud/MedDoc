@@ -26,7 +26,7 @@ from .types import CONTEXT_FACTS, sha256_json
 
 DRAFT, REVIEWED = ReportArtifact.DRAFT, ReportArtifact.REVIEWED
 KINDS = (DRAFT, REVIEWED)
-FORMAT_VERSION = 'cpt-studio-report@3'
+FORMAT_VERSION = 'cpt-studio-report@4'
 HEADLINES = {DRAFT: 'CPT STUDIO CODING REPORT — DRAFT — NOT REVIEWED', REVIEWED: 'CPT STUDIO CODING REPORT — REVIEWED'}
 SYNTHETIC_LINE = 'SYNTHETIC DATA — NOT FOR BILLING OR CLAIMS'
 SYNTHETIC_CELL = 'SYNTHETIC — NOT FOR BILLING'
@@ -56,7 +56,10 @@ LISTS = ('approved', 'rejected', 'undecided', 'excluded', 'alternative')
 CSV_COLUMNS = ('report_kind', 'encounter_id', 'revision_number', 'source_sha256', 'text_sha256', 'assessment_id',
                'proposal_id', 'item_list', 'code', 'code_kind', 'family', 'family_label', 'status', 'decision', 'reviewer',
                'reviewer_kind', 'decided_at', 'decision_carried_from', 'decision_carried_at', 'units', 'evidence',
-               'checks', 'not_verified', 'modifier_considerations', 'exclusion_reason', 'synthetic')
+               'checks', 'not_verified', 'modifier_considerations', 'exclusion_reason', 'synthetic',
+               'evidence_support', 'source_passages', 'documented_service', 'proposal_origin')
+# Rows that are not proposals: what the documented-service reconciliation found (format @4).
+ENCOUNTER_LISTS = ('coding_completeness', 'unresolved_service', 'conflict')
 # A line break inside stored text always continues at least this deep: deeper than any structural line of
 # the TXT (headings at column 0, list lines at 2, item detail at 5), so stored text can never forge one.
 CONTINUATION = '       '
@@ -187,6 +190,57 @@ def _item(proposal, decision, kind, text):
         'checks': [_check(c) for c in proposal.checks or []],
         'modifier_considerations': [str(m) for m in proposal.modifier_considerations or []],
         'fingerprint': proposal.fingerprint, 'decision': _decision(decision),
+        'support': _support(proposal.support or {}, text),
+    }
+
+
+def _support(support, text):
+    """What the proposal was matched to in the documented services, and how its passages relate to the coded act;
+    source passages are re-checked against the revision text, never assumed."""
+    if not support:
+        return {}
+    source = [{'start': s['start'], 'end': s['end'], 'text': s['text']} for s in support.get('source') or []
+              if isinstance(s.get('start'), int) and isinstance(s.get('end'), int)
+              and 0 <= s['start'] < s['end'] <= len(text) and text[s['start']:s['end']] == s.get('text')]
+    return {'origin': support.get('origin', 'primary'), 'service': support.get('service', ''),
+            'state': support.get('state', ''), 'status': support.get('status', ''),
+            'detail': support.get('detail_support', ''), 'match': support.get('detail', ''),
+            'unrelated': list(support.get('unrelated') or []), 'source': source}
+
+
+def _services(assessment):
+    """The documented services as the assessment recorded them (format @4), for the report."""
+    inventory = assessment.services or {}
+    completeness = assessment.completeness or {}
+    out = []
+    for service in inventory.get('services') or []:
+        acts = [a for a in service.get('acts') or [] if a.get('status') == 'performed'
+                and a.get('role') in ('physician', 'unknown')]
+        out.append({'id': service.get('id', ''), 'family': service.get('family', ''),
+                    'family_label': _family_label(service.get('family', '')), 'status': service.get('status', ''),
+                    'completion': service.get('completion', ''), 'extent': service.get('extent', ''),
+                    'intent': service.get('intent', ''),
+                    'acts': sorted({a.get('kind', '').replace('_', ' ') + (f' ({", ".join(a.get("anatomy") or [])})'
+                                                                            if a.get('anatomy') else '')
+                                    for a in acts}),
+                    'covered_by': list((completeness.get('covered') or {}).get(service.get('id'), []))})
+    return {
+        'services': out,
+        'unresolved': [{'service': u.get('service', ''), 'family': u.get('family', ''), 'label': u.get('label', ''),
+                        'reason': u.get('reason', ''),
+                        'evidence': [{'start': e['start'], 'end': e['end'], 'text': e['text']}
+                                     for e in u.get('evidence') or []]}
+                       for u in completeness.get('unresolved_items') or []],
+        'bundled': [{'label': b.get('label', ''), 'why': b.get('why', '')} for b in completeness.get('bundled') or []],
+        'conflicts': [{'service': c.get('service', ''), 'subject': c.get('subject', ''),
+                       'sides': [{'role': side.get('role', ''), 'status': side.get('status', ''),
+                                  'text': (side.get('evidence') or [{}])[0].get('text', '')}
+                                 for side in c.get('sides') or []]}
+                      for c in inventory.get('conflicts') or []],
+        'attributions': [a.get('role', '') for a in inventory.get('attributions') or []],
+        'problems': list(inventory.get('problems') or []) + list(completeness.get('inventory_problems') or []),
+        'catalogue_version': completeness.get('catalogue_version', ''),
+        'inventory_version': inventory.get('version', ''),
     }
 
 
@@ -231,7 +285,8 @@ def _provider_runs(encounter, assessment):
         'request_sha256': run.request_sha256, 'response_sha256': run.response_sha256,
         'reused_from': str(run.reused_from_id) if run.reused_from_id else None,
         'reconciled': run.reconciled_at is not None, 'created_at': _ts(run.created_at),
-        'used_by_assessment': run.pk == assessment.provider_run_id,
+        'used_by_assessment': run.pk in (assessment.provider_run_id, assessment.second_run_id),
+        'purpose': run.purpose,
     } for run in encounter.provider_runs.select_related('revision').order_by('created_at', 'pk')]
 
 
@@ -292,6 +347,9 @@ def snapshot(encounter, kind):
                        'routing_sha256': assessment.routing.sha256,
                        'encounter_checks': [_check(c) for c in assessment.encounter_checks or []]},
         'readiness': ready,
+        'coding': review.coding_completeness(encounter),
+        'documented': _services(assessment),
+        'second_review': str(assessment.second_run_id) if assessment.second_run_id else None,
         'proposals': items,
         'clarifications': [_clarification(q) for q in questions],
         'not_verified': _not_verified(items, assessment),
@@ -369,6 +427,14 @@ def _item_block(number, item, kind):
     if item['unmatched_evidence']:
         lines.append(f'{pad}  ({item["unmatched_evidence"]} cited passage(s) did not match the revision text '
                      'exactly and are not shown)')
+    support = item.get('support') or {}
+    if support.get('origin') == 'second_review':
+        lines.append(f'{pad}Origin: selected by the provider in the bounded second review of an unresolved service')
+    if support.get('status'):
+        lines.append(f'{pad}Evidence support: {support["status"]} — {_indent(support.get("detail", ""), pad + "  ")}')
+        for span in support.get('source') or []:
+            lines.append(f'{pad}  + source passage selected by CPT Studio: '
+                         f'{_indent(_evidence_line(span), pad + "    ")}')
     if item['rationale']:
         lines.append(f'{pad}Rationale: {_indent(item["rationale"], pad + "  ")}')
     if item['modifier_considerations']:
@@ -566,6 +632,59 @@ def _audit_section(snap):
     return lines or ['  No review decisions have been recorded.']
 
 
+def _coding_section(snap):
+    coding = snap.get('coding') or {}
+    return [f'  State: {coding.get("state", "not_established")}', f'  {coding.get("statement", "")}']
+
+
+def _documented_section(snap):
+    documented = snap.get('documented') or {}
+    lines = []
+    for service in documented.get('services') or []:
+        bits = [service['family_label'], service['status']]
+        if service.get('completion') and service['completion'] != 'unknown' and service['status'] in (
+                'performed', 'incomplete'):
+            bits.append(f'{service["completion"]} examination' + (f' ({service["extent"]})' if service.get('extent')
+                                                                  else ''))
+        if service.get('intent'):
+            bits.append(service['intent'])
+        lines.append(f'  - {service["id"]}: ' + ' · '.join(bits))
+        if service.get('acts'):
+            lines.append(f'      acts documented as done: {"; ".join(service["acts"])}')
+        if service.get('covered_by'):
+            lines.append(f'      accounted for by: {", ".join(service["covered_by"])}')
+    for item in documented.get('bundled') or []:
+        lines.append(f'  - not separately reported: {item["label"]} — {item["why"]}')
+    if documented.get('attributions'):
+        lines.append(f'  - attributed to another provider (never coded here): {", ".join(documented["attributions"])}')
+    for problem in documented.get('problems') or []:
+        lines.append(f'  - reading problem: {problem}')
+    if documented.get('inventory_version'):
+        lines.append(f'  Read by {documented["inventory_version"]}, reconciled by {documented.get("catalogue_version", "")}'
+                     ' (internal profiles; advisory: wording the reader does not recognise is not covered).')
+    return lines or ['  - none recorded (this assessment predates the documented-service reconciliation)']
+
+
+def _unresolved_section(snap):
+    items = (snap.get('documented') or {}).get('unresolved') or []
+    lines = []
+    for item in items:
+        lines.append(f'  - {item["label"]} [{item["reason"]}]')
+        lines += [f'      {_indent(_evidence_line(span), "        ")}' for span in item.get('evidence') or []]
+    return lines or ['  - none: every documented act the catalogue reconciles has a selected proposal or is not '
+                     'separately reported']
+
+
+def _conflicts_section(snap):
+    lines = []
+    for conflict in (snap.get('documented') or {}).get('conflicts') or []:
+        lines.append(f'  - {conflict["subject"].replace("_", " ")} ({conflict["service"]}); both sides kept, neither '
+                     'chosen:')
+        for side in conflict['sides']:
+            lines.append(f'      {side["role"]} entry, {side["status"]}: "{_indent(side["text"], "        ")}"')
+    return lines or ['  - none']
+
+
 def _review_status(snap):
     ready = snap['readiness']
     if snap['kind'] == REVIEWED:
@@ -612,8 +731,12 @@ def render_txt(snap) -> bytes:
     if snap['agent_review']:
         lines.append(AGENT_LINE)
     lines += [f'Generated: {snap["generated_at"]} · format {snap["format_version"]}', *_review_status(snap)]
-    sections = [('ENCOUNTER, SOURCE AND REVISION', _source_section(snap)),
-                ('ENCOUNTER CONTEXT', _context_section(snap))]
+    sections = [('CODING COMPLETENESS', _coding_section(snap)),
+                ('ENCOUNTER, SOURCE AND REVISION', _source_section(snap)),
+                ('ENCOUNTER CONTEXT', _context_section(snap)),
+                ('DOCUMENTED SERVICES', _documented_section(snap)),
+                ('UNRESOLVED DOCUMENTED SERVICES — NO SUPPORTED PROPOSAL', _unresolved_section(snap)),
+                ('CONFLICTS IN THE RECORD', _conflicts_section(snap))]
     if kind == REVIEWED:
         sections.append(('APPROVED SELECTIONS', _numbered(snap, 'approved', kind)))
     sections.append(('REJECTED — EXCLUDED FROM APPROVED RESULTS', _rejected_section(snap)))
@@ -670,8 +793,33 @@ def _csv_row(snap, item):
            'decision_carried_at': decision.get('carried_at') or '', 'units': item['units'], 'evidence': evidence,
            'checks': ';'.join(f'{c["id"]}={c["status"]}' for c in item['checks']),
            'not_verified': _not_verified_cell(item), 'modifier_considerations': ' | '.join(item['modifier_considerations']),
-           'exclusion_reason': item['exclusion_reason']}
+           'exclusion_reason': item['exclusion_reason'],
+           'evidence_support': (item.get('support') or {}).get('status', ''),
+           'source_passages': ' | '.join(f'"{s["text"]}" [{s["start"]}-{s["end"]}]'
+                                         for s in (item.get('support') or {}).get('source') or []),
+           'documented_service': (item.get('support') or {}).get('service', ''),
+           'proposal_origin': (item.get('support') or {}).get('origin', '') or ('primary' if item.get('support') else '')}
     return [row[column] for column in CSV_COLUMNS]
+
+
+def _encounter_rows(snap):
+    """One coding-completeness row, then one row per unresolved documented service and per conflict (format @4)."""
+    base = {**dict.fromkeys(CSV_COLUMNS, ''), **_identity_cells(snap)}
+    coding = snap.get('coding') or {}
+    rows = [{**base, 'item_list': 'coding_completeness', 'status': coding.get('state', ''),
+             'exclusion_reason': coding.get('statement', '')}]
+    documented = snap.get('documented') or {}
+    for item in documented.get('unresolved') or []:
+        rows.append({**base, 'item_list': 'unresolved_service', 'family': item['family'],
+                     'family_label': _family_label(item['family']), 'status': item['reason'],
+                     'documented_service': item['service'], 'exclusion_reason': item['label'],
+                     'evidence': ' | '.join(f'"{s["text"]}" [{s["start"]}-{s["end"]}]' for s in item['evidence'])})
+    for conflict in documented.get('conflicts') or []:
+        rows.append({**base, 'item_list': 'conflict', 'documented_service': conflict['service'],
+                     'status': conflict['subject'],
+                     'evidence': ' | '.join(f'{side["role"]} {side["status"]}: "{side["text"]}"'
+                                            for side in conflict['sides'])})
+    return [[row[column] for column in CSV_COLUMNS] for row in rows]
 
 
 def _placeholder_row(snap):
@@ -688,7 +836,7 @@ def render_csv(snap) -> bytes:
     writer.writerow([neutralise(column) for column in CSV_COLUMNS])
     order = {name: index for index, name in enumerate(LISTS)}
     rows = [_csv_row(snap, item) for item in sorted(snap['proposals'], key=lambda i: order[i['list']])]
-    for row in rows or [_placeholder_row(snap)]:
+    for row in (rows or [_placeholder_row(snap)]) + _encounter_rows(snap):
         # Control characters are shown escaped here too (round 3, review3:5): a cited passage carrying ESC/CSI,
         # backspace or DEL must not redraw a row when the file is printed in a terminal.
         writer.writerow([neutralise(_visible(cell) if isinstance(cell, str) else cell) for cell in row])

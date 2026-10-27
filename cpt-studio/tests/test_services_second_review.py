@@ -1,0 +1,154 @@
+"""The bounded second review (ARCHITECTURE 5.11), end to end through the pipeline with an in-process provider.
+
+Once per revision and service date, only for a documented service left without a supported proposal, under the same
+send discipline as the primary request; its codes fill only unresolved items. Synthetic data, no network.
+"""
+import hashlib
+import json
+from unittest import mock
+
+from django.test import Client, TestCase, override_settings
+
+from studio import jobs, models
+from studio.providers.corti import ADAPTER_VERSION
+from studio.types import ProviderRequest, RawExchange
+from tests.support import factories as f
+from tests.test_pipeline_api import drain
+
+LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
+
+REPORT = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Colonoscopy report (fictional)
+Date of service: 2026-10-16
+Place of service: Hospital outpatient department
+The colonoscope was advanced to the cecum and the examination was completed.
+A 6 mm polyp in the rectum was removed with a cold snare.
+A separate 10 mm flat lesion in the transverse colon was sampled with cold biopsy forceps; it was not removed.
+"""
+
+
+def response(context, quotes):
+    codes = []
+    for code, quote in quotes:
+        start = context.index(quote)
+        codes.append({'system': 'cpt', 'code': code, 'display': 'UNVERIFIED PROVIDER WORDING',
+                      'evidences': [{'contextIndex': 0, 'start': start, 'end': start + len(quote), 'text': quote}],
+                      'alternatives': []})
+    return json.dumps({'codes': codes, 'candidates': [], 'usageInfo': {'creditsConsumed': 0.02}}).encode()
+
+
+class TwoPassProvider:
+    """The live adapter's name and version (so the real normaliser reads the stored runs). The first request gets
+    ``first``; any later request gets ``later``. Each outcome can be scripted."""
+    name, adapter_version, mode = 'corti', ADAPTER_VERSION, 'live'
+
+    def __init__(self, first, later, outcomes=()):
+        self.first, self.later, self.outcomes, self.requests = first, later, list(outcomes), []
+
+    def build_request(self, text, service_date):
+        contexts = [text] + ([f'Date of service: {service_date.isoformat()}'] if service_date else [])
+        body = {'system': ['icd10cm-outpatient', 'cpt'], 'context': [{'type': 'text', 'text': c} for c in contexts]}
+        digest = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(',', ':'),
+                                           ensure_ascii=False).encode()).hexdigest()
+        return ProviderRequest(provider=self.name, adapter_version=self.adapter_version, body=body,
+                               canonical_sha256=digest, contexts=tuple(contexts))
+
+    def send(self, request, *, deadline_s):
+        quotes = self.first if not self.requests else self.later
+        self.requests.append(request)
+        outcome = self.outcomes.pop(0) if self.outcomes else 'succeeded'
+        if outcome == 'unknown':
+            return RawExchange(outcome='unknown', sent=True, error='Read timed out after the request was sent.')
+        data = response(request.contexts[0], quotes)
+        return RawExchange(outcome='succeeded', sent=True, http_status=200, response_bytes=data,
+                           response_sha256=hashlib.sha256(data).hexdigest(), latency_ms=10.0,
+                           usage={'creditsConsumed': 0.02}, usage_basis='provider_reported_credits_not_usd')
+
+
+@override_settings(**LIVE)
+class SecondReviewTests(TestCase):
+    def setUp(self):
+        self.ws = f.workspace()
+        self.reviewer = f.member(self.ws, f.user('reviewer'))
+        self.client = Client(enforce_csrf_checks=False)
+        self.client.force_login(self.reviewer)
+        self.provider = TwoPassProvider(first=[('45385', 'was removed with a cold snare')],
+                                        later=[('45380', 'was sampled with cold biopsy forceps'),
+                                               ('45385', 'was removed with a cold snare')])
+        patcher = mock.patch('studio.jobs.get_provider', return_value=self.provider)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def create(self, text=REPORT):
+        reply = self.client.post('/api/encounters', {'text': text, 'synthetic_attestation': 'yes'})
+        self.assertEqual(reply.status_code, 201, reply.content)
+        return reply.json()['id']
+
+    def test_one_second_review_fills_the_unresolved_biopsy(self):
+        encounter_id = self.create()
+        drain()
+        runs = list(models.ProviderRun.objects.filter(encounter_id=encounter_id).order_by('created_at'))
+        self.assertEqual([(r.purpose, r.state) for r in runs], [('primary', 'succeeded'), ('second_review', 'succeeded')])
+        second = runs[1]
+        excerpt = second.contexts[0]
+        self.assertNotEqual(excerpt, REPORT)  # only the text that documents the service
+        self.assertIn('cold biopsy forceps', excerpt)
+        self.assertEqual(second.scope['primary_run'], str(runs[0].pk))
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        assessment = encounter.current_assessment
+        self.assertEqual(assessment.second_run_id, second.pk)
+        codes = {p.code: p for p in assessment.proposals.filter(bucket='selected')}
+        self.assertEqual(sorted(codes), ['45380', '45385'])
+        self.assertEqual(codes['45380'].support['origin'], 'second_review')
+        text = encounter.current_revision.text
+        for span in codes['45380'].evidence:  # moved from the excerpt to the revision, and exact there
+            self.assertEqual(text[span['start']:span['end']], span['text'])
+        self.assertEqual(assessment.completeness['unresolved_items'], [])
+        drain()
+        self.assertEqual(len(self.provider.requests), 2)  # bounded: never a third
+
+    def test_no_second_review_once_one_was_made_for_the_revision_and_date(self):
+        encounter_id = self.create()
+        drain()
+        reply = self.client.post(f'/api/encounters/{encounter_id}/context', data=json.dumps({'setting': 'asc'}),
+                                 content_type='application/json')
+        self.assertIn(reply.status_code, (200, 201), reply.content)
+        drain()
+        self.assertEqual(len(self.provider.requests), 2)
+
+    def test_a_stop_before_it_runs_sends_nothing_and_resume_runs_it_once(self):
+        encounter_id = self.create()
+        while True:  # through the first assess, which queues the second review
+            job = jobs.claim_next()
+            jobs.run_job(job)
+            if job.kind == models.Job.ASSESS:
+                break
+        self.assertTrue(models.Job.objects.filter(encounter_id=encounter_id, kind='review2', state='queued').exists())
+        self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/stop').status_code, 200)
+        drain()
+        self.assertEqual(len(self.provider.requests), 1)
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'stopped')
+        self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
+        drain()
+        self.assertEqual(len(self.provider.requests), 2)
+
+    def test_an_unknown_second_review_blocks_every_further_send(self):
+        self.provider.outcomes = ['succeeded', 'unknown']
+        encounter_id = self.create()
+        drain()
+        runs = list(models.ProviderRun.objects.filter(encounter_id=encounter_id).order_by('created_at'))
+        self.assertEqual([r.state for r in runs], ['succeeded', 'unknown'])
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        # the assessment that followed read the primary run only; the unknown outcome is shown and must be reconciled
+        self.assertIsNone(encounter.current_assessment.second_run_id)
+        reply = self.client.post(f'/api/encounters/{encounter_id}/context', data=json.dumps({'setting': 'asc'}),
+                                 content_type='application/json')
+        drain()
+        self.assertEqual(len(self.provider.requests), 2)
+
+    def test_no_second_review_when_every_documented_service_is_accounted_for(self):
+        self.provider.first = [('45385', 'was removed with a cold snare'),
+                               ('45380', 'was sampled with cold biopsy forceps')]
+        self.create()
+        drain()
+        self.assertEqual(len(self.provider.requests), 1)

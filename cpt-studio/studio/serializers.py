@@ -175,6 +175,7 @@ def _proposal_json(proposal, current, assessment, membership, clarification_ids)
                        'label': 'Description withheld — no licensed CPT descriptor is connected.'},
         'evidence': proposal.evidence, 'rationale': proposal.rationale, 'units': proposal.units,
         'checks': proposal.checks, 'modifier_considerations': proposal.modifier_considerations,
+        'support': proposal.support or {},
         'clarification_ids': clarification_ids.get(proposal.pk, []),
         'decision': _decision_json(decision) if decision else None,
         'decision_state': DECISION_STATES.get(decision.action, 'undecided') if decision else 'undecided',
@@ -201,7 +202,9 @@ def _assessment_json(encounter, membership):
         'engine_version': assessment.engine_version, 'created_at': _iso(assessment.created_at),
         'proposals': proposals, 'encounter_checks': assessment.encounter_checks,
         'unsupported': assessment.unsupported, 'reference_sources': assessment.reference_sources,
-        'summary': assessment.summary,
+        'summary': assessment.summary, 'services': assessment.services or {},
+        'completeness': assessment.completeness or {},
+        'second_run': str(assessment.second_run_id) if assessment.second_run_id else None,
     }
     return data, clarifications
 
@@ -219,7 +222,8 @@ def _provider_run_json(run):
             'usage_basis': run.usage_basis, 'request_sha256': run.request_sha256,
             'response_sha256': run.response_sha256,
             'reused_from': str(run.reused_from_id) if run.reused_from_id else None, 'error': run.error,
-            'reconciled': run.reconciled_at is not None, 'created_at': _iso(run.created_at)}
+            'reconciled': run.reconciled_at is not None, 'created_at': _iso(run.created_at),
+            'purpose': run.purpose, 'scope_items': list((run.scope or {}).get('items', []))}
 
 
 def _report_json(report):
@@ -276,6 +280,7 @@ def encounter_detail(encounter, membership):
         'decisions': {'history': [_decision_json(d) for d in encounter.decisions.select_related(
             'proposal', 'reviewer', 'revision').order_by('sequence')]},
         'readiness': review.readiness(encounter),
+        'coding': review.coding_completeness(encounter),
         'reports': [_report_json(r) for r in encounter.reports.order_by('-generated_at')],
         'activity': [_activity_json(e) for e in encounter.audit_events.select_related('actor').order_by('created_at')],
     }

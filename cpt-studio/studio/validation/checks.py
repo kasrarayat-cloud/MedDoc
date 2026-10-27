@@ -485,7 +485,7 @@ def _section_cue(reading: Reading) -> str:
 def cite(reading: Reading) -> str:
     """'“<passage>” (cue “<cue>”, linked passage)'; routing readings say 'routing' instead. The cue is the one that
     decided the reading: for an explicit performance statement held because of its section, that section's cue."""
-    origin = 'linked passage' if reading.origin == 'evidence' else 'routing'
+    origin = {'evidence': 'linked passage', 'service': 'documented service'}.get(reading.origin, 'routing')
     cue = _section_cue(reading) if restated(reading) else next((c.strip() for c in reading.cues if c.strip()), '')
     detail = f'cue “{excerpt(cue)}”, {origin}' if cue else origin
     if reading.passage.strip():
@@ -980,6 +980,9 @@ def service_date_state(context: Mapping[str, Fact], service_date: Optional[date]
 
 def _date_problem(state: DateState) -> str:
     if state.origin == 'conflict':
+        note = state.fact.note if state.fact is not None else ''
+        if note.startswith('Encounter metadata'):
+            return f'The date of service is in conflict. {note.rstrip(".")}'
         return f'Conflicting dates of service are documented ({_conflict_values(state.fact)})'
     if state.origin == 'unreadable':
         return f'The date of service “{excerpt(str(state.fact.value))}” is not a readable date'

@@ -235,6 +235,12 @@ class ProviderRun(models.Model):
     # The service date the request was built with (null: none was sent). An
     # assessment pairs a run only with a context carrying this same date.
     service_date = models.DateField(null=True, blank=True)
+    # 'primary': the revision's whole text; 'second_review': one bounded second request about documented services that
+    # had no supported proposal, sent once per revision and service date (ARCHITECTURE 5.11). ``scope`` records what it
+    # was for: the excerpt's offsets in the revision text and the unresolved items.
+    PRIMARY, SECOND_REVIEW = 'primary', 'second_review'
+    purpose = models.CharField(max_length=16, default=PRIMARY)
+    scope = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
@@ -251,12 +257,17 @@ class Assessment(ImmutableModel):
     context = models.ForeignKey(EncounterContext, on_delete=models.PROTECT, related_name='assessments')
     routing = models.ForeignKey(RoutingRun, on_delete=models.PROTECT, related_name='assessments')
     provider_run = models.ForeignKey(ProviderRun, null=True, blank=True, on_delete=models.PROTECT, related_name='assessments')
+    # The bounded second review whose proposals this assessment also read (null: none).
+    second_run = models.ForeignKey(ProviderRun, null=True, blank=True, on_delete=models.PROTECT,
+                                   related_name='second_assessments')
     profiles_version = models.CharField(max_length=40)
     engine_version = models.CharField(max_length=40)
     reference_sources = models.JSONField(default=list)
     encounter_checks = models.JSONField(default=list)
     unsupported = models.JSONField(default=list)
     summary = models.JSONField(default=dict)
+    services = models.JSONField(default=dict)  # the documented-service inventory (gi/services.py)
+    completeness = models.JSONField(default=dict)  # coding completeness, unresolved and bundled items (reconcile.py)
     sha256 = models.CharField(max_length=64)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -286,6 +297,7 @@ class Proposal(ImmutableModel):
     units = models.PositiveIntegerField(default=1)
     fingerprint = models.CharField(max_length=64)
     position = models.PositiveIntegerField(default=0)
+    support = models.JSONField(default=dict)  # the documented service and act it was matched to, and passage support
 
     class Meta:
         ordering = ['position']
@@ -349,7 +361,7 @@ class DecisionInvalidation(ImmutableModel):
 
 
 class Job(models.Model):
-    EXTRACT, ANALYZE, PREDICT, ASSESS = 'extract', 'analyze', 'predict', 'assess'
+    EXTRACT, ANALYZE, PREDICT, ASSESS, REVIEW2 = 'extract', 'analyze', 'predict', 'assess', 'review2'
     QUEUED, RUNNING, SUCCEEDED, FAILED, UNKNOWN, CANCELLED = 'queued', 'running', 'succeeded', 'failed', 'unknown', 'cancelled'
     TERMINAL = {SUCCEEDED, FAILED, UNKNOWN, CANCELLED}
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

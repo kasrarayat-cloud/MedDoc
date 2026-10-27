@@ -398,6 +398,12 @@ function documentLayout(doc) {
       spans.push({ ...evidence, key });
       codes.set(key, proposal.code);
     });
+    // Source passages CPT Studio selected because the provider's passages do not show the coded act.
+    (proposal.support?.source || []).forEach((evidence, index) => {
+      const key = `${proposal.id}:s${index}`;
+      spans.push({ ...evidence, key });
+      codes.set(key, proposal.code);
+    });
   }
   const layout = layoutDocument(doc.revision?.text || '', doc.revision?.pages, spans);
   return { pages: layout.pages, unlocated: new Set(layout.unlocated), codes };
@@ -498,11 +504,20 @@ function modifierNote(proposal) {
 }
 
 function evidenceChips(proposal, layout) {
-  return (proposal.evidence || []).map((evidence, index) => {
+  const unrelated = new Set(Array.isArray(proposal.support?.unrelated) ? proposal.support.unrelated : []);
+  const provider = (proposal.evidence || []).map((evidence, index) => {
     const key = `${proposal.id}:${index}`;
     if (layout.unlocated.has(key)) return `<span class="evidence-chip unlocated">${icon('info')}<span>${escapeHtml(`“${evidence?.text ?? ''}” — not found at this position in the current revision, so it is not highlighted.`)}</span></span>`;
-    return `<button type="button" class="evidence-chip" data-evidence="${escapeHtml(key)}">${icon('link')}<span>${escapeHtml(`“${evidence.text}”`)}</span></button>`;
-  }).join('');
+    const note = unrelated.has(index) ? ' — cited by the provider; does not show the coded act' : '';
+    return `<button type="button" class="evidence-chip" data-evidence="${escapeHtml(key)}">${icon('link')}<span>${escapeHtml(`“${evidence.text}”${note}`)}</span></button>`;
+  });
+  const source = (proposal.support?.source || []).map((evidence, index) => {
+    const key = `${proposal.id}:s${index}`;
+    if (layout.unlocated.has(key)) return '';
+    return `<button type="button" class="evidence-chip" data-evidence="${escapeHtml(key)}">${icon('link')}<span>${escapeHtml(`“${evidence.text}” — selected from the source by CPT Studio`)}</span></button>`;
+  });
+  const sourceLabel = source.some(Boolean) ? groupLabel('Source passages that show the coded act') : '';
+  return provider.join('') + sourceLabel + source.join('');
 }
 
 function clarificationQuestion(clarification, doc) {
@@ -513,7 +528,8 @@ function clarificationQuestion(clarification, doc) {
 function codeCard(proposal, doc, layout) {
   const count = (proposal.evidence || []).length;
   const units = Number.isInteger(proposal.units) && proposal.units > 1 ? `Units: ${proposal.units} · ` : '';
-  return `<article class="code-card" id="card-${escapeHtml(proposal.id)}" tabindex="-1"><div class="code-card-main"><div class="code-card-top"><span class="code-category">${escapeHtml(proposal.eyebrow || proposal.family_label || '')}</span>${proposalBadge(proposal)}</div><strong class="code-number">${escapeHtml(proposal.code)}</strong><h3>Description withheld</h3><span class="code-short-note">${escapeHtml(units + (proposal.descriptor?.label || 'No licensed CPT descriptor is connected.'))}</span>${proposal.rationale ? `<p class="code-rationale">${escapeHtml(proposal.rationale)}</p>` : ''}${clarificationsFor(proposal, doc).map(item => clarificationQuestion(item, doc)).join('')}</div><div class="evidence-section"><div class="evidence-label">${icon('link')}${escapeHtml(passagesLabel(count))}</div>${evidenceChips(proposal, layout)}${referenceNote(proposal)}${modifierNote(proposal)}</div>${decisionLine(proposal)}${cardActions(proposal)}</article>`;
+  const second = proposal.support?.origin === 'second_review' ? `<span class="small-badge">Second review</span>` : '';
+  return `<article class="code-card" id="card-${escapeHtml(proposal.id)}" tabindex="-1"><div class="code-card-main"><div class="code-card-top"><span class="code-category">${escapeHtml(proposal.eyebrow || proposal.family_label || '')}</span>${second}${proposalBadge(proposal)}</div><strong class="code-number">${escapeHtml(proposal.code)}</strong><h3>Description withheld</h3><span class="code-short-note">${escapeHtml(units + (proposal.descriptor?.label || 'No licensed CPT descriptor is connected.'))}</span>${proposal.rationale ? `<p class="code-rationale">${escapeHtml(proposal.rationale)}</p>` : ''}${clarificationsFor(proposal, doc).map(item => clarificationQuestion(item, doc)).join('')}</div><div class="evidence-section"><div class="evidence-label">${icon('link')}${escapeHtml(passagesLabel(count))}</div>${evidenceChips(proposal, layout)}${referenceNote(proposal)}${modifierNote(proposal)}</div>${decisionLine(proposal)}${cardActions(proposal)}</article>`;
 }
 
 function clarificationCard(clarification, doc) {
@@ -560,6 +576,54 @@ function candidateSection(title, proposals, fallback, doc) {
   return `${sectionHeading(title, proposals.length)}<div class="check-list-card">${items.join('')}</div>`;
 }
 
+const SERVICE_STATUS_LABELS = { performed: 'performed', incomplete: 'performed, incomplete', planned: 'planned', historical: 'historical', cancelled: 'cancelled', negated: 'documented as not performed', uncertain: 'not established' };
+const CODING_TONES = { incomplete: 'pending', pending_review: '', reviewed: '', not_established: 'muted' };
+
+// The encounter's coding completeness, kept apart from whether a proposal is ready for review.
+function codingBanner(doc) {
+  const coding = doc.coding;
+  if (!coding || !coding.statement) return '';
+  const title = lookup({ incomplete: 'Coding for this encounter is incomplete', pending_review: 'Every documented service has a proposal to review', reviewed: 'Every documented service has a reviewed decision', not_established: 'Coding completeness not established' }, coding.state, 'Coding completeness');
+  return `<div class="check-list-card">${checkItem(lookup(CODING_TONES, coding.state, 'pending'), coding.state === 'incomplete' ? 'info' : 'shield', title, coding.statement)}</div>`;
+}
+
+function serviceTitle(service, doc) {
+  const parts = [familyLabel(doc, service.family) || service.kind, lookup(SERVICE_STATUS_LABELS, service.status, service.status)];
+  if (service.completion && service.completion !== 'unknown' && ['performed', 'incomplete'].includes(service.status)) parts.push(`${service.completion} examination${service.extent ? ` (${service.extent})` : ''}`);
+  if (service.intent) parts.push(service.intent);
+  return parts.filter(Boolean).join(' · ');
+}
+
+function documentedServices(doc) {
+  const assessment = doc.assessment || {};
+  const inventory = assessment.services || {};
+  const services = Array.isArray(inventory.services) ? inventory.services : [];
+  if (!services.length) return '';
+  const completeness = assessment.completeness || {};
+  const unresolved = Array.isArray(completeness.unresolved_items) ? completeness.unresolved_items : [];
+  const bundled = Array.isArray(completeness.bundled) ? completeness.bundled : [];
+  const covered = completeness.covered || {};
+  const conflicts = Array.isArray(inventory.conflicts) ? inventory.conflicts : [];
+  const items = services.map(service => {
+    const lines = [];
+    const done = ['performed', 'incomplete'].includes(service.status);
+    const acts = (service.acts || []).filter(act => act.status === 'performed' && ['physician', 'unknown'].includes(act.role));
+    if (done && acts.length) lines.push(`Acts documented as done: ${[...new Set(acts.map(act => act.kind.replace(/_/g, ' ') + (act.anatomy?.length ? ` (${act.anatomy.join(', ')})` : '')))].join('; ')}.`);
+    if (done && Array.isArray(covered[service.id]) && covered[service.id].length) lines.push(`Accounted for by: ${covered[service.id].join(', ')}.`);
+    for (const item of unresolved.filter(entry => entry.service === service.id)) lines.push(`Unresolved: ${item.label}. No code is added for it and no alternative is promoted.`);
+    for (const item of bundled.filter(entry => entry.service === service.id)) lines.push(`Not separately reported: ${item.label} — ${item.why}`);
+    for (const conflict of conflicts.filter(entry => entry.service === service.id)) {
+      const sides = (conflict.sides || []).map(side => `${side.role} entry: ${side.status}${side.evidence?.[0]?.text ? ` (“${side.evidence[0].text.replace(/\s+/g, ' ').slice(0, 120)}”)` : ''}`).join('; ');
+      lines.push(`Conflict on ${conflict.subject.replace(/_/g, ' ')}: ${sides}. Both are kept; neither is chosen.`);
+    }
+    const tone = !done ? 'muted' : unresolved.some(entry => entry.service === service.id) || conflicts.some(entry => entry.service === service.id) ? 'pending' : '';
+    return checkItem(tone, done ? 'circle-check' : 'info', serviceTitle(service, doc), lines.join(' '));
+  });
+  const attributions = (inventory.attributions || []).map(item => item.role);
+  if (attributions.length) items.push(checkItem('muted', 'info', 'Another provider\'s services', `The document attributes ${attributions.join(', ')} services to their own providers; they are never coded for the performing physician.`));
+  return `${sectionHeading('Documented services', services.length)}<div class="check-list-card">${items.join('')}</div>`;
+}
+
 function unsupportedSection(assessment) {
   const items = Array.isArray(assessment.unsupported) ? assessment.unsupported : [];
   if (!items.length) return '';
@@ -590,7 +654,7 @@ function suggestionsPanel(doc, layout) {
   const inline = new Set(selected.flatMap(proposal => clarificationsFor(proposal, doc).map(item => item.id)));
   const general = openClarifications(doc).filter(item => !inline.has(item.id)).map(item => clarificationCard(item, doc));
   const cards = selected.length ? selected.map(proposal => codeCard(proposal, doc, layout)) : [`<div class="check-list-card"><p class="card-empty">${escapeHtml(emptySelectionCopy(assessment))}</p></div>`];
-  return `<div class="card-stack">${general.join('')}${cards.join('')}</div>${unsupportedSection(assessment)}${candidateSection('Alternatives (not selected)', proposalsIn(assessment, 'alternative'), 'Offered by the provider as an alternative and not selected. Alternatives cannot be approved.', doc)}${candidateSection('Excluded candidates', proposalsIn(assessment, 'excluded'), 'Excluded from CPT-only results.', doc)}<div class="review-insight">${icon('shield')}<div><strong>The source remains the starting point</strong><p>The checks hold or exclude planned, historical, cancelled and uncertain services when they recognise the wording, and they can miss wording they do not recognise. Read the document before deciding; agreement between sources is not treated as verification.</p></div></div>`;
+  return `<div class="card-stack">${codingBanner(doc)}${general.join('')}${cards.join('')}</div>${documentedServices(doc)}${unsupportedSection(assessment)}${candidateSection('Alternatives (not selected)', proposalsIn(assessment, 'alternative'), 'Offered by the provider as an alternative and not selected. Alternatives cannot be approved.', doc)}${candidateSection('Excluded candidates', proposalsIn(assessment, 'excluded'), 'Excluded from CPT-only results.', doc)}<div class="review-insight">${icon('shield')}<div><strong>The source remains the starting point</strong><p>The checks hold or exclude planned, historical, cancelled and uncertain services when they recognise the wording, and they can miss wording they do not recognise. Read the document before deciding; agreement between sources is not treated as verification.</p></div></div>`;
 }
 
 function checkItems(checks) {
@@ -1606,6 +1670,7 @@ if (typeof module === 'object' && module.exports) {
     factValue, metaFact, exportStatusText, documentLayout, reviewView, documentRow, listBody, listDescription,
     inviteMarkup, overviewView, documentsView, howItWorksView, exportOptions, state, QUEUE_STATES, decisionLine,
     hasAgentDecision, candidateDecision, ACKNOWLEDGEMENTS, emptySelectionCopy, attestationText,
+    codingBanner, documentedServices, evidenceChips,
   };
 }
 if (typeof document !== 'undefined') boot();

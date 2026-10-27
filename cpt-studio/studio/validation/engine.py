@@ -13,14 +13,15 @@ from dataclasses import dataclass, replace
 from datetime import date
 from typing import Mapping, Optional, Sequence
 
+from studio.gi import services as gi_services
 from studio.gi.profiles import DETECTED_FAMILIES, PROFILES, PROFILES_VERSION, ServiceProfile, family_for_code
 from studio.reference.store import PFS, applied_sources
 from studio.types import (CONTEXT_FACTS, AssessmentResult, Check, ClarificationSpec, CodeReference, EvidenceSpan, Fact,
                           FamilyFinding, NormalizedResponse, PageSpan, ProposalAssessment, ProviderCode,
                           ReferenceLookup, ReferenceSourceInfo, RoutingResult, ServiceMention, sha256_json)
-from studio.validation import checks, rationale
+from studio.validation import checks, rationale, reconcile
 
-ENGINE_VERSION = 'cpt-studio-validation@3'
+ENGINE_VERSION = 'cpt-studio-validation@4'
 PROVIDER_STATUSES = ('succeeded', 'not_run', 'failed', 'unknown')
 EXTRACTION_STATUSES = ('ok', 'partial', 'failed')
 NO_EVIDENCE = 'No exact source evidence'
@@ -39,6 +40,10 @@ class _Evaluation:
     # report's procedure line a findings sentence opening with the code's own procedure counts through. The code speaks
     # for them (_cited), so its own procedure is never called a missed service with no selected proposal.
     speaks_for: tuple[tuple[int, int], ...] = ()
+    # The documented service the code was matched to (engine @4): its status decides the code's, never a fragment of a
+    # provider passage read alone. None when the inventory documents no service of the code's family.
+    match: Optional[reconcile.Match] = None
+    support: Optional[reconcile.Support] = None
 
 
 @dataclass(frozen=True)
@@ -53,6 +58,7 @@ class _Selection:
     dropped: tuple[str, ...]
     family: str
     evaluation: Optional[_Evaluation] = None  # None: excluded for scope or evidence, not reinstatable
+    origin: str = 'primary'  # 'second_review': selected by the bounded second review for an unresolved service
 
     @property
     def profile(self) -> ServiceProfile:
@@ -84,6 +90,9 @@ class _Encounter:
     # documented) that such a reinstatement would hold. Review gates approval on them; empty when nothing would.
     if_reinstated: tuple[tuple[str, str], ...] = ()
     gated_visits: tuple[str, ...] = ()
+    # Engine @4: a family's base (diagnostic) code selected beside a code of the same documented service that accounts
+    # for one of its interventions: (base code, the other codes). The base is held, never excluded.
+    bases_included: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
     @property
     def procedure_day(self) -> bool:
@@ -93,7 +102,8 @@ class _Encounter:
 def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], routing: RoutingResult,
            normalized: Optional[NormalizedResponse], reference: ReferenceLookup, service_date: Optional[date],
            provider_status: str, extraction_status: Optional[str] = None,
-           extraction_messages: Sequence[str] = ()) -> AssessmentResult:
+           extraction_messages: Sequence[str] = (), second: Optional[NormalizedResponse] = None,
+           second_scope: Optional[dict] = None) -> AssessmentResult:
     if provider_status not in PROVIDER_STATUSES:
         raise ValueError(f'Unknown provider status {provider_status!r}.')
     if extraction_status is not None and extraction_status not in EXTRACTION_STATUSES:
@@ -107,27 +117,144 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     proposals: tuple[ProposalAssessment, ...] = ()
     provider = list(checks.provider_checks(provider_status, response))
     coverage: list[Check] = []
+    # The documented-service inventory is read from the text alone, before and independently of the proposals.
+    inventory = gi_services.build(text, service_date=date_state.value, routing=routing, context_facts=context)
+    problems = gi_services.validate(inventory, text)
+    usable = inventory if not problems else None  # an inconsistent reading never decides a status; it is reported
     if response is not None:
         listable = [c for c in response.codes if isinstance(c.code, str) and 0 < len(c.code) <= MAX_LISTED_CODE]
         if len(listable) < len(response.codes):
             provider.append(checks.unlisted_codes_check(len(response.codes) - len(listable), MAX_LISTED_CODE))
-        selections = [_select(group, text, pages, routing, reference, date_state.value)
+        selections = [_select(group, text, pages, routing, reference, date_state.value, usable)
                       for group in _merge_selected(listable)]
+        second_alternatives: list[ProposalAssessment] = []
+        if second is not None and usable is not None:
+            selections, second_alternatives, second_check = _second_review(
+                second, second_scope or {}, selections, text, pages, routing, reference, date_state.value, usable)
+            provider.append(second_check)
         encounter = _encounter(response.provider, context, routing, sources, date_state, selections)
         alternatives = (c for c in listable if c.role != 'selected')
         proposals = (_keyed(selections, encounter)
                      + tuple(_alternative(index, item, text, pages, response.provider)
-                             for index, item in enumerate(alternatives)))
-        coverage.append(checks.unproposed_check(*_missed(routing, selections, encounter.procedure_day)))
+                             for index, item in enumerate(alternatives))
+                     + tuple(second_alternatives))
+        reconciled = {s.family for s in selections} | ({s.family for s in usable.services} if usable else set())
+        coverage.append(checks.unproposed_check(*_missed(routing, selections, encounter.procedure_day,
+                                                         reconciled if usable else set())))
+    active = [(s.code, s.family) for s in selections if not s.excluded]
+    unresolved, bundled, covered = reconcile.reconcile(usable, active) if usable else ([], [], {})
+    service_questions = _service_questions(usable, proposals) if usable else []
     unsupported = _unsupported(routing, selections)
     encounter_checks = [*provider, checks.extraction_check(extraction_status, extraction_messages),
-                        checks.service_date_check(date_state), *coverage, checks.unsupported_check(unsupported)]
+                        checks.service_date_check(date_state), reconcile.inventory_check(inventory, problems),
+                        *coverage]
+    if usable and response is not None:
+        encounter_checks.append(reconcile.unresolved_check(unresolved))
+    if usable:
+        encounter_checks.append(reconcile.conflicts_check(usable))
+        attribution = reconcile.attribution_check(usable, [code for code, _ in active])
+        if attribution:
+            encounter_checks.append(attribution)
+    encounter_checks.append(checks.unsupported_check(unsupported))
     clarification = checks.service_date_clarification(date_state)
+    clarifications = ((clarification,) if clarification else ()) + tuple(service_questions)
+    open_questions = len(clarifications) + sum(len(p.clarifications) for p in proposals)
+    complete = reconcile.completeness(usable or inventory, unresolved, open_questions,
+                                      provider_status == 'succeeded' and response is not None)
+    if problems:
+        complete['state'] = 'incomplete'
+        complete['reasons'] = list(complete['reasons']) + ['the documented-service reading was inconsistent']
+    complete.update({
+        'unresolved_items': [_jsonable_unresolved(u) for u in unresolved],
+        'bundled': [{'service': b.service, 'act': b.act, 'label': b.label, 'why': b.why} for b in bundled],
+        'covered': covered, 'catalogue_version': reconcile.catalogue.CATALOGUE_VERSION,
+        'inventory_problems': list(problems)})
     return AssessmentResult(
         profiles_version=PROFILES_VERSION, engine_version=ENGINE_VERSION, proposals=proposals,
-        encounter_checks=tuple(encounter_checks), clarifications=(clarification,) if clarification else (),
+        encounter_checks=tuple(encounter_checks), clarifications=clarifications,
         unsupported=unsupported, reference_sources=checks.reference_source_entries(sources, date_state.value),
-        summary=_summary(proposals, provider_status, extraction_status, date_state))
+        summary=_summary(proposals, provider_status, extraction_status, date_state),
+        services=_jsonable_inventory(inventory), completeness=complete)
+
+
+def _second_review(second: NormalizedResponse, scope: dict, selections: list, text: str, pages, routing, reference,
+                   day, inventory) -> tuple[list, list, Check]:
+    """Merge the bounded second review (ARCHITECTURE 5.11). Only a code it SELECTED that accounts for a documented
+    service or act left unresolved by the primary proposals becomes a proposal (marked as from the second review); every
+    other code it lists is informational. Nothing is promoted from an alternative and nothing is invented."""
+    active = [(s.code, s.family) for s in selections if not s.excluded]
+    unresolved, _, _ = reconcile.reconcile(inventory, active)
+    open_items = [(u.service, u.family, u.act) for u in unresolved if u.reason in ('no_proposal', 'not_covered')]
+    have = {s.code for s in selections}
+    listable = [c for c in second.codes if isinstance(c.code, str) and 0 < len(c.code) <= MAX_LISTED_CODE]
+    added, listed = [], []
+    for group in _merge_selected(listable):
+        code = group[0].code
+        if code in have:
+            continue
+        candidate = _select(group, text, pages, routing, reference, day, inventory)
+        profile = reconcile.catalogue.code_profile(code)
+        accounts = profile is not None and any(
+            family == candidate.family and (act == '' or act in profile.covers
+                                            or (act in ('tattoo', 'injection') and {'tattoo', 'injection'}
+                                                & set(profile.covers)))
+            for _, family, act in open_items)
+        if accounts and candidate.evaluation is not None and not candidate.excluded:
+            added.append(replace(candidate, origin='second_review'))
+            have.add(code)
+        else:
+            listed.append(group[0])
+    alternatives = [_alternative(index, replace(item, role='candidate'), text, pages, f'{second.provider} (second review)')
+                    for index, item in enumerate(listed + [c for c in listable if c.role != 'selected'])]
+    alternatives = [replace(a, key=f'alt2:{index}') for index, a in enumerate(alternatives)]
+    what = '; '.join(scope.get('items', [])[:4]) or 'the unresolved documented services'
+    if second.refused:
+        detail = f'A second review was requested for: {what}. Its response was not used ({"; ".join(second.problems)}).'
+        status = 'warn'
+    elif added:
+        detail = (f'A second review limited to the passages of {what} selected '
+                  + ', '.join(s.code for s in added) + ', which account for them and are added as proposals for '
+                  'review (marked as from the second review).')
+        if listed:
+            detail += ' It also listed ' + ', '.join(c.code for c in listed) + ', shown as alternatives only.'
+        status = 'info'
+    else:
+        detail = (f'A second review limited to the passages of {what} selected no code that accounts for them'
+                  + (' (it listed ' + ', '.join(c.code for c in listed) + ', shown as alternatives only)' if listed else '')
+                  + '. They stay unresolved; nothing is added.')
+        status = 'warn'
+    return list(selections) + added, alternatives, Check('provider.second_review', 'Second review', status, detail,
+                                                         'cpt-studio:provider@1')
+
+
+def _jsonable_unresolved(u: reconcile.Unresolved) -> dict:
+    return {'service': u.service, 'family': u.family, 'act': u.act, 'label': u.label, 'reason': u.reason,
+            'evidence': [{'start': e.start, 'end': e.end, 'text': e.text} for e in u.evidence]}
+
+
+def _jsonable_inventory(inventory) -> dict:
+    from studio.types import to_jsonable
+    return to_jsonable(inventory)
+
+
+def _service_questions(inventory, proposals) -> list[ClarificationSpec]:
+    """Every materially necessary question about a documented service, asked together and once: its missing
+    documentation (a sparse visit note's setting, status and basis together) and each conflict in the record. A
+    question a proposal of the same family already asks is not asked again."""
+    asked = {(c.family, c.fact) for p in proposals for c in p.clarifications}
+    out: list[ClarificationSpec] = []
+    for service in inventory.services:
+        for spec in reconcile.documentation_clarifications(service):
+            if (spec.family, spec.fact) not in asked:
+                asked.add((spec.family, spec.fact))
+                out.append(spec)
+    for conflict in inventory.conflicts:
+        service = inventory.service(conflict.service)
+        spec = reconcile.conflict_clarification(conflict, service)
+        if (spec.family, spec.fact) not in asked:
+            asked.add((spec.family, spec.fact))
+            out.append(spec)
+    return out
 
 
 # --- phase 1: each selected code on its own --------------------------------------------
@@ -142,7 +269,7 @@ def _merge_selected(codes: Sequence[ProviderCode]) -> list[list[ProviderCode]]:
 
 
 def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult, reference: ReferenceLookup,
-            day: Optional[date]) -> _Selection:
+            day: Optional[date], inventory=None) -> _Selection:
     code = group[0].code
     code_kind, scope_reason = checks.code_scope(code)
     kept, dropped = checks.exact_evidence([span for item in group for span in item.evidence], text, pages)
@@ -168,7 +295,76 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
                 for r in own)
     outcome = checks.resolve_status(own + checks.routing_readings(finding),
                                     detectable=selection.family in DETECTED_FAMILIES)
-    return replace(selection, evaluation=_Evaluation(finding, outcome, reference.lookup(code, day), own, speaks_for))
+    found = reconcile.match(code, inventory, selection.family) if inventory is not None else None
+    supported = None
+    if found is not None:
+        # Engine @4: the documented service and act decide the code's status; its passages are verified against them.
+        found = _second_opinion(outcome, found, code, text)
+        outcome = _service_outcome(found)
+        supported = reconcile.support(found, kept, current=lambda span: gi_services.current_statement(
+            text, span.start, span.end, day))
+    return replace(selection, evaluation=_Evaluation(finding, outcome, reference.lookup(code, day), own, speaks_for,
+                                                     found, supported))
+
+
+def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str, text: str) -> reconcile.Match:
+    """The documented service decides the code's status, with the routing-era reading as a second opinion that can
+    only hold (ARCHITECTURE 5.10):
+    - a hedge, a denial or a cancellation read in the code's OWN passage, when that passage is about the matched
+      service (it overlaps the service's or one of its acts' evidence, or names the service or the code's act), holds
+      the code with both readings - a doubt about this act is never released by a second reader;
+    - a passage read as about another TIME (an earlier visit, a planned repeat) does not decide: the inventory reads
+      time per clause and per service, and an unrelated historical reference never invalidates a current service;
+    - a passage about something else (a fragment of a findings sentence) does not decide;
+    - where the documented service is not performed but the routing-era reading is positive, the code is held, never
+      newly excluded.
+    Routing's own family doubts are folded into the service's status by the inventory (services._finish)."""
+    positive = found.state in checks.POSITIVE
+    if positive and old.state in ('uncertain', 'not_performed'):
+        doubt = old.decisive
+        if (doubt is not None and doubt.origin == 'evidence' and doubt.start is not None
+                and doubt.status in ('negated', 'cancelled', 'uncertain') and not checks._silent(doubt)
+                and _about(doubt, found, code, text)):
+            return replace(found, state='uncertain', reason='readings_disagree', question=(
+                f'Confirm whether {code} is supported: a passage it cites about this service reads as '
+                f'{doubt.status}.'), detail=(f'{found.detail} But a passage the code cites about it reads as '
+                                             f'{doubt.status}: {checks.cite(doubt)}. Held for the reviewer.'))
+        return found
+    if found.state == 'not_performed' and old.state in checks.POSITIVE:
+        return replace(found, state='uncertain', reason='readings_disagree',
+                       question=f'Confirm whether {code} was performed on the date of service.',
+                       detail=f'{found.detail} Its own passages read otherwise; held for the reviewer, not excluded.')
+    return found
+
+
+def _about(reading: checks.Reading, found: reconcile.Match, code: str, text: str) -> bool:
+    """Whether a passage the code cites is about the matched service: it overlaps the service's evidence or any of
+    its acts' evidence, or it names the service or the act the code accounts for."""
+    service = found.service
+    targets = list(service.evidence) + list(service.completion_evidence) + [ev for a in service.acts for ev in a.evidence]
+    if any(reading.start < t.end and t.start < reading.end for t in targets):
+        return True
+    passage = text[reading.start:reading.end]
+    if any(family == service.family and pattern.search(passage) for family, _, pattern in gi_services.SERVICES):
+        return True
+    profile = reconcile.catalogue.code_profile(code)
+    kinds = set(profile.covers) if profile is not None else set()
+    return any(kind in kinds and pattern.search(passage) for kind, pattern in gi_services.ACTS)
+
+
+def _service_outcome(found: reconcile.Match) -> checks.StatusOutcome:
+    service = found.service
+    passage = found.acts[0].evidence[0] if found.acts else (service.evidence[0] if service.evidence else None)
+    status = {'performed': 'performed', 'incomplete': 'incomplete', 'uncertain': 'uncertain'}.get(
+        found.state, service.status if service.status in checks.NEGATIVE else 'negated')
+    reading = checks.Reading(status, (found.detail,), 'service', passage.text if passage else '',
+                             passage.start if passage else None, passage.end if passage else None)
+    incomplete = None
+    if found.state == 'incomplete':
+        ev = service.completion_evidence[0] if service.completion_evidence else passage
+        incomplete = checks.Reading('incomplete', ('incomplete: ' + (ev.text if ev else 'documented'),), 'service',
+                                    ev.text if ev else '', ev.start if ev else None, ev.end if ev else None)
+    return checks.StatusOutcome(found.state, reading, incomplete=incomplete, reason=found.reason)
 
 
 def _VAL_overlap_test(intervals):
@@ -498,7 +694,20 @@ def _encounter(provider, context, routing, sources, date_state, selections) -> _
     visits = [s for s in selections if s.family in checks.EM_FAMILIES and s.evaluation is not None
               and checks.separate_em_statement(s.evaluation.finding) is None]
     gate = bool(reinstatable and visits and not (labels or possible_labels))
-    return _Encounter(provider=provider, context=context, sources=sources, date_state=date_state,
+    bases = []
+    for s in active:
+        profile = reconcile.catalogue.code_profile(s.code)
+        match = s.evaluation.match if s.evaluation is not None else None
+        if profile is None or not profile.base or match is None:
+            continue
+        others = tuple(t.code for t in active if t is not s and t.family == s.family
+                       and (reconcile.catalogue.code_profile(t.code) or reconcile.catalogue.CodeProfile('')).covers
+                       and t.evaluation is not None and t.evaluation.match is not None
+                       and t.evaluation.match.service.id == match.service.id)
+        if others:
+            bases.append((s.code, others))
+    return _Encounter(bases_included=tuple(bases), provider=provider, context=context, sources=sources,
+                      date_state=date_state,
                       pfs_source=pfs_source, active_pfs=rows, procedure_labels=tuple(dict.fromkeys(labels)),
                       possible_labels=tuple(possible_labels),
                       global_days=_global_days(procedures + possible, pfs_source, sources, date_state.value),
@@ -551,14 +760,32 @@ def _proposal(s: _Selection, key: str, enc: _Encounter) -> ProposalAssessment:
     finding, outcome, ref = s.evaluation.finding, s.evaluation.outcome, s.evaluation.reference
     profile, name, day = s.profile, checks.service_name(s.profile, s.code), enc.date_state.value
     release = enc.pfs_source.release if enc.pfs_source else ''
+    m, supported = s.evaluation.match, s.evaluation.support
+    status_found = checks.status_check(outcome, name) if m is None else _service_status_check(m)
     found: list[Check] = [checks.scope_check(s.code_kind, s.scope_reason),
                           *checks.evidence_checks(s.evidence, s.dropped),
-                          checks.routing_check(profile, finding), checks.status_check(outcome, name)]
+                          checks.routing_check(profile, finding), status_found]
+    if supported is not None:
+        found.append(reconcile.support_check(supported))
     clarifications: list[ClarificationSpec] = []
     considerations: list[str] = []
     if outcome.state == 'incomplete':
         found.append(checks.incomplete_check(outcome))
         considerations.append(checks.incomplete_consideration(s.code, ref.pfs, release))
+    if m is not None:
+        considerations += _service_considerations(s, m)
+    included = dict(enc.bases_included).get(s.code)
+    if included and not s.excluded:
+        reason = (f'The documented {reconcile.service_label(m.service) if m else "service"} has interventions that '
+                  f'{", ".join(included)} account for; its diagnostic examination is normally included in them '
+                  '(internal profile rule; NCCI procedure-to-procedure edits are not connected). Held for the reviewer, '
+                  'not excluded.')
+        found.append(Check('services.base_included', 'Diagnostic examination beside its interventions', 'warn', reason,
+                           reconcile.SOURCE))
+        clarifications.append(ClarificationSpec(scope='proposal', fact='base_included', family=s.family,
+                                                proposal_key=key, reason=reason,
+                                                question=f'Is {s.code} reported separately from {", ".join(included)} '
+                                                         'for this examination?'))
     states = checks.required_fact_states(profile, finding, enc.context)
     facts_check = checks.required_facts_check(profile, states)
     if facts_check:
@@ -568,7 +795,13 @@ def _proposal(s: _Selection, key: str, enc: _Encounter) -> ProposalAssessment:
         if s.code in enc.gated_visits:
             found.append(checks.same_day_if_reinstated_check(enc.if_reinstated))
     if not s.excluded:
-        if outcome.state == 'uncertain':
+        if outcome.state == 'uncertain' and m is not None:
+            fact = f'conflict:{m.conflict.subject}' if m.conflict is not None else 'performed_status'
+            clarifications.append(ClarificationSpec(
+                scope='proposal', fact=fact, family=s.family, proposal_key=key,
+                question=m.question or f'Confirm whether {s.code} is supported by what was done on the date of service.',
+                reason=m.detail))
+        elif outcome.state == 'uncertain':
             clarifications.append(checks.performed_clarification(outcome, name, s.family, key))
         clarifications += checks.fact_clarifications(states, profile, s.family, key)
         if s.family in checks.EM_FAMILIES and enc.procedure_day:
@@ -607,15 +840,64 @@ def _proposal(s: _Selection, key: str, enc: _Encounter) -> ProposalAssessment:
     return ProposalAssessment(
         key=key, bucket='excluded' if s.excluded else 'selected', code=s.code, code_kind=s.code_kind,
         family=s.family, profile_version=profile.version, status=status,
-        exclusion_reason=checks.exclusion_reason(outcome, name) if s.excluded else '', reinstatable=s.excluded,
+        exclusion_reason=(_service_exclusion(m) if m is not None else checks.exclusion_reason(outcome, name))
+        if s.excluded else '', reinstatable=s.excluded,
         provider_display=s.display, evidence=s.evidence,
-        rationale=rationale.selected_rationale(provider=enc.provider, units=s.units, evidence_count=len(s.evidence),
+        rationale=rationale.selected_rationale(provider=(f'{enc.provider} in a second review limited to the '
+                                                         'unresolved documented service'
+                                                         if s.origin == 'second_review' else enc.provider),
+                                               units=s.units, evidence_count=len(s.evidence),
                                                profile=profile, detected=finding is not None, outcome=outcome,
-                                               facts=_documented_facts(finding, states)),
+                                               facts=_documented_facts(finding, states, m)),
         checks=tuple(found), modifier_considerations=tuple(considerations), units=s.units,
         fingerprint=_fingerprint(s.code, s.family, profile.version, s.evidence, found,
                                  _relevant_context(s.family, enc, bool(pctc)), s.units, status),
-        clarifications=tuple(clarifications))
+        clarifications=tuple(clarifications), support=_support_json(m, supported, s.origin))
+
+
+def _service_status_check(m: reconcile.Match) -> Check:
+    status = {'performed': 'pass', 'incomplete': 'pass', 'not_performed': 'fail', 'uncertain': 'warn'}[m.state]
+    if m.reason == 'profile_unknown' and m.state != 'uncertain':
+        status = 'warn'
+    return Check('service.status', 'Service performed on this encounter', status, m.detail, reconcile.INVENTORY_SOURCE)
+
+
+def _service_exclusion(m: reconcile.Match) -> str:
+    return f'{m.detail} Reinstate if this code is supported.'
+
+
+def _service_considerations(s: _Selection, m: reconcile.Match) -> list[str]:
+    """Modifier considerations the documented service supports (never assigned; payer and NCCI sources are not
+    connected): separate lesions within one endoscopic family, and screening that became therapeutic."""
+    out = []
+    service = m.service
+    lesions = {a.lesion for a in m.acts if a.lesion}
+    others = [a for a in service.acts if a.status == 'performed' and a.lesion and a.lesion not in lesions
+              and a.kind in reconcile.REMOVAL_KINDS + ('biopsy', 'ablation', 'injection', 'tattoo')]
+    if lesions and others:
+        here = '; '.join(reconcile.lesion_words(service, l) for l in sorted(lesions))
+        there = '; '.join(sorted({reconcile.lesion_words(service, a.lesion) for a in others}))
+        out.append(f'Separate lesions are documented: this code\'s act is on {here}, and another act is on {there}. '
+                   'If an NCCI procedure-to-procedure edit pairs the two codes, a distinct-lesion modifier (59 or XS) '
+                   'may apply. NCCI edits are not connected; no modifier is assigned.')
+    if service.intent == 'screening' and m.acts:
+        out.append('The documented intent is screening and a therapeutic or diagnostic act was performed: payer rules '
+                   'for a screening examination that becomes therapeutic (for example Medicare modifier PT, '
+                   'commercial modifier 33) are not connected. No modifier is assigned.')
+    return out
+
+
+def _support_json(m, supported, origin='primary') -> dict:
+    if m is None:
+        return {'origin': origin} if origin != 'primary' else {}
+    out = {'origin': origin, 'service': m.service.id, 'family': m.service.family, 'state': m.state, 'reason': m.reason,
+           'detail': m.detail, 'acts': [{'id': a.id, 'kind': a.kind, 'label': reconcile.describe_act(m.service, a)}
+                                        for a in m.acts]}
+    if supported is not None:
+        out.update({'status': supported.status, 'supporting': list(supported.supporting),
+                    'unrelated': list(supported.unrelated), 'detail_support': supported.detail,
+                    'source': [{'start': sp.start, 'end': sp.end, 'text': sp.text} for sp in supported.source]})
+    return out
 
 
 def _excluded_early(s: _Selection, key: str, provider: str) -> ProposalAssessment:
@@ -660,7 +942,21 @@ def _billing(context: Mapping[str, Fact]) -> str:
     return str(fact.value) if fact is not None and checks.is_documented(fact) else 'not documented'
 
 
-def _documented_facts(finding: Optional[FamilyFinding], states) -> list[tuple[str, str]]:
+def _documented_facts(finding: Optional[FamilyFinding], states, m=None) -> list[tuple[str, str]]:
+    if m is not None:
+        # The documented service's own reading (acts read with their negation and time), never a flat word list.
+        service = m.service
+        facts = [(name, value) for name, value in (('extent', service.extent), ('completion', service.completion
+                                                                                  if service.completion != 'unknown'
+                                                                                  else ''),
+                                                   ('intent', service.intent)) if value]
+        acts = [reconcile.describe_act(service, a) for a in service.acts if a.status == 'performed'
+                and a.role in ('physician', 'unknown')]
+        if acts:
+            facts.append(('interventions', '; '.join(dict.fromkeys(acts))))
+        facts += [(state.name, str(state.fact.value)) for state in states
+                  if not state.problem and state.fact is not None and state.name in CONTEXT_FACTS]
+        return list(dict.fromkeys(facts))
     facts = [(f.name, str(f.value)) for f in (finding.facts if finding else ()) if checks.is_documented(f)]
     facts += [(state.name, str(state.fact.value)) for state in states
               if not state.problem and state.fact is not None and state.name in CONTEXT_FACTS]
@@ -688,7 +984,8 @@ def _fingerprint(code, family, profile_version, evidence, found, context_values,
 
 # --- encounter level -------------------------------------------------------------------
 
-def _missed(routing: RoutingResult, selections: Sequence[_Selection], procedure_day: bool) -> tuple[list[str], bool]:
+def _missed(routing: RoutingResult, selections: Sequence[_Selection], procedure_day: bool,
+            reconciled: frozenset | set = frozenset()) -> tuple[list[str], bool]:
     """(labels of performed, profiled families - and other GI services routing detected - without a selected
     proposal, whether an E/M was not counted).
 
@@ -702,6 +999,8 @@ def _missed(routing: RoutingResult, selections: Sequence[_Selection], procedure_
     for f in routing.findings:
         if not (f.family in PROFILES and (PROFILES[f.family].supported or f.family == OTHER_GI) and _done_today(f)):
             continue
+        if f.family in reconciled and f.family != OTHER_GI:
+            continue  # the documented-service reconciliation (services.unresolved) reports this family, act by act
         if f.family == OTHER_GI and f.mentions:
             cited = _cited(f.mentions, selections) | _VAL_named_again(f.mentions, selections)
             uncited = [m.span.text for index, m in enumerate(f.mentions)

@@ -122,7 +122,7 @@ NEGATED_POST = (
 )
 # "No X was performed": X must sit between "no" and the verb, with no other
 # finite verb or relative clause in between.
-NEGATED_SPAN = rx(r'\bno\b(?P<body>(?:(?!\b(?:was|were|is|are|has|have|had|which|that|but|and\s+the)\b)[^;.!?]){0,80}?)'
+NEGATED_SPAN = rx(r'\bno\b(?P<body>(?:(?!\b(?:was|were|is|are|has|have|had|which|that|but|and\s+the)\b)[^;.!?]){0,240}?)'
                   r'\b(?:was|were|has\s+been|had\s+been|have\s+been|is|are|will\s+be|could\s+be)\s+'
                   r'(?:successfully\s+|then\s+|further\s+)?(?:' + _NOT_DONE + r'|planned)\b')
 # "<something> was not <done>" with no service or intervention named in it ("The stricture was
@@ -303,7 +303,7 @@ INCOMPLETE_CLAUSE = (
                         r'|\bfailed\s+to\s+(?:reach|advance|pass|intubate|enter|traverse)\b|\bwithout\s+reaching\b')),
     ('prevented', rx(r'\bprevent(?:ed|s|ing)\s+(?:\w+\s+){0,2}?(?:passage|advancement|intubation|entry|traversal|'
                      r'examination|evaluation|insertion)\b|\bimpassable\b|\bnon-?traversable\b')),
-    ('terminated', rx(r'\b(?:terminated|discontinued|halted)\b')),
+    ('terminated', rx(r'(?<!\bnot\s)(?<!\bnever\s)(?<!\bnot\s\s)\b(?:terminated|discontinued|halted)\b')),
     ('stopped', rx(r'\bstopped\s+(?:at|short|due|because|before)\b')),
     ('precluded', rx(r'\bprecluded\b')),
     ('failed cannulation', rx(r'\b(?:failed|unsuccessful)\s+(?:attempts?\s+at\s+)?(?:deep\s+|selective\s+|biliary\s+|'

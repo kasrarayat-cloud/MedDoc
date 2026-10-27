@@ -39,7 +39,8 @@ _MONTH = (r'(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|
           r'|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)')
 _FULL_DATE = (r'(?P<iy>\d{4})-(?P<im>\d{2})-(?P<id>\d{2})'
               r'|(?P<um>\d{1,2})/(?P<ud>\d{1,2})/(?P<uy>\d{4})'
-              r'|(?P<lm>' + _MONTH + r')\.?[ \t]+(?P<ld>\d{1,2})(?:st|nd|rd|th)?,?[ \t]+(?P<ly>\d{4})')
+              r'|(?P<lm>' + _MONTH + r')\.?[ \t]+(?P<ld>\d{1,2})(?:st|nd|rd|th)?,?[ \t]+(?P<ly>\d{4})'
+              r'|(?P<dd>\d{1,2})(?:st|nd|rd|th)?[ \t]+(?P<dm>' + _MONTH + r')\.?,?[ \t]+(?P<dy>\d{4})')
 FULL_DATE = cues.rx(r'(?<![\w/-])(?:' + _FULL_DATE + r')(?![\w/-])')
 MONTH_YEAR = cues.rx(r'(?<![\w/-])(?:(?P<mm>' + _MONTH + r')\.?,?[ \t]+(?P<my>(?:19|20)\d{2})'
                      r'|(?P<nm>\d{1,2})/(?P<ny>(?:19|20)\d{2}))(?![\w/-])')
@@ -111,8 +112,10 @@ def date_from_match(m: re.Match) -> Optional[date]:
         parts = (m.group('iy'), m.group('im'), m.group('id'))
     elif m.group('uy'):
         parts = (m.group('uy'), m.group('um'), m.group('ud'))
-    else:
+    elif m.group('ly'):
         parts = (m.group('ly'), _month(m.group('lm')), m.group('ld'))
+    else:
+        parts = (m.group('dy'), _month(m.group('dm')), m.group('dd'))
     try:
         return date(int(parts[0]), int(parts[1]), int(parts[2]))
     except ValueError:
@@ -325,9 +328,18 @@ def _valid_user_value(name: str, value: str) -> bool:
     return value in allowed
 
 
+USER_CONFLICT_NOTE = ('Encounter metadata entered by a workspace member gives {user}; the document gives {document}. '
+                      'Both are kept and neither is used until they agree: correct the metadata, clear it, or add an '
+                      'addendum to the document.')
+
+
 def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> dict[str, Fact]:
-    """A non-empty user value replaces the document's value as encounter metadata;
-    an empty one leaves the document value. Unknown names or values are refused."""
+    """A non-empty user value is encounter metadata: it supplies a fact the document does not give or does not give
+    unambiguously (a missing or conflicting documented value), and it agrees with a documented value. A user value
+    that DIFFERS from a single documented value is a conflict, kept with both sides, never a silent replacement of the
+    clinical documentation (2026-10-27: a member-entered service date 28 years before the documented one was used for
+    every dated check and sent to the provider). An empty value leaves the document value. Unknown names or values are
+    refused."""
     merged = dict(facts)
     for name, raw in user_values.items():
         if name not in CONTEXT_FACTS:
@@ -339,5 +351,11 @@ def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> di
             continue
         if not _valid_user_value(name, value):
             raise ValueError(f'{value!r} is not a valid {name}.')
+        documented = facts.get(name)
+        if documented is not None and documented.origin == 'document' and documented.value \
+                and str(documented.value) != value:
+            merged[name] = Fact(name, None, 'conflict', documented.evidence,
+                                USER_CONFLICT_NOTE.format(user=value, document=documented.value))
+            continue
         merged[name] = Fact(name, value, 'user', (), USER_NOTE)
     return merged

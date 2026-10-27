@@ -337,9 +337,16 @@ Every printed box is then placed where it is drawn (`_I2_Places`) and widgets
 `billing_context` (professional | facility | not_documented),
 `patient_status` (new | established). `Fact = {value, origin ∈ {document,
 user, missing, conflict}, evidence: [{start,end,text}], note}`. Conflicting
-documented values → `conflict` (never pick one silently). User-supplied values
-(service date, setting, billing context) override with `origin=user` and are
-recorded as encounter metadata, never as clinical facts.
+documented values → `conflict` (never pick one silently). A member-supplied
+value (service date, setting, billing context) is encounter metadata, never a
+clinical fact: it supplies a fact the document does not give, or gives only as
+a conflict, and it may agree with the documented value (`origin=user`). **A
+member value that differs from a single documented value is a conflict**
+(`origin=conflict`, value none, the note names both): both sides are kept and
+neither is used until they agree (2026-10-27: a member-entered service date 28
+years before the documented one had been used for every dated check, for the
+time readings and in the provider request). Dates read as ISO, US, "October 20,
+2026" and day-month-year ("20 October 2026", "20 Oct 2026").
 
 ### 5.3 `studio/gi/profiles` + `studio/gi/detect` — routing
 
@@ -1365,7 +1372,16 @@ stream the stored bytes. TXT is the coding report; CSV is one row per item
 neutralisation (`=`, `+`, `-`, `@`, tab, CR prefixed with `'`). In both formats
 a C0 control other than tab and line breaks, DEL and a C1 control print as
 `\xNN`; in the TXT a line break of any form continues the value at seven
-spaces or deeper, below every structural line. Draft:
+spaces or deeper, below every structural line. Format `cpt-studio-report@4`
+adds CODING COMPLETENESS (the encounter's coding state, separate from the
+review status), DOCUMENTED SERVICES (status, completion, acts, the codes that
+account for them, bundled acts, other providers' services), UNRESOLVED
+DOCUMENTED SERVICES and CONFLICTS IN THE RECORD to the TXT, per proposal its
+evidence support, the source passages CPT Studio selected and a second-review
+origin; the CSV adds `evidence_support`, `source_passages`,
+`documented_service` and `proposal_origin` columns and one
+`coding_completeness` row, one `unresolved_service` row per unresolved item and
+one `conflict` row per conflict. Draft:
 "DRAFT — NOT REVIEWED", no "approved selections" section; its list of
 undecided and provisionally approved codes is titled "UNDECIDED — REVIEW NOT
 COMPLETE", or "UNDECIDED OR PROVISIONAL — THE REVIEWED REPORT IS AVAILABLE"
@@ -1377,6 +1393,142 @@ approved results; reviewer identity, kind and time; agent review labelled
 name + sha256, revision number + text sha256, assessment id, profile and
 engine versions, provider runs and usage, reference sources with releases,
 every not-verified item, open clarifications, SYNTHETIC — NOT FOR BILLING.
+
+### 5.9 `studio/gi/services` — documented services (engine @4)
+
+`build(text, service_date, routing, context_facts) -> ServiceInventory`
+(`gi-services@1`) is a source-based inventory of what the document says was
+done, read independently of any provider's codes. Per service: family and kind,
+status (performed | incomplete | planned | historical | cancelled | negated |
+uncertain), completion (complete | incomplete | unknown) and extent, intent,
+the date, clinician and setting the context gives, its evidence, the text span
+that documents it (`scope_start/end`), its lesions (noun, size, morphology,
+anatomy, specimen label, disposition removed | sampled | untreated | scheduled)
+and its acts (`ACT_KINDS`: biopsy, hot_biopsy, snare, emr, esd, ablation,
+bleeding_control, clip, tattoo, injection, band_ligation, dilation, stent,
+foreign_body, sphincterotomy, stone_extraction, lithotripsy, cholangioscopy,
+cannulation, peg, tube_replacement, tube_placement, myotomy, decompression,
+fundoplication, capsule_study, manometry, ph_monitoring, rectal_sensation,
+moderate_sedation, fna), each with its status, the role that documented it
+(physician | nursing | anesthesia | pathology | radiology | facility), anatomy,
+technique, lesion and exact passages. Also: conflicts (an act stated both as
+done and as not done for the same service and site, with every side kept),
+attributions (anesthesia, pathology, radiology or facility services the
+document gives to another provider — never coded for the performing
+physician) and problems.
+
+Reading rules, each decided within the clause and the service it belongs to:
+negation has a scope (a clause opening with "No / Neither / Without" covers
+every act it lists up to its predicate; "X was not <done> with A, B or C"
+denies A, B and C for X; a negated negative is positive — "was complete and
+was not discontinued", "not terminated early or interrupted"); "No other /
+further X" denies only acts beyond the documented ones; time belongs to the
+clause (a date or year in it, history and plan words, a history or plan
+section outside today's report; reviewing earlier records is today's work); an
+unresected lesion never makes a completed examination incomplete (completion
+is read only from extent and completion statements); a duct "dilated to 11 mm"
+is a finding, a dilation needs its instrument or an agent; a check-box row is
+read only when exactly one option is marked. Report parts: a report title
+naming one service owns its subsections to the next title; a bare service
+heading ("Colonoscopy") owns the lines to the next heading; nursing,
+anesthesia, pathology and radiology headings open role parts; an instrument
+("the colonoscope was passed to the cecum") names its service; an act whose
+anatomy its part's service cannot reach goes to the present service whose
+anatomy it is. The office E/M service is routing's E/M finding, or for a note
+routing reads no E/M in, the note's own evaluation wording (a sparse note still
+documents a visit, with its missing setting, status and basis); routine
+preprocedure work on a procedure day is not a separate E/M.
+
+It is advisory, like routing (5.3): it reads declared wording and cannot be
+complete for open prose. It is bounded (sentences, acts, lesions and services
+are capped; a cap reached is a recorded problem, never a silent truncation),
+runs inside the assess child, and is validated (`validate`: every passage
+exact, every value in its vocabulary, every reference resolvable). An
+inventory with a validation problem decides nothing (the engine falls back to
+the routing-era reading for every code) and the problem is reported.
+
+### 5.10 `studio/gi/catalogue` + `studio/validation/reconcile` — coverage and reconciliation
+
+The coverage catalogue (`gi-catalogue@1`, rendered to `COVERAGE.md`) states per
+family its support level (supported | recognised | unsupported), required
+documentation, reconciled acts, acts not separately reported under an
+internal profile rule (a prophylactic clip, cannulation, a biopsy of a lesion
+removed at the same session, a lift injection before a resection, routine
+preprocedure work), unsupported acts (ESD), clarification questions,
+verification evidence and the rule checks applied. `CODES` maps a code number
+to the documented act it accounts for: an internal engineering profile for
+reconciliation only, never a CPT reference, never shown as a descriptor; a code
+missing from it is "coverage not established", never wrong.
+
+Per provider-selected code (`reconcile.match`): the documented service of its
+family decides its status — never a fragment of a provider passage read on its
+own. A service documented as planned / historical / cancelled / negated →
+excluded (reinstatable, the reviewer decides); uncertain → held; performed or
+incomplete → the act the code accounts for must be documented as done in that
+service: done → positive; denied → excluded (reinstatable); not documented →
+held with the question; in conflict → held with both sides. A base or E/M code
+needs the service itself. **Second opinion:** when the code's own passage is
+about the very act or service matched (it overlaps that act's or service's
+evidence) and the routing-era reading of that passage hedges or denies it, the
+code is held with both readings; a doubt on a passage about something else (a
+fragment of a findings sentence, an earlier visit) does not decide. **Evidence
+support** (`evidence.support`): a provider passage supports the code when it
+overlaps the documented act's evidence (for an office visit, when it is a
+statement of this visit, not of another time); when none does, CPT Studio
+selects the source passages that show the act (`Proposal.support.source`,
+exact, shown and exported beside the provider's passages, which are labelled
+as not showing it). Exact quotation is necessary, never sufficient.
+
+Encounter level (`reconcile.reconcile`): every performed act the catalogue
+reconciles in a supported family, documented by the physician and not
+bundled, is covered by a selected, non-excluded proposal whose profile covers
+it, or listed as unresolved (`services.unresolved`, one per service and act
+kind; a service with no proposal at all is unresolved as a whole, except an
+office visit beside a same-day procedure). No code is added for an unresolved
+item and no alternative is promoted. Conflicts → `services.conflicts` and a
+service-scoped question with both sides; missing documentation → every
+materially necessary question for that service, asked together (a sparse visit
+note: setting, patient status and E/M basis), never twice for the same family
+and fact. `Assessment.completeness` records the unresolved, bundled and covered
+items and the reasons; `review.coding_completeness` adds the review state:
+`incomplete` (unresolved services, open conflicts or open questions — the
+supported proposals stay available for review), `pending_review`, `reviewed`.
+It is never "verified": CPT membership and NCCI edits are not connected. A
+proposal being ready for review and the encounter's coding being complete are
+separate statements everywhere (UI banner, both reports, CSV row).
+
+Rules connected: CMS PFS RVU26D (presence and status for the date, global
+period → same-day E/M, endoscopic base family → multiple-endoscopy payment,
+PC/TC indicator → modifier 26 consideration in a facility setting) and the
+CMS practitioner MUE table (units per day). Modifier considerations (never
+assigned): separate lesions within one endoscopic family (59/XS — an NCCI PTP
+question, not connected), incomplete examination (52/53 — payer rule, not
+connected), screening that became therapeutic (PT/33 — payer rule, not
+connected), separately identifiable E/M (25). A selected anesthesia,
+pathology or radiology code for a service the document attributes to another
+provider is flagged (`services.attribution`). Practitioner and facility rules
+stay distinct: only practitioner sources are connected.
+
+### 5.11 The bounded second review
+
+When an assessment leaves a documented service (or act) of a supported family
+without a supported proposal, the assess stage queues ONE `review2` job
+(idempotency key `review2:<revision>:<service date>`): never while the
+encounter is stopped, never for a revision and date that already had one,
+whatever its outcome, only after the primary request succeeded. It sends the
+provider the text that documents those services (the services' report parts,
+≤ 20,000 characters) with the date line, under the same send discipline as
+predict (`jobs._send`: single-flight advisory lock, the run written reserved
+before any I/O, Stop observed, no automatic retry, unknown outcomes recorded
+and blocking every further send until reconciled; an identical retained
+second review is reused, not resent). `ProviderRun.purpose = second_review`,
+`ProviderRun.scope` = the excerpt offsets, the primary run and the items.
+The assessment that follows reads both runs (`Assessment.second_run`): the
+second review's passages are moved from the excerpt to the revision text and
+re-checked exactly; only a code it SELECTED that accounts for an unresolved
+item becomes a proposal (`support.origin = second_review`, labelled on the
+card and in both reports); every other code it lists is an alternative. The
+primary run stays the run in use for context changes and reuse.
 
 ## 6. Security
 
