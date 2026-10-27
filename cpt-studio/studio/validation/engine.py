@@ -135,8 +135,10 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     proposals: tuple[ProposalAssessment, ...] = ()
     provider = list(checks.provider_checks(provider_status, response))
     coverage: list[Check] = []
-    # The documented-service inventory is read from the text alone, before and independently of the proposals.
-    inventory = (gi_services.build(text, service_date=date_state.value, routing=routing, context_facts=context)
+    # The documented-service inventory is read from the text alone, before and independently of the proposals; the
+    # page spans tell it where a page turns inside a sentence (refutation r1, formats-6).
+    inventory = (gi_services.build(text, service_date=date_state.value, routing=routing, context_facts=context,
+                                   pages=pages)
                  if READ_DOCUMENTED_SERVICES else gi_services.ServiceInventory(version=gi_services.INVENTORY_VERSION))
     problems = gi_services.validate(inventory, text)
     usable = inventory if not problems else None  # an inconsistent reading never decides a status; it is reported

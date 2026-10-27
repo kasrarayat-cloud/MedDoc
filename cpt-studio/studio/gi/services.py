@@ -2047,13 +2047,15 @@ OBSERVED = _rx(r'\b(?:was|were|is|are)\s+(?:seen|noted|found|identified|visualiz
                r'appreciated|evident|demonstrated)\b')
 
 
-def build(text: str, *, service_date: Optional[date], routing=None, context_facts=None) -> ServiceInventory:
+def build(text: str, *, service_date: Optional[date], routing=None, context_facts=None,
+          pages: Sequence = ()) -> ServiceInventory:
     """The documented services of ``text`` for the effective ``service_date``. ``routing`` (a RoutingResult) supplies
     routing's family readings, kept beside each service and used, fail-closed, where the two readings disagree.
 
     The reader reads a same-length view of the text in which a line break inside a sentence (a PDF or scan wrapping
-    its line) is a space (``reflow``); every offset is the text's own, and every passage it returns is the text's."""
-    flow = reflow(text)
+    its line, or turning its page: ``pages`` are the revision's page spans) is a space (``reflow``); every offset is the
+    text's own, and every passage it returns is the text's."""
+    flow = reflow(text, pages)
     token = _ORIGINAL.set(text)
     try:
         inventory = _build(flow, service_date=service_date, routing=routing, context_facts=context_facts)
@@ -2074,7 +2076,7 @@ _LIST_ITEM = re.compile(r'[ \t]*(?:[a-z][.)]|[ivx]{1,4}[.)])\s')
 _TERMINAL = re.compile(r'[.:;!?]["\')\]]*[ \t]*$')
 
 
-def reflow(text: str) -> str:
+def reflow(text: str, pages: Sequence = ()) -> str:
     """``text`` with each soft line break - a wrap inside a sentence - replaced by a space, one character for one.
 
     A break is soft only when the line before it is a long run of prose (25+ characters and 4+ words) that does not
@@ -2082,9 +2084,19 @@ def reflow(text: str) -> str:
     and the next line continues it in lower case, or after a word that cannot end a line (_DANGLING), a comma, or
     before a line opening with a parenthesis; never around a
     check-box or option row, a table row, a list item or a labelled field, and never inside an extraction block.
-    Headings, labels, fields and short lines keep their breaks."""
+    Headings, labels, fields and short lines keep their breaks.
+
+    A page join - the separator the extraction writes between two pages, after the earlier page's own last newline;
+    ``pages`` are the text's page spans - is the line break it stands for, never a paragraph break of its own: when the
+    last text line of one page and the first text line of the next pass the same test, every newline between them is
+    a space, and when the next page's first line only continues in lower case it is one line break, as the same two
+    lines read on one page (refutation r1, formats-2, formats-5 and formats-6: "The procedure was not" at the foot of
+    a page and "discontinued; it was completed" atop the next, or "a 5 mm adenoma was" and "removed with a cold snare",
+    were read as two sentences). Only a recorded page join is one: a blank line the author typed stays a paragraph
+    break, and so does a join that ends an extraction block."""
     if '\n' not in text:
         return text
+    joins = _page_joins(text, pages)
     out = list(text)
     pos = 0
     n = len(text)
@@ -2096,28 +2108,69 @@ def reflow(text: str) -> str:
         pos = i + 1
         ls = text.rfind('\n', 0, i) + 1
         prev = text[ls:i]
-        ne = text.find('\n', i + 1)
-        nxt = text[i + 1:ne if ne >= 0 else n]
+        ns = joins.get(i, i + 1)  # where the next line starts: past the page separator at a page join
+        ne = text.find('\n', ns)
+        nxt = text[ns:ne if ne >= 0 else n]
         stripped = prev.strip()
         in_block = bool(_sections.FORM_BLOCK.fullmatch(stripped)) or (in_block and bool(stripped))
         if in_block:
             continue  # an extraction block's lines are each a field, never one wrapped sentence
-        if len(stripped) < 25 or len(stripped.split()) < 4 or _TERMINAL.search(prev):
+        if _soft_break(text, ls, i, ns, prev, nxt):
+            kept = None
+        elif ns > i + 1 and _SOFT_NEXT.match(nxt):
+            kept = i  # a page join before a lower-case continuation: one line break, as on one page
+        else:
             continue
-        if _LIST_ITEM.match(nxt) or _NEXT_ITEM.match(nxt):
-            continue
-        if not _SOFT_NEXT.match(nxt) and not ((_DANGLING.search(prev) or prev.rstrip().endswith(',')
-                                               or nxt.lstrip().startswith('(')) and nxt.strip()
-                                              and not GENERIC_HEADING.match(nxt.strip())):
-            continue
-        if '|' in prev or '|' in nxt or '\t' in prev or '\t' in nxt:
-            continue
-        if BOX_MARK.search(prev) or BOX_MARK.search(nxt):
-            continue
-        if _answered_line(text, ls, i, i + 1):
-            continue  # "... and said no" / "Hiatal hernia - no": the answer ends its line
-        out[i] = ' '
+        for j in range(i, ns):
+            if text[j] == '\n' and j != kept:
+                out[j] = ' '
+        pos = ns
     return ''.join(out)
+
+
+def _soft_break(text: str, ls: int, le: int, ns: int, prev: str, nxt: str) -> bool:
+    """Whether the break after the line ``prev`` ([ls, le)) is soft before the line ``nxt`` starting at ``ns`` (see
+    reflow)."""
+    stripped = prev.strip()
+    if len(stripped) < 25 or len(stripped.split()) < 4 or _TERMINAL.search(prev):
+        return False
+    if _LIST_ITEM.match(nxt) or _NEXT_ITEM.match(nxt):
+        return False
+    if not _SOFT_NEXT.match(nxt) and not ((_DANGLING.search(prev) or prev.rstrip().endswith(',')
+                                           or nxt.lstrip().startswith('(')) and nxt.strip()
+                                          and not GENERIC_HEADING.match(nxt.strip())):
+        return False
+    if '|' in prev or '|' in nxt or '\t' in prev or '\t' in nxt:
+        return False
+    if BOX_MARK.search(prev) or BOX_MARK.search(nxt):
+        return False
+    if _answered_line(text, ls, le, ns):
+        return False  # "... and said no" / "Hiatal hernia - no": the answer ends its line
+    return True
+
+
+def _page_joins(text: str, pages: Sequence) -> dict:
+    """{offset of the newline that ends the last text line of a page: offset of the first text line of the next page}
+    for each two consecutive pages of ``pages`` (spans with ``start`` and ``end``) that both hold text, with only
+    whitespace between them. Bounded: one walk over each page's trailing and leading whitespace."""
+    spans = sorted((p.start, p.end) for p in pages or ())
+    joins = {}
+    for (s1, e1), (s2, e2) in zip(spans, spans[1:]):
+        if not 0 <= s1 <= e1 <= s2 <= e2 <= len(text):
+            continue
+        last = e1
+        while last > s1 and text[last - 1].isspace():
+            last -= 1
+        first = s2
+        while first < e2 and text[first].isspace():
+            first += 1
+        if last == s1 or first == e2 or text[e1:s2].strip():
+            continue  # a page with no text, or something between the pages: no join
+        newline = text.find('\n', last, first)
+        start = text.rfind('\n', last, first) + 1
+        if 0 <= newline < start:
+            joins[newline] = start
+    return joins
 
 
 def _restore_spans(obj, text: str):

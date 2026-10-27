@@ -22,6 +22,7 @@ accounts for withholds "performed" (DOUBT_TOKEN, detect._doubt).
 from __future__ import annotations
 
 import re
+import sys
 
 FLAGS = re.A | re.I
 
@@ -285,6 +286,34 @@ BEFORE_START = rx(r'\b(?:before|prior\s+to)\s+(?:the\s+)?(?:sedation|insertion|s
 
 # --- incomplete: started but not completed as intended ---------------------------
 
+
+class _Undenied:
+    """A stop word ("discontinued") read like a compiled pattern (finditer, search), whose match a "not" or "never"
+    directly before it withdraws across any run of whitespace, never a fixed count of it (refutation r1, formats-6: a
+    look-behind that reached across at most two whitespace characters read a page join - "The procedure was not" at
+    the foot of one page, "discontinued; it was completed" atop the next - and a wide gap on one line as a discontinued
+    procedure). Only whitespace may stand between the two words."""
+
+    _DENIAL = rx(r'\b(?:not|never)$')
+
+    def __init__(self, pattern: str):
+        self._words = rx(pattern)
+        self.pattern = pattern
+
+    def _denied(self, string: str, start: int) -> bool:
+        gap = start
+        while gap > 0 and string[gap - 1].isspace():
+            gap -= 1
+        return gap < start and self._DENIAL.search(string, max(0, gap - 5), gap) is not None
+
+    def finditer(self, string: str, pos: int = 0, endpos: int = sys.maxsize):
+        return (m for m in self._words.finditer(string, pos, endpos) if not self._denied(string, m.start()))
+
+    def search(self, string: str, pos: int = 0, endpos: int = sys.maxsize):
+        return next(self.finditer(string, pos, endpos), None)
+
+
+
 INCOMPLETE_CLAUSE = (
     # Subject-less forms name only scope movement: "unable to complete the preparation"
     # is about the patient, not the procedure.
@@ -303,7 +332,7 @@ INCOMPLETE_CLAUSE = (
                         r'|\bfailed\s+to\s+(?:reach|advance|pass|intubate|enter|traverse)\b|\bwithout\s+reaching\b')),
     ('prevented', rx(r'\bprevent(?:ed|s|ing)\s+(?:\w+\s+){0,2}?(?:passage|advancement|intubation|entry|traversal|'
                      r'examination|evaluation|insertion)\b|\bimpassable\b|\bnon-?traversable\b')),
-    ('terminated', rx(r'(?<!\bnot\s)(?<!\bnever\s)(?<!\bnot\s\s)\b(?:terminated|discontinued|halted)\b')),
+    ('terminated', _Undenied(r'\b(?:terminated|discontinued|halted)\b')),
     ('stopped', rx(r'\bstopped\s+(?:at|short|due|because|before)\b')),
     ('precluded', rx(r'\bprecluded\b')),
     ('failed cannulation', rx(r'\b(?:failed|unsuccessful)\s+(?:attempts?\s+at\s+)?(?:deep\s+|selective\s+|biliary\s+|'

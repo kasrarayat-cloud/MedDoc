@@ -28,12 +28,13 @@ SCAN_SAMPLE = ('svc-08-egd-multisite-biopsy-list-negation', 'svc-22-colo-incompl
                'svc-24-colo-screening-complete-not-discontinued', 'svc-33-ercp-biliary-stent-brushing')
 
 
-def reading(text: str) -> set:
-    """What the documented-service reader reads in ``text``, as comparable items."""
+def reading(text: str, pages=()) -> set:
+    """What the documented-service reader reads in ``text`` (with its page spans, as the engine reads a revision), as
+    comparable items."""
     facts = gi_context.extract_context(text)
     fact = facts['service_date']
     day = date.fromisoformat(fact.value) if fact.origin in ('document', 'user') and fact.value else None
-    inv = services.build(text, service_date=day, routing=detect.route(text, day), context_facts=facts)
+    inv = services.build(text, service_date=day, routing=detect.route(text, day), context_facts=facts, pages=pages)
     items = {('service_date', str(day))}
     for s in inv.services:
         items.add(('service', s.family, s.status, s.completion, s.included_in or ''))
@@ -76,7 +77,7 @@ class DigitalPdfCorpusTests(SimpleTestCase):
                 data = docgen.make_pdf(pages(text, docgen.PDF_LINE_CHARS, PDF_LINES_PER_PAGE))
                 result = extract_document(data, 'corpus.pdf', 'application/pdf')
                 self.assertEqual(result.status, 'ok', result.messages)
-                self.assertEqual(diff(reading(text), reading(result.text)), recorded('pdf', path.stem),
+                self.assertEqual(diff(reading(text), reading(result.text, result.pages)), recorded('pdf', path.stem),
                                  'a PDF reading changed: a new difference is a regression; a recorded one that '
                                  'disappeared must be removed from format_known_differences.json')
 
@@ -97,4 +98,4 @@ class ScannedCorpusSampleTests(SimpleTestCase):
                 data = docgen.make_scanned_pdf(pages(text, docgen.SCAN_LINE_CHARS, SCAN_LINES_PER_PAGE))
                 result = extract_document(data, 'corpus-scan.pdf', 'application/pdf', ocr=DETECT)
                 self.assertEqual((result.status, result.method), ('ok', 'pdf-ocr'), result.messages)
-                self.assertEqual(diff(reading(text), reading(result.text)), recorded('scan', name))
+                self.assertEqual(diff(reading(text), reading(result.text, result.pages)), recorded('scan', name))
