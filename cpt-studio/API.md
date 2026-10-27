@@ -202,9 +202,13 @@ Asks for the one bounded second review of the current assessment
 `{"second_review": "queued"}`, or 409 with the reason a bound stands (the
 same reason the encounter view's `second_review.reason` shows). The encounter
 view carries `"second_review": {"available": bool, "reason": "...", "items":
-["<unresolved item>", ...], "can_request": bool}`; `items` is empty when no
-documented service is left without a supported proposal. An assessment never
-queues a second review (owner decision 2026-10-27).
+["<unresolved item>", ...], "can_request": bool, "run": "uuid" | null}`; `items` is empty when no
+documented service is left without a supported proposal. `run` is the id (in
+`provider_runs`) of the newest second review made for the answer the current
+assessment reads, whatever its outcome, and null when none was: while its
+response was not read (unknown, failed, not sent) or not used (refused whole),
+the page states that outcome and never says that no CPT codes were proposed. An
+assessment never queues a second review (owner decision 2026-10-27).
 
 ## POST /api/encounters/{id}/stop · /resume · /reconcile
 

@@ -474,6 +474,51 @@ test('a provider check that failed, or a response never read, gives the panel it
   assert.equal(app.emptySelectionCopy({ proposals: [], summary: { provider_status: 'unknown' }, encounter_checks: [] }), 'No provider response was read for this revision, so there are no CPT proposals.');
 });
 
+// skeptic of refutation 7c8 reports-5: the second review made for the answer the assessment reads (second_review.run)
+// whose response was not read (unknown, failed, not sent) or not used (refused whole) is stated after the panel's own
+// wording, never left behind "No CPT codes were proposed"; one read and used, or none made, changes nothing.
+test('a second review whose response was not read or not used is stated in the panel, never read as nothing proposed', () => {
+  const ready = fixture('encounter-ready.json');
+  const primary = 'corti (corti-coding@2) returned no selected CPT-labelled code (0 candidate or alternatives, which cannot be approved).';
+  const assessment = { ...ready.assessment, proposals: [], summary: { provider_status: 'succeeded' }, encounter_checks: [{ id: 'provider.status', status: 'warn', detail: primary }] };
+  const second = { ...ready.provider_runs[0], id: UUID, purpose: 'second_review', state: 'unknown', http_status: null, error: 'Read timed out after the request was sent.', reconciled: false, scope_items: ['colonoscopy (documented as performed) has no supported proposal'] };
+  const asked = 'A second review was requested for: colonoscopy (documented as performed) has no supported proposal.';
+  const none = 'This is not a finding that no codes apply.';
+  const doc = (run, extra = {}) => ({ ...ready, provider_runs: [...ready.provider_runs, run], second_review: { available: false, reason: '', items: [], can_request: true, run: run.id }, assessment: { ...assessment, ...extra } });
+  for (const [run, said] of [
+    [second, 'It was sent, but its outcome is unknown: no response was recorded, so nothing from it was read.'],
+    [{ ...second, reconciled: true }, 'It was sent, but its outcome is unknown: no response was recorded, so nothing from it was read. A member reconciled it.'],
+    [{ ...second, state: 'failed', http_status: 500, error: 'HTTP 500 from the provider.' }, 'It failed: HTTP 500 from the provider. Nothing from it was used.'],
+    [{ ...second, state: 'not_sent', error: 'The excerpt could not be sent' }, 'Nothing was sent for it: The excerpt could not be sent.'],
+    [{ ...second, state: 'succeeded', error: '' }, 'Its response has not been read by this assessment.'],
+  ]) {
+    const page = doc(run);
+    const expected = `${primary} ${asked} ${said} ${none}`;
+    assert.equal(app.secondReviewUnread(page), `${asked} ${said} ${none}`, run.state);
+    assert.equal(app.emptySelectionCopy(page.assessment, page), expected, run.state);
+    const html = render(page);
+    assert.equal(html.includes('No CPT codes were proposed for this document.'), false, run.state);
+    assert.ok(html.includes(app.escapeHtml(expected)), run.state);
+  }
+  // refused whole: the review's own failed check, as the primary's refused response gives its own (round 7 bypass:1)
+  const refused = 'A second review was requested for: colonoscopy. Its response was not used (it selects 65 codes, more than the 64 this adapter accepts).';
+  const read = { ...second, state: 'succeeded', error: '' };
+  const refusedDoc = doc(read, { second_run: UUID, encounter_checks: [...assessment.encounter_checks, { id: 'provider.second_review', status: 'fail', detail: refused }] });
+  assert.equal(app.emptySelectionCopy(refusedDoc.assessment, refusedDoc), `${primary} ${refused}`);
+  // a listed alternative keeps its wording, then the review's outcome
+  const listed = doc(second, { proposals: [{ bucket: 'alternative' }] });
+  assert.ok(app.emptySelectionCopy(listed.assessment, listed).startsWith('No code is selected for approval.'));
+  assert.ok(app.emptySelectionCopy(listed.assessment, listed).endsWith(`${asked} It was sent, but its outcome is unknown: no response was recorded, so nothing from it was read. ${none}`));
+  // controls: read and used (its check did not fail), no run named, or no second_review at all: nothing is added
+  const used = doc(read, { second_run: UUID, encounter_checks: [...assessment.encounter_checks, { id: 'provider.second_review', status: 'warn', detail: 'Added no proposal.' }] });
+  assert.equal(app.secondReviewUnread(used), '');
+  assert.equal(app.emptySelectionCopy(used.assessment, used), 'No CPT codes were proposed for this document.');
+  const unnamed = { ...doc(second), second_review: { available: false, reason: '', items: [], run: null } };
+  assert.equal(app.emptySelectionCopy(unnamed.assessment, unnamed), 'No CPT codes were proposed for this document.');
+  assert.equal(app.emptySelectionCopy(assessment), 'No CPT codes were proposed for this document.');
+  assert.equal(app.emptySelectionCopy(assessment, ready), 'No CPT codes were proposed for this document.');
+});
+
 // round 6, bypass:3: whether a reinstated code can be approved is the code's own gate, never the member's action list.
 test('a viewer is told a reinstated code is approvable by a reviewer, and is told it is withheld only by its gate', () => {
   const reinstated = { bucket: 'excluded', reinstatable: true, decision_state: 'reinstated', allowed_actions: [],

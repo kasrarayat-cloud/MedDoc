@@ -697,17 +697,43 @@ function unsupportedSection(assessment) {
   return `${sectionHeading('Services outside the GI profiles', items.length)}<div class="check-list-card">${items.map(item => checkItem('pending', 'info', [item.label || item.family, item.status].filter(Boolean).join(' · '), item.detail)).join('')}</div>`;
 }
 
-function emptySelectionCopy(assessment) {
+// The outcome of the second review made for the answer the current assessment reads (the API names it:
+// second_review.run), when its response was not read or not used; '' when none was made, or its response was read and
+// used. Worded from its run row, or from its own failed check when its response was refused whole (skeptic of
+// refutation 7c8 reports-5: an unknown, failed or refused second review left "No CPT codes were proposed").
+function secondReviewUnread(doc) {
+  const id = doc?.second_review?.run;
+  const run = id ? (Array.isArray(doc.provider_runs) ? doc.provider_runs : []).find(item => item?.id === id) : undefined;
+  if (!run) return '';
+  const items = Array.isArray(run.scope_items) && run.scope_items.length ? run.scope_items.join('; ') : 'the unresolved documented services';
+  const asked = `A second review was requested for: ${items}.`;
+  const none = 'This is not a finding that no codes apply.';
+  if (run.state === 'succeeded') {
+    if (doc.assessment?.second_run !== run.id) return `${asked} Its response has not been read by this assessment. ${none}`;
+    const check = (Array.isArray(doc.assessment.encounter_checks) ? doc.assessment.encounter_checks : []).find(item => item && item.id === 'provider.second_review');
+    return check && check.status === 'fail' && typeof check.detail === 'string' && check.detail ? check.detail : '';
+  }
+  if (run.state === 'unknown') return `${asked} It was sent, but its outcome is unknown: no response was recorded, so nothing from it was read.${run.reconciled ? ' A member reconciled it.' : ''} ${none}`;
+  if (run.state === 'failed') return `${asked} It failed${run.error ? `: ${sentence(run.error)}` : '.'} Nothing from it was used. ${none}`;
+  if (run.state === 'not_sent' || run.state === 'cancelled') return `${asked} Nothing was sent for it${run.error ? `: ${sentence(run.error)}` : '.'} ${none}`;
+  return `${asked} It has not finished, so nothing from it was read. ${none}`;
+}
+
+function emptySelectionCopy(assessment, doc) {
+  // A second review whose response was not read or not used is stated after whatever the panel says, so no wording
+  // here reads as covering every response for this document (skeptic of refutation 7c8 reports-5).
+  const second = secondReviewUnread(doc);
+  const and = text => (second ? `${text} ${second}` : text);
   // Codes a documentation check excluded still need a reviewer decision, so the panel never says nothing was
   // proposed while they wait below (round 5, bypass:6). Only the codes still waiting are counted, as readiness
   // counts them, so a decided set is never told it needs a decision (round 6, bypass:4).
   const excluded = proposalsIn(assessment, 'excluded');
   const reinstatable = excluded.filter(proposal => proposal.reinstatable);
   const waiting = reinstatable.filter(proposal => proposal.decision_state === 'undecided' || proposal.decision_state === 'reinstated').length;
-  if (waiting === 1) return 'One code that a documentation check excluded needs a reviewer\'s decision under Excluded candidates below.';
-  if (waiting) return `${waiting} codes that a documentation check excluded need a reviewer's decision under Excluded candidates below.`;
-  if (reinstatable.length) return 'Every code that a documentation check excluded has a decision; see Excluded candidates below.';
-  if (excluded.length || proposalsIn(assessment, 'alternative').length) return 'No code is selected for approval. The provider proposed only codes that were excluded or offered as alternatives; they are listed below.';
+  if (waiting === 1) return and('One code that a documentation check excluded needs a reviewer\'s decision under Excluded candidates below.');
+  if (waiting) return and(`${waiting} codes that a documentation check excluded need a reviewer's decision under Excluded candidates below.`);
+  if (reinstatable.length) return and('Every code that a documentation check excluded has a decision; see Excluded candidates below.');
+  if (excluded.length || proposalsIn(assessment, 'alternative').length) return and('No code is selected for approval. The provider proposed only codes that were excluded or offered as alternatives; they are listed below.');
   // A provider check that failed (a response refused whole, or no usable result) says why there are no proposals;
   // "none were proposed" would misstate a response that was never read (round 7, bypass:1). So does the check of an
   // assessment that read no response at all - its provider outcome unknown, failed, or the provider not run - whatever
@@ -715,8 +741,11 @@ function emptySelectionCopy(assessment) {
   const provider = (Array.isArray(assessment.encounter_checks) ? assessment.encounter_checks : []).find(check => check && check.id === 'provider.status');
   const read = assessment.summary?.provider_status;
   const unread = typeof read === 'string' && read !== 'succeeded';
-  if (provider && (provider.status === 'fail' || unread) && typeof provider.detail === 'string' && provider.detail) return provider.detail;
-  if (unread) return 'No provider response was read for this revision, so there are no CPT proposals.';
+  if (provider && (provider.status === 'fail' || unread) && typeof provider.detail === 'string' && provider.detail) return and(provider.detail);
+  if (unread) return and('No provider response was read for this revision, so there are no CPT proposals.');
+  // The primary response was read and selected nothing, but the second review's was not read or not used: the primary
+  // check's own wording, then that review's outcome - never "none were proposed".
+  if (second) return provider && typeof provider.detail === 'string' && provider.detail ? and(provider.detail) : second;
   return 'No CPT codes were proposed for this document.';
 }
 
@@ -725,7 +754,7 @@ function suggestionsPanel(doc, layout) {
   const selected = proposalsIn(assessment, 'selected');
   const inline = new Set(selected.flatMap(proposal => clarificationsFor(proposal, doc).map(item => item.id)));
   const general = openClarifications(doc).filter(item => !inline.has(item.id)).map(item => clarificationCard(item, doc));
-  const cards = selected.length ? selected.map(proposal => codeCard(proposal, doc, layout)) : [`<div class="check-list-card"><p class="card-empty">${escapeHtml(emptySelectionCopy(assessment))}</p></div>`];
+  const cards = selected.length ? selected.map(proposal => codeCard(proposal, doc, layout)) : [`<div class="check-list-card"><p class="card-empty">${escapeHtml(emptySelectionCopy(assessment, doc))}</p></div>`];
   return `<div class="card-stack">${codingBanner(doc)}${general.join('')}${cards.join('')}</div>${documentedServices(doc)}${unsupportedSection(assessment)}${candidateSection('Alternatives (never selectable)', proposalsIn(assessment, 'alternative'), 'Offered by the provider as an alternative and not selected. Alternatives cannot be approved.', doc)}${candidateSection('Excluded candidates', proposalsIn(assessment, 'excluded'), 'Excluded from CPT-only results.', doc)}<div class="review-insight">${icon('shield')}<div><strong>The source remains the starting point</strong><p>The checks hold or exclude planned, historical, cancelled and uncertain services when they recognise the wording, and they can miss wording they do not recognise. Read the document before deciding; agreement between sources is not treated as verification.</p></div></div>`;
 }
 
@@ -1767,7 +1796,7 @@ if (typeof module === 'object' && module.exports) {
     factValue, metaFact, exportStatusText, documentLayout, reviewView, documentRow, listBody, listDescription,
     inviteMarkup, overviewView, documentsView, howItWorksView, exportOptions, state, QUEUE_STATES, decisionLine,
     hasAgentDecision, candidateDecision, ACKNOWLEDGEMENTS, emptySelectionCopy, attestationText,
-    codingBanner, documentedServices, evidenceChips,
+    codingBanner, documentedServices, evidenceChips, secondReviewUnread,
   };
 }
 if (typeof document !== 'undefined') boot();

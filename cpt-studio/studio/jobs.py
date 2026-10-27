@@ -713,18 +713,21 @@ def _answer_of(run):
     return (run.provider, run.adapter_version, run.request_sha256, run.response_sha256)
 
 
-def _second_run_for(revision, run):
+def _second_run_for(revision, run, *, any_outcome=False):
     """The second review that succeeded on this revision and date for the primary answer ``run`` carries: made for
     ``run`` itself or for any run carrying the same answer to the same request - the retained run it reuses, or another
     run reusing that same retained run (refutation r1, sends-2 / context-2: after a member date conflict was cleared, or
     a date changed and changed back, the reused primary never found the paid second review, so its code disappeared from
     the decision set and another could not be asked for; ec5: also when that second review had been made for a primary
-    that was itself a reuse, as when the same report is uploaded twice in a workspace)."""
+    that was itself a reuse, as when the same report is uploaded twice in a workspace). ``any_outcome``: the newest
+    one made for that answer, whatever its outcome (second_review_status names it for the page)."""
     if run is None or run.state != models.ProviderRun.SUCCEEDED or run.purpose != models.ProviderRun.PRIMARY:
         return None
-    seconds = list(models.ProviderRun.objects.filter(revision=revision, purpose=models.ProviderRun.SECOND_REVIEW,
-                                                     state=models.ProviderRun.SUCCEEDED, service_date=run.service_date)
-                   .order_by('-created_at'))
+    seconds = models.ProviderRun.objects.filter(revision=revision, purpose=models.ProviderRun.SECOND_REVIEW,
+                                                service_date=run.service_date)
+    if not any_outcome:
+        seconds = seconds.filter(state=models.ProviderRun.SUCCEEDED)
+    seconds = list(seconds.order_by('-created_at'))
     made_for = set()
     for second in seconds:
         try:
@@ -816,14 +819,19 @@ def _second_review_blocker(encounter, revision, context, assessment):
 
 
 def second_review_status(encounter):
-    """What the encounter view shows about the bounded second review: whether one can be asked for now, why not, and
-    the unresolved items it would ask about."""
+    """What the encounter view shows about the bounded second review: whether one can be asked for now, why not, the
+    unresolved items it would ask about, and ``run``: the second review made for the answer the current assessment
+    reads, whatever its outcome (None when none was), so the page states the outcome of one whose response was not read
+    or not used, never that no code was proposed (skeptic of refutation 7c8 reports-5: an unknown, failed or refused
+    second review left the panel saying "No CPT codes were proposed for this document")."""
     revision, context, assessment = (encounter.current_revision, encounter.current_context,
                                      encounter.current_assessment)
     items = _second_review_items(assessment)[0] if assessment is not None else []
     reason = _second_review_blocker(encounter, revision, context, assessment) if items else ''
+    made = (_second_run_for(revision, assessment.provider_run, any_outcome=True)
+            if assessment is not None and revision is not None and assessment.revision_id == revision.pk else None)
     return {'available': bool(items) and not reason, 'reason': reason,
-            'items': [item.get('label', '') for item in items][:8]}
+            'items': [item.get('label', '') for item in items][:8], 'run': str(made.pk) if made is not None else None}
 
 
 def request_second_review(encounter, user):

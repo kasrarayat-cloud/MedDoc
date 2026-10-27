@@ -782,3 +782,120 @@ class UnresolvedSectionNamesTheUnlistedVisitTests(Harness):
         lines = self.unresolved(listed).split('\n')
         self.assertTrue(lines[0].endswith('[not_covered]'), lines)
         self.assertFalse(any(line.startswith('  - no other') for line in lines), lines)
+
+
+# --- skeptic of the first repair, reports-5: the panel beside a second review whose response was never read ---------
+
+SCOPE_SENTENCE = 'The colonoscope was advanced to the cecum and the examination was completed.'
+ASKED = 'A second review was requested for: colonoscopy (documented as performed) has no supported proposal.'
+NOT_A_FINDING = 'This is not a finding that no codes apply.'
+
+
+class SecondOutcome(TwoPassProvider):
+    """The primary request gets ``first``; the second review is 'unknown' (sent, no response read), 'failed' (HTTP 500),
+    'refused' (a response selecting 65 codes, over the 64-code cap, so refused whole) or 'read' (``later``)."""
+
+    def __init__(self, first, later, second):
+        super().__init__(first, later)
+        self.second = second
+
+    def send(self, request, *, deadline_s):
+        if not self.requests or self.second == 'read':
+            return super().send(request, deadline_s=deadline_s)
+        self.requests.append(request)
+        if self.second == 'unknown':
+            return RawExchange(outcome='unknown', sent=True, error='Read timed out after the request was sent.')
+        if self.second == 'failed':
+            return RawExchange(outcome='failed', sent=True, http_status=500, error='HTTP 500 from the provider.')
+        context = request.contexts[0]
+        start = context.index(SCOPE_SENTENCE)
+        code = {'system': 'cpt', 'code': '45378', 'display': 'UNVERIFIED PROVIDER WORDING',
+                'evidences': [{'contextIndex': 0, 'start': start, 'end': start + len(SCOPE_SENTENCE),
+                               'text': SCOPE_SENTENCE}]}
+        data = json.dumps({'codes': [code] * 65, 'candidates': []}).encode()
+        return RawExchange(outcome='succeeded', sent=True, http_status=200, response_bytes=data,
+                           response_sha256=hashlib.sha256(data).hexdigest(), latency_ms=10.0,
+                           usage={'creditsConsumed': 0.02}, usage_basis='provider_reported_credits_not_usd')
+
+
+def panel_copy(html):
+    """The suggestions panel's text when no code is selected (its card-empty paragraph), unescaped."""
+    import re
+    found = re.findall(r'<p class="card-empty">(.*?)</p>', html)
+    return [text.replace('&#x27;', "'").replace('&quot;', '"').replace('&amp;', '&') for text in found]
+
+
+class SecondReviewOutcomeIsStatedTests(Harness):
+    """Skeptic of the reports-5 repair (0f44cf065): the primary response was read with no code, the colonoscopy was
+    offered for the second review and a reviewer asked for it (201). With that review's outcome unknown (sent, no
+    response read), failed (HTTP 500) or refused whole (65 codes, over the cap), the suggestions panel still said "No
+    CPT codes were proposed for this document": emptySelectionCopy read only summary.provider_status, the primary's
+    'succeeded'. The panel states the outcome of the second review made for the answer the assessment reads (the API
+    names it: second_review.run) whenever its response was not read or not used."""
+
+    def asked(self, second, later=(('45378', SCOPE_SENTENCE),)):
+        self.use(SecondOutcome([], list(later), second))
+        encounter_id = self.create(COLONOSCOPY)
+        drain()
+        offered = self.detail(encounter_id)['second_review']
+        self.assertEqual(offered['items'], ['colonoscopy (documented as performed) has no supported proposal'])
+        self.assertIsNone(offered['run'])
+        self.assertEqual(ask(self.client, encounter_id).status_code, 201)
+        drain()
+        return encounter_id
+
+    def panel(self, encounter_id):
+        detail = self.detail(encounter_id)
+        (copy,) = panel_copy(page(detail)['codes'])
+        return detail, copy
+
+    def test_a_second_review_never_read_is_stated_never_read_as_none_proposed(self):
+        for second, said in (('unknown', 'It was sent, but its outcome is unknown: no response was recorded, so '
+                                         'nothing from it was read.'),
+                             ('failed', 'It failed: HTTP 500 from the provider. Nothing from it was used.')):
+            with self.subTest(second):
+                self.fresh(f'Synthetic workspace {second}')
+                encounter_id = self.asked(second)
+                run = models.ProviderRun.objects.get(encounter_id=encounter_id, purpose='second_review')
+                self.assertEqual((run.state, run.sent), (second, True))
+                detail, copy = self.panel(encounter_id)
+                self.assertEqual(detail['assessment']['summary']['provider_status'], 'succeeded')
+                self.assertEqual(detail['assessment']['proposals'], [])
+                self.assertEqual(detail['second_review']['run'], str(run.pk))
+                self.assertNotIn(NONE_PROPOSED, copy)
+                primary = self.encounter_check(encounter_id, 'provider.status')['detail']
+                self.assertEqual(copy, f'{primary} {ASKED} {said} {NOT_A_FINDING}')
+        # the unknown one, reconciled by a member: its outcome is still unknown, and still said
+        self.fresh('Synthetic workspace reconciled')
+        encounter_id = self.asked('unknown')
+        run = models.ProviderRun.objects.get(encounter_id=encounter_id, purpose='second_review')
+        reply = self.post(f'/api/encounters/{encounter_id}/reconcile',
+                          {'provider_run_id': str(run.pk), 'note': 'Checked the provider console: nothing recorded.'})
+        self.assertIn(reply.status_code, (200, 201), reply.content)
+        drain()
+        detail, copy = self.panel(encounter_id)
+        self.assertEqual(detail['second_review']['run'], str(run.pk))
+        self.assertNotIn(NONE_PROPOSED, copy)
+        self.assertIn('its outcome is unknown: no response was recorded, so nothing from it was read. A member '
+                      'reconciled it.', copy)
+
+    def test_a_second_review_refused_whole_gives_its_own_failed_check(self):
+        encounter_id = self.asked('refused')
+        run = models.ProviderRun.objects.get(encounter_id=encounter_id, purpose='second_review')
+        self.assertEqual(run.state, 'succeeded')
+        check = self.encounter_check(encounter_id, 'provider.second_review')
+        self.assertEqual(check['status'], 'fail')
+        self.assertIn('Its response was not used', check['detail'])
+        detail, copy = self.panel(encounter_id)
+        self.assertEqual(detail['assessment']['second_run'], str(run.pk))
+        self.assertNotIn(NONE_PROPOSED, copy)
+        self.assertTrue(copy.endswith(check['detail']), copy)
+
+    def test_control_a_second_review_read_that_proposed_nothing_still_says_none_were_proposed(self):
+        encounter_id = self.asked('read', later=())
+        run = models.ProviderRun.objects.get(encounter_id=encounter_id, purpose='second_review')
+        self.assertEqual(run.state, 'succeeded')
+        self.assertEqual(self.encounter_check(encounter_id, 'provider.second_review')['status'], 'warn')
+        detail, copy = self.panel(encounter_id)
+        self.assertEqual((detail['second_review']['run'], detail['assessment']['second_run']), (str(run.pk),) * 2)
+        self.assertEqual(copy, NONE_PROPOSED)
