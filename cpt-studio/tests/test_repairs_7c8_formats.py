@@ -537,3 +537,34 @@ class FieldAnswerCostTests(SimpleTestCase):
                                ('Biopsies taken.    - no', True), ('Biopsies taken. - no', False)):
             with self.subTest(tail=tail):
                 self.assertEqual(sections._answered(tail), answered)
+
+
+class AnotherEventsDateAfterTheActsOwnTodayTests(SimpleTestCase):
+    """sk:12 (outside FORMATS, EXCL class 4, pre-existing at 8985dde42): "Two polyps were removed with a cold snare
+    today because the polypectomy in 2025 had been incomplete." excluded 45385 as historical: the date of the clause
+    "because the polypectomy in 2025 had been incomplete" was read as the act's own, since that clause's predicate comes
+    after the date. A date inside a clause another event opens (because, after, since ...) is that event's whenever
+    the clause has a predicate of its own, before or after the date; the act is never excluded on it."""
+
+    HEAD = (f'{BANNER}\nProcedure date: 10/14/2026\nPROCEDURE NOTE: Colonoscopy\nTechnique: The colonoscope was advanced '
+            'to the cecum.\nFindings: ')
+    ANOSCOPY = (f'{BANNER}\nProcedure date: 10/14/2026\nPROCEDURE NOTE: Anoscopy with hemorrhoid banding\nIndication: '
+                'Bleeding internal hemorrhoids.\nFindings: ')
+
+    def test_the_act_stated_done_today_is_never_excluded(self):
+        for head, line, code in (
+                (self.HEAD, 'Two polyps were removed with a cold snare today because the polypectomy in 2025 had been '
+                            'incomplete.', '45385'),
+                (self.HEAD, 'Biopsies were taken from the sigmoid colon today because the biopsies in 2025 had been '
+                            'nondiagnostic.', '45380'),
+                (self.ANOSCOPY, 'Two rubber bands were placed on the internal hemorrhoids today because the banding in '
+                                '2025 had failed.', '46221')):
+            with self.subTest(line=line):
+                text = head + line + '\nImpression: See findings.\n'
+                result = run(text, [(code, line)])[0]
+                self.assertNotEqual(proposals_of(result)[code][0], 'excluded')
+
+    def test_a_dated_phrase_still_dates_the_act(self):  # control: "since 2019" opens no clause of its own
+        text = self.HEAD + 'Polyps have been removed with a cold snare at annual colonoscopies since 2019.\n'
+        result = run(text)[0]
+        self.assertIn(('snare', 'historical'), acts_of(result, 'snare'))

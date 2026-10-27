@@ -395,6 +395,7 @@ OTHER_EVENT = _rx(r'\b(?:after|before|when|whenever|once|until|because|since|whi
                   r'admitted|discharged|referred|hospitali[sz]ed|held|stopped|started|resumed|restarted|discontinued|last\s+dose)\b')
 OTHER_EVENT_PREDICATE = _rx(r'\b(?:was|were|is|are|been|has|have|had|did|does)\b|\b[a-z]{3,}ed\b')
 OTHER_TIME_CUE = 'uncertain: a time in its clause is something else\u2019s: '
+OTHER_EVENT_REACH = 80  # characters after a date read for the predicate of the clause another event opens before it
 HEDGE_WORDS = _rx(r'\?|\b(?:possibl[ey]|probabl[ey]|questionabl[ey]|likely|unlikely|uncertain|unclear|may\s+have|might\s+have'
                   r'|presumed|presumably|suspected|apparently'
                   r'|(?<!first\s)(?<!second\s)(?<!third\s)(?<!fourth\s)(?<!initial\s)(?<!final\s)attempt(?:ed)?)\b')
@@ -1590,7 +1591,7 @@ def _elsewhere_time_words(text: str, cs: int, ce: int, pos: int) -> dict[int, st
     return out
 
 
-def _date_owner(text: str, d, cs: int, pos: int) -> str:
+def _date_owner(text: str, d, cs: int, pos: int, ce: Optional[int] = None) -> str:
     """Whose time the date ``d`` in the clause starting at ``cs`` is, for the mention at ``pos``: '' the clause's own
     (it dates the act), 'none' no act's (a birth date, a documentation stamp, a clock time), 'other' another clause's or
     event's (BIRTH_LABEL, STAMP_LABEL, CLOCK_TIME, OTHER_EVENT). Bounded: the clause up to the date, once."""
@@ -1620,6 +1621,7 @@ def _date_owner(text: str, d, cs: int, pos: int) -> str:
         return 'other'
     # Every other clause or event before the date is asked, the last first: a later word that is no clause of its own
     # ("since") never hides an earlier event whose date it is ("apixaban held since 10/12/2026": 7c8 skeptic, sk:3).
+    after = None  # whether a predicate follows the date in its clause: read once, when an opener first needs it
     for opener in reversed(list(OTHER_EVENT.finditer(text, cs, d.start))):
         if opener.start() <= pos < d.start:
             return ''  # the mention is inside that clause or event: the date is its own
@@ -1628,6 +1630,17 @@ def _date_owner(text: str, d, cs: int, pos: int) -> str:
             return ''  # that clause or event (and every earlier one) closed before the date
         if opener.group('event') is not None or OTHER_EVENT_PREDICATE.search(phrase):
             return 'other'
+        # A clause the opener begins may set its subject before the date and its predicate after it ("because the
+        # polypectomy in 2025 had been incomplete"): the date is then that clause's, never the act's (refutation 7c8,
+        # sk:12: "Two polyps were removed with a cold snare today because the polypectomy in 2025 had been incomplete."
+        # excluded 45385). Bounded: OTHER_EVENT_REACH after the date, to the clause's end or its next mark.
+        if phrase.strip():
+            if after is None:
+                rest = text[d.end:min(len(text) if ce is None else ce, d.end + OTHER_EVENT_REACH)]
+                rest = rest[:next((m.start() for m in re.finditer(r'[,;:()\n]', rest)), len(rest))]
+                after = bool(OTHER_EVENT_PREDICATE.search(rest))
+            if after:
+                return 'other'
         # "since 2019": a phrase, not a clause of its own - an earlier opener may still own the date
     return ''  # no other clause or event before it: the date is its own
 
@@ -1752,7 +1765,7 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     act_said = bool(ACT_VERB.search(said))
     other_time = ''
     for d in _dates_in(dates, cs, ce):
-        owner = _date_owner(text, d, cs, pos)
+        owner = _date_owner(text, d, cs, pos, ce)
         if not owner and today and ((d.precision == 'year' and d.bare) or _in_an_aside(text, cs, d)):
             # a bare year, or a date in a parenthetical aside ("Alex Synthetic (03/04/1961) underwent colonoscopy
             # today"), never outweighs the clause's "today" (7c8 skeptic, sk:3): held, never dated
