@@ -253,6 +253,23 @@ NOT_VERB = _rx(r"\b(?:was|were|is|are|been|has|have|had|did|does|could|would|can
                r"attempted|repeated|undertaken|carried\s+out|reached|completed|required|needed|indicated)\b"
                r"|\b(?:was|were|is|are|has|have|had|did|does|could|would|ca)" + NEG_CONTRACTION + r"\b(?:\s+be)?")
 WITHOUT = _rx(r'\b(?:without|w/o)\b')
+# A negation's list ends where another clause opens after it - a subordinator or a temporal preposition ("No bleeding
+# occurred after the biopsies were obtained", "There were no complications after biopsies were taken", "No residual
+# bleeding followed once two hemoclips were placed"): an act inside that clause is outside the negated list and reads by
+# its own predicate, unless a negation of its own follows the opener ("There was no bleeding because no biopsies were
+# taken"). Refutation r1, negtime-6: the opening "No" had excluded 43239 and 43255 as denied.
+NEGATION_SCOPE_END = _rx(r'\b(?:after|before|once|when|whenever|while|until|because|since|following|whereupon'
+                         r'|as\s+soon\s+as|so\s+that)\b')
+NEGATION_WORD = _rx(r'\b(?:no|not|none|nothing|neither|nor|never|without|w/o)\b')
+
+
+def _outside_negation(phrase: str) -> bool:
+    """Whether ``phrase`` - the words from a negation up to an act's mention - opens another clause after the negation
+    (NEGATION_SCOPE_END) with no negation of its own after that opener: the act is then outside the negated list."""
+    opener = None
+    for m in NEGATION_SCOPE_END.finditer(phrase):
+        opener = m
+    return opener is not None and not NEGATION_WORD.search(phrase, opener.end())
 # A "not" after the act that belongs to another predicate: one inside a subordinate clause ("Possible EGD with PEG
 # placement if intake does not improve"), or a second predicate coordinated with the act's own participle ("was
 # tattooed and not removed"). Every other "not" in the clause still negates the act (fail-closed).
@@ -1452,7 +1469,7 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         # taken, and ... there was nothing to remove with snare or forceps", "... and no tattoo was placed")
         negated_again = auxiliaries and re.search(r'\b(?:no|not|nothing|none|neither|nor|never|without)\b',
                                                   between[auxiliaries[-1].end():], FLAGS)
-        if not auxiliaries or own or negated_again:
+        if (not auxiliaries or own or negated_again) and not _outside_negation(between):
             return Reading('negated', ('negated: the clause opens with a negation that covers its list',))
     head = before[-60:]
     negation = re.search(r'\b(?:no|without|w/o|nor|neither)\s+(?:\w+[\s,-]+){0,6}$', head, FLAGS)
@@ -1464,8 +1481,9 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         # leaves the act to its own predicate.
         tail = head[negation.start():]
         auxiliaries = re.findall(r'\b(?:was|were|is|are|been)\b', tail, FLAGS)
-        if not auxiliaries or (len(auxiliaries) == 1
-                               and re.search(r'\b(?:was|were|is|are|been)\s+(?:[\w-]+ly\s+)?$', tail, FLAGS)):
+        if (not auxiliaries or (len(auxiliaries) == 1
+                                and re.search(r'\b(?:was|were|is|are|been)\s+(?:[\w-]+ly\s+)?$', tail, FLAGS))) \
+                and not _outside_negation(tail):
             cues.append('negated: a negation before it in its clause')
             return Reading('negated', tuple(cues))
     for not_verb in NOT_VERB.finditer(whole):
@@ -1478,7 +1496,8 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         if not re.match(r'\s*(?:[\w-]+ly\s+)?(?:discontinu|interrupt|terminat|abort|incomplet|stopped)', neg_target, FLAGS):
             return Reading('negated', ('negated: "not" on its predicate',))
     near = before[-40:]
-    if any(not WITHOUT_COMPLICATION.match(near, w.start()) for w in WITHOUT.finditer(near)):
+    if any(not WITHOUT_COMPLICATION.match(near, w.start()) and not _outside_negation(near[w.start():])
+           for w in WITHOUT.finditer(near)):
         return Reading('negated', ('negated: "without" before it',))
     if REPLACED.search(before[-80:]):
         return Reading('negated', (REPLACED_CUE,))

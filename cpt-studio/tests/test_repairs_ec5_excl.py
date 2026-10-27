@@ -257,3 +257,63 @@ class AttributiveTimeWordTests(SimpleTestCase):
                 (EGD, 'Biopsies were taken at the previous EGD.', '43239')):
             with self.subTest(line=line):
                 self.assertEqual(proposal(assessed(template.format(x=line), [(code, line)]), code).bucket, 'excluded')
+
+
+class NegationScopeTests(SimpleTestCase):
+    """negtime-6: a negation covers what it lists up to its predicate; an act inside a clause opened after it by a
+    subordinator ("after", "once", "because", ...) is outside the negated list and reads by its own predicate, so its
+    code is never excluded on that negation. A negation of the act's own ("... because no biopsies were taken") still
+    denies it."""
+
+    def test_an_act_in_a_clause_opened_after_the_negation_is_outside_it(self):
+        for template, line, kind, code in (
+                (EGD, 'No bleeding occurred after the biopsies were obtained from the antrum.', 'biopsy', '43239'),
+                (EGD, 'There were no complications after biopsies were taken from the antrum.', 'biopsy', '43239'),
+                (EGD, 'No residual bleeding followed once two hemoclips were placed on the vessel.', 'clip', '43255'),
+                (EGD, 'There was no oozing once two hemoclips were placed on the vessel.', 'clip', '43255'),
+                (EGD, 'There was no bleeding after the antral biopsies were taken with cold forceps.', 'biopsy', '43239'),
+                (EGD, 'Hemostasis was achieved without rebleeding once two hemoclips were placed on the vessel.', 'clip',
+                 '43255')):
+            with self.subTest(line=line):
+                text = template.format(x=line)
+                self.assertEqual(statuses(text, kind), ['performed'])
+                self.assertNotEqual(proposal(assessed(text, [(code, line)]), code).bucket, 'excluded')
+
+    def test_controls_the_negations_own_list_still_denies(self):
+        for template, line, kind in (
+                (EGD, 'No biopsies were taken after the dilation.', 'biopsy'),
+                (EGD, 'There were no biopsies taken since the mucosa was normal.', 'biopsy'),
+                (EGD, 'No biopsies were obtained because the patient takes apixaban.', 'biopsy'),
+                (COLONOSCOPY, 'No biopsies, polypectomy or tattoo was performed.', 'snare'),
+                (COLONOSCOPY, 'No polyps were seen, so no polypectomy was performed.', 'snare'),
+                # the act's own negation after the subordinator
+                (EGD, 'There was no bleeding because no biopsies were taken.', 'biopsy'),
+                (EGD, 'The mucosa was normal after inspection, so no biopsies were obtained.', 'biopsy')):
+            with self.subTest(line=line):
+                self.assertEqual(statuses(template.format(x=line), kind), ['negated'])
+        for line in ('No biopsies were taken after the dilation.', 'There were no biopsies taken since the mucosa was '
+                                                                   'normal.'):
+            with self.subTest(line=line):
+                self.assertEqual(proposal(assessed(EGD.format(x=line), [('43239', line)]), '43239').bucket, 'excluded')
+
+
+class BothReadersAgreeTests(SimpleTestCase):
+    """The engine half of negtime-6's class: where the inventory reads no act of a code's kind, the routing-era reading
+    of the code's own passage excluded the code alone, even when the inventory reads an act stated done today in that
+    very passage ("No residual bleeding followed once two hemoclips were placed on the vessel": clips placed, 43255
+    excluded as "negated"). The two readers then disagree about the passage, so the code is held, never excluded."""
+
+    def test_an_act_done_in_the_passage_routing_denies_holds_the_code(self):
+        for line in ('No residual bleeding followed once two hemoclips were placed on the vessel.',
+                     'There was no oozing once two hemoclips were placed on the vessel.'):
+            with self.subTest(line=line):
+                held = proposal(assessed(EGD.format(x=line), [('43255', line)]), '43255')
+                self.assertEqual((held.bucket, held.status), ('selected', 'needs_clarification'))
+
+    def test_controls_an_agreed_or_unopposed_exclusion_stands(self):
+        # the inventory reads the code's own act as not done (planned), and routing agrees
+        line = 'The 6 mm polyp was removed with a cold snare and will be biopsied at the next EGD.'
+        self.assertEqual(proposal(assessed(COLONOSCOPY.format(x=line), [('45380', line)]), '45380').bucket, 'excluded')
+        # nothing in the passage is read as done today
+        line = 'Hemostasis will be achieved with hemoclips at the next EGD if the ulcer bleeds.'
+        self.assertEqual(proposal(assessed(EGD.format(x=line), [('43255', line)]), '43255').bucket, 'excluded')

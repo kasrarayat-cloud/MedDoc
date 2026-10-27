@@ -415,11 +415,13 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
         # Engine @4: the documented service and act decide the code's status; its passages are verified against them.
         found = _second_opinion(outcome, found, code, text, inventory, routing)
         if found.reason == 'act_missing' and outcome.state == 'not_performed' \
-                and not _time_in_doubt(code, found.service):
+                and not _time_in_doubt(code, found.service) \
+                and not _done_where_routing_denies(code, outcome, found.service):
             # The inventory documents no such act and the code's own passage reads it as not performed today (a
             # planned repeat, an earlier procedure): the inventory has nothing to add, and the exclusion stands.
             # Never when the inventory states the act done and holds only its time in doubt (a date or a time word in
-            # its clause is something else's): both readers must agree before a code is excluded, so it is held.
+            # its clause is something else's), nor when it reads an act done today in the very passage routing reads
+            # as not performed: both readers must agree before a code is excluded, so it is held.
             found = None
         elif found.reason == 'service_uncertain' and outcome.state == 'not_performed' \
                 and _own_passage_decides(outcome) and gi_services.doubted_by_routing_alone(found.service) \
@@ -564,6 +566,23 @@ def _time_in_doubt(code: str, service) -> bool:
     kinds = set(profile.covers) if profile is not None else set()
     return any(a.kind in kinds and a.status == 'uncertain'
                and any(cue.startswith(gi_services.OTHER_TIME_CUE) for cue in a.cues) for a in service.acts)
+
+
+def _done_where_routing_denies(code: str, outcome: checks.StatusOutcome, service) -> bool:
+    """Whether the inventory reads no act ``code`` accounts for in ``service`` at all, yet reads an act stated done
+    today in the very passage of the code whose routing-era reading excludes it ("No residual bleeding followed once two
+    hemoclips were placed on the vessel": clips placed, read by routing as negated). The two readers then disagree about
+    that passage, and the routing-era reading alone never excludes the code (ec5, cluster EXCL; refutation r1,
+    negtime-6's class). A not-done act of the code's own kind in the inventory (planned, historical) is an agreement."""
+    decisive = outcome.decisive
+    if decisive is None or decisive.origin != 'evidence' or decisive.start is None or decisive.end is None:
+        return False
+    profile = reconcile.catalogue.code_profile(code)
+    kinds = set(profile.covers) if profile is not None else set()
+    if not kinds or any(a.kind in kinds for a in service.acts):
+        return False
+    return any(a.status == 'performed' and any(decisive.start < ev.end and ev.start < decisive.end for ev in a.evidence)
+               for a in service.acts)
 
 
 def _act_documented(code: str, service, inventory) -> bool:
