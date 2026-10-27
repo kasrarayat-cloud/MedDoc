@@ -505,6 +505,109 @@ class PreUpgradeSettingTests(Base):
         self.assertTrue([q for q in self.detail(encounter_id)['clarifications'] if 'place of service' in q['question']])
 
 
+# --- migrate-5: nothing is sent at the swap that no member asked for ---------------------------------------------------
+
+@override_settings(**LIVE)
+class NothingSentAtTheSwapTests(Base):
+    """Work the installed revision left queued, or stranded, at the swap is finished under the current rules without
+    a request no member asked for: the assessment queues no second review (8985dde42), and a context the installed
+    revision recorded is remade (WIP 8i) - but when the request the remade context makes differs from the one the
+    installed revision sent (the current rules read a date it could not), a stage that never sends (an assess, or the
+    stale-stage sweep's settlement of a predict) leaves that request for a member: the encounter offers Resume."""
+
+    def installed_upload(self, text, *, read_date=True):
+        """An upload the installed revision extracted and analysed (its gi-context@1 row, without member values; with
+        ``read_date`` False it read no service date), nothing assessed yet."""
+        from studio.types import to_jsonable
+        encounter = f.encounter(self.ws, self.reviewer)
+        revision = f.pasted_revision(encounter, self.reviewer, text)
+        facts = {name: to_jsonable(fact) for name, fact in gi_context.extract_context(revision.text).items()}
+        if not read_date:
+            facts['service_date'] = {'name': 'service_date', 'value': None, 'origin': 'missing', 'evidence': [],
+                                     'note': gi_context.MISSING_NOTES['service_date']}
+        context = models.EncounterContext.objects.create(encounter=encounter, revision=revision, facts=facts,
+                                                         user_values={}, version=EARLIER_VERSION, sha256='0' * 64)
+        encounter.current_context = context
+        encounter.save(update_fields=['current_context', 'updated_at'])
+        return str(encounter.pk), context
+
+    def assert_left_for_a_member(self, encounter_id, sends):
+        self.assertEqual(self.sent(), sends, [r.contexts[1:] for r in self.provider.requests])
+        encounter = self.encounter(encounter_id)
+        self.assertNotEqual(encounter.current_context.version, EARLIER_VERSION)
+        self.assertEqual(encounter.state, 'stopped')
+        self.assertTrue(review.can_resume(encounter))
+        latest = review.latest_job(encounter)
+        self.assertEqual((latest.kind, latest.state, latest.context_id),
+                         (models.Job.PREDICT, models.Job.CANCELLED, encounter.current_context_id))
+        self.assertEqual(latest.error, jobs.REMADE_REQUEST_MESSAGE)
+        self.assertFalse(self.detail(encounter_id)['pipeline']['stopped_by_member'])  # the system's stop, said so
+        reply = self.post(f'/api/encounters/{encounter_id}/resume')  # a member asks: the one request is sent
+        self.assertEqual(reply.status_code, 201, reply.content)
+        drain()
+        self.assertEqual(self.sent(), sends + 1)
+        self.assertEqual(self.provider.requests[-1].contexts[1:], ('Date of service: 2026-10-16',))
+        encounter = self.encounter(encounter_id)
+        self.assertEqual(encounter.current_assessment.provider_run.service_date, DOCUMENTED)
+        self.assertNotEqual(encounter.state, 'stopped')
+
+    def test_an_assess_queued_at_the_swap_for_a_date_the_installed_revision_could_not_read(self):
+        encounter_id, context = self.installed_upload(REPORT_TABLE_DATE, read_date=False)
+        run = self.installed_run(encounter_id, None)  # the installed revision's request, sent without a date
+        self.installed_job(encounter_id, models.Job.ASSESS, context, run=run)
+        drain()
+        self.assert_left_for_a_member(encounter_id, 1)
+
+    def test_the_stale_sweep_of_a_predict_the_installed_worker_finished(self):
+        encounter_id, context = self.installed_upload(REPORT_TABLE_DATE, read_date=False)
+        started = timezone.now() - timedelta(hours=2)
+        self.installed_job(encounter_id, models.Job.PREDICT, context, state=models.Job.RUNNING, started=started)
+        self.installed_run(encounter_id, None, created=started + timedelta(seconds=5))
+        jobs.mark_stale()
+        drain()
+        self.assert_left_for_a_member(encounter_id, 1)
+
+    def test_a_resumed_assess_of_the_installed_revisions_answer(self):
+        encounter_id, context = self.installed_upload(REPORT_TABLE_DATE, read_date=False)
+        run = self.installed_run(encounter_id, None)
+        self.installed_job(encounter_id, models.Job.ASSESS, context, run=run, state=models.Job.CANCELLED)
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
+        drain()
+        self.assert_left_for_a_member(encounter_id, 1)
+
+    def test_controls_a_predict_queued_at_the_swap_sends_its_one_request_for_the_remade_context(self):
+        encounter_id, context = self.installed_upload(REPORT_TABLE_DATE, read_date=False)
+        self.installed_job(encounter_id, models.Job.PREDICT, context)  # the upload asked for this request
+        drain()
+        self.assertEqual(self.sent(), 1)
+        self.assertEqual(self.dates_sent(), ['Date of service: 2026-10-16'])
+        self.assertNotEqual(self.encounter(encounter_id).state, 'stopped')
+
+    def test_controls_an_assess_whose_request_is_unchanged_reassesses_and_asks_no_second_review(self):
+        encounter_id, context = self.installed_upload(REPORT)
+        run = self.installed_run(encounter_id, '2026-10-16')
+        self.installed_job(encounter_id, models.Job.ASSESS, context, run=run)
+        drain()
+        self.assertEqual(self.sent(), 1)
+        encounter = self.encounter(encounter_id)
+        self.assertEqual(encounter.current_assessment.provider_run_id, run.pk)
+        self.assertNotEqual(encounter.state, 'stopped')
+        self.assertTrue(self.unresolved(encounter_id))  # the biopsy: offered to a reviewer, never sent by itself
+        self.assertTrue(self.detail(encounter_id)['second_review']['available'])
+        self.assertFalse(models.Job.objects.filter(encounter_id=encounter_id, kind=models.Job.REVIEW2).exists())
+
+    def test_controls_the_stale_sweep_of_a_finished_predict_asks_no_second_review(self):
+        encounter_id, context = self.installed_upload(REPORT)
+        started = timezone.now() - timedelta(hours=2)
+        self.installed_job(encounter_id, models.Job.PREDICT, context, state=models.Job.RUNNING, started=started)
+        run = self.installed_run(encounter_id, '2026-10-16', created=started + timedelta(seconds=5))
+        jobs.mark_stale()
+        drain()
+        self.assertEqual(self.sent(), 1)
+        self.assertEqual(self.encounter(encounter_id).current_assessment.provider_run_id, run.pk)
+        self.assertFalse(models.Job.objects.filter(encounter_id=encounter_id, kind=models.Job.REVIEW2).exists())
+
+
 # --- the reviewer-requested second review (8985dde42): never sent twice, never sent when it should not be -------------
 
 @override_settings(**LIVE)

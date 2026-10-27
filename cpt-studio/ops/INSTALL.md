@@ -114,12 +114,18 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   `rollback-app`, then rename the parked pair back. Migrations already applied
   are not reversed.
 - **Work in flight at the swap** is not frozen: a stage the previous pair
-  queued or left running is finished by the new pair under the new rules, and a
-  re-assessment there may make the one bounded second review its revision and
-  date have not had (ARCHITECTURE 5.11): an install does not guarantee that
-  nothing is sent. Encounters with nothing in flight are neither reprocessed
-  nor sent until a member acts. To install with nothing in flight, let the
-  queue drain (or Stop the encounters) before `app`.
+  queued or left running is finished by the new pair under the new rules, and
+  nothing is sent that no member asked for. A predict the previous pair queued
+  (for an upload, a date change, a Resume or a reconciliation) sends its one
+  request, for the context remade under the new rules (a member's conflicting
+  service date is held, not sent). A re-assessment never asks for the bounded
+  second review: a reviewer does (ARCHITECTURE 5.11). When the remade context
+  needs another request than the one the previous pair sent (the new rules read
+  a date the old ones could not), a re-assessment or the stale-stage sweep
+  leaves that request stopped, with the reason, for a member's Resume.
+  Encounters with nothing in flight are neither reprocessed nor sent until a
+  member acts. To install with nothing in flight, let the queue drain (or Stop
+  the encounters) before `app`.
 - **reference** requires each zip to match its pinned size and sha256 and
   passes the pinned release, URL and window with the retrieval time you give.
 - **provision** writes both credentials files only after the accounts exist

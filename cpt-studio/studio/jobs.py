@@ -389,12 +389,37 @@ def _remade_context(job):
     audit.record(encounter.workspace, 'context.remade', encounter=encounter, context=str(fresh.pk),
                  previous=str(context.pk), previous_version=context.version)
     last_run = _run_in_use(revision)
+    remade = f'the context was recorded by {context.version}; it was remade under {CONTEXT_VERSION}'
     if _run_answers(last_run, revision, fresh):
         enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=fresh, provider_run=last_run,
                 key=f'assess:{fresh.pk}:{last_run.pk}', requested_by=job.requested_by)
-    else:
+    elif job.kind == Job.PREDICT or gi_context.is_member_conflict((fresh.facts or {}).get('service_date')):
+        # the request a member's action queued (an upload, a date change, a Resume, a reconciliation), or the hold
         _queue_predict(encounter, revision, fresh, key=f'predict:{fresh.pk}', requested_by=job.requested_by)
-    return {'skipped': f'the context was recorded by {context.version}; it was remade under {CONTEXT_VERSION}'}
+    else:
+        # Refutation r1, migrate-5 (ec5): this stage never sends - an assess the earlier revision queued or a member
+        # resumed, or the stale-stage sweep's settlement of its predict - and the remade context needs another request
+        # than the one sent (the current rules read a date the earlier ones could not). The upgrade never spends by
+        # itself: the predict is left stopped, with the reason, for a member's Resume.
+        _stopped_predict(encounter, revision, fresh, key=f'predict:{fresh.pk}', requested_by=job.requested_by)
+        return {'skipped': f'{remade}; its request changed, so nothing was sent: resume to send it'}
+    return {'skipped': remade}
+
+
+REMADE_REQUEST_MESSAGE = ('Nothing was sent: after an upgrade this document was read again under the current rules, '
+                          'and the request they make for it differs from the one sent before. Resume to send it.')
+
+
+def _stopped_predict(encounter, revision, context, *, key, requested_by):
+    """The predict for ``context`` recorded as a stage the system stopped (cancelled, with the reason), never queued:
+    the encounter offers Resume, and only a member's Resume sends it."""
+    now = timezone.now()
+    job, _ = Job.objects.get_or_create(
+        idempotency_key=key,
+        defaults={'encounter': encounter, 'revision': revision, 'kind': Job.PREDICT, 'context': context,
+                  'requested_by': requested_by, 'state': Job.CANCELLED, 'error': REMADE_REQUEST_MESSAGE,
+                  'finished_at': now, 'deadline_at': now + QUEUE_DEADLINE})
+    return job
 
 
 def stage_predict(job):
