@@ -630,3 +630,9 @@ What it changes, so a later session does not re-derive it:
     and its live verification. 06f227b1's unfinished cluster edits stay where it left them (worktrees
     `.worktrees/cpt-r1fix-*`, backups `fix/partial/*.patch` in the save directory); the commits of this session name
     what they adopt from them.
+26. **One deployment owner, again (7c8d38da).** Session ec5e7910 stopped at its account's weekly limit at 17:50Z on 27
+    October 2026 (every later message was answered with the limit notice), and its workflow wf_d9952ac0-e1f lost seven
+    agents mid-run. The owner opened session 7c8d38da and told it to continue, so from 19:20Z 7c8d38da is the single
+    owner of this branch, its install and its live verification. Edits ec5e7910's agents had proven but not committed
+    are committed by 7c8d38da, each commit naming its origin; ec5e7910's integration branch `wip/ec5-integ` carries on,
+    and the unfinished cluster work continues in worktrees `.worktrees/cpt-7c8-*` branched from its head.
