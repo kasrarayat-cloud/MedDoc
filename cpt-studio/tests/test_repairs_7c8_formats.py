@@ -508,3 +508,32 @@ class ActFrameReadsThePageJoinTests(SimpleTestCase):
                 at = text.index(quote)
                 self.assertIsNotNone(services.states_an_act_done(text, at, at + len(quote), date(2026, 10, 14),
                                                                  pages))
+
+
+class FieldAnswerCostTests(SimpleTestCase):
+    """sk:13 (outside FORMATS, COST class 2, pre-existing at 8985dde42): routing's field-answer reader
+    (sections._FIELD_ANSWER, read at every line end by _answered and _answered_line) let a run of spaces be shared every
+    way between its opening run, a label that may hold spaces and the space before the separator: a line whose last 200
+    characters hold a long run of spaces took about a second ("Withdrawal time" + 170 spaces + "9 minutes."), and 120
+    such lines took the assess stage past its limit. The runs are read once (possessive), so the cost is linear."""
+
+    def test_the_assess_stage_reads_many_spaced_rows_in_time(self):
+        from tests.test_repairs_r7_cost import assess_child
+        text = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-21\n'  # the date assess_child assesses for
+                + ''.join(f'Colonoscopy {i}: the procedure was not' + ' ' * 170 + 'discontinued; it was completed.\n'
+                          for i in range(120)))
+        at = text.index('COLONOSCOPY REPORT')
+        proposals = assess_child(text, '45378', [(at, at + len('COLONOSCOPY REPORT'))])
+        self.assertIn('45378', proposals)
+
+    def test_the_answers_read_as_before(self):  # the readings the pattern gives are unchanged
+        from studio.gi import sections
+        for tail, answered in (('Hiatal hernia: no', True), ('Hiatal hernia - no', True), ('Hiatal hernia? never', True),
+                               ('Sedation: patient declined', True), ('Hiatal hernia\tno', True),
+                               ('Hiatal hernia: no, Schatzki ring: no', True), ('Mucosa: normal,   hiatal hernia: no', True),
+                               ('Hiatal hernia: no   Schatzki ring: no', True), ('Withdrawal time' + ' ' * 170 + '9 minutes.', False),
+                               ('Colonoscopy was performed - no EGD was done', False), ('Biopsies: taken', False),
+                               ('   Hiatal hernia:   none', True), ('Ring = no', True), ('a  b: no', True),
+                               ('Biopsies taken.    - no', True), ('Biopsies taken. - no', False)):
+            with self.subTest(tail=tail):
+                self.assertEqual(sections._answered(tail), answered)

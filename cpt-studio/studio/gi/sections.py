@@ -450,9 +450,27 @@ WRAP_TAIL = 200  # only the end of a line is read for its shape (bounds the work
 # The LAST field on the line is read: its label may also start after a comma, a tab or a run of spaces, so two fields
 # on one line, or a field after a comma, end the line too ("Hiatal hernia: no, Schatzki ring: no", "Mucosa: normal,
 # hiatal hernia: no", "Hiatal hernia: no   Schatzki ring: no"; round 4 structure:1, restoring 57b4b3747).
-_FIELD_ANSWER = re.compile(r'(?:^|[.;,][ \t]+|\t[ \t]*|[ ]{2,})(?P<label>[^:.;?=|\n]{1,60}?)[ \t]*'
+# Its opening run of blank space is read once (possessive), so a label starts where the run ends: tried in every way of
+# sharing it between the opening run, a label that may hold spaces and the space before the separator, a line whose
+# last 200 characters held a long run took about a second ("Withdrawal time" + 170 spaces + "9 minutes.") and 120
+# such lines took the assess stage past its limit (refutation 7c8, sk:13). What that sharing could also read - a
+# separator after a run of blank space with no label of its own ("Biopsies taken.    - no") - is _FIELD_BARE_ANSWER,
+# whose runs are read once too; _field_parts takes the leftmost of the two, as the one pattern did.
+_FIELD_ANSWER = re.compile(r'(?:^|[.;,][ \t]++|\t[ \t]*+|[ ]{2,}+)(?P<label>[^:.;?=|\n]{1,60}?)[ \t]*'
                            r'(?P<sep>:|\?|=|[ \t][-\u2013\u2014][ \t])[ \t]*'
                            r'(?P<value>[^\s:?=|]+(?:[ \t]+[^\s:?=|]+){0,2})[ \t]*$', re.A)
+_FIELD_BARE_ANSWER = re.compile(r'(?:(?:[.;,][ \t]{2,}+|\t[ \t]++|[ ]{2}[ \t]++)(?P<sep>[:?=])'
+                                r'|(?:[.;,][ \t]{3,}+|\t[ \t]{2,}+|[ ]{2}[ \t]{2,}+)[-\u2013\u2014][ \t])[ \t]*'
+                                r'(?P<value>[^\s:?=|]+(?:[ \t]+[^\s:?=|]+){0,2})[ \t]*$', re.A)
+
+
+def _field_parts(tail: str):
+    """(label, separator, value) of the last field ``tail`` ends with, or None: _FIELD_ANSWER's reading, or - where it
+    starts further left - a separator after blank space with no label (label '', separator ':', '?', '=' or ' - ')."""
+    field, bare = _FIELD_ANSWER.search(tail), _FIELD_BARE_ANSWER.search(tail)
+    if bare is not None and (field is None or bare.start() < field.start()):
+        return '', bare.group('sep') or ' - ', bare.group('value')
+    return None if field is None else (field.group('label'), field.group('sep'), field.group('value'))
 # Before a dash a field's label names a thing; a clause ("Colonoscopy was performed - no EGD was done") is prose.
 _LABEL_CLAUSE = re.compile(r'\b(?:was|were|is|are|has|have|had|did|does|do|will|would|shall|should|can|could|may|'
                            r'might|must)\b', re.A | re.I)
@@ -517,10 +535,10 @@ def _answered(tail: str) -> bool:
     column = _SEC_COLUMN_ANSWER.fullmatch(tail)
     if column and not _LABEL_CLAUSE.search(column.group('label')):
         return True
-    field = _FIELD_ANSWER.search(tail)
-    if not field or (field.group('sep') not in ':?=' and _LABEL_CLAUSE.search(field.group('label'))):
+    field = _field_parts(tail)
+    if not field or (field[1] not in ':?=' and _LABEL_CLAUSE.search(field[0])):
         return False
-    words = field.group('value').lower().split()
+    words = field[2].lower().split()
     return (len(words) == 1 and words[0] in _ALONE_ANSWERS) or words[-1] in _DENIALS
 
 
