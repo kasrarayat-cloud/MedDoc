@@ -46,16 +46,12 @@ SNARE = ('45385', 'was removed with a cold snare')
 BIOPSY = ('45380', 'was sampled with cold biopsy forceps')
 UNDATED_NOTE = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
 MEMBER_CONFLICT = '2026-09-01'  # differs from OFFICE_NOTE's documented 2026-10-20
-# sk:0's document: this revision reads its service date from the title (2026-10-14); the installed revision 057a7d39
-# read the labelled outside procedure's date (2026-09-03) - proven with its real code by the skeptic's probe.
-OUTSIDE = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
-Colonoscopy report - 10/14/2026
-Outside procedure date: 09/03/2026
-Place of service: Hospital outpatient department
-The colonoscope was advanced to the cecum and the examination was completed.
-A 6 mm polyp in the rectum was removed with a cold snare.
-"""
-OUTSIDE_THIS, OUTSIDE_INSTALLED = '2026-10-14', '2026-09-03'
+# sk:0: the installed revision 057a7d39 can read a document's service date otherwise than this revision (the skeptic's
+# probe a_dates proved it with its real code: a report's title gave this revision 2026-10-14, a labelled outside
+# procedure date gave 057a7d39 2026-09-03). The tests below build 057a7d39's rows with such a reading of OFFICE_NOTE
+# (whose documented 2026-10-20 this revision reads), so they do not depend on this revision's reading of a contested
+# document - which the CONTEXT cluster changes.
+INSTALLED_READING = '2026-09-03'
 NOTE = 'Closed by the installer: undone (revision aaaaaaaaaaaa), so this stage will not run.'
 OLD_IMAGE, NEW_IMAGE = 'sha256:' + 'b' * 64, 'sha256:' + 'a' * 64
 
@@ -364,12 +360,12 @@ class OutcomeIsARequestTheOlderRevisionWouldMakeAgainTests(Base):
     Resume of a stopped predict makes for the current context's stored date, which it does not compare."""
 
     def test_sk0_the_installed_revisions_reading_failed_and_this_revisions_request_stands_newest(self):
-        # 057a7d39 read OUTSIDE's labelled outside procedure date and its request FAILED (probe a_dates); this revision
-        # reads the title's date, and a member's setting save here sends that request, which succeeds and is newest
-        encounter_id, failed = self.installed_request(OUTSIDE_INSTALLED, member=False, text=OUTSIDE)
+        # 057a7d39's request for its own reading of the document's date FAILED (probe a_dates); this revision reads the
+        # documented date, and a member's setting save here sends that request, which succeeds and is newest
+        encounter_id, failed = self.installed_request(INSTALLED_READING, member=False)
         self.set_context(encounter_id, setting='asc')
         self.assertEqual(self.sent(), 2)
-        self.assertEqual(self.provider.requests[-1].contexts[1:], (f'Date of service: {OUTSIDE_THIS}',))
+        self.assertEqual(self.provider.requests[-1].contexts[1:], ('Date of service: 2026-10-20',))
         newest = self.runs(encounter_id)[-1]
         self.assertEqual((newest.state, newest.purpose), (models.ProviderRun.SUCCEEDED, models.ProviderRun.PRIMARY))
         self.assertEqual(self.hazards(), {encounter_id: ['outcome']})
@@ -381,7 +377,7 @@ class OutcomeIsARequestTheOlderRevisionWouldMakeAgainTests(Base):
     def test_sk0_control_the_installed_revisions_failed_request_standing_alone_is_not_named(self):
         # the skeptic's control A1c: the same rows, untouched here - the failed request is its run in use, which its
         # save compares with the request it makes (nothing sent)
-        self.installed_request(OUTSIDE_INSTALLED, member=False, text=OUTSIDE)
+        self.installed_request(INSTALLED_READING, member=False)
         self.assertEqual(self.hazards(), {})
 
     def test_sk1_a_hold_over_a_succeeded_request_while_the_members_date_is_a_request_that_failed(self):
@@ -408,10 +404,10 @@ class OutcomeIsARequestTheOlderRevisionWouldMakeAgainTests(Base):
         changed, _ = self.installed_request(MEMBER_CONFLICT, member=True)
         self.installed_request('2026-09-02', member=True, state=models.ProviderRun.SUCCEEDED, encounter=changed)
         # a failed request whose identical request another encounter has since had answered: it reuses that answer
-        retained, _ = self.installed_request(OUTSIDE_INSTALLED, member=False, text=OUTSIDE)
+        retained, _ = self.installed_request(INSTALLED_READING, member=False)
         self.set_context(retained, setting='asc')  # this revision's request stands newer than the failed one
         self.assertEqual(self.hazards(), {retained: ['outcome']})
-        self.installed_request(OUTSIDE_INSTALLED, member=False, text=OUTSIDE, state=models.ProviderRun.SUCCEEDED)
+        self.installed_request(INSTALLED_READING, member=False, state=models.ProviderRun.SUCCEEDED)
         self.assertEqual(self.hazards(), {})
 
     def test_a_stopped_predict_whose_resume_makes_a_request_that_failed_is_named(self):
