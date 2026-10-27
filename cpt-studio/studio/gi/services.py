@@ -244,10 +244,14 @@ NEG_OTHER = _rx(r'^(?:[\s\-*•(]*(?:[A-Z]{1,3}\d{1,2}|\d{1,2}[.)])?\s*)*(?:no|n
                 # a limit on acts beyond the documented ones: "No tissue was sampled beyond the three containers"
                 r'|\b[^.;\n]{0,80}?\b(?:beyond|other\s+than|except(?:\s+for)?|apart\s+from|besides|in\s+addition\s+to)\s+'
                 r'(?:the|those|these|what|that|this|its|their|\w+\s+(?:listed|described|documented|noted))\b)')
-NOT_VERB = _rx(r"\b(?:was|were|is|are|been|has|have|had|did|does|could|would|can)\s+(?:not|never|n't)\b(?:\s+be)?"
+# Each auxiliary's contraction is the same negation, in either apostrophe (refutation r1: "Biopsies weren’t taken"
+# from Word or PDF text, "Biopsies haven't been obtained" and "A biopsy hasn't been taken" had read as done acts).
+NEG_CONTRACTION = r"n['’]t"
+NOT_VERB = _rx(r"\b(?:was|were|is|are|been|has|have|had|did|does|could|would|can)\s+(?:not|never|" + NEG_CONTRACTION
+               + r")\b(?:\s+be)?"
                r"|\bnot\s+(?:performed|done|obtained|taken|removed|resected|treated|sampled|biopsied|placed|injected|"
                r"attempted|repeated|undertaken|carried\s+out|reached|completed|required|needed|indicated)\b"
-               r"|\b(?:wasn't|weren't|didn't)\b")
+               r"|\b(?:was|were|is|are|has|have|had|did|does|could|would|ca)" + NEG_CONTRACTION + r"\b(?:\s+be)?")
 WITHOUT = _rx(r'\b(?:without|w/o)\b')
 # A "not" after the act that belongs to another predicate: one inside a subordinate clause ("Possible EGD with PEG
 # placement if intake does not improve"), or a second predicate coordinated with the act's own participle ("was
@@ -1104,13 +1108,15 @@ def _span(text: str, start: int, end: int) -> Span:
 
 # --- clause reading -------------------------------------------------------------------------------------------------
 
-_CLAUSE_CUT = _rx(r';|\s+but\s+|\s+whereas\s+|\s+although\s+|,\s+while\s+|\s+and\s+(?=(?:was|were|is|are)\s+(?:not|never)\b)'
+_CLAUSE_CUT = _rx(r';|\s+but\s+|\s+whereas\s+|\s+although\s+|,\s+while\s+'
+                  r'|\s+and\s+(?=(?:was|were|is|are)(?:\s+(?:not|never)|' + NEG_CONTRACTION + r')\b)'
                   # "Biopsies were obtained and dilation was not performed": a coordinated subject with its own negated
                   # predicate opens a clause of its own, so its "not" never reaches the first act
-                  r'|\s+and\s+(?=(?:[\w-]+\s+){1,3}(?:was|were|is|are|could|did|had)\s+(?:not|never)\b)'
+                  r'|\s+and\s+(?=(?:[\w-]+\s+){1,3}(?:was|were|is|are|could|did|had)(?:\s+(?:not|never)|'
+                  + NEG_CONTRACTION + r')\b)'
                   r'|(?<![\d.])\s+and\s+(?=(?:the|a|an|this|that|it|she|he|they|we|I|one|two|three|\d+)\b[^.;]{0,60}\b(?:was|were|'
-                  r'is|are|has|have|had|did)\b)|,\s+(?=(?:and\s+)?(?:the|this|that|it|she|he|they|we|I)\s+[^.;,]{0,40}'
-                  r'\b(?:was|were|is|are)\b)')
+                  r'is|are|has|have|had|did)(?:' + NEG_CONTRACTION + r')?\b)|,\s+(?=(?:and\s+)?(?:the|this|that|it|she|he|they|'
+                  r'we|I)\s+[^.;,]{0,40}\b(?:was|were|is|are)(?:' + NEG_CONTRACTION + r')?\b)')
 
 
 def _bounded_clause(text: str, clause: tuple[int, int], pos: int, end: int) -> tuple[int, int]:
@@ -2235,10 +2241,10 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                         d.completion_pos.append(reached)
                 for m in INCOMPLETE_WORDS.finditer(text, cs, ce):
                     lead = text[max(cs, m.start() - 60):m.start()].lower()
-                    if re.search(r'\b(?:not|never|no|without)\s+(?:\w+\s+)?$', lead) or re.search(
-                            r'\b(?:not|never|without)\s+(?:(?!was\b|were\b|is\b|are\b|but\b|however\b)[\w-]+,?\s+){0,5}$',
-                            lead):
-                        continue  # "was not discontinued", "not terminated early or interrupted"
+                    if re.search(r'(?:\b(?:not|never|no|without)|' + NEG_CONTRACTION + r')\s+(?:\w+\s+)?$', lead) \
+                            or re.search(r'(?:\b(?:not|never|without)|' + NEG_CONTRACTION + r')\s+(?:(?!was\b|were\b|is\b|'
+                                         r'are\b|but\b|however\b)[\w-]+,?\s+){0,5}$', lead):
+                        continue  # "was not discontinued", "wasn't discontinued", "not terminated early or interrupted"
                     if PLAN_WORDS.search(clause_text):
                         continue
                     if re.search(r'\b(?:lesion|polyp|mass|it)\b[^.;]{0,40}\bnot\s+removed\b', clause_text, FLAGS):
