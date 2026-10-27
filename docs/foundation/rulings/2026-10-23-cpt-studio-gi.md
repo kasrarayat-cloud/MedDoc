@@ -599,3 +599,34 @@ the work that depends on it is committed for review. Verbatim:
     fail-closed form sends no second review for any of the fourteen consent, equipment, education, office and form-field
     documents in test_services_second_review (the skeptics' and this session's), and still sends one for a checked box
     under "Interventions:" (its positive control).
+
+## Owner decision, 2026-10-27 (session ec5e7910) — narrow, install-first
+
+Asked in session ec5e7910 at about 16:00Z on 27 October 2026, after the session found that refutation round r1 had left
+63 blocking findings on this branch (seven repaired, integrated as `wip/r1-integ` b7715733) and that the account's
+weekly usage stood at 92% with no extra usage enabled. Verbatim:
+
+> With ~8% weekly usage left, how should I get the GI-core repair to installation?
+> — Narrow, install-first (Recommended): Make the second Corti review reviewer-requested, never automatic. That removes most wrongful paid sends. Fix only the must-fix classes: wrong date sent to Corti, re-sending an identical request, reports or the UI misstating saved state, rollback safety, time/memory. Record the remaining misreadings as known limits; the reviewer still decides every code. Then tests, PR, CI, merge, install, and a fresh HTTPS Word/PDF walk with real downloads. This overrules interpretation 21 for this change. It may still run out before the install; if so I stop at a pushed checkpoint.
+
+The owner's answer: **"Narrow, install-first (Recommended)"**.
+
+What it changes, so a later session does not re-derive it:
+- The bounded second review (interpretation 10) is made only when a workspace owner or reviewer asks for it, for the
+  current assessment, under every bound 10, 19 and 22 set (once per revision and service date, a usable primary
+  response, a known and unconflicted date, the identical-request rule). An assessment never queues one.
+- Interpretation 21's grading is overruled for this change only. The merge is blocked by the must-fix classes of the
+  owner's 2026-10-25 decision (read in full: a request sent to Corti that should not be sent, including a wrong or
+  conflicting date and an identical re-send; stage time or memory limits; a report, export or screen that misstates
+  persisted state; a code approved or removed from the decision set without a reviewer's decision; data loss; rollback
+  safety; security). Every other confirmed r1 misreading is a known limit in `cpt-studio/ACCURACY-RESIDUALS.md` and the
+  PR body; the reviewer decides every code.
+
+### Session interpretation, 2026-10-27 (ec5e7910) — recorded, not owner-ruled
+
+25. **One deployment owner, again.** Session 06f227b1 (which took this branch over from bc7df129 at 13:01Z) stopped at
+    its account's usage limit at 15:03Z, and its repair workflows ended with it; no session was running at 15:50Z. The
+    owner started session ec5e7910 to continue, so from 15:50Z ec5e7910 is the single owner of this branch, its install
+    and its live verification. 06f227b1's unfinished cluster edits stay where it left them (worktrees
+    `.worktrees/cpt-r1fix-*`, backups `fix/partial/*.patch` in the save directory); the commits of this session name
+    what they adopt from them.
