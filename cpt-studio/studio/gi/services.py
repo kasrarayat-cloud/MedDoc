@@ -1142,6 +1142,14 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         if status == 'negated' and not checked and any('unchecked' in cue for cue in box_cues):
             # no option on the row is marked: an unselected option alone says nothing (the box contract)
             return Reading('uncertain', ('box: an unselected option alone says nothing',))
+        label = _row_label(text, line_start, pos) if status == 'performed' and box_cues \
+            and all(cue.startswith('section:') for cue in box_cues) and (_acts_in(text, pos, end) or any(
+                pattern.search(text, pos, end) for _, _, pattern in SERVICES)) else None  # an act or a service, never
+        # a landmark ("Furthest point reached: [X] Cecum" still completes the examination)
+        if label is not None:
+            # done only by its section's default, on a row whose own label lists something else ("Risks discussed -
+            # \u2612 Biopsy"): strict boxes (2026-10-25) hold it, never read it as done
+            return Reading('uncertain', (f'box: the row\u2019s label \u201c{label}\u201d does not list what was done',))
         return Reading(BOX_STATUS.get(status, 'uncertain'), ('box: ' + (box_cues[0] if box_cues else status),)
                        + tuple(box_cues[1:3]))
     # Check boxes on the row, never another line's: "[X] Performed [ ] Not performed".
@@ -1309,6 +1317,22 @@ def _checked_field_in_a_procedure_list(text: str, pos: int, end: int, service_da
     return any(_in_a_procedure_list(text, start, stop) for start, stop in ties)
 
 
+def _row_label(text: str, line_start: int, pos: int) -> Optional[str]:
+    """The label a check-box row gives itself before its first box ("Risks discussed -", "Equipment:"), when that label
+    names no item and is no procedure list's ("Interventions:"); else None. Bounded: one line."""
+    first = BOX_MARK.search(text, line_start, pos)
+    if first is None:
+        return None
+    head = text[line_start:first.start()].strip()
+    if not head or head[-1] not in ':-\u2013\u2014':
+        return None
+    words = head.rstrip(':-\u2013\u2014 \t')
+    if not words or PROCEDURE_LIST_LABEL.fullmatch(words) or _acts_in(text, line_start, first.start()) \
+            or any(pattern.search(words) for _, _, pattern in SERVICES):
+        return None
+    return words
+
+
 def _row_hold(reading: Reading) -> bool:
     """Whether ``reading`` is a hold its check-box row or its form field's answer makes (see BOX_SILENT)."""
     if reading.status != 'uncertain' or not reading.cues:
@@ -1376,10 +1400,29 @@ def _own_question(text: str, start: int, end: int) -> bool:
                if not any(a <= w.start() < b for a, b in names))
 
 
+# A typed field whose label and answer a spaced dash separates ("Biopsy taken - No", "Tattoo placed \u2013 none"): read as a
+# field, but a denial it gives only holds (a dash also joins prose), never excludes.
+FIELD_DASH = re.compile(r'[ \t]+[-\u2013\u2014][ \t]+')
+DASH_FIELD_CUE = 'field: its label and answer are separated by a dash, so its denial holds, never excludes'
+
+
 def _field_answer(text: str, pos: int, end: int, service_date: Optional[date]) -> Optional[Reading]:
+    """_field_answer_read, with a dash-separated field's denial held (FIELD_DASH)."""
+    reading = _field_answer_read(text, pos, end, service_date)
+    if reading is not None and reading.status == 'negated':
+        ls = text.rfind('\n', 0, pos) + 1
+        le = text.find('\n', end)
+        le = len(text) if le < 0 else le
+        if text.find(':', ls, le) < 0:
+            return Reading('uncertain', reading.cues + (DASH_FIELD_CUE,))
+    return reading
+
+
+def _field_answer_read(text: str, pos: int, end: int, service_date: Optional[date]) -> Optional[Reading]:
     """The reading a form field's answer gives the item named at [pos, end) in its label, or None when the mention is
     not in the label of a field line, or the answer says nothing this rule reads (it is then read by its clause's words,
-    as before). Bounded by FIELD_REACH; one routing reading (status_for_span) for an unanswered label."""
+    as before). Its label ends at a colon, or - with no colon on the line - at a spaced dash after the item (FIELD_DASH).
+    Bounded by FIELD_REACH; one routing reading (status_for_span) for an unanswered label."""
     ls = text.rfind('\n', max(0, pos - FIELD_REACH), pos) + 1
     if ls == 0 and pos > FIELD_REACH:
         return None
@@ -1389,12 +1432,15 @@ def _field_answer(text: str, pos: int, end: int, service_date: Optional[date]) -
             return None
         le = len(text)
     colon = text.find(':', ls, le)
+    dash = FIELD_DASH.search(text, end, le) if colon < 0 else None
+    if dash is not None:
+        colon = dash.start()
     if colon < end or ls > pos:
         return None  # no label, or the mention is in the answer ("Findings: biopsies were taken")
     from studio.gi import detect  # local: detect imports context, which this module also imports
-    line = text[ls:le]
+    line = text[ls:le] if dash is None else text[ls:colon] + ':' + text[dash.end():le]
     label_end = colon - ls
-    value = text[colon + 1:le].strip()
+    value = (text[colon + 1:le] if dash is None else text[dash.end():le]).strip()
     option = FORM_OPTION_STATE.fullmatch(value)
     if option is not None and _in_form_block(text, ls):
         # An extraction block writes each option of a printed question as its own field line ("Biopsy taken: no:

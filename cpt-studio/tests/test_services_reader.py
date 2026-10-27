@@ -875,6 +875,25 @@ class UnreadableFieldAnswerTests(SimpleTestCase):
                 colon = one(read(self.REPORT.format(line=line))[1], 'gi.colonoscopy')
                 self.assertNotIn(kind, kinds(colon))
 
+    def test_a_dash_separated_field_is_a_field_whose_denial_holds(self):
+        for line, kind in (('Biopsy taken - No', 'biopsy'), ('Biopsy taken - None', 'biopsy'),
+                           ('Biopsy taken \u2013 no', 'biopsy'), ('Tattoo placed - none', 'tattoo')):
+            with self.subTest(line=line):
+                colon = one(read(self.REPORT.format(line=line))[1], 'gi.colonoscopy')
+                self.assertNotIn(kind, kinds(colon))
+                self.assertNotIn(kind, kinds(colon, 'negated'))  # held, never newly excluded
+        for line in ('Biopsy taken - yes', 'Biopsy taken - 2 from the sigmoid colon'):
+            with self.subTest(line=line):
+                self.assertIn('biopsy', kinds(one(read(self.REPORT.format(line=line))[1], 'gi.colonoscopy')))
+
+    def test_a_checked_row_labelled_for_something_else_holds(self):
+        """Strict boxes (2026-10-25): a row done only by its section's default must be listed by its own label."""
+        colon = one(read(self.REPORT.format(line='Risks discussed - \u2612 Biopsy \u2612 Cold snare polypectomy'))[1],
+                    'gi.colonoscopy')
+        self.assertEqual([k for k in kinds(colon) if k in ('biopsy', 'snare')], [])
+        colon = one(read(self.REPORT.format(line='Interventions: \u2612 Biopsy'))[1], 'gi.colonoscopy')
+        self.assertIn('biopsy', kinds(colon))
+
     def test_details_state_the_act_and_a_negated_predicate_denies_it(self):
         colon = one(read(self.REPORT.format(line='Biopsies taken: 3 from the sigmoid colon'))[1], 'gi.colonoscopy')
         self.assertIn('biopsy', kinds(colon))

@@ -1632,8 +1632,12 @@ rule, never a sentence patch). The rules this added, by module:
     "Biopsy recommended at follow-up?") is a doubt for the reviewer. A field's answer - never a participle in its
     label - states its item: an answer with a denial or a doubt among other words, or with several printed options
     ("None obtained", "zero", "Yes ___ No ___", "Yes / No (circle one)"), holds it (`ANSWER_DOUBT`); details ("3 from
-    the sigmoid colon") still state the act and a negated predicate ("not placed") still denies it. A bare object noun
-    answered with nothing ("Stones: None", "Stent: None") reports a finding, not a denied act. An extraction block's option line ("Biopsy taken: no: checked") is decided by its
+    the sigmoid colon") still state the act and a negated predicate ("not placed") still denies it. With no colon on
+    its line, a spaced dash after the item separates a typed field's label from its answer ("Biopsy taken - No"), and
+    the denial such a field gives only holds (`FIELD_DASH`). A bare object noun answered with nothing ("Stones: None",
+    "Stent: None") reports a finding, not a denied act. A checked row that routing reads as done only by its section's
+    default is held when its own label lists something else ("Risks discussed - \u2612 Biopsy", `_row_label`); a
+    landmark row ("Furthest point reached: [X] Cecum") is unaffected. An extraction block's option line ("Biopsy taken: no: checked") is decided by its
     checked option.
   - **Consent** (`_consent_object`): what a consent, an authorization or an approval is for is named, never stated done
     ("Consent was obtained for biopsy and cold snare polypectomy", "Written consent for EGD with dilation was
