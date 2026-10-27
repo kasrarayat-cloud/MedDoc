@@ -630,3 +630,13 @@ test('the provider-not-run card gives the reason of the latest predict, not of o
   assert.ok(html.includes('<p>Live provider calls are not authorized on this installation.</p>'));
   assert.ok(!html.includes('did not run for this revision'));
 });
+
+test('the provider-failed card gives the reason of the latest primary request, the run in use', () => {
+  const ready = fixture('encounter-ready.json');
+  const old = { ...ready.provider_runs[0], state: 'failed', http_status: 500, error: 'HTTP 500 from the provider.', purpose: 'primary' };
+  const refused = { ...old, id: UUID, state: 'not_sent', http_status: null, error: 'The credentials could not be read; nothing was sent.' };
+  const html = render({ ...ready, state: 'provider_failed', provider_runs: [old, refused] });
+  assert.ok(html.includes('<p>Error: The credentials could not be read; nothing was sent.</p>'));
+  assert.ok(!html.includes('<p>Error: HTTP 500 from the provider.</p>'));
+  assert.ok(render({ ...ready, state: 'provider_failed', provider_runs: [old] }).includes('<p>Error: HTTP 500 from the provider.</p>'));
+});

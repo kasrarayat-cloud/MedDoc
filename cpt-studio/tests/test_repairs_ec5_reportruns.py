@@ -98,6 +98,18 @@ class FailingProvider(FakeProvider):
                            error='HTTP 500 from the provider (synthetic).')
 
 
+class FailsThenRefusesToSend(FakeProvider):
+    """The first request is sent and fails; the next is refused before sending (the adapter's not-sent exchange, as
+    when its credentials cannot be read at send time)."""
+
+    def send(self, request, *, deadline_s):
+        self.sent.append(request.canonical_sha256)
+        if len(self.sent) == 1:
+            return RawExchange(outcome='failed', sent=True, http_status=500,
+                               error='HTTP 500 from the provider (synthetic).')
+        return RawExchange(outcome='not_sent', sent=False, error='The credentials could not be read; nothing was sent.')
+
+
 class UnbuildableProvider(FakeProvider):
     """The adapter cannot build any request: a run recorded as not sent, without a held reason."""
 
@@ -529,3 +541,25 @@ class LatestStageExplainsTests(Pipeline):
         self.assertIn('No proposals were | requested. | Only an owner or reviewer of this workspace can start a live '
                       'provider request.', shown)
         self.assertNotIn('did not run for this revision', shown)
+
+
+class FailedCardNamesTheRunInUseTests(Pipeline):
+    """The "provider request failed" card explains itself with the run the current assessment read. It took the
+    encounter's last FAILED run instead, so after a date change whose request was refused before sending it showed the
+    earlier request's error for another date."""
+
+    def test_the_card_gives_the_reason_of_the_run_in_use(self):
+        self.use(FailsThenRefusesToSend(selections=[VISIT]))
+        undated = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
+        encounter_id = self.create(undated, service_date='2026-10-20')
+        drain()
+        reply = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': '2026-10-22'})
+        self.assertEqual(reply.status_code, 201, reply.content)
+        drain()
+        self.assertEqual([r.state for r in self.runs(encounter_id)], ['failed', 'not_sent'])
+        detail = self.detail(encounter_id)
+        self.assertEqual(detail['state'], 'provider_failed')
+        shown = page(detail)['codes']
+        self.assertIn('The provider request | failed. | Error: The credentials could not be read; nothing was sent.',
+                      shown)
+        self.assertNotIn('HTTP 500 from the provider', shown)

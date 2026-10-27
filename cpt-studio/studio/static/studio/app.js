@@ -803,7 +803,9 @@ function stateCards(doc) {
     cards.push(infoCard('The text could not<br>be read.', ['No CPT proposals were requested because no text could be extracted; the reasons are listed above the document. Upload another copy, or paste the text instead.'], `<button type="button" class="button primary" data-action="upload">${icon('plus')}New document</button>`));
   }
   if (doc.state === 'provider_failed') {
-    const failed = runs.filter(run => run.state === 'failed').pop();
+    // The latest primary request is the run in use, the one this state reads; an earlier failed request (for another
+    // date) says nothing about it (ec5 re-check: the last FAILED run's error was shown beside a request never sent).
+    const failed = runs.filter(run => run?.purpose !== 'second_review').pop();
     cards.push(infoCard('The provider request<br>failed.', [failed?.error ? `Error: ${failed.error}` : 'The provider did not return proposals.', 'Nothing was resent automatically, and any recorded usage is kept.']));
   }
   if (doc.state === 'provider_not_run') {
