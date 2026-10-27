@@ -159,7 +159,7 @@ The code lists are internal reconciliation profiles (which documented act a code
 **Verification evidence:**
 - the endosonographic examination on the date of service
 - the needle sampling and its target
-- the stations examined, which separate limited from full examinations
+- the stations examined (whether the examination was limited or full is the reviewer's to judge; this catalogue does not check it)
 **Rule checks:**
 - CMS PFS (RVU file): presence and status for the date, global period, endoscopic base family (multiple-endoscopy payment rule), PC/TC indicator
 - CMS practitioner MUE: units per day

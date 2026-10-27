@@ -599,6 +599,9 @@ def _assessment_blockers(encounter, assessment):
         blockers.append('The provider was not run')
     elif run.state in UNSETTLED_RUN_STATES:
         blockers.append('The provider outcome is unknown')
+    elif run.state == ProviderRun.NOT_SENT and (run.scope or {}).get('held') == ProviderRun.HELD_MEMBER_DATE_CONFLICT:
+        # interpretation 19: held on purpose, never a failure (refutation r1, context lens)
+        blockers.append('Nothing was sent: the service date entered as encounter metadata conflicts with the document')
     elif run.state != ProviderRun.SUCCEEDED:
         blockers.append('The provider request failed')
     open_clarifications = list(assessment.clarifications.filter(state=Clarification.OPEN))

@@ -317,6 +317,7 @@ def _provider_runs(encounter, assessment):
         'reconciled': run.reconciled_at is not None, 'created_at': _ts(run.created_at),
         'used_by_assessment': run.pk in (assessment.provider_run_id, assessment.second_run_id),
         'purpose': run.purpose,
+        'held': (run.scope or {}).get('held', ''),
     } for run in encounter.provider_runs.select_related('revision').order_by('created_at', 'pk')]
 
 
@@ -618,8 +619,15 @@ def _provider_section(snap):
             refused = ('provider.second_review' if second else 'provider.status') in failed
             used = (' · read by this assessment; its response was not used'
                     if refused and run['state'] == 'succeeded' else ' · used by this assessment')
-        lines.append(f'  - {run["provider"]} · {mode} · {run["state"]}{status} · revision {run["revision_number"]}'
-                     + (' · bounded second review' if second else '') + f' · requested {run["created_at"]}{used}')
+        if run['state'] == 'not_sent':
+            # nothing was requested, so nothing was used (refutation r1: a held run read "requested ... used")
+            used = (' · nothing was sent: the service date entered as encounter metadata conflicts with the document'
+                    if run.get('held') == 'member_date_conflict' else ' · nothing was sent')
+            lines.append(f'  - {run["provider"]} · {mode} · not_sent · revision {run["revision_number"]}'
+                         + (' · bounded second review' if second else '') + f' · recorded {run["created_at"]}{used}')
+        else:
+            lines.append(f'  - {run["provider"]} · {mode} · {run["state"]}{status} · revision {run["revision_number"]}'
+                         + (' · bounded second review' if second else '') + f' · requested {run["created_at"]}{used}')
         usage = json.dumps(run['usage'], sort_keys=True, ensure_ascii=False) if run['usage'] else 'none reported'
         lines.append(f'    Usage: {usage}' + (f' ({run["usage_basis"]})' if run['usage_basis'] else ''))
         lines.append(f'    Request sha256: {run["request_sha256"] or "none"} · '

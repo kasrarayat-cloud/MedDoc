@@ -253,6 +253,17 @@ class DateChangeRoutesBeforeSendingTests(LiveEncounter, TestCase):
                          (models.ProviderRun.NOT_SENT, False, None, ''))
         self.assertEqual(run.error, jobs.MEMBER_DATE_CONFLICT_MESSAGE)
         self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'needs_clarification')
+        # held on purpose, never reported as a failed or a used request (refutation r1, context and report lenses)
+        from studio import reports, review
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        blockers = review.readiness(encounter)['blockers']
+        self.assertIn('Nothing was sent: the service date entered as encounter metadata conflicts with the document',
+                      blockers)
+        self.assertNotIn('The provider request failed', blockers)
+        draft = reports.render_txt(reports.snapshot(encounter, 'draft')).decode('utf-8')
+        held_line = next(line for line in draft.splitlines() if ' · not_sent · ' in line)
+        self.assertIn('nothing was sent: the service date entered as encounter metadata conflicts', held_line)
+        self.assertNotIn('used by this assessment', held_line)
         response = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': ''})
         self.assertEqual(response.status_code, 201, response.content)
         drain()

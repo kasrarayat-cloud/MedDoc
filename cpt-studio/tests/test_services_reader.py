@@ -899,3 +899,15 @@ class UnreadableFieldAnswerTests(SimpleTestCase):
         self.assertIn('biopsy', kinds(colon))
         colon = one(read(self.REPORT.format(line='Tattoo placed: not placed'))[1], 'gi.colonoscopy')
         self.assertNotIn('tattoo', kinds(colon))
+
+
+class ReferralTests(SimpleTestCase):
+    """Refutation r1 (report lens): "for EMR referral" names what the patient is referred for, never an EMR done today."""
+
+    def test_an_act_named_for_a_referral_is_planned(self):
+        text = HEAD + ('Date of service: 2026-10-14\nProcedure: Colonoscopy\nFindings: The colonoscope was advanced to the '
+                       'cecum. A 25 mm laterally spreading lesion in the ascending colon was biopsied with cold forceps '
+                       'and tattooed for EMR referral.\n')
+        colon = one(read(text)[1], 'gi.colonoscopy')
+        self.assertNotIn('emr', kinds(colon))
+        self.assertIn('biopsy', kinds(colon))

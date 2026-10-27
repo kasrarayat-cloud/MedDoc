@@ -11,7 +11,7 @@ licensed CPT edition is connected; a code missing from this table is "coverage n
 
 Support levels:
 - ``supported``: the inventory reads the family's services and acts, the catalogue reconciles them with proposals, and
-  the family has regression documents (tests/fixtures/services).
+  the family has regression documents (tests/corpus/services).
 - ``recognised``: services are recognised and listed for review, but acts are not reconciled with codes.
 - ``unsupported``: named so that the result can say so; nothing is reconciled.
 """
@@ -222,7 +222,8 @@ CATALOGUE: dict[str, FamilyEntry] = {e.family: e for e in (
                                        'gastroenterostomy) has no profiled code.'),),
         questions=(('target', 'What was examined, and what (if anything) was sampled with the needle?'),),
         evidence=('the endosonographic examination on the date of service', 'the needle sampling and its target',
-                  'the stations examined, which separate limited from full examinations'),
+                  'the stations examined (whether the examination was limited or full is the reviewer\'s to judge; '
+                  'this catalogue does not check it)'),
         rules=PROCEDURE_RULES),
     FamilyEntry(
         'gi.ercp', 'ERCP', SUPPORTED, ('ercp',),
@@ -343,7 +344,7 @@ def coverage_matrix() -> list[dict]:
 
 
 def render_markdown() -> str:
-    """COVERAGE.md, generated from this catalogue (tests/test_services_catalogue.py keeps the file in step)."""
+    """COVERAGE.md, generated from this catalogue (tests/test_services_reconcile.py keeps the file in step)."""
     lines = ['# CPT Studio — GI coverage catalogue', '',
              f'Generated from `studio/gi/catalogue.py` ({CATALOGUE_VERSION}); do not edit by hand. One GI workspace, '
              'one upload flow and one combined results screen: these families are internal profiles, never '

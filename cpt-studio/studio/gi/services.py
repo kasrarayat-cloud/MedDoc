@@ -352,6 +352,9 @@ CONSENT_SUBJECT = _rx(r'\b(?:informed\s+|written\s+|verbal\s+|procedural\s+)?(?:
                       r'approval)\b')
 CONSENT_PREDICATE = _rx(r'\b(?:signed|given|documented|reviewed|confirmed|verified|received|discussed)\b')
 CONSENT_CUE = 'uncertain: named as what a consent or an authorization is for'
+# What a referral is for ("tattooed for EMR referral", "for an advanced endoscopy referral"): the item inside the phrase
+# is planned, never done today; the rest of the clause keeps its own reading (refutation r1: read as an EMR done).
+REFERRAL_FOR = _rx(r'\bfor\s+(?:an?\s+|the\s+)?(?:[\w-]+\s+){0,3}?referral\b')
 INDICATION_READING = 'uncertain: stated in an indication, not as done today'
 # "placement of a covered stent", "removal of the polyp": a nominal act predicate, read like a verb.
 NOMINAL_ACT = _rx(r'\b(?:placement|insertion|deployment|removal|extraction|retrieval|resection|ablation|dilation|dilatation|'
@@ -1121,6 +1124,8 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
                 part: _Part, in_today_report: bool) -> Reading:
     """The status a clause gives the thing named at [pos, end) in it, read within CLAUSE_REACH of the mention."""
     cs, ce = _bounded_clause(text, clause, pos, end)
+    if end > pos and any(m.start() <= pos and end <= m.end() for m in REFERRAL_FOR.finditer(text, cs, ce)):
+        return Reading('planned', ('planned: what a referral is for',))
     if end > pos and _consent_object(text, cs, ce, pos, end):
         # "Consent was obtained for biopsy and cold snare polypectomy": what the consent is for, never stated done here
         # (a paid second review had been queued for consented acts); held, never excluded.
