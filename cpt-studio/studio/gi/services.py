@@ -245,6 +245,21 @@ NOT_VERB = _rx(r"\b(?:was|were|is|are|been|has|have|had|did|does|could|would|can
                r"attempted|repeated|undertaken|carried\s+out|reached|completed|required|needed|indicated)\b"
                r"|\b(?:wasn't|weren't|didn't)\b")
 WITHOUT = _rx(r'\b(?:without|w/o)\b')
+# A "not" after the act that belongs to another predicate: one inside a subordinate clause ("Possible EGD with PEG
+# placement if intake does not improve"), or a second predicate coordinated with the act's own participle ("was
+# tattooed and not removed"). Every other "not" in the clause still negates the act (fail-closed).
+SUBORDINATOR = _rx(r'\b(?:if|unless|until|because|since|when|whenever|once|so\s+that|in\s+case|whether)\b')
+COORDINATED_PREDICATE = _rx(r'(?:,\s*)?\s+(?:and|or)\s+$')
+
+
+def _not_on_another_predicate(text: str, neg: int, end: int) -> bool:
+    """Whether the negation at ``neg`` governs a predicate other than the act mention ending at ``end``."""
+    if neg < end:
+        return False  # the negation precedes or covers the mention ("did not undergo EGD", "not biopsied")
+    between = text[end:neg]
+    if SUBORDINATOR.search(between):
+        return True
+    return bool(COORDINATED_PREDICATE.fullmatch(between)) and bool(re.search(r'ed\Z', text[:end]))
 # "without (any) complication(s) (at all)" ending its clause at a stop, a semicolon, a colon or the line's end ("The
 # following procedures were performed today without any complication at all:" over the polypectomy line): the "without"
 # denies the complication, never the act after it. A phrase that runs on, or a list that goes on after a comma ("without
@@ -841,6 +856,9 @@ def _span(text: str, start: int, end: int) -> Span:
 # --- clause reading -------------------------------------------------------------------------------------------------
 
 _CLAUSE_CUT = _rx(r';|\s+but\s+|\s+whereas\s+|\s+although\s+|,\s+while\s+|\s+and\s+(?=(?:was|were|is|are)\s+(?:not|never)\b)'
+                  # "Biopsies were obtained and dilation was not performed": a coordinated subject with its own negated
+                  # predicate opens a clause of its own, so its "not" never reaches the first act
+                  r'|\s+and\s+(?=(?:[\w-]+\s+){1,3}(?:was|were|is|are|could|did|had)\s+(?:not|never)\b)'
                   r'|(?<![\d.])\s+and\s+(?=(?:the|a|an|this|that|it|she|he|they|we|I|one|two|three|\d+)\b[^.;]{0,60}\b(?:was|were|'
                   r'is|are|has|have|had|did)\b)|,\s+(?=(?:and\s+)?(?:the|this|that|it|she|he|they|we|I)\s+[^.;,]{0,40}'
                   r'\b(?:was|were|is|are)\b)')
@@ -937,8 +955,9 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         if not re.search(r'\b(?:was|were|is|are|been)\b', head[head.lower().rfind('no'):] if 'no' in head.lower() else head, FLAGS):
             cues.append('negated: a negation before it in its clause')
             return Reading('negated', tuple(cues))
-    not_verb = NOT_VERB.search(whole)
-    if not_verb:
+    for not_verb in NOT_VERB.finditer(whole):
+        if _not_on_another_predicate(text, cs + not_verb.start(), end):
+            continue
         # "was complete and was not discontinued": the negated word is the completion word, not this act.
         neg_target = text[cs + not_verb.end(): min(ce, cs + not_verb.end() + 40)]
         if not re.match(r'\s*(?:\w+\s+){0,2}(?:discontinu|interrupt|terminat|abort|incomplet|stopped)', neg_target, FLAGS):

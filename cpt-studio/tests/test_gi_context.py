@@ -2,6 +2,7 @@
 import unittest
 from pathlib import Path
 
+from studio.gi import context
 from studio.gi.context import USER_CONFLICT_NOTE, USER_NOTE, extract_context, merge_user_values
 from studio.types import CONTEXT_FACTS, Fact
 
@@ -237,3 +238,45 @@ class MergeUserValuesTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class OwnTitleDateTests(unittest.TestCase):
+    """Without a labelled date, only the FIRST dated title line near the top can be the note's own date. A qualified
+    first title gives none, and another unqualified dated title with another date is a conflict - never a value taken
+    from another document's title (a pathology report's own date had been read as the visit's and sent)."""
+
+    def test_the_first_title_decides(self):
+        head = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
+        cases = (
+            ('GI follow-up visit: 2026-10-20\nPathology report: 2026-10-14\nEstablished patient.\n', 'missing', None),
+            ('GI consultation note: 2026-10-20\nPathology report: 2026-10-14\n', 'conflict', None),
+            ('GI consultation note: 2026-10-20\nNext visit: 2026-12-01\n', 'document', '2026-10-20'),
+            ('Outside colonoscopy report: 2026-09-03\nGastroenterology consultation.\n', 'missing', None),
+            ('Post-procedure note: 2026-10-20\nUpper endoscopy.\n', 'document', '2026-10-20'),
+            ('Colonoscopy report: 14 Oct 2026\nThe colonoscope was advanced to the cecum.\n', 'document', '2026-10-14'),
+        )
+        for text, origin, value in cases:
+            with self.subTest(text=text.split('\n')[0]):
+                fact = context.extract_context(head + text)['service_date']
+                self.assertEqual((fact.origin, fact.value), (origin, value))
+
+
+class MemberValueAgainstADocumentConflictTests(unittest.TestCase):
+    """A member value settles a conflict inside the document only by choosing one of its values; any other value is
+    a third side, kept with them (the Elena class: a member-entered 1998-01-01 against two documented dates)."""
+
+    TEXT = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nDate of service: 2026-10-20\n'
+            'Visit date: 2026-10-21\nEstablished patient office visit.\n')
+
+    def test_a_value_the_document_does_not_give_is_a_conflict(self):
+        facts = context.extract_context(self.TEXT)
+        self.assertEqual(facts['service_date'].origin, 'conflict')
+        merged = context.merge_user_values(facts, {'service_date': '1998-01-01'})['service_date']
+        self.assertEqual((merged.origin, merged.value), ('conflict', None))
+        self.assertTrue(context.is_member_conflict(merged))
+        self.assertIn('gives 1998-01-01; the document gives 2026-10-20 or 2026-10-21', merged.note)
+
+    def test_choosing_a_documented_value_settles_it(self):
+        facts = context.extract_context(self.TEXT)
+        merged = context.merge_user_values(facts, {'service_date': '2026-10-21'})['service_date']
+        self.assertEqual((merged.origin, merged.value), ('user', '2026-10-21'))

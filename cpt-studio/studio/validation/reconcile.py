@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import Optional, Sequence
 
 from studio.gi import catalogue
+from studio.gi.context import is_member_conflict
 from studio.gi.services import SERVICES, Act, Conflict, DocumentedService, ServiceInventory
 from studio.types import Check, ClarificationSpec, EvidenceSpan, Span
 
@@ -384,8 +385,10 @@ def conflict_clarification(conflict: Conflict, service: DocumentedService) -> Cl
                'until this is answered.')
 
 
-def documentation_clarifications(service: DocumentedService) -> list[ClarificationSpec]:
-    """Every materially necessary question for one documented service, asked together."""
+def documentation_clarifications(service: DocumentedService, context=None) -> list[ClarificationSpec]:
+    """Every materially necessary question for one documented service, asked together. A fact the visit lacks because
+    a member's encounter metadata conflicts with the document is asked as that conflict, both sides named
+    (context.is_member_conflict), never as undocumented."""
     entry = catalogue.entry(service.family)
     if entry is None or service.status not in ('performed', 'incomplete', 'uncertain'):
         return []
@@ -394,10 +397,11 @@ def documentation_clarifications(service: DocumentedService) -> list[Clarificati
     if service.family == 'gi.office_em':
         for fact in service.uncertainty:
             if fact in questions:
+                held = (context or {}).get(fact)
+                reason = (f'The {fact.replace("_", " ")} is in conflict. {held.note}' if is_member_conflict(held)
+                          else f'The documented office / outpatient visit does not state its {fact.replace("_", " ")}.')
                 out.append(ClarificationSpec(scope='service', fact=fact, family=service.family,
-                                             question=questions[fact],
-                                             reason=f'The documented office / outpatient visit does not state its '
-                                                    f'{fact.replace("_", " ")}.'))
+                                             question=questions[fact], reason=reason))
         return out
     if entry.support == catalogue.SUPPORTED and 'extent' in questions and not service.extent \
             and service.completion == 'unknown' and service.family in ('gi.egd', 'gi.colonoscopy', 'gi.flex_sig',

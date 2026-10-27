@@ -171,7 +171,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     # visit without a proposal is not pushed as unresolved, whatever families the inventory reads.
     unresolved, bundled, covered = (reconcile.reconcile(usable, active, procedure_day=procedure_day) if usable
                                     else ([], [], {}))
-    service_questions = _service_questions(usable, proposals) if usable else []
+    service_questions = _service_questions(usable, proposals, context) if usable else []
     unsupported = _unsupported(routing, selections)
     encounter_checks = [*provider, checks.extraction_check(extraction_status, extraction_messages),
                         checks.service_date_check(date_state), reconcile.inventory_check(inventory, problems),
@@ -186,6 +186,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     encounter_checks.append(checks.unsupported_check(unsupported))
     clarification = checks.service_date_clarification(date_state)
     clarifications = ((clarification,) if clarification else ()) + tuple(service_questions)
+    clarifications += tuple(_member_conflict_questions(context, clarifications, proposals))
     open_questions = len(clarifications) + sum(len(p.clarifications) for p in proposals)
     complete = reconcile.completeness(usable or inventory, unresolved, open_questions,
                                       provider_status == 'succeeded' and response is not None)
@@ -267,14 +268,30 @@ def _jsonable_inventory(inventory) -> dict:
     return to_jsonable(inventory)
 
 
-def _service_questions(inventory, proposals) -> list[ClarificationSpec]:
+def _member_conflict_questions(context, asked, proposals) -> list[ClarificationSpec]:
+    """A member's encounter metadata that conflicts with the document (context.is_member_conflict) is asked once, at the
+    encounter, unless a question already asks about that fact: both sides are kept and neither is used until they
+    agree (session interpretations 11 and 19). The service date has its own encounter question."""
+    from studio.gi.context import is_member_conflict
+    seen = {c.fact for c in asked} | {c.fact for p in proposals for c in p.clarifications}
+    out = []
+    for name, fact in sorted((context or {}).items()):
+        if name == 'service_date' or name in seen or not is_member_conflict(fact):
+            continue
+        label = checks.fact_label(name)
+        out.append(ClarificationSpec(scope='encounter', fact=name, question=f'Which {label} is right for this encounter?',
+                                     reason=f'The {label} is in conflict. {fact.note}'))
+    return out
+
+
+def _service_questions(inventory, proposals, context=None) -> list[ClarificationSpec]:
     """Every materially necessary question about a documented service, asked together and once: its missing
     documentation (a sparse visit note's setting, status and basis together) and each conflict in the record. A
     question a proposal of the same family already asks is not asked again."""
     asked = {(c.family, c.fact) for p in proposals for c in p.clarifications}
     out: list[ClarificationSpec] = []
     for service in inventory.services:
-        for spec in reconcile.documentation_clarifications(service):
+        for spec in reconcile.documentation_clarifications(service, context):
             if (spec.family, spec.fact) not in asked:
                 asked.add((spec.family, spec.fact))
                 out.append(spec)

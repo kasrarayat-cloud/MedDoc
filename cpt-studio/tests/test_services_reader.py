@@ -353,3 +353,56 @@ A 7 mm polyp in the descending colon was removed with a cold snare.
                         reference=InMemoryReferenceLookup((), {}), service_date=day, provider_status='succeeded')
         code = next(p for p in result.proposals if p.code == '45385')
         self.assertEqual(code.status, 'ready', [(c.id, c.detail) for c in code.checks if c.status != 'pass'])
+
+
+class NegationScopeTests(SimpleTestCase):
+    """A "not" that governs another predicate never denies the act; every other one still does (fail-closed)."""
+
+    def test_a_negation_on_another_predicate_leaves_the_act(self):
+        _, inv = read(HEAD + 'Date of service: 2026-10-14\nColonoscopy report\nThe colonoscope was advanced to the '
+                             'cecum. A 30 mm laterally spreading lesion in the ascending colon was tattooed and not '
+                             'removed; it is referred for EMR.\n')
+        self.assertIn('tattoo', kinds(one(inv, 'gi.colonoscopy')))
+        _, inv = read(HEAD + 'Date of service: 2026-10-14\nColonoscopy report\nThe colonoscope was advanced to the '
+                             'cecum. Biopsies of the sigmoid colon were obtained and a dilation was not performed.\n')
+        svc = one(inv, 'gi.colonoscopy')
+        self.assertIn('biopsy', kinds(svc))
+        self.assertIn('dilation', kinds(svc, 'negated'))
+
+    def test_a_negation_in_a_subordinate_clause_leaves_the_mention(self):
+        _, inv = read(HEAD + 'Date of service: 2026-10-14\nOffice visit\nPlan: possible EGD with PEG placement if '
+                             'oral intake does not improve.\n')
+        egd = [s for s in inv.services if s.family == 'gi.egd']
+        self.assertTrue(all(s.status != 'negated' for s in egd), [(s.status, s.cues) for s in egd])
+
+    def test_controls_a_negation_of_the_act_itself_still_denies_it(self):
+        for line, kind in (('Biopsies were not obtained.', 'biopsy'), ('The polyp was not removed with a snare.', 'snare'),
+                           ('Cold forceps biopsy was not performed because of anticoagulation.', 'biopsy')):
+            with self.subTest(line=line):
+                _, inv = read(HEAD + 'Date of service: 2026-10-14\nColonoscopy report\nThe colonoscope was advanced to '
+                                     'the cecum. ' + line + '\n')
+                svc = one(inv, 'gi.colonoscopy')
+                self.assertNotIn(kind, kinds(svc))
+        _, inv = read(HEAD + 'Date of service: 2026-10-14\nOffice visit\nThe patient did not undergo EGD today.\n')
+        self.assertTrue(all(s.status not in services.POSITIVE for s in inv.services if s.family == 'gi.egd'))
+
+
+class MemberConflictQuestionTests(SimpleTestCase):
+    """A member's encounter metadata that conflicts with the document is asked once, as that conflict, with both sides;
+    never as an undocumented fact, and never left unasked when no proposal asks about it."""
+
+    def test_a_conflicting_setting_is_asked_at_the_encounter(self):
+        for body in ('Place of service: 11 - Office\nGastroenterology office visit for heartburn.\n',
+                     'Gastroenterology office visit for heartburn.\n'):
+            text = HEAD + 'Date of service: 2026-10-20\n' + body
+            facts = gi_context.merge_user_values(gi_context.extract_context(text), {'setting': 'asc'})
+            day = date(2026, 10, 20)
+            result = assess(text=text, pages=(), context=facts, routing=detect.route(text, day),
+                            normalized=NormalizedResponse('replay', 'test@1', ()),
+                            reference=InMemoryReferenceLookup((), {}), service_date=day, provider_status='succeeded')
+            with self.subTest(body=body):
+                asked = [c for c in result.clarifications if c.fact == 'setting']
+                self.assertEqual(len(asked), 1)
+                self.assertEqual(asked[0].scope, 'encounter')
+                self.assertIn('gives asc; the document gives office', asked[0].reason)
+                self.assertNotIn('does not state its setting', ' '.join(c.reason for c in result.clarifications))
