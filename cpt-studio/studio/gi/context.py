@@ -400,8 +400,32 @@ def _qualifier_field(text: str, q_start: int, q_end: int, limit: int, has_date) 
     return 'else'
 
 
+# A field line: a label of at most 40 characters opening its line, then a colon that is not a clock's ("Outside
+# colonoscopy:", "Next procedure: Colonoscopy", "Scheduled: Yes"). A title or a sentence is no field.
+_LINE_FIELD = re.compile(r"[ \t]*+[A-Za-z][A-Za-z0-9 '’/()&,.-]{0,40}?[ \t]*+:(?!\d)")
+
+
+def _line_above(text: str, start: int) -> Optional[tuple[int, int]]:
+    """The nearest non-blank line above the line ``start`` opens (nothing but blanks before ``start`` on its line),
+    across blank lines within GAP_REACH characters: (line start, line end), or None when ``start`` does not open its
+    line or no such line is in reach. A non-blank line is the line above for one line at most - the next one, which one
+    label at most opens - so a long line costs its length once."""
+    ls = text.rfind('\n', max(0, start - VALUE_REACH), start) + 1
+    if ls == 0 or text[ls:start].strip():
+        return None
+    end = ls - 1
+    while ls - end <= GAP_REACH:
+        line_start = text.rfind('\n', 0, end) + 1
+        if text[line_start:end].strip():
+            return line_start, end
+        if line_start == 0:
+            return None
+        end = line_start - 1
+    return None
+
+
 def _line_reading(text: str, label_start: int, label_end: int, date_start: int, date_end: int,
-                  value: Optional[date]) -> str:
+                  value: Optional[date], phrase_start: Optional[int] = None) -> str:
     """How the qualifiers on a labelled date's line read it: 'own', 'another' or 'unplaced' (refutation r1,
     negtime-15: a qualifier of another field or another date discarded the real date, and a letter or title date was
     then taken and sent).
@@ -417,12 +441,30 @@ def _line_reading(text: str, label_start: int, label_end: int, date_start: int, 
     c2:2: "... colon polyps Date of service:") the words are another field's, so a qualifier there is never attached to
     it: it holds the date as one across a field break does (refutation round 3, sk:2: round 2 read nothing there, and
     "Colonoscopy status: scheduled Procedure Date: 11/04/2026" or "Prior colonoscopy: yes Procedure Date: 05/01/2019"
-    gave the documented date, which was sent and an act done that day excluded against it). The scans stop 80
-    characters either side, so a long line costs each date only its window."""
+    gave the documented date, which was sent and an act done that day excluded against it).
+
+    Refutation round 3, sk:5 (only the label's own line was read, so an outside or planned date under an undated title
+    was the documented date, sent, and an act done that day excluded against it): a label whose phrase opens its line
+    (``phrase_start``) reads the field on the nearest line above it (_line_above, _LINE_FIELD; a title or a sentence is
+    no field). A field label ending its line heads the lines below it, so a qualifier in it makes the date another
+    occurrence's ("Outside colonoscopy:" above "Procedure date: 09/03/2026"); a field with a value may or may not date
+    what follows ("Next procedure: Colonoscopy", "Planned procedure: EGD", "Scheduled: Yes"): the date is held. The
+    qualifiers passed over there are those passed over on the label's line. After the date the history words count too
+    when attached to it ("09/03/2026, outside facility", "(performed at an outside facility)"); one across a field break
+    ("Indication: history of polyps") does not place the date. A phrase that wraps onto the next line - it opens in lower
+    case - is read on that line too ("11/04/2026," above "scheduled for 8:00 AM."). The scans stop 80 characters either
+    side (200 on the line above), so a long line costs each date only its window."""
     lo = max(text.rfind('\n', max(0, label_start - 80), label_start) + 1, label_start - 80, 0)
     opens = _opens_field(text, label_start, label_end)
     hi = text.find('\n', date_end, date_end + 80)
     hi = min(len(text), date_end + 80) if hi < 0 else hi
+    if hi < len(text) and text[hi] == '\n':  # a phrase wrapping onto the next line, which opens in lower case
+        wrap = hi + 1
+        while wrap < min(len(text), hi + 81) and text[wrap] in ' \t':
+            wrap += 1
+        if wrap < len(text) and text[wrap].islower():
+            stop = text.find('\n', wrap, hi + 81)
+            hi = min(len(text), hi + 81) if stop < 0 else stop
     dates, starts = find_dates(text), _date_starts(text)
 
     def other_dates(a: int, b: int) -> list:
@@ -442,12 +484,23 @@ def _line_reading(text: str, label_start: int, label_end: int, date_start: int, 
         if not opens and not _NOT_ATTACHED.search(_ROW_BAR.sub(' ', text[q.end():label_start])):
             return 'another'
         reading = 'unplaced'
+    above = _line_above(text, label_start if phrase_start is None else phrase_start)
+    field = _LINE_FIELD.match(text, *above) if above is not None else None
+    if field is not None:  # refutation round 3, sk:5: the field on the line above
+        heads = not text[field.end():above[1]].strip()
+        for q in _OTHER_OCCURRENCE.finditer(text, above[0], min(above[1], above[0] + 200)):
+            if other_dates(q.end(), above[1]) or _qualifier_field(text, q.start(), q.end(), above[1],
+                                                                  has_date) == 'else':
+                continue
+            if heads:
+                return 'another'
+            reading = 'unplaced'
     bracket = _BRACKET_HISTORY.match(text, date_end, hi)
     if bracket is not None:
         close = text.find(')', bracket.end(), hi)
         if not other_dates(date_end, hi if close < 0 else close):
             return 'another'
-    for q in DATE_QUALIFIER.finditer(text, date_end, hi):
+    for q in _OTHER_OCCURRENCE.finditer(text, date_end, hi):
         if other_dates(date_end, q.start()):
             continue
         own = other_dates(q.end(), hi)
@@ -457,7 +510,8 @@ def _line_reading(text: str, label_start: int, label_end: int, date_start: int, 
             continue
         if not _NOT_ATTACHED.search(_ROW_BAR.sub(' ', text[date_end:q.start()])):
             return 'another'
-        reading = 'unplaced'
+        if DATE_QUALIFIER.fullmatch(q.group()):  # a history word across a field break does not place the date
+            reading = 'unplaced'
     return reading
 
 
@@ -471,7 +525,7 @@ def _labelled_kind(text: str, label_start: int, label_end: int, date_start: int,
     words, start = _label_words(text, label_start, label_end)
     if words and _OTHER_OCCURRENCE.search(words):
         return 'another', start
-    reading = _line_reading(text, label_start, label_end, date_start, date_end, value)
+    reading = _line_reading(text, label_start, label_end, date_start, date_end, value, start)
     if reading == 'another':
         return 'another', start
     if reading == 'unplaced' or (words and not _names_this_service(words, words + ' ' + text[label_start:label_end])):

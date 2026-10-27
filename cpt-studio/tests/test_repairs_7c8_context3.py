@@ -382,3 +382,77 @@ class AnotherDisciplineTitleRequestTests(EndToEnd):
         encounter_id = self.finished(text)
         self.assertEqual(self.dates_sent(encounter_id), [[]])
         self.assertNotEqual(self.bucket(encounter_id, '45385'), 'excluded')
+
+
+class FieldAboveOrPhraseAfterTests(DateAssertions, SimpleTestCase):
+    """sk:5 (c2:6 and c2:1, claimed fixed in round 2, reproducing under an undated title): a labelled date was read on
+    its own line only, so a field on the line above naming another occurrence ('Outside colonoscopy:', 'Next procedure:
+    Colonoscopy', 'Planned procedure: EGD', 'Scheduled: Yes') never held it; after the date only the date qualifiers were
+    read, so 'outside' attached to it ('(performed at an outside facility)', ', outside facility', '- outside facility')
+    passed; and the line a phrase wraps to ('11/04/2026,' then 'scheduled for 8:00 AM.') was never read. The outside or
+    planned date was sent and the snare polypectomy done on the note's date was excluded against it. A field on the
+    line above (its words are another field's: the date is asked) and a phrase attached after the date naming another
+    occurrence, also on the line it wraps to (another occurrence's date), now hold it."""
+
+    CASES = (
+        ('Outside colonoscopy:\nProcedure date: 09/03/2026\nFindings: two adenomas.', '2026-09-03'),
+        ('Indication: Surveillance. Procedure date: 09/03/2026 (performed at an outside facility).', '2026-09-03'),
+        ('Next procedure: Colonoscopy\nProcedure date: 10/14/2029', '2029-10-14'),
+        ('Planned procedure: EGD\nProcedure date: 11/04/2026', '2026-11-04'),
+        ('Scheduled: Yes\nProcedure date: 11/04/2026', '2026-11-04'),
+        ('Outside colonoscopy:\n\nProcedure date: 09/03/2026', '2026-09-03'),
+        ('Colonoscopy procedure date: 11/04/2026,\nscheduled for 8:00 AM.', '2026-11-04'),
+        ('Procedure date: 09/03/2026, outside facility; cold snare polypectomy.', '2026-09-03'),
+        ('Procedure date: 09/03/2026 - outside facility', '2026-09-03'),
+        ('Procedure date: 09/03/2026 performed at an outside hospital', '2026-09-03'),
+    )
+
+    def test_the_other_occurrence_s_date_is_asked_never_documented(self):
+        for lines, other in self.CASES:
+            for title in ('', 'Colonoscopy report\n'):
+                with self.subTest(lines=lines[:50], title=title.strip()):
+                    text = HEAD + title + lines + '\n' + COLO_BODY
+                    self.assert_never(text, other)
+                    self.assert_asked(text, 'rocedure date')
+
+    def test_under_a_dated_title_it_is_a_conflict(self):
+        for lines, other in self.CASES[:5]:
+            with self.subTest(lines=lines[:50]):
+                text = HEAD + 'Colonoscopy report - 10/14/2026\n' + lines + '\n' + COLO_PLAIN
+                self.assert_never(text, other)
+                self.assert_conflict(text, '2026-10-14', other)
+
+    def test_beside_the_note_s_own_labelled_date_another_occurrence_s_is_set_aside(self):
+        for lines in ('Outside colonoscopy:\nProcedure date: 09/03/2026\nFindings: two adenomas.',
+                      'Procedure date: 09/03/2026, outside facility; cold snare polypectomy.'):
+            with self.subTest(lines=lines[:40]):
+                self.assert_document(HEAD + 'Date of service: 10/14/2026\n' + lines + '\n' + COLO_PLAIN, '2026-10-14')
+
+    def test_controls_a_field_above_about_something_else_or_naming_no_occurrence(self):
+        for above in ('Last colonoscopy: 05/01/2019', 'Patient: Synthetic, Alex', 'Last name: Synthetic',
+                      'Indication: screening colonoscopy', 'GI follow-up visit', 'Previous surgeries: appendectomy',
+                      'Next colonoscopy: 10/2029', 'Prior colonoscopy 2019, normal'):
+            with self.subTest(above=above):
+                text = HEAD + above + '\nProcedure date: 10/14/2026\n' + COLO_PLAIN
+                self.assert_document(text, '2026-10-14')
+                self.assert_member_conflict(text, ELENA_DATE)
+        for line in ('Procedure date: 10/14/2026    Indication: personal history of colon polyps',
+                     'Procedure date: 10/14/2026\nIndication: surveillance after prior polypectomy.',
+                     'Procedure date: 10/14/2026\nOutside records were reviewed.',
+                     'Date of service: 10/14/2026 (capsule placement) Recording started at 9:00 AM'):
+            with self.subTest(line=line[:50]):
+                self.assert_document(HEAD + line + '\n' + COLO_PLAIN, '2026-10-14')
+
+
+class FieldAboveOrPhraseAfterRequestTests(EndToEnd):
+    """sk:5 end to end (W1, W2, E5): no outside or planned date is sent, and the snare polypectomy done on the note's
+    date is never excluded against one."""
+
+    def test_w1_w2_e5(self):
+        for lines in ('Outside colonoscopy:\nProcedure date: 09/03/2026\nFindings: two adenomas.\n',
+                      'Indication: Surveillance. Procedure date: 09/03/2026 (performed at an outside facility).',
+                      'Next procedure: Colonoscopy\nProcedure date: 10/14/2029'):
+            with self.subTest(lines=lines[:40]):
+                encounter_id = self.finished(HEAD + 'Colonoscopy report\n' + lines + '\n' + COLO_BODY)
+                self.assertEqual(self.dates_sent(encounter_id), [[]])
+                self.assertNotEqual(self.bucket(encounter_id, '45385'), 'excluded')
