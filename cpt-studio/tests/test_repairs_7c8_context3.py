@@ -536,3 +536,55 @@ class DateAndTimeLabelRequestTests(EndToEnd):
         self.assert_held(self.finished(HEAD + 'DOS/Time: 10/20/2026 09:15\n' + OFFICE_BODY, service_date=ELENA_DATE))
         encounter_id = self.finished(HEAD + 'DOS/Time: 10/20/2026 09:15\n' + OFFICE_BODY)
         self.assertEqual(self.dates_sent(encounter_id), [['Date of service: 2026-10-20']])
+
+
+class ServiceLineStatesOnlyItsOwnDateTests(DateAssertions, SimpleTestCase):
+    """sk:1's class, a variant the skeptic's own generator still reaches (72 of its 25,920 lines after the first sk:1
+    repair; none at 8eb959734): a dated line naming the service took the date ENDING the line as its own, also when that
+    date was another field's - "Colonoscopy Date of service: 10-14-26 DOB: 01/01/1998", "Seen today. DOS: 10-14-26 DOB:
+    01/01/1998" - so a member's 1998-01-01 agreed with the line and was taken and sent. The line's last date is the
+    service's only when no other field or date stands between the service's name and it; otherwise the service's own is
+    the first date after its name, and a line whose only date is another field's is no candidate."""
+
+    BORN = (
+        HEAD + 'Colonoscopy Date of service: 10-14-26 DOB: ' + BIRTH + '\n' + COLO_PLAIN,
+        HEAD + 'Seen today. DOS: 10-14-26 DOB: ' + BIRTH + '\n' + COLO_PLAIN,
+        HEAD + 'Colonoscopy report\nColonoscopy Procedure Date 10-14-26 DOB: ' + BIRTH + '\n' + COLO_PLAIN,
+        HEAD + 'Colonoscopy 10-14-26 DOB ' + BIRTH + '\n' + COLO_PLAIN,
+        HEAD + 'Date: 10/27/2026\nColonoscopy Visit Date: 10-14-26 DOB: ' + BIRTH + '\n' + COLO_PLAIN,
+    )
+
+    def test_a_date_of_birth_ending_the_line_is_never_the_line_s_date(self):
+        for text in self.BORN:
+            with self.subTest(text=text.splitlines()[1][:50] + ' / ' + text.splitlines()[2][:40]):
+                self.assertNotEqual(date_fact(text).origin, 'document')
+                self.assert_member_conflict(text, ELENA_DATE)
+                self.assertFalse(any(BIRTH in quoted for quoted in evidence_text(text)), evidence_text(text))
+
+    def test_the_service_s_own_date_is_the_first_after_its_name(self):
+        text = HEAD + 'Colonoscopy 10/14/2026 DOB ' + BIRTH + '\n' + COLO_PLAIN
+        self.assert_asked(text, 'Colonoscopy 10/14/2026')
+        self.assert_member_date(text, '2026-10-14')
+        self.assert_member_conflict(text, ELENA_DATE)
+
+    def test_controls(self):
+        for line in ('Colonoscopy: 10/14/2026', 'Colonoscopy #2 10/14/2026', 'Colonoscopy at 09:15 on 10/14/2026',
+                     'EGD - 10/14/2026'):
+            with self.subTest(line=line):
+                text = HEAD + line + '\n' + COLO_PLAIN
+                self.assert_asked(text, line)
+                self.assert_member_date(text, '2026-10-14')
+        # a line whose only date is another field's states no date of the service: it keeps nothing, as a date of birth
+        # alone does
+        text = HEAD + 'Colonoscopy DOB: ' + BIRTH + '\n' + VISIT_BODY
+        self.assertEqual((date_fact(text).origin, date_fact(text).evidence), ('missing', ()))
+
+
+class ServiceLineStatesOnlyItsOwnDateRequestTests(EndToEnd):
+    """The variant end to end: created with the member's 1998-01-01, nothing is sent and 45385 is never excluded."""
+
+    def test_a_service_line_ending_with_a_date_of_birth(self):
+        text = HEAD + 'Colonoscopy Date of service: 10-14-26 DOB: ' + BIRTH + '\n' + COLO_BODY
+        encounter_id = self.finished(text, service_date=ELENA_DATE)
+        self.assert_held(encounter_id)
+        self.assert_not_excluded(encounter_id, '45385')

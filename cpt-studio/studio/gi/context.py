@@ -619,21 +619,26 @@ _GLUED = re.compile(r'[\w/-]')
 _NON_SPACE = re.compile(r'\S*')
 
 
-def _value_extent(text: str, start: int, end: int) -> tuple[int, int]:
-    """The label's own value in its value field [start, end): the field's first date-shaped run that carries a digit
-    (_VALUE_TOKEN); one glued to more of its kind ("10/14/2026-10/15/2026") runs on to the next space, so a cut never
-    makes a date of its own. The whole field when it has no such run."""
+def _first_value(text: str, start: int, end: int) -> Optional[tuple[int, int]]:
+    """The first date-shaped run in [start, end) that carries a digit (_VALUE_TOKEN), or None; one glued to more of its
+    kind ("10/14/2026-10/15/2026") runs on to the next space, so a cut never makes a date of its own."""
     pos = start
     while True:
         m = _VALUE_TOKEN.search(text, pos, end)
         if m is None:
-            return start, end
+            return None
         if _DIGIT.search(text, m.start(), m.end()):
             stop = m.end()
             if stop < end and _GLUED.match(text, stop):
                 stop = _NON_SPACE.match(text, stop, end).end()
             return m.start(), stop
         pos = m.end()
+
+
+def _value_extent(text: str, start: int, end: int) -> tuple[int, int]:
+    """The label's own value in its value field [start, end): the field's first date-shaped run (_first_value); the
+    whole field when it has none."""
+    return _first_value(text, start, end) or (start, end)
 
 
 def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int, bool]]:
@@ -797,6 +802,12 @@ _LINE_END_DATE = cues.rx(r'(?<![\w/-])(?:' + _FULL_DATE + r'|(?P<unread>' + DATE
                          + r'[ \t]*+\.?+[ \t]*+$')
 
 
+# Between a service's name and the date ending its line: another field's label (a colon that is not a clock's) or the
+# start of another date (refutation round 3, sk:1).
+_GAP_FIELD = re.compile(r'(?<!\d)[:=]|[:=](?!\d)')
+_GAP_DATE = cues.rx(r'(?<![\w/.-])(?:' + _VALUE_DATE_START.pattern + r')')
+
+
 # A letter's subject line opening a line ("Re: ", "Regarding: ", "Subject: "): the structure is the subject line naming
 # the encounter the letter is about; these labels are its vocabulary.
 _SUBJECT_FIELD = cues.rx(r'[ \t]*+(?:re|regarding|subject|subj)\.?[ \t]*+:[ \t]*+')
@@ -818,7 +829,10 @@ def _dated_service_line(text: str, ls: int, le: int) -> Optional[_Candidate]:
     colonoscopy of 10/14/2026" or a sentence ending "... colonoscopy on 10/14/2026.", so a letter's date was sent and a
     snare polypectomy done on 10/14 excluded as historical; only a "Re:", "Regarding:" or "Subject:" line questioned it)."""
     m = _LINE_END_DATE.search(text, ls, le)
-    if m is None or m.start() - ls > 80 or not any(p.search(text, ls, m.start()) for p in _THIS_SERVICE):
+    if m is None or m.start() - ls > 80:
+        return None
+    names = [name for p in _THIS_SERVICE for name in p.finditer(text, ls, m.start())]
+    if not names:
         return None
     field = _SUBJECT_FIELD.match(text, ls, m.start())
     if field is not None and any(p.search(text, field.end(), m.start()) for p in _THIS_SERVICE):
@@ -827,15 +841,28 @@ def _dated_service_line(text: str, ls: int, le: int) -> Optional[_Candidate]:
         return None
     else:
         source, reading = 'line', 'aside'
+    # refutation round 3, sk:1: the evidence holds no date but the line's own. A date before the line's service name
+    # ("Synthetic, Alex DOB 01/01/1998 Colonoscopy 10/14/26") is not its value: the evidence starts after it. And the
+    # line's last date is the service's only when no other field or date stands between the service's name and it:
+    # in "Colonoscopy DOS: 10-14-26 DOB: 01/01/1998" or "Colonoscopy 10-14-26 DOB 01/01/1998" it is the date of birth,
+    # and the service's own is the first date after its name (here one this service does not read) - so a member's date
+    # of birth never agrees with this line.
+    name_start, name_end = max((name.start(), name.end()) for name in names)
+    start = _strip_span(text, ls, le)[0]
+    for before in FULL_DATE.finditer(text, start, name_start):
+        start = before.end()
+    while start < name_start and text[start] in ' \t,;:|-–':
+        start += 1
+    gap = name_end
+    while gap < m.start() and text[gap] in ' \t:,-–—':  # "Colonoscopy: 10/14/2026", "EGD - 10/14/2026"
+        gap += 1
+    if _GAP_FIELD.search(text, gap, m.start()) or _GAP_DATE.search(text, gap, m.start()):
+        own = _first_value(text, gap, m.start())
+        if own is None:  # the line's only date is another field's ("Colonoscopy DOB: 01/01/1998")
+            return None
+        return _Candidate(_span(text, start, own[1]), None, source, reading, 'unread')
     day = None if m.group('unread') is not None else date_from_match(m)
     form = 'read' if day else ('unread' if m.group('unread') is not None else 'invalid')
-    # refutation round 3, sk:1: a date before the line's own ("Synthetic, Alex DOB 01/01/1998 Colonoscopy 10/14/26") is
-    # not its value - the evidence starts after it, so a member's date of birth never agrees with this line
-    start = _strip_span(text, ls, le)[0]
-    for before in FULL_DATE.finditer(text, start, m.start()):
-        start = before.end()
-    while start < m.start() and text[start] in ' \t,;:|-–':
-        start += 1
     return _Candidate(_span(text, start, _strip_span(text, m.start(), m.end())[1]),
                       day.isoformat() if day else None, source, reading, form)
 
