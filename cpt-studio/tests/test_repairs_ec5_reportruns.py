@@ -279,3 +279,93 @@ class ProviderUsageWordingTests(Pipeline):
         line = self.only_line(encounter_id)
         self.assertIn(' · succeeded · HTTP 200 · revision 1 · requested ', line)
         self.assertTrue(line.endswith(' · used by this assessment'), line)
+
+
+# --- sends-5: an unreconciled unknown second review is what the encounter waits on ----------------------------------
+
+QUEUE_NODE = r"""
+const app = require(process.argv[1]);
+let input = '';
+process.stdin.on('data', chunk => { input += chunk; });
+process.stdin.on('end', () => process.stdout.write(app.listDescription('queue', JSON.parse(input).encounters)));
+"""
+
+
+class UnknownSecondReviewStateTests(Pipeline):
+    """A second review a reviewer asked for whose outcome is unknown blocks every further send until a member reconciles
+    it (ARCHITECTURE 5.11), and the page shows the reconciliation card. At the head the encounter's state followed the
+    primary run only when the provider never answered ("Ready for review", then "Reviewed": off the review queue, whose
+    page then said no document waited for a reconciliation), while the same runs left by a worker that died mid-send
+    read "Provider outcome unknown"."""
+
+    def setUp(self):
+        super().setUp()
+        self.use(TwoPassProvider(first=[SNARE], later=[BIOPSY], outcomes=['succeeded', 'unknown']))
+
+    def unknown_second_review(self):
+        encounter_id = self.create(COLONOSCOPY)
+        drain()
+        self.assertEqual(self.detail(encounter_id)['state'], 'ready_for_review')
+        self.assertEqual(ask(self.client, encounter_id).status_code, 201)
+        drain()
+        self.assertEqual([(r.purpose, r.state, r.reconciled_at) for r in self.runs(encounter_id)],
+                         [('primary', 'succeeded', None), ('second_review', 'unknown', None)])
+        return encounter_id
+
+    def queue_page(self):
+        node = shutil.which('node')
+        self.assertIsNotNone(node, 'node is not installed; the queue page is checked by running the shipped app.js')
+        listed = self.client.get('/api/encounters').json()
+        done = subprocess.run([node, '-e', QUEUE_NODE, str(APP)], input=json.dumps(listed), capture_output=True,
+                              text=True, timeout=60, check=True)
+        return done.stdout
+
+    def test_an_unknown_second_review_keeps_the_encounter_waiting_on_its_reconciliation(self):
+        encounter_id = self.unknown_second_review()
+        self.assertEqual(self.detail(encounter_id)['state'], 'provider_unknown')
+        self.approve(encounter_id, '45385')
+        detail = self.detail(encounter_id)
+        self.assertEqual(detail['state'], 'provider_unknown')
+        self.assertEqual(self.queue_count(), 1)
+        self.assertEqual(self.queue_page(),
+                         'One document needs a clarification, a review decision or a reconciliation.')
+        unknown = models.ProviderRun.objects.get(encounter_id=encounter_id, state='unknown')
+        reply = self.post(f'/api/encounters/{encounter_id}/reconcile',
+                          {'provider_run_id': str(unknown.pk), 'note': 'Checked the provider console: no response.'})
+        self.assertIn(reply.status_code, (200, 201), reply.content)
+        drain()
+        self.assertEqual(len(self.provider.requests), 2)  # reconciling sends nothing by itself
+        self.assertEqual(self.detail(encounter_id)['state'], 'reviewed')  # the carried approval; nothing waits now
+
+    def test_control_the_same_runs_left_by_a_worker_that_died_read_the_same(self):
+        encounter_id = self.create(COLONOSCOPY)
+        drain()
+        self.assertEqual(ask(self.client, encounter_id).status_code, 201)
+        job = jobs.claim_next()
+        self.assertEqual(job.kind, models.Job.REVIEW2)
+
+        def dies(request, *, deadline_s):
+            raise SystemExit('the worker died while the request was in flight (synthetic)')
+        with mock.patch.object(self.provider, 'send', dies), self.assertRaises(SystemExit):
+            jobs.run_job(job)
+        models.Job.objects.filter(pk=job.pk).update(started_at=job.started_at.replace(year=2000))
+        jobs.mark_stale()
+        drain()
+        self.assertEqual([(r.purpose, r.state) for r in self.runs(encounter_id)],
+                         [('primary', 'succeeded'), ('second_review', 'unknown')])
+        self.assertEqual(self.detail(encounter_id)['state'], 'provider_unknown')
+        self.approve(encounter_id, '45385')
+        self.assertEqual(self.detail(encounter_id)['state'], 'provider_unknown')
+
+    def test_control_without_an_unknown_outcome_the_review_decides_the_state(self):
+        self.provider.outcomes = []
+        encounter_id = self.create(COLONOSCOPY)
+        drain()
+        self.assertEqual(ask(self.client, encounter_id).status_code, 201)
+        drain()
+        self.assertEqual([r.state for r in self.runs(encounter_id)], ['succeeded', 'succeeded'])
+        self.assertEqual(self.detail(encounter_id)['state'], 'ready_for_review')
+        self.approve(encounter_id, '45385')
+        self.approve(encounter_id, '45380')
+        self.assertEqual(self.detail(encounter_id)['state'], 'reviewed')
+        self.assertEqual(self.queue_count(), 0)

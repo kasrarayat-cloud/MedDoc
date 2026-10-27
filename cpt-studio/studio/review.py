@@ -783,7 +783,11 @@ def _derive_state(encounter):
     run = assessment.provider_run
     if run is None:
         return 'provider_not_run'
-    if run.state in UNSETTLED_RUN_STATES:
+    if run.state in UNSETTLED_RUN_STATES or _unreconciled_unknown(encounter):
+        # An outcome still unknown - the second review's included - blocks every further send until a member reconciles
+        # it, so the encounter waits on that, whatever the run in use says (refutation r1, sends-5: a second review the
+        # provider never answered left "Ready for review", then "Reviewed" and off the review queue, while the same
+        # runs left by a worker that died mid-send read "Provider outcome unknown").
         return 'provider_unknown'
     if run.state == ProviderRun.NOT_SENT and (run.scope or {}).get('held') == ProviderRun.HELD_MEMBER_DATE_CONFLICT:
         # nothing was sent on purpose: the date question is open, and the encounter waits on it, not on the provider
