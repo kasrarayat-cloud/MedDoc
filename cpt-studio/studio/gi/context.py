@@ -773,16 +773,21 @@ def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
     and another document's title. A difference is a conflict with every side kept (both sides listed when all are
     read), never a silent choice of the weaker or the stronger source (c2:1: a planned procedure's labelled date was
     taken over the report's title, sent, and an act done that day excluded against it). With no usable own date, every
-    candidate is kept as evidence and the date is asked: a member value must agree with it (merge_user_values)."""
+    candidate is kept as evidence and the date is asked: a member value must agree with it (merge_user_values).
+
+    Every set here is kept by identity, never by a list membership test: that compared each pair of candidates, so
+    the fact was quadratic in the note's labelled dates (refutation round 3, sk:3: 'DOS: 10/14/2026' 24,000 times, under
+    the paste cap, overran the analyze stage's 60 s, and 12,000 a member's POST /context)."""
     labels = [c for c in found if c.source == 'label']
     own = [c for c in labels if c.reading == 'own' and c.form == 'read']
     if own:
-        speaks = [c for c in labels if c not in own and c.reading in ('own', 'unplaced')]
+        speaks = [c for c in labels if c.reading in ('own', 'unplaced') and not (c.reading == 'own' and c.form == 'read')]
         support = list(speaks)  # what joins the date's evidence when it agrees: as before, labels only
         speaks += [c for c in found if c.source != 'label' and c.reading in ('own', 'unplaced')]
     else:
         own = [c for c in found if c.source == 'title' and c.reading == 'own' and c.form == 'read']
-        speaks = [c for c in found if c not in own
+        own_ids = {id(c) for c in own}
+        speaks = [c for c in found if id(c) not in own_ids
                   and (c.source != 'title' or c.reading in ('own', 'unplaced', 'other'))]
         support = [c for c in speaks if c.reading != 'aside']  # never another occurrence's label that agrees
     values = {c.value for c in own}
