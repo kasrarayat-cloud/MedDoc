@@ -415,3 +415,85 @@ class EarlierVisitReferenceTests(SimpleTestCase):
                 text = self.NOTES[0].replace('Last seen by Dr. Ramos on 2026-03-02.', line)
                 held = _not_excluded(self, text, '99213', line, day)
                 self.assertEqual(held.status, 'needs_clarification')
+
+
+class MannerPhraseTimeTests(SimpleTestCase):
+    """The class of sk:1 and sk:4 beyond their inputs (the skeptic's differential fuzz still excluded 95 assessments after
+    the engine rule, nearly all of them these): a plan or history word in a manner phrase - "as planned", "as
+    recommended", "as previously discussed", "per the prior plan" - is the booking an act kept, as routing's
+    cues.AS_BOOKED_BEFORE reads it, never the act's time; and a time adverb on another event's participle ("Previously
+    described, the lesion was tattooed") is that event's time. Neither dates the act, so its code is never excluded."""
+
+    def test_a_manner_phrase_never_dates_the_act(self):
+        for template, line, kind, code in (
+                (EGD, 'Biopsies were taken as recommended and will be sent to pathology.', 'biopsy', '43239'),
+                (COLONOSCOPY, 'A 6 mm sigmoid polyp was removed with a cold snare as planned.', 'snare', '45385'),
+                (EGD, 'Cold forceps biopsies were obtained from the antrum as previously discussed.', 'biopsy', '43239'),
+                (COLONOSCOPY, 'Biopsies were taken from the ascending colon per the prior plan.', 'biopsy', '45380'),
+                (EGD, 'A 10 mm gastric polyp was removed with a hot snare as recommended and will be sent to pathology.',
+                 'snare', '43251')):
+            with self.subTest(line=line):
+                text = template.format(x=line)
+                self.assertEqual(statuses(text, kind), ['performed'])
+                _not_excluded(self, text, code, line)
+
+    def test_a_time_adverb_on_another_events_participle_is_that_events(self):
+        for line, kind, code in (
+                ('Previously described, the lesion was tattooed with India ink.', 'tattoo', '45381'),
+                ('Previously described, a 4 mm rectal polyp was removed with cold forceps and will be sent to pathology.',
+                 'biopsy', '45380'),
+                ('Recently noted, a 6 mm polyp was removed with a cold snare.', 'snare', '45385')):
+            with self.subTest(line=line):
+                text = COLONOSCOPY.format(x=line)
+                self.assertIn(statuses(text, kind), (['performed'], ['uncertain']))
+                _not_excluded(self, text, code, line)
+
+    def test_controls_an_acts_own_plan_or_history_still_dates_it(self):
+        for line, kind, status in (
+                ('Polypectomy is planned at the next colonoscopy.', 'snare', 'planned'),
+                ('A 6 mm polyp will be removed with a cold snare as planned.', 'snare', 'planned'),
+                ('Repeat colonoscopy with polypectomy as scheduled next month.', 'snare', 'planned'),
+                ('Previously, polyps were removed with a cold snare.', 'snare', 'historical'),
+                ('Polyps were previously removed with a cold snare.', 'snare', 'historical')):
+            with self.subTest(line=line):
+                self.assertEqual(statuses(COLONOSCOPY.format(x=line), kind), [status])
+
+
+class SameClassVariantTests(SimpleTestCase):
+    """Variants of sk:3, sk:4 and sk:6 that the skeptic's own paraphrase battery still excluded after their repairs: a
+    birth date labelled "DOB is", an unlabelled date in an aside beside "today", a clock time labelled "time", a date or a
+    time word after a noun that names another study or a site ("the stricture on barium swallow of 09/22/2026", "the
+    polyp from the CT of 09/22/2026", "the EMR scar from 2023", "the scar from the prior colonoscopy"), a time adverb set
+    off with its participle ("A polyp, previously biopsied, was removed"), and an addendum "dated". None is the act's own
+    time: held or performed, never excluded."""
+
+    def test_none_of_these_dates_the_act(self):
+        for template, line, code in (
+                (COLONOSCOPY, 'Alex Synthetic, age 65, DOB is 03/04/1961, underwent cold snare polypectomy of a 6 mm '
+                              'sigmoid polyp.', '45385'),
+                (COLONOSCOPY, 'Alex Synthetic (03/04/1961) underwent colonoscopy today with cold snare polypectomy of a 6 '
+                              'mm sigmoid polyp.', '45385'),
+                (EGD, 'Two hemoclips were placed on the visible vessel, time 2015, with hemostasis.', '43255'),
+                (EGD, 'Two hemoclips were placed on the visible vessel by 2015 with hemostasis.', '43255'),
+                (COLONOSCOPY, 'A 6 mm sigmoid polyp was removed with a cold snare, with apixaban last dose 10/12/2026.',
+                 '45385'),
+                (EGD, 'Upper endoscopy with balloon dilation was performed for the stricture on barium swallow of '
+                      '09/22/2026.', '43249'),
+                (COLONOSCOPY, 'The 8 mm polyp from the CT of 09/22/2026 was removed with a cold snare.', '45385'),
+                (COLONOSCOPY, 'The EMR scar from 2023 in the ascending colon was biopsied with cold forceps.', '45380'),
+                (COLONOSCOPY, 'Biopsies of the scar from the prior colonoscopy were obtained in the ascending colon.',
+                 '45380'),
+                (COLONOSCOPY, 'A polyp, previously biopsied, was removed with a hot snare.', '45385'),
+                (EGD, 'Addendum dated 10/16/2026 - cold forceps biopsies were also taken from the duodenum.', '43239')):
+            with self.subTest(line=line):
+                _not_excluded(self, template.format(x=line), code, line)
+
+    def test_controls_an_acts_own_occasion_or_date_still_dates_it(self):
+        for template, line, kind, status in (
+                (COLONOSCOPY, 'Biopsies were taken at the colonoscopy of 09/03/2026.', 'biopsy', 'historical'),
+                (COLONOSCOPY, 'A 6 mm polyp was removed with a cold snare during the colonoscopy of 09/03/2026.', 'snare',
+                 'historical'),
+                (COLONOSCOPY, 'A 6 mm sigmoid polyp was removed with a cold snare (09/03/2026).', 'snare', 'historical'),
+                (EGD, 'Two hemoclips were placed on the visible vessel in 2015.', 'clip', 'historical')):
+            with self.subTest(line=line):
+                self.assertEqual(statuses(template.format(x=line), kind), [status])

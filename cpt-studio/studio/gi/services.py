@@ -350,6 +350,14 @@ PLAN_WORDS = _rx(r'\b(?:will(?:\s+be)?|plan(?:s|ned)?|schedul(?:e|ed|ing)|future
                  r'|arrange(?:d)?|next|upcoming|pending\s+(?:scheduling|authorization)|repeat\s+(?:in|after)|after\s+'
                  r'pathology\s+review|if\s+(?:needed|necessary|indicated|cholangitis|symptoms)|referr(?:al|ed)\s+for'
                  r'|follow-?up\s+(?:colonoscopy|EGD|endoscopy|EUS|ERCP))\b')
+# A manner phrase - "as planned", "as recommended", "as previously discussed", "per the prior plan" - is the booking or
+# the agreement an act kept (routing's cues.AS_BOOKED_BEFORE), never its time: its plan or history word never dates the
+# act (the class of 7c8 skeptic sk:1 and sk:4 beyond their inputs). "will ... as planned" still has its own "will".
+MANNER_PHRASE = _rx(r'\bas\s+(?:(?:previously|originally|initially|already|earlier)\s+)?(?:planned|scheduled|recommended|'
+                    r'arranged|discussed|requested|ordered|agreed|intended|booked|indicated|noted|described|documented|'
+                    r'outlined|consented)(?:\s+(?:previously|earlier|before))?\b'
+                    r'|\bper\s+(?:(?:the|our|her|his|their)\s+)?(?:(?:prior|previous|original|initial|earlier)\s+)?'
+                    r'(?:plan|recommendation|protocol|discussion|request|order|schedule|consent)\b')
 # Reviewing earlier records is today's work: "review of prior records" never makes its clause historical.
 REVIEW_OF_RECORDS = _rx(r'\breview(?:ed|ing)?\s+(?:of\s+)?(?:the\s+)?(?:prior|previous|old|outside|earlier)\s+'
                         r'(?:records?|notes?|results?|reports?|imaging|studies|labs?|pathology|colonoscopy|endoscopy|'
@@ -361,8 +369,8 @@ REVIEW_OF_RECORDS = _rx(r'\breview(?:ed|ing)?\s+(?:of\s+)?(?:the\s+)?(?:prior|pr
 # own ("after apixaban was held on ...", "which was removed on ..."), or after another event's participle ("found",
 # "seen", "noted", "held") with nothing closing its phrase - is that event's, unless the mention is inside it: it
 # leaves the act's time in doubt (OTHER_TIME_CUE: held, never excluded - engine._select), never dates it.
-BIRTH_LABEL = _rx(r'(?:\bDOB|\bD\.O\.B\.?|\bdate\s+of\s+birth|\bbirth\s*date|\bborn(?:\s+(?:on|in))?|\bb\.)[ \t]*[:#=-]?[ \t]*'
-                  r'$')
+BIRTH_LABEL = _rx(r'(?:\bDOB|\bD\.O\.B\.?|\bdate\s+of\s+birth|\bbirth\s*date|\bborn(?:\s+(?:on|in))?|\bb\.)'
+                  r'(?:[ \t]+(?:is|was))?[ \t]*[:#=-]?[ \t]*$')
 # The date that stamps when text was written - the app's own addendum header ("ADDENDUM (revision 2, added 2026-10-27
 # 08:15 UTC)", jobs.addendum_block_text), a signature's or a dictation's date - is the document's time, never an act's
 # (refutation r1, negtime-10: the stamp had made the act an addendum adds "planned" and excluded its code).
@@ -370,19 +378,21 @@ BIRTH_LABEL = _rx(r'(?:\bDOB|\bD\.O\.B\.?|\bdate\s+of\s+birth|\bbirth\s*date|\bb
 # addendum, a late entry, an entry, an update, a correction, a revision, an edit, a signature, a dictation; the list is
 # only that structure's vocabulary), optionally its author ("by Dr. Ramos") and "on" / "at", right before the date or
 # the bracket that opens it ("Addendum 10/16/2026:", "(entered 10/16/2026)", "signed by Dr. Ramos on 10/16/2026").
-STAMP_LABEL = _rx(r'(?:\badded|\baddendum|\blate\s+entry|\b(?:re-?)?entered|\bupdated|\bcorrected|\brevised|\bedited|'
+STAMP_LABEL = _rx(r'(?:\badded|\baddendum(?:\s+dated)?|\blate\s+entry(?:\s+dated)?|\b(?:re-?)?entered|\bupdated|\bcorrected|\brevised|\bedited|'
                   r'\bfinali[sz]ed|\bauthenticated|\battested|\b(?:e-?|electronically\s+|co-?)?signed|\bdictated|'
                   r'\btranscribed|\bamended|\baddended|\bfaxed|\bprinted)'
                   r"(?:\s+by\s+(?:[\w.'-]+,?\s+){1,5}?)?(?:\s*(?:on|at))?[ \t]*[:#=(-]?[ \t]*$")
 # A clock time: "at 2015", "@ 2015", "at approximately 2015" (7c8 skeptic, sk:3: an approximation had read as a year).
-CLOCK_TIME = _rx(r'(?:\bat|@)[ \t]*(?:(?:approximately|approx\.?|about|around|roughly|~)[ \t]*)?$')
+CLOCK_TIME = _rx(r'(?:\bat|@|\btime[ \t]*[:=]?)[ \t]*(?:(?:approximately|approx\.?|about|around|roughly|~)[ \t]*)?$')
+# A four-digit number after "by" reads as a clock time as well as a year ("placed on the vessel by 2015").
+BY_TIME = _rx(r'\bby[ \t]*$')
 # What may stand before a date in a parenthesis that dates the act itself ("(09/03/2026)", "(on 09/03/2026)"); any other
 # words there label another item's date ("(barium swallow 09/22/2026)", "(CT 09/22/2026)": 7c8 skeptic, sk:3).
 OWN_DATE_LEAD = _rx(r'[ \t]*(?:(?:on|in|at|dated|from|since|until|by|circa)[ \t]+)?')
 OTHER_EVENT = _rx(r'\b(?:after|before|when|whenever|once|until|because|since|while|whereas|although|if|unless|which|who|'
                   r'whom|whose|where|whereby)\b|\b(?P<event>found|seen|noted|identified|detected|diagnosed|shown|'
                   r'demonstrated|described|reported|documented|visuali[sz]ed|observed|imaged|confirmed|suspected|'
-                  r'admitted|discharged|referred|hospitali[sz]ed|held|stopped|started|resumed|restarted|discontinued)\b')
+                  r'admitted|discharged|referred|hospitali[sz]ed|held|stopped|started|resumed|restarted|discontinued|last\s+dose)\b')
 OTHER_EVENT_PREDICATE = _rx(r'\b(?:was|were|is|are|been|has|have|had|did|does)\b|\b[a-z]{3,}ed\b')
 OTHER_TIME_CUE = 'uncertain: a time in its clause is something else\u2019s: '
 HEDGE_WORDS = _rx(r'\?|\b(?:possibl[ey]|probabl[ey]|questionabl[ey]|likely|unlikely|uncertain|unclear|may\s+have|might\s+have'
@@ -1492,11 +1502,19 @@ ATTRIBUTIVE_TIME = _rx(r'\b(?:the|a|an|this|that|its|their|his|her|with|from|of|
 # noun within two words after it); and a relative clause or another event's participle describing a noun ("the polyp
 # that was previously biopsied", "the ulcer seen on the prior EGD"), from its opener to the predicate after it (a
 # relative clause's own predicate first).
-ATTRIBUTIVE_OF = _rx(r'\b(?:sites?|scars?|beds?|base|margins?|areas?)\s+of\s+(?:(?:the|a|an)\s+)?'
-                     r'(?P<w>prior|previous(?:ly)?|old|earlier|remote|former)\s+[\w-]+')
-ATTRIBUTIVE_LEAD = _rx(r'[^\w\n]*(?P<w>previously|recently|formerly)\s+[a-z]+(?:ed|en)\s+(?:[\w-]+\s+){0,2}?'
-                       + _ATTRIBUTIVE_HEAD + r'\b')
+ATTRIBUTIVE_OF = _rx(r'\b(?:sites?|scars?|beds?|base|margins?|areas?)\s+(?:of|from)\s+(?:(?:the|a|an)\s+)?'
+                     r'(?P<w>prior|previous(?:ly)?|old|earlier|remote|former)\s+[\w-]+'
+                     # a time adverb set off with its participle, describing the noun before it ("A polyp, previously
+                     # biopsied, was removed")
+                     r'|,\s*(?P<w2>previously|recently|formerly)\s+[a-z]+(?:ed|en)\s*,')
+ATTRIBUTIVE_LEAD = _rx(r'[^\w\n]*(?P<w>previously|recently|formerly)\s+[a-z]+(?:ed|en)(?:\s+(?:[\w-]+\s+){0,2}?'
+                       + _ATTRIBUTIVE_HEAD + r'\b|\s*,)')
 ATTRIBUTIVE_DATE_LEAD = _rx(r'\b(?:the|a|an|this|that|its|their|his|her)\s+$')
+# A date after the noun it belongs to ("the stricture on barium swallow of 09/22/2026", "the polyp from the CT of
+# 09/22/2026", "the EMR scar from 2023"): a site, lesion or finding noun, or another study's, then "of", "from" or
+# "dated" right before the date. The act's own occasion ("at the colonoscopy of 09/03/2026") names no such noun.
+POSTNOMINAL_DATE = _rx(r'\b(?:' + _ATTRIBUTIVE_HEAD + r'|CT|MRI|MRCP|imaging|scans?|swallow|esophagram|ultrasound|'
+                       r'sonogram|x-?rays?|radiographs?|stud(?:y|ies)|exam(?:ination)?s?|labs?)\s+(?:of|from|dated)\s+$')
 ATTRIBUTIVE_DATE_HEAD = _rx(r'\s+(?:[\w-]+\s+){0,2}?' + _ATTRIBUTIVE_HEAD + r'\b')
 RELATIVE_OR_EVENT = _rx(r'\b(?:(?P<rel>that|which|who|whom|whose)|(?P<event>found|seen|noted|identified|detected|'
                         r'diagnosed|shown|demonstrated|described|reported|documented|visuali[sz]ed|observed|imaged|'
@@ -1528,8 +1546,12 @@ def _elsewhere_time_words(text: str, cs: int, ce: int, pos: int) -> dict[int, st
     """The time words of the clause [cs, ce) that describe another noun than the mention at ``pos`` (ATTRIBUTIVE_TIME,
     ATTRIBUTIVE_OF, ATTRIBUTIVE_LEAD, or inside a relative clause or event phrase, _described_phrases; the mention outside
     the phrase): their positions, with the phrase each describes."""
-    out = {m.start('w'): ' '.join(text[m.start('w'):m.end()].split()) for pattern in (ATTRIBUTIVE_TIME, ATTRIBUTIVE_OF)
-           for m in pattern.finditer(text, cs, ce) if not m.start('w') <= pos < m.end()}
+    out = {}
+    for pattern in (ATTRIBUTIVE_TIME, ATTRIBUTIVE_OF):
+        for m in pattern.finditer(text, cs, ce):
+            w = m.start('w') if m.group('w') else m.start('w2')
+            if not w <= pos < m.end():
+                out[w] = ' '.join(text[w:m.end()].strip(' ,').split())
     lead = ATTRIBUTIVE_LEAD.match(text, cs, ce)
     if lead and not lead.start('w') <= pos < lead.end():
         out.setdefault(lead.start('w'), ' '.join(text[lead.start('w'):lead.end()].split()))
@@ -1557,11 +1579,16 @@ def _date_owner(text: str, d, cs: int, pos: int) -> str:
     if BIRTH_LABEL.search(head) or STAMP_LABEL.search(head) \
             or (d.precision == 'year' and d.bare and CLOCK_TIME.search(head)):
         return 'none'
+    if d.precision == 'year' and BY_TIME.search(head):
+        return 'other'  # "placed ... by 2015": a clock time or a year, never established as the act's own year
     # A date as the attribute of a site, a lesion or a finding ("The 2023 EMR scar ... was biopsied"), with the mention
     # outside that noun phrase, is that noun's (7c8 skeptic, sk:4).
     lead = ATTRIBUTIVE_DATE_LEAD.search(text, max(cs, d.start - 12), d.start)
     noun = ATTRIBUTIVE_DATE_HEAD.match(text, d.end) if lead else None
     if noun is not None and not lead.start() <= pos < noun.end():
+        return 'other'
+    of = POSTNOMINAL_DATE.search(text, max(cs, d.start - 40), d.start)
+    if of is not None and not of.start() <= pos < d.end:
         return 'other'
     # A date in a parenthesis whose words label another item ("The polyp (CT 09/22/2026) was removed"), with the mention
     # outside it, is that item's (7c8 skeptic, sk:3).
@@ -1581,6 +1608,12 @@ def _date_owner(text: str, d, cs: int, pos: int) -> str:
             return 'other'
         # "since 2019": a phrase, not a clause of its own - an earlier opener may still own the date
     return ''  # no other clause or event before it: the date is its own
+
+
+def _in_an_aside(text: str, cs: int, d) -> bool:
+    """Whether the date ``d`` stands inside a parenthesis opened before it (in its clause, or just before it)."""
+    paren = text.rfind('(', max(0, min(cs, d.start - 80)), d.start)
+    return paren >= 0 and ')' not in text[paren:d.start]
 
 
 def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, service_date: Optional[date], dates,
@@ -1696,8 +1729,10 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     other_time = ''
     for d in _dates_in(dates, cs, ce):
         owner = _date_owner(text, d, cs, pos)
-        if not owner and d.precision == 'year' and d.bare and today:
-            owner = 'other'  # a bare year never outweighs the clause's "today" (7c8 skeptic, sk:3): held, never dated
+        if not owner and today and ((d.precision == 'year' and d.bare) or _in_an_aside(text, cs, d)):
+            # a bare year, or a date in a parenthetical aside ("Alex Synthetic (03/04/1961) underwent colonoscopy
+            # today"), never outweighs the clause's "today" (7c8 skeptic, sk:3): held, never dated
+            owner = 'other'
         if owner:
             if owner == 'other' and not other_time:
                 other_time = f'{text[d.start:d.end]} is dated by another clause or event'
@@ -1719,11 +1754,14 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     # A history or plan word dates the act unless it describes another noun of the clause (ATTRIBUTIVE_TIME): that one
     # leaves the act's time in doubt (refutation r1, negtime-5).
     elsewhere = _elsewhere_time_words(text, cs, ce, pos)
+    manner = [m.span() for m in MANNER_PHRASE.finditer(whole)]
     hist = next((h for h in HISTORY_WORDS.finditer(whole) if cs + h.start() not in elsewhere
+                 and not any(a <= h.start() < b for a, b in manner)
                  and not REVIEW_OF_RECORDS.search(whole, max(0, h.start() - 30), min(len(whole), h.end() + 40))), None)
     if hist and not today:
         return Reading('historical', ('historical: ' + hist.group(0).lower(),))
-    plan = next((m for m in PLAN_WORDS.finditer(whole) if cs + m.start() not in elsewhere), None)
+    plan = next((m for m in PLAN_WORDS.finditer(whole) if cs + m.start() not in elsewhere
+                 and not any(a <= m.start() < b for a, b in manner)), None)
     if plan and not (today and act_said):
         return Reading('planned', ('planned: ' + plan.group(0).lower(),))
     skipped = next((cs + m.start() for words in (HISTORY_WORDS, PLAN_WORDS) for m in words.finditer(whole)
