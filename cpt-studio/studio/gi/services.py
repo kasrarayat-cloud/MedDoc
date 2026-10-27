@@ -32,6 +32,7 @@ from __future__ import annotations
 import bisect
 import contextvars
 import dataclasses
+import functools
 import re
 from dataclasses import dataclass, field, replace
 from datetime import date
@@ -2013,6 +2014,49 @@ def current_statement(text: str, start: int, end: int, service_date: Optional[da
     reading = read_clause(text, (start, end), start, start, service_date=service_date, dates=dates, part=part,
                           in_today_report=False)
     return reading.status not in ('historical', 'planned', 'negated', 'cancelled')
+
+
+@functools.lru_cache(maxsize=1)
+def _act_frame(text: str, service_date: Optional[date]):
+    """The reflowed view of ``text`` with its dates, parts (and their starts) and sentences, as build() reads them:
+    computed once per document and date, however many codes ask states_an_act_done of it (one linear pass)."""
+    flow = reflow(text)
+    dates = gi_context.find_dates(flow)
+    plist = parts(flow, service_date=service_date, dates=dates)
+    return flow, dates, plist, [p.start for p in plist], _sentences(flow)
+
+
+def states_an_act_done(text: str, start: int, end: int, service_date: Optional[date]) -> Optional[Span]:
+    """An act mention inside the passage [start, end) that this reader reads as done today - performed, or stated done
+    with its time in doubt (OTHER_TIME_CUE) - each in its own clause and section, as pass 3 reads acts, on the same
+    reflowed view as build(): the clause of the first one, or None. For a code whose family no documented service names,
+    the engine asks it of the code's own passage, so the routing-era reading alone never excludes an act this reader
+    reads as done there (ec5, cluster EXCL: both readers must agree). Bounded: the sentences that meet the passage."""
+    flow, dates, plist, starts, sentences = _act_frame(text, service_date)
+    token = _ORIGINAL.set(text)
+    try:
+        for ss, se in sentences:
+            if se <= start:
+                continue
+            if ss >= end:
+                break
+            read_end = min(se, ss + SENTENCE_READ_CHARS)
+            mentions = _acts_in(flow, max(ss, start), min(read_end, end))
+            if not mentions:
+                continue
+            part = _part_at(plist, starts, ss)
+            cls = clauses(flow, ss, read_end)
+            for _kind, ms, me in mentions:
+                clause = _clause_for(cls, ms)
+                reading = read_clause(flow, clause, ms, me, service_date=service_date, dates=dates, part=part,
+                                      in_today_report=part.kind == 'report')
+                reading = held_under_denial(flow, ms, reading, service_date)
+                if reading.status == 'performed' or (reading.status == 'uncertain' and any(
+                        cue.startswith(OTHER_TIME_CUE) for cue in reading.cues)):
+                    return _span(text, *clause)
+    finally:
+        _ORIGINAL.reset(token)
+    return None
 
 
 # --- the reader -----------------------------------------------------------------------------------------------------

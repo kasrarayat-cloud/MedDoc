@@ -361,3 +361,35 @@ class DocumentationStampTests(SimpleTestCase):
         self.assertEqual(statuses(text, 'snare'), ['planned'])
         text, _ = self._with_addendum(note, 'The 5 mm sigmoid polyp had been removed with a cold snare on 09/03/2026.')
         self.assertEqual(statuses(text, 'snare'), ['historical'])
+
+
+class NoDocumentedServiceTests(SimpleTestCase):
+    """The same rule where the inventory documents no service of the code's family (a gi.other procedure such as
+    hemorrhoid banding): the routing-era reading of the code's own passage excluded the code alone, on the misreadings
+    above ("No bleeding occurred after two rubber bands were placed ...", "... and will be checked at the next visit",
+    "(DOB ...)"). The documented-service reader reads that passage's own act: where it reads the act done today, the two
+    readers disagree and the code is held; where it agrees (a plan line, an earlier date), the exclusion stands."""
+
+    ANOSCOPY = HEAD + ('Procedure date: 10/14/2026\nPROCEDURE NOTE: Anoscopy with hemorrhoid banding\nIndication: Bleeding '
+                       'internal hemorrhoids.\nFindings:\nGrade 2 internal hemorrhoids were seen. {x}\nImpression: See '
+                       'findings.\n')
+
+    def test_an_act_this_reader_reads_done_holds_the_code(self):
+        for line in ('No bleeding occurred after two rubber bands were placed on the internal hemorrhoids.',
+                     'Two rubber bands were placed on the internal hemorrhoids and will be checked at the next visit.',
+                     'Two rubber bands were placed on the hemorrhoids at the prior banding site.',
+                     'Patient (DOB 03/04/1961): two rubber bands were placed on the internal hemorrhoids today.'):
+            with self.subTest(line=line):
+                held = proposal(assessed(self.ANOSCOPY.format(x=line), [('46221', line)]), '46221')
+                self.assertEqual((held.bucket, held.status), ('selected', 'needs_clarification'))
+                self.assertTrue(any(c.fact == 'performed_status' for c in held.clarifications))
+
+    def test_controls_an_agreed_exclusion_stands_and_a_done_act_stays_ready(self):
+        for line in ('Two rubber bands were placed on the internal hemorrhoids on 09/03/2026.',
+                     'Two rubber bands will be placed on the internal hemorrhoids at the next visit.',
+                     'No rubber bands were placed on the internal hemorrhoids.'):
+            with self.subTest(line=line):
+                self.assertEqual(proposal(assessed(self.ANOSCOPY.format(x=line), [('46221', line)]), '46221').bucket,
+                                 'excluded')
+        line = 'Two rubber bands were placed on the internal hemorrhoids.'
+        self.assertEqual(proposal(assessed(self.ANOSCOPY.format(x=line), [('46221', line)]), '46221').status, 'ready')

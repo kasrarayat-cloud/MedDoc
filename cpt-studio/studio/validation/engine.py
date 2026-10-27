@@ -409,6 +409,12 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     outcome = checks.resolve_status(own + checks.routing_readings(finding),
                                     detectable=legacy in DETECTED_FAMILIES)
     found = reconcile.match(code, inventory, selection.family) if inventory is not None else None
+    if found is None and READ_DOCUMENTED_SERVICES and inventory is not None and outcome.state == 'not_performed':
+        # No documented service of the code's family: the routing-era reading of its own passage decided alone. Where
+        # the documented-service reader reads an act in that very passage as done today, the readers disagree, and the
+        # code is held with a question, never excluded (ec5, cluster EXCL: both readers must agree). With that reader
+        # off (READ_DOCUMENTED_SERVICES) there is no second reading, and the routing-era path stands as before.
+        outcome = _held_where_an_act_reads_done(outcome, text, day)
     supported = None
     note = ''
     if found is not None:
@@ -583,6 +589,25 @@ def _done_where_routing_denies(code: str, outcome: checks.StatusOutcome, service
         return False
     return any(a.status == 'performed' and any(decisive.start < ev.end and ev.start < decisive.end for ev in a.evidence)
                for a in service.acts)
+
+
+def _held_where_an_act_reads_done(outcome: checks.StatusOutcome, text: str,
+                                  day: Optional[date]) -> checks.StatusOutcome:
+    """The routing-era not-performed outcome of a code whose family no documented service names, unless the
+    documented-service reader reads an act in the code's own deciding passage as done today
+    (services.states_an_act_done): the code is then held (uncertain) with that disagreement as its reading, never
+    excluded ("No bleeding occurred after two rubber bands were placed ...", 46221 read "negated" by routing alone)."""
+    decisive = outcome.decisive
+    if decisive is None or decisive.origin != 'evidence' or decisive.start is None or decisive.end is None:
+        return outcome
+    clause = gi_services.states_an_act_done(text, decisive.start, decisive.end, day)
+    if clause is None:
+        return outcome
+    held = checks.Reading('uncertain', (f'uncertain: the routing-era reading reads it as {decisive.status}, but the '
+                                        'documented-service reader reads an act in it as done today: '
+                                        f'\u201c{checks.excerpt(clause.text)}\u201d',),
+                          'evidence', decisive.passage, decisive.start, decisive.end)
+    return checks.StatusOutcome('uncertain', held)
 
 
 def _act_documented(code: str, service, inventory) -> bool:
