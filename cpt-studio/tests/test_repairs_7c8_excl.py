@@ -158,3 +158,46 @@ class AnotherPredicatesTimeTests(SimpleTestCase):
                  'biopsy', 'planned')):
             with self.subTest(line=line, kind=kind):
                 self.assertEqual(statuses(template.format(x=line), kind), [status])
+
+
+class DateNotTheActsOwnTests(SimpleTestCase):
+    """sk:3 (negtime-7, claimed fixed by 28dcc0e7f): dates that are not the act's own still excluded it as historical - a
+    clock time after "at approximately", a date in a parenthesis that labels another event ("(barium swallow
+    09/22/2026)", "(CT 09/22/2026)"), another event's date after a later word that is no clause of its own ("held since
+    <date>": the last opener had won), a birth date after "b.", and a bare year beside "today". A date dates an act only as
+    its own time: these hold the act (or leave it performed), never exclude it."""
+
+    def test_a_date_that_is_not_the_acts_own_never_excludes_it(self):
+        for template, line, kind, code in (
+                (EGD, 'Today two hemoclips were placed on the visible vessel at approximately 2015.', 'clip', '43255'),
+                (EGD, 'Hemostasis was achieved with two hemoclips at approximately 2015.', 'bleeding_control', '43255'),
+                (EGD, 'Today two hemoclips were placed on the visible vessel around 2015.', 'clip', '43255'),
+                (EGD, 'The distal esophageal stricture (barium swallow 09/22/2026) was dilated with a 15 mm '
+                      'through-the-scope balloon.', 'dilation', '43249'),
+                (COLONOSCOPY, 'The polyp (CT 09/22/2026) was removed with a cold snare.', 'snare', '45385'),
+                (COLONOSCOPY, 'A 6 mm sigmoid polyp was removed with a cold snare, apixaban held since 10/12/2026.',
+                 'snare', '45385'),
+                (COLONOSCOPY, 'Alex Synthetic (b. 03/04/1961) underwent cold snare polypectomy of a 6 mm sigmoid polyp.',
+                 'snare', '45385')):
+            with self.subTest(line=line):
+                text = template.format(x=line)
+                self.assertIn(statuses(text, kind), (['performed'], ['uncertain']))
+                _not_excluded(self, text, code, line)
+        # a birth date is no act's time at all, in a parenthesis or not: the act reads by its own predicate
+        for line in ('Alex Synthetic (b. 03/04/1961) underwent cold snare polypectomy of a 6 mm sigmoid polyp.',
+                     'Alex Synthetic, b. 03/04/1961, underwent cold snare polypectomy of a 6 mm sigmoid polyp.'):
+            with self.subTest(line=line):
+                text = COLONOSCOPY.format(x=line)
+                self.assertEqual(statuses(text, 'snare'), ['performed'])
+                _not_excluded(self, text, '45385', line)
+
+    def test_controls_the_acts_own_date_still_dates_it(self):
+        for line, status in (
+                ('A 6 mm sigmoid polyp was removed with a cold snare on 09/03/2026.', 'historical'),
+                ('A 6 mm sigmoid polyp was removed with a cold snare (09/03/2026).', 'historical'),
+                ('A 6 mm sigmoid polyp was removed with a cold snare (on 09/03/2026).', 'historical'),
+                ('In 2015 a 6 mm sigmoid polyp was removed with a cold snare.', 'historical'),
+                ('A 6 mm sigmoid polyp will be removed with a cold snare on 11/20/2026.', 'planned'),
+                ('Polypectomy with a cold snare is scheduled for 11/20/2026.', 'planned')):
+            with self.subTest(line=line):
+                self.assertEqual(statuses(COLONOSCOPY.format(x=line), 'snare'), [status])

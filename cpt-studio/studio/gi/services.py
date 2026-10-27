@@ -361,13 +361,18 @@ REVIEW_OF_RECORDS = _rx(r'\breview(?:ed|ing)?\s+(?:of\s+)?(?:the\s+)?(?:prior|pr
 # own ("after apixaban was held on ...", "which was removed on ..."), or after another event's participle ("found",
 # "seen", "noted", "held") with nothing closing its phrase - is that event's, unless the mention is inside it: it
 # leaves the act's time in doubt (OTHER_TIME_CUE: held, never excluded - engine._select), never dates it.
-BIRTH_LABEL = _rx(r'(?:\bDOB|\bD\.O\.B\.?|\bdate\s+of\s+birth|\bbirth\s*date|\bborn(?:\s+(?:on|in))?)[ \t]*[:#=-]?[ \t]*$')
+BIRTH_LABEL = _rx(r'(?:\bDOB|\bD\.O\.B\.?|\bdate\s+of\s+birth|\bbirth\s*date|\bborn(?:\s+(?:on|in))?|\bb\.)[ \t]*[:#=-]?[ \t]*'
+                  r'$')
 # The date that stamps when text was written - the app's own addendum header ("ADDENDUM (revision 2, added 2026-10-27
 # 08:15 UTC)", jobs.addendum_block_text), a signature's or a dictation's date - is the document's time, never an act's
 # (refutation r1, negtime-10: the stamp had made the act an addendum adds "planned" and excluded its code).
 STAMP_LABEL = _rx(r'(?:\badded|\b(?:e-?|electronically\s+|co-?)?signed|\bdictated|\btranscribed|\bamended|\baddended|'
                   r'\bfaxed|\bprinted)(?:\s+(?:on|at))?[ \t]*[:#=-]?[ \t]*$')
-CLOCK_TIME = _rx(r'(?:\bat|@)[ \t]*$')
+# A clock time: "at 2015", "@ 2015", "at approximately 2015" (7c8 skeptic, sk:3: an approximation had read as a year).
+CLOCK_TIME = _rx(r'(?:\bat|@)[ \t]*(?:(?:approximately|approx\.?|about|around|roughly|~)[ \t]*)?$')
+# What may stand before a date in a parenthesis that dates the act itself ("(09/03/2026)", "(on 09/03/2026)"); any other
+# words there label another item's date ("(barium swallow 09/22/2026)", "(CT 09/22/2026)": 7c8 skeptic, sk:3).
+OWN_DATE_LEAD = _rx(r'[ \t]*(?:(?:on|in|at|dated|from|since|until|by|circa)[ \t]+)?')
 OTHER_EVENT = _rx(r'\b(?:after|before|when|whenever|once|until|because|since|while|whereas|although|if|unless|which|who|'
                   r'whom|whose|where|whereby)\b|\b(?P<event>found|seen|noted|identified|detected|diagnosed|shown|'
                   r'demonstrated|described|reported|documented|visuali[sz]ed|observed|imaged|confirmed|suspected|'
@@ -1486,21 +1491,30 @@ def _date_owner(text: str, d, cs: int, pos: int) -> str:
     """Whose time the date ``d`` in the clause starting at ``cs`` is, for the mention at ``pos``: '' the clause's own
     (it dates the act), 'none' no act's (a birth date, a documentation stamp, a clock time), 'other' another clause's or
     event's (BIRTH_LABEL, STAMP_LABEL, CLOCK_TIME, OTHER_EVENT). Bounded: the clause up to the date, once."""
-    head = text[max(cs, d.start - 30):d.start]
+    # A label stands right before its date (each pattern is anchored there), so it is read even across a clause or
+    # sentence start an abbreviation's period made ("Alex Synthetic (b. 03/04/1961) underwent ...": 7c8 skeptic, sk:3).
+    head = text[max(0, d.start - 30):d.start]
     if BIRTH_LABEL.search(head) or STAMP_LABEL.search(head) \
             or (d.precision == 'year' and d.bare and CLOCK_TIME.search(head)):
         return 'none'
-    opener = None
-    for m in OTHER_EVENT.finditer(text, cs, d.start):
-        opener = m
-    if opener is None or opener.start() <= pos < d.start:
-        return ''  # no other clause or event before it, or the mention is inside that clause: the date is its own
-    phrase = text[opener.end():d.start]
-    if re.search(r'[,;:()\n]', phrase):
-        return ''  # the other clause or event closed before the date
-    if opener.group('event') is None and not OTHER_EVENT_PREDICATE.search(phrase):
-        return ''  # "since 2019": a phrase, not a clause of its own
-    return 'other'
+    # A date in a parenthesis whose words label another item ("The polyp (CT 09/22/2026) was removed"), with the mention
+    # outside it, is that item's (7c8 skeptic, sk:3).
+    paren = text.rfind('(', max(0, min(cs, d.start - 80)), d.start)
+    if paren >= 0 and ')' not in text[paren:d.start] and not paren < pos < d.start \
+            and OWN_DATE_LEAD.fullmatch(text, paren + 1, d.start) is None:
+        return 'other'
+    # Every other clause or event before the date is asked, the last first: a later word that is no clause of its own
+    # ("since") never hides an earlier event whose date it is ("apixaban held since 10/12/2026": 7c8 skeptic, sk:3).
+    for opener in reversed(list(OTHER_EVENT.finditer(text, cs, d.start))):
+        if opener.start() <= pos < d.start:
+            return ''  # the mention is inside that clause or event: the date is its own
+        phrase = text[opener.end():d.start]
+        if re.search(r'[,;:()\n]', phrase):
+            return ''  # that clause or event (and every earlier one) closed before the date
+        if opener.group('event') is not None or OTHER_EVENT_PREDICATE.search(phrase):
+            return 'other'
+        # "since 2019": a phrase, not a clause of its own - an earlier opener may still own the date
+    return ''  # no other clause or event before it: the date is its own
 
 
 def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, service_date: Optional[date], dates,
@@ -1616,6 +1630,8 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     other_time = ''
     for d in _dates_in(dates, cs, ce):
         owner = _date_owner(text, d, cs, pos)
+        if not owner and d.precision == 'year' and d.bare and today:
+            owner = 'other'  # a bare year never outweighs the clause's "today" (7c8 skeptic, sk:3): held, never dated
         if owner:
             if owner == 'other' and not other_time:
                 other_time = f'{text[d.start:d.end]} is dated by another clause or event'
