@@ -470,7 +470,7 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
         # do not agree and the code is held with a question, never excluded (ec5 and 7c8, cluster EXCL: both readers
         # must agree; an earlier visit's reference never decides an E/M code). With that reader off
         # (READ_DOCUMENTED_SERVICES) there is no second reading, and the routing-era path stands as before.
-        outcome = _held_unless_agreed(outcome, text, day, legacy)
+        outcome = _held_unless_agreed(outcome, text, day, legacy, pages)
     supported = None
     note = ''
     if found is not None:
@@ -478,7 +478,7 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
         found = _second_opinion(outcome, found, code, text, inventory, routing)
         if found.reason == 'act_missing' and outcome.state == 'not_performed' \
                 and not _time_in_doubt(code, found.service) \
-                and _agreed_not_done(code, outcome, found.service, text, day):
+                and _agreed_not_done(code, outcome, found.service, text, day, pages):
             # The inventory documents no such act and the code's own passage reads it as not performed today (a
             # planned repeat, an earlier procedure), and the inventory reads the same not-done status there: the
             # exclusion stands. Never when the inventory states the act done and holds only its time in doubt (a date
@@ -646,15 +646,16 @@ def _not_done_class(status: str) -> str:
     return 'denied' if status in ('negated', 'cancelled') else status
 
 
-def _second_reading(outcome: checks.StatusOutcome, text: str, day: Optional[date]) -> str:
+def _second_reading(outcome: checks.StatusOutcome, text: str, day: Optional[date], pages=()) -> str:
     """Why the documented-service reader does not agree with the routing-era not-performed reading of the code's own
     deciding passage, or '' when it does: what it reads in that passage (services.passage_readings - its acts, service
     and procedure names and act predicates, each in its own clause) holds nothing done today, nothing it reads another
     way (a doubt, another time, a denial against a plan) and at least one thing with the same not-done status. An act
     read done today, another reading, a passage too full to read through, or nothing read at all: no agreement (ec5 and
-    7c8, cluster EXCL; sk:7 - a procedure named outside the act vocabulary is read by its name or its predicate)."""
+    7c8, cluster EXCL; sk:7 - a procedure named outside the act vocabulary is read by its name or its predicate), on
+    the page-joined view build() reads (``pages``; 7c8 FORMATS skeptic, sk:11)."""
     decisive = outcome.decisive
-    readings = gi_services.passage_readings(text, decisive.start, decisive.end, day)
+    readings = gi_services.passage_readings(text, decisive.start, decisive.end, day, pages)
     if readings is None:
         return 'does not read it through: there is too much in it to read'
     want = _not_done_class(decisive.status)
@@ -681,7 +682,8 @@ def _says_nothing(status: str, cues: Sequence[str]) -> bool:
     return status == 'uncertain' and bool(cues) and cues[0] in gi_services.SAYS_NOTHING
 
 
-def _agreed_not_done(code: str, outcome: checks.StatusOutcome, service, text: str, day: Optional[date]) -> bool:
+def _agreed_not_done(code: str, outcome: checks.StatusOutcome, service, text: str, day: Optional[date],
+                     pages=()) -> bool:
     """Whether both readers read the act ``code`` accounts for with the same not-done status (_not_done_class) from the
     code's own deciding passage - only then does the routing-era reading exclude a code whose documented service
     documents no such act done (7c8 skeptic, sk:9: one reader's "negated" and the other's "planned" had counted as
@@ -698,7 +700,7 @@ def _agreed_not_done(code: str, outcome: checks.StatusOutcome, service, text: st
             and any(decisive.start < ev.end and ev.start < decisive.end for ev in a.evidence)]
     if here:
         return all(a.status in checks.NEGATIVE and _not_done_class(a.status) == want for a in here)
-    return not _second_reading(outcome, text, day)
+    return not _second_reading(outcome, text, day, pages)
 
 
 def _not_the_same_not_done(found: reconcile.Match, old: checks.StatusOutcome, code: str) -> str:
@@ -725,7 +727,7 @@ def _not_the_same_not_done(found: reconcile.Match, old: checks.StatusOutcome, co
 
 
 def _held_unless_agreed(outcome: checks.StatusOutcome, text: str, day: Optional[date],
-                        legacy: str) -> checks.StatusOutcome:
+                        legacy: str, pages=()) -> checks.StatusOutcome:
     """The routing-era not-performed outcome of a code whose family no documented service names, unless the
     documented-service reader reads the code's own deciding passage with the same not-done status (_second_reading):
     otherwise the code is held (uncertain) with that disagreement as its reading, never excluded ("No bleeding occurred
@@ -736,7 +738,7 @@ def _held_unless_agreed(outcome: checks.StatusOutcome, text: str, day: Optional[
     decisive = outcome.decisive
     if decisive is None or decisive.origin != 'evidence' or decisive.start is None or decisive.end is None:
         return outcome
-    why = _second_reading(outcome, text, day)
+    why = _second_reading(outcome, text, day, pages)
     if not why and legacy in checks.EM_FAMILIES and decisive.status == 'historical':
         why = 'reads no reading of this visit in it: a reference to an earlier visit or service never decides a current one'
     if not why:

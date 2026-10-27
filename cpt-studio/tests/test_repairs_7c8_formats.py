@@ -477,3 +477,34 @@ class LabelAnsweredOnTheNextLineTests(SimpleTestCase):
                      'Biopsies taken from the gastric antrum for CLO:\nThe rapid urease test was negative.\n'):
             with self.subTest(text=text):
                 self.assertEqual(services.reflow(text), text)
+
+
+class ActFrameReadsThePageJoinTests(SimpleTestCase):
+    """sk:11: the routing-era exclusion of a code whose family no documented service names is held when the
+    documented-service reader reads an act in the code's passage as done today (services.states_an_act_done); that
+    reader's view (_act_frame) was reflowed without the revision's page spans, so across a page join it read nothing,
+    and 46221 was EXCLUDED for two rubber bands the document places today ("... two rubber bands were" / "placed on
+    the internal hemorrhoids today."). It reads the same page-joined view as build()."""
+
+    HEAD = (f'{BANNER}\nProcedure date: 10/14/2026\nPROCEDURE NOTE: Anoscopy with hemorrhoid banding\nIndication: '
+            'Bleeding internal hemorrhoids.\nFindings: Grade 2 internal hemorrhoids were seen.\n')
+
+    def test_a_banding_across_a_page_join_is_never_excluded(self):
+        for first, second in (('After the previous banding failed, two rubber bands were',
+                               'placed on the internal hemorrhoids today.'),
+                              ('Although banding had been planned for next month, two rubber bands were',
+                               'placed on the internal hemorrhoids today.'),
+                              ('After the previous banding failed two years ago, two rubber bands were',
+                               'placed today.')):
+            with self.subTest(first=first):
+                one_text, one_pages = pdf(self.HEAD + first + '\n' + second + '\nImpression: See findings.')
+                one = run(one_text, [('46221', first + '\n' + second)], one_pages)[0]
+                text, pages = pdf(self.HEAD + first, second + '\nImpression: See findings.')
+                quote = first + '\n\n\n' + second
+                self.assertIn(quote, text)
+                two = run(text, [('46221', quote)], pages)[0]
+                self.assertNotEqual(proposals_of(one)['46221'][0], 'excluded')  # control: one page holds it
+                self.assertNotEqual(proposals_of(two)['46221'][0], 'excluded')
+                at = text.index(quote)
+                self.assertIsNotNone(services.states_an_act_done(text, at, at + len(quote), date(2026, 10, 14),
+                                                                 pages))

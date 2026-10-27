@@ -2239,10 +2239,12 @@ def current_statement(text: str, start: int, end: int, service_date: Optional[da
 
 
 @functools.lru_cache(maxsize=1)
-def _act_frame(text: str, service_date: Optional[date]):
-    """The reflowed view of ``text`` with its dates, parts (and their starts) and sentences, as build() reads them:
-    computed once per document and date, however many codes ask states_an_act_done of it (one linear pass)."""
-    flow = reflow(text)
+def _act_frame(text: str, service_date: Optional[date], pages: tuple = ()):
+    """The reflowed view of ``text`` with its dates, parts (and their starts) and sentences, as build() reads them -
+    page joins included: ``pages`` are the revision's page spans (refutation 7c8, sk:11: without them a sentence
+    across a page join read no act done, and 46221 was excluded for bands the document places today): computed once
+    per document, date and pages, however many codes ask states_an_act_done of it (one linear pass)."""
+    flow = reflow(text, pages)
     dates = gi_context.find_dates(flow)
     plist = parts(flow, service_date=service_date, dates=dates)
     return flow, dates, plist, [p.start for p in plist], _sentences(flow)
@@ -2259,7 +2261,8 @@ def done_today(reading: Reading) -> bool:
         cue.startswith(OTHER_TIME_CUE) for cue in reading.cues))
 
 
-def passage_readings(text: str, start: int, end: int, service_date: Optional[date]) -> Optional[list]:
+def passage_readings(text: str, start: int, end: int, service_date: Optional[date],
+                     pages: Sequence = ()) -> Optional[list]:
     """What this reader reads in the passage [start, end), as pass 3 reads acts, on the same reflowed view as build():
     every act mention, service name, procedure-shaped word (routing's own structural form, detect._PROCEDURE_WORD:
     "Anoscopy", "Hemorrhoid banding", "Paracentesis") and act predicate ("was performed", "were placed") in it, each read
@@ -2267,9 +2270,10 @@ def passage_readings(text: str, start: int, end: int, service_date: Optional[dat
     (done_today). None when the passage holds more than PASSAGE_READS of them (not read through). The engine asks it of
     a code's own deciding passage, so the routing-era reading alone never excludes a code (ec5 and 7c8, cluster EXCL:
     both readers must read the same not-done status; 7c8 skeptic, sk:7 - an act outside the act vocabulary, read by its
-    name or its predicate). Bounded: the sentences that meet the passage, PASSAGE_READS reads."""
+    name or its predicate). ``pages`` are the revision's page spans, so a sentence across a page join is read as build()
+    reads it (7c8 FORMATS skeptic, sk:11). Bounded: the sentences that meet the passage, PASSAGE_READS reads."""
     from studio.gi import detect  # local: detect imports context, which this module also imports
-    flow, dates, plist, starts, sentences = _act_frame(text, service_date)
+    flow, dates, plist, starts, sentences = _act_frame(text, service_date, tuple(pages or ()))
     out: list = []
     token = _ORIGINAL.set(text)
     try:
@@ -2304,9 +2308,10 @@ def passage_readings(text: str, start: int, end: int, service_date: Optional[dat
     return out
 
 
-def states_an_act_done(text: str, start: int, end: int, service_date: Optional[date]) -> Optional[Span]:
+def states_an_act_done(text: str, start: int, end: int, service_date: Optional[date],
+                       pages: Sequence = ()) -> Optional[Span]:
     """The clause of the first thing passage_readings reads as done today in the passage [start, end), or None."""
-    readings = passage_readings(text, start, end, service_date) or []
+    readings = passage_readings(text, start, end, service_date, pages) or []
     return next((clause for reading, clause in readings if done_today(reading)), None)
 
 
