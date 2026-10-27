@@ -105,6 +105,10 @@ class EndToEnd(TestCase):
         encounter = models.Encounter.objects.get(pk=encounter_id)
         return encounter.current_assessment.proposals.get(code=code, bucket__in=('selected', 'excluded')).bucket
 
+    def assert_not_excluded(self, encounter_id, code):
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        self.assertFalse(encounter.current_assessment.proposals.filter(code=code, bucket='excluded').exists())
+
     def assert_held(self, encounter_id, runs=1):
         """Nothing sent for the member's date: the last run is held as a member date conflict."""
         held = models.ProviderRun.objects.filter(encounter_id=encounter_id).order_by('created_at')
@@ -143,3 +147,100 @@ class ManyLabelledDatesCostTests(SimpleTestCase):
                                     memory_bytes=settings.BOUNDED_MEMORY_BYTES)
         self.assertLess(time.perf_counter() - started, settings.CONTEXT_REQUEST_SECONDS)
         self.assertEqual(facts['service_date'].origin, 'document')
+
+
+class MemberDateAgreesOnlyWithAStatedValueTests(DateAssertions, SimpleTestCase):
+    """sk:1 (a regression of 0e639e79f, the Elena class): a member date agreed with any date found anywhere in a
+    candidate's evidence span, and an unread label's span ran to the end of its value field - across a date of birth
+    one space after the value, or across the earlier cells of a table row. A member's 1998-01-01 beside 'DOB:
+    01/01/1998' was taken and sent, and an act done on the documented date was excluded against it. Each candidate's
+    evidence now holds only its own value (the value's first date-shaped run; a table column's label and its cell), so a
+    member date agrees only with a date some candidate states as its own."""
+
+    BORN = (
+        # title + a table whose date-of-birth column comes before the date-of-service column (T5)
+        HEAD + 'Colonoscopy report - 10/14/2026\nPatient | DOB | Date of Service\nSynthetic, Alex | ' + BIRTH
+        + ' | 10/14/2026\n' + COLO_BODY,
+        # title + a flattened header row: an unread value one space before a date of birth (T4)
+        HEAD + 'Colonoscopy report - 10/14/2026\nPatient: Synthetic, Alex    DOS: 10/14/26 DOB: ' + BIRTH + '\n'
+        + COLO_BODY,
+        # the note's own labelled date beside such a line or table
+        HEAD + 'Date of service: 10/14/2026\nPatient: Synthetic, Alex    DOS: 10/14/26 DOB: ' + BIRTH + '\n'
+        + COLO_PLAIN,
+        HEAD + 'Date of service: 10/14/2026\nPatient | DOB | Visit Date\nSynthetic, Alex | ' + BIRTH
+        + ' | 10/14/2026\n' + COLO_PLAIN,
+        # a label above its value, the value one space before a date of birth
+        HEAD + 'Colonoscopy report - 10/14/2026\nDate of service:\n10/14/2026 DOB: ' + BIRTH + '\n' + COLO_PLAIN,
+        # tables without a title, the date-of-birth column first
+        HEAD + 'Patient | DOB | Date of Service | Provider\nSynthetic, Alex | ' + BIRTH
+        + ' | 10/14/2026 | Dr. A. Synthetic\n' + COLO_PLAIN,
+        HEAD + '| Patient | DOB | Date of Service |\n| --- | --- | --- |\n| Synthetic, Alex | ' + BIRTH
+        + ' | 10/14/2026 |\n' + COLO_PLAIN,
+    )
+    UNREAD_BORN = (
+        HEAD + 'DOS: 10-20-26 DOB: ' + BIRTH + '\n' + VISIT_BODY,  # E1
+        HEAD + 'Date of Service: 10/20/26 Date of Birth: ' + BIRTH + '\n' + VISIT_BODY,  # E2
+        HEAD + 'Date of service: 20-Oct-26 (DOB ' + BIRTH + ')\n' + VISIT_BODY,
+        HEAD + 'Visit date: 10.20.2026, DOB ' + BIRTH + '\n' + VISIT_BODY,
+        HEAD + 'Date of service:\n10-20-26 DOB ' + BIRTH + '\n' + VISIT_BODY,
+        HEAD + 'DOS: 10-20-26 MRN: 12345 DOB: ' + BIRTH + '\n' + VISIT_BODY,
+        HEAD + 'Synthetic, Alex DOB ' + BIRTH + ' Colonoscopy 10/14/26\n' + COLO_PLAIN,
+    )
+
+    def test_a_member_date_a_date_of_birth_states_is_a_member_conflict(self):
+        for text in self.BORN + self.UNREAD_BORN:
+            with self.subTest(text=text.splitlines()[1][:60] + ' / ' + text.splitlines()[2][:40]):
+                self.assertNotEqual(date_fact(text).origin, 'document')
+                self.assert_member_conflict(text, ELENA_DATE)
+                self.assertFalse(any(BIRTH in quoted for quoted in evidence_text(text)), evidence_text(text))
+
+    def test_the_date_a_candidate_states_still_answers_the_question(self):
+        for text in self.BORN:
+            with self.subTest(text=text.splitlines()[1][:60] + ' / ' + text.splitlines()[2][:40]):
+                self.assert_member_date(text, '2026-10-14')
+
+    def test_a_table_column_keeps_its_label_and_its_cell(self):
+        text = self.BORN[0]
+        self.assertEqual(evidence_text(text), ['Colonoscopy report - 10/14/2026', 'Date of Service', '10/14/2026'])
+        self.assertEqual(evidence_text(self.BORN[1]), ['Colonoscopy report - 10/14/2026', 'DOS: 10/14/26'])
+
+    def test_controls_a_readable_value_s_own_forms(self):
+        # the value's first date-shaped run, with a weekday, a month name or an ordinal, is still the label's own
+        for header, value in (('Date of service: Tuesday, October 20, 2026 at 9:15', '2026-10-20'),
+                              ('Date of service: see 10/20/2026', '2026-10-20'),
+                              ('Date of Service | Provider | Location\n10/20/2026 | Dr. A. Synthetic | Office',
+                               '2026-10-20'),
+                              ('Date of service:\n\n\n20th October 2026, at the clinic', '2026-10-20')):
+            with self.subTest(header=header[:40]):
+                text = HEAD + header + '\n' + OFFICE_BODY
+                self.assert_member_date(text, value)
+                self.assert_member_conflict(text, ELENA_DATE)
+
+
+class MemberDateAgreesOnlyWithAStatedValueRequestTests(EndToEnd):
+    """sk:1 end to end: nothing is sent for the member's 1998-01-01, and no act is excluded against it."""
+
+    def test_t5_created_with_the_member_date(self):
+        text = (HEAD + 'Colonoscopy report - 10/14/2026\nPatient | DOB | Date of Service\nSynthetic, Alex | ' + BIRTH
+                + ' | 10/14/2026\n' + COLO_BODY)
+        encounter_id = self.finished(text, service_date=ELENA_DATE)
+        self.assert_held(encounter_id)
+        self.assert_not_excluded(encounter_id, '45385')
+
+    def test_t4_the_member_date_entered_afterwards(self):
+        text = (HEAD + 'Colonoscopy report - 10/14/2026\nPatient: Synthetic, Alex    DOS: 10/14/26 DOB: ' + BIRTH + '\n'
+                + COLO_BODY)
+        encounter_id = self.finished(text)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.set_context(encounter_id, {'service_date': ELENA_DATE})
+        self.assert_never_sent(encounter_id, ELENA_DATE)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.assertNotEqual(self.bucket(encounter_id, '45385'), 'excluded')
+
+    def test_e1_and_e2_an_unread_date_of_service_beside_a_date_of_birth(self):
+        e1 = self.finished(HEAD + 'DOS: 10-20-26 DOB: ' + BIRTH + '\n' + OFFICE_BODY, service_date=ELENA_DATE)
+        self.assert_held(e1)
+        e2 = self.finished(HEAD + 'Date of Service: 10/20/26 Date of Birth: ' + BIRTH + '\n' + OFFICE_BODY)
+        self.set_context(e2, {'service_date': ELENA_DATE})
+        self.assert_never_sent(e2, ELENA_DATE)
+        self.assertEqual(self.dates_sent(e2), [[]])

@@ -299,6 +299,14 @@ class _Candidate:
     source: str  # 'label' (a date-of-service label) | 'title' (a dated title or "Date:" line) | 'field' ("Re: ...")
     reading: str  # 'own' | 'unplaced' (it may be the date) | 'aside' (another occurrence's) | 'other' (another document)
     form: str  # 'read' | 'invalid' | 'unread'
+    # A table column's value cell, kept beside the label heading it (span): never the cells between them. Every span a
+    # candidate keeps holds no date but its own value (refutation round 3, sk:1), so the dates its evidence reads are the
+    # dates it states.
+    extra: tuple[Span, ...] = ()
+
+    @property
+    def spans(self) -> tuple[Span, ...]:
+        return (self.span,) + self.extra
 
 
 _LABEL_WORDS = re.compile(r"(?<![A-Za-z'’-])((?:[A-Za-z][A-Za-z'’-]* ){1,4})$")
@@ -534,14 +542,44 @@ def _field_end(text: str, pos: int, line_end: int) -> int:
     return _strip_span(text, pos, brk.start() if brk else limit)[1]
 
 
-def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int]]:
+# The value a date label states: the first date-shaped run of its value field - a weekday, then at most three date
+# parts (digits with an ordinal, or a month name) joined by a separator, "of" or a space ("10/14/26", "20-Oct-26",
+# "Tuesday, October 20, 2026"). The rest of the field is not the label's value (refutation round 3, sk:1: the field of
+# "DOS: 10/14/26 DOB: 01/01/1998" ran on over the date of birth, so a member's 1998-01-01 agreed with the label's
+# evidence and was sent). Linear: possessive runs, at most three parts.
+_DATE_PART = r'(?:\d{1,4}(?:st|nd|rd|th)?|' + _MONTH + r'\.?)(?![A-Za-z0-9])'
+_VALUE_TOKEN = cues.rx(r'(?<![A-Za-z0-9])(?:' + _WEEKDAY + r',?[ \t]*+)?' + _DATE_PART
+                       + r'(?:[ \t]*+(?:[-/.,–]|of\b)?+[ \t]*+' + _DATE_PART + r'){0,2}')
+_GLUED = re.compile(r'[\w/-]')
+_NON_SPACE = re.compile(r'\S*')
+
+
+def _value_extent(text: str, start: int, end: int) -> tuple[int, int]:
+    """The label's own value in its value field [start, end): the field's first date-shaped run that carries a digit
+    (_VALUE_TOKEN); one glued to more of its kind ("10/14/2026-10/15/2026") runs on to the next space, so a cut never
+    makes a date of its own. The whole field when it has no such run."""
+    pos = start
+    while True:
+        m = _VALUE_TOKEN.search(text, pos, end)
+        if m is None:
+            return start, end
+        if _DIGIT.search(text, m.start(), m.end()):
+            stop = m.end()
+            if stop < end and _GLUED.match(text, stop):
+                stop = _NON_SPACE.match(text, stop, end).end()
+            return m.start(), stop
+        pos = m.end()
+
+
+def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int, bool]]:
     """Where a date-of-service label's value is, when SERVICE_DATE read no date after it and the value carries a digit:
-    (start, end), else None (refutation round 2, rule A and c2:8: such a label kept nothing, so a member's date became
-    the date and was sent). The value is the label's field on its own line ("20-Oct-26", "10 / 20 / 2026"); the same
-    column of the next row, under a label heading a table column; or the next non-blank line, under a label that ends
-    its line ("Date of service:" above "10/20/2026", blank lines between). Without a separator the value must start as
-    a date does, so a label in prose ("the procedure date was moved twice") has none. A scan: each label reads its own
-    tail, and each line's bars and the row under it are read once."""
+    (start, end, column), else None (refutation round 2, rule A and c2:8: such a label kept nothing, so a member's date
+    became the date and was sent). The value is the label's field on its own line ("20-Oct-26", "10 / 20 / 2026"); the
+    same column of the next row, under a label heading a table column (column True: the cells between are not the
+    label's); or the next non-blank line, under a label that ends its line ("Date of service:" above "10/20/2026", blank
+    lines between). Without a separator the value must start as a date does, so a label in prose ("the procedure date
+    was moved twice") has none. A scan: each label reads its own tail, and each line's bars and the row under it are
+    read once."""
     tail = _LABEL_TAIL.match(text, m.end())
     pos, sep, gap = tail.end(), tail.group('sep'), tail.group('gap')
     line_start, line_end = rows.line(m.start())
@@ -550,7 +588,7 @@ def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int
         if sep is None and not _VALUE_DATE_START.match(text, pos, max(end, pos)):
             return None
         if _DIGIT.search(text, pos, end):
-            return pos, end
+            return pos, end, False
         if sep != '|':
             return None
     bars = rows.bars(line_start, line_end)
@@ -568,7 +606,7 @@ def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int
         start, end = _strip_span(text, *cells[col])
         if end - m.start() > GAP_REACH or not _DIGIT.search(text, start, end):
             return None
-        return start, end
+        return start, end, True
     if pos < line_end:
         return None
     row = rows.below(line_end)
@@ -577,7 +615,7 @@ def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int
     start = _strip_span(text, *row)[0]
     if not _VALUE_DATE_START.match(text, start, row[1]):
         return None
-    return start, _field_end(text, start, row[1])
+    return start, _field_end(text, start, row[1]), False
 
 
 def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
@@ -602,7 +640,13 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
         if where is None:
             continue
         kind, start = _labelled_kind(text, m.start('label'), m.end('label'), where[0], where[1], None)
-        found.append(_Candidate(_span(text, start, where[1]), None, 'label', _READING[kind], 'unread'))
+        # refutation round 3, sk:1: the evidence is the label and its own value, never the text beside it
+        value_start, value_end = _value_extent(text, where[0], where[1])
+        if where[2]:  # a table column: the label's cell and its value's cell, never the cells between
+            span, extra = _span(text, start, m.end('label')), (_span(text, value_start, value_end),)
+        else:
+            span, extra = _span(text, start, value_end), ()
+        found.append(_Candidate(span, None, 'label', _READING[kind], 'unread', extra))
     return tuple(found) + _title_candidates(text, lay)
 
 
@@ -709,7 +753,14 @@ def _dated_service_line(text: str, ls: int, le: int) -> Optional[_Candidate]:
         source, reading = 'title', 'aside'
     day = None if m.group('unread') is not None else date_from_match(m)
     form = 'read' if day else ('unread' if m.group('unread') is not None else 'invalid')
-    return _Candidate(_span(text, _strip_span(text, ls, le)[0], _strip_span(text, m.start(), m.end())[1]),
+    # refutation round 3, sk:1: a date before the line's own ("Synthetic, Alex DOB 01/01/1998 Colonoscopy 10/14/26") is
+    # not its value - the evidence starts after it, so a member's date of birth never agrees with this line
+    start = _strip_span(text, ls, le)[0]
+    for before in FULL_DATE.finditer(text, start, m.start()):
+        start = before.end()
+    while start < m.start() and text[start] in ' \t,;:|-–':
+        start += 1
+    return _Candidate(_span(text, start, _strip_span(text, m.start(), m.end())[1]),
                       day.isoformat() if day else None, source, reading, form)
 
 
@@ -797,17 +848,17 @@ def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
         (any(c.form == 'unread' for c in unusable), UNREAD_DATE_NOTE),
         (not own and any(c.form == 'read' for c in found), UNPLACED_DATE_NOTE)) if present)
     if own and len(values) == 1 and all(c.form == 'read' and c.value in values for c in speaks):
-        return _fact('service_date', [(c.value, c.span) for c in own + support])
+        return _fact('service_date', [(c.value, s) for c in own + support for s in c.spans])
+    unread = tuple(s for c in unusable for s in c.spans)
     if own:
-        fact = _fact('service_date', [(c.value, c.span) for c in own + speaks if c.form == 'read'])
+        fact = _fact('service_date', [(c.value, s) for c in own + speaks if c.form == 'read' for s in c.spans])
         if not unusable:
             return fact
-        return Fact('service_date', None, 'conflict', _sorted_spans(fact.evidence + tuple(c.span for c in unusable)),
-                    note)
-    fact = _fact('service_date', [(c.value, c.span) for c in found if c.form == 'read'])
+        return Fact('service_date', None, 'conflict', _sorted_spans(fact.evidence + unread), note)
+    fact = _fact('service_date', [(c.value, s) for c in found if c.form == 'read' for s in c.spans])
     if not found:
         return fact
-    return Fact('service_date', None, 'missing', _sorted_spans(fact.evidence + tuple(c.span for c in unusable)), note)
+    return Fact('service_date', None, 'missing', _sorted_spans(fact.evidence + unread), note)
 
 
 def _sorted_spans(spans) -> tuple[Span, ...]:
@@ -878,7 +929,10 @@ def _date_readings(spans) -> Optional[set]:
     """The calendar dates documented date text reads (ISO strings), or None when it reads none - a member date can then
     never be shown to agree with it. Refutation round 2: every candidate is now kept, so the evidence can hold text that
     reads a date beside text that reads none ("GI visit - 10/20/2026" beside "Last visit date: 04/15/26"); the dates it
-    does read are the ones a member can answer with, so the date asked is never stuck when the member answers with one."""
+    does read are the ones a member can answer with, so the date asked is never stuck when the member answers with one.
+    Refutation round 3, sk:1: these are only the dates the candidates state as their own values - each candidate's
+    evidence holds no other date (_Candidate.extra, _value_extent, _dated_service_line), so a date of birth written
+    beside a date of service ("DOS: 10/14/26 DOB: 01/01/1998", "Patient | DOB | Date of Service") is never one."""
     values = set()
     for span in spans:
         values |= {day.isoformat() for day in (date_from_match(m) for m in FULL_DATE.finditer(str(span.text))) if day}
@@ -930,7 +984,9 @@ def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> di
             # documented conflict by choosing one of its values: the date asked is never stuck when the member
             # answers with a date the evidence reads, also where the evidence reads more than one (refutation round 2:
             # every candidate is now kept). Any other date is a conflict, and so is any date where the evidence reads
-            # none ("Date of service: 20-Oct-26" alone: amend the document or clear the value).
+            # none ("Date of service: 20-Oct-26" alone: amend the document or clear the value). The evidence reads
+            # only the dates its candidates state as their own (refutation round 3, sk:1: a date of birth beside the
+            # date of service was read too, and a member's 1998-01-01 was taken and sent).
             readings = _date_readings(documented.evidence) if name == 'service_date' else None
             if readings is not None and value in readings:
                 merged[name] = Fact(name, value, 'user', (), USER_NOTE)
