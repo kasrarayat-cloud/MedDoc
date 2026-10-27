@@ -3524,7 +3524,8 @@ def _family_sentences(an: Analysis, attributed: list[Optional[str]], family: str
 
 def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                denied: Optional[list] = None, doubted: Optional[list] = None, *,
-               cut: Optional[list] = None, cut_denials: Optional[list] = None) -> tuple[list, list]:
+               cut: Optional[list] = None, cut_denials: Optional[list] = None,
+               labelled: Optional[list] = None) -> tuple[list, list]:
     """(reached, blocked) as (depth, label, clause span) for landmarks read as
     part of a performed or incomplete service. A landmark is reached only from a
     reading with no unresolved negation; a denied advancement ("it was not advanced
@@ -3541,7 +3542,9 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
     declared:11: "Extent: cecum | Prep quality: Good"; _S2_read_by_the_cut), and ``cut_denials`` every blocked or denied
     hit with its match, its clause window and whether its own reading denies it outright (hit, start, end, window start,
     window end, explicit: negated, cancelled or incomplete), so that a denial in the family's text can still keep such a
-    label from reading as reached (_S2_cut_denied, round 4d regression:3)."""
+    label from reading as reached (_S2_cut_denied, round 4d regression:3). ``labelled``, when given, collects every
+    landmark an extent label names (cues.EXTENT_LABEL_BEFORE right before it: "Extent: Cecum | Scope: Olympus",
+    "Intended extent: cecum"), whatever its reading: the document's own statement of the extent (_insertion_only)."""
     text = an.text
     reached, blocked = [], []
     for s, e in sentences:
@@ -3560,6 +3563,8 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                     if clause is None:
                         clause = _span(text, cs, ce)
                     hit = (depth, label, clause)
+                    if labelled is not None and cues.EXTENT_LABEL_BEFORE.search(text, ws, m.start()):
+                        labelled.append(hit)
                     if status in ('performed', 'incomplete') and cues.REACHED_BEYOND.search(pre):
                         reached.append(hit)
                     elif base in ('performed', 'incomplete', 'negated') and (
@@ -5223,23 +5228,25 @@ _INSERTED_AT = re.compile(r'\b(?:inserted|introduced|placed|passed)\b[^.;]{0,40}
                           re.A | re.I)
 
 
-def _insertion_only(depth: int, span: Span, denials) -> bool:
+def _insertion_only(depth: int, span: Span, denials, labelled=()) -> bool:
     """The deepest landmark reached is the first one, read only from the instrument's insertion ("The colonoscope was
-    inserted into the rectum and advanced under direct vision"), and nothing denies or doubts a deeper reach: the text
-    states where the examination started, not how far it went."""
-    return depth == 1 and not denials and bool(_INSERTED_AT.search(span.text))
+    inserted into the rectum and advanced under direct vision"), nothing denies or doubts a deeper reach, and no extent
+    label names a landmark (``labelled``, read or not): the text states where the examination started, not how far it
+    went. An extent label is the document's own statement of the extent, so beside one the label readings decide as
+    before (round 4c-2 plan:B, B2, D, D2: an unread, shorter, denied or aimed label keeps the procedure incomplete)."""
+    return depth == 1 and not denials and not labelled and bool(_INSERTED_AT.search(span.text))
 
 
 def _colon_extent(an: Analysis, sentences) -> Optional[Fact]:
-    unread, denied, doubted, cut, cut_denials = [], [], [], [], []
+    unread, denied, doubted, cut, cut_denials, labelled = [], [], [], [], [], []
     reached, blocked = _landmarks(an, sentences, cues.LOWER_LANDMARKS, unread, denied, doubted, cut=cut,
-                                  cut_denials=cut_denials)
+                                  cut_denials=cut_denials, labelled=labelled)
     reached, withhold = _S2_cut_denied(an, reached, cut, cut_denials, cues.LOWER_LANDMARKS,  # round 4d regression:3
                                        cues.CECUM_DEPTH, sub_acts=True)
     if not reached or withhold:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
-    if depth < cues.CECUM_DEPTH and _insertion_only(depth, span, blocked + denied + doubted):
+    if depth < cues.CECUM_DEPTH and _insertion_only(depth, span, blocked + denied + doubted, labelled):
         return None  # "inserted into the rectum and advanced": where the examination starts, never how far it went
     if depth < cues.CECUM_DEPTH:
         if _P2_unread_reaches(unread, cues.CECUM_DEPTH) and not _P2_denied_beyond(blocked + denied, depth):
@@ -5275,15 +5282,16 @@ def _expected_upper_depth(an: Analysis) -> int:
 def _upper_extent(an: Analysis, sentences, incomplete: bool) -> Optional[Fact]:
     """The deepest landmark reached; incomplete when the service is documented as incomplete
     or that landmark lies short of the depth the named procedure calls for."""
-    unread, denied, doubted, cut, cut_denials = [], [], [], [], []
+    unread, denied, doubted, cut, cut_denials, labelled = [], [], [], [], [], []
     reached, blocked = _landmarks(an, sentences, cues.UPPER_LANDMARKS, unread, denied, doubted, cut=cut,
-                                  cut_denials=cut_denials)
+                                  cut_denials=cut_denials, labelled=labelled)
     reached, withhold = _S2_cut_denied(an, reached, cut, cut_denials, cues.UPPER_LANDMARKS,  # round 4d regression:3
                                        _expected_upper_depth(an))
     if not reached or withhold:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
-    if depth < _expected_upper_depth(an) and not incomplete and _insertion_only(depth, span, blocked + denied + doubted):
+    if depth < _expected_upper_depth(an) and not incomplete and _insertion_only(depth, span, blocked + denied + doubted,
+                                                                                 labelled):
         return None  # "introduced into the esophagus": where the examination starts, never how far it went
     if depth < _expected_upper_depth(an) and _P2_unread_reaches(unread, _expected_upper_depth(an)) \
             and not _P2_denied_beyond(blocked + denied, depth):
@@ -6980,6 +6988,18 @@ def status_for_span(text: str, start: int, end: int,
         raise ValueError(f'span [{start}, {end}) is not a non-empty range inside the text (length {len(text)}).')
     reading = _read_span(_analysis(text, _checked_date(service_date, 'status_for_span()'))[0], start, end)
     return reading.status, reading.cues
+
+
+def denying_label_over(text: str, pos: int, service_date: Optional[date] = None) -> Optional[str]:
+    """The label that denies performance over the list the line at ``pos`` belongs to ("Procedures not performed:",
+    "Cancelled procedures:", "[ ] Not done:"), read exactly as routing reads it (_denying_label_above: LABEL_ITEMS lines
+    back in the same section, stopping at a blank line or at another label line); None when there is none. For the
+    documented-service reader (gi/services), so that both readers hold the same listed lines (round 4c-2 plan:C)."""
+    if not isinstance(text, str):
+        raise TypeError('denying_label_over() needs the canonical text as str.')
+    if not 0 <= pos < len(text):
+        return None
+    return _denying_label_above(_analysis(text, _checked_date(service_date, 'denying_label_over()'))[0], pos)
 
 
 def own_status_for_span(text: str, start: int, end: int,

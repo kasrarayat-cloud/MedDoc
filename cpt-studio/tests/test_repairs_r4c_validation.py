@@ -8,6 +8,7 @@ import json
 from datetime import date
 
 from studio.gi.detect import route
+from studio.gi.profiles import INVENTORY_FAMILIES, family_for_code
 from studio.types import EvidenceSpan, RoutingResult, from_jsonable, to_jsonable
 from studio.validation import checks, engine
 from tests.test_repairs_r3_validation_b import HEAD, Case, check_of, real
@@ -473,7 +474,14 @@ class Validation2OwnProcedureReportOverHoldTests(Case):
                 text = V2_REPORT.format(proc=proc, ind='Symptoms.', find=line)
                 proposals, _ = real(text, (code, line))
                 self.assertReady(proposals[code])
-                self.assertIn(f'Documented as performed: “{line}”', check_of(proposals[code], 'service.status').detail)
+                status = check_of(proposals[code], 'service.status').detail
+                if family_for_code(code) in INVENTORY_FAMILIES:
+                    # engine @4 (gi-profiles@3 profiles 91010 and 91122): the documented service words the status, and
+                    # the cited findings sentence is the passage that shows its act
+                    self.assertIn('is documented as performed', status)
+                    self.assertEqual(check_of(proposals[code], 'evidence.support').status, 'pass')
+                else:
+                    self.assertIn(f'Documented as performed: “{line}”', status)
         # a cited fragment is read in its sentence
         text = V2_REPORT.format(proc='Anoscopy', ind='Symptoms.', find='Anoscopy revealed grade 2 internal hemorrhoids.')
         proposals, _ = real(text, ('46600', 'grade 2 internal hemorrhoids'))

@@ -9,7 +9,7 @@ from unittest import mock
 
 from django.test import Client, TestCase, override_settings
 
-from studio import jobs, models
+from studio import jobs, models, reports
 from studio.providers.corti import ADAPTER_VERSION
 from studio.types import ProviderRequest, RawExchange
 from tests.support import factories as f
@@ -106,6 +106,26 @@ class SecondReviewTests(TestCase):
         self.assertEqual(assessment.completeness['unresolved_items'], [])
         drain()
         self.assertEqual(len(self.provider.requests), 2)  # bounded: never a third
+
+    def test_a_refused_second_review_response_is_a_failed_check_and_never_reported_used(self):
+        """A second-review response the adapter refuses whole (here over its selection cap) decides nothing: its check
+        fails, as provider.status does for a refused primary (round 7 bypass:1), and the report never calls it used."""
+        self.provider.later = [('45380', 'was sampled with cold biopsy forceps')] * 65
+        encounter_id = self.create()
+        drain()
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        assessment = encounter.current_assessment
+        check = next(c for c in assessment.encounter_checks if c['id'] == 'provider.second_review')
+        self.assertEqual(check['status'], 'fail')
+        self.assertIn('was not used', check['detail'])
+        self.assertEqual([p.code for p in assessment.proposals.filter(bucket='selected')], ['45385'])
+        draft = reports.render_txt(reports.snapshot(encounter, 'draft')).decode()
+        usage = draft[draft.index('\nPROVIDER USAGE\n'):draft.index('\nREFERENCE SOURCES\n')]
+        runs = [line for line in usage.split('\n') if line.startswith('  - ')]
+        self.assertEqual(len(runs), 2)
+        self.assertTrue(runs[0].endswith(' · used by this assessment'), runs[0])
+        self.assertIn(' · bounded second review', runs[1])
+        self.assertTrue(runs[1].endswith(' · read by this assessment; its response was not used'), runs[1])
 
     def test_no_second_review_once_one_was_made_for_the_revision_and_date(self):
         encounter_id = self.create()

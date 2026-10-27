@@ -35,6 +35,9 @@ from .validation.engine import assess as run_assessment
 log = logging.getLogger(__name__)
 
 CONTEXT_VERSION = 'gi-context@2'
+MEMBER_DATE_CONFLICT_MESSAGE = ('Nothing was sent: the service date entered as encounter metadata differs from the '
+                                'documented one. Correct or clear the metadata (or add an addendum), and the request is '
+                                'made for the agreed date.')
 PROVIDER_LOCK_KEY = 0x435054535455  # 'CPTSTU': CPT Studio's own single-flight key
 QUEUE_DEADLINE = timedelta(minutes=30)  # a job that cannot start within this window expires
 Job = models.Job
@@ -353,6 +356,19 @@ def stage_predict(job):
     if provider is None:
         next_assess(None)
         return {'provider': 'disabled'}
+    if gi_context.is_member_conflict((context.facts or {}).get('service_date')):
+        # Session interpretation 19: a member-entered service date that differs from the document's is a conflict with
+        # both sides kept (interpretation 11), so the request has no date it can carry. Nothing is built, reused or
+        # sent while it stands - a dateless request would be paid for and discarded once the date is settled - and the
+        # encounter asks the date question. Correcting or clearing the metadata starts the request for its date.
+        run = models.ProviderRun.objects.create(
+            encounter=encounter, revision=revision, provider=provider.name, adapter_version=provider.adapter_version,
+            request_sha256='', request_body={}, contexts=[], state=models.ProviderRun.NOT_SENT,
+            error=MEMBER_DATE_CONFLICT_MESSAGE, authorization_ref=settings.AUTHORIZATION_REF,
+            requested_by=job.requested_by, service_date=None, finished_at=timezone.now(),
+            scope={'held': models.ProviderRun.HELD_MEMBER_DATE_CONFLICT})
+        next_assess(run)
+        return {'provider': 'not_sent', 'reason': 'member-entered service date conflicts with the document'}
     if not models.RoutingRun.objects.filter(revision=revision, service_date=service_date).exists():
         # Nothing is sent for a date this revision was never routed for (round 6 pipeline:0): after a date change the
         # new date is routed first, in one bounded child under the analyze deadline, so a document that cannot be read

@@ -239,6 +239,8 @@ class ProviderRun(models.Model):
     # had no supported proposal, sent once per revision and service date (ARCHITECTURE 5.11). ``scope`` records what it
     # was for: the excerpt's offsets in the revision text and the unresolved items.
     PRIMARY, SECOND_REVIEW = 'primary', 'second_review'
+    # scope['held'] of a run deliberately not sent: the service date is a member-vs-document conflict (jobs.stage_predict)
+    HELD_MEMBER_DATE_CONFLICT = 'member_date_conflict'
     purpose = models.CharField(max_length=16, default=PRIMARY)
     scope = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

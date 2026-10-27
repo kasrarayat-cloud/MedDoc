@@ -202,11 +202,15 @@ class EmptyCsvTests(TestCase):
         s = pf.scenario()
         pf.assess(s.encounter, pf.result())
         rows = parse_csv(reports.render_csv(reports.snapshot(s.encounter, 'draft')))
-        self.assertEqual(len(rows), 2)
+        # Format @4: the placeholder, then the encounter's coding_completeness row (never a proposal row).
+        self.assertEqual([r[rows[0].index('item_list')] for r in rows[1:]], ['none', 'coding_completeness'])
         row = dict(zip(rows[0], rows[1]))
         self.assertEqual((row['report_kind'], row['item_list'], row['synthetic']),
                          ('draft', 'none', reports.SYNTHETIC_CELL))
         self.assertEqual(row['encounter_id'], str(s.encounter.pk))
+        coding = dict(zip(rows[0], rows[2]))
+        self.assertEqual((coding['report_kind'], coding['synthetic'], coding['encounter_id'], coding['code']),
+                         ('draft', reports.SYNTHETIC_CELL, str(s.encounter.pk), ''))
 
 
 class CarriedDecisionTimeTests(ReportCase):
@@ -291,13 +295,16 @@ class ReinstatementGateTests(ApiHarness, TestCase):
         self.assertEqual(self.approve(encounter_id, proposal).status_code, 409)
 
     def test_reinstated_code_with_its_facts_documented_can_be_approved(self):
+        # Engine @4: a code whose service is documented as performed today is no longer excluded by a passage about a
+        # planned repeat (interpretation 9), so the exclusion reinstated here is one the documented service makes: an
+        # act the document denies, in a colonoscopy whose facts are documented.
         note = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\nProcedure: Colonoscopy\n'
-                'Findings: The colonoscope was advanced to the cecum. The colon was normal.\n'
+                'Findings: The colonoscope was advanced to the cecum. The colon was normal. No biopsies were taken.\n'
                 'Plan: Repeat colonoscopy in 3 years.\n')
-        self.provider.selections = [('45378', 'Repeat colonoscopy in 3 years.')]
+        self.provider.selections = [('45380', 'No biopsies were taken.')]
         encounter_id = self.create(note)
         drain()
-        proposal = self.reinstate(encounter_id, '45378')
+        proposal = self.reinstate(encounter_id, '45380')
         gate = next(c for c in proposal.checks if c['id'] == 'review.reinstatement')
         self.assertEqual(gate['status'], 'pass', gate)
         self.assertEqual(self.approve(encounter_id, proposal).status_code, 201)

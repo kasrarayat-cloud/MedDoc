@@ -69,14 +69,23 @@ class Validation4ContestedOwnServiceTests(Case):
                 'Medical decision making: moderate.\nTotal time: approximately 30 minutes?\n')
         proposals, _ = real(text, ('99214', VISIT, 'Total time: approximately 30 minutes?'))
         self.assertEqual(proposals['99214'].status, 'needs_clarification')
-        hedges = (('Plan: Repeat colonoscopy if symptoms persist.', 'Repeat colonoscopy if symptoms persist.'),
-                  ('A 5 mm cecal lesion was seen?', 'A 5 mm cecal lesion was seen?'))
+        hedges = (('Plan: Repeat colonoscopy if symptoms persist.', 'Repeat colonoscopy if symptoms persist.'),)
         for tail, hedge in hedges:
             with self.subTest(hedge=hedge):
                 proposals, _ = real(COLONOSCOPY_AP.format(tail=tail), ('45385', POLYP, hedge))
                 item = proposals['45385']
                 self.assertEqual(item.status, 'needs_clarification')
                 self.assertIn('A passage that hedges holds the code', check_of(item, 'service.status').detail)
+        # Engine @4 (ARCHITECTURE 5.10, interpretation 9): a hedged finding about a lesion the code's act is not on is
+        # not about the documented snare removal, which the document states as done - it is named in a warn, never
+        # dropped, and does not hold 45385.
+        hedge = 'A 5 mm cecal lesion was seen?'
+        proposals, _ = real(COLONOSCOPY_AP.format(tail=hedge), ('45385', POLYP, hedge))
+        self.assertReady(proposals['45385'])
+        status = check_of(proposals['45385'], 'service.status')
+        self.assertEqual(status.status, 'warn')
+        self.assertIn(f'A linked passage reads as uncertain: “{hedge}”', status.detail)
+        self.assertIn('it is not about the documented colonoscopy', status.detail)
 
     def test_controls_a_hedge_naming_another_service_and_this_code_s_act_still_contests(self):
         # The EGD is named, but so is the colonoscopy's own act (a biopsy): fail-closed, the hedge contests 45380.
@@ -87,11 +96,20 @@ class Validation4ContestedOwnServiceTests(Case):
         self.assertEqual(proposals['45380'].status, 'needs_clarification')
         self.assertIn('A passage that hedges holds the code', check_of(proposals['45380'], 'service.status').detail)
 
-    def test_controls_a_hedge_alone_still_holds(self):
+    def test_controls_a_hedge_alone_about_another_service_is_named_not_held(self):
+        # Engine @4 (ARCHITECTURE 5.10, interpretation 9): the documented visit decides the E/M's status; its only passage
+        # hedges an EGD, not the visit, so it does not decide - it is named in a warn, and the passages that show the
+        # visit are selected from the source beside it.
         text = OFFICE_PLAN.format(assessment='GERD.', plan='Possible EGD if symptoms persist.')
         proposals, _ = real(text, ('99214', 'Possible EGD if symptoms persist.'))
-        self.assertEqual(proposals['99214'].status, 'needs_clarification')
-        self.assertIn('performed_status', [c.fact for c in proposals['99214'].clarifications])
+        visit = proposals['99214']
+        self.assertReady(visit)
+        status = check_of(visit, 'service.status')
+        self.assertEqual(status.status, 'warn')
+        self.assertIn('A linked passage reads as uncertain: “Possible EGD if symptoms persist.”', status.detail)
+        self.assertEqual(check_of(visit, 'evidence.support').status, 'warn')
+        self.assertEqual(visit.support['unrelated'], [0])
+        self.assertTrue(any(s['text'] == 'Established patient office visit.' for s in visit.support['source']))
 
 
 class Validation4ResolveStatusTests(SimpleTestCase):

@@ -182,6 +182,58 @@ class DateConflictTests(SimpleTestCase):
         self.assertEqual(proposal(result, '45385').status, 'needs_clarification')
 
 
+OFFICE_VISIT = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Gastroenterology office visit (fictional)
+Date of service: 2026-10-14
+Place of service: Office
+Patient status: Established patient.
+Chief complaint
+Follow-up of chronic constipation.
+Assessment and plan
+Chronic idiopathic constipation, improved. Continue polyethylene glycol daily.
+Medical decision making
+Low: one stable chronic illness; prescription drug management.
+Time
+Total time on the date of the encounter was 24 minutes.
+"""
+VISIT_TIME = 'Total time on the date of the encounter was 24 minutes.'
+
+
+class MemberConflictWordingTests(SimpleTestCase):
+    """A member's setting or patient status unlike the document's single value is a conflict (interpretation 11). What
+    is asked names both sides; it never says the document gives conflicting values, which it does not."""
+
+    def em(self, text, **user_values):
+        result = run(text, [sel('99213', span(text, VISIT_TIME))], user_values=user_values)
+        item = proposal(result, '99213')
+        return item, {c.fact: c for c in item.clarifications}
+
+    def test_a_member_value_unlike_the_documented_one_is_asked_with_both_sides(self):
+        for name, user, documented, label in (('setting', 'asc', 'office', 'place of service'),
+                                              ('patient_status', 'new', 'established',
+                                               'new or established patient status')):
+            with self.subTest(name=name):
+                item, asked = self.em(OFFICE_VISIT, **{name: user})
+                self.assertEqual(item.status, 'needs_clarification')
+                self.assertEqual(asked[name].reason, f'The {label} is in conflict. '
+                                 + gi_context.USER_CONFLICT_NOTE.format(user=user, document=documented))
+                facts = check(item, 'facts.required')
+                self.assertEqual(facts.status, 'warn')
+                self.assertIn('Member-entered encounter metadata differs from the document (both kept, neither '
+                              f'used): {label}.', facts.detail)
+                self.assertNotIn('Conflicting values documented', facts.detail)
+
+    def test_controls_a_documented_conflict_and_an_agreeing_member_value(self):
+        text = OFFICE_VISIT.replace('Place of service: Office\n', 'Place of service: Office\nPlace of service: 22\n')
+        item, asked = self.em(text)
+        self.assertEqual(item.status, 'needs_clarification')
+        self.assertTrue(asked['setting'].reason.startswith('The document gives conflicting values for the place of '
+                                                           'service: '), asked['setting'].reason)
+        self.assertIn('Conflicting values documented: place of service.', check(item, 'facts.required').detail)
+        item, asked = self.em(OFFICE_VISIT, setting='office')
+        self.assertEqual((item.status, asked), ('ready', {}))
+
+
 class SecondReviewMergeTests(SimpleTestCase):
     def test_only_a_selected_code_for_an_unresolved_act_is_added(self):
         text = BIDIRECTIONAL
@@ -227,3 +279,50 @@ class CatalogueTests(SimpleTestCase):
     def test_no_descriptor_is_held(self):
         for code, profile in catalogue.CODES.items():
             self.assertFalse(hasattr(profile, 'descriptor'))
+
+
+SERVICE_STATEMENT = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nDate of service: 2026-10-14\n'
+                     'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. {findings}\n')
+CECUM_STATEMENT = 'The colonoscope was advanced to the cecum.'
+
+
+class ServiceStatementIsNotTheActTests(SimpleTestCase):
+    """The routing-era reading may only hold: a code's own passage that states the service, not the act the code
+    accounts for, never stands for that act. The documented colonoscopy shows no biopsy, or leaves it in doubt, so a
+    biopsy code citing only the extent statement is held with the documented service's question, never ready."""
+
+    def test_a_service_statement_never_stands_for_the_act(self):
+        for findings in ('The colon was normal.', 'It is unclear whether biopsies were taken.'):
+            with self.subTest(findings=findings):
+                text = SERVICE_STATEMENT.format(findings=findings)
+                item = proposal(run(text, [sel('45380', span(text, CECUM_STATEMENT))]), '45380')
+                self.assertEqual((item.bucket, item.status), ('selected', 'needs_clarification'))
+                self.assertNotIn('read from its own passage by the routing-era reader',
+                                 check(item, 'service.status').detail)
+
+    def test_control_a_passage_naming_an_act_the_reader_does_not_read_still_stands(self):
+        text = SERVICE_STATEMENT.format(findings='Cecal biopsies x2.')
+        item = proposal(run(text, [sel('45380', span(text, 'Cecal biopsies x2.'))]), '45380')
+        self.assertEqual(item.status, 'ready')
+        self.assertIn('read from its own passage by the routing-era reader', check(item, 'service.status').detail)
+
+
+class DoubtedActTests(SimpleTestCase):
+    """An act the document names and leaves in doubt is held with that passage; it is never called an act the
+    document does not show ("The documented colonoscopy shows no forceps biopsy")."""
+
+    def test_the_doubted_act_is_quoted_in_the_reason_and_the_question(self):
+        hedge = 'It is unclear whether biopsies were taken.'
+        text = SERVICE_STATEMENT.format(findings=hedge)
+        item = proposal(run(text, [sel('45380', span(text, CECUM_STATEMENT), span(text, hedge))]), '45380')
+        self.assertEqual((item.bucket, item.status), ('selected', 'needs_clarification'))
+        self.assertIn(f'does not establish the forceps biopsy as done: “{hedge}”', check(item, 'service.status').detail)
+        (asked,) = [c for c in item.clarifications if c.fact == 'performed_status']
+        self.assertIn(f'“{hedge}”', asked.question)
+        self.assertNotIn('shows no forceps biopsy', asked.question)
+
+    def test_control_an_act_the_document_never_names_is_still_asked_as_missing(self):
+        text = SERVICE_STATEMENT.format(findings='The colon was normal.')
+        item = proposal(run(text, [sel('45380', span(text, CECUM_STATEMENT))]), '45380')
+        (asked,) = [c for c in item.clarifications if c.fact == 'performed_status']
+        self.assertIn('shows no forceps biopsy', asked.question)

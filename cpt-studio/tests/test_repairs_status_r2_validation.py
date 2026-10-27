@@ -135,9 +135,11 @@ class Status3PlanHedgeTests(RealCase):
     def test_a_pure_office_visit_still_reports_an_unproposed_e_m(self):
         """The second symptom: the same reading suppressed the possible-missed-E/M warning on a pure office visit."""
         _, result = real(OFFICE.format(cc='Heartburn.', plan='Possible EGD if symptoms persist.'))
-        unproposed = encounter_check(result, 'services.unproposed')
-        self.assertEqual(unproposed.status, 'warn')
-        self.assertIn('Possible missed service: Office / outpatient evaluation and management', unproposed.detail)
+        # engine @4: the documented-service reconciliation reports the visit, as services.unresolved
+        unresolved = encounter_check(result, 'services.unresolved')
+        self.assertEqual(unresolved.status, 'warn')
+        self.assertIn('Unresolved: office / outpatient visit (documented as performed) has no supported proposal',
+                      unresolved.detail)
 
     def test_controls_scheduled_and_planned_wording_stay_ready(self):
         for plan in ('Schedule EGD.', 'Consider EGD if no improvement.', 'EGD in 2024 was normal.'):
@@ -169,8 +171,11 @@ class Review1PlanDiscussionTests(RealCase):
                                                'Return in three months.')
         proposals, _ = real(text, ('99214', 'Return in three months.'))
         visit = proposals['99214']
-        self.assertEqual((visit.bucket, visit.reinstatable), ('excluded', True))
-        self.assertEqual(check_of(visit, 'review.reinstatement').status, 'pass')
+        # Engine @4: today's documented visit decides the code (interpretation 9), so it is not excluded and needs no
+        # reinstatement; the discussion still gates nothing, and the return-visit passage is never read as showing the
+        # visit.
+        self.assertVisitReady(proposals)
+        self.assertEqual((check_of(visit, 'evidence.support').status, visit.support['unrelated']), ('warn', [0]))
 
     def test_controls_a_performance_statement_in_the_plan_still_holds(self):
         proposals, _ = real(ASSESSMENT_AND_PLAN.format(plan='EGD was performed today with biopsies of the antrum.'),
@@ -383,8 +388,9 @@ class Status13HedgedOwnPassageTests(RealCase):
         (asked,) = [c for c in item.clarifications if c.fact == 'performed_status']
         self.assertIn(hedge, asked.reason)
         self.assertIn(positive, asked.reason)
-        self.assertEqual(asked.question, 'Confirm whether Colonoscopy was performed on the date of service as coded: '
-                                         'one of its linked passages reads as uncertain.')
+        # engine @4: the question is the documented service's own (the biopsy it lacks or denies); the reason above
+        # still names the performed and the hedged passage, both readings.
+        self.assertRegex(asked.question, r'(?:45380 was|forceps biopsy) performed on the date of service')
 
     def test_the_claimed_input_in_either_order(self):
         text = S13.format(findings='The colon was normal. No biopsies were obtained.')
@@ -400,15 +406,20 @@ class Status13HedgedOwnPassageTests(RealCase):
                 proposals, _ = real(text, ('45380', CECUM, hedge))
                 self.assertContested(proposals['45380'], CECUM, hedge)
 
-    def test_control_a_negated_second_passage_is_flagged_not_held(self):
-        """Round 1's rule (a performed passage wins and a contrary linked passage is named) is unchanged."""
+    def test_control_a_negated_second_passage_is_flagged_and_held_never_excluded(self):
+        """Round 1's rule (a contrary linked passage is named) is unchanged; engine @4 (ARCHITECTURE 5.10): the
+        documented colonoscopy denies the biopsy 45380 accounts for, so the code is no longer ready - and since its own
+        passages do not exclude it, it is held, never newly excluded."""
         text = S13.format(findings='The colon was normal. No biopsies were obtained.')
         proposals, _ = real(text, ('45380', CECUM, 'No biopsies were obtained.'))
         item = proposals['45380']
-        self.assertEqual(item.status, 'ready')
+        self.assertEqual((item.bucket, item.status), ('selected', 'needs_clarification'))
         status = check_of(item, 'service.status')
         self.assertEqual(status.status, 'warn')
+        self.assertIn('the document states the forceps biopsy was not performed: “No biopsies were obtained.”',
+                      status.detail)
         self.assertIn('Another linked passage reads as negated: “No biopsies were obtained.”', status.detail)
+        self.assertIn('Held for the reviewer, not excluded.', status.detail)
 
     def test_control_a_single_performed_passage_is_ready(self):
         proposals, _ = real(S13.format(findings='The colon was normal.'), ('45378', CECUM))
@@ -518,8 +529,9 @@ class Status19CoverageTests(RealCase):
         self.assertIsNone(check_of(proposals['99214'], 'em.same_day_coverage'))
 
     def test_a_found_service_outside_the_profiles_still_warns(self):
-        text = HEAD + 'Esophageal motility study performed today.\n'
-        _, result = real(text, ('91010', 'Esophageal motility study performed today.'))
+        # gi-profiles@3 profiles motility (91010 is gi.motility); a hydrogen breath test is still outside every profile
+        text = HEAD + 'Hydrogen breath test performed today.\n'
+        _, result = real(text, ('91065', 'Hydrogen breath test performed today.'))
         self.assertEqual(encounter_check(result, 'services.unsupported').status, 'warn')
 
 
@@ -729,4 +741,5 @@ class Status1GuardTests(EngineCase):
 
 class EngineVersionTests(SimpleTestCase):
     def test_the_engine_version_is_bumped_once(self):
-        self.assertEqual(ENGINE_VERSION, 'cpt-studio-validation@3')
+        # @4: the documented-service inventory decides the codes it matches (ARCHITECTURE 5.9-5.11)
+        self.assertEqual(ENGINE_VERSION, 'cpt-studio-validation@4')

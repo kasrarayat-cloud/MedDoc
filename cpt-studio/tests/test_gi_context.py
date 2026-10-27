@@ -2,7 +2,7 @@
 import unittest
 from pathlib import Path
 
-from studio.gi.context import USER_NOTE, extract_context, merge_user_values
+from studio.gi.context import USER_CONFLICT_NOTE, USER_NOTE, extract_context, merge_user_values
 from studio.types import CONTEXT_FACTS, Fact
 
 FIXTURES = Path(__file__).parent / 'fixtures' / 'gi'
@@ -187,12 +187,23 @@ class MergeUserValuesTests(unittest.TestCase):
         self.text = fixture('01-office-established-time-mdm.txt')
         self.facts = extract_context(self.text)
 
-    def test_user_value_overrides_as_metadata(self):
+    def test_user_value_is_metadata_and_never_overrides_the_document(self):
+        # The document gives 2026-10-21 and no billing context (session interpretation 11, ARCHITECTURE 5.2): the
+        # member's different date is a conflict with both sides kept, the billing context is supplied as metadata.
         merged = merge_user_values(self.facts, {'service_date': '2026-10-22', 'billing_context': 'facility'})
-        self.assertEqual(merged['service_date'], Fact('service_date', '2026-10-22', 'user', (), USER_NOTE))
+        self.assertEqual(merged['service_date'], Fact('service_date', None, 'conflict',
+                                                      self.facts['service_date'].evidence,
+                                                      USER_CONFLICT_NOTE.format(user='2026-10-22',
+                                                                                document='2026-10-21')))
         self.assertEqual(merged['billing_context'], Fact('billing_context', 'facility', 'user', (), USER_NOTE))
         self.assertEqual(merged['setting'], self.facts['setting'])
         self.assertEqual(self.facts['service_date'].value, '2026-10-21')  # input untouched
+        # a member date for a note that documents none, or one that agrees with the document, is metadata
+        undated = extract_context(self.text.replace('Date of service: 2026-10-21\n', ''))
+        self.assertEqual(undated['service_date'].origin, 'missing')
+        for facts, value in ((undated, '2026-10-22'), (self.facts, '2026-10-21')):
+            merged = merge_user_values(facts, {'service_date': value})
+            self.assertEqual(merged['service_date'], Fact('service_date', value, 'user', (), USER_NOTE))
 
     def test_empty_values_keep_the_document(self):
         merged = merge_user_values(self.facts, {'service_date': '', 'setting': '   '})
@@ -211,9 +222,17 @@ class MergeUserValuesTests(unittest.TestCase):
                 merge_user_values(self.facts, values)
 
     def test_patient_status_and_setting_values(self):
+        # The document gives an established patient seen in the office: different member values are conflicts with
+        # both sides kept; for a note that gives neither, the same values are supplied as metadata.
         merged = merge_user_values(self.facts, {'patient_status': 'new', 'setting': 'telehealth'})
+        for name, user, documented in (('patient_status', 'new', 'established'), ('setting', 'telehealth', 'office')):
+            self.assertEqual(merged[name], Fact(name, None, 'conflict', self.facts[name].evidence,
+                                                USER_CONFLICT_NOTE.format(user=user, document=documented)))
+        bare = extract_context('Follow-up of chronic constipation.\n')
+        self.assertEqual((bare['patient_status'].origin, bare['setting'].origin), ('missing', 'missing'))
+        merged = merge_user_values(bare, {'patient_status': 'new', 'setting': 'telehealth'})
         self.assertEqual((merged['patient_status'].value, merged['patient_status'].origin), ('new', 'user'))
-        self.assertEqual(merged['setting'].value, 'telehealth')
+        self.assertEqual((merged['setting'].value, merged['setting'].origin), ('telehealth', 'user'))
 
 
 if __name__ == '__main__':

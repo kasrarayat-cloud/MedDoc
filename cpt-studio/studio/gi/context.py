@@ -55,9 +55,12 @@ SERVICE_DATE = cues.rx(r'(?<![\w/-])(?:date[ \t]+of[ \t]+service|DOS|service[ \t
 # A note's own dated title line ("GI visit - 10/20/2026", "Colonoscopy report: 14 Oct 2026") or its bare header
 # "Date:" field: read only near the top
 # of the document and only when no labelled service date exists, never in a plan or history section.
-TITLE_DATE = cues.rx(r'[ \t]*(?:[A-Za-z][A-Za-z /&,()]{0,60}?\b(?:visit|encounter|consultation|consult|note|report)'
+TITLE_DATE = cues.rx(r'[ \t]*(?:[A-Za-z][A-Za-z /&,()\-]{0,60}?\b(?:visit|encounter|consultation|consult|note|report)'
                      r'[ \t]*(?:[-\u2013\u2014:|,]|\bon\b|\bof\b)?|date[ \t]*[:|\u2013-])[ \t]*(?:' + _FULL_DATE + r')[ \t]*$')
 TITLE_LINES = 12  # non-empty lines from the top in which a dated title is read
+_HISTORY_TITLE = tuple((name, cues.rx(r'\b(?:' + words + r')\b')) for name, words in (
+    ('history of', r'history\s+of|hx\s+of|h/o|s/p|status\s+post'),
+    ('prior', r'prior|previous|previously|last|most\s+recent|recent|recently|remote|earlier|past|index|outside')))
 DATE_QUALIFIER = cues.rx(r'\b(?:previous|prior|last|next|planned|scheduled|future|follow-?up|repeat|anticipated'
                          r'|tentative|proposed|requested|rescheduled|upcoming|due)\b')
 
@@ -229,7 +232,7 @@ def _fact(name: str, found: list[tuple[str, Span]]) -> Fact:
         return Fact(name, None, 'missing', (), MISSING_NOTES[name])
     if len(values) == 1:
         return Fact(name, values[0], 'document', evidence)
-    return Fact(name, None, 'conflict', evidence, 'Conflicting documented values: ' + ', '.join(values) + '.')
+    return Fact(name, None, 'conflict', evidence, DOCUMENT_CONFLICT_NOTE + ', '.join(values) + '.')
 
 
 def _service_dates(text: str, lay: Layout) -> tuple[list[tuple[str, Span]], list[Span]]:
@@ -247,6 +250,12 @@ def _service_dates(text: str, lay: Layout) -> tuple[list[tuple[str, Span]], list
         else:
             found.append((value.isoformat(), span))
     if not found and not invalid:
+        # Only the FIRST dated title line near the top can be the note's own ("GI visit - 10/20/2026"). A qualified
+        # first title ("GI follow-up visit: ...", "Outside colonoscopy report: ...") gives no title date at all, so the
+        # date is asked, never taken from a later title ("Pathology report: 2026-10-14", another document's own date);
+        # a later unqualified dated title with another date makes the date a conflict with both sides kept. A later
+        # title qualified as another time ("Next visit: ...") says nothing about this note's date.
+        titles = []
         seen = 0
         for ls, le in ((m.start(), m.end()) for m in re.finditer(r'[^\n]+', text)):
             if not text[ls:le].strip():
@@ -255,12 +264,26 @@ def _service_dates(text: str, lay: Layout) -> tuple[list[tuple[str, Span]], list
             if seen > TITLE_LINES:
                 break
             m = TITLE_DATE.match(text, ls, le)
-            if m is None or lay.section_at(ls).kind in NOT_CURRENT_SECTIONS or DATE_QUALIFIER.search(text, ls, le):
+            if m is None or lay.section_at(ls).kind in NOT_CURRENT_SECTIONS:
                 continue
             value = date_from_match(m)
             if value is not None:
+                titles.append((ls, le, value, _title_qualified(text, ls, le, m)))
+        if titles and not titles[0][3]:
+            for ls, le, value, qualified in titles:
+                if qualified:
+                    continue
                 found.append((value.isoformat(), _span(text, ls + len(text[ls:le]) - len(text[ls:le].lstrip()), le)))
     return found, invalid
+
+
+def _title_qualified(text: str, ls: int, le: int, m) -> bool:
+    """Whether a dated title line names another occurrence: a date qualifier anywhere on it ("follow-up", "next",
+    "planned"), or a history word before its date ("Outside", "Prior", "Index", "s/p"; routing's own cues)."""
+    if DATE_QUALIFIER.search(text, ls, le):
+        return True
+    head = text[ls:le]
+    return any(pattern.search(head) for _, pattern in _HISTORY_TITLE)
 
 
 def _settings(text: str, lay: Layout) -> list[tuple[str, Span]]:
@@ -348,9 +371,32 @@ def _valid_user_value(name: str, value: str) -> bool:
     return value in allowed
 
 
+DOCUMENT_CONFLICT_NOTE = 'Conflicting documented values: '
+
+
+def documented_values(fact) -> tuple[str, ...]:
+    """The values a document-internal conflict lists (its note, written by _fact), or () for any other fact."""
+    note = str(getattr(fact, 'note', '') or '')
+    if getattr(fact, 'origin', None) != 'conflict' or not note.startswith(DOCUMENT_CONFLICT_NOTE) or not note.endswith('.'):
+        return ()
+    return tuple(v for v in note[len(DOCUMENT_CONFLICT_NOTE):-1].split(', ') if v)
+
+
 USER_CONFLICT_NOTE = ('Encounter metadata entered by a workspace member gives {user}; the document gives {document}. '
                       'Both are kept and neither is used until they agree: correct the metadata, clear it, or add an '
                       'addendum to the document.')
+_USER_CONFLICT_PREFIX = USER_CONFLICT_NOTE.split('{', 1)[0]
+
+
+def is_member_conflict(fact) -> bool:
+    """Whether ``fact`` is a member's encounter metadata that differs from the document's single value
+    (merge_user_values), as opposed to values that conflict within the document itself. Every reader that words a
+    conflict asks this one question, so a member's value is never described as conflicting documentation. ``fact`` is
+    a Fact or a stored context fact (a mapping)."""
+    if fact is None:
+        return False
+    get = fact.get if isinstance(fact, dict) else (lambda name, default=None: getattr(fact, name, default))
+    return get('origin') == 'conflict' and str(get('note', '') or '').startswith(_USER_CONFLICT_PREFIX)
 
 
 def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> dict[str, Fact]:
@@ -358,7 +404,8 @@ def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> di
     unambiguously (a missing or conflicting documented value), and it agrees with a documented value. A user value
     that DIFFERS from a single documented value is a conflict, kept with both sides, never a silent replacement of the
     clinical documentation (2026-10-27: a member-entered service date 28 years before the documented one was used for
-    every dated check and sent to the provider). An empty value leaves the document value. Unknown names or values are
+    every dated check and sent to the provider). Where the document itself gives conflicting values, a member value
+    settles it only by choosing one of them. An empty value leaves the document value. Unknown names or values are
     refused."""
     merged = dict(facts)
     for name, raw in user_values.items():
@@ -376,6 +423,14 @@ def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> di
                 and str(documented.value) != value:
             merged[name] = Fact(name, None, 'conflict', documented.evidence,
                                 USER_CONFLICT_NOTE.format(user=value, document=documented.value))
+            continue
+        listed = documented_values(documented)
+        if listed and value not in listed:
+            # The document itself gives several values: a member value settles the conflict only by choosing one of
+            # them. Any other value is a third side, kept with the documented ones (the Elena class: a member-entered
+            # 1998-01-01 against two documented dates was taken as the service date and sent to the provider).
+            merged[name] = Fact(name, None, 'conflict', documented.evidence,
+                                USER_CONFLICT_NOTE.format(user=value, document=' or '.join(listed)))
             continue
         merged[name] = Fact(name, value, 'user', (), USER_NOTE)
     return merged

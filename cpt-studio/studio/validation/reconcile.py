@@ -18,12 +18,15 @@ from dataclasses import dataclass
 from typing import Optional, Sequence
 
 from studio.gi import catalogue
-from studio.gi.services import Act, Conflict, DocumentedService, ServiceInventory
+from studio.gi.services import SERVICES, Act, Conflict, DocumentedService, ServiceInventory
 from studio.types import Check, ClarificationSpec, EvidenceSpan, Span
 
 SOURCE = f'cpt-studio:{catalogue.CATALOGUE_VERSION}'
 INVENTORY_SOURCE = 'cpt-studio:gi-services@1'
 REMOVAL_KINDS = ('snare', 'emr', 'hot_biopsy', 'esd')
+# Physiology studies whose coded act is the study itself (the act a code of the family accounts for is the service).
+STUDY_ACTS = {'gi.capsule': 'capsule_study', 'gi.motility': 'manometry', 'gi.reflux': 'ph_monitoring',
+              'gi.anorectal': 'manometry'}
 ACT_LABELS = {
     'biopsy': 'forceps biopsy', 'hot_biopsy': 'hot forceps removal', 'snare': 'snare removal', 'emr': 'endoscopic '
     'mucosal resection', 'esd': 'endoscopic submucosal dissection', 'ablation': 'ablation', 'bleeding_control':
@@ -160,6 +163,16 @@ def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match
         return Match('not_performed', service, (), 'act_denied',
                      f'The {name} is documented as {service.status}, but the document states the {what} was not '
                      f'performed: {quote(denied[0].evidence[0])}.')
+    doubted = next((a for a in service.acts if a.kind in kinds and a.status == 'uncertain' and a.evidence), None)
+    if doubted is not None:
+        # The document names the act and leaves it in doubt ("It is unclear whether biopsies were taken."): held with
+        # that passage, never reported as an act the document does not mention. Still 'act_missing' - no such act is
+        # documented as done - so every rule that reads that reason (engine._select, engine._second_opinion) is unchanged.
+        return Match('uncertain', service, (), 'act_missing',
+                     f'The {name} is documented as {service.status}, but the document does not establish the {what} '
+                     f'as done: {quote(doubted.evidence[0])}.',
+                     question=f'The documented {name} leaves the {what} in doubt ({quote(doubted.evidence[0], 120)}). '
+                              f'Was a {what} performed on the date of service?')
     return Match('uncertain', service, (), 'act_missing',
                  f'The {name} is documented as {service.status}, but no {what} is documented as done in it.',
                  question=f'The documented {name} shows no {what}. Was a {what} performed on the date of service?')
@@ -183,16 +196,29 @@ def _targets(m: Match) -> tuple[Span, ...]:
         ev for a in s.acts if a.status == 'performed' for ev in a.evidence)
 
 
-def support(m: Match, evidence: Sequence[EvidenceSpan], current=None) -> Support:
+def _study_named(m: Match, span: EvidenceSpan, today) -> bool:
+    """A physiology study whose coded act is the study itself (STUDY_ACTS): a passage that names this service and
+    states something of this encounter (``today``: not in a plan, history or indication section, not about another
+    time, planned, denied or cancelled - "Esophageal manometry showed normal peristalsis.") shows the study, as a
+    statement of this visit shows an office visit."""
+    study = STUDY_ACTS.get(m.service.family)
+    if today is None or study is None or not m.acts or any(a.kind != study for a in m.acts):
+        return False
+    named = any(family == m.service.family and pattern.search(span.text) for family, _, pattern in SERVICES)
+    return named and today(span)
+
+
+def support(m: Match, evidence: Sequence[EvidenceSpan], current=None, today=None) -> Support:
     """How ``evidence`` (the provider's exact passages) relates to the documented act. For an office visit the act is
     the visit itself: a passage supports it when it is a statement of this visit - not one ``current`` reads as about
-    another time ("Last seen by Dr. Ramos on 2026-03-02", a planned procedure)."""
+    another time ("Last seen by Dr. Ramos on 2026-03-02", a planned procedure). So for a study that is its own act: a
+    statement of this encounter naming the study supports it (_study_named)."""
     targets = _targets(m)
     supporting, unrelated = [], []
     for index, span in enumerate(evidence):
         if m.service.family == 'gi.office_em' and current is not None:
             (supporting if current(span) else unrelated).append(index)
-        elif any(_overlaps(span.start, span.end, t.start, t.end) for t in targets):
+        elif any(_overlaps(span.start, span.end, t.start, t.end) for t in targets) or _study_named(m, span, today):
             supporting.append(index)
         else:
             unrelated.append(index)
@@ -275,10 +301,11 @@ def _bundled(service: DocumentedService, act: Act) -> Optional[str]:
     return None
 
 
-def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]]) -> tuple[list[Unresolved], list[Bundled],
-                                                                                          dict[str, list[str]]]:
+def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]], procedure_day: bool = False
+              ) -> tuple[list[Unresolved], list[Bundled], dict[str, list[str]]]:
     """(unresolved items, bundled acts, covered: service id -> codes) for ``selected`` = (code, family) of the selected,
-    non-excluded proposals."""
+    non-excluded proposals. ``procedure_day``: the engine's same-day E/M reading (a procedure the inventory does not
+    read - another GI service, a possibly performed one, a selected procedural code - is one too)."""
     unresolved: list[Unresolved] = []
     bundled: list[Bundled] = []
     covered: dict[str, list[str]] = {}
@@ -293,8 +320,8 @@ def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]]) 
         if not codes and service.included_in:
             pass  # the including service's code covers the examination (an EGD inside an EUS); its own acts still count
         elif not codes:
-            if service.family == 'gi.office_em' and any(s.status in ('performed', 'incomplete') and s.family != service.family
-                                                        for s in inventory.services):
+            if service.family == 'gi.office_em' and (procedure_day or any(
+                    s.status in ('performed', 'incomplete') and s.family != service.family for s in inventory.services)):
                 continue  # never push an office visit beside a same-day procedure
             unresolved.append(Unresolved(service.id, service.family, '', f'{service_label(service)} '
                                          f'(documented as {service.status}) has no supported proposal',

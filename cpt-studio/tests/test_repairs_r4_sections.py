@@ -178,17 +178,32 @@ class Release2PlanLabelsTests(PlannedEmrAssertions, unittest.TestCase):
     def test_a_numbered_plan_label_item_reads_as_at_r3b_base(self):
         """The cost of restoring R3B-BASE, accepted and stated: a numbered item that is itself a plan label ("3. Upcoming
         procedures", "3. Further evaluation") opens a plan section even when the next line is the next item of the same
-        list, so the performed item after it is excluded as planned (reinstatable, for a reviewer), never ready. Round
-        3b's list-item guard read it as content, and that guard is what released the planned EMR above."""
+        list, so the performed item after it reads as planned, and a code whose only support it is is never ready (excluded
+        as planned, reinstatable, for a reviewer). Round 3b's list-item guard read it as content, and that guard is what
+        released the planned EMR above.
+
+        Engine @4 (time_plan triage, bc7df129): where the report's own procedure line documents the same act as done
+        today ("Colonoscopy with biopsy and cold snare polypectomy"), the documented act supports the code, so it is
+        ready - with the planned reading of its own passage named in its status check and CPT Studio's source passage
+        in its support check. The planned item itself is never read as done."""
         polyp = '6 mm sigmoid polyp removed with cold snare.'
         for item in ('Further evaluation', 'Upcoming procedures'):
-            text = (HEADER + 'Procedure: Colonoscopy with biopsy and cold snare polypectomy.\nFindings:\n1. The colonoscope was advanced '
-                    'to the cecum.\n2. A 3 cm ascending colon mass, biopsied and tattooed.\n3. ' + item + '\n4. ' + polyp + '\n')
-            with self.subTest(item=item):
-                self.assertEqual(kind_at(text, polyp), 'plan')
-                proposal = run_engine(text, [('45385', polyp)])['45385']
-                self.assertFalse(ready(proposal))
-                self.assertNotIn(read(text, polyp)[0], POSITIVE)
+            for line, documented in (('Colonoscopy with biopsy and cold snare polypectomy.', True), ('Colonoscopy.', False)):
+                text = (HEADER + 'Procedure: ' + line + '\nFindings:\n1. The colonoscope was advanced '
+                        'to the cecum.\n2. A 3 cm ascending colon mass, biopsied and tattooed.\n3. ' + item + '\n4. ' + polyp + '\n')
+                with self.subTest(item=item, procedure_line=line):
+                    self.assertEqual(kind_at(text, polyp), 'plan')
+                    self.assertNotIn(read(text, polyp)[0], POSITIVE)
+                    proposal = run_engine(text, [('45385', polyp)])['45385']
+                    if not documented:
+                        self.assertFalse(ready(proposal))
+                        continue
+                    self.assertTrue(ready(proposal))
+                    status = next(c for c in proposal.checks if c.id == 'service.status')
+                    support = next(c for c in proposal.checks if c.id == 'evidence.support')
+                    self.assertEqual((status.status, support.status), ('warn', 'warn'))
+                    self.assertIn(f'A linked passage reads as planned: “{polyp}”', status.detail)
+                    self.assertIn('“Procedure: Colonoscopy with biopsy and cold snare polypectomy.”', support.detail)
 
 
 # --- structure:4: a colon-less line that ends with a section noun but reads as a phrase ---------------------------------

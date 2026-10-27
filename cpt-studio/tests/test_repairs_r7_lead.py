@@ -112,7 +112,9 @@ class InvalidationReasonTests(TestCase):
 @override_settings(**LIVE)
 class RealEngineDateChangeReasonTests(LiveEncounter, TestCase):
     def test_an_approved_em_invalidated_by_a_new_date_is_never_blamed_on_its_evidence_or_checks(self):
-        encounter_id = self.finished_encounter()
+        # a note with no date of its own, dated by the member and then re-dated: a member's date beside a documented
+        # one would be a conflict instead (session interpretation 11)
+        encounter_id = self.finished_encounter(UNDATED_NOTE, service_date='2026-10-20')
         detail = self.client.get(f'/api/encounters/{encounter_id}').json()
         em = next(p for p in detail['assessment']['proposals'] if p['code'] == '99213')
         response = self.post(f'/api/encounters/{encounter_id}/decisions',
@@ -128,7 +130,7 @@ class RealEngineDateChangeReasonTests(LiveEncounter, TestCase):
         # what the engine's fingerprint reads beside the context: equal here, so only the date may be named
         self.assertEqual(review._evidence_texts(before), review._evidence_texts(after))
         self.assertEqual(review._check_results(before), review._check_results(after))
-        self.assertIn('service date: 2026-10-20 → 2026-10-22', invalidation.reason)
+        self.assertIn('service date: 2026-10-20 [member-supplied] → 2026-10-22 [member-supplied]', invalidation.reason)
         self.assertTrue(invalidation.reason.endswith(
             ': the decision on 99213 depends on a context value that changed.'), invalidation.reason)
 

@@ -14,6 +14,7 @@ from dataclasses import dataclass, replace
 from datetime import date
 from typing import Mapping, Optional, Sequence
 
+from studio.gi.context import is_member_conflict
 from studio.gi.profiles import DETECTED_FAMILIES, PROFILES, PROFILES_VERSION, ServiceProfile
 from studio.reference.store import (KIND_LABELS, MUE, PFS, UNKNOWN_DATE_NOTE, applied_sources,
                                     modifier_only_prefix, source_applies)
@@ -676,15 +677,19 @@ def required_facts_check(profile: ServiceProfile, states: Sequence[FactState]) -
         return None
     documented = [f'{fact_label(s.name)} = {excerpt(str(s.fact.value))}' for s in states if not s.problem]
     missing = [fact_label(s.name) for s in states if s.problem == 'missing']
-    conflicting = [fact_label(s.name) for s in states if s.problem == 'conflict']
+    conflicting = [fact_label(s.name) for s in states if s.problem == 'conflict' and not is_member_conflict(s.fact)]
+    entered = [fact_label(s.name) for s in states if s.problem == 'conflict' and is_member_conflict(s.fact)]
     parts = []
     if missing:
         parts.append(f'Not documented: {"; ".join(missing)}.')
     if conflicting:
         parts.append(f'Conflicting values documented: {"; ".join(conflicting)}.')
+    if entered:
+        parts.append(f'Member-entered encounter metadata differs from the document (both kept, neither used): '
+                     f'{"; ".join(entered)}.')
     if documented:
         parts.append(f'Documented: {"; ".join(documented)}.')
-    status = 'warn' if missing or conflicting else 'pass'
+    status = 'warn' if missing or conflicting or entered else 'pass'
     return Check('facts.required', 'Required documentation (CPT Studio profile)', status, ' '.join(parts),
                  f'cpt-studio:{profile.version}')
 
@@ -703,7 +708,9 @@ def fact_clarifications(states: Sequence[FactState], profile: ServiceProfile, fa
         template = FACT_QUESTIONS.get(state.name)
         question = (template.format(label=profile.label) if template
                     else f'{profile.label}: confirm the documented {fact_label(state.name)}.')
-        if state.problem == 'conflict':
+        if state.problem == 'conflict' and is_member_conflict(state.fact):
+            reason = f'The {fact_label(state.name)} is in conflict. {state.fact.note}'
+        elif state.problem == 'conflict':
             reason = (f'The document gives conflicting values for the {fact_label(state.name)}: '
                       f'{_conflict_values(state.fact)}.')
         else:
@@ -980,9 +987,8 @@ def service_date_state(context: Mapping[str, Fact], service_date: Optional[date]
 
 def _date_problem(state: DateState) -> str:
     if state.origin == 'conflict':
-        note = state.fact.note if state.fact is not None else ''
-        if note.startswith('Encounter metadata'):
-            return f'The date of service is in conflict. {note.rstrip(".")}'
+        if is_member_conflict(state.fact):
+            return f'The date of service is in conflict. {state.fact.note.rstrip(".")}'
         return f'Conflicting dates of service are documented ({_conflict_values(state.fact)})'
     if state.origin == 'unreadable':
         return f'The date of service “{excerpt(str(state.fact.value))}” is not a readable date'

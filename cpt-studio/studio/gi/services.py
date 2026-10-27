@@ -30,6 +30,7 @@ and cannot be complete for open prose, so nothing it decides is final without a 
 from __future__ import annotations
 
 import bisect
+import contextvars
 import dataclasses
 import re
 from dataclasses import dataclass, field, replace
@@ -244,6 +245,16 @@ NOT_VERB = _rx(r"\b(?:was|were|is|are|been|has|have|had|did|does|could|would|can
                r"attempted|repeated|undertaken|carried\s+out|reached|completed|required|needed|indicated)\b"
                r"|\b(?:wasn't|weren't|didn't)\b")
 WITHOUT = _rx(r'\b(?:without|w/o)\b')
+# "without (any) complication(s) (at all)" ending its clause at a stop, a semicolon, a colon or the line's end ("The
+# following procedures were performed today without any complication at all:" over the polypectomy line): the "without"
+# denies the complication, never the act after it. A phrase that runs on, or a list that goes on after a comma ("without
+# bleeding requiring clip placement", "without bleeding, perforation or a clip being placed"), still denies.
+WITHOUT_COMPLICATION = _rx(r'\b(?:without|w/o)\s+(?:(?:any|immediate|apparent|obvious|significant|major)\s+){0,2}'
+                           r'(?:complications?|bleeding|perforation)(?:\s+(?:at\s+all|whatsoever))?[ \t]*(?:[.;:]|\n)')
+# A service named as replaced by another: "an EGD was performed rather than EUS", "flexible sigmoidoscopy instead of
+# colonoscopy", "EGD in lieu of EUS" (routing's own replacement cue, studio.gi.cues).
+REPLACED = dict(_cues.NEGATED_PRE)['instead of']
+REPLACED_CUE = 'negated: named as replaced by another service'
 CANCEL_WORDS = _rx(r'\b(?:cancel(?:l)?ed|declined|refused|deferred|postponed|aborted\s+before|not\s+attempted)\b')
 HISTORY_WORDS = _rx(r'\b(?:prior|previous(?:ly)?|history\s+of|historical|in\s+the\s+past|ago|earlier|remote|old|formerly'
                     r'|last\s+(?:year|month|week|time|visit|seen)|had\s+(?:a|an|undergone|been|had)|status\s+post|s/p'
@@ -514,7 +525,7 @@ class _Part:
     family: str  # the service a report part is about; '' outside a report
     role: str
     title: Optional[Span]
-    kind: str  # report | history | plan | other
+    kind: str  # report | history | plan | indication | other
 
 
 def _lines(text: str) -> list[tuple[int, int]]:
@@ -540,14 +551,33 @@ PLAN_HEADING = _rx(r'^[\s\-*#]*(?:plan|plans|recommendations?|assessment\s+and\s
 
 def parts(text: str) -> tuple[_Part, ...]:
     """The document cut into report parts (a part about one service, from its title to the next title), role parts
-    (a nursing, anesthesia, pathology or radiology entry, to the next heading) and other text."""
+    (a nursing, anesthesia, pathology or radiology entry, to the next heading) and other text. A history or plan part
+    never runs into today's report: a history part ends at the line routing's sections read as a procedure heading
+    when today's report goes on under it ("Procedure: Colonoscopy with cold snare polypectomy." after "History:", then a
+    findings, technique or impression heading: _opens_todays_report), and an extraction block ("[PDF form fields on
+    page 1]") interrupts a history or plan part as text of no time, its lines opening no part, until the blank line
+    that ends the block, where the part resumes (routing reads both the same way: gi/sections layout)."""
     cuts: list[tuple[int, str, str, Optional[Span], str]] = [(0, '', 'physician', None, 'other')]
     family, kind_now = '', 'other'
-    for ls, le in _lines(text):
+    resume_after_block = None  # the history or plan part an extraction block interrupted
+    lines = _lines(text)
+    for index, (ls, le) in enumerate(lines):
         line = text[ls:le]
         stripped = line.strip()
+        if resume_after_block is not None:
+            if not stripped:
+                cuts.append((ls, *resume_after_block))
+                resume_after_block = None
+            continue  # an extraction block's lines open no part of their own
         if not stripped or len(stripped) > 100:
             continue
+        if cuts[-1][4] in ('history', 'plan') and _sections.FORM_BLOCK.fullmatch(stripped):
+            resume_after_block = (cuts[-1][1], cuts[-1][2], None, cuts[-1][4])
+            cuts.append((ls, '', 'physician', None, 'other'))
+            continue
+        if cuts[-1][4] == 'history' and _opens_todays_report(text, lines, index):
+            # today's procedure line ends the history before it ("History:" ... "Procedure: Colonoscopy ...")
+            cuts.append((ls, family, 'physician', None, kind_now if family else 'other'))
         if PAGE_HEADER.match(stripped) and stripped.count('|') >= 2:
             continue
         role = next((r for r, p in ROLE_HEADINGS if p.match(line)), None)
@@ -595,7 +625,114 @@ def parts(text: str) -> tuple[_Part, ...]:
             kind = 'report'
         if end > start:
             out.append(_Part(start, end, fam, role, title, 'report' if kind == 'role' and fam else kind))
+    return _time_parts(text, out)
+
+
+def _time_parts(text: str, plist: Sequence[_Part]) -> tuple[_Part, ...]:
+    """The parts with their history and plan sections where routing's section layout (studio.gi.sections, the structure
+    the refutation rounds hardened: inline and wrapped labels, field labels, held lines) puts them, from where such a
+    section opens to where it ends. "Prior colonoscopies:", "Past history:", "Impression and Recommendations:",
+    "Procedures to be done:" and "Plan: Dr. Smith recommended" open one; the next section the layout opens ("Findings:")
+    ends it, as it ends a history or plan part this module's own headings opened. A heading the layout adds whose own
+    line already carries a complete statement ("History: an outside EUS-guided biopsy showed adenocarcinoma.") speaks
+    for that line only, as a field does. A part keeps its family, role and title; a role part keeps its reading, and a
+    plan section inside a titled report stays that report's (its title owns its subsections, as PLAN_HEADING has it)."""
+    lay = _sections.layout(text)
+    timed = [(s.start, _time_end(text, s), s.kind) for s in lay.sections if s.kind in ('history', 'plan')]
+    timed += [(s.start, min(_time_end(text, s), _paragraph_end(text, s)), s.kind) for s in lay.sections
+              if s.kind == 'indication']
+    marks = {m for start, end, _ in timed for m in (start, end)}
+    ends = {}
+    for p in plist:
+        if p.kind in ('history', 'plan') and p.role == 'physician':
+            # this module's own heading opened it: it ends where the layout opens another section
+            ends[p.start] = next((s.start for s in lay.sections if p.start < s.start < p.end), p.end)
+            marks.add(ends[p.start])
+    marks = sorted(marks)
+    out: list[_Part] = []
+    for p in plist:
+        edges = [p.start] + [m for m in marks if p.start < m < p.end] + [p.end]
+        pieces: list[_Part] = []
+        for a, b in zip(edges, edges[1:]):
+            kind = _time_kind(p, a, timed, ends.get(p.start))
+            if pieces and pieces[-1].kind == kind:
+                pieces[-1] = replace(pieces[-1], end=b)
+            else:
+                pieces.append(_Part(a, b, p.family, p.role, p.title if a == p.start else None, kind))
+        out.extend(pieces)
     return tuple(out)
+
+
+TODAYS_REPORT_REACH = 12  # non-empty lines after a procedure heading read for today's report going on under it
+
+
+def _opens_todays_report(text: str, lines: Sequence[tuple[int, int]], index: int) -> bool:
+    """Whether line ``index`` is a procedure heading (routing's sections: "Procedure: Colonoscopy with cold snare
+    polypectomy.", "PROCEDURE PERFORMED:") under which today's report goes on: within TODAYS_REPORT_REACH non-empty
+    lines a findings, technique or impression heading follows, before any history or plan heading or report title. A
+    history entry's own procedure field ("Procedure: colonoscopy (outside), polyps removed." before "Upper endoscopy
+    report") stays history."""
+    heading = _sections._heading(text, *lines[index])
+    if heading is None or heading[0] != 'procedure':
+        return False
+    seen = 0
+    for ls, le in lines[index + 1:]:
+        line = text[ls:le]
+        if not line.strip():
+            continue
+        seen += 1
+        if seen > TODAYS_REPORT_REACH:
+            return False
+        if REPORT_TITLE.match(line) or TITLE_FIELD.match(line) or TITLE_REPORT_WORDS.match(line) \
+                or HISTORY_HEADING.match(line) or PLAN_HEADING.match(line):
+            return False
+        following = _sections._heading(text, ls, le)
+        if following is not None and following[0] in ('history', 'plan'):
+            return False
+        if following is not None and following[0] in ('findings', 'technique', 'impression'):
+            return True
+    return False
+def _time_end(text: str, section) -> int:
+    """Where a history or plan section of the layout stops dating what it holds: its end, or the end of its heading's
+    line when that line carries a complete statement after the heading."""
+    line_end = text.find('\n', section.start, section.end)
+    line_end = section.end if line_end < 0 else line_end
+    if section.heading is not None and section.heading.end <= line_end:
+        content = text[section.heading.end:line_end].strip()
+        if content and content[-1] in '.!?':
+            return min(section.end, line_end + 1)
+    return section.end
+
+
+def _paragraph_end(text: str, section) -> int:
+    """Where an indication stops: its heading line and the lines after it up to a blank line or a line that reads as
+    another heading. The layout runs an indication on over a report's own headings it does not know ("OPERATIVE
+    DETAILS", "NARRATIVE"), and what follows them is today's report."""
+    nl = text.find('\n', section.start, section.end)
+    pos = section.end if nl < 0 else nl + 1
+    while pos < section.end:
+        nl = text.find('\n', pos, section.end)
+        line_end = section.end if nl < 0 else nl
+        line = text[pos:line_end]
+        if not line.strip() or GENERIC_HEADING.match(line):
+            return pos
+        pos = line_end + 1
+    return section.end
+
+
+def _time_kind(p: _Part, pos: int, timed, own_end: Optional[int]) -> str:
+    if p.role != 'physician' or p.kind == 'role':
+        return p.kind
+    kind = next((k for start, end, k in timed if start <= pos < end), '')
+    if kind == 'history':
+        return 'history'
+    if kind == 'plan':
+        return p.kind if p.kind == 'report' else 'plan'
+    if kind == 'indication' and p.kind == 'other':
+        return 'indication'  # why the patient came (never inside a titled report, whose subsections are its own)
+    if p.kind in ('history', 'plan') and own_end is not None and pos >= own_end:
+        return 'report' if p.family else 'other'  # the history or plan this module's heading opened has ended
+    return p.kind
 
 
 def _part_at(plist: Sequence[_Part], starts: Sequence[int], pos: int) -> _Part:
@@ -603,14 +740,39 @@ def _part_at(plist: Sequence[_Part], starts: Sequence[int], pos: int) -> _Part:
     return plist[max(i, 0)]
 
 
+def _answered_line(text: str, ls: int, le: int, nxt: int) -> bool:
+    """Whether the line [ls, le) ends in an answer of its own, read with routing's own answer readers (gi/sections:
+    _answered, _OPTION_ROW, the spoken answer), so the two readers never disagree: a field answered with a lone negation
+    or a short value ending in a denial ("Hiatal hernia - no", "Hiatal hernia \u2013 no", "Hiatal hernia? no",
+    "Sedation: patient declined"), a column answer ("Hiatal hernia\tno"), an option row ("Biopsy taken [ ] Yes [x] No")
+    or a spoken answer before a line that opens a clause of its own ("the patient said no" / "Colonoscopy was then
+    performed"). Its "no" is the answer, never a negation of the next line's act (round 3 routing:1, round 4
+    structure:1 and structure:3). A next line in lower case still runs on (round 4 structure:2: routing holds that
+    negation across the break). The line is read after any heading label on it, as routing reads it, and only its
+    last WRAP_TAIL characters (bounded work per line)."""
+    heading = _sections._heading(text, ls, le)
+    content = heading[2].end if heading and ls <= heading[2].end <= le else ls
+    before = text[content:le].rstrip()
+    reach = min(len(text), nxt + _sections.OWN_CLAUSE_REACH)
+    line_end = text.find('\n', nxt, reach)
+    after = text[nxt:line_end if line_end >= 0 else reach].lstrip()
+    if not before or not after or after[0].islower():
+        return False
+    tail = before[-_sections.WRAP_TAIL:]
+    if _sections._answered(before if len(before) <= _sections.WRAP_TAIL else tail) or _sections._OPTION_ROW.search(tail):
+        return True
+    return bool(_sections._SEC_SPOKEN_ANSWER.search(tail) and _sections._own_clause(after))
+
+
 def _sentences(text: str) -> list[tuple[int, int]]:
     """Sentences: split at a full stop, question or exclamation mark followed by space and a capital or digit or a
-    list label, at a line that starts a numbered or labelled item, and at blank lines. Line wraps inside a sentence
-    are kept (PDF text wraps mid-sentence)."""
+    list label, at a line that starts a numbered or labelled item, after a line that ends in an answer of its own
+    (_answered_line), and at blank lines. Line wraps inside a sentence are kept (PDF text wraps mid-sentence)."""
     out: list[tuple[int, int]] = []
     start = 0
     n = len(text)
     i = 0
+    in_block = False  # inside an extraction block ("[PDF form fields on page 1]" to the blank line that ends it)
     abbreviations = ('Dr', 'Mr', 'Mrs', 'Ms', 'vs', 'approx', 'e.g', 'i.e', 'St', 'No', 'Fig')
     while i < n:
         ch = text[i]
@@ -627,7 +789,11 @@ def _sentences(text: str) -> list[tuple[int, int]]:
         elif ch == '\n':
             nxt = text[i + 1:i + 40]
             prev_line_text = text[max(text.rfind('\n', max(0, i - 400), i) + 1, start):i]
-            if BOX_MARK.search(prev_line_text) or BOX_MARK.search(text, i + 1, min(n, i + 200)) and \
+            ended = text[text.rfind('\n', 0, i) + 1:i].strip()
+            in_block = bool(_sections.FORM_BLOCK.fullmatch(ended)) or (in_block and bool(ended))
+            if in_block:
+                cut = i  # an extraction block's lines are each a sentence, never one field run on into the next
+            elif BOX_MARK.search(prev_line_text) or BOX_MARK.search(text, i + 1, min(n, i + 200)) and \
                     BOX_MARK.search(text[i + 1:text.find('\n', i + 1) if text.find('\n', i + 1, i + 400) >= 0
                                          else min(n, i + 400)]):
                 cut = i  # a check-box or option row never runs on into the next line, nor another into it
@@ -641,6 +807,8 @@ def _sentences(text: str) -> list[tuple[int, int]]:
                     or (re.match(r'[ \t]*[A-Z][A-Za-z /&,()\-]{1,60}:?[ \t]*(?:\n|$)', text[i + 1:i + 80])
                         and not text[start:i].rstrip().endswith(',')):
                 cut = i
+            elif _answered_line(text, text.rfind('\n', 0, i) + 1, i, i + 1):
+                cut = i  # "Hiatal hernia \u2013 no" / "Biopsies were taken ...": the answer ends its line's sentence
             else:
                 prev_line = text[text.rfind('\n', 0, i) + 1:i].strip()
                 if prev_line and (prev_line.endswith(':') or GENERIC_HEADING.match(prev_line)) \
@@ -743,7 +911,7 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         # Any other boxed row: routing's box reader, hardened over the refutation rounds, decides (strict rows: an
         # unusual row holds). Its status is the act's.
         from studio.gi import detect  # local: detect imports context, which this module also imports
-        status, box_cues = detect.status_for_span(text, pos, end, service_date)
+        status, box_cues = detect.status_for_span(_ORIGINAL.get() or text, pos, end, service_date)
         checked = re.search(_box_symbols.BOX_ON_PATTERN, text[line_start:line_end])
         if status == 'negated' and not checked and any('unchecked' in cue for cue in box_cues):
             # no option on the row is marked: an unselected option alone says nothing (the box contract)
@@ -775,8 +943,11 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         neg_target = text[cs + not_verb.end(): min(ce, cs + not_verb.end() + 40)]
         if not re.match(r'\s*(?:\w+\s+){0,2}(?:discontinu|interrupt|terminat|abort|incomplet|stopped)', neg_target, FLAGS):
             return Reading('negated', ('negated: "not" on its predicate',))
-    if WITHOUT.search(before[-40:]):
+    near = before[-40:]
+    if any(not WITHOUT_COMPLICATION.match(near, w.start()) for w in WITHOUT.finditer(near)):
         return Reading('negated', ('negated: "without" before it',))
+    if REPLACED.search(before[-80:]):
+        return Reading('negated', (REPLACED_CUE,))
     if CANCEL_WORDS.search(whole):
         return Reading('cancelled', ('cancelled: ' + CANCEL_WORDS.search(whole).group(0).lower(),))
     # Time: a date in the clause.
@@ -797,13 +968,21 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     plan = PLAN_WORDS.search(whole)
     if plan and not (TODAY_WORDS.search(whole) and ACT_VERB.search(whole)):
         return Reading('planned', ('planned: ' + plan.group(0).lower(),))
-    hedge = HEDGE_WORDS.search(whole)
-    if hedge:
-        return Reading('uncertain', ('uncertain: ' + hedge.group(0).lower(),))
+    # A history or plan section dates what it names before a hedge in the clause is read: a hedged item of a plan is
+    # still planned ("1. Dysphagia, likely peptic stricture - upper endoscopy with dilation at the hospital"), never a
+    # doubt about a service done today.
     if part.kind == 'history' and not TODAY_WORDS.search(whole):
         return Reading('historical', ('historical: in a history section',))
     if part.kind == 'plan' and not TODAY_WORDS.search(whole):
         return Reading('planned', ('planned: in a plan section',))
+    hedge = HEDGE_WORDS.search(whole)
+    if hedge:
+        return Reading('uncertain', ('uncertain: ' + hedge.group(0).lower(),))
+    if part.kind == 'indication' and not TODAY_WORDS.search(whole):
+        # An indication says why the patient came: a performance stated there and not said to be today's is not
+        # established as today's ("Indication: Anemia. An EGD was performed last month at an outside hospital; the
+        # endoscope was advanced to the duodenum") - held, as routing holds it, never read as done today.
+        return Reading('uncertain', ('uncertain: stated in an indication, not as done today',))
     if ACT_VERB.search(whole) or BARE_PARTICIPLE.search(after) or BARE_PARTICIPLE.search(before[-40:]) \
             or BARE_PARTICIPLE.fullmatch(text[pos:end].strip()) or _nominal_act(text, before, pos):
         if in_today_report or TODAY_WORDS.search(whole) or part.kind == 'report':
@@ -812,6 +991,70 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     if in_today_report:
         return Reading('uncertain', ('uncertain: named without an act predicate',))
     return Reading('uncertain', ('uncertain: no performance statement',))
+
+
+# A label line that may deny performance ("Procedures not performed:", "Cancelled procedures:"): only beside one is
+# routing's denying-label reader asked (bounded work per reading).
+DENIAL_LABEL_WORDS = _rx(r'\b(?:not\s+(?:performed|done)|cancell?ed|deferred|declined)\b')
+DENIAL_LABEL_LOOKBACK = 2400  # characters above a line in which its label is looked for (LABEL_ITEMS lines in routing)
+LISTED_UNDER_DENIAL = 'uncertain: listed under '
+
+
+def held_under_denial(text: str, pos: int, reading: Reading, service_date: Optional[date]) -> Reading:
+    """``reading`` of the mention at ``pos``, held when it reads performed and its line is listed under a label that
+    denies performance, read by routing's own reader (detect.denying_label_over, round 4c-2 plan:C): "Procedures not
+    performed:" over "Cold snare polypectomy of the 6 mm sigmoid polyp." is never a performed act. Uncertain, never
+    negated: the same hold routing makes, so the two readers never disagree."""
+    if reading.status != 'performed':
+        return reading
+    line_start = text.rfind('\n', max(0, pos - DENIAL_LABEL_LOOKBACK), pos) + 1
+    above = text[max(0, line_start - DENIAL_LABEL_LOOKBACK):line_start]
+    if not any(line.rstrip().endswith(':') and DENIAL_LABEL_WORDS.search(line) for line in above.split('\n')):
+        return reading
+    from studio.gi import detect  # local: detect imports context, which this module also imports
+    label = detect.denying_label_over(text, pos, service_date)
+    if label is None:
+        return reading
+    return Reading('uncertain', (f"{LISTED_UNDER_DENIAL}'{label}', a label that denies performance",) + reading.cues)
+
+
+# A PDF form-field line the extraction writes for a checked checkbox ("Cold snare polypectomy: checked", inside
+# "[PDF form fields on page N]"): one box, marked. Its label names the act; the line states it done, as a marked box
+# row does (the check-box contract: exactly one option marked). An unmarked one ("not checked") says nothing here.
+FORM_FIELD_CHECKED = re.compile(r'[ \t]*(?P<label>[^:\n]{1,120}?)[ \t]*:[ \t]*checked[ \t]*\.?[ \t]*', re.A | re.I)
+SILENT_READINGS = ('uncertain: no performance statement', 'uncertain: named without an act predicate')
+
+
+def form_field_blocks(text: str) -> list[tuple[int, int]]:
+    """The lines of each PDF form-field block, in order: from the line after its "[PDF form fields on page N]" line to
+    the blank line (or the next block's line) that ends it (routing's block, gi/sections). One pass over the lines."""
+    out, start, pos = [], None, 0
+    for line in text.split('\n'):
+        ls, le = pos, pos + len(line)
+        pos = le + 1
+        stripped = line.strip()
+        block = _sections.FORM_BLOCK.fullmatch(stripped) if stripped else None
+        if start is not None and (not stripped or block):
+            out.append((start, max(start, ls - 1)))
+            start = None
+        if block and block.group('what') == 'form fields':
+            start = min(len(text), le + 1)
+    if start is not None:
+        out.append((start, len(text)))
+    return out
+
+
+def checked_form_field(text: str, pos: int, blocks: Sequence[tuple[int, int]], starts: Sequence[int]) -> bool:
+    """Whether ``pos`` lies in the label of a checked form-field line inside a form-field block (``blocks`` in order,
+    ``starts`` their starts)."""
+    i = bisect.bisect_right(starts, pos) - 1
+    if i < 0 or pos >= blocks[i][1]:
+        return False
+    line_start = text.rfind('\n', 0, pos) + 1
+    line_end = text.find('\n', pos)
+    m = FORM_FIELD_CHECKED.fullmatch(text, line_start, line_end if line_end >= 0 else len(text))
+    # a label that negates or doubts its act ("Biopsy not done: checked") is no statement that it was done
+    return m is not None and pos < m.end('label') and not _cues.DOUBT_TOKEN.search(m.group('label'))
 
 
 # The act's own noun heading its phrase: "En bloc endoscopic submucosal dissection of a 0-IIa lesion", "ligation of
@@ -996,12 +1239,98 @@ OBSERVED = _rx(r'\b(?:was|were|is|are)\s+(?:seen|noted|found|identified|visualiz
 
 def build(text: str, *, service_date: Optional[date], routing=None, context_facts=None) -> ServiceInventory:
     """The documented services of ``text`` for the effective ``service_date``. ``routing`` (a RoutingResult) supplies
-    routing's family readings, kept beside each service and used, fail-closed, where the two readings disagree."""
+    routing's family readings, kept beside each service and used, fail-closed, where the two readings disagree.
+
+    The reader reads a same-length view of the text in which a line break inside a sentence (a PDF or scan wrapping
+    its line) is a space (``reflow``); every offset is the text's own, and every passage it returns is the text's."""
+    flow = reflow(text)
+    token = _ORIGINAL.set(text)
+    try:
+        inventory = _build(flow, service_date=service_date, routing=routing, context_facts=context_facts)
+    finally:
+        _ORIGINAL.reset(token)
+    return _restore_spans(inventory, text) if flow != text else inventory
+
+
+_ORIGINAL: contextvars.ContextVar = contextvars.ContextVar('services_original_text', default=None)
+_SOFT_NEXT = re.compile(r'[ \t]*[a-z]')
+# A line ending in a word that cannot end a sentence (an article, a preposition, an auxiliary, a conjunction) is
+# continued by the next line whatever its case ("... provided by the" / "Anesthesia team").
+_DANGLING = re.compile(r'\b(?:a|an|the|of|to|in|on|at|by|with|from|for|into|onto|and|or|but|nor|was|were|is|are|be|been|'
+                       r'being|has|have|had|than|as|per|via|under|over|after|before|during|within|without|including|'
+                       r'using|measuring|approximately|about|its|their|his|her|this|that|these|those)[ \t]*$', re.I)
+_NEXT_ITEM = re.compile(r'[ \t]*(?:[-*\u2022]|\d{1,2}[.)]\s|[A-Z][A-Za-z /&()\-]{1,40}:(?:\s|$))')
+_LIST_ITEM = re.compile(r'[ \t]*(?:[a-z][.)]|[ivx]{1,4}[.)])\s')
+_TERMINAL = re.compile(r'[.:;!?]["\')\]]*[ \t]*$')
+
+
+def reflow(text: str) -> str:
+    """``text`` with each soft line break - a wrap inside a sentence - replaced by a space, one character for one.
+
+    A break is soft only when the line before it is a long run of prose (25+ characters and 4+ words) that does not
+    end a sentence or a label and does not end in an answer of its own (_answered_line, the rule _sentences cuts at),
+    and the next line continues it in lower case, or after a word that cannot end a line (_DANGLING); never around a
+    check-box or option row, a table row, a list item or a labelled field, and never inside an extraction block.
+    Headings, labels, fields and short lines keep their breaks."""
+    if '\n' not in text:
+        return text
+    out = list(text)
+    pos = 0
+    n = len(text)
+    in_block = False
+    while True:
+        i = text.find('\n', pos)
+        if i < 0 or i + 1 >= n:
+            break
+        pos = i + 1
+        ls = text.rfind('\n', 0, i) + 1
+        prev = text[ls:i]
+        ne = text.find('\n', i + 1)
+        nxt = text[i + 1:ne if ne >= 0 else n]
+        stripped = prev.strip()
+        in_block = bool(_sections.FORM_BLOCK.fullmatch(stripped)) or (in_block and bool(stripped))
+        if in_block:
+            continue  # an extraction block's lines are each a field, never one wrapped sentence
+        if len(stripped) < 25 or len(stripped.split()) < 4 or _TERMINAL.search(prev):
+            continue
+        if _LIST_ITEM.match(nxt) or _NEXT_ITEM.match(nxt):
+            continue
+        if not _SOFT_NEXT.match(nxt) and not (_DANGLING.search(prev) and nxt.strip()
+                                              and not GENERIC_HEADING.match(nxt.strip())):
+            continue
+        if '|' in prev or '|' in nxt or '\t' in prev or '\t' in nxt:
+            continue
+        if BOX_MARK.search(prev) or BOX_MARK.search(nxt):
+            continue
+        if _answered_line(text, ls, i, i + 1):
+            continue  # "... and said no" / "Hiatal hernia - no": the answer ends its line
+        out[i] = ' '
+    return ''.join(out)
+
+
+def _restore_spans(obj, text: str):
+    """``obj`` (the inventory) with every passage's text taken from ``text`` at its own offsets."""
+    if isinstance(obj, Span):
+        return Span(obj.start, obj.end, text[obj.start:obj.end])
+    if isinstance(obj, tuple):
+        return tuple(_restore_spans(x, text) for x in obj)
+    if isinstance(obj, list):
+        return [_restore_spans(x, text) for x in obj]
+    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+        changes = {f.name: _restore_spans(getattr(obj, f.name), text) for f in dataclasses.fields(obj)
+                   if f.init}
+        return dataclasses.replace(obj, **changes)
+    return obj
+
+
+def _build(text: str, *, service_date: Optional[date], routing=None, context_facts=None) -> ServiceInventory:
     problems: list[str] = []
     dates = gi_context.find_dates(text)
     plist = parts(text)
     starts = [p.start for p in plist]
     sentences = _sentences(text)
+    blocks = form_field_blocks(text)
+    block_starts = [bs for bs, _ in blocks]
     if len(sentences) > MAX_SENTENCES:
         problems.append(f'The document has {len(sentences):,} sentences; only the first {MAX_SENTENCES:,} were read '
                         'for documented services, so services after them are not inventoried.')
@@ -1063,6 +1392,7 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
                 if reading.status == 'uncertain' and PROCEDURE_FIELD.match(text[line_start:line_end if line_end >= 0
                                                                                   else len(text)]):
                     reading = Reading('performed', reading.cues + ('performed: listed on the procedure line',))
+                reading = held_under_denial(text, ms, reading, service_date)
             d = draft(family, kind)
             if (title or reading.status == 'performed') and not d.kind_settled:
                 d.kind, d.kind_settled = kind, True  # "Prior upper endoscopy ..." never makes a TNE an EGD
@@ -1090,6 +1420,15 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
                 clause = _clause_for(clauses(text, ss, se), m.start())
                 reading = read_clause(text, clause, m.start(), m.end(), service_date=service_date, dates=dates,
                                       part=part, in_today_report=part.kind == 'report' and part.family == family)
+                reading = held_under_denial(text, m.start(), reading, service_date)
+                bounded_span = _span(text, *_bounded_clause(text, clause, m.start(), m.end()))
+                if reading.status == 'performed' and family in drafts and any(
+                        REPLACED_CUE in cue_list for status, cue_list, sp in drafts[family].statuses
+                        if status == 'negated' and sp.start < bounded_span.end and bounded_span.start < sp.end):
+                    # "Because the echoendoscope was unavailable, an EGD was performed rather than EUS": the clause's act
+                    # predicate is the replacing service's; the replaced service's instrument documents no performance.
+                    reading = Reading('uncertain', reading.cues + ('uncertain: its service is named as replaced in the '
+                                                                   'same clause',))
                 if family not in drafts:
                     if reading.status != 'performed':
                         continue
@@ -1100,7 +1439,6 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
                 if reading.status == 'performed' and family not in performed_families:
                     performed_families.append(family)
                 d = drafts[family]
-                bounded_span = _span(text, *_bounded_clause(text, clause, m.start(), m.end()))
                 d.statuses.append((reading.status, reading.cues, bounded_span))
                 if reading.status == 'performed':
                     d.evidence.append(bounded_span)
@@ -1236,8 +1574,9 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
                 row_hi = text.find('\n', me, me + ROW_REACH)
                 row_hi = min(len(text), me + ROW_REACH) if row_hi < 0 else row_hi
                 boxed = bool(BOX_MARK.search(text, row_lo, row_hi))
+                checked = checked_form_field(text, ms, blocks, block_starts)
                 has_act_verb = bool(ACT_VERB.search(clause_text) or BARE_PARTICIPLE.search(clause_text) or boxed
-                                    or _nominal_act(text, text[bc[0]:ms], ms))
+                                    or checked or _nominal_act(text, text[bc[0]:ms], ms))
                 if reading.status == 'negated' and not has_act_verb:
                     continue  # a denied finding ("without food impaction", "no stones"), not a denied act
                 if reading.status == 'negated' and OBSERVED.search(clause_text) and not ACT_VERB.search(clause_text):
@@ -1250,6 +1589,9 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
                     continue
                 if reading.status == 'uncertain' and _on_procedure_line(text, ms, part):
                     reading = Reading('performed', reading.cues + ('performed: listed on the procedure line',))
+                if checked and reading.status == 'uncertain' and reading.cues and reading.cues[0] in SILENT_READINGS:
+                    reading = Reading('performed', reading.cues + ('performed: its form field is checked',))
+                reading = held_under_denial(text, ms, reading, service_date)
                 d = drafts[fam]
                 d.scopes.append((part.start, part.end) if part.kind == 'report' and part.family == fam else (ss, se))
                 lesion = _lesion_for(sentence_lesions, ms)

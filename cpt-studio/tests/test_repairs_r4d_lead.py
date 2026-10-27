@@ -147,6 +147,9 @@ LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/202
 DEADLINES = {'extract': 300, 'analyze': 60, 'predict': 180, 'assess': 60}
 _ROUTE = detect.route
 NEW_DATE = date(2026, 10, 22)  # OFFICE_NOTE documents 2026-10-20
+# A note with no date of its own: a member's date supplies it, and a later member date is a date change. A member's
+# date beside a documented one is a conflict instead (session interpretation 11), and nothing is routed for it.
+UNDATED_NOTE = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
 
 
 class LiveEncounter:
@@ -162,9 +165,9 @@ class LiveEncounter:
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def finished_encounter(self):
+    def finished_encounter(self, text=OFFICE_NOTE, **extra):
         with self.captureOnCommitCallbacks(execute=True):
-            response = self.client.post('/api/encounters', {'text': OFFICE_NOTE, 'synthetic_attestation': 'yes'})
+            response = self.client.post('/api/encounters', {'text': text, 'synthetic_attestation': 'yes', **extra})
         self.assertEqual(response.status_code, 201, response.content)
         drain()
         encounter_id = response.json()['id']
@@ -188,7 +191,7 @@ class LiveEncounter:
 @override_settings(**LIVE)
 class DateChangeRoutesBeforeSendingTests(LiveEncounter, TestCase):
     def test_a_new_date_the_document_cannot_be_routed_for_in_time_sends_nothing(self):
-        encounter_id = self.finished_encounter()
+        encounter_id = self.finished_encounter(UNDATED_NOTE, service_date='2026-10-20')
         runs_before = models.ProviderRun.objects.filter(encounter_id=encounter_id).count()
 
         def slow_for_the_new_date(text, service_date=None):
@@ -209,7 +212,7 @@ class DateChangeRoutesBeforeSendingTests(LiveEncounter, TestCase):
                                                           service_date=NEW_DATE).exists())
 
     def test_controls_a_new_date_that_routes_in_time_is_routed_once_then_sent(self):
-        encounter_id = self.finished_encounter()
+        encounter_id = self.finished_encounter(UNDATED_NOTE, service_date='2026-10-20')
         self.change_date(encounter_id)
         drain()
         self.assertEqual(len(self.provider.sent), 2)
@@ -219,6 +222,47 @@ class DateChangeRoutesBeforeSendingTests(LiveEncounter, TestCase):
                     .values_list('service_date', flat=True))
         self.assertEqual(dates, {date(2026, 10, 20), NEW_DATE})
 
+    def test_a_member_date_unlike_the_documented_one_is_never_routed_or_sent(self):
+        # OFFICE_NOTE documents 2026-10-20: the member's different date is a conflict with both sides kept, and neither
+        # is used until they agree (session interpretation 11; the member's date had been sent to the provider).
+        encounter_id = self.finished_encounter()
+        self.change_date(encounter_id)
+        drain()
+        self.assertFalse(models.RoutingRun.objects.filter(revision__encounter_id=encounter_id,
+                                                          service_date=NEW_DATE).exists())
+        runs = models.ProviderRun.objects.filter(encounter_id=encounter_id)
+        self.assertFalse(runs.filter(service_date=NEW_DATE).exists())
+        self.assertFalse([run.pk for run in runs if f'Date of service: {NEW_DATE.isoformat()}' in run.contexts])
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        self.assertEqual(encounter.current_context.facts['service_date']['origin'], 'conflict')
+        self.assertEqual(encounter.state, 'needs_clarification')
+        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        (question,) = [q for q in detail['clarifications'] if q['fact'] == 'service_date']
+        self.assertIn('gives 2026-10-22; the document gives 2026-10-20', question['reason'])
+
+    def test_nothing_is_sent_while_a_member_date_conflicts_and_clearing_it_reuses_the_documented_request(self):
+        # Session interpretation 19: while the member's date conflicts with the documented one, nothing is built,
+        # reused or sent - not a dateless request either, which would be paid for and then discarded - and the not-sent
+        # run says why. Clearing the metadata returns to the documented date, whose retained result is reused.
+        encounter_id = self.finished_encounter()
+        self.change_date(encounter_id)
+        drain()
+        self.assertEqual(len(self.provider.sent), 1)
+        run = models.ProviderRun.objects.filter(encounter_id=encounter_id).latest('created_at')
+        self.assertEqual((run.state, run.sent, run.service_date, run.request_sha256),
+                         (models.ProviderRun.NOT_SENT, False, None, ''))
+        self.assertEqual(run.error, jobs.MEMBER_DATE_CONFLICT_MESSAGE)
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'needs_clarification')
+        response = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': ''})
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+        self.assertEqual(len(self.provider.sent), 1)
+        latest = models.ProviderRun.objects.filter(encounter_id=encounter_id).latest('created_at')
+        self.assertEqual((latest.state, latest.sent, latest.service_date),
+                         (models.ProviderRun.SUCCEEDED, False, date(2026, 10, 20)))
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).current_context.facts['service_date']['origin'],
+                         'document')
+
 
 # --- pipeline:1 and pipeline:2: a stopped analysis versus one that overran ------------------------------------------
 
@@ -227,7 +271,6 @@ from datetime import timedelta  # noqa: E402
 from django.conf import settings  # noqa: E402
 from django.utils import timezone  # noqa: E402
 
-DOCUMENT_DATE = date(2026, 10, 20)
 
 
 @override_settings(**LIVE)
@@ -260,8 +303,9 @@ class StoppedOrOverranAnalysisTests(LiveEncounter, TestCase):
     def test_a_context_change_after_a_stopped_analysis_sends_once_and_only_for_the_members_date(self):
         for cause in ('stop', 'sweep', 'expiry'):
             with self.subTest(cause=cause):
-                # a distinct document per cause: an identical request in one workspace is reused, never re-sent
-                encounter_id, analyze = self.extracted_only(OFFICE_NOTE + f'\nReference: {cause}.\n')
+                # a distinct document per cause: an identical request in one workspace is reused, never re-sent; a
+                # note with no date of its own, so the member's date supplies it
+                encounter_id, analyze = self.extracted_only(UNDATED_NOTE + f'\nReference: {cause}.\n')
                 self.cancel(encounter_id, analyze, cause)
                 sent_before = len(self.provider.sent)
                 response = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': NEW_DATE.isoformat()})
@@ -272,13 +316,13 @@ class StoppedOrOverranAnalysisTests(LiveEncounter, TestCase):
                 self.assertEqual((run.service_date, run.sent), (NEW_DATE, True))
                 self.assertIn(f'Date of service: {NEW_DATE.isoformat()}', run.contexts)
                 self.assertFalse(models.RoutingRun.objects.filter(revision__encounter_id=encounter_id,
-                                                                  service_date=DOCUMENT_DATE).exists(),
-                                 'the document was analysed for its own date first')
+                                                                  service_date__isnull=True).exists(),
+                                 'the document was analysed for its own date (none) first')
                 assess = models.Job.objects.filter(encounter_id=encounter_id, kind=models.Job.ASSESS).get()
                 self.assertEqual(assess.state, models.Job.SUCCEEDED, assess.error)
 
     def test_a_stopped_analysis_whose_new_date_cannot_be_read_in_time_sends_nothing(self):
-        encounter_id, analyze = self.extracted_only()
+        encounter_id, analyze = self.extracted_only(UNDATED_NOTE)
         self.cancel(encounter_id, analyze, 'stop')
 
         def slow_for_the_new_date(text, service_date=None):

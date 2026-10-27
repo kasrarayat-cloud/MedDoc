@@ -782,6 +782,9 @@ def _derive_state(encounter):
         return 'provider_not_run'
     if run.state in UNSETTLED_RUN_STATES:
         return 'provider_unknown'
+    if run.state == ProviderRun.NOT_SENT and (run.scope or {}).get('held') == ProviderRun.HELD_MEMBER_DATE_CONFLICT:
+        # nothing was sent on purpose: the date question is open, and the encounter waits on it, not on the provider
+        return _review_state(encounter, assessment)
     if run.state != ProviderRun.SUCCEEDED:
         return 'provider_failed'
     return _review_state(encounter, assessment)

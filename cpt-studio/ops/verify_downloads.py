@@ -377,7 +377,7 @@ def check_txt(doc: str, name: str, text: str, kind: str, api: dict | None) -> li
     return out
 
 
-SOURCE_LINE = re.compile(r'^ {7}\+ source passage selected by CPT Studio: ')
+SOURCE_OPENER = '       + source passage selected by CPT Studio: '  # reports._item_block, at CONTINUATION depth
 
 
 def _txt_documented(doc, name, text, sections, api, revision_text) -> list[Result]:
@@ -403,22 +403,14 @@ def _txt_documented(doc, name, text, sections, api, revision_text) -> list[Resul
     out.append(Result(doc, name, 'txt.conflicts', 'pass' if named == conflicts else 'fail',
                       f'{len(named)} conflict(s) listed, as persisted' if named == conflicts else
                       f'listed {sorted(named)}, persisted {sorted(conflicts)}'))
-    wrong = []
-    for line in text.splitlines():
-        if not SOURCE_LINE.match(line):
-            continue
-        rest = SOURCE_LINE.sub('', line)
-        match = TXT_EVIDENCE_END.search(rest)
-        if match is None:
-            continue  # a passage over several lines: its offsets are checked where the renderer closes it
-        start, end = int(match.group(1)), int(match.group(2))
-        passage = cp_slice(revision_text, start, end)
-        quoted = collapse(rest[:match.start()] + '"') if passage is not None else None
-        if passage is None or quoted != collapse(f'"{txt_shown(passage)}"'):
-            wrong.append(f'{start}-{end}')
+    # A passage over several lines is one entry (the renderer continues it at nine spaces and closes it on its last
+    # line), read like an evidence entry; an opener with no closing citation cannot be checked and fails.
+    entries, unclosed = scan_entries(text.splitlines(), SOURCE_OPENER, SOURCE_OPENER)
+    wrong = [f'{start}-{end}' for entry, start, end in entries if not quotes_exactly(entry, start, end, revision_text)]
+    wrong += ['a source passage line with no closing citation'] * unclosed
     out.append(Result(doc, name, 'txt.source_passages', 'fail' if wrong else 'pass',
-                      f'source passage offsets that do not quote the revision text: {wrong}' if wrong
-                      else 'every single-line source passage quotes the revision text exactly'))
+                      f'source passages that do not quote the revision text at their offsets: {wrong}' if wrong
+                      else f'{len(entries)} source passage(s) quote the revision text exactly at their offsets'))
     return out
 
 
@@ -572,6 +564,44 @@ def _reviewer_labels(doc, name, text, items, sections, kind) -> list[Result]:
     return out
 
 
+def scan_entries(lines, opener, prefix) -> tuple[list[tuple[str, int, int]], int]:
+    """(entries, unclosed): each entry is (text, start, end) for an opener line and every continuation line up to the
+    next opener. Its offsets are its LAST line that ends like a citation: a passage line that happens to end in
+    '" [chars 1-2]' is text, and the renderer's closing bracket comes after it (round 3, orchestrator:1). ``unclosed``
+    counts openers with no closing citation at all, which the renderer never writes."""
+    entries: list[tuple[str, int, int]] = []
+    runs, current = [], None
+    for line in lines:
+        if line.startswith(opener):
+            current = [line]
+            runs.append(current)
+        elif current is not None and line.startswith(CONTINUATION):
+            current.append(line)
+        else:
+            current = None
+    unclosed = 0
+    for run in runs:
+        ends = [i for i, line in enumerate(run) if TXT_EVIDENCE_END.search(line)]
+        if not ends:
+            unclosed += 1
+            continue
+        match = TXT_EVIDENCE_END.search(run[ends[-1]])
+        text = [run[0][len(prefix):]] + [line.strip() for line in run[1:ends[-1] + 1]]
+        entries.append(('\n'.join(text), int(match.group(1)), int(match.group(2))))
+    return entries, unclosed
+
+
+def quotes_exactly(entry: str, start: int, end: int, revision_text: str) -> bool:
+    """The WHOLE quoted text before the entry's structural bracket is the revision text at its offsets: a prefix test
+    let anything, an inner bracket with a wrong end offset included, stand between the passage and the bracket read
+    (round 4, pipeline:4). The closing quote stays in the comparison, so a space before it is not collapsed away."""
+    passage = cp_slice(revision_text, start, end)
+    flat = collapse(entry)
+    tail = TXT_EVIDENCE_END.search(flat)
+    quoted = collapse(flat[:tail.start()] + '"') if tail else None
+    return passage is not None and quoted == collapse(f'"{txt_shown(passage)}"')
+
+
 def _evidence_entries(sections, kind) -> list[tuple[str, int, int]]:
     """(entry text, start, end) for each evidence entry printed where the renderer prints one: after an item
     block's '     Evidence:' line (up to the block's next field), and '    Evidence: "' lines in ENCOUNTER CONTEXT.
@@ -579,24 +609,7 @@ def _evidence_entries(sections, kind) -> list[tuple[str, int, int]]:
     entries: list[tuple[str, int, int]] = []
 
     def scan(lines, opener, prefix):
-        # An entry is its opener and every continuation line up to the next opener. Its offsets are its LAST
-        # line that ends like a citation: a passage line that happens to end in '" [chars 1-2]' is text, and the
-        # renderer's closing bracket comes after it (round 3, orchestrator:1).
-        runs, current = [], None
-        for line in lines:
-            if line.startswith(opener):
-                current = [line]
-                runs.append(current)
-            elif current is not None and line.startswith(CONTINUATION):
-                current.append(line)
-            else:
-                current = None
-        for run in runs:
-            ends = [i for i, line in enumerate(run) if TXT_EVIDENCE_END.search(line)]
-            if ends:
-                match = TXT_EVIDENCE_END.search(run[ends[-1]])
-                text = [run[0][len(prefix):]] + [line.strip() for line in run[1:ends[-1] + 1]]
-                entries.append(('\n'.join(text), int(match.group(1)), int(match.group(2))))
+        entries.extend(scan_entries(lines, opener, prefix)[0])
 
     for heading, body in sections:
         if heading.startswith(_numbered_prefix(kind)):
@@ -625,18 +638,8 @@ def _txt_passages(doc, name, text, listed, revision_text, sections, kind) -> lis
             quoted = collapse(f'"{txt_shown(span["text"])}" [chars {span["start"]}')
             if quoted not in flat:
                 missing.append(f'{item.code}[{span["start"]}:{span["end"]}]')
-    wrong = []
-    for entry, start, end in _evidence_entries(sections, kind):
-        passage = cp_slice(revision_text, start, end)
-        flat = collapse(entry)
-        tail = TXT_EVIDENCE_END.search(flat)
-        # The WHOLE quoted text before the entry's structural bracket must be the revision text at its offsets: a
-        # prefix test let anything, an inner bracket with a wrong end offset included, stand between the passage and
-        # the bracket read (round 4, pipeline:4). The closing quote stays in the comparison, so a space before it is
-        # not collapsed away.
-        quoted = collapse(flat[:tail.start()] + '"') if tail else None
-        if passage is None or quoted != collapse(f'"{txt_shown(passage)}"'):
-            wrong.append(f'{start}-{end}')
+    wrong = [f'{start}-{end}' for entry, start, end in _evidence_entries(sections, kind)
+             if not quotes_exactly(entry, start, end, revision_text)]
     return [Result(doc, name, 'evidence.present', 'fail' if missing else 'pass',
                    f'missing: {missing}' if missing else f'{sum(len(exact_spans(i, revision_text)) for i in listed)}'
                                                          ' passage(s) present with their offsets'),
