@@ -268,9 +268,11 @@ class DateChangeRoutesBeforeSendingTests(LiveEncounter, TestCase):
         self.assertEqual(response.status_code, 201, response.content)
         drain()
         self.assertEqual(len(self.provider.sent), 1)
-        latest = models.ProviderRun.objects.filter(encounter_id=encounter_id).latest('created_at')
-        self.assertEqual((latest.state, latest.sent, latest.service_date),
-                         (models.ProviderRun.SUCCEEDED, False, date(2026, 10, 20)))
+        # the documented request's retained answer is read again; since the ec5 integration the re-check meets that
+        # run itself (a held run is no request's outcome) where it queued a predict that reused it
+        run = models.Encounter.objects.get(pk=encounter_id).current_assessment.provider_run
+        self.assertEqual((run.state, run.service_date, (run.scope or {}).get('held')),
+                         (models.ProviderRun.SUCCEEDED, date(2026, 10, 20), None))
         self.assertEqual(models.Encounter.objects.get(pk=encounter_id).current_context.facts['service_date']['origin'],
                          'document')
 
