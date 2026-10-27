@@ -2680,17 +2680,44 @@ def _opens_a_sentence(text: str, i: int) -> bool:
     finite verb or a participle predicate after its first word). A digital PDF's text layer, a scan's OCR and a Word
     document whose paragraphs are spaced carry no blank line between paragraphs (refutation r1, formats-7: "No polyps;
     no masses" / "Biopsies were taken." had been read as one sentence whose "no" denied the biopsy). Bounded: the end
-    of the line before (WRAP_TAIL) and the start of the line after (OWN_CLAUSE_REACH)."""
+    of the line before (WRAP_TAIL) and the start of the line after (OWN_CLAUSE_REACH).
+
+    A line that opens with a count and the noun it counts, then its predicate ("2 biopsies were taken"), or with its
+    own verb before what it acts on ("Biopsied the sigmoid colon at 20 cm"), opens one too (refutation 7c8, formats-7:
+    "No polyps; no masses" / "2 biopsies were taken from the sigmoid colon." had denied the biopsy, so with 45378 alone
+    it was hidden and 45378 READY); a measure that goes on ("5 mm and was removed") does not."""
     ns = i + 1
     first = re.match(r'[ \t]{0,40}', text[ns:ns + 41]).end() + ns
-    if first >= len(text) or not text[first].isupper():
+    if first >= len(text) or not (text[first].isupper() or text[first].isdigit()):
         return False
     ls = max(text.rfind('\n', 0, i) + 1, i - _sections.WRAP_TAIL)
     if not text[ls:i].strip():
         return False
     ne = text.find('\n', ns, ns + _sections.OWN_CLAUSE_REACH)
     ne = min(len(text), ns + _sections.OWN_CLAUSE_REACH) if ne < 0 else ne
-    return _sections._own_clause(text[ns:ne]) and not _sections._soft_wrap(text, (ls, i), (ns, ne))
+    line = text[ns:ne]
+    if text[first].isdigit():
+        opens = _COUNTED_SUBJECT.match(line) is not None
+    else:
+        opens = _sections._own_clause(line) or _verb_first(line)
+    return opens and not _sections._soft_wrap(text, (ls, i), (ns, ne))
+
+
+# A count and the noun it counts, then their predicate: "2 biopsies were taken", "3 polyps were removed" (a measure
+# that goes on - "5 mm and was removed" - has no predicate of its own before its "and").
+_COUNTED_SUBJECT = re.compile(r'[ \t]*\d{1,3}(?:[ \t]+(?!(?:and|or)\b)[A-Za-z][A-Za-z/-]*){1,3}?[ \t]+'
+                              r'(?:was|were|is|are|has|have|had)\b', re.A | re.I)
+
+
+def _verb_first(line: str) -> bool:
+    """Whether ``line`` opens with its own verb, capitalised, before what it acts on ("Biopsied the sigmoid colon at
+    20 cm.", "Removed a 6 mm polyp with a cold snare."): a past form or participle (sections._own_clause's own test of
+    a predicate word) followed by at least two more words. Bounded: OWN_CLAUSE_REACH."""
+    words = _sections._CLAUSE_WORD_TOKEN.findall(line, 0, _sections.OWN_CLAUSE_REACH)
+    if len(words) < 3 or not words[0][:1].isupper():
+        return False
+    verb = words[0].lower()
+    return (verb.endswith('ed') and len(verb) > 3 and '-' not in verb) or verb in _sections._IRREGULAR_PARTICIPLES
 
 
 def _title_line(line: str) -> bool:

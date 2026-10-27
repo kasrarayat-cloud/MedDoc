@@ -308,3 +308,50 @@ class WrappedRowContinuationTests(SimpleTestCase):
                      'Tattoo injection [ ] Performed [X] Not\n[X] Biopsy\n'):
             with self.subTest(text=text):
                 self.assertEqual(services.reflow(text), text)
+
+
+class ParagraphOpeningWithANumeralOrAVerbTests(SimpleTestCase):
+    """sk:5 (formats-7): a PDF's text layer and a Word document's paragraphs carry no blank line, so a findings
+    paragraph without a final stop ran on into the next one when that one opened with a numeral ("2 biopsies were
+    taken") or with its verb ("Biopsied the sigmoid colon"): "no masses" denied the biopsy, so with 45378 alone the
+    biopsy was hidden and 45378 READY (with 45380, held). Such a line opens a sentence of its own, as a capitalised
+    subject and its predicate do."""
+
+    def document(self, paragraph: str, blank: bool):
+        sep = '\n\n' if blank else '\n'
+        return (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-14\nThe colonoscope was advanced to the '
+                f'cecum.{sep}No polyps; no masses{sep}{paragraph}\n')
+
+    def readings(self, paragraph: str, codes):
+        text = self.document(paragraph, True)
+        out = [run(text, codes)[0]]
+        ptext, ppages = pdf(self.document(paragraph, False))
+        out.append(run(ptext, codes, ppages)[0])
+        paragraphs = [p for p in text.split('\n') if p]
+        docx = extract_document(docgen.make_docx(paragraphs), 'synthetic.docx',
+                                'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+        self.assertEqual(docx.status, 'ok', docx.messages)
+        out.append(run(docx.text, codes, docx.pages)[0])
+        return out
+
+    def test_the_pdf_and_word_readings_equal_the_text(self):
+        for paragraph, quote in (('2 biopsies were taken from the sigmoid colon.', '2 biopsies were taken'),
+                                 ('Biopsied the sigmoid colon at 20 cm.', 'Biopsied the sigmoid colon')):
+            with self.subTest(paragraph):
+                for result in self.readings(paragraph, [('45378', 'The colonoscope was advanced to the cecum.')]):
+                    self.assertEqual(acts_of(result, 'biopsy'), [('biopsy', 'performed')])
+                    self.assertEqual(unresolved_of(result), [('gi.colonoscopy', 'biopsy', 'not_covered')])
+                    self.assertNotEqual(proposals_of(result)['45378'][0], 'ready')
+                for result in self.readings(paragraph, [('45380', quote)]):
+                    self.assertEqual(proposals_of(result)['45380'], ('ready', []))
+
+    def test_a_measure_or_a_wrap_on_the_next_line_stays_in_its_sentence(self):  # controls
+        for sentence in ('The flat polyp found in the proximal sigmoid colon near the fold measured\n5 mm and was removed with a cold snare.',
+                         'No polyp was seen, and no biopsy was taken at\n20 cm in the sigmoid colon.',
+                         'A single sessile polyp with a central depression was seen in the descending colon\nMeasuring 6 mm in size.'):
+            with self.subTest(sentence=sentence):
+                first, second = sentence.split('\n')
+                text = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-14\nThe colonoscope was advanced to '
+                        f'the cecum.\n{sentence}\n')
+                cuts = services._sentences(services.reflow(text))
+                self.assertTrue(any(s <= text.index(first) and text.index(second) < e for s, e in cuts))
