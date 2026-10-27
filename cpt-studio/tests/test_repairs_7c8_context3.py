@@ -500,3 +500,39 @@ class LetterDateBesideTheEncounterLineRequestTests(EndToEnd):
         self.set_context(encounter_id, {'service_date': '2026-10-14'})
         self.assertEqual(self.dates_sent(encounter_id), [[], ['Date of service: 2026-10-14']])
         self.assertNotEqual(self.bucket(encounter_id, '45385'), 'excluded')
+
+
+class DateAndTimeLabelTests(DateAssertions, SimpleTestCase):
+    """sk:7 (c2:8, claimed fixed in round 2): 'DOS/Time: 10/20/2026 09:15' - a time named after DOS rather than after a
+    date word - and 'Date & Time: 10/20/2026 09:15' kept no evidence, so a member's 1998-01-01 became the date and was
+    sent with 99213 ready. A date label or a "Date:" line may name the time, and a clock may follow a title's or a dated
+    line's date."""
+
+    def test_the_labelled_date_is_read(self):
+        for header in ('DOS/Time: 10/20/2026 09:15', 'DOS / time: 10/20/2026 9:15 AM', 'Date & Time: 10/20/2026 09:15',
+                       'Date/Time: 10/20/2026 9:15 AM', 'GI visit - 10/20/2026 09:15'):
+            with self.subTest(header=header):
+                text = HEAD + header + '\n' + VISIT_BODY
+                self.assert_document(text, '2026-10-20')
+                self.assert_member_conflict(text, ELENA_DATE)
+
+    def test_a_dated_service_line_with_a_clock_is_kept_as_evidence(self):
+        text = HEAD + 'Colonoscopy - 10/14/2026 08:30\n' + COLO_PLAIN
+        self.assert_asked(text, 'Colonoscopy - 10/14/2026')
+        self.assert_member_date(text, '2026-10-14')
+
+    def test_controls(self):
+        for header in ('Time: 09:15', 'Date of birth: 01/01/1998 08:30', 'Date of birth & time: 01/01/1998 08:30'):
+            with self.subTest(header=header):
+                text = HEAD + header + '\n' + VISIT_BODY
+                self.assertEqual(date_fact(text).origin, 'missing')
+                self.assert_member_date(text, ELENA_DATE)
+
+
+class DateAndTimeLabelRequestTests(EndToEnd):
+    """sk:7 end to end (W3): the member's 1998-01-01 is a member conflict and nothing is sent."""
+
+    def test_w3(self):
+        self.assert_held(self.finished(HEAD + 'DOS/Time: 10/20/2026 09:15\n' + OFFICE_BODY, service_date=ELENA_DATE))
+        encounter_id = self.finished(HEAD + 'DOS/Time: 10/20/2026 09:15\n' + OFFICE_BODY)
+        self.assertEqual(self.dates_sent(encounter_id), [['Date of service: 2026-10-20']])

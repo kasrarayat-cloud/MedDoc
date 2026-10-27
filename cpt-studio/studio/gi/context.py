@@ -55,8 +55,13 @@ YEAR = cues.rx(r'(?:\b(?P<lead>in|since|from|during|until|by|circa)[ \t]+|(?P<br
 # adjacent runs never backtrack into each other (refutation round 2, c2:4: a label, a long run and no date was read in
 # time quadratic in the run).
 _DATE_TIME = r'(?:[ \t]*+(?:/|&|and)[ \t]*+time\b)?+'
-_DATE_LABEL = (r'(?:date' + _DATE_TIME + r'[ \t]++of[ \t]++(?:service|procedure|visit|encounter)|DOS'
-               r'|(?:service|procedure|visit|encounter)[ \t]++date' + _DATE_TIME + r')')
+# "DOS" names its time the same way ("DOS/Time: 10/20/2026 09:15"; refutation round 3, sk:7: it kept no evidence, so a
+# member's 1998-01-01 became the date and was sent).
+_DATE_LABEL = (r'(?:date' + _DATE_TIME + r'[ \t]++of[ \t]++(?:service|procedure|visit|encounter)|DOS' + _DATE_TIME
+               + r'|(?:service|procedure|visit|encounter)[ \t]++date' + _DATE_TIME + r')')
+# A clock after a title's or a dated line's date ("GI visit - 10/20/2026 09:15", "Date & Time: 10/20/2026 9:15 AM";
+# refutation round 3, sk:7). Possessive: an optional run that never backtracks into the line's trailing run.
+_CLOCK = r'(?:[ \t]++(?:at[ \t]++)?+\d{1,2}:\d{2}(?::\d{2})?+(?:[ \t]*+[ap]\.?m\.?)?+)?+'
 _DATE_LABEL_SEP = r'\b[ \t]*+(?:\([ \t]*+DOS[ \t]*+\)[ \t]*+)?+[:#=\u2013|-]?+[ \t]*+'
 SERVICE_DATE = cues.rx(r'(?<![\w/-])(?P<label>' + _DATE_LABEL + r')' + _DATE_LABEL_SEP
                        + r'(?P<date>' + _FULL_DATE + r')(?![\w/-])')
@@ -91,12 +96,12 @@ _TITLE_WORD = r'(?P<keyword>visit|encounter|consultation|consult|note|report)'
 _TITLE_WORDS = r'[A-Za-z][A-Za-z /&,()\-]{0,60}?'
 TITLE_DATE = cues.rx(r'[ \t]*+(?:(?P<field>[A-Za-z]{2,12}[ \t]*+:[ \t]*+)(?=[A-Za-z]))?'
                      r'(?:(?P<words>(?(field)(?:' + _TITLE_WORDS + r')??|' + _TITLE_WORDS + r'))\b' + _TITLE_WORD
-                     + r'[ \t]*+(?:[-\u2013\u2014:|,]|\bon\b|\bof\b)?+|date[ \t]*+[:|\u2013-])[ \t]*+'
-                     r'(?:' + _FULL_DATE + r'|(?P<unread>' + DATE_SHAPE + r'))[ \t]*+$')
+                     + r'[ \t]*+(?:[-\u2013\u2014:|,]|\bon\b|\bof\b)?+|date' + _DATE_TIME + r'[ \t]*+[:|\u2013-])[ \t]*+'
+                     r'(?:' + _FULL_DATE + r'|(?P<unread>' + DATE_SHAPE + r'))' + _CLOCK + r'[ \t]*+$')
 # A title whose date stands alone on the next line ("Colonoscopy Report" above "10/20/2026").
 TITLE_HEAD = cues.rx(r'[ \t]*+(?P<words>' + _TITLE_WORDS + r')\b' + _TITLE_WORD
                      + r'[ \t]*+[-\u2013\u2014:|,]?+[ \t]*+$')
-DATE_LINE = cues.rx(r'[ \t]*+' + DATE_SHAPE + r'[ \t]*+$')
+DATE_LINE = cues.rx(r'[ \t]*+' + DATE_SHAPE + _CLOCK + r'[ \t]*+$')
 TITLE_LINES = 12  # non-empty lines from the top in which a dated title is read
 _HISTORY_WORDS = (('history of', r'history\s+of|hx\s+of|h/o|s/p|status\s+post'),
                   ('prior', r'prior|previous|previously|last|most\s+recent|recent|recently|remote|earlier|past|index'
@@ -787,8 +792,9 @@ def _title_qualified(text: str, ls: int, le: int, m) -> bool:
 
 # A date that ends a line near the top ("Colonoscopy - 10/14/2026", "EGD 10/14/2026"): read by _dated_service_line.
 # A sentence's full stop may end the line after the date ("Your patient underwent colonoscopy on 10/14/2026.";
-# refutation round 3, sk:6).
-_LINE_END_DATE = cues.rx(r'(?<![\w/-])(?:' + _FULL_DATE + r'|(?P<unread>' + DATE_SHAPE + r'))[ \t]*+\.?+[ \t]*+$')
+# refutation round 3, sk:6), and a clock may follow it ("Colonoscopy - 10/14/2026 08:30"; sk:7).
+_LINE_END_DATE = cues.rx(r'(?<![\w/-])(?:' + _FULL_DATE + r'|(?P<unread>' + DATE_SHAPE + r'))' + _CLOCK
+                         + r'[ \t]*+\.?+[ \t]*+$')
 
 
 # A letter's subject line opening a line ("Re: ", "Regarding: ", "Subject: "): the structure is the subject line naming
