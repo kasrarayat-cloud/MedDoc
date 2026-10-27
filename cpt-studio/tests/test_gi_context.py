@@ -280,3 +280,33 @@ class MemberValueAgainstADocumentConflictTests(unittest.TestCase):
         facts = context.extract_context(self.TEXT)
         merged = context.merge_user_values(facts, {'service_date': '2026-10-21'})['service_date']
         self.assertEqual((merged.origin, merged.value), ('user', '2026-10-21'))
+
+
+class MemberValueAgainstAnUnusableDocumentedValueTests(unittest.TestCase):
+    """Refutation r1 (context lens): a member value against a fact the document labels but this service cannot use - a
+    labelled date that is no calendar date, a place-of-service code it does not recognise - is a member conflict with
+    both sides kept, never a silent replacement that is sent to the provider or makes a held visit ready."""
+
+    HEAD = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
+
+    def test_an_invalid_labelled_date(self):
+        for body in ('Date of service: 2026-10-20\nVisit date: 20/10/2026\n', 'Date of service: 14/10/2026\n',
+                     'Date of service: 2026-10-14\nProcedure date: 2026-10-20\nDOS: 02/30/2026\n'):
+            with self.subTest(body=body):
+                facts = context.extract_context(self.HEAD + body + 'Established patient office visit.\n')
+                merged = context.merge_user_values(facts, {'service_date': '1998-01-01'})['service_date']
+                self.assertEqual((merged.origin, merged.value), ('conflict', None))
+                self.assertTrue(context.is_member_conflict(merged))
+
+    def test_an_unrecognised_place_of_service_code(self):
+        facts = context.extract_context(self.HEAD + 'Place of service: 31\nChief complaint: Dysphagia.\n')
+        self.assertEqual(facts['setting'].origin, 'missing')
+        merged = context.merge_user_values(facts, {'setting': 'office'})['setting']
+        self.assertTrue(context.is_member_conflict(merged))
+        self.assertIn('Place of service: 31', merged.note)
+
+    def test_a_fact_the_document_does_not_label_takes_the_member_value(self):
+        facts = context.extract_context(self.HEAD + 'Established patient office visit.\n')
+        merged = context.merge_user_values(facts, {'service_date': '2026-10-20', 'setting': 'office'})
+        self.assertEqual((merged['service_date'].origin, merged['service_date'].value), ('user', '2026-10-20'))
+        self.assertEqual((merged['setting'].origin, merged['setting'].value), ('user', 'office'))

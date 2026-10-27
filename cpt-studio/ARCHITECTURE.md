@@ -1673,6 +1673,9 @@ rule, never a sentence patch). The rules this added, by module:
     asks it.
 - Reconciliation (`studio/validation/reconcile.py`): an act read as uncertain is quoted as in doubt, never reported as
   absent; a member conflict is worded as one in the visit's own questions.
+- Context, refutation r1: a member value against a fact the document labels but this service cannot use (a labelled
+  date that is no calendar date, a place-of-service code it does not recognise) is a member conflict with both sides
+  kept - never a silent replacement that is sent or that makes a held visit ready.
 - Context (`studio/gi/context.py`): only the first dated title line near the top can be the note's own date (a
   qualified first title gives none; another unqualified dated title with another date is a conflict); a member value
   settles a document-internal conflict only by choosing one of its values; a member conflict is described as one

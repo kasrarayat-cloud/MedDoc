@@ -432,5 +432,15 @@ def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> di
             merged[name] = Fact(name, None, 'conflict', documented.evidence,
                                 USER_CONFLICT_NOTE.format(user=value, document=' or '.join(listed)))
             continue
+        if not listed and documented is not None and documented.origin in ('missing', 'conflict') \
+                and documented.evidence:
+            # The document labels this fact but its value cannot be used here (a labelled date that is no calendar
+            # date, a place-of-service code this service does not recognise): a member value cannot be checked
+            # against it, so both sides are kept (refutation r1: such a member date was used and sent to the provider,
+            # and such a member setting made a held office visit ready).
+            shown = ', '.join('\u201c' + ' '.join(ev.text.split())[:60] + '\u201d' for ev in documented.evidence[:3])
+            merged[name] = Fact(name, None, 'conflict', documented.evidence,
+                                USER_CONFLICT_NOTE.format(user=value, document=shown))
+            continue
         merged[name] = Fact(name, value, 'user', (), USER_NOTE)
     return merged
