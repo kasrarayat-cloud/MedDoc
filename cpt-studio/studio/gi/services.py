@@ -291,6 +291,30 @@ REVIEW_OF_RECORDS = _rx(r'\breview(?:ed|ing)?\s+(?:of\s+)?(?:the\s+)?(?:prior|pr
 HEDGE_WORDS = _rx(r'\?|\b(?:possibl[ey]|probabl[ey]|questionabl[ey]|likely|unlikely|uncertain|unclear|may\s+have|might\s+have'
                   r'|presumed|presumably|suspected|apparently'
                   r'|(?<!first\s)(?<!second\s)(?<!third\s)(?<!fourth\s)(?<!initial\s)(?<!final\s)attempt(?:ed)?)\b')
+# A predicate under a modal states nothing done (routing:18): a perfect modal ("it would have been dilated with a
+# balloon", "Biopsies could have been taken but were not needed"), the conditional "would be" ("EGD with biopsy would be
+# done if the dysphagia persists") - the hedges routing's HEDGED_AFTER reads - and the modals of a recommendation or a
+# possibility ("EGD should be done.", "may be done", "could be done"), which routing reads as no performance at all. A
+# plan section or a plan word still dates a clause first (read_clause), so a plan line keeps its planned reading. A
+# match spans the modal and the one predicate word it governs, so blanking it leaves a clause's own stated predicates
+# ("Biopsies were taken and would be sent ...") readable.
+HYPOTHETICAL = _rx(r"\b(?:would|could|should|must|may|might)(?:n't)?\s+(?:(?:not|never|possibly|perhaps|also|well|then|"
+                   r"otherwise|still)\s+)?have\s+(?:been\s+)?(?:(?:then|also|[\w-]+ly)\s+){0,2}[\w-]+"
+                   r"|\b(?:would|should|could|may|might|must|can|cannot)(?:n't)?\s+(?:(?:not|never|then|also|otherwise|"
+                   r"still|[\w-]+ly)\s+)?be\s+(?:(?:then|also|[\w-]+ly)\s+){0,2}[\w-]+")
+# A hypothetical predicate right after the mention, after at most a short phrase of place or means (routing's own
+# cues._PLACE_PHRASE): "A biopsy would have been taken had ...", "EGD with biopsy would be done if ...".
+HYPOTHETICAL_AFTER = _rx(_cues._PLACE_PHRASE + r'[\s,]*(?P<h>' + HYPOTHETICAL.pattern + r')')
+# A condition on the mention's own performance that opens its clause (routing's cues.CONDITIONAL, read for any
+# mention): "If colonoscopy were done today, ...", "Were a colonoscopy done today, ...", "Had a colonoscopy been done
+# today, ...", "Should EGD be performed, ...". BEFORE is read on the clause up to the mention, AFTER right after it; an
+# inverted "Had" holds only with its "been" ("Had EGD performed today" says the patient had one).
+CONDITION_BEFORE = _rx(r'^[\s\-*•(]*(?P<w>if|unless|were|had|should)\s+(?:(?:the|a|an|any)\s+)?$')
+CONDITION_AFTER = _rx(r'\s+(?:(?:were|was|is|are|be|been|had\s+been|has\s+been|have\s+been)\s+)?' + _cues._HEDGE_ACT
+                      + r'\b')
+CONDITION_AFTER_HAD = _rx(r'\s+been\s+' + _cues._HEDGE_ACT + r'\b')
+HYPOTHETICAL_CUE = 'uncertain: hypothetical: '
+INDICATION_READING = 'uncertain: stated in an indication, not as done today'
 # "placement of a covered stent", "removal of the polyp": a nominal act predicate, read like a verb.
 NOMINAL_ACT = _rx(r'\b(?:placement|insertion|deployment|removal|extraction|retrieval|resection|ablation|dilation|dilatation|'
                   r'ligation|injection|closure|decompression)\s+of\b')
@@ -348,9 +372,13 @@ TITLE_FIELD = _rx(r'^[\s\-*#]*(?:procedure|operative|endoscopy|endoscopic)\s+(?:
                   r'(?P<value>\S[^\n]{0,100})$')
 # A numbered part of the document ("PART 2 - ") is read by the line after its number.
 PART_NUMBER = re.compile(r'[ \t]*' + _sections.DOCUMENT_PART, re.A)
-PROCEDURE_FIELD = _rx(r'^[\s\-*#]*(?:procedures?(?:\s+performed(?:\s+today)?)?|operation|interventions?|stud(?:y|ies)'
-                      r'(?:\s+performed)?|tests?\s+performed)\s*[:\-–]\s*'
+# The procedure field's labels ("Procedure:", "Interventions:", "Procedures performed today:"); a check-box list under
+# one lists what was done (_in_a_procedure_list).
+PROCEDURE_LABELS = (r'(?:procedures?(?:\s+performed(?:\s+today)?)?|operation|interventions?|stud(?:y|ies)'
+                    r'(?:\s+performed)?|tests?\s+performed)')
+PROCEDURE_FIELD = _rx(r'^[\s\-*#]*' + PROCEDURE_LABELS + r'\s*[:\-–]\s*'
                       r'(?P<value>\S[^\n]*)$')
+PROCEDURE_LIST_LABEL = _rx(r'[\s\-*#]*' + PROCEDURE_LABELS + r'[ \t]*:?[ \t]*')
 ROLE_HEADINGS = (('nursing', _rx(r'^[\s\-*#]*(?:nursing|nurse|RN|recovery\s+nurse|procedure\s+checklist|nursing\s+'
                                  r'checklist|pre-?procedure\s+nursing|intra-?procedure\s+nursing)\b[^\n]{0,60}$')),
                  ('anesthesia', _rx(r'^[\s\-*#]*(?:anesthesia|anaesthesia|sedation\s+record)\s+(?:record|note|report)\b[^\n]{0,60}$')),
@@ -560,6 +588,13 @@ def _family_named(line: str) -> tuple[str, str]:
 
 HISTORY_HEADING = _rx(r'^[\s\-*#]*(?:past\s+(?:medical|surgical|gi|procedural)\s+history|history|prior\s+(?:procedures|'
                       r'endoscopy|studies)|historical\s+procedures|previous\s+procedures|procedural\s+history)\b[^\n]{0,40}$')
+# A span of earlier time that asks after another occurrence ("Colonoscopy in the last 10 years:", a screening question
+# printed on a form): a line carrying one is never a bare service heading, which would read that question as today's
+# service performed (a phantom service, listed unresolved and sent for a second review). Read for headings only: in a
+# clause it can describe today's indication ("for bleeding over the last 2 weeks").
+EARLIER_SPAN = _rx(r'\b(?:in|within|over|during)\s+the\s+(?:last|past|previous|preceding)\s+'
+                   r'(?:\d{1,3}|few|several|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+'
+                   r'(?:years?|months?|weeks?|days?)\b')
 PLAN_HEADING = _rx(r'^[\s\-*#]*(?:plan|plans|recommendations?|assessment\s+and\s+plan|disposition\s+and\s+plan'
                    r'|follow-?up\s+plan)\s*:?\s*$')
 
@@ -612,6 +647,7 @@ def parts(text: str) -> tuple[_Part, ...]:
             kind_now = 'report'
             continue
         if not m and GENERIC_HEADING.match(line) and not PLAN_WORDS.search(line) and not HISTORY_WORDS.search(line) \
+                and not EARLIER_SPAN.search(line) \
                 and not HISTORY_HEADING.match(line) and not PLAN_HEADING.match(line):
             heading_families = {f for f, _, p in SERVICES if p.search(line)}
             if len(heading_families) == 1 and len(stripped) <= 60:
@@ -907,6 +943,60 @@ def _dates_in(dates, start: int, end: int):
     return out
 
 
+def _verbal_predicate(text: str, whole: str, before: str, after: str, pos: int, end: int) -> bool:
+    """Whether a clause states an act through a verb (read_clause's performed test, without its nominal form: a
+    nominal act - "Balloon dilation of the stricture would have been performed" - takes the tense of its verb)."""
+    return bool(ACT_VERB.search(whole) or BARE_PARTICIPLE.search(after) or BARE_PARTICIPLE.search(before[-40:])
+                or BARE_PARTICIPLE.fullmatch(text[pos:end].strip()))
+
+
+def unhypothetical(text: str, start: int, end: int) -> str:
+    """text[start:end] with every hypothetical predicate (HYPOTHETICAL) blanked, same length."""
+    piece = text[start:end]
+    return HYPOTHETICAL.sub(lambda h: ' ' * len(h.group(0)), piece) if HYPOTHETICAL.search(piece) else piece
+
+
+def _hypothetical(text: str, cs: int, ce: int, pos: int, end: int) -> str:
+    """The hypothetical wording that keeps the mention at [pos, end) of the bounded clause [cs, ce) from reading as done,
+    or '': a condition on its own performance opens the clause ("If colonoscopy were done today, ..."); the mention
+    lies in a hypothetical predicate ("it would have been dilated"); or, when no act verb of the clause's own is left
+    once the hypothetical predicates are blanked (one that is - "Biopsies were taken and would be sent for H. pylori
+    testing" - still decides, as before), a hypothetical act predicate follows the mention after at most a short phrase
+    of place or means ("A biopsy would have been taken had ...", "EGD with biopsy would be done if ...") or the clause
+    has act verbs and all are hypothetical ("The stricture would have been treated with balloon dilation had it been
+    tight")."""
+    def phrase(a: int, b: int) -> str:
+        return ' '.join(text[a:b].split()).lower()[:80]
+
+    condition = CONDITION_BEFORE.search(text[cs:pos]) if pos > cs else None
+    if condition:
+        held = (CONDITION_AFTER_HAD if condition.group('w').lower() == 'had' else CONDITION_AFTER).match(text, end, ce)
+        if held:
+            return phrase(cs, held.end())
+    spans = [(m.start(), m.end()) for m in HYPOTHETICAL.finditer(text, cs, ce)]
+    if not spans:
+        return ''
+    for a, b in spans:
+        if a <= pos < b:
+            return phrase(a, b)
+    masked = unhypothetical(text, cs, ce)
+    if _verbal_predicate(text, masked, masked[:pos - cs], masked[end - cs:], pos, end):
+        return ''  # a predicate the clause states for itself decides, as before ("..., which was done")
+    following = HYPOTHETICAL_AFTER.match(text, end, ce)
+    if following:
+        word = following.group('h').split()[-1]
+        if ACT_VERB.match('was ' + word) or BARE_PARTICIPLE.fullmatch(word):  # its own act predicate, not "difficult"
+            return phrase(following.start('h'), following.end('h'))
+    if _verbal_predicate(text, text[cs:ce], text[cs:pos], text[end:ce], pos, end):
+        return phrase(*spans[0])  # every act verb of the clause is hypothetical
+    return ''  # no act predicate at all: the mention's reading is decided as before (silent or not)
+
+
+def hypothetical_reading(reading: Reading) -> bool:
+    """A reading decided by hypothetical wording: never promoted to performed by a listing or a report it is in."""
+    return any(cue.startswith(HYPOTHETICAL_CUE) for cue in reading.cues)
+
+
 def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, service_date: Optional[date], dates,
                 part: _Part, in_today_report: bool) -> Reading:
     """The status a clause gives the thing named at [pos, end) in it, read within CLAUSE_REACH of the mention."""
@@ -1002,11 +1092,20 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     hedge = HEDGE_WORDS.search(whole)
     if hedge:
         return Reading('uncertain', ('uncertain: ' + hedge.group(0).lower(),))
+    hypothetical = _hypothetical(text, cs, ce, pos, end)
+    if hypothetical:
+        return Reading('uncertain', (HYPOTHETICAL_CUE + hypothetical,))
     if part.kind == 'indication' and not TODAY_WORDS.search(whole):
         # An indication says why the patient came: a performance stated there and not said to be today's is not
         # established as today's ("Indication: Anemia. An EGD was performed last month at an outside hospital; the
         # endoscope was advanced to the duodenum") - held, as routing holds it, never read as done today.
-        return Reading('uncertain', ('uncertain: stated in an indication, not as done today',))
+        return Reading('uncertain', (INDICATION_READING,))
+    # A form field on its own line ("Biopsy taken: No", "Tattoo placed: None"): once its time is today's (no date,
+    # history or plan word, section, hedge or indication said otherwise), its answer - never a participle in its label
+    # - states the item.
+    answered = _field_answer(text, pos, end, service_date)
+    if answered is not None:
+        return answered
     if ACT_VERB.search(whole) or BARE_PARTICIPLE.search(after) or BARE_PARTICIPLE.search(before[-40:]) \
             or BARE_PARTICIPLE.fullmatch(text[pos:end].strip()) or _nominal_act(text, before, pos):
         if in_today_report or TODAY_WORDS.search(whole) or part.kind == 'report':
@@ -1015,6 +1114,180 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     if in_today_report:
         return Reading('uncertain', ('uncertain: named without an act predicate',))
     return Reading('uncertain', ('uncertain: no performance statement',))
+
+
+# Routing's reading of an item no status wording speaks for (detect.SILENT; validation's checks.SILENT_CUE_PREFIX).
+ROUTING_SILENT = 'uncertain: no performance evidence'
+OWN_BOX_CHECKED = 'box: its own check box is checked, the one marked option of its row'
+# What routing's box reader says when no box on the row speaks for or against the item: silence, which a procedure
+# line may still list as done. Any other boxed 'uncertain' - an unselected option ("Interventions: \u2610 Hot snare
+# \u2610 Biopsy"), an unread mark, boxes that disagree, a row that cannot be paired - is a hold, as is a form field's
+# held answer; neither a procedure line nor the service's own report ever makes it a performed act or service.
+BOX_SILENT = 'box: ' + ROUTING_SILENT
+
+
+LIST_REACH = 40  # lines above a check-box line read for the label of the list it is in (bounded work per act)
+
+
+def _in_a_procedure_list(text: str, pos: int, end: int) -> bool:
+    """Whether the check-box line of the item at [pos, end) lists what was done: the label of the list it is in is a
+    procedure field's ("Interventions:", "Procedures performed:"), or it has none (a check-box line standing alone in
+    the report, among lines that answer their own fields). The label is the line's own, before the item ("Interventions:
+    \u2612 Cold snare polypectomy"), unless that names an item of its own ("Biopsy: \u2610 ..."); else the line right
+    above the run of check-box lines the item's line belongs to, when that is a label with no answer of its own or a
+    heading routing's layout reads. Any other label ("Consent obtained for:", "Risks discussed:", "Instruments:") lists
+    something other than what was done. Bounded: LIST_REACH lines; a longer run is not read (fail-closed)."""
+    ls = text.rfind('\n', 0, pos) + 1
+    colon = text.find(':', ls, pos)
+    if colon >= 0 and not _acts_in(text, ls, colon) \
+            and not any(pattern.search(text, ls, colon) for _, _, pattern in SERVICES):
+        return PROCEDURE_LIST_LABEL.fullmatch(text, ls, colon + 1) is not None
+    line_end = ls - 1
+    for _ in range(LIST_REACH):
+        if line_end < 0:
+            return True  # the document's start: the run stands alone
+        line_start = text.rfind('\n', 0, line_end) + 1
+        line = text[line_start:line_end]
+        if not line.strip():
+            return True  # a blank line: no label over the run
+        if BOX_MARK.search(line):
+            line_end = line_start - 1
+            continue  # another line of the same check-box run
+        colon = line.find(':')
+        if colon >= 0 and not line[colon + 1:].strip():
+            return PROCEDURE_LIST_LABEL.fullmatch(line, 0, colon + 1) is not None  # the label over the run
+        if colon < 0 and _sections._heading(text, line_start, line_end) is not None:
+            return PROCEDURE_LIST_LABEL.fullmatch(line) is not None  # a heading over the run
+        return True  # prose, or a field with its own answer: the run stands alone
+    return False
+
+
+def _checked_in_a_procedure_list(text: str, pos: int, end: int, service_date: Optional[date]) -> bool:
+    """Whether the act at [pos, end) has its own box checked in every reading of its row (routing's reader,
+    detect.own_box_checked, on the text as written) and its check-box line lists what was done
+    (_in_a_procedure_list)."""
+    from studio.gi import detect  # local: detect imports context, which this module also imports
+    return detect.own_box_checked(_ORIGINAL.get() or text, pos, end, service_date) \
+        and _in_a_procedure_list(text, pos, end)
+
+
+def _row_hold(reading: Reading) -> bool:
+    """Whether ``reading`` is a hold its check-box row or its form field's answer makes (see BOX_SILENT)."""
+    if reading.status != 'uncertain' or not reading.cues:
+        return False
+    cue = reading.cues[0]
+    return (cue.startswith('box:') and not cue.startswith(BOX_SILENT)) or cue.startswith('field:')
+
+
+# A form field: one "Label: answer" line, typed in a template or written by extraction for a PDF form's fields. Its
+# answer, never a participle in its label, states the item its label names ("Biopsy taken: No" read as a performed
+# biopsy, "Tattoo placed: None" as a performed tattoo), in routing's field vocabulary (detect._FIELD_DENIED and
+# _BOX_ITEM_WORDS, so the two readers never disagree on a word): a box state ("not checked", "unchecked", "no option
+# selected") negates the item, as routing reads it whatever the label; a selected denial ("No", "None", "Not done",
+# "Not performed") negates it when the label is the item's own question - the item named with only the words of its
+# own question ("Biopsy", "Biopsy taken", "Was a biopsy performed") - and holds it when the label names it among other
+# words ("Biopsy (Y/N)", "Flexible sigmoidoscopy complications"); a short answer this reader cannot read ("N", "0",
+# "N/A") holds it. A printed question with no answer on its line, or with both options printed and none marked
+# ("Biopsy taken:   Yes   No"), is answered by the form field routing ties it to on its page (detect._form_fields: an
+# off field negates it, a held one holds it); with no such field an unanswered label is read by its words as before
+# ("Biopsies taken:" over the list of sites) and an unmarked pair is held. An affirming answer is no statement here:
+# a checked or "Yes" field documents its act through checked_form_field, as before. Any other answer is read by its
+# words. A boxed line never reaches this (routing's box reader decides it).
+FIELD_REACH = 160  # a field line is short: a longer line is prose, read by its words (bounds the work per mention)
+FIELD_BOTH_OPTIONS = re.compile(r'[ \t]*(?:yes|no)(?:[ \t]*[/|,]?[ \t]*(?:yes|no))+[ \t.]*', FLAGS)
+FIELD_HOLD_PREFIX = "uncertain: the form field '"  # routing's cues for a field that holds its item or its page
+# An option line an extraction block writes for a printed question: "<question>: <option>: checked|not checked".
+FORM_OPTION_STATE = re.compile(r'(?P<option>yes|no|none|n/?a|not\s+done|not\s+performed)[ \t]*:[ \t]*'
+                               r'(?P<state>checked|not\s+checked|unchecked)[ \t]*\.?', FLAGS)
+FORM_BLOCK_REACH = 200  # lines walked back from a field line to the extraction block marker above it (bounded)
+
+
+def _in_form_block(text: str, ls: int) -> bool:
+    """Whether the line starting at ``ls`` lies inside an extraction block ("[PDF form fields on page 1]" down to the
+    blank line that ends it): walked back over non-blank lines, at most FORM_BLOCK_REACH of them."""
+    pos = ls
+    for _ in range(FORM_BLOCK_REACH):
+        if pos <= 0:
+            return False
+        prev_start = text.rfind('\n', 0, pos - 1) + 1
+        line = text[prev_start:pos - 1].strip()
+        if not line:
+            return False
+        if _sections.FORM_BLOCK.fullmatch(line):
+            return True
+        pos = prev_start
+    return False
+
+
+def _own_question(text: str, start: int, end: int) -> bool:
+    """Whether the field label [start, end) is an item's own question: every word of it outside the acts and services
+    it names is a word of that question (routing's _BOX_ITEM_WORDS: "Biopsy taken", "Was a biopsy performed"), as
+    routing's _box_label_kind reads an 'item' label; a time, an attribute or a count ("Biopsy (Y/N)", "Flexible
+    sigmoidoscopy in the last 10 years") makes it another question."""
+    from studio.gi import detect  # local: detect imports context, which this module also imports
+    names = [(a, b) for _, a, b in _acts_in(text, start, end)]
+    names += [(m.start(), m.end()) for _, _, pattern in SERVICES for m in pattern.finditer(text, start, end)]
+    return all(w.group(0).lower() in detect._BOX_ITEM_WORDS for w in detect._BOX_LABEL_WORD.finditer(text, start, end)
+               if not any(a <= w.start() < b for a, b in names))
+
+
+def _field_answer(text: str, pos: int, end: int, service_date: Optional[date]) -> Optional[Reading]:
+    """The reading a form field's answer gives the item named at [pos, end) in its label, or None when the mention is
+    not in the label of a field line, or the answer says nothing this rule reads (it is then read by its clause's words,
+    as before). Bounded by FIELD_REACH; one routing reading (status_for_span) for an unanswered label."""
+    ls = text.rfind('\n', max(0, pos - FIELD_REACH), pos) + 1
+    if ls == 0 and pos > FIELD_REACH:
+        return None
+    le = text.find('\n', end, end + FIELD_REACH)
+    if le < 0:
+        if end + FIELD_REACH < len(text):
+            return None
+        le = len(text)
+    colon = text.find(':', ls, le)
+    if colon < end or ls > pos:
+        return None  # no label, or the mention is in the answer ("Findings: biopsies were taken")
+    from studio.gi import detect  # local: detect imports context, which this module also imports
+    line = text[ls:le]
+    label_end = colon - ls
+    value = text[colon + 1:le].strip()
+    option = FORM_OPTION_STATE.fullmatch(value)
+    if option is not None and _in_form_block(text, ls):
+        # An extraction block writes each option of a printed question as its own field line ("Biopsy taken: no:
+        # checked"): the checked option decides, and a participle in the label is never the item's predicate.
+        if not option.group('state').lower().startswith('checked'):
+            return Reading('uncertain', (SILENT_READINGS[0],))  # an option not marked says nothing of the item
+        word = re.sub(r'\s+', ' ', option.group('option').lower())
+        if word in ('no', 'none', 'not done', 'not performed'):
+            if _own_question(text, ls, colon):
+                return Reading('negated', (f'field: its option \u201c{word}\u201d is checked',))
+            return Reading('uncertain', (f'field: its option \u201c{word}\u201d is checked, to a question that names it '
+                                         'among other words',))
+        if word != 'yes':
+            return Reading('uncertain', (f'field: its option \u201c{word}\u201d is checked',))
+        return None  # "yes: checked" is read by its words, as before
+    denied = detect._FIELD_DENIED.fullmatch(line)
+    if denied is not None and denied.end('label') == label_end:
+        if denied.group('box'):
+            return Reading('negated', (f'field: the answer \u201c{value}\u201d marks it off',))
+        if denied.group('answer'):
+            if _own_question(text, ls, colon):
+                return Reading('negated', (f'field: the answer \u201c{value}\u201d denies it',))
+            return Reading('uncertain', (f'field: the answer \u201c{value}\u201d is to a question that names it among '
+                                         'other words',))
+        return Reading('uncertain', (f'field: the answer \u201c{value}\u201d is not read as done or not done',))
+    both = FIELD_BOTH_OPTIONS.fullmatch(value) is not None
+    if value and not both:
+        return None
+    if end > pos:  # a passage read whole (current_statement) names no item to tie
+        # A printed question: its answer, if any, is the form field routing ties to it by its label.
+        _, cues = detect.status_for_span(_ORIGINAL.get() or text, pos, end, service_date)
+        if cues[:1] == (detect.UNCHECKED,):
+            return Reading('negated', ('field: its form field marks it off (' + cues[0] + ')',))
+        if cues and cues[0].startswith(FIELD_HOLD_PREFIX):
+            return Reading('uncertain', ('field: ' + cues[0],))
+    if both:
+        return Reading('uncertain', (f'field: both options are printed and none is marked (\u201c{value}\u201d)',))
+    return None
 
 
 # A label line that may deny performance ("Procedures not performed:", "Cancelled procedures:"): only beside one is
@@ -1042,10 +1315,12 @@ def held_under_denial(text: str, pos: int, reading: Reading, service_date: Optio
     return Reading('uncertain', (f"{LISTED_UNDER_DENIAL}'{label}', a label that denies performance",) + reading.cues)
 
 
-# A PDF form-field line the extraction writes for a checked checkbox ("Cold snare polypectomy: checked", inside
-# "[PDF form fields on page N]"): one box, marked. Its label names the act; the line states it done, as a marked box
-# row does (the check-box contract: exactly one option marked). An unmarked one ("not checked") says nothing here.
-FORM_FIELD_CHECKED = re.compile(r'[ \t]*(?P<label>[^:\n]{1,120}?)[ \t]*:[ \t]*checked[ \t]*\.?[ \t]*', re.A | re.I)
+# A PDF form-field line the extraction writes for a checked checkbox or a selected "Yes" ("Cold snare polypectomy:
+# checked", "Biopsy: Yes", inside "[PDF form fields on page N]"; routing's _FIELD_CHECKED vocabulary): one option,
+# marked. Its label names the act; the line states it done, as a marked box row does (the check-box contract: exactly
+# one option marked). An unmarked one ("not checked") says nothing here.
+FORM_FIELD_CHECKED = re.compile(r'[ \t]*(?P<label>[^:\n]{1,120}?)[ \t]*:[ \t]*(?P<answer>checked|yes)[ \t]*\.?[ \t]*',
+                                re.A | re.I)
 SILENT_READINGS = ('uncertain: no performance statement', 'uncertain: named without an act predicate')
 
 
@@ -1077,8 +1352,11 @@ def checked_form_field(text: str, pos: int, blocks: Sequence[tuple[int, int]], s
     line_start = text.rfind('\n', 0, pos) + 1
     line_end = text.find('\n', pos)
     m = FORM_FIELD_CHECKED.fullmatch(text, line_start, line_end if line_end >= 0 else len(text))
-    # a label that negates or doubts its act ("Biopsy not done: checked") is no statement that it was done
-    return m is not None and pos < m.end('label') and not _cues.DOUBT_TOKEN.search(m.group('label'))
+    # a label that negates or doubts its act ("Biopsy not done: checked") is no statement that it was done; a "Yes"
+    # answers a question, which documents the act only when it is the act's own ("Biopsy: Yes", never "Biopsy in the
+    # last 10 years: Yes")
+    return m is not None and pos < m.end('label') and not _cues.DOUBT_TOKEN.search(m.group('label')) and (
+        m.group('answer').lower() == 'checked' or _own_question(text, m.start('label'), m.end('label')))
 
 
 # The act's own noun heading its phrase: "En bloc endoscopic submucosal dissection of a 0-IIa lesion", "ligation of
@@ -1093,6 +1371,31 @@ def _nominal_act(text: str, before: str, pos: int) -> bool:
     if not NOMINAL_ACT.search(before[-60:]) and not NOMINAL_HEAD.match(text, pos, pos + 120):
         return False
     return _sections.layout(text).section_at(pos).kind in ('impression', 'findings', 'technique', 'procedure')
+
+
+def _intent_word(text: str, ss: int, se: int, m: re.Match, name: str, *, service_date: Optional[date], dates,
+                 part: _Part) -> str:
+    """The intent the word at ``m`` of the sentence [ss, se) states for this encounter: ``name``, 'not <name>' for "not
+    a screening ..." (read as diagnostic when nothing else is stated), or '' when it states none - a question, a hedge,
+    a presumption, a pending confirmation or a doubt in its sentence (routing's own intent vocabularies,
+    detect._INTENT_*: "Is this a screening colonoscopy?", "Presumed screening.", "Screening (to be confirmed ...)",
+    "Screening per patient, but unclear."), another denial ("non-screening", "no screening"), or a clause its reader
+    reads as another time, planned, denied, cancelled or hypothetical ("Screening colonoscopy recommended in 10
+    years"). Used only for a family routing does not read (_finish)."""
+    from studio.gi import detect  # local: detect imports context, which this module also imports
+    if HEDGE_WORDS.search(text, ss, se) or detect._INTENT_PENDING.search(text, ss, se) \
+            or detect._INTENT_DOUBTED.search(text, ss, se) \
+            or detect._INTENT_PRESUMED.search(text, max(ss, m.start() - 40), m.start()):
+        return ''
+    if re.search(r'\bnot\s+(?:a\s+|an\s+)?$', text[max(ss, m.start() - 20):m.start()], FLAGS):
+        return 'not ' + name
+    if detect._INTENT_DENIED.search(text, max(ss, m.start() - 40), m.start()):
+        return ''
+    reading = read_clause(text, _clause_for(clauses(text, ss, se), m.start()), m.start(), m.end(),
+                          service_date=service_date, dates=dates, part=part, in_today_report=False)
+    stated = reading.status == 'performed' or (reading.status == 'uncertain' and bool(reading.cues)
+                                               and reading.cues[0] in SILENT_READINGS + (INDICATION_READING,))
+    return name if stated else ''
 
 
 def current_statement(text: str, start: int, end: int, service_date: Optional[date]) -> bool:
@@ -1293,7 +1596,8 @@ def reflow(text: str) -> str:
 
     A break is soft only when the line before it is a long run of prose (25+ characters and 4+ words) that does not
     end a sentence or a label and does not end in an answer of its own (_answered_line, the rule _sentences cuts at),
-    and the next line continues it in lower case, or after a word that cannot end a line (_DANGLING); never around a
+    and the next line continues it in lower case, or after a word that cannot end a line (_DANGLING), a comma, or
+    before a line opening with a parenthesis; never around a
     check-box or option row, a table row, a list item or a labelled field, and never inside an extraction block.
     Headings, labels, fields and short lines keep their breaks."""
     if '\n' not in text:
@@ -1319,7 +1623,8 @@ def reflow(text: str) -> str:
             continue
         if _LIST_ITEM.match(nxt) or _NEXT_ITEM.match(nxt):
             continue
-        if not _SOFT_NEXT.match(nxt) and not (_DANGLING.search(prev) and nxt.strip()
+        if not _SOFT_NEXT.match(nxt) and not ((_DANGLING.search(prev) or prev.rstrip().endswith(',')
+                                               or nxt.lstrip().startswith('(')) and nxt.strip()
                                               and not GENERIC_HEADING.match(nxt.strip())):
             continue
         if '|' in prev or '|' in nxt or '\t' in prev or '\t' in nxt:
@@ -1392,9 +1697,10 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
         if part.kind not in ('history', 'plan'):
             for name, pattern in INTENT_WORDS:
                 m = pattern.search(text, ss, se)
-                if m:
-                    lead = text[max(ss, m.start() - 20):m.start()].lower()
-                    encounter_intents.append(('not ' if re.search(r'\bnot\s+(?:a\s+|an\s+)?$', lead) else '') + name)
+                stated = _intent_word(text, ss, se, m, name, service_date=service_date, dates=dates, part=part) \
+                    if m else ''
+                if stated:
+                    encounter_intents.append(stated)
         if EM_ROUTINE.search(text, ss, se):
             routine_em.append(_span(text, ss, se))
     try:
@@ -1409,12 +1715,14 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             else:
                 reading = read_clause(text, clause, ms, me, service_date=service_date, dates=dates, part=part,
                                       in_today_report=in_report)
-                if reading.status == 'uncertain' and in_report and not HEDGE_WORDS.search(text, *clause):
+                hypothetical = hypothetical_reading(reading)  # a hypothetical is a hedge: never promoted below
+                if reading.status == 'uncertain' and in_report and not HEDGE_WORDS.search(text, *clause) \
+                        and not hypothetical and not _row_hold(reading):
                     reading = Reading('performed', reading.cues + ('performed: named inside its own current report',))
                 line_start = text.rfind('\n', 0, ms) + 1
                 line_end = text.find('\n', ms)
-                if reading.status == 'uncertain' and PROCEDURE_FIELD.match(text[line_start:line_end if line_end >= 0
-                                                                                  else len(text)]):
+                if reading.status == 'uncertain' and not hypothetical and not _row_hold(reading) and PROCEDURE_FIELD.match(
+                        text[line_start:line_end if line_end >= 0 else len(text)]):
                     reading = Reading('performed', reading.cues + ('performed: listed on the procedure line',))
                 reading = held_under_denial(text, ms, reading, service_date)
             d = draft(family, kind)
@@ -1484,7 +1792,9 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 clause_text = text[cs:ce]
                 if HISTORY_WORDS.search(clause_text) or re.search(r'\b(?:if|unless|whether)\b', clause_text, FLAGS):
                     continue
-                positive_m = COMPLETE_POS.search(clause_text)
+                # "It would have been passed to the cecum had ...": a hypothetical reach completes nothing (a stop in
+                # the clause is still read below, from the clause as written)
+                positive_m = COMPLETE_POS.search(unhypothetical(text, cs, ce))
                 if positive_m and not re.search(r'\bnot\s+(?:reached|intubated|complete)', clause_text, FLAGS):
                     d.completion_pos.append(_span(text, *_bounded_clause(text, (cs, ce), cs + positive_m.start(),
                                                                          cs + positive_m.end())))
@@ -1599,8 +1909,11 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 row_hi = min(len(text), me + ROW_REACH) if row_hi < 0 else row_hi
                 boxed = bool(BOX_MARK.search(text, row_lo, row_hi))
                 checked = checked_form_field(text, ms, blocks, block_starts)
+                # a form field's denying answer is its item's predicate ("Biopsy: No", "Tattoo placed: None")
+                fielded = reading.status == 'negated' and reading.cues[:1] != () \
+                    and reading.cues[0].startswith('field:')
                 has_act_verb = bool(ACT_VERB.search(clause_text) or BARE_PARTICIPLE.search(clause_text) or boxed
-                                    or checked or _nominal_act(text, text[bc[0]:ms], ms))
+                                    or checked or fielded or _nominal_act(text, text[bc[0]:ms], ms))
                 if reading.status == 'negated' and not has_act_verb:
                     continue  # a denied finding ("without food impaction", "no stones"), not a denied act
                 if reading.status == 'negated' and OBSERVED.search(clause_text) and not ACT_VERB.search(clause_text):
@@ -1611,10 +1924,20 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     continue
                 if reading.status == 'uncertain' and not has_act_verb and not _on_procedure_line(text, ms, part):
                     continue
-                if reading.status == 'uncertain' and _on_procedure_line(text, ms, part):
+                if reading.status == 'uncertain' and not hypothetical_reading(reading) and not _row_hold(reading) \
+                        and _on_procedure_line(text, ms, part):
                     reading = Reading('performed', reading.cues + ('performed: listed on the procedure line',))
                 if checked and reading.status == 'uncertain' and reading.cues and reading.cues[0] in SILENT_READINGS:
                     reading = Reading('performed', reading.cues + ('performed: its form field is checked',))
+                if reading.status == 'uncertain' and reading.cues and reading.cues[0].startswith(BOX_SILENT) \
+                        and all(cue.startswith(ROUTING_SILENT) for cue in reading.cues[1:]) \
+                        and part.kind not in ('history', 'plan', 'indication') \
+                        and _checked_in_a_procedure_list(text, ms, me, service_date):
+                    # Routing finds nothing for or against the act (a checked box is no performance statement to it:
+                    # its section decides, and this one gives no default), its own box is checked in every reading of
+                    # its row, and the list it is in lists what was done: the row's one marked option (5.9) - "(x)
+                    # Cold snare polypectomy" under "Interventions:", never under "Consent obtained for:".
+                    reading = Reading('performed', reading.cues + (OWN_BOX_CHECKED,))
                 reading = held_under_denial(text, ms, reading, service_date)
                 d = drafts[fam]
                 d.scopes.append((part.start, part.end) if part.kind == 'report' and part.family == fam else (ss, se))
@@ -1655,6 +1978,19 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
 
 
 POSITIVE_STATUSES = ('performed', 'incomplete')
+# The cues _finish adds when routing's reading of a family makes a service uncertain: a contrary statement in today's
+# report (or, for a service the inventory reads as not performed, routing reading it performed), or routing's own doubt
+# about today's service.
+ROUTING_CONTRARY_CUE = 'uncertain: routing reads the family as '
+ROUTING_DOUBT_CUE = 'uncertain: routing holds the family: '
+
+
+def doubted_by_routing_alone(service) -> bool:
+    """Whether ``service`` is uncertain only through routing's reading of its family: the inventory read it as performed
+    (or incomplete), and a contrary statement in today's report or routing's own doubt about today's service made it
+    uncertain (_finish). A service the inventory itself reads as not performed, or in doubt, is not."""
+    return service.status == 'uncertain' and service.routing_status not in POSITIVE_STATUSES and any(
+        cue.startswith((ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE)) for cue in service.cues)
 
 
 def _included(services: list) -> list:
@@ -1915,23 +2251,32 @@ def _finish(d: _ServiceDraft, text: str, routing, context_facts, encounter_inten
                     or (m.status in ('planned', 'historical')
                         and m.section in ('procedure', 'findings', 'technique', 'impression'))]
         if status in POSITIVE and routing_status in ('planned', 'historical', 'cancelled', 'negated') and contrary:
-            cues.append(f'uncertain: routing reads the family as {routing_status}: '
+            cues.append(f'{ROUTING_CONTRARY_CUE}{routing_status}: '
                         + (contrary[0].cues[0] if contrary[0].cues else contrary[0].sentence.text[:80]))
             status = 'uncertain'
         elif status in POSITIVE and routing_status == 'uncertain' and doubting:
             # routing's own doubt about today's service (a hedge, an ambiguous box row, a plan label) holds it
-            cues.append('uncertain: routing holds the family: ' + (doubting[0].cues[0] if doubting[0].cues else 'doubt'))
+            cues.append(ROUTING_DOUBT_CUE + (doubting[0].cues[0] if doubting[0].cues else 'doubt'))
             status = 'uncertain'
         elif status in ('planned', 'historical', 'cancelled', 'negated') and routing_status in POSITIVE:
-            cues.append(f'uncertain: routing reads the family as {routing_status}')
+            cues.append(f'{ROUTING_CONTRARY_CUE}{routing_status}')
             status = 'uncertain'
 
     extent = reach.value if reach is not None else ''
-    own_intents = [i for i in d.intents if not i.startswith('not ')]
-    all_intents = own_intents or [i for i in encounter_intents if not i.startswith('not ')]
-    intent = all_intents[0] if all_intents else ''
-    if not intent and any(i == 'not screening' for i in list(d.intents) + list(encounter_intents)):
-        intent = 'diagnostic'
+    if finding is not None:
+        # A family routing reads takes routing's intent, as it takes routing's extent: read per family, for a service
+        # done today, from today's indication and procedure text only - never a question, a hedge, a pending
+        # confirmation, a direct denial, a plan or a history (detect._intent; routing reads it for a colonoscopy, so
+        # another routed family states none, as the routing-era rationale did). Intent words elsewhere in the document
+        # are no reading of this service.
+        stated = _routing_fact(finding, 'intent') if routing_status in POSITIVE else None
+        intent = str(stated.value) if stated is not None and getattr(stated, 'origin', '') == 'document' else ''
+    else:
+        own_intents = [i for i in d.intents if not i.startswith('not ')]
+        all_intents = own_intents or [i for i in encounter_intents if not i.startswith('not ')]
+        intent = all_intents[0] if all_intents else ''
+        if not intent and any(i == 'not screening' for i in list(d.intents) + list(encounter_intents)):
+            intent = 'diagnostic'
     if d.family in ('gi.ercp', 'gi.eus', 'gi.office_em', 'gi.motility', 'gi.reflux', 'gi.anorectal', 'gi.capsule',
                     'gi.feeding_tube'):
         intent = '' if intent in ('screening', 'surveillance') else intent

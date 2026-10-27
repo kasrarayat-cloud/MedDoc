@@ -19,7 +19,8 @@ from typing import Optional, Sequence
 
 from studio.gi import catalogue
 from studio.gi.context import is_member_conflict
-from studio.gi.services import SERVICES, Act, Conflict, DocumentedService, ServiceInventory
+from studio.gi.services import (ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE, SERVICES, Act, Conflict, DocumentedService,
+                                 ServiceInventory)
 from studio.types import Check, ClarificationSpec, EvidenceSpan, Span
 
 SOURCE = f'cpt-studio:{catalogue.CATALOGUE_VERSION}'
@@ -122,7 +123,10 @@ def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match
                      f'The document gives the {name} as {service.status}, not as performed on the date of service'
                      + (f': {quote(ev)}.' if ev else '.'))
     if service.status == 'uncertain':
-        cue = service.cues[0] if service.cues else 'its documentation does not establish it'
+        # The cue that made it uncertain: routing's reading of the family when that decided it (services._finish adds it
+        # after the statement of performance it overrides), else the service's own first doubt.
+        cue = next((c for c in service.cues if c.startswith((ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE))),
+                   service.cues[0] if service.cues else 'its documentation does not establish it')
         return Match('uncertain', service, (), 'service_uncertain',
                      f'The document does not establish the {name} as performed on the date of service ({cue}).',
                      question=f'Confirm whether the {name} was performed on the date of service.')

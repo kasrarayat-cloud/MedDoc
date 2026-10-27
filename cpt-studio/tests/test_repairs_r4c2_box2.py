@@ -900,11 +900,15 @@ class Box2JVisitStatementBoxTests(unittest.TestCase):
                 text = J_OFFICE.format(line=line)
                 self.assertEqual(self.read(text, checked, within=line)[0], 'performed')
                 self.assertEqual(self.read(text, unchecked, within=line)[0], 'uncertain')
+                # engine @4: the status check describes the documented visit; whether the cited statement documents it
+                # is that check's status and the performed-status question (99214 is held by the context facts alone)
                 proposals, _ = real(text, ('99214', checked))
-                self.assertTrue(check_of(proposals['99214'], 'service.status').detail.startswith('Documented as performed'))
+                self.assertEqual(check_of(proposals['99214'], 'service.status').status, 'pass')
+                self.assertNotIn('performed_status', [c.fact for c in proposals['99214'].clarifications])
                 self.assertNotEqual(outcome(proposals['99214']), 'excluded')
                 proposals, _ = real(text, ('99214', unchecked))
-                self.assertFalse(check_of(proposals['99214'], 'service.status').detail.startswith('Documented as performed'))
+                self.assertEqual(check_of(proposals['99214'], 'service.status').status, 'warn')
+                self.assertIn('performed_status', [c.fact for c in proposals['99214'].clarifications])
                 self.assertEqual(outcome(proposals['99214']), 'held')
 
     def test_controls_read_as_before(self):

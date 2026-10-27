@@ -23,7 +23,7 @@ from reportlab.pdfgen.canvas import Canvas
 
 from studio.ingest import Limits, extract_document
 from tests.test_repairs_ingest_pdf import HELVETICA, esc, serialise, stream
-from tests.test_repairs_status_r2_routing import read, run_engine
+from tests.test_repairs_status_r2_routing import check, read, run_engine
 from tests.test_repairs_r3_forms_routing import not_silent, outcome
 
 PDF = 'application/pdf'
@@ -345,8 +345,13 @@ class Ingest1OrdinaryLayoutTests(unittest.TestCase):
             for tooltips in (True, False):
                 with self.subTest(layout=name, tooltips=tooltips):
                     text = text_of(layout_form(name, True, True, tooltips=tooltips))
+                    # Engine @4 (ARCHITECTURE 5.10): a checked box tied to its item (its glyph on the item's row, or a
+                    # field line named for it) documents the act, so the twins stay ready; a generic field the
+                    # extraction cannot place ('label-left', 'xobject' without tooltips) names no item, so no act is
+                    # documented as done and both are held with the question - never excluded.
+                    untied = not tooltips and name in ('label-left', 'xobject')
                     self.assertEqual(codes(text, ('45380', 'Biopsy'), ('45385', 'Cold snare polypectomy')),
-                                     ('ready', 'ready'))
+                                     ('held', 'held') if untied else ('ready', 'ready'))
 
     def test_glyphs_are_placed_where_each_box_can_be_tied(self):
         text = text_of(layout_form('row', False, True, tooltips=True))
@@ -537,8 +542,14 @@ class Contract3StatusOptionInAFormTests(unittest.TestCase):
                 form.checkbox('Procedure completed', (260, 677, 272, 689), not cancelled)
                 form.checkbox('Procedure cancelled', (260, 657, 272, 669), cancelled)
                 text = text_of(form.build())
-                want = 'excluded' if cancelled else 'ready'
-                self.assertEqual(codes(text, ('45385', 'A 6 mm polyp was removed with a cold snare.'))[0], want)
+                # Engine @4 (ARCHITECTURE 5.9, session interpretation 13): a checked "Procedure cancelled" box is a
+                # contrary statement in today's report beside the documented removal, so the code is held with the
+                # cancellation named, never ready; an unchecked one is no cancellation.
+                want = 'held' if cancelled else 'ready'
+                proposals, _ = run_engine(text, [('45385', 'A 6 mm polyp was removed with a cold snare.')])
+                self.assertEqual(outcome(proposals['45385']), want)
+                if cancelled:
+                    self.assertIn('Procedure cancelled', check(proposals['45385'], 'service.status').detail)
 
 
 # --- ingest:14 -- the radio /Opt lookup is linear ------------------------------------------------------------------

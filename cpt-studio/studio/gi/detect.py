@@ -7002,6 +7002,19 @@ def denying_label_over(text: str, pos: int, service_date: Optional[date] = None)
     return _denying_label_above(_analysis(text, _checked_date(service_date, 'denying_label_over()'))[0], pos)
 
 
+def own_box_checked(text: str, start: int, end: int, service_date: Optional[date] = None) -> bool:
+    """Whether the item at [start, end) is governed by a checked box of its own in every reading of its row
+    (_box_checked_in_every_reading: "(x) Cold snare polypectomy", "Biopsy: [x]"; never "Biopsy: \u2612 Cold snare
+    polypectomy", whose box one reading gives the other item). For the documented-service reader (gi/services), which
+    reads such an item, where routing finds its line silent, as the one marked option of its row (ARCHITECTURE 5.9)."""
+    if not isinstance(text, str):
+        raise TypeError('own_box_checked() needs the canonical text as str.')
+    if not (0 <= start < end <= len(text)):
+        return False
+    return _box_checked_in_every_reading(_analysis(text, _checked_date(service_date, 'own_box_checked()'))[0], start,
+                                         end)
+
+
 def own_status_for_span(text: str, start: int, end: int,
                         service_date: Optional[date] = None) -> tuple[str, tuple[str, ...]]:
     """status_for_span before the family's document-level judgement (_adjusted): what the passage's own clause,

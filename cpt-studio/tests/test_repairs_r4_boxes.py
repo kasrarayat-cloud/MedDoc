@@ -493,6 +493,26 @@ def unproposed(result):
     return next(c for c in result.encounter_checks if c.id == 'services.unproposed')
 
 
+def missed_flex_sig(case, result):
+    """Engine @4: a performed service of a family the documented-service inventory reconciles is reported missing by
+    services.unresolved (services.unproposed leaves those families to it: engine._missed), so the office note's
+    same-day flexible sigmoidoscopy with no proposal keeps its warning there."""
+    unresolved = next(c for c in result.encounter_checks if c.id == 'services.unresolved')
+    case.assertEqual(unresolved.status, 'warn', unresolved.detail)
+    case.assertEqual([(u['family'], u['act'], u['reason']) for u in result.completeness['unresolved_items']],
+                     [('gi.flex_sig', '', 'no_proposal')])
+
+
+def held_for_its_interventions_only(case, proposal):
+    """Engine @4 (services.base_included): the diagnostic 45378 beside the documented snare removal is held for that
+    question alone. The field holds nothing: the documented colonoscopy passes its status check, no performed-status
+    question is asked (as a page hold would ask), and a field's denial is never read as a done intervention."""
+    case.assertEqual([c.fact for c in proposal.clarifications], ['base_included'])
+    case.assertEqual(next(c for c in proposal.checks if c.id == 'service.status').status, 'pass')
+    included = next(c for c in proposal.checks if c.id == 'services.base_included')
+    case.assertIn('includes snare removal, which', included.detail)
+
+
 class Structure6QualifiedFieldLabelTests(BoxCase):
     """structure:6 (critical, new in 686d60b11). A form field answering 'No' or 'None' to another question whose label
     names the service ('Flexible sigmoidoscopy in the last 10 years: No', '... complications: None') negated the family,
@@ -514,7 +534,7 @@ class Structure6QualifiedFieldLabelTests(BoxCase):
                 self.assertNotEqual(read(text, field)[0], 'negated')
                 if printed:  # tied to its printed label: only the field's own passages are held, as at d05326ef
                     self.assertEqual(family(text, 'gi.flex_sig'), 'performed')
-                    self.assertEqual(unproposed(result).status, 'warn')
+                    missed_flex_sig(self, result)
 
     def test_a_colonoscopy_reports_complications_field(self):
         text = (HEADER + 'Procedure: Colonoscopy. The colonoscope was advanced to the cecum.\nFindings: A 6 mm sigmoid polyp '
@@ -561,7 +581,7 @@ class Evidence4AndStructure7PageHoldTests(BoxCase):
                 self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
                 self.assertEqual(read(text, EV4_POLYP)[0], 'performed')
                 self.assert_outcome(text, '45385', EV4_POLYP, 'ready')
-                self.assert_outcome(text, '45378', 'Colonoscopy', 'ready')
+                held_for_its_interventions_only(self, self.assert_outcome(text, '45378', 'Colonoscopy', 'held'))
 
     def test_the_report_whose_text_is_all_fields(self):
         text = (HEADER + 'COLONOSCOPY REPORT\nProcedure:\nIndication:\nFindings:\nComplications (if any):\n\n[PDF form '
@@ -595,7 +615,7 @@ class Evidence4AndStructure7PageHoldTests(BoxCase):
                'checked\nCold snare polypectomy: checked')
         self.assertEqual(read(row, 'Biopsy')[0], 'negated')
         self.assert_outcome(row, '45385', 'Cold snare polypectomy', 'ready')
-        self.assert_outcome(row, '45378', 'Colonoscopy', 'ready')
+        held_for_its_interventions_only(self, self.assert_outcome(row, '45378', 'Colonoscopy', 'held'))
 
     def test_a_checked_field_line_is_silent_on_a_held_page(self):
         """structure:7: 'Colonoscopy: checked' read the untied field's hold; a checked line says nothing of its page."""
@@ -610,7 +630,7 @@ class Evidence4AndStructure7PageHoldTests(BoxCase):
             with self.subTest(field=field):
                 text = EV4_PAGE.format(printed=row, field=field)
                 self.assert_outcome(text, '45385', EV4_POLYP, 'ready')
-                self.assert_outcome(text, '45378', 'Colonoscopy', 'ready')
+                held_for_its_interventions_only(self, self.assert_outcome(text, '45378', 'Colonoscopy', 'held'))
 
     def test_an_egd_report_with_an_ordinary_field(self):
         egd = (HEADER + 'Procedure: EGD with biopsy.\nFindings: The endoscope was advanced to the second part of the duodenum. '
@@ -625,7 +645,7 @@ class Evidence4AndStructure7PageHoldTests(BoxCase):
     def test_the_office_note_keeps_its_missed_service_warning(self):
         text = OFFICE_FLEX.format(printed='', field='Complications: None')
         proposals, result = run_engine(text, [('99214', VISIT)])
-        self.assertEqual(unproposed(result).status, 'warn')
+        missed_flex_sig(self, result)
         self.assertEqual(family(text, 'gi.flex_sig'), 'performed')
 
 

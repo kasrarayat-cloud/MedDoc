@@ -188,7 +188,11 @@ class Evidence4OrdinaryTextFieldInAPdfTests(unittest.TestCase):
                             ('EBL', 'None')):
             with self.subTest(name=name, value=value):
                 text = self.form(name, value)
-                self.assertEqual(codes(text, ('45385', POLYP), ('45378', 'Colonoscopy')), ('ready', 'ready'))
+                self.assertEqual(codes(text, ('45385', POLYP))[0], 'ready')
+                # Engine @4: 45378 beside the documented snare removal is held by the base-included profile rule
+                # (services.base_included), never by the field - that is its only question.
+                proposals, _ = run_engine(text, [('45378', 'Colonoscopy')])
+                self.assertEqual(clarified(proposals['45378']), ['base_included'])
 
     def test_a_generic_field_still_holds_truthfully(self):
         text = self.form('Text7', 'None')

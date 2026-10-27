@@ -1,14 +1,16 @@
 """The documented-service inventory reads the same services from a Word document and a digital PDF as from the text.
 
-Scanned (OCR) input is exercised in the image, where tesseract is installed (ARCHITECTURE 9); here an image-only PDF
-without OCR tools must say its text was not read, never yield an inventory from nothing.
+A scanned page is read with real OCR wherever tesseract and pdftoppm are installed (CI installs them, and so does the
+image); without them an image-only PDF must say its text was not read, never yield an inventory from nothing.
 """
 from datetime import date
+from unittest import skipUnless
 
 from django.test import SimpleTestCase
 
 from studio.gi import context as gi_context
 from studio.gi import detect, services
+from studio.ingest import DETECT, ocr_available
 from studio.ingest.extract import extract_document
 from tests.support import docgen
 
@@ -64,3 +66,16 @@ class FormatTests(SimpleTestCase):
         self.assertNotEqual(result.status, 'ok')
         self.assertTrue(result.messages)
         self.assertEqual({item for item in summary(result.text) if item[1] in ('performed', 'incomplete')}, set())
+
+
+@skipUnless(ocr_available(), 'tesseract and pdftoppm are not installed on this host')
+class ScannedFormatTests(SimpleTestCase):
+    """The same report as an image-only scan, read with real OCR: the line breaks fall inside sentences, wherever the
+    page wraps, and the reader must still find the services, their completion and each act on its own lesion."""
+
+    def test_a_scanned_report_read_with_ocr(self):
+        expected = summary('\n'.join(LINES) + '\n')
+        data = docgen.make_scanned_pdf(['\n'.join(LINES)])
+        result = extract_document(data, 'synthetic-scan.pdf', 'application/pdf', ocr=DETECT)
+        self.assertEqual((result.status, result.method), ('ok', 'pdf-ocr'), result.messages)
+        self.assertEqual(summary(result.text), expected, result.text)

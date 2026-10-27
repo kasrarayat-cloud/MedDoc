@@ -120,7 +120,12 @@ class Release2PlanLabelsTests(PlannedEmrAssertions, unittest.TestCase):
             text = release2_note(label)
             with self.subTest(label=label):
                 self.assert_planned_emr_not_ready(text, RELEASE2_EMR)
-                self.assertTrue(ready(run_engine(text, [('45378', RELEASE2_CECUM)])['45378']))
+                # The cecum item still reads performed: 45378 is selected. Engine @4 also reads the tattoo of item 2 as
+                # performed ("was tattooed and not removed": the "not" is the removal's), so the diagnostic code is held
+                # only to ask whether it is reported beside that intervention, which it does not account for.
+                cecum = run_engine(text, [('45378', RELEASE2_CECUM)])['45378']
+                self.assertEqual(cecum.bucket, 'selected')
+                self.assertEqual({c.fact for c in cecum.clarifications}, {'base_included'})
 
     def test_in_prose_findings(self):
         for label in ('Plan going forward', 'Procedures planned', 'Plan moving forward', 'Procedures recommended',

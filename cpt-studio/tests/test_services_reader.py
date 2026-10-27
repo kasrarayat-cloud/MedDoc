@@ -416,3 +416,305 @@ class UnknownDateTests(SimpleTestCase):
         colon = [s for s in inv.services if s.family == 'gi.colonoscopy']
         self.assertTrue(colon and all(s.status not in services.POSITIVE for s in colon),
                         [(s.status, s.cues) for s in colon])
+
+
+def _assess(text, picks, day=date(2026, 10, 21)):
+    """The engine's result for provider-selected (code, quote) picks against an empty reference."""
+    from studio.types import EvidenceSpan, ProviderCode
+    codes = []
+    for code, quote in picks:
+        start = text.index(quote)
+        codes.append(ProviderCode('selected', 'cpt', code, 'UNVERIFIED PROVIDER WORDING',
+                                  (EvidenceSpan(0, start, start + len(quote), quote, True),)))
+    return assess(text=text, pages=(), context=gi_context.extract_context(text), routing=detect.route(text, day),
+                  normalized=NormalizedResponse('replay', 'test@1', tuple(codes)),
+                  reference=InMemoryReferenceLookup((), {}), service_date=day, provider_status='succeeded')
+
+
+def _proposal(result, code):
+    return next(p for p in result.proposals if p.code == code)
+
+
+def _unresolved(result):
+    return [(u.get('act'), u.get('reason')) for u in (result.completeness or {}).get('unresolved_items', [])]
+
+
+class HypotheticalWordingTests(SimpleTestCase):
+    """A predicate under a modal states nothing done (routing:18): an act or a service under a perfect or a conditional
+    modal, a recommendation or a possibility, or inside a condition that opens its clause, reads uncertain with a
+    non-silent cue - never performed - so it is no unresolved act (no paid second review) and no act a diagnostic code
+    leaves unreported; an act verb the clause states for itself still reads, and a hypothetical reach completes nothing."""
+
+    EGD = (HEAD + 'Date of service: 2026-10-21\nProcedure: EGD\nFindings: The gastroscope was passed to the second part '
+           'of the duodenum. The mucosa looked normal. {sentence}\n')
+    GASTRO = 'The gastroscope was passed to the second part of the duodenum.'
+
+    def test_a_hypothetical_act_reads_uncertain(self):
+        for sentence, kind in (('Were a ring present, it would have been dilated with a balloon.', 'dilation'),
+                               ('Gastric biopsies could have been obtained but were judged unnecessary.', 'biopsy'),
+                               ('The ring would have been treated with balloon dilation had it been tight.', 'dilation'),
+                               ('If biopsies were taken, they would be labelled by site.', 'biopsy'),
+                               ('Biopsies of the antrum should be obtained per protocol.', 'biopsy')):
+            text = self.EGD.format(sentence=sentence)
+            with self.subTest(sentence=sentence):
+                _, inv = read(text)
+                egd = one(inv, 'gi.egd')
+                self.assertNotIn(kind, kinds(egd))
+                act = next(a for a in egd.acts if a.kind == kind)
+                self.assertEqual(act.status, 'uncertain')
+                self.assertTrue(act.cues[0].startswith(services.HYPOTHETICAL_CUE), act.cues)
+                result = _assess(text, [('43235', self.GASTRO)])
+                self.assertEqual(_proposal(result, '43235').status, 'ready')
+                self.assertEqual(_unresolved(result), [])
+
+    def test_an_act_verb_the_clause_states_still_reads(self):
+        for sentence, kind in (('Biopsies were taken from the antrum and would be sent for H. pylori testing.', 'biopsy'),
+                               ('The ring was dilated with an 18 mm balloon; a second dilation would have been performed '
+                                'had it persisted.', 'dilation'),
+                               ('Biopsies, which would be sent to pathology, were taken from the antrum.', 'biopsy'),
+                               ('Balloon dilation was performed, which would have been difficult without fluoroscopy.',
+                                'dilation')):
+            text = self.EGD.format(sentence=sentence)
+            with self.subTest(sentence=sentence):
+                _, inv = read(text)
+                self.assertIn(kind, kinds(one(inv, 'gi.egd')))
+                result = _assess(text, [('43235', self.GASTRO)])
+                self.assertEqual(_proposal(result, '43235').status, 'needs_clarification')  # base_included, as before
+                self.assertIn((kind, 'not_covered'), _unresolved(result))  # still named: no missed service is hidden
+
+    def test_a_hypothetical_reach_completes_nothing(self):
+        for findings in ('The colonoscope would have been advanced to the cecum had the preparation been adequate.',
+                         'The colonoscope was inserted into the rectum. It would have been passed to the cecum, but the '
+                         'preparation was poor.'):
+            with self.subTest(findings=findings):
+                _, inv = read(HEAD + f'Date of service: 2026-10-21\nProcedure: Colonoscopy\nFindings: {findings}\n')
+                self.assertNotEqual(one(inv, 'gi.colonoscopy').completion, 'complete')
+        _, inv = read(HEAD + 'Date of service: 2026-10-21\nProcedure: Colonoscopy\nFindings: The colonoscope was passed '
+                             'to the cecum and would have been advanced into the ileum had the valve allowed.\n')
+        self.assertEqual(one(inv, 'gi.colonoscopy').completion, 'complete')
+
+    def test_an_office_note_s_modal_service_is_no_missed_service(self):
+        office = (HEAD + 'Date of service: 2026-10-21\nPlace of service: Office (POS 11)\nEstablished patient office '
+                  'visit for dysphagia.\nAssessment: Dysphagia. {sentence}\nMedical decision making: moderate.\n')
+        for sentence in ('EGD with biopsy would be done if the dysphagia persists.', 'EGD should be done.',
+                         'If an EGD were done today, the sedation risk would be high.',
+                         'An EGD would have been performed had the dysphagia persisted.'):
+            text = office.format(sentence=sentence)
+            with self.subTest(sentence=sentence):
+                # the reader's own reading, without routing's family doubt
+                inv = services.build(text, service_date=date(2026, 10, 21), routing=None,
+                                     context_facts=gi_context.extract_context(text))
+                egd = one(inv, 'gi.egd')
+                self.assertEqual(egd.status, 'uncertain', egd.cues)
+                self.assertTrue(egd.cues[0].startswith(services.HYPOTHETICAL_CUE), egd.cues)
+                result = _assess(text, [('99214', 'Established patient office visit for dysphagia.')])
+                self.assertEqual(_unresolved(result), [])  # no unresolved EGD, so no second review is asked for
+
+    def test_a_listing_or_its_report_never_promotes_a_hypothetical(self):
+        day = date(2026, 10, 21)
+        # a procedure line lists the service: the reader's own reading (routing=None) keeps the modal predicate
+        text = (HEAD + 'Date of service: 2026-10-21\nProcedures: EGD; colonoscopy would have been performed had the '
+                'preparation been adequate.\nFindings: The gastroscope was passed to the second part of the duodenum.\n')
+        inv = services.build(text, service_date=day, routing=None, context_facts=gi_context.extract_context(text))
+        self.assertEqual(one(inv, 'gi.colonoscopy').status, 'uncertain')
+        # ... or an act
+        _, inv = read(HEAD + 'Date of service: 2026-10-21\nProcedure: EGD; balloon dilation would be performed for any '
+                             'stricture.\nFindings: The gastroscope was passed to the second part of the duodenum.\n')
+        egd = one(inv, 'gi.egd')
+        self.assertNotIn('dilation', kinds(egd))
+        self.assertIn('dilation', kinds(egd, 'uncertain'))
+        # inside its own report the hypothetical sentence documents nothing of the service
+        sentence = 'Colonoscopy would have been completed sooner had the preparation been adequate.'
+        _, inv = read(HEAD + 'Date of service: 2026-10-21\nCOLONOSCOPY REPORT\nThe colonoscope was advanced to the cecum. '
+                      + sentence + '\n')
+        self.assertNotIn(sentence, [e.text for e in one(inv, 'gi.colonoscopy').evidence])
+
+    def test_a_plan_line_keeps_its_planned_reading(self):
+        _, inv = read(HEAD + 'Date of service: 2026-10-21\nPlace of service: Office (POS 11)\nEstablished patient office '
+                             'visit for dysphagia.\nAssessment: Dysphagia.\nPlan: EGD should be done.\n')
+        self.assertEqual(one(inv, 'gi.egd').status, 'planned')
+
+
+class IntentTests(SimpleTestCase):
+    """A service's intent is read like its extent. For a family routing reads it is routing's intent (today's indication
+    and procedure text only: never a question, a hedge, a pending confirmation, a denial, a plan or a history; routing
+    reads it for a colonoscopy), so the words of another service's intent are never this one's; for a family routing
+    does not read, the reader's own intent words are read with the same doubts. A doubted intent is no screening
+    intent, so no screening-became-therapeutic consideration is raised for it."""
+
+    COLON = (HEAD + 'Date of service: 2026-10-21\nIndication: {indication}\nProcedure: Colonoscopy\nFindings: The '
+             'colonoscope was passed to the cecum. A 4 mm sigmoid polyp was removed with a cold snare.\n')
+    SNARE = 'A 4 mm sigmoid polyp was removed with a cold snare.'
+    LOWER = (HEAD + 'Date of service: 2026-10-21\nLOWER ENDOSCOPY REPORT\nIndication: {indication}\nThe colonoscope was '
+             'passed to the cecum. The colon was normal.\n')
+
+    def screening_consideration(self, text):
+        code = _proposal(_assess(text, [('45385', self.SNARE)]), '45385')
+        return any('documented intent is screening' in c for c in code.modifier_considerations)
+
+    def test_a_doubted_denied_or_planned_intent_states_none(self):
+        for indication in ('Could this be a screening colonoscopy? Rectal bleeding for a month.',
+                           'Possibly a screening colonoscopy.',
+                           'Screening colonoscopy, still to be confirmed with the referring clinic.',
+                           'Non-screening colonoscopy for rectal bleeding.',
+                           'Rectal bleeding for a month.\nPlan: Surveillance colonoscopy in three years.'):
+            text = self.COLON.format(indication=indication)
+            with self.subTest(indication=indication):
+                _, inv = read(text)
+                self.assertEqual(one(inv, 'gi.colonoscopy').intent, '')
+                self.assertFalse(self.screening_consideration(text))
+
+    def test_a_service_routing_does_not_read_as_done_takes_no_intent_from_its_plan(self):
+        # routing reads a planned or doubted colonoscopy's intent from the plan; today's service never takes it
+        text = (HEAD + 'Date of service: 2026-10-21\nProcedure: Colonoscopy?\nFindings: A 4 mm sigmoid polyp was removed '
+                'with a cold snare.\nPlan: Screening colonoscopy in 10 years.\n')
+        self.assertEqual(detect.route(text, date(2026, 10, 21)).finding('gi.colonoscopy').status, 'uncertain')
+        _, inv = read(text)
+        self.assertEqual(one(inv, 'gi.colonoscopy').intent, '')
+
+    def test_a_stated_intent_is_kept(self):
+        text = self.COLON.format(indication='Average-risk screening colonoscopy.')
+        _, inv = read(text)
+        self.assertEqual(one(inv, 'gi.colonoscopy').intent, 'screening')
+        self.assertTrue(self.screening_consideration(text))
+        _, inv = read(self.COLON.format(indication='Surveillance colonoscopy; adenomas were removed in 2019.'))
+        self.assertEqual(one(inv, 'gi.colonoscopy').intent, 'surveillance')
+
+    def test_another_service_takes_no_intent_from_the_colonoscopy_s_words(self):
+        text = (HEAD + 'Date of service: 2026-10-21\nIndication: Average-risk screening colonoscopy; epigastric pain.\n'
+                'Procedures: EGD and colonoscopy\nFindings: The gastroscope was passed to the second part of the '
+                'duodenum and gastric biopsies were taken. The colonoscope was passed to the cecum. The colon was '
+                'normal.\n')
+        _, inv = read(text)
+        self.assertEqual(one(inv, 'gi.colonoscopy').intent, 'screening')
+        self.assertEqual(one(inv, 'gi.egd').intent, '')
+        code = _proposal(_assess(text, [('43239', 'gastric biopsies were taken')]), '43239')
+        self.assertFalse(any('documented intent is screening' in c for c in code.modifier_considerations))
+
+    def test_where_routing_reads_no_family_the_reader_s_own_words_keep_their_doubts(self):
+        for indication, intent in (('Average-risk screening examination.', 'screening'),
+                                   ('Could this be a screening examination? Rectal bleeding.', ''),
+                                   ('Screening examination, to be confirmed with the referring clinic.', ''),
+                                   ('Rectal bleeding.\nPlan: Screening examination again in ten years.', '')):
+            text = self.LOWER.format(indication=indication)
+            with self.subTest(indication=indication):
+                _, inv = read(text)
+                self.assertIsNone(detect.route(text, date(2026, 10, 21)).finding('gi.colonoscopy'))
+                self.assertEqual(one(inv, 'gi.colonoscopy').intent, intent)
+
+
+class BoxAndFieldRowTests(SimpleTestCase):
+    """Check-box rows and form fields as the documented-service reader reads them (the boxes_text triage of the GI core
+    repair). A row's own reading is never overruled by the line it is on, a field's answer - never a participle in its
+    label - states its item, and a checked box documents its act only in a list of what was done."""
+    REPORT = HEAD + ('Date of service: 2026-10-14\nProcedure: Colonoscopy\nFindings: The colonoscope was advanced to '
+                     'the cecum. No polyps were seen.\n{rows}\n')
+    CECUM = 'The colonoscope was advanced to the cecum.'
+
+    def assess_codes(self, text, *picks):
+        from studio.types import EvidenceSpan, ProviderCode
+        codes = []
+        for code, phrase in picks:
+            start = text.index(phrase)
+            codes.append(ProviderCode('selected', 'cpt', code, 'UNVERIFIED PROVIDER WORDING',
+                                      (EvidenceSpan(0, start, start + len(phrase), phrase, True),)))
+        facts = gi_context.extract_context(text)
+        day = date(2026, 10, 14)
+        result = assess(text=text, pages=(), context=facts, routing=detect.route(text, day),
+                        normalized=NormalizedResponse('replay', 'test@1', tuple(codes)),
+                        reference=InMemoryReferenceLookup((), {}), service_date=day, provider_status='succeeded')
+        return {p.code: p for p in result.proposals}, result
+
+    def test_an_unmarked_row_on_a_procedure_line_documents_no_act(self):
+        """"Interventions: ☐ Hot snare ☐ Biopsy" read as a done snare and biopsy ("listed on the procedure line"): codes
+        citing the cecum sentence were ready, and a diagnostic code alone listed both as unresolved."""
+        for row in ('Interventions: ☐ Hot snare ☐ Biopsy', 'Interventions: [ ] Cold snare polypectomy [ ] Biopsy'):
+            with self.subTest(row=row):
+                text = self.REPORT.format(rows=row)
+                _, inv = read(text)
+                self.assertEqual(kinds(one(inv, 'gi.colonoscopy')), [])
+                proposals, _ = self.assess_codes(text, ('45380', self.CECUM), ('45385', self.CECUM))
+                self.assertEqual({code: p.status for code, p in proposals.items()},
+                                 {'45380': 'needs_clarification', '45385': 'needs_clarification'})
+                _, result = self.assess_codes(text, ('45378', 'Colonoscopy'))
+                self.assertEqual(result.completeness['unresolved_items'], [])
+
+    def test_a_field_s_answer_states_its_item(self):
+        """"Biopsy taken: No" and "Tattoo placed: None" read as a performed biopsy and tattoo (the participle in the
+        label); "Biopsy: Yes" in a form-field block read as nothing at all."""
+        block = '\n[PDF form fields on page 1]\n{fields}\n'
+        fields = 'Biopsy taken: No\nTattoo placed: None'
+        for typed in (False, True):
+            with self.subTest(fields=fields, typed=typed):
+                text = self.REPORT.format(rows=fields if typed else block.format(fields=fields))
+                colon = one(read(text)[1], 'gi.colonoscopy')
+                self.assertEqual((kinds(colon), kinds(colon, 'negated')), ([], ['biopsy', 'tattoo']))
+        text = self.REPORT.format(rows=block.format(fields='Biopsy: Yes'))
+        self.assertEqual(kinds(one(read(text)[1], 'gi.colonoscopy')), ['biopsy'])
+        # a question that names the item among other words holds it, never denies or performs it
+        for fields in ('Biopsy (Y/N): N', 'Biopsy in the last 10 years: Yes', 'Biopsy in the last 10 years: No'):
+            with self.subTest(fields=fields):
+                colon = one(read(self.REPORT.format(rows=block.format(fields=fields)))[1], 'gi.colonoscopy')
+                self.assertEqual((kinds(colon), kinds(colon, 'negated')), ([], []))
+
+    def test_an_unanswered_label_takes_its_tied_field_s_answer_or_its_words(self):
+        """A printed "Biopsy taken:" answered "No" in its page's form fields is denied with it, never a done biopsy in
+        conflict with the field; a label over a list of sites still states the act; a passage read whole is no field."""
+        text = self.REPORT.format(rows='Interventions:\nBiopsy taken:\n\n[PDF form fields on page 1]\nBiopsy taken: No')
+        colon = one(read(text)[1], 'gi.colonoscopy')
+        self.assertEqual((kinds(colon), kinds(colon, 'negated')), ([], ['biopsy']))
+        self.assertEqual(read(text)[1].conflicts, ())
+        listed = self.REPORT.format(rows='Biopsies taken:\n- sigmoid colon x2\n- rectum x1')
+        self.assertEqual(kinds(one(read(listed)[1], 'gi.colonoscopy')), ['biopsy'])
+        start = text.index('Biopsy taken:')
+        self.assertTrue(services.current_statement(text, start, start + len('Biopsy taken:'), date(2026, 10, 14)))
+
+    def test_a_checked_box_documents_its_act_only_in_a_list_of_what_was_done(self):
+        """Routing finds a checked box silent where its section gives no default: under "Interventions:" (or standing
+        alone) the box is the row's one marked option and its act was done; under a consent or risks label it is not."""
+        for rows in ('Interventions:\n[ ] Biopsy\n(x) Cold snare polypectomy',
+                     'Interventions:\n☒ Cold snare polypectomy'):
+            with self.subTest(rows=rows):
+                self.assertEqual(kinds(one(read(self.REPORT.format(rows=rows))[1], 'gi.colonoscopy')), ['snare'])
+        for rows in ('Consent obtained for:\n☒ Biopsy\n☒ Cold snare polypectomy',
+                     'Informed consent: ☒ Biopsy ☒ Cold snare polypectomy',
+                     'Risks discussed for:\n[x] Cold snare polypectomy'):
+            with self.subTest(rows=rows):
+                text = self.REPORT.format(rows=rows)
+                self.assertEqual(kinds(one(read(text)[1], 'gi.colonoscopy')), [])
+                proposals, result = self.assess_codes(text, ('45385', self.CECUM))
+                self.assertEqual(proposals['45385'].status, 'needs_clarification')
+                _, result = self.assess_codes(text, ('45378', 'Colonoscopy'))
+                self.assertEqual(result.completeness['unresolved_items'], [])
+
+    def test_a_screening_question_is_no_service_heading(self):
+        """"Colonoscopy in the last 10 years:" printed on an office form read as a bare colonoscopy heading, so the
+        visit documented a colonoscopy performed today: listed unresolved, and sent for a second review, where the note
+        documents none."""
+        note = HEAD + ('Date of service: 2026-10-14\nPlace of service: Office\nEstablished patient office visit for '
+                       'dyspepsia.\nChief complaint: Dyspepsia.\nMedical decision making: low.\n{line}\n')
+        for line in ('Colonoscopy in the last 10 years:', 'Upper endoscopy within the last 3 years:',
+                     'Flexible sigmoidoscopy in the past 5 years:'):
+            with self.subTest(line=line):
+                text = note.format(line=line)
+                _, inv = read(text)
+                self.assertEqual([s.family for s in inv.services if s.status in services.POSITIVE], ['gi.office_em'])
+                _, result = self.assess_codes(text, ('99214', 'Established patient office visit for dyspepsia.'))
+                self.assertEqual(result.completeness['unresolved_items'], [])
+
+
+class FormOptionLineTests(SimpleTestCase):
+    """An extraction block writes each option of a printed question as its own field line ("Biopsy taken: no:
+    checked"): the checked option decides the item, never the participle in the label; an unmarked option says
+    nothing. Outside an extraction block the rule does not apply."""
+
+    REPORT = (HEAD + 'Date of service: 2026-10-14\nColonoscopy report\nThe colonoscope was advanced to the cecum.\n'
+              'Cold snare polypectomy of a 6 mm sigmoid polyp was performed.\n\n[PDF form fields on page 1]\n'
+              'Biopsy taken: yes: {yes}\nBiopsy taken: no: {no}\n')
+
+    def test_the_checked_option_decides(self):
+        _, inv = read(self.REPORT.format(yes='not checked', no='checked'))
+        self.assertNotIn('biopsy', kinds(one(inv, 'gi.colonoscopy')))
+        self.assertIn('biopsy', kinds(one(inv, 'gi.colonoscopy'), 'negated'))
+        _, inv = read(self.REPORT.format(yes='checked', no='not checked'))
+        self.assertNotIn('biopsy', kinds(one(inv, 'gi.colonoscopy'), 'negated'))

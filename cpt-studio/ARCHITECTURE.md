@@ -1603,6 +1603,19 @@ rule, never a sentence patch). The rules this added, by module:
     predicate is its own clause (every other "not" still denies); a line listed under a label that denies
     performance is held (`detect.denying_label_over`, routing's plan:C reader); a checked form-field line documents
     its act; without a known service date a dated act statement is held, never read as today's.
+  - **Modal predicates** (routing:18): an act or a service whose own predicate is under a modal - a perfect or a
+    conditional modal ("it would have been dilated", "Biopsies could have been taken but were not needed", "EGD with
+    biopsy would be done if ..."), a recommendation or a possibility ("EGD should be done.", "may be done") - or
+    inside a condition that opens its clause ("If colonoscopy were done today, ...") reads uncertain with a non-silent
+    cue (`HYPOTHETICAL`, `_hypothetical`), and no report, procedure line or form field promotes it; an act verb the
+    clause states for itself still decides ("Biopsies were taken and would be sent ..."), a plan section or plan word
+    still dates first, and a hypothetical reach completes no examination. A hypothetical act is therefore no
+    unresolved act (no second review is paid for it) and no act a diagnostic code leaves unreported.
+  - **Intent** is read like extent: a family routing reads takes routing's intent (`detect._intent`: today's
+    indication and procedure text only, never a question, a hedge, a pending confirmation, a denial, a plan or a
+    history; read for a colonoscopy, so another routed family states none, as the routing-era rationale did); a family
+    routing does not read takes the reader's own intent words, read with routing's intent doubts and its clause's
+    reading (`_intent_word`). A doubted intent raises no screening-became-therapeutic consideration.
 - Routing (`studio/gi/detect.py`): an insertion statement is no extent only when no extent label speaks
   (`_insertion_only` beside the plan:B/B2/D/D2 label readings), which restores the incomplete readings it had lost.
 - Engine (`studio/validation/engine.py`):

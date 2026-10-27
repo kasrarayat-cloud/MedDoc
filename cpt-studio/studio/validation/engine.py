@@ -353,6 +353,15 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
             # The inventory documents no such act and the code's own passage reads it as not performed today (a
             # planned repeat, an earlier procedure): the inventory has nothing to add, and the exclusion stands.
             found = None
+        elif found.reason == 'service_uncertain' and outcome.state == 'not_performed' \
+                and _own_passage_decides(outcome) and gi_services.doubted_by_routing_alone(found.service) \
+                and not _act_documented(code, found.service, inventory):
+            # The same, for a service the inventory reads as performed and only routing's reading of the family makes
+            # uncertain (a form field it cannot tie to a printed item, a contrary statement in today's report): the
+            # code's own passage reads its act as not performed today (an unchecked box, a "No"), and the inventory
+            # documents no act the code accounts for as done or in conflict - it has nothing to add, and the exclusion
+            # stands. A code whose act the inventory reads as done, or a base or E/M code, stays held.
+            found = None
     if found is not None:
         note = _undecided(outcome, found)
         outcome = _service_outcome(found)
@@ -399,9 +408,9 @@ def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str
     if positive and old.state in ('uncertain', 'not_performed'):
         doubt = old.decisive
         own = doubt is not None and doubt.origin == 'evidence' and doubt.start is not None
-        holds = (old.state == 'uncertain' and own and _about(doubt, found, code, text, routing)) or (
+        holds = (old.state == 'uncertain' and own and _about(doubt, found, code, text, routing, inventory)) or (
             old.state == 'not_performed' and own and doubt.status in ('negated', 'cancelled')
-            and _about(doubt, found, code, text, routing)) or (
+            and _about(doubt, found, code, text, routing, inventory)) or (
             old.state == 'not_performed' and own and _section_time(doubt) and _on_matched_act(doubt, found))
         if holds and old.state == 'uncertain' and _negation_resolved(doubt, found):
             # The routing-era reader left a negation unresolved ("was complete and was not discontinued") in a passage
@@ -451,7 +460,7 @@ def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str
         # (coverage: an explicit performance statement held only by its section is such a reading too - checks.restated
         # - "Colonoscopy was performed with cold snare polypectomy" under Assessment and plan)
         if old.reason == 'unestablished' or (own and (doubt.status not in checks.POSITIVE or checks.restated(doubt))
-                                              and _about(doubt, found, code, text, routing)):
+                                              and _about(doubt, found, code, text, routing, inventory)):
             return replace(found, detail=f'{found.detail} The routing-era reading of the passages it cites also holds '
                                          f'it: {checks.uncertain_reason(old, name)}')
     if found.state == 'not_performed' and old.state == 'not_performed':
@@ -460,6 +469,28 @@ def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str
         agreed = checks.exclusion_reason(old, name).removesuffix(' Reinstate if this code is supported.')
         return replace(found, detail=f'{found.detail} The routing-era reading agrees: {agreed}')
     return found
+
+
+def _own_passage_decides(outcome: checks.StatusOutcome) -> bool:
+    """Whether the routing-era outcome is decided by a reading of the code's own passage (a linked evidence reading),
+    not by routing's reading of the family."""
+    decisive = outcome.decisive
+    return decisive is not None and decisive.origin == 'evidence' and decisive.start is not None
+
+
+def _act_documented(code: str, service, inventory) -> bool:
+    """Whether the inventory documents as done, or in conflict, an act ``code`` accounts for in ``service``. A base,
+    E/M or uncatalogued code (or one of another family) accounts for the service itself, so it counts as documented."""
+    profile = reconcile.catalogue.code_profile(code)
+    if profile is None or profile.family != service.family or profile.base or 'em_visit' in profile.covers:
+        return True
+    kinds = set(profile.covers)
+    if any(a.kind in kinds and a.status == 'performed' for a in service.acts):
+        return True
+    marking = bool(kinds & {'tattoo', 'injection'})  # one conflict for both, as reconcile.match reads it
+    return inventory is not None and any(
+        c.service == service.id and (c.subject in kinds or marking and c.subject in ('tattoo', 'injection'))
+        for c in inventory.conflicts)
 
 
 def _section_time(reading: checks.Reading) -> bool:
@@ -555,12 +586,19 @@ STATUS_WORDS = re.compile(r'\b(?:perform\w*|done|complet\w*|cancel\w*|abort\w*|t
 
 
 def _about(reading: checks.Reading, found: reconcile.Match, code: str, text: str,
-           routing: Optional[RoutingResult] = None) -> bool:
+           routing: Optional[RoutingResult] = None, inventory=None) -> bool:
     """Whether a passage the code cites is about the matched service: it overlaps the service's evidence or any of
     its acts' evidence, or it names the service or the act the code accounts for. For an office visit, the visit's own
     documentation routing reads (visit statement, chief complaint, MDM, time) is about the visit whatever its reading:
     the service's evidence keeps only the statements read as performed, so a hedged one ("Total time: approximately 30
-    minutes?") would otherwise read as about nothing, and its doubt would be released."""
+    minutes?") would otherwise read as about nothing, and its doubt would be released.
+
+    A bare status statement ("\u2612 Not performed", "Physical exam and anoscopy were completed?") is the matched
+    procedure's when it lies in the service's own report, or when it is about no other service at all (_other_named):
+    the routing-era reader's fail-closed rule for a procedure code (validation:4: a doubt that names no other service is
+    the code's own). A service whose report has no title is scoped by its own passages, so a status line after its last
+    passage lay outside it and its hold was released. An office visit keeps validation:4's own rule (the visit's
+    documentation, above): a status statement about procedures is not about the visit."""
     service = found.service
     targets = list(service.evidence) + list(service.completion_evidence) + [ev for a in service.acts for ev in a.evidence]
     if any(reading.start < t.end and t.start < reading.end for t in targets):
@@ -575,11 +613,38 @@ def _about(reading: checks.Reading, found: reconcile.Match, code: str, text: str
             reading.start < m.span.end and m.span.start < reading.end
             for f in routing.findings if f.family == 'gi.office_em' for m in f.mentions):
         return True  # the visit's own E/M documentation, whatever routing read it as (validation:4, engine._other_service)
-    if service.scope_start <= reading.start and reading.end <= service.scope_end and STATUS_WORDS.search(passage):
-        return True  # a bare status statement inside the service's own report ("☒ Not performed", "Aborted ...")
+    # a bare status statement inside the service's own report ("☒ Not performed", "Aborted ..."), or, for a procedure,
+    # about no other service at all
+    if STATUS_WORDS.search(passage) and (
+            (service.scope_start <= reading.start and reading.end <= service.scope_end)
+            or (service.family not in checks.EM_FAMILIES and inventory is not None
+                and not _other_named(reading, found, passage, inventory, routing))):
+        return True
     profile = reconcile.catalogue.code_profile(code)
     kinds = set(profile.covers) if profile is not None else set()
     return any(kind in kinds and pattern.search(passage) for kind, pattern in gi_services.ACTS)
+
+
+def _other_named(reading: checks.Reading, found: reconcile.Match, passage: str, inventory,
+                 routing: Optional[RoutingResult]) -> bool:
+    """Whether a passage is about a service other than the matched one: it lies in another documented service's report
+    or passages (_elsewhere), names another family's service, or overlaps a routed mention of another family (the
+    validation:4 index, _VAL_family_index, which never counts a part routing holds as named together with a visit:
+    box2:E, hold-only). Bounded: one pass over the inventory's services, one search per service pattern, and two
+    bisections per routed family."""
+    own = {found.service.family, legacy_family(found.service.family)}
+    for service in inventory.services:
+        if service.id != found.service.id and service.scope_start <= reading.start \
+                and reading.end <= service.scope_end:
+            return True
+    if _elsewhere(reading, found, inventory):
+        return True
+    if any(family not in own and pattern.search(passage) for family, _, pattern in gi_services.SERVICES):
+        return True
+    if routing is None:
+        return False
+    index = _VAL_family_index(routing)
+    return any(family not in own and overlaps(reading.start, reading.end) for family, overlaps in index.items())
 
 
 def _service_outcome(found: reconcile.Match) -> checks.StatusOutcome:

@@ -1,0 +1,39 @@
+{
+  "schema": "cpt-studio-services-format-differences@1",
+  "note": "Differences between the reading of a corpus document from a digital PDF (or a scan read with OCR) and from its text, kept on purpose with the reason. A new difference, or a recorded one that disappears, fails the test.",
+  "pdf": {
+    "svc-12-egd-peg": {
+      "missing": [
+        "act|gi.egd|snare|performed|physician||"
+      ],
+      "extra": [],
+      "reason": "In the text, the snare that grasps the PEG guidewire is read as a snare act (no lesion is removed: a misreading, recorded); in the PDF its wrapped sentence reads it as part of the guidewire step. Neither reading accounts for a code: 43246 is the PEG."
+    },
+    "svc-18-colo-snare-plus-separate-biopsy-table": {
+      "missing": [
+        "act|gi.colonoscopy|biopsy|performed|physician||anal canal,rectum,sigmoid colon,transverse colon",
+        "act|gi.colonoscopy|snare|performed|physician||anal canal,rectum,sigmoid colon,transverse colon"
+      ],
+      "extra": [
+        "act|gi.colonoscopy|biopsy|performed|physician||anal canal,rectum,sigmoid colon",
+        "act|gi.colonoscopy|snare|performed|physician||transverse colon"
+      ],
+      "reason": "A table row that wraps onto a second line is read as its own line (a table row is never joined): the acts keep their kinds and status, and their anatomy lists split along the rows (transverse colon goes to the snare row, the rest to the biopsy row)."
+    },
+    "svc-20-colo-cold-hot-snare-hot-biopsy": {
+      "missing": [
+        "attribution|pathology"
+      ],
+      "extra": [],
+      "reason": "The pathology attribution wraps before a proper noun (\"sent ... to Fairhaven\" / \"Laboratory Pathology (fictional)\"): a break before a capitalised word after an ordinary word is kept (session interpretation 20), so the attribution is not read across it."
+    },
+    "svc-36-balloon-enteroscopy-apc-biopsy-table": {
+      "missing": [
+        "act|gi.enteroscopy|biopsy|planned|physician|jejunum|jejunum"
+      ],
+      "extra": [],
+      "reason": "A table row that wraps onto a second line is read as its own line: the planned jejunal biopsy row loses its anatomy, so the planned act is not read in the PDF (a planned act never accounts for a code)."
+    }
+  },
+  "scan": {}
+}
