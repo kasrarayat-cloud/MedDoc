@@ -1402,11 +1402,15 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
         ctx = self.ctx('app', provider_mode='live',
                        authorization_ref='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
         corti = {'exists': True, 'kind': 'file', 'uid': install.APP_UID, 'gid': install.APP_UID, 'mode': '0o400'}
-        for loads, expected_commands in ((False, 1), (True, 2)):
+        # credentials, then migrate, then the read of the queue for stages this revision cannot run (refutation r1)
+        for loads, expected_commands in ((False, 1), (True, 3)):
             commands = []
 
             def fake_oneshot(image_id, command, env, **kwargs):
                 commands.append(command)
+                if command[:2] == ['manage', 'shell'] and install.UNRUNNABLE_STAGES in command[-1]:
+                    answer = install.APP_SCRIPT_ANSWER + json.dumps({'known': [], 'stuck': 0, 'kinds': []})
+                    return SimpleNamespace(returncode=0, stderr=b'', stdout=answer.encode() + b'\n')
                 parsed = loads or command[:2] != ['manage', 'shell']
                 return SimpleNamespace(returncode=0 if parsed else 1, stderr=b'CredentialsError: refused',
                                        stdout=b'corti-credentials-parse-ok\n' if parsed else b'')
@@ -1425,6 +1429,7 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
                         install.phase_app(ctx)
             self.assertEqual(len(commands), expected_commands)
             self.assertEqual(commands[0][:2], ['manage', 'shell'])
+            self.assertIn(install.CREDENTIALS_CHECK, commands[0][-1])
             self.assertEqual(replace.called, loads)
 
     def test_installed_image_must_carry_this_revision(self):
@@ -1436,7 +1441,8 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
 
 
 class ServiceReplacementTests(TemporaryDirectoryTest):
-    """A failed replacement removes what it started and restores exactly the parked pair."""
+    """A failed replacement removes what it started and restores exactly the parked pair (after closing the stages
+    the new pair left open: tests/test_repairs_r1_m.py)."""
 
     def test_failed_worker_restores_previous_pair(self):
         names = {'cpt-studio-web': 'web', 'cpt-studio-worker': 'worker'}
@@ -1468,7 +1474,9 @@ class ServiceReplacementTests(TemporaryDirectoryTest):
             return {'id': f'new-{role}'}
         ctx = install.Context(SimpleNamespace(phase='app', revision=REVISION), self.tmp)
         with mock.patch.object(install, 'inspect', fake_inspect), mock.patch.object(install, 'docker', fake_docker), \
-                mock.patch.object(install, 'wait_service', fake_wait), self.assertRaises(install.InstallError):
+                mock.patch.object(install, 'wait_service', fake_wait), \
+                mock.patch.object(install, 'close_undone_stages', return_value={'closed': 0}), \
+                self.assertRaises(install.InstallError):
             install.replace_services(ctx, 'new', b'', 'disabled', '')
         self.assertEqual({name: container['Id'] for name, container in live.items()},
                          {'cpt-studio-web': 'old-web', 'cpt-studio-worker': 'old-worker'})

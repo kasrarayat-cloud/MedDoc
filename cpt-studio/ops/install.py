@@ -1365,6 +1365,67 @@ CREDENTIALS_CHECK = ('from django.conf import settings\n'
                      'load_corti_credentials(settings.CORTI_CREDENTIALS_FILE)\n'
                      "print('corti-credentials-parse-ok')\n")
 
+# Run by `manage shell -c` in an image of the app (APP_SCRIPT_PRELUDE gives it P, the parameters, and ANSWER); each
+# prints one ANSWER line. Both use only what every revision's models have (057a7d39's included).
+APP_SCRIPT_ANSWER = 'cpt-studio-answer '
+APP_SCRIPT_PRELUDE = 'import base64, json\nP = json.loads(base64.b64decode({payload!r}))\nANSWER = {answer!r}\n'
+# Close what a pair being undone left open since it started (refutation r1, migrate-3/-4): every stage it queued, ran
+# or left resumable (cancelled) becomes FAILED with P['note'] - failed, not cancelled, so no revision's web offers a
+# Resume for it - and every provider run it left unsettled is settled as the stale-stage sweep settles one (sending:
+# unknown, reserved: not sent). Nothing the pair finished is touched and no row is removed.
+CLOSE_STAGES = '''
+import datetime
+from django.db import transaction
+from django.db.models import Q
+from django.utils import timezone
+from studio import models, review
+Job, Run = models.Job, models.ProviderRun
+since, now = datetime.datetime.fromisoformat(P['since']), timezone.now()
+with transaction.atomic():
+    stages = Job.objects.filter(Q(created_at__gte=since, state__in=(Job.QUEUED, Job.RUNNING, Job.CANCELLED))
+                                | Q(started_at__gte=since, state=Job.RUNNING))
+    encounters = sorted({str(pk) for pk in stages.values_list('encounter_id', flat=True)})
+    kinds = sorted(set(stages.values_list('kind', flat=True)))
+    runs = Run.objects.filter(created_at__gte=since)
+    unknown = runs.filter(state=Run.SENDING).update(
+        state=Run.UNKNOWN, finished_at=now, error='The worker stopped while the request was in flight.')
+    not_sent = runs.filter(state=Run.RESERVED).update(
+        state=Run.NOT_SENT, finished_at=now, error='The worker stopped before sending.')
+    closed = stages.update(state=Job.FAILED, error=P['note'], finished_at=now)
+for pk in encounters:
+    review.refresh_state(models.Encounter.objects.get(pk=pk))
+print(ANSWER + json.dumps({'closed': closed, 'kinds': kinds, 'encounters': len(encounters),
+                           'runs_unknown': unknown, 'runs_not_sent': not_sent}))
+'''
+# The stages this image's worker cannot run (a kind its STAGES does not know) that are queued, running, or cancelled
+# as their encounter's latest stage (what a Resume runs again): a worker meeting one ends on a KeyError (migrate-3).
+UNRUNNABLE_STAGES = '''
+from studio import jobs, models
+Job, known, stuck = models.Job, sorted(jobs.STAGES), []
+rows = (Job.objects.exclude(kind__in=known).filter(state__in=(Job.QUEUED, Job.RUNNING, Job.CANCELLED))
+        .values_list('pk', 'kind', 'state', 'revision_id', 'encounter_id'))
+for pk, kind, state, revision_id, encounter_id in rows:
+    if state == Job.CANCELLED and (
+            Job.objects.filter(revision_id=revision_id).order_by('-created_at', '-pk').values_list('pk', flat=True)
+            .first() != pk
+            or not models.Encounter.objects.filter(pk=encounter_id, current_revision_id=revision_id).exists()):
+        continue
+    stuck.append(kind)
+print(ANSWER + json.dumps({'known': known, 'stuck': len(stuck), 'kinds': sorted(set(stuck))}))
+'''
+
+
+def app_script(image_id, env_bytes, body, params, *, what, timeout=180) -> dict:
+    """Run ``body`` in a one-shot container of ``image_id`` (provider disabled) and return its ANSWER line's JSON."""
+    payload = base64.b64encode(json.dumps(params).encode()).decode()
+    source = APP_SCRIPT_PRELUDE.format(payload=payload, answer=APP_SCRIPT_ANSWER) + body
+    result = oneshot(image_id, ['manage', 'shell', '-c', source], env_bytes, timeout=timeout)
+    answers = [line for line in result.stdout.decode('utf-8', 'replace').splitlines()
+               if line.startswith(APP_SCRIPT_ANSWER)]
+    if result.returncode or len(answers) != 1:
+        raise InstallError(f'{what} failed (exit {result.returncode}).', output=result.stderr[-2048:])
+    return json.loads(answers[0][len(APP_SCRIPT_ANSWER):])
+
 
 def require_db():
     container = inspect('container', DB_CONTAINER)
@@ -1477,25 +1538,66 @@ def remove_service_container(name, role):
     docker('rm', '--force', container['Id'], timeout=60)
 
 
+def stop_service_container(name, role):
+    container = inspect('container', name)
+    if container is not None and owned(container, role):
+        docker('stop', '--time', str(STOP_SECONDS[role]), name, check=False, timeout=STOP_SECONDS[role] + 60)
+
+
+def created_at(container) -> dt.datetime:
+    """When Docker created ``container``, in UTC (nanoseconds cut to microseconds, which can only move it earlier)."""
+    match = re.fullmatch(r'(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?Z', str(container.get('Created', '')))
+    if not match:
+        raise InstallError(f'Docker gave no creation time for {container.get("Id", "a container")}.')
+    return dt.datetime.fromisoformat(f'{match[1]}.{(match[2] or "")[:6].ljust(6, "0")}+00:00')
+
+
+def close_undone_stages(image_id, env_bytes, since, revision, reason) -> dict:
+    """Undo, before any other pair runs on this database: every stage the pair of ``revision`` queued, ran or left
+    resumable since ``since`` is closed as failed with the revision named, and the provider runs it left unsettled are
+    settled (CLOSE_STAGES). A pair restored or reinstalled afterwards would read that work under its own rules: the
+    installed revision's worker ends on a second review it has no stage for, and reads a member date conflict as no
+    date at all (refutation r1, migrate-3 and migrate-4). Run with the undone revision's own image."""
+    note = (f'Closed by the installer: {reason} (revision {revision[:12]}), so this stage will not run. Change the '
+            'context, add an addendum or upload the document again to process it.')
+    return app_script(image_id, env_bytes, CLOSE_STAGES, {'since': since.isoformat(), 'note': note},
+                      what=f'Closing the stages revision {revision[:12]} left open')
+
+
 def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref) -> dict:
-    """Park the old pair, start the new pair; on any failure restore exactly the old pair."""
+    """Park the old pair, start the new pair; on any failure stop what was started, close every stage it left open
+    (close_undone_stages), and only then restore exactly the old pair. A pair whose stages cannot be closed is never
+    restored over them: the new pair is left stopped and the old one parked, for rollback-app."""
     parked, launched, started = {}, [], {}
+    swapped_at = None
     try:
         for role in ('worker', 'web'):  # the worker first, so no stage runs across the switch
             parked[role] = park(role)
+        swapped_at = dt.datetime.now(dt.timezone.utc)  # every stage created from here on is the new pair's
         for role in ('web', 'worker'):
             launched.append(role)
             docker('run', '-d', *service_args(role, image_id, ctx.revision, provider_mode, authorization_ref),
                    input=env_bytes, quiet=True)
             started[role] = wait_service(role, ctx.revision, image_id)
-    except BaseException:
+    except BaseException as failure:
         for role in reversed(launched):
             name = SERVICES[role]
             container = inspect('container', name)
             if container is not None and owned(container, role):
                 tail = docker('logs', '--tail', '40', name, check=False, timeout=30)
                 ctx.log(f'{role}-failed', tail.stdout[-8192:] + tail.stderr[-8192:])
-            remove_service_container(name, role)
+            stop_service_container(name, role)
+        if launched and any(parked.values()):
+            try:
+                closed = close_undone_stages(image_id, env_bytes, swapped_at, ctx.revision,
+                                             'its installation failed and the previous revision was restored')
+            except BaseException as error:
+                raise InstallError(f'{failure}; the stages the new pair left open could not then be closed ({error}), '
+                                   'so the new pair was left stopped and the previous pair parked (*-previous): run '
+                                   '--phase rollback-app, then rename the parked pair back.') from error
+            ctx.log('undo', json.dumps(closed).encode())
+        for role in reversed(launched):
+            remove_service_container(SERVICES[role], role)
         for role, previous in parked.items():
             if previous:
                 docker('rename', SERVICES[role] + '-previous', SERVICES[role])
@@ -1705,9 +1807,20 @@ def phase_app(ctx) -> dict:
     migrate_log = ctx.log('migrate', migrate.stdout + migrate.stderr)
     if migrate.returncode:
         raise InstallError(f'Migrations failed (exit {migrate.returncode}); see {migrate_log}.')
+    # A stage this revision's worker has no handler for ends the worker (refutation r1, migrate-3): an older revision
+    # installed over a newer one meets the newer one's open stages. Nothing is replaced while one could be claimed or
+    # resumed; the newer revision's rollback-app closes them.
+    unrunnable = app_script(image_id, env, UNRUNNABLE_STAGES, {},
+                            what='Reading the queue for stages this revision cannot run')
+    if unrunnable['stuck']:
+        raise InstallError(f'{unrunnable["stuck"]} stage(s) of a kind this revision cannot run '
+                           f'({", ".join(unrunnable["kinds"])}) are queued, running or resumable; nothing was '
+                           'replaced. Close them with the newer revision\'s --phase rollback-app first.',
+                           details=unrunnable)
     services = replace_services(ctx, image_id, env, mode, reference)
     return {'image_id': image_id, 'provider_mode': mode, 'authorization_ref': reference, 'migrate_log': migrate_log,
-            **services, 'summary': f'web and worker running {image_id[:19]} (provider {mode})'}
+            'unrunnable_stages': unrunnable, **services,
+            'summary': f'web and worker running {image_id[:19]} (provider {mode})'}
 
 
 def reference_command(kind, path, retrieved_at) -> list:
@@ -2081,15 +2194,40 @@ def phase_verify(ctx) -> dict:
 
 
 def phase_rollback_app(ctx) -> dict:
+    """Stop the web and worker, close every stage their revision left open since they were created
+    (close_undone_stages, with their own image), then remove them - so a parked pair renamed back or an older revision
+    installed afterwards never runs that work under its own rules. When the stages cannot be closed the pair is left
+    stopped, not removed, and a rerun finishes the undo."""
+    pair = {}
+    for role in ('worker', 'web'):
+        container = inspect('container', SERVICES[role])
+        if container is not None:
+            if not owned(container, role):
+                raise InstallError(f'{SERVICES[role]} is not a CPT Studio {role} container; refusing to remove it.')
+            pair[role] = container
+    for role in pair:
+        stop_service_container(SERVICES[role], role)
+    closed = None
+    if pair:
+        first = pair.get('web') or pair['worker']
+        revision = labels_of(first).get(REVISION_LABEL) or 'unlabelled'
+        try:
+            require_db()
+            closed = close_undone_stages(first['Image'], read_protected_env(APP_ENV, APP_ENV_KEYS),
+                                         min(created_at(container) for container in pair.values()), revision,
+                                         'its web and worker were removed (rollback-app)')
+        except InstallError as error:
+            raise InstallError(f'Web and worker stopped, not removed: the stages they left open could not be closed '
+                               f'({error}). Rerun --phase rollback-app once that is resolved.') from error
     removed = {}
     for role in ('worker', 'web'):
         name = SERVICES[role]
-        container = inspect('container', name)
-        removed[name] = container is not None
+        removed[name] = role in pair
         remove_service_container(name, role)
     parked = [name + '-previous' for name in SERVICES.values() if inspect('container', name + '-previous')]
-    return {'removed': removed, 'parked_left_in_place': parked,
-            'summary': 'web and worker removed; database, volumes, images and secrets kept'}
+    return {'removed': removed, 'stages_closed': closed, 'parked_left_in_place': parked,
+            'summary': 'web and worker removed after closing their open stages; database, volumes, images and '
+                       'secrets kept'}
 
 
 def recorded_vhosts(ctx) -> dict:
