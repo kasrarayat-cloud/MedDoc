@@ -725,6 +725,19 @@ class UpgradeStopsOnlyWhereItWouldSendTests(Base):
         self.assertEqual((latest.kind, latest.state, latest.error),
                          (models.Job.PREDICT, models.Job.CANCELLED, jobs.REMADE_UNANSWERED_MESSAGE))
 
+    def test_a_request_sent_by_another_adapter_version_is_said_to_differ(self):
+        # the run in use carries the same body sent by an earlier adapter version: another request, as _run_answers
+        # and the retained-answer lookup read it, so the stop says the request differs from the one sent before
+        encounter_id, context = self.installed_upload(REPORT)
+        run = self.installed_run(encounter_id, '2026-10-16')
+        models.ProviderRun.objects.filter(pk=run.pk).update(adapter_version='corti-coding-v1@cptstudio-0')
+        self.installed_job(encounter_id, models.Job.ASSESS, context, run=run)
+        drain()
+        self.assertEqual(self.sent(), 1)  # the installed revision's own request only
+        latest = review.latest_job(self.encounter(encounter_id))
+        self.assertEqual((latest.kind, latest.state, latest.error),
+                         (models.Job.PREDICT, models.Job.CANCELLED, jobs.REMADE_REQUEST_MESSAGE))
+
     def test_with_the_provider_disabled_now_nothing_is_stopped(self):
         encounter_id, context = self.installed_upload(REPORT_TABLE_DATE, read_date=False)
         self.installed_job(encounter_id, models.Job.ASSESS, context, run=None)

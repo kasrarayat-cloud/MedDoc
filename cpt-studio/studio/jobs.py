@@ -422,9 +422,12 @@ def _upgrade_predict_key(context):
 
 def _remade_request_message(revision, request):
     """Why the upgrade's predict stopped where it would send ``request``, worded from what is recorded: "differs from
-    the one sent before" only when the run in use carries another request that was sent."""
+    the one sent before" only when the run in use carries another request (provider, adapter and body, as _run_answers
+    compares them) that was sent."""
     run = _run_in_use(revision)
-    if run is not None and run.sent and run.request_sha256 and run.request_sha256 != request.canonical_sha256:
+    sent = run is not None and run.sent and bool(run.request_sha256)
+    if sent and (run.provider, run.adapter_version, run.request_sha256) != (
+            request.provider, request.adapter_version, request.canonical_sha256):
         return REMADE_REQUEST_MESSAGE
     return REMADE_UNANSWERED_MESSAGE
 
