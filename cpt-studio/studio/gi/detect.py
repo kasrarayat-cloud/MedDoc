@@ -6055,7 +6055,7 @@ def _B3_attestation_above_refuses(an: Analysis, line_start: int) -> bool:
         return False  # round 4d integration (BOXES3 verifier, new problem 2): "Allergies confirmed: none." is not it
     if _B3_ATTEST_DENIED.search(text, start, end):
         return True  # "Attestation: I do not attest to a separate service today."
-    field = _B2_FIELD.match(text, start, end)
+    field = _b2_field(text, start, end)
     if (field is not None and _B3_words(text, field.end(), end, B3_ABOVE_ANSWER_WORDS) <= B3_ABOVE_ANSWER_WORDS
             and _B2_attestation_line_refuses(an, start, end)):
         return True
@@ -6122,10 +6122,22 @@ def _box_answer_affirms(an: Analysis, start: int, end: int) -> bool:
 
 # --- round 4c-2 box2:F: a refusal in the line under the separately identifiable E/M statement ---------------------------
 # A field line under the statement: a list marker, a short label and the shared separator (_BOX_Q_LEAD, _BOX_Q_SEP: one
-# grammar with the status lines), except that a word's own hyphen ("Same-day", "Follow-up") separates nothing.
-_B2_FIELD = re.compile(_BOX_Q_LEAD + r"(?P<label>[A-Za-z][\w /'-]{0,30}?)(?!(?<=[A-Za-z0-9])[-\u2013\u2014][A-Za-z0-9])"
+# grammar with the status lines), except that a word's own hyphen ("Same-day", "Follow-up") separates nothing. A label
+# never runs on into two spaces: two spaces are the separator, so a shorter label always matched first wherever one could
+# (7c8 COST skeptic: a label that could end anywhere in a long run of spaces made each failing match cubic in the run, and
+# a few hundred padded attestation lines overran the analyze stage); the matches are the same.
+_B2_FIELD = re.compile(_BOX_Q_LEAD + r"(?P<label>[A-Za-z](?:[\w/'-]| (?! )){0,30}?)"
+                       r"(?!(?<=[A-Za-z0-9])[-\u2013\u2014][A-Za-z0-9])"
                        + _BOX_Q_SEP + r"(?=\S)", re.I)  # a value follows: "Attested?" alone is no field
 _B2_MARK = re.compile(_BOX_ANY_MARK)
+
+
+def _b2_field(text: str, start: int, end: int):
+    """_B2_FIELD over the line [start, end) less its trailing whitespace: a field's value must follow its separator, so
+    no match can end in that whitespace, and leaving it out spares the pattern every split of it (7c8 COST skeptic)."""
+    while end > start and text[end - 1].isspace():
+        end -= 1
+    return _B2_FIELD.match(text, start, end)
 # An attestation word negated in itself ("Unattested", "Disagree", "Unconfirmed"): an attestation word and a word the
 # statement's own line would refuse at once.
 _B2_DENIED = re.compile(r'\b(?:un|non-?|dis)(?:attest|agree|confirm|acknowledg)\w*', re.A | re.I)
@@ -6145,7 +6157,7 @@ def _B2_attestation_line_refuses(an: Analysis, start: int, end: int) -> bool:
     text = an.text
     if not (_BOX_ATTEST_WORD.search(text, start, end) or _B2_DENIED.search(text, start, end)):
         return False
-    field = _B2_FIELD.match(text, start, end)
+    field = _b2_field(text, start, end)
     if field is None:
         if _B2_contrary(text, start, end):
             return True
