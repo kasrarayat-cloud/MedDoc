@@ -530,7 +530,9 @@ def _second_review_items(assessment):
     """(the unresolved documented services a second review may ask about, (start, end) of the text that documents
     them or None)."""
     completeness = assessment.completeness or {}
-    items = [u for u in completeness.get('unresolved_items', []) if u.get('reason') in SECOND_REVIEW_REASONS]
+    # only items both readers read as done today (engine._routing_agrees); an assessment without the mark asks nothing
+    items = [u for u in completeness.get('unresolved_items', []) if u.get('reason') in SECOND_REVIEW_REASONS
+             and u.get('second_review') is True]
     if not items:
         return [], None
     services = {s.get('id'): s for s in (assessment.services or {}).get('services', [])}

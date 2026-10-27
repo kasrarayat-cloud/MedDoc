@@ -1677,6 +1677,16 @@ rule, never a sentence patch). The rules this added, by module:
   qualified first title gives none; another unqualified dated title with another date is a conflict); a member value
   settles a document-internal conflict only by choosing one of its values; a member conflict is described as one
   (`is_member_conflict`, one predicate for every reader).
+- Second review gate (`engine._routing_agrees`, refutation r1): a second review is paid for only an unresolved item
+  both readers read as done today - the routing-era reading of the item's own passage is performed (or its clause states
+  it done and only routing's family summary doubts the service), or it is silent beside the strict check-box and
+  form-field rule; a whole service needs routing's family reading performed. Each unresolved item records the answer
+  (`second_review`), and `jobs._second_review_items` asks about marked items only. An item routing reads otherwise stays
+  listed for the reviewer and is never sent. A second review whose request repeats a primary request already answered
+  is never sent, and the primary reuse lookup matches a retained run of any purpose.
+- Reader, refutation r1: a "can/could be" possibility governed by a time still to come ("once anticoagulation is
+  held", "at a repeat colonoscopy") stays a possibility; a check-box run under a label that sits directly under an empty
+  plan heading ("Plan:" / "Procedure:" / "[x] ...") lists what is planned.
 - Jobs (`studio/jobs.py`): nothing is built, reused or sent while the service date is a member-vs-document conflict
   (session interpretation 19; the not-sent run carries `scope.held`, and the encounter waits on the date question);
   no second review after a primary response refused whole, nor without a known service date.

@@ -270,6 +270,16 @@ class NoSecondReviewForWhatWasNotDoneTests(TestCase):
         (OFFICE_LIST, 'Discussed today:\n\n\u2612 Colonoscopy\n\u2612 Cold snare polypectomy', '99214', VISIT_LINE),
         (OFFICE_LIST, 'Prior authorization was obtained for colonoscopy.', '99214', VISIT_LINE),
         (OFFICE_LIST, 'Colonoscopy within 10 years:\nLast colonoscopy:', '99214', VISIT_LINE),
+        # refutation r1 (release lens): the reader's misreadings of a denied, earlier, planned or possible act; the
+        # routing-era reader does not read them as done today, so nothing is sent (engine._routing_agrees)
+        (REPORT_LIST, 'On withdrawal, no polyp was snared.', '45378', CECUM_LINE),
+        (REPORT_LIST, 'At her most recent colonoscopy the polyp was removed by cold snare.', '45378', CECUM_LINE),
+        (REPORT_LIST, 'Snare polypectomy of the polyp, since it appeared deeply invasive, was not performed.', '45378',
+         CECUM_LINE),
+        (REPORT_LIST, 'The polyp was neither biopsied nor removed.', '45378', CECUM_LINE),
+        (REPORT_LIST, 'Hot snare polypectomy can be performed once anticoagulation is held.', '45378', CECUM_LINE),
+        (REPORT_LIST, 'Impression: as above.\nPlan:\nProcedure:\n\u2612 Endoscopic mucosal resection\n'
+                      '\u2612 Cold snare polypectomy\nReturn in 4 weeks for the above.', '45378', CECUM_LINE),
     )
 
     def setUp(self):

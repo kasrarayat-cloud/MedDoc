@@ -313,7 +313,13 @@ HYPOTHETICAL = _rx(r"\b(?:would|could|should|must|may|might)(?:n't|n\u2019t)?(?:
 # possibility.
 ABILITY = _rx(r"\b(?:could|can)\s+(?:(?:then|also|still|[\w-]+ly)\s+)?(?:be|get)\b")
 CONDITION_IN_CLAUSE = _rx(r"\b(?:if|unless|whether|provided|in\s+case|had\s+(?:it|the|a|an|there|he|she|they|we|this|"
-                          r"that|prep|preparation)|were\s+(?:it|the|a|an|there|he|she|they|we|this|that))\b")
+                          r"that|prep|preparation)|were\s+(?:it|the|a|an|there|he|she|they|we|this|that))\b"
+                          # a time still to come (refutation r1: "can be performed once anticoagulation is held", "could
+                          # be biopsied at a repeat colonoscopy" had read as done today)
+                          r"|\b(?:once|when|after|until|before|as\s+soon\s+as)\b[^.;\n]{0,60}?\b(?:is|are|has\s+been|"
+                          r"have\s+been|returns?|resumes?|stops?|starts?|completes?|becomes?|gets?|can|will)\b"
+                          r"|\bat\s+(?:a|the)\s+(?:repeat|future|subsequent|later|next|follow-?up|second)\b"
+                          r"|\bat\s+a\s+later\s+(?:date|time|session)\b")
 PAST_STATEMENT = _rx(r"\b(?:was|were)\s+(?:then\s+|also\s+|subsequently\s+)?[a-z]+(?:ed|en|ne|wn)\b")
 # An opener between an act and a modal predicate after it gives the modal another subject ("Cold snare polypectomy of
 # the 8 mm polyp, after which the examination could be completed", "Stent placement, so that the duct could be
@@ -1142,6 +1148,8 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         if status == 'negated' and not checked and any('unchecked' in cue for cue in box_cues):
             # no option on the row is marked: an unselected option alone says nothing (the box contract)
             return Reading('uncertain', ('box: an unselected option alone says nothing',))
+        if status in ('performed', 'incomplete') and _under_an_empty_plan_heading(text, line_start):
+            return Reading('planned', ('planned: listed under a plan heading',))
         label = _row_label(text, line_start, pos) if status == 'performed' and box_cues \
             and all(cue.startswith('section:') for cue in box_cues) and (_acts_in(text, pos, end) or any(
                 pattern.search(text, pos, end) for _, _, pattern in SERVICES)) else None  # an act or a service, never
@@ -1315,6 +1323,29 @@ def _checked_field_in_a_procedure_list(text: str, pos: int, end: int, service_da
     from studio.gi import detect  # local: detect imports context, which this module also imports
     ties = detect.checked_field_ties(_ORIGINAL.get() or text, pos, end, service_date)
     return any(_in_a_procedure_list(text, start, stop) for start, stop in ties)
+
+
+def _under_an_empty_plan_heading(text: str, line_start: int) -> bool:
+    """Whether the check-box run holding the line at ``line_start`` lies under a label with no answer ("Procedure:") that
+    sits directly under a plan heading with nothing on its line ("Plan:"): the run lists what is planned (refutation r1:
+    "Plan: / Procedure: / [x] Endoscopic mucosal resection / Return in 4 weeks" had read as done today, and paid for a
+    second review). Bounded: LIST_REACH lines."""
+    line_end = line_start - 1
+    for _ in range(LIST_REACH):
+        if line_end < 0:
+            return False
+        start = text.rfind('\n', 0, line_end) + 1
+        line = text[start:line_end]
+        if BOX_MARK.search(line):
+            line_end = start - 1
+            continue
+        colon = line.find(':')
+        if colon < 0 or line[colon + 1:].strip() or start == 0:
+            return False
+        above_end = start - 1
+        above = text[text.rfind('\n', 0, above_end) + 1:above_end]
+        return PLAN_HEADING.match(above) is not None
+    return False
 
 
 def _row_label(text: str, line_start: int, pos: int) -> Optional[str]:

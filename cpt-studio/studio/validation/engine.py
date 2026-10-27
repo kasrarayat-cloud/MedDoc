@@ -194,7 +194,9 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         complete['state'] = 'incomplete'
         complete['reasons'] = list(complete['reasons']) + ['the documented-service reading was inconsistent']
     complete.update({
-        'unresolved_items': [_jsonable_unresolved(u) for u in unresolved],
+        'unresolved_items': [_jsonable_unresolved(u, i < SECOND_REVIEW_CHECKED
+                                                  and _routing_agrees(u, usable or inventory, routing, text, service_date))
+                             for i, u in enumerate(unresolved)],
         'bundled': [{'service': b.service, 'act': b.act, 'label': b.label, 'why': b.why} for b in bundled],
         'covered': covered, 'catalogue_version': reconcile.catalogue.CATALOGUE_VERSION,
         'inventory_problems': list(problems)})
@@ -258,9 +260,45 @@ def _second_review(second: NormalizedResponse, scope: dict, selections: list, te
                                                          'cpt-studio:provider@1')
 
 
-def _jsonable_unresolved(u: reconcile.Unresolved) -> dict:
+def _jsonable_unresolved(u: reconcile.Unresolved, second_review: bool = False) -> dict:
     return {'service': u.service, 'family': u.family, 'act': u.act, 'label': u.label, 'reason': u.reason,
-            'evidence': [{'start': e.start, 'end': e.end, 'text': e.text} for e in u.evidence]}
+            'evidence': [{'start': e.start, 'end': e.end, 'text': e.text} for e in u.evidence],
+            'second_review': bool(second_review)}
+
+
+# A second review is paid for only what both readers read as done today (refutation r1: the documented-service
+# reader's misreadings - a missed "no", an earlier procedure, a plan section's boxes, a possibility - each queued one).
+# The routing-era reading of the item's own passage must be performed, or silent beside the strict check-box and
+# form-field rule (interpretation 24); a whole service needs routing's reading of its family performed. Fail-closed: an
+# item routing reads otherwise stays listed for the reviewer and is never sent.
+SECOND_REVIEW_CHECKED = 64  # unresolved items checked (a second review asks about at most eight)
+STRICT_PROMOTIONS = (gi_services.OWN_BOX_CHECKED, 'performed: its form field is checked')
+
+
+def _routing_agrees(u: reconcile.Unresolved, inventory, routing: Optional[RoutingResult], text: str,
+                    day: Optional[date]) -> bool:
+    """Whether the routing-era reader also reads the unresolved item as done today (see SECOND_REVIEW_CHECKED)."""
+    if u.reason not in ('no_proposal', 'not_covered') or routing is None:
+        return False
+    if not u.act:
+        families = {u.family, legacy_family(u.family)}
+        return any(f.family in families and f.status in ('performed', 'incomplete') for f in routing.findings)
+    from studio.gi import detect  # the analysis is cached per text: one routing analysis for every item
+    service = next((s for s in inventory.services if s.id == u.service), None)
+    strict = any(c in STRICT_PROMOTIONS for a in (service.acts if service is not None else ())
+                 if a.kind == u.act and a.status == 'performed' for c in a.cues)
+    for ev in u.evidence:
+        if not (0 <= ev.start < ev.end <= len(text)):
+            continue
+        status, cues = detect.status_for_span(text, ev.start, ev.end, day)
+        if status in ('performed', 'incomplete'):
+            return True
+        if status == 'uncertain' and cues[:1] and cues[0].startswith('performed') \
+                and all(c == detect.UNESTABLISHED for c in cues[1:]):
+            return True  # its own clause states it done; only routing's family summary doubts the service
+        if strict and status == 'uncertain' and cues[:1] and cues[0].startswith(detect.SILENT):
+            return True
+    return False
 
 
 def _jsonable_inventory(inventory) -> dict:
