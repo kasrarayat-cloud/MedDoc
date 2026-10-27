@@ -230,15 +230,18 @@ def _conflict_side(side, text):
             'exact': bool(exact)}
 
 
-def _services(assessment, text):
+def _services(assessment, text, rejected=frozenset()):
     """The documented services as the assessment recorded them (format @4), for the report. Their passages are
-    re-checked against the revision text: an inventory that failed validation is still stored (it decides nothing)."""
+    re-checked against the revision text: an inventory that failed validation is still stored (it decides nothing).
+    ``rejected``: the codes the reviewer rejected, which account for nothing in the review - printed as rejected, never
+    as accounting for a service (refutation r1, report-6)."""
     inventory = assessment.services or {}
     completeness = assessment.completeness or {}
     out = []
     for service in inventory.get('services') or []:
         acts = [a for a in service.get('acts') or [] if a.get('status') == 'performed'
                 and a.get('role') in ('physician', 'unknown')]
+        codes = list((completeness.get('covered') or {}).get(service.get('id'), []))
         out.append({'id': service.get('id', ''), 'family': service.get('family', ''),
                     'family_label': _family_label(service.get('family', '')), 'status': service.get('status', ''),
                     'completion': service.get('completion', ''), 'extent': service.get('extent', ''),
@@ -246,7 +249,8 @@ def _services(assessment, text):
                     'acts': sorted({a.get('kind', '').replace('_', ' ') + (f' ({", ".join(a.get("anatomy") or [])})'
                                                                             if a.get('anatomy') else '')
                                     for a in acts}),
-                    'covered_by': list((completeness.get('covered') or {}).get(service.get('id'), [])),
+                    'covered_by': [code for code in codes if code not in rejected],
+                    'rejected_by_reviewer': [code for code in codes if code in rejected],
                     'included_in': service.get('included_in', '')})
     return {
         'services': out,
@@ -382,7 +386,8 @@ def snapshot(encounter, kind):
                        'encounter_checks': [_check(c) for c in assessment.encounter_checks or []]},
         'readiness': ready,
         'coding': review.coding_completeness(encounter),
-        'documented': _services(assessment, revision.text),
+        'documented': _services(assessment, revision.text,
+                                {item['code'] for item in items if item['list'] == 'rejected'}),
         'second_review': str(assessment.second_run_id) if assessment.second_run_id else None,
         'proposals': items,
         'clarifications': [_clarification(q) for q in questions],
@@ -710,6 +715,9 @@ def _documented_section(snap):
             lines.append(f'      acts documented as done: {"; ".join(service["acts"])}')
         if service.get('covered_by'):
             lines.append(f'      accounted for by: {", ".join(service["covered_by"])}')
+        if service.get('rejected_by_reviewer'):
+            lines.append(f'      rejected by the reviewer: {", ".join(service["rejected_by_reviewer"])}'
+                         + ('' if service.get('covered_by') else ' — no other selected code accounts for this service'))
         if service.get('included_in'):
             lines.append(f'      included in {service["included_in"]}: that service\'s code includes this examination')
     for item in documented.get('bundled') or []:
