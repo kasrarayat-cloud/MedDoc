@@ -1567,7 +1567,9 @@ A documented service performed with no proposal that is not listed as
 unresolved (the office visit beside a same-day procedure) is recorded in
 `completeness.not_listed`, named, and keeps coding `incomplete`: no surface
 says every documented service has a proposal while one has none (refutation
-7c8, reports-1).
+7c8, reports-1). The `services.unresolved` check names it and never passes
+beside one, and every closing line of UNRESOLVED names it, over a reading read
+in part and beside listed items too (its skeptic).
 It is never "verified": CPT membership and NCCI edits are not connected. A
 proposal being ready for review and the encounter's coding being complete are
 separate statements everywhere (UI banner, both reports, CSV row).
@@ -1620,7 +1622,12 @@ second review's passages are moved from the excerpt to the revision text and
 re-checked exactly; only a code it SELECTED that accounts for an unresolved
 item becomes a proposal (`support.origin = second_review`, labelled on the
 card and in both reports); every other code it lists is an alternative. The
-primary run stays the run in use for context changes and reuse.
+primary run stays the run in use for context changes and reuse. The encounter
+view's `second_review.run` names the newest second review made for the answer
+the current assessment reads, whatever its outcome; while its response was not
+read (unknown, failed, not sent) or not used (refused whole), the suggestions
+panel states that outcome from its row or its own failed check, never "No CPT
+codes were proposed" (skeptic of refutation 7c8, reports-5).
 
 ### 5.12 Repairs after the full-suite triage of WIP 3 (2026-10-27)
 
