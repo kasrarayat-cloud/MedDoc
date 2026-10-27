@@ -6,9 +6,11 @@ Every document opens with the synthetic banner. A context "the installed revisio
 merge wrote (gi-context@1: a member's value kept as plain metadata, origin 'user'); a run it sent is built by the same
 request builder the stand-in uses for every other run.
 """
+import hashlib
 import json
 from datetime import date, timedelta
 from unittest import mock
+from uuid import uuid4
 
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
@@ -128,7 +130,7 @@ class Base(TestCase):
             adapter_version=self.provider.adapter_version, request_sha256=request.canonical_sha256,
             request_body=request.body, contexts=list(request.contexts), state=state, sent=True,
             http_status=200 if succeeded else None, response_bytes=data if succeeded else b'',
-            response_sha256=__import__('hashlib').sha256(data).hexdigest() if succeeded else '',
+            response_sha256=hashlib.sha256(data).hexdigest() if succeeded else '',
             usage={'creditsConsumed': 0.02} if succeeded else {}, requested_by=self.reviewer,
             service_date=date.fromisoformat(service_date) if service_date else None,
             started_at=timezone.now(), finished_at=timezone.now())
@@ -154,7 +156,7 @@ class Base(TestCase):
         models.Job.objects.filter(encounter_id=encounter_id).exclude(started_at=started).update(created_at=earlier)
 
 
-# --- sends-0 / migrate-1: an identical request is never sent again, in either direction --------------------------------
+# --- sends-0 / migrate-1: an identical request is never sent again, in either direction -------------------------------
 
 @override_settings(**LIVE)
 class IdenticalRequestTests(Base):
@@ -453,7 +455,6 @@ class SecondReviewAcrossReuseTests(Base):
         self.assert_kept(twin, 2)
 
     def test_controls_another_answer_to_the_same_request_or_an_unreadable_scope_never_reads_it(self):
-        import uuid
         encounter_id = self.create()
         drain()
         self.assertEqual(self.ask(encounter_id).status_code, 201)
@@ -463,7 +464,7 @@ class SecondReviewAcrossReuseTests(Base):
         second = models.ProviderRun.objects.get(encounter_id=encounter_id, purpose='second_review')
         self.assertEqual(jobs._second_run_for(revision, primary).pk, second.pk)
         other = models.ProviderRun.objects.get(pk=primary.pk)  # the same request answered otherwise
-        other.pk, other.run_identity, other.response_sha256 = None, uuid.uuid4(), '0' * 64
+        other.pk, other.run_identity, other.response_sha256 = None, uuid4(), '0' * 64
         other.save()
         self.assertIsNone(jobs._second_run_for(revision, other))
         models.ProviderRun.objects.filter(pk=second.pk).update(scope={**second.scope, 'primary_run': 'not-a-run'})
@@ -482,7 +483,7 @@ class SecondReviewAcrossReuseTests(Base):
         self.assertNotIn('second_review', self.selected(encounter_id).values())
 
 
-# --- migrate-2: a member setting the installed revision kept is never read as the setting ------------------------------
+# --- migrate-2: a member setting the installed revision kept is never read as the setting -----------------------------
 
 @override_settings(**LIVE)
 class PreUpgradeSettingTests(Base):
@@ -505,7 +506,7 @@ class PreUpgradeSettingTests(Base):
         self.assertTrue([q for q in self.detail(encounter_id)['clarifications'] if 'place of service' in q['question']])
 
 
-# --- migrate-5: nothing is sent at the swap that no member asked for ---------------------------------------------------
+# --- migrate-5: nothing is sent at the swap that no member asked for --------------------------------------------------
 
 @override_settings(**LIVE)
 class NothingSentAtTheSwapTests(Base):
@@ -693,7 +694,7 @@ class ReviewerSecondReviewTests(Base):
         self.assertEqual(self.sent(), 1)
 
 
-# --- migrate-3: the reviewer's second review never reaches a worker that cannot run it ----------------------------------
+# --- migrate-3: the reviewer's second review never reaches a worker that cannot run it --------------------------------
 
 @override_settings(**LIVE)
 class UndoClosesTheReviewersSecondReviewTests(Base):
