@@ -1,0 +1,26 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Sandpiper Colorectal & GI Clinic (fictional)
+
+PROCEDURE NOTE - FLEXIBLE SIGMOIDOSCOPY WITH HEMORRHOID BAND LIGATION
+Patient: Ottavia Nkemelu-Strom (fictional)       MRN: SYN-102733
+Date of service: 2026-10-15
+Place of service: Office (POS 11), endoscopy room
+Physician: Rupert Ademola-Vasquez, MD (fictional)
+Sedation: None.
+
+Indication: Recurrent painless bright red bleeding with defecation; grade II internal hemorrhoids on office anoscopy. Colonoscopy in 2023 was normal apart from hemorrhoids.
+
+Procedure:
+After two enemas, the flexible sigmoidoscope was advanced to 50 cm into the descending colon. The sigmoid and descending colon and the rectum showed normal mucosa with no polyps, inflammation or masses. On retroflexion in the rectum there were grade II internal hemorrhoids in three columns. Using an endoscopic multi-band ligator, bands were applied above the dentate line to the left lateral, right anterior and right posterior columns, one band each. Each column blanched appropriately and the patient felt no sharp pain. No biopsies were obtained.
+
+Impression: Grade II internal hemorrhoids, three columns ligated. Otherwise normal examination to 50 cm.
+Instructions: Fiber supplement daily, warm sitz baths, acetaminophen for discomfort; call for heavy bleeding, fever or urinary retention. Reassess in clinic in six weeks.
+
+R. Ademola-Vasquez, MD (fictional)
+
+NURSING PROCEDURE RECORD (Delphine Oakes, LPN (fictional))
+Consent verified                  [X] Yes
+Specimen collected                [X] Yes   [ ] No    Container label: "rectum"
+Number of bands applied           3
+Patient discharged ambulatory     11:20

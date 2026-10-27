@@ -610,6 +610,7 @@ function documentedServices(doc) {
     const acts = (service.acts || []).filter(act => act.status === 'performed' && ['physician', 'unknown'].includes(act.role));
     if (done && acts.length) lines.push(`Acts documented as done: ${[...new Set(acts.map(act => act.kind.replace(/_/g, ' ') + (act.anatomy?.length ? ` (${act.anatomy.join(', ')})` : '')))].join('; ')}.`);
     if (done && Array.isArray(covered[service.id]) && covered[service.id].length) lines.push(`Accounted for by: ${covered[service.id].join(', ')}.`);
+    if (done && service.included_in) lines.push(`Included in ${service.included_in}: that service's code includes this examination, so no code of its own is asked.`);
     for (const item of unresolved.filter(entry => entry.service === service.id)) lines.push(`Unresolved: ${item.label}. No code is added for it and no alternative is promoted.`);
     for (const item of bundled.filter(entry => entry.service === service.id)) lines.push(`Not separately reported: ${item.label} — ${item.why}`);
     for (const conflict of conflicts.filter(entry => entry.service === service.id)) {

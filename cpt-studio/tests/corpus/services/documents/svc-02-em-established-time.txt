@@ -1,0 +1,33 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Riverbend Digestive Care (fictional) - Clinic Progress Note
+
+Patient: Harlan Mbeki-Thorsen (fictional) | Age 38 | MRN SYN-100317
+Encounter date: October 9, 2026
+Location: Riverbend Digestive Care outpatient office, Suite 210 (in-person office visit)
+Status: Established patient. I last saw him on 2026-04-21.
+
+Subjective
+Harlan returns for routine follow-up of Crohn's ileocolitis, which has been treated with ustekinumab every 8 weeks since early 2025. Over the past month he has had two to three loose stools daily without blood, plus crampy right lower quadrant discomfort after high-fat meals. He admits he delayed his August injection by about ten days because of travel. No fevers, night sweats, perianal drainage or joint pain.
+
+Relevant history
+Diagnosed in 2017. His most recent ileocolonoscopy, on 2024-02-13, showed mild inflammation of the terminal ileum (SES-CD 4) with no dysplasia on surveillance biopsies. Appendectomy as a teenager.
+
+Objective
+Temp 36.8 C, BP 124/78, HR 76, weight 74.1 kg (stable from April).
+Abdomen soft, slight tenderness in the right lower quadrant, no guarding and no palpable mass. No perianal findings on inspection.
+Results reviewed: CRP 6 mg/L (drawn 2026-10-02); fecal calprotectin 210 mcg/g (same date).
+
+Assessment and plan
+Crohn's disease of the ileum and colon, mildly active, likely related in part to the delayed dose.
+- Continue ustekinumab on its 8-week schedule; reviewed injection reminders with him.
+- Ordered ustekinumab trough level and anti-drug antibody.
+- Surveillance ileocolonoscopy with chromoendoscopy is booked for 2026-12-03; he will receive split-dose prep instructions by mail.
+- Influenza vaccine given today by nursing; pneumococcal status is up to date.
+- He will come back to clinic after the December colonoscopy, or sooner if he has bleeding or fever.
+
+Time
+I spent 34 minutes in total on the date of this encounter: reviewing the October laboratory results and the 2024 colonoscopy report before the visit, taking the interval history and examining him, counseling about adherence and the drug-level plan, placing orders, and completing this note.
+
+Mireille Castellanos-Pryor, MD (fictional)
+Gastroenterology, Riverbend Digestive Care (fictional)

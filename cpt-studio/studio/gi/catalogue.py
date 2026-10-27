@@ -188,7 +188,7 @@ CATALOGUE: dict[str, FamilyEntry] = {e.family: e for e in (
                        'its anatomy and technique', 'completion, and the reason when it was not completed'),
         acts=ENDOSCOPIC_ACTS + ('peg', 'tube_placement', 'myotomy', 'fundoplication'),
         bundled=COMMON_BUNDLED,
-        unsupported_acts=(('esd', 'Endoscopic submucosal dissection has no profiled code (unlisted procedure).'),),
+        unsupported_acts=(('esd', 'Endoscopic submucosal dissection has no code profile here; a coder decides how it is reported.'),),
         questions=ENDOSCOPIC_QUESTIONS, evidence=PROCEDURE_EVIDENCE, rules=PROCEDURE_RULES),
     FamilyEntry(
         'gi.enteroscopy', 'Small-bowel enteroscopy (push, balloon-assisted, through a stoma)', SUPPORTED,
@@ -204,7 +204,7 @@ CATALOGUE: dict[str, FamilyEntry] = {e.family: e for e in (
                        'each lesion (size, site) and what was done to it (sampled, removed, untreated)', 'intent '
                        '(screening, surveillance or diagnostic)', 'completion and the reason it was not completed'),
         acts=ENDOSCOPIC_ACTS, bundled=COMMON_BUNDLED,
-        unsupported_acts=(('esd', 'Endoscopic submucosal dissection has no profiled code (unlisted procedure).'),),
+        unsupported_acts=(('esd', 'Endoscopic submucosal dissection has no code profile here; a coder decides how it is reported.'),),
         questions=ENDOSCOPIC_QUESTIONS, evidence=PROCEDURE_EVIDENCE, rules=PROCEDURE_RULES),
     FamilyEntry(
         'gi.flex_sig', 'Flexible sigmoidoscopy', SUPPORTED, ('flex_sig',),
@@ -301,7 +301,7 @@ CATALOGUE: dict[str, FamilyEntry] = {e.family: e for e in (
 )}
 
 UNSUPPORTED_SERVICES = (
-    ('Endoscopic submucosal dissection (ESD)', 'no specific CPT code; reported as an unlisted procedure'),
+    ('Endoscopic submucosal dissection (ESD)', 'no code profile in this catalogue; no code is proposed or checked for it, and a coder decides how it is reported (the CPT code set is not connected)'),
     ('Endoscopic suturing and endoscopic bariatric procedures (sleeve gastroplasty)', 'not profiled'),
     ('EUS-guided drainage other than of a pseudocyst (biliary, gallbladder, gastroenterostomy)', 'not profiled'),
     ('Gastric peroral endoscopic myotomy (G-POEM) and flexible Zenker diverticulotomy', 'not profiled'),

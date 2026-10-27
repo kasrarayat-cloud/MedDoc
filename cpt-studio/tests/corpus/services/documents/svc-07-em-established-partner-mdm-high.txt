@@ -1,0 +1,35 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+CEDAR HOLLOW GASTROENTEROLOGY (fictional) - Office Note
+
+Patient: Ottoline Brascoupe (fictional)        MRN: SYN-100604
+Service date: 2026-10-23
+Place of service: Office, Cedar Hollow Gastroenterology main clinic (POS 11)
+Physician: Augustin Faleolo, MD (fictional)
+
+Patient status: Established. This is my first time meeting her, but she was last seen in this practice on 2024-05-02 by my partner Ines Halvorsen, MD (fictional), gastroenterology, for reflux.
+
+HPI
+Ms. Brascoupe is a 67-year-old woman with ten days of painless yellowing of the eyes, generalized itching, dark urine and pale stools. She has lost about 4 kg over two months and has a poor appetite. No fever, rigors or abdominal pain. Her last upper endoscopy, on 2024-05-15, showed only LA grade A esophagitis.
+
+Pertinent findings
+Deeply icteric. Excoriations on the forearms. Abdomen soft and non-tender; no palpable gallbladder or mass.
+
+Data
+- Contrast CT of the abdomen and pelvis from Brookfield Imaging (fictional), dated 2026-10-20: I personally reviewed the images, which show a common bile duct of 14 mm and a pancreatic duct of 5 mm tapering abruptly at the pancreatic head (double-duct sign) without a discrete mass on this phase.
+- Laboratory results from today: total bilirubin 8.2 mg/dL, alkaline phosphatase 512 U/L, ALT 180 U/L, INR 1.0, lipase normal.
+- Ordered: CA 19-9 and a pancreas-protocol CT.
+- I spoke by phone with her surgeon, Dr. Celestine Nakagawa-Brandt (fictional), about sequencing of tissue diagnosis and biliary drainage.
+
+Assessment
+Obstructive jaundice with a double-duct sign, highly concerning for a periampullary or pancreatic head malignancy - an illness that poses a threat to bodily function.
+
+Plan
+- We discussed direct hospital admission for expedited drainage versus a scheduled outpatient procedure. She declined admission after we reviewed warning signs of cholangitis; the decision against hospitalization is documented.
+- EUS with fine-needle biopsy and ERCP with biliary stent placement are scheduled together for 2026-10-29 under anesthesia.
+- Cholestyramine 4 g daily for pruritus (prescription sent).
+- She will call for fever, rigors, confusion or abdominal pain and go to the emergency department.
+
+Medical decision making: High.
+
+Augustin Faleolo, MD (fictional) - signed 2026-10-23

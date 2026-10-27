@@ -1,0 +1,33 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+WICKHAM HEIGHTS HOSPITAL (fictional) - Capsule Endoscopy Service
+SMALL BOWEL CAPSULE ENDOSCOPY: INTERPRETATION AND REPORT
+
+Patient: Cordelia Mwangi-Ellison (fictional)        MRN: SYN-103712
+Date of service: 2026-10-13
+Place of service: Hospital outpatient department. The capsule system and recorder are owned by Wickham Heights Hospital, which reports the technical component.
+Ingestion: 2026-10-13 at 08:05 in the GI unit, after a split preparation with PEG and simethicone.
+Reading completed: 2026-10-14
+Interpreting physician: Barnaby Okonkwo-Lisle, MD (fictional)
+
+Indication: Iron deficiency anemia with occult blood-positive stool; upper endoscopy and colonoscopy on 2026-09-02 were unrevealing.
+
+Transit landmarks
+- First gastric image: 00:01:12
+- First duodenal image: 00:33:40 (gastric transit 32 minutes)
+- First cecal image: 04:44:51 (small-bowel transit 4 hours 11 minutes)
+The capsule reached the cecum within the recording period, so the small bowel was imaged in full. Visualization quality: adequate (about 85% of mucosa clearly seen).
+
+Findings
+1. Two small angioectasias in the proximal jejunum, 18 and 26 minutes after the first duodenal image, without active bleeding.
+2. No ulcers, strictures, masses or areas of fresh blood.
+3. Incidental lymphangiectasia in the distal duodenum.
+
+Interpretation
+Proximal jejunal angioectasias are the likely source of occult bleeding. They lie within reach of push enteroscopy.
+
+Recommendation
+Push enteroscopy with argon plasma coagulation is planned for 2026-10-28. Continue iron replacement until then.
+
+I personally reviewed the full video and prepared this report.
+B. Okonkwo-Lisle, MD (fictional)

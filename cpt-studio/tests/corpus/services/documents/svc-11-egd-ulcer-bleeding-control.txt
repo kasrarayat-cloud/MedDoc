@@ -1,0 +1,38 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+ST. BRENDAN'S REGIONAL MEDICAL CENTER (fictional)
+Inpatient Endoscopy - Procedure Note
+
+Patient: Florian Abiodun-Kessler (fictional)    MRN: SYN-101046    Room 6-118
+Date of service: 2026-10-17
+Place of service: Inpatient hospital (endoscopy suite)
+Gastroenterologist: Henrike Mwangi-Sorensen, MD (fictional)
+Anesthesia: Anesthesia care team (Ruben Calloway, MD (fictional), anesthesiologist; Tamsin Oduya, CRNA (fictional)) provided MAC; anesthesia services are reported separately.
+Facility: Hospital facility services are billed by St. Brendan's Regional Medical Center.
+
+INDICATION
+Melena for two days with a fall in hemoglobin from 11.2 to 7.6 g/dL; on aspirin and clopidogrel after coronary stenting. Two units of packed red cells given overnight. Pantoprazole infusion started on admission.
+
+PROCEDURE
+The upper endoscope was advanced to the descending duodenum under direct vision.
+- Esophagus: no varices, no tears.
+- Stomach: scattered antral erosions; no fresh or old blood in the stomach.
+- Duodenal bulb: a 12 mm ulcer on the posterior wall with a raised, non-bleeding visible vessel (Forrest IIa) and a small amount of altered blood in the bulb.
+- Second portion: normal.
+
+Endoscopic therapy: Epinephrine diluted 1:10,000 was injected in four quadrants around the vessel, 6 mL in total. Bipolar coagulation was then applied directly to the vessel, and two through-the-scope clips were deployed across it. After washing there was no further oozing and the vessel was flattened; hemostasis was secured.
+
+Biopsies were deferred because of the recent bleeding; a serum Helicobacter pylori antibody was sent instead.
+
+ESTIMATED BLOOD LOSS: Minimal.
+COMPLICATIONS: None.
+
+IMPRESSION
+Posterior duodenal bulb ulcer with a non-bleeding visible vessel, treated with injection, bipolar coagulation and clips.
+
+PLAN
+- Continue the pantoprazole infusion for 72 hours, then 40 mg twice daily.
+- Cardiology to advise on resuming clopidogrel; continue aspirin.
+- Repeat EGD in 8 to 12 weeks to confirm healing; gastric biopsies will be taken at that time if H. pylori status is still unknown.
+
+H. Mwangi-Sorensen, MD (fictional)

@@ -1,0 +1,42 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+COLONOSCOPY REPORT
+Silverbrook Endoscopy Center (fictional)
+
+Field | Value
+Patient | Jasper Okonjo-Whitfield (fictional)
+MRN | SYN-101714
+Date of service | 2026-10-05
+Place of service | Ambulatory surgery center
+Endoscopist | Annika Ferreira-Oduya, MD (fictional)
+Anesthesia | MAC by the anesthesia provider (separately documented and reported)
+Indication | Surveillance - two tubular adenomas removed at colonoscopy on 2021-08-17
+Bowel preparation | BBPS 3-3-2 (total 8), adequate
+Extent | Cecum, confirmed by appendiceal orifice and ileocecal valve; terminal ileum not intubated
+Withdrawal time | 14 minutes
+
+FINDINGS
+
+# | Location | Size / morphology | Intervention | Specimen
+1 | Transverse colon, mid | 12 mm sessile (Paris Is) | Resected en bloc with a hot snare | Jar A
+2 | Rectum, 8 cm from anal verge | 4 mm sessile | Cold forceps biopsy, removed completely in two bites | Jar B
+3 | Sigmoid colon | Scattered small-mouthed diverticula | None | -
+
+NARRATIVE
+The colonoscope was passed through the rectum to the cecum without difficulty. Polyp 1 had a broad base without a stalk; a 15 mm snare captured it in a single piece and it was cut with blended current, leaving a clean defect with no bleeding. A separate diminutive polyp in the rectum (polyp 2) was taken with cold biopsy forceps until no residual tissue was visible. Diverticula were noted in the sigmoid colon. No other biopsies were taken. Retroflexion in the rectum showed small internal hemorrhoids.
+
+SPECIMENS
+Jar A (transverse polyp) and Jar B (rectal polyp) to Ridgefield Pathology (fictional); results pending.
+
+COMPLICATIONS
+None.
+
+IMPRESSION
+1. 12 mm transverse colon polyp, hot snare polypectomy.
+2. 4 mm rectal polyp, cold forceps removal.
+3. Sigmoid diverticulosis; small internal hemorrhoids.
+
+RECOMMENDATION
+Repeat colonoscopy interval to be set once histology is available.
+
+A. Ferreira-Oduya, MD (fictional)

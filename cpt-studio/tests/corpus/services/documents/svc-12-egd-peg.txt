@@ -1,0 +1,33 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+HOLLINGSWORTH MEMORIAL HOSPITAL (fictional) - Endoscopy Unit
+PERCUTANEOUS ENDOSCOPIC GASTROSTOMY - PROCEDURE RECORD
+
+Patient: Marguerite Ilunga-Prescott (fictional)    MRN: SYN-101150
+Date of service: 2026-10-19
+Place of service: Inpatient hospital
+Endoscopist: Konstantin Abara, MD (fictional)
+Assistant: Yusra Delamere, RN (fictional)
+
+Indication: Persistent oropharyngeal dysphagia after a left hemispheric stroke on 2026-10-02; fed by nasogastric tube since admission. Speech-language pathology does not expect safe oral intake for at least several months.
+Prior history: A gastrostomy was placed endoscopically in 2019 during head and neck radiation and was removed in 2020; the old site is well healed in the left upper quadrant.
+
+Sedation: Moderate sedation administered by me with Yusra Delamere, RN, as independent trained observer. Midazolam 3 mg IV and fentanyl 75 mcg IV. Intraservice time 24 minutes (09:41 to 10:05).
+
+Checklist
+Antibiotic prophylaxis [X] Given (cefazolin 2 g IV)   [ ] Not given
+Transillumination      [X] Seen                      [ ] Not seen
+Finger indentation     [X] Seen                      [ ] Not seen
+Safe-tract aspiration  [X] Air only on aspiration    [ ] Bowel content
+Biopsy                 [ ] Performed                 [X] Not performed
+
+Procedure
+The gastroscope was advanced under direct vision to the second part of the duodenum; the esophagus, stomach and duodenum were unremarkable apart from a small hiatal hernia. The stomach was insufflated and a site on the anterior gastric body was chosen where transillumination and one-to-one finger indentation coincided, away from the old scar. After local lidocaine, a small skin incision was made and the trocar was introduced into the stomach under endoscopic view. The guidewire was grasped with a snare and pulled out through the mouth, and a 20 Fr pull-type gastrostomy tube was drawn into position. The endoscope was reintroduced to confirm that the internal bumper sat snugly and without blanching against the gastric wall. External bolster at 3.5 cm at the skin.
+
+Blood loss: Negligible.
+Complications: None.
+
+Impression: Successful pull-technique PEG placement (20 Fr). Small hiatal hernia.
+Orders: Flush with 30 mL water after 4 hours; begin tube feeds at 6 hours if no pain or distension.
+
+Konstantin Abara, MD (fictional)

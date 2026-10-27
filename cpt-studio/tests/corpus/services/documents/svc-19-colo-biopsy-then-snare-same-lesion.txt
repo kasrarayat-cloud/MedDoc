@@ -1,0 +1,30 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Oak Harbor Hospital (fictional) - Endoscopy
+Colonoscopy
+
+Patient: Imelda Castellanos-Reyes (fictional)     MRN SYN-101829
+Date of procedure: October 13, 2026
+Place of service: Hospital outpatient department
+Proceduralist: Gideon Okeke-Marsh, MD (fictional)
+Sedation: Propofol administered by Leontine Barros, MD (fictional), anesthesiologist; documented on the anesthesia record.
+
+Reason for exam: Positive fecal immunochemical test.
+
+Description of procedure
+Following a normal digital rectal examination, the colonoscope was introduced and advanced without difficulty to the cecum. The appendiceal orifice and the ileocecal valve were identified, and the terminal ileum was entered briefly; it was normal. Preparation was good (BBPS 7).
+
+At 30 cm, in the sigmoid colon, there was an 18 mm pedunculated polyp with a thick stalk. Part of its head had an irregular, slightly depressed surface pattern. Two cold forceps samples were first taken from that irregular area and sent in a separate container. The same polyp was then removed: a snare was closed around the stalk about 5 mm below the head and the stalk was transected with a hot snare using blended current. The polyp was retrieved with a net. The stalk showed no bleeding.
+
+The rest of the colon, examined during a 13-minute withdrawal, showed no other abnormalities.
+
+Specimens
+Container 1: sigmoid polyp, forceps samples of the irregular area. Container 2: sigmoid polyp, polypectomy specimen. Both sent to Oak Harbor Hospital Pathology (fictional). Biopsy results pending.
+
+Impression
+18 mm pedunculated sigmoid polyp, sampled with forceps and then removed by hot snare polypectomy.
+
+Plan
+Await pathology. Repeat colonoscopy in three years if the polyp is an adenoma without high-risk features; sooner if histology shows invasive features.
+
+G. Okeke-Marsh, MD (fictional)

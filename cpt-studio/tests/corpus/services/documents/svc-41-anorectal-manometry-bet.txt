@@ -1,0 +1,40 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+PELVIC FLOOR AND ANORECTAL PHYSIOLOGY LAB
+Brambleton University Hospital (fictional)
+
+Study: High-resolution anorectal manometry with rectal sensory and compliance testing and balloon expulsion test
+Patient: Marisela Obiora-Lindahl (fictional)       MRN: SYN-104136
+Date of service: 2026-10-16
+Place of service: Hospital outpatient department
+Physician: Tobias Wainwright-Achebe, MD (fictional)
+
+Indication: Chronic constipation with straining, a sense of incomplete evacuation and occasional digital assistance, despite fiber and osmotic laxatives.
+
+Preparation: One phosphate enema two hours before the study.
+
+Method: With the patient in the left lateral position, a high-resolution solid-state anorectal catheter with an attached rectal balloon was inserted. After a 3-minute run-in, resting, squeeze, cough and simulated evacuation (push) maneuvers were recorded, and the rectoanal inhibitory reflex was tested.
+
+Manometry
+- Mean resting anal pressure: 58 mmHg (normal).
+- Maximum squeeze pressure: 142 mmHg (normal); endurance squeeze sustained 20 seconds.
+- Cough reflex: present.
+- Simulated defecation: rectal pressure rose to 48 mmHg while the anal sphincter paradoxically contracted (type I dyssynergia).
+- Rectoanal inhibitory reflex: present at 30 mL.
+
+Rectal sensation and compliance (graded balloon distension)
+- First sensation: 60 mL.
+- Desire to defecate: 140 mL.
+- Maximum tolerated volume: 220 mL.
+- Rectal compliance from the pressure-volume relationship: 6.1 mL/mmHg (normal range).
+
+Balloon expulsion test
+A balloon filled with 50 mL of warm water was placed in the rectum. In the seated position on a commode the patient could not expel it within 3 minutes.
+
+Interpretation
+Type I dyssynergic defecation with an abnormal balloon expulsion test. Normal resting and squeeze pressures, normal rectal sensation and compliance.
+
+Recommendation
+Referral to pelvic floor biofeedback therapy. Continue polyethylene glycol daily.
+
+T. Wainwright-Achebe, MD (fictional)

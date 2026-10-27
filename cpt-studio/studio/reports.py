@@ -223,7 +223,8 @@ def _services(assessment):
                     'acts': sorted({a.get('kind', '').replace('_', ' ') + (f' ({", ".join(a.get("anatomy") or [])})'
                                                                             if a.get('anatomy') else '')
                                     for a in acts}),
-                    'covered_by': list((completeness.get('covered') or {}).get(service.get('id'), []))})
+                    'covered_by': list((completeness.get('covered') or {}).get(service.get('id'), [])),
+                    'included_in': service.get('included_in', '')})
     return {
         'services': out,
         'unresolved': [{'service': u.get('service', ''), 'family': u.get('family', ''), 'label': u.get('label', ''),
@@ -653,6 +654,8 @@ def _documented_section(snap):
             lines.append(f'      acts documented as done: {"; ".join(service["acts"])}')
         if service.get('covered_by'):
             lines.append(f'      accounted for by: {", ".join(service["covered_by"])}')
+        if service.get('included_in'):
+            lines.append(f'      included in {service["included_in"]}: that service\'s code includes this examination')
     for item in documented.get('bundled') or []:
         lines.append(f'  - not separately reported: {item["label"]} — {item["why"]}')
     if documented.get('attributions'):

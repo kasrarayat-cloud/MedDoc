@@ -1,0 +1,23 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Fairmont Lakes Hospital (fictional) - GI Consult Service
+BEDSIDE PROCEDURE NOTE: GASTROSTOMY TUBE REPLACEMENT
+
+Patient: Eustace Ndlovu-Pemberton (fictional)      MRN: SYN-104241      Room 4-214
+Date of service: 2026-10-18
+Place of service: Inpatient hospital, at the bedside
+Performed by: Annabel Okoye-Sterling, MD (fictional), Gastroenterology
+
+Background: He has a gastrostomy that was first placed endoscopically on 2025-02-11 for amyotrophic lateral sclerosis. The original tube was exchanged for a 20 Fr balloon replacement tube in clinic in September 2025. Nursing reports that the current tube came out three hours ago after the balloon ruptured; the stoma was covered with gauze and has not closed.
+
+Consent: Obtained from his health care proxy by telephone, witnessed by the bedside nurse.
+
+Procedure: The stoma was inspected: a mature, clean tract with no granulation tissue, erythema or drainage. The old tube was examined at the bedside and its balloon was found torn. A new 20 Fr balloon gastrostomy tube was lubricated and inserted through the existing tract without resistance, and the balloon was inflated with 8 mL of sterile water. Gastric contents were aspirated (pH 3) and the tube flushed easily with 30 mL of water. The external bolster was set at 2.5 cm. No imaging or endoscopy was used, and the tract did not need revision.
+
+Complications: None.
+
+Impression: Dislodged balloon gastrostomy tube replaced at the bedside through a mature tract; position confirmed by aspiration of gastric contents.
+
+Plan: Resume tube feeds now at the previous rate. Check balloon volume weekly.
+
+A. Okoye-Sterling, MD (fictional)

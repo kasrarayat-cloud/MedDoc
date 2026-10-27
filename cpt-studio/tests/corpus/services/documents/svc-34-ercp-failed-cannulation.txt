@@ -1,0 +1,26 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+GREYSTONE MEMORIAL HOSPITAL (fictional) - Endoscopy
+ERCP (UNSUCCESSFUL)
+
+Patient: Percival Achieng-Rousseau (fictional)       MRN: SYN-103391
+Date of service: 2026-10-24
+Place of service: Inpatient hospital
+Endoscopist: Odalys Kwarteng-Bell, MD (fictional)
+Anesthesia: General anesthesia by the Greystone anesthesia service; reported separately.
+
+Indication: Suspected choledocholithiasis - common bile duct 10 mm on ultrasound with rising bilirubin (4.4 mg/dL).
+
+Course of the procedure:
+The duodenoscope reached the second portion of the duodenum without difficulty. The major papilla lay on the inner rim of a large periampullary diverticulum and was difficult to bring en face. Biliary cannulation was attempted for about 25 minutes using a sphincterotome with a guidewire; the wire entered the pancreatic duct three times. A double-guidewire technique was then tried without success. Because of the anatomy, a precut sphincterotomy was not attempted. Deep biliary cannulation was not achieved, and no cholangiogram was obtained.
+No sphincterotomy, stent placement or stone extraction was performed. A prophylactic pancreatic stent was not placed. Rectal indomethacin 100 mg was given after the procedure.
+
+Complications: None evident at the end of the procedure.
+
+Impression: Unsuccessful ERCP - failed biliary cannulation because of a papilla within a periampullary diverticulum. Procedure incomplete.
+
+Plan:
+- Monitor for post-ERCP pancreatitis overnight.
+- EUS-guided rendezvous or a repeat ERCP by the advanced endoscopy team at Calder Regional Center (fictional) is planned for 2026-11-02; earlier if cholangitis develops.
+
+O. Kwarteng-Bell, MD (fictional)

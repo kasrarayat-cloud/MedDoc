@@ -1,0 +1,33 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Thornfield Gastroenterology Clinic (fictional)
+OFFICE PROCEDURE: TRANSNASAL ESOPHAGOSCOPY WITH BIOPSY
+
+Patient: Evander Kowalczyk-Ashby (fictional)      MRN: SYN-101263
+Date of service: 2026-10-07
+Place of service: Office (POS 11), procedure room B
+Physician: Simone Achterberg-Nkosi, MD (fictional)
+Sedation: None (unsedated examination)
+
+Indication: Surveillance of known Barrett's esophagus without dysplasia (Prague C2 M4). Previous surveillance upper endoscopies on 2022-06-10 and 2024-06-21 found no dysplasia. He prefers unsedated surveillance in the office.
+
+Topical preparation: Oxymetazoline and 4% lidocaine sprayed into the right naris; lidocaine gel applied to the scope.
+
+Technique and findings:
+A 5.4 mm transnasal endoscope was introduced through the right naris and passed through the nasopharynx and upper esophageal sphincter without difficulty. Salmon-colored mucosa extended circumferentially from 38 to 40 cm with tongues reaching 36 cm, unchanged from 2024 (C2 M4). The squamocolumnar junction was at 36 cm and the top of the gastric folds at 40 cm. High-definition white light and narrow-band imaging showed a regular mucosal and vascular pattern with no nodules, depressions or ulcers.
+Seattle-protocol sampling: four-quadrant cold forceps specimens at 40, 38 and 36 cm, each level placed in its own jar (3 jars).
+The examination was confined to the esophagus; the endoscope was not advanced past the gastroesophageal junction.
+
+He tolerated the examination well and left the office 20 minutes afterward.
+
+Specimens: 3 jars to Northline Pathology Group (fictional); results pending.
+
+Impression:
+Short-segment Barrett's esophagus, C2 M4, without visible lesions; surveillance biopsies obtained.
+
+Plan:
+- Endoscopic ablation is not indicated at this time because there is no dysplasia.
+- Continue omeprazole 20 mg daily.
+- If histology again shows no dysplasia, next surveillance in three to five years.
+
+S. Achterberg-Nkosi, MD (fictional)

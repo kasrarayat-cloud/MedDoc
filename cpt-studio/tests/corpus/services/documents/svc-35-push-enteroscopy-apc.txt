@@ -1,0 +1,26 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+ASHCOMBE COUNTY HOSPITAL (fictional)
+Small Bowel Endoscopy Report - Push Enteroscopy
+
+Patient: Hyacinth Oduya-Marchetti (fictional)        MRN: SYN-103497
+Date of service: 2026-10-07
+Place of service: Hospital outpatient department
+Endoscopist: Emeric Fashola-Grant, MD (fictional)
+Anesthesia: Propofol sedation by Nadia Kowalski, CRNA (fictional), of the hospital anesthesia department; anesthesia services billed separately.
+
+Clinical background
+Transfusion-dependent iron deficiency anemia with suspected small-bowel bleeding. Bidirectional endoscopy on 2026-08-05 was unrevealing. Small-bowel capsule endoscopy on 2026-09-14 showed several angioectasias in the proximal jejunum.
+
+Procedure
+A dedicated push enteroscope with an overtube was advanced through the esophagus, stomach and duodenum and beyond the ligament of Treitz, reaching an estimated 70 cm into the proximal jejunum. The esophagus, stomach and duodenum showed no bleeding source. In the proximal jejunum there were five flat, non-bleeding angioectasias measuring 3 to 6 mm, with no fresh or altered blood in the lumen. Each angioectasia was treated with argon plasma coagulation (flow 0.8 L/min, 20 W) until it was completely blanched. No active bleeding was present at any point.
+
+Complications: None.
+
+Impression
+Five non-bleeding proximal jejunal angioectasias, all ablated with argon plasma coagulation.
+
+Plan
+Continue oral iron; check hemoglobin weekly for a month. If transfusion is needed again, consider deep (balloon-assisted) enteroscopy.
+
+E. Fashola-Grant, MD (fictional)

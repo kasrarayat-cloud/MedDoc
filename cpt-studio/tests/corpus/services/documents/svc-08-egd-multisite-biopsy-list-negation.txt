@@ -1,0 +1,39 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+PROCEDURE REPORT - ESOPHAGOGASTRODUODENOSCOPY
+Granite Bay Digestive Institute (fictional)
+
+Patient: Lucian Abernethy-Osei (fictional)     MRN: SYN-100713
+Date of service: 2026-10-12
+Place of service: Ambulatory surgery center
+Endoscopist: Theodora Vukovic, MD (fictional)
+
+SEDATION
+Moderate sedation administered under my direction by Lena Marchetti, RN (fictional), who served as the independent trained observer and monitored the patient throughout. Midazolam 4 mg IV and fentanyl 100 mcg IV in divided doses. Intraservice time 18 minutes (sedation start 09:12, scope out and sedation end 09:30).
+
+INDICATIONS
+Iron deficiency anemia and dyspepsia. Tissue transglutaminase IgA borderline at 9 U/mL. An abdominal CT from 2026-09-30 incidentally noted a mildly prominent pancreatic duct (3.5 mm); MRCP has been ordered by his primary physician.
+
+DESCRIPTION
+The gastroscope was passed through the mouth and advanced under direct vision to the second part of the duodenum. Retroflexion was performed in the stomach.
+
+FINDINGS
+1. Esophagus: Normal mucosa with no rings, furrows or exudates. To exclude eosinophilic esophagitis, tissue was taken from the proximal and distal esophagus (container 1).
+2. Stomach: Patchy erythema in the antrum without ulceration. Gastric mapping biopsies were sampled with cold forceps from the antrum, incisura and body according to the updated Sydney protocol (container 2).
+3. Duodenum: Mild scalloping of the folds in the second portion. Four biopsies were obtained from the second portion and two from the bulb (container 3).
+
+No tissue was sampled beyond the three containers listed above.
+No EUS, fine-needle sampling, ERCP or dilation was performed.
+
+SPECIMENS
+Three containers sent to Clearwater Pathology Partners (fictional); results pending.
+
+IMPRESSION
+- Normal-appearing esophagus, biopsied.
+- Mild antral erythema, biopsied for Helicobacter pylori and gastritis staging.
+- Duodenal scalloping, biopsied to evaluate for celiac disease.
+
+PLAN
+Await histology. Continue the MRCP already ordered. Clinic follow-up after pathology returns.
+
+Theodora Vukovic, MD (fictional)

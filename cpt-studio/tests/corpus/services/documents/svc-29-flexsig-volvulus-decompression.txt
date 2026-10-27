@@ -1,0 +1,26 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+RAVENSCROFT GENERAL HOSPITAL (fictional)
+Inpatient Gastroenterology - Endoscopic Procedure Note
+
+Patient: Augustus Olabode-Frey (fictional), 84 years      MRN: SYN-102846
+Date of service: 2026-10-18
+Place of service: Inpatient hospital, endoscopy suite
+Gastroenterologist: Calliope Varga-Adeyemi, MD (fictional)
+Facility: Hospital facility component billed by Ravenscroft General Hospital.
+Sedation: None; the patient was awake and cooperative.
+
+Indication: Abdominal distension and obstipation for two days; CT this morning showed sigmoid volvulus with a markedly dilated sigmoid loop and no free air or pneumatosis.
+History: A previous episode of sigmoid volvulus was decompressed endoscopically on 2025-03-02; he declined elective surgery at that time.
+
+Procedure:
+The flexible sigmoidoscope was advanced to 22 cm, where a twisted, spiraling segment of the sigmoid colon was reached. With gentle insufflation and torque the instrument was worked through the point of torsion, releasing a large rush of gas and liquid stool. The mucosa of the dilated loop was edematous and mildly congested but pink, without ulceration, black discoloration or other signs of ischemia. Once the loop had collapsed, a guidewire was left in the proximal sigmoid colon and a large-bore decompression tube was passed over it under fluoroscopy, its tip resting at the junction with the descending colon. The tube was secured to the buttock and connected to gravity drainage.
+No biopsies were taken and no tattoo was placed.
+
+Complications: None.
+
+Impression: Sigmoid volvulus, endoscopically detorsed and decompressed, with a decompression tube left in place. No ischemia seen.
+
+Plan: Serial abdominal examinations and radiographs. Colorectal surgery has been consulted to discuss sigmoid colectomy during this admission.
+
+C. Varga-Adeyemi, MD (fictional)

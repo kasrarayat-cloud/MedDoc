@@ -1,0 +1,32 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+KESTREL POINT UNIVERSITY HOSPITAL (fictional)
+Interventional Endoscopy - Operative Report
+
+Patient: Rosamund Adeyemi-Falk (fictional)       MRN: SYN-101608
+Date of service: 2026-10-22
+Place of service: Hospital outpatient department, with overnight observation
+Primary operator: Vikram Oduya-Hartmann, MD (fictional)
+Anesthesia: General endotracheal anesthesia with positive-pressure ventilation, provided by the department of anesthesiology (separate record and billing).
+Facility: Hospital facility charges submitted by Kestrel Point University Hospital.
+
+PROCEDURE: Peroral endoscopic myotomy (POEM), anterior approach.
+
+INDICATION
+Type II achalasia confirmed on high-resolution manometry dated 2026-08-20 (integrated relaxation pressure 31 mmHg). Eckardt score 8. Earlier treatments: pneumatic dilation to 30 mm on 2023-05-11 and endoscopic botulinum toxin injection on 2024-02-09, each with only transient benefit.
+
+OPERATIVE DETAILS
+1. Initial inspection: Dilated esophagus with retained fluid, which was suctioned. The stomach was examined in retroflexion and was normal.
+2. Entry: At 29 cm, at the 2 o'clock position, a submucosal bleb was raised with saline tinted with indigo carmine, and a 2 cm longitudinal mucosotomy was made with a triangle-tip knife.
+3. Tunnel: The submucosal tunnel was developed distally with spray coagulation to 3 cm onto the gastric cardia, confirmed by double-scope view.
+4. Myotomy: Selective circular muscle myotomy from 33 cm to 2.5 cm below the gastroesophageal junction, 9.5 cm total.
+5. Closure: The mucosal entry was closed with six through-the-scope clips; complete closure was confirmed.
+No fundoplication was performed.
+
+Estimated blood loss: Under 10 mL.
+Complications: None; no capnoperitoneum requiring decompression.
+
+POST-OPERATIVE PLAN
+Admit for overnight observation; nothing by mouth tonight. Esophagram tomorrow morning, then clear liquids if no leak. Intravenous antibiotics for 24 hours, then oral for five days. PPI once daily for eight weeks.
+
+V. Oduya-Hartmann, MD (fictional)

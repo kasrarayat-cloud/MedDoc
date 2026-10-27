@@ -1,0 +1,28 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Pinecrest Surgery & Endoscopy Center (fictional)
+UPPER ENDOSCOPY REPORT
+
+Name: Cassius Delahaye-Mbatha (fictional)    MRN: SYN-100825
+Procedure date: 10/08/2026
+Place of service: Ambulatory surgery center
+Physician: Noor Halloran-Iyer, MD (fictional)
+Anesthesia: MAC by Bartholomew Quist, MD (fictional), anesthesiology - billed separately by the anesthesia group
+
+Indication: Intermittent solid-food dysphagia for two years. He required emergency endoscopic removal of an impacted meat bolus on 2025-06-11 at another hospital.
+
+Findings:
+Esophagus - Concentric rings and linear furrows in the proximal and mid esophagus (EREFS: edema 1, rings 1, exudates 0, furrows 1, stricture 0). A thin Schatzki ring sits at 39 cm from the incisors. Three samples were taken with cold forceps at 25 cm and three more at 32 cm, placed in separate labeled containers.
+Stomach - Normal, including retroflexed views of the cardia.
+Duodenum - Normal bulb and second portion.
+
+Specimens: Two containers (proximal esophagus; mid esophagus) to Lantern Hill Pathology (fictional).
+
+Impression:
+1. Endoscopic features suggestive of eosinophilic esophagitis; proximal and mid esophagus biopsied.
+2. Schatzki ring at 39 cm, disrupted with a through-the-scope balloon inflated stepwise to 18 mm; a superficial mucosal rent was seen afterward with no bleeding.
+3. Normal stomach and duodenum.
+
+Recommendations: Soft diet for the rest of the day. Await histology; if eosinophil counts are elevated, begin a PPI trial and repeat endoscopy in about 12 weeks. Clinic follow-up in four weeks.
+
+N. Halloran-Iyer, MD (fictional)

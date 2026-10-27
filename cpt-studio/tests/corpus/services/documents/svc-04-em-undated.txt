@@ -1,0 +1,30 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+NORTHGATE GASTROENTEROLOGY (fictional)
+Office Visit - Established Patient
+
+Patient: Ignatius Pomeroy-Vale (fictional)
+Date of birth: 1961-07-02
+Setting: Northgate Gastroenterology office, exam room 4 (in person)
+
+REASON FOR VISIT
+Follow-up of gastroesophageal reflux disease and metabolic dysfunction-associated steatotic liver disease.
+
+INTERVAL HISTORY
+He is an established patient of mine. Heartburn now occurs about once a week on omeprazole 20 mg daily, down from nightly symptoms before treatment. No dysphagia, odynophagia, vomiting or black stools. He has lost 3 kg through dietary changes and walks four times a week. Alcohol intake is rare.
+
+EXAMINATION
+Weight 96.4 kg, BMI 31.2. Not jaundiced. Abdomen obese, soft and non-tender; liver edge not palpable.
+
+RESULTS
+Laboratory studies drawn on 2026-09-30 were reviewed with him: ALT 52 U/L (previously 71), AST 38 U/L, platelets 231 K/uL. FIB-4 calculated at 1.21.
+
+ASSESSMENT AND PLAN
+1. GERD, well controlled. Continue omeprazole 20 mg daily; we discussed trying on-demand dosing in three months if he stays symptom-free.
+2. Steatotic liver disease with improving aminotransferases and low fibrosis risk. Continue weight-loss efforts with a goal of 7-10 percent of body weight. Repeat liver panel and FIB-4 in six months.
+3. Return visit in six months.
+
+TIME STATEMENT
+Total time I personally spent on this patient's care today was 22 minutes, including reviewing the September laboratory results, obtaining the history, examining him, counseling on diet and medication, and documenting the visit.
+
+Electronically signed by Marguerite Olaniyan, DO (fictional), Gastroenterology

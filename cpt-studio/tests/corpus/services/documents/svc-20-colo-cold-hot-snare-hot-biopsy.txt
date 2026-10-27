@@ -1,0 +1,33 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+LARKSPUR DIGESTIVE HEALTH (fictional) - Ambulatory Surgery Center
+Colonoscopy Procedure Note
+
+Patient: Benedikt Afolabi-Strand (fictional)    MRN: SYN-101931
+Date of service: 2026-10-19
+Place of service: Ambulatory surgery center
+Physician: Ottilie Nakamura-Boateng, MD (fictional)
+
+Sedation: Moderate sedation administered by me, with Corwin Ashdown, RN (fictional), as the independent trained observer monitoring the patient. Midazolam 5 mg and fentanyl 100 mcg IV in increments. Intraservice time 31 minutes (10:02 to 10:33).
+
+Indication: Average-risk screening at age 58; first colonoscopy.
+
+Extent and quality: The instrument was advanced to the appendiceal orifice; the ileocecal valve was identified and photographed. Preparation excellent (BBPS 9). Withdrawal time 15 minutes.
+
+Findings
+1. Cecum - 3 mm sessile polyp near the appendiceal orifice, removed with hot biopsy forceps.
+2. Descending colon - 15 mm sessile polyp, removed en bloc with a hot snare.
+3. Sigmoid colon - 6 mm sessile polyp, removed with a cold snare.
+4. Remainder of the colon unremarkable; small internal hemorrhoids on retroflexion.
+
+All three polyps were retrieved and sent separately (jars 1, 2 and 3) to Fairhaven Laboratory Pathology (fictional).
+
+There were no complications.
+
+Impression
+Three colon polyps: cecal polyp by hot biopsy forceps, descending colon polyp by hot snare, sigmoid polyp by cold snare.
+
+Plan
+Surveillance interval after histology. Resume diet. Avoid NSAIDs for one week.
+
+Ottilie Nakamura-Boateng, MD (fictional)

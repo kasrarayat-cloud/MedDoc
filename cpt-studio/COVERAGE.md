@@ -73,7 +73,7 @@ The code lists are internal reconciliation profiles (which documented act a code
 - `biopsy_of_removed_lesion`: A biopsy of a lesion that is then removed at the same session (snare, hot forceps, EMR) is part of the removal (internal profile rule, NCCI policy principle; NCCI is not connected).
 - `lift_injection`: A submucosal injection made to lift a lesion for its resection is part of the resection.
 **Unsupported within the family:**
-- `esd`: Endoscopic submucosal dissection has no profiled code (unlisted procedure).
+- `esd`: Endoscopic submucosal dissection has no code profile here; a coder decides how it is reported.
 
 ## Small-bowel enteroscopy (push, balloon-assisted, through a stoma) — supported
 
@@ -124,7 +124,7 @@ The code lists are internal reconciliation profiles (which documented act a code
 - `biopsy_of_removed_lesion`: A biopsy of a lesion that is then removed at the same session (snare, hot forceps, EMR) is part of the removal (internal profile rule, NCCI policy principle; NCCI is not connected).
 - `lift_injection`: A submucosal injection made to lift a lesion for its resection is part of the resection.
 **Unsupported within the family:**
-- `esd`: Endoscopic submucosal dissection has no profiled code (unlisted procedure).
+- `esd`: Endoscopic submucosal dissection has no code profile here; a coder decides how it is reported.
 
 ## Flexible sigmoidoscopy — supported
 
@@ -287,7 +287,7 @@ The code lists are internal reconciliation profiles (which documented act a code
 ## Named unsupported services — unsupported
 
 **Notes:**
-- Endoscopic submucosal dissection (ESD): no specific CPT code; reported as an unlisted procedure
+- Endoscopic submucosal dissection (ESD): no code profile in this catalogue; no code is proposed or checked for it, and a coder decides how it is reported (the CPT code set is not connected)
 - Endoscopic suturing and endoscopic bariatric procedures (sleeve gastroplasty): not profiled
 - EUS-guided drainage other than of a pseudocyst (biliary, gallbladder, gastroenterostomy): not profiled
 - Gastric peroral endoscopic myotomy (G-POEM) and flexible Zenker diverticulotomy: not profiled

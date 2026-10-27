@@ -1,0 +1,24 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Harrowgate Endoscopy Center (fictional)
+UPPER ENDOSCOPY WITH LIMITED ENDOSCOPIC ULTRASOUND
+
+Patient: Lysander Omotola-Wren (fictional)       MRN: SYN-103065
+Date of service: 2026-10-09
+Place of service: Ambulatory surgery center
+Physician: Beatrix Sandoval-Achebe, MD (fictional)
+
+Sedation: Moderate sedation was given by me (midazolam 5 mg, fentanyl 100 mcg IV) while Noel Fairbanks, RN (fictional), acting as independent trained observer, monitored vital signs and level of consciousness. Intraservice time 19 minutes (13:04-13:23).
+
+Reason: A 15 mm subepithelial bulge in the mid esophagus seen on a screening upper endoscopy performed elsewhere; no dysphagia.
+
+Endoscopic portion: A standard gastroscope was introduced and advanced to the second portion of the duodenum. The stomach and duodenum were normal. At 28 cm from the incisors there was a smooth, round bulge covered by normal mucosa, with a negative pillow sign.
+
+Ultrasound portion: The radial echoendoscope was then introduced. The sonographic evaluation was limited to the esophageal wall from 26 to 30 cm; the stomach and duodenum were not examined sonographically. A 14 x 9 mm homogeneous hypoechoic lesion arose from the fourth layer (muscularis propria), with smooth borders and no cystic spaces, consistent with a leiomyoma. No peri-esophageal lymph nodes were seen in the field examined.
+
+Tissue sampling: FNA was not performed because the features were characteristic and the lesion is small.
+
+Impression: Esophageal subepithelial lesion at 28 cm arising from the muscularis propria, most consistent with leiomyoma.
+Recommendations: No further evaluation is needed while he remains asymptomatic.
+
+B. Sandoval-Achebe, MD (fictional)

@@ -1439,6 +1439,49 @@ routing reads no E/M in, the note's own evaluation wording (a sparse note still
 documents a visit, with its missing setting, status and basis); routine
 preprocedure work on a procedure day is not a separate E/M.
 
+Wider reading (2026-10-27, from an independently written 43-document
+synthetic corpus and fresh paraphrase tests; `gi-routing@4`, `gi-context@2`):
+- Service date: a labelled date (also a table row "Date of service | …"), in
+  ISO, US, "14 Oct 2026", "14-Oct-2026" or "October 14, 2026" form; only when no
+  labelled date exists, the note's own dated title ("GI visit - 10/20/2026") or
+  bare "Date:" field in its first 12 non-empty lines, never in a plan or
+  history section or beside a qualifier (prior, last, next …). A member's value
+  that differs from the document's is a conflict with both kept (5.2).
+- Structure: a numbered part ("PART 2 - PROCEDURE NOTE: EGD …") is read by the
+  label after its number, so it never inherits the previous part's plan
+  (routing too); "SMALL BOWEL CAPSULE ENDOSCOPY: INTERPRETATION AND REPORT" and
+  "PROCEDURE NOTE: <service>" are report titles; a "Study:" line is a procedure
+  line; a wrapped "Label: value" line stays one sentence.
+- Completion has a per-family endpoint: the cecum for a colonoscopy or a
+  capsule, beyond the pylorus for an EGD (or a PEG), deep cannulation for an
+  ERCP, the full examination for an EUS. It is read from routing's extent, from
+  the endpoint landmark stated reached, checked ("Extent reached: [X] Cecum")
+  or described as seen, or from deep cannulation; an insertion statement ("the
+  colonoscope was inserted into the rectum and advanced") is no extent (routing
+  too). A service without an endpoint (esophagoscopy, POEM, enteroscopy,
+  flexible sigmoidoscopy, physiology studies, a tube change) is incomplete only
+  when its discontinuation is documented, never from how far it went.
+- Routing disagreement: a performed service becomes uncertain only through a
+  contrary statement in today's report (negated or cancelled outside history,
+  indication and plan; planned or historical inside procedure, findings,
+  technique or impression). A planned repeat or an earlier examination named
+  elsewhere is another occurrence, never a doubt about today's acts.
+- Families: a PEG placed during an upper endoscopy is that EGD's act; an EGD
+  performed with an EUS is `included_in` the EUS (the EUS code includes the
+  examination: no code of its own is asked, its acts are still reconciled);
+  manometry, pH and capsule acts go to their own family whatever part names
+  them; an unnamed endoscope in upper GI anatomy is an EGD; an act that more
+  than one service could take goes to the one documented as performed.
+- Attributions: anesthesia given by an anesthesia professional, specimens sent
+  to a pathology or cytology service, a facility's charges or technical
+  component, radiology's interpretation; a sentence that denies it attributes
+  nothing.
+- Conflicts: a specimen recorded as collected (a nursing or specimen row)
+  beside the physician's denied biopsy, with no tissue-taking act documented,
+  is a biopsy conflict; a limit on further acts ("No tissue was sampled beyond
+  the containers listed") and an act noun named as a place ("not passed
+  through the newly deployed stent") deny nothing.
+
 It is advisory, like routing (5.3): it reads declared wording and cannot be
 complete for open prose. It is bounded (sentences, acts, lesions and services
 are capped; a cap reached is a recorded problem, never a silent truncation),
@@ -1471,7 +1514,11 @@ needs the service itself. **Second opinion:** when the code's own passage is
 about the very act or service matched (it overlaps that act's or service's
 evidence) and the routing-era reading of that passage hedges or denies it, the
 code is held with both readings; a doubt on a passage about something else (a
-fragment of a findings sentence, an earlier visit) does not decide. **Evidence
+fragment of a findings sentence, an earlier visit) does not decide, nor does a
+doubt that is only the routing-era reader's unresolved negation in a passage
+the inventory reads, clause by clause, as this service's own positive
+statement ("The examination was complete and was not discontinued"); a hedge,
+a denial or a cancellation always holds. **Evidence
 support** (`evidence.support`): a provider passage supports the code when it
 overlaps the documented act's evidence (for an office visit, when it is a
 statement of this visit, not of another time); when none does, CPT Studio
@@ -1484,7 +1531,8 @@ reconciles in a supported family, documented by the physician and not
 bundled, is covered by a selected, non-excluded proposal whose profile covers
 it, or listed as unresolved (`services.unresolved`, one per service and act
 kind; a service with no proposal at all is unresolved as a whole, except an
-office visit beside a same-day procedure). No code is added for an unresolved
+office visit beside a same-day procedure and a service included in another,
+and its unsupported acts are still named). No code is added for an unresolved
 item and no alternative is promoted. Conflicts → `services.conflicts` and a
 service-scoped question with both sides; missing documentation → every
 materially necessary question for that service, asked together (a sparse visit

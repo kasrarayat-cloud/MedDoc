@@ -1,0 +1,35 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+WESTBROOK REGIONAL HOSPITAL (fictional)
+Structured Colonoscopy Report
+
+Patient: Anneliese Okoro-Vance (fictional)          MRN: SYN-102590
+Date of service: 2026-10-02
+Place of service: Hospital outpatient department
+Endoscopist: Florentin Adjei-Hartley, MD (fictional)
+Anesthesia: MAC by the Westbrook anesthesia service (separate record)
+Indication: Diagnostic - hematochezia and a positive stool DNA test
+
+Extent reached:          [X] Cecum   [X] Terminal ileum   [ ] Other: ____
+Cecal landmarks:         [X] Appendiceal orifice   [X] Ileocecal valve
+Preparation (BBPS):      3-3-3 = 9
+
+Lesion 1
+Location:                Ascending colon, 10 cm above the ileocecal valve
+Description:             35 mm non-granular laterally spreading lesion with a central pseudo-depression
+Removed today:           [ ] Yes   [X] No
+Biopsy:                  [ ] Taken   [X] Not taken - deliberately not sampled to avoid submucosal fibrosis before resection
+Tattoo injection         [X] Performed   [ ] Not performed
+Tattoo details:          Carbon-particle ink, 1 mL in each of three quadrants, placed 3 cm distal to the lesion
+
+Other findings:          None. Normal terminal ileum.
+Complications:           None
+
+Assessment
+Large non-granular laterally spreading lesion of the ascending colon, not resected today. The site was tattooed for localization.
+
+Plan
+- The patient will be referred for EMR at the advanced endoscopy unit; the referral has been sent and the resection is tentatively booked for 2026-11-17.
+- Hold aspirin for five days before that procedure.
+
+F. Adjei-Hartley, MD (fictional)

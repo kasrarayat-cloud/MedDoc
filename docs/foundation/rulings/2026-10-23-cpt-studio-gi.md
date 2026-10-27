@@ -522,3 +522,33 @@ the work that depends on it is committed for review. Verbatim:
     correcting or clearing the metadata or by an addendum.
 12. **No qualified GI-coder adjudication is available to this session.** Every expectation in the regression corpus
     and the held-out acceptance set is an author expectation, labelled provisional; no accuracy percentage is claimed.
+13. **Routing's family doubt is narrowed to today's report** (refines 9). Routing reads a family from its NAME, so
+    its one-line family summary is often about another occurrence: a planned repeat in the plan ("Repeat colonoscopy
+    in three years"), an earlier examination in the indication ("found at an outside colonoscopy on 2026-09-03", "no
+    prior colonoscopy"). Read against the documented acts, that summary made clearly performed procedures uncertain
+    (7 of 43 corpus documents). It now holds a performed service only through a contrary statement in today's own
+    report: negated or cancelled outside history, indication and plan, or planned or historical inside procedure,
+    findings, technique or impression. Routing's own doubt about today's service (a hedge, an ambiguous box row)
+    still holds, as 9 says.
+14. **An unresolved negation the inventory resolves does not hold a code.** When the routing-era reader's only doubt
+    is a negation it could not resolve ("The examination was complete and was not discontinued") in a passage the
+    inventory reads, clause by clause, as this service's own positive statement (its performance, a performed act,
+    a completion read as complete), the code is not held for it; the detail names both readings. A hedge, a denial
+    or a cancellation still holds. This is the Elena 45385 hold the earlier repair left in place.
+15. **How three services are modelled** (provisional, for adjudication): a PEG placed during an upper endoscopy is
+    that EGD's act, not a feeding-tube service; an EGD performed with an EUS is kept and marked included in the EUS
+    (no code of its own is asked, its acts are still reconciled), where the corpus author modelled one EUS service;
+    a procedure documented as "PROCEDURE PERFORMED: transoral esophagoscopy … the intended EGD could not be
+    completed" is a performed esophagoscopy (no endpoint), where the corpus author expected an incomplete EGD. The
+    three differences are recorded with their reasons in cpt-studio/tests/corpus/services/known_differences.json.
+16. **The 43-document corpus is a development corpus.** The reader was repaired against it, so it is committed as a
+    regression guard (tests/test_services_corpus.py), never reported as an accuracy measure. The live acceptance set
+    (10 documents) is held out: it was written separately, and its documents and expectations were neither read
+    nor run through the reader while repairing. The repairing sessions saw only its file names, sizes, one-line
+    titles and source hashes (909be030 at 02:46Z, after the WIP 2 reader repairs; bc7df129 while taking over).
+17. **No CPT fact is asserted without a connected source.** The coverage catalogue no longer says ESD "has no
+    specific CPT code; reported as an unlisted procedure"; it says no code profile exists here and a coder decides.
+18. **One deployment owner.** At 02:51Z on 27 October 2026 the owner chose "Take over now" in session
+    meddoc-pro-01 (bc7df129) and stopped 909be030 (meddoc-pro-94), whose last commit was WIP 2 (9eb82f0d) and
+    whose refutation workflow (wf_ce4e77bb-c22) died with it before any lens finished. From then on bc7df129 is the
+    single owner of this branch, its install and its live verification.

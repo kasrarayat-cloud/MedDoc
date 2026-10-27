@@ -1,0 +1,24 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+LINDENFIELD UNIVERSITY HOSPITAL (fictional)
+ERCP REPORT
+
+Patient: Marisol Ekwueme-Thorne (fictional)       MRN: SYN-103172
+Date of service: 2026-10-12
+Place of service: Inpatient hospital
+Endoscopist: Cormac Delacroix-Ansah, MD (fictional)
+Anesthesia: General anesthesia by the department of anesthesiology (Dr. Rosalind Mbeki (fictional)); separately billed.
+Fluoroscopy: Images were obtained by the radiology technologist and interpreted by Torvald Nnaji, MD (fictional), radiology; radiological supervision and interpretation will be reported by radiology.
+
+Indication: Choledocholithiasis with obstructive pattern liver tests (bilirubin 3.9 mg/dL) after an episode of biliary colic. Gallbladder in situ. An EUS performed on 2024-03-08 had shown gallbladder sludge only.
+
+Procedure description:
+The duodenoscope was passed to the second portion of the duodenum and a native major papilla was identified. Deep biliary cannulation was achieved with a sphincterotome loaded with a 0.025-inch guidewire. The cholangiogram showed a common bile duct of 11 mm containing three filling defects up to 9 mm in size; the intrahepatic ducts were mildly dilated. A biliary sphincterotomy of about 10 mm was performed with blended current. The duct was swept four times with a 12 mm extraction balloon, delivering three stones and sludge into the duodenum. A final occlusion cholangiogram showed no residual filling defects and good drainage.
+No stent was placed. The pancreatic duct was neither cannulated nor injected. Rectal indomethacin 100 mg was given.
+
+Complications: None; no bleeding after sphincterotomy.
+
+Impression: Choledocholithiasis, cleared after biliary sphincterotomy and balloon stone extraction.
+Plan: Advance diet as tolerated; trend liver tests. General surgery consultation for laparoscopic cholecystectomy during this admission.
+
+C. Delacroix-Ansah, MD (fictional)

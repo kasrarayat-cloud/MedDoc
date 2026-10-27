@@ -1,0 +1,41 @@
+{
+  "schema": "cpt-studio-services-corpus-known-differences@1",
+  "note": "Readings that differ from the author's provisional expectations, kept on purpose with the reason. A GI coder's adjudication may settle either side.",
+  "documents": {
+    "svc-10-egd-savary-dilation": {
+      "differences": [
+        {
+          "kind": "act.missing",
+          "subject": "gi.egd dilation"
+        }
+      ],
+      "reason": "The dilation is read as performed, but its sentence names no site: the stricture is located only as '36 cm', and the reader does not turn a distance from the incisors into anatomy. The expectation names the esophagus."
+    },
+    "svc-14-esophagoscopy-stricture-not-traversed": {
+      "differences": [
+        {
+          "kind": "service.status",
+          "subject": "gi.egd"
+        },
+        {
+          "kind": "service.completion",
+          "subject": "gi.egd"
+        }
+      ],
+      "reason": "The document's own procedure line says 'PROCEDURE PERFORMED: Flexible transoral esophagoscopy with biopsy. The intended EGD could not be completed.' The reader records the performed service as an esophagoscopy, which has no endpoint, so it is performed rather than incomplete. The expectation models it as an incomplete EGD whose rendered service is an esophagoscopy. Both describe the same facts; which status a coder wants is for adjudication."
+    },
+    "svc-31-eus-limited-esophageal-wall": {
+      "differences": [
+        {
+          "kind": "act.missing",
+          "subject": "gi.eus moderate_sedation"
+        },
+        {
+          "kind": "service.extra",
+          "subject": "gi.egd"
+        }
+      ],
+      "reason": "The reader keeps the upper endoscopy as a performed service marked included in the EUS (included_in: the EUS code includes the examination, so no code of its own is asked), where the expectation models one EUS service. The moderate sedation documented in the header is therefore an act of the included EGD rather than of the EUS."
+    }
+  }
+}

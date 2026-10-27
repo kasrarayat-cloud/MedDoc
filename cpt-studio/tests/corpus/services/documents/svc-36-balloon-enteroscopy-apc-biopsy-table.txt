@@ -1,0 +1,30 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+PROCEDURE SUMMARY - DOUBLE-BALLOON ENTEROSCOPY
+Kestrel Point University Hospital (fictional), Small Bowel Unit
+
+Item | Detail
+Patient | Ignatius Abernathy-Oyo (fictional)
+MRN | SYN-103604
+Date of service | 2026-10-19
+Place of service | Hospital outpatient department
+Endoscopist | Rhiannon Achebe-Sorensen, MD (fictional)
+Anesthesia | General anesthesia, department of anesthesiology (separately billed)
+Route | Antegrade (oral)
+Depth of insertion | About 180 cm beyond the ligament of Treitz, mid jejunum; the ileum was not reached
+Indication | Recurrent overt small-bowel bleeding; capsule study showed jejunal vascular lesions and a mid-jejunal nodule
+
+LESIONS
+
+Lesion | Site | Description | Treatment | Specimen
+L1 | Proximal jejunum | 5 mm angioectasia, not bleeding | Argon plasma coagulation, 20 W | -
+L2 | Proximal jejunum | 3 mm angioectasia, not bleeding | Argon plasma coagulation, 20 W | -
+L3 | Mid jejunum | 8 mm smooth submucosal-appearing nodule | Cold forceps biopsies x 4 | Jar 1
+
+COMMENTS
+Both angioectasias were coagulated until blanched; neither was actively bleeding. The nodule in the mid jejunum was separate from the vascular lesions and was sampled for histology (jar 1, to the Kestrel Point pathology department (fictional)). No tattoo was placed. The overtube and enteroscope were withdrawn without difficulty.
+
+Complications | None
+Impression | Two non-bleeding proximal jejunal angioectasias ablated with APC; mid-jejunal nodule biopsied
+Plan | Await histology; continue iron replacement; hemoglobin check in two weeks
+Signed | R. Achebe-Sorensen, MD (fictional)

@@ -1,0 +1,31 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+GI PHYSIOLOGY LABORATORY - Brambleton University Hospital (fictional)
+High-Resolution Esophageal Manometry and 24-Hour pH-Impedance Study
+
+Patient: Fenella Okafor-Wainwright (fictional)      MRN: SYN-103925
+Date of service: 2026-10-20 (manometry and catheter placement); recording ended 2026-10-21
+Place of service: Hospital outpatient department
+Interpreting physician: Lucius Adebanjo-Kerr, MD (fictional)
+Indication: Chronic cough and throat clearing with intermittent heartburn; poor response to twice-daily PPI. Studies done off PPI for 7 days.
+
+PART A - HIGH-RESOLUTION ESOPHAGEAL MANOMETRY
+A solid-state 36-sensor catheter was placed transnasally. Ten supine and five upright 5 mL water swallows were recorded, followed by multiple rapid swallows.
+- Lower esophageal sphincter: basal pressure 14 mmHg; integrated relaxation pressure 9 mmHg (normal).
+- Esophagogastric junction morphology: type I.
+- Peristalsis: median distal contractile integral 1,450 mmHg-s-cm; 20% ineffective swallows; no failed or premature swallows.
+- Multiple rapid swallows: contraction reserve present.
+Conclusion: normal esophageal motility by Chicago Classification v4.0. The lower esophageal sphincter was located at 43 cm from the nares to guide pH-impedance catheter placement.
+
+PART B - 24-HOUR pH-IMPEDANCE MONITORING
+A combined pH-impedance catheter was then passed transnasally with the pH sensor 5 cm above the lower esophageal sphincter. The recording lasted 23 hours 40 minutes.
+- Acid exposure time: 3.1% (inconclusive range).
+- Total reflux episodes: 62 (acid 38, weakly acidic 24).
+- Mean nocturnal baseline impedance: 2,300 ohms.
+- Cough: symptom index 55%, symptom association probability 96%.
+Conclusion: borderline acid exposure with a strongly positive symptom association for cough.
+
+OVERALL INTERPRETATION
+Normal motility. Reflux-associated cough is likely despite borderline acid exposure; consider optimizing anti-reflux therapy and lifestyle measures before any surgical evaluation.
+
+L. Adebanjo-Kerr, MD (fictional)

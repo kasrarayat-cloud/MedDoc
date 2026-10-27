@@ -1,0 +1,29 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Foxglove Valley Hospital (fictional) - GI Endoscopy
+FLEXIBLE SIGMOIDOSCOPY
+
+Patient: Dashiell Amankwah-Berg (fictional)      MRN: SYN-102697
+Date of service: 2026-10-09
+Place of service: Hospital outpatient department
+Endoscopist: Ysolde Mukherjee-Grant, MD (fictional)
+Sedation: None; the patient declined sedation.
+
+History: 26-year-old man with three weeks of bloody diarrhea, six stools a day, and urgency. Stool culture, Clostridioides difficile toxin and ova and parasite studies were negative.
+
+Preparation: Two enemas on the morning of the procedure.
+
+Technique: The flexible sigmoidoscope was introduced through the anus and advanced to 40 cm, near the junction of the sigmoid and descending colon, with mild discomfort.
+
+Findings:
+- From the anal verge to 30 cm: continuous erythema, loss of the vascular pattern, friability with contact bleeding, and scattered erosions.
+- Above 30 cm to the extent of the examination: normal-appearing mucosa with a sharp demarcation.
+- Retroflexion in the rectum was not performed because of inflammation.
+
+Impression:
+1. Proctosigmoiditis extending to 30 cm, Mayo endoscopic subscore 2, most consistent with ulcerative colitis; biopsies were taken from the rectum and the sigmoid colon and sent to pathology.
+2. Normal mucosa from 30 to 40 cm.
+
+Recommendations: Mesalamine 1 g suppository nightly and oral mesalamine 4.8 g daily pending histology. Clinic review in two weeks.
+
+Y. Mukherjee-Grant, MD (fictional)
