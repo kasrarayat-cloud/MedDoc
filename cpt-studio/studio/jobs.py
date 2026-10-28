@@ -685,6 +685,13 @@ def stage_assess(job):
 
 SECOND_REVIEW_REASONS = ('no_proposal', 'not_covered')
 SECOND_REVIEW_MAX_CHARS = 20_000  # a longer excerpt is not sent (a second review is about one report, not a chart)
+# The states of a second review that conclusively never reached the provider, when its run says sent=False: recorded not
+# sent by the adapter (only while the request provably has not left), where its request could not be built, or where the
+# stale sweep (or an undo's close) settled a reservation that never reached the send; cancelled by a Stop before sending.
+# One whose outcome is unknown stays 'unknown', sent or not.
+NEVER_SENT_STATES = (models.ProviderRun.NOT_SENT, models.ProviderRun.CANCELLED)
+SECOND_REVIEW_EARLIER_CONTEXT = ('This document was read under earlier context rules: save a change to the encounter '
+                                 'context (or add an addendum) so it is read under the current ones, then ask.')
 
 
 def _second_review_items(assessment):
@@ -770,14 +777,20 @@ def _second_inputs(second):
 def _second_review_blocker(encounter, revision, context, assessment):
     """Why the one bounded second review cannot be asked for now, or '' when it can (5.11). The bounds are the ones the
     automatic second review kept (interpretations 10, 19, 22): once per revision and service date whatever its outcome
-    (only a reconciled unknown one releases another), only for the current assessment of a usable primary response,
-    only with a known, unconflicted service date, never while a request has an unknown outcome. stage_review2 checks
-    them again when it runs. Cheap checks first: the encounter view reads this on every refresh."""
+    - only a reconciled unknown one, or one that conclusively never reached the provider (NEVER_SENT_STATES, not sent),
+    releases another ask - only for the current assessment of a usable primary response read under the current context
+    rules, only with a known, unconflicted service date, never while a request has an unknown outcome. stage_review2
+    checks them again when it runs. Cheap checks first: the encounter view reads this on every refresh."""
     if busy(encounter):
         return 'Wait for processing to finish (or stop it) before asking for a second review.'
     if (assessment is None or revision is None or context is None or assessment.revision_id != revision.pk
             or assessment.context_id != context.pk):
         return 'There is no current assessment to review again.'
+    if context.version in EARLIER_CONTEXT_VERSIONS:
+        # Repair gi2 (eus2 F3): stage_review2 sends nothing for a context an earlier version recorded, so the offer
+        # never accepts an ask the stage then skips (after an install that bumped the context version, the ask was
+        # accepted, nothing was sent, the button came back and a second press was refused).
+        return SECOND_REVIEW_EARLIER_CONTEXT
     items, span = _second_review_items(assessment)
     if not items:
         return 'No documented service is left without a supported proposal.'
@@ -793,7 +806,10 @@ def _second_review_blocker(encounter, revision, context, assessment):
         return 'A second review was already made for this document and date.'
     earlier = models.ProviderRun.objects.filter(revision=revision, purpose=models.ProviderRun.SECOND_REVIEW,
                                                 service_date=run.service_date)
-    if earlier.exclude(state=models.ProviderRun.UNKNOWN, reconciled_at__isnull=False).exists():
+    # Repair gi2 (eus2 L1): one that conclusively never reached the provider - not sent, or cancelled before sending -
+    # used up the bound, so it could never be asked for again but by a new, paid primary request (an addendum).
+    if (earlier.exclude(state=models.ProviderRun.UNKNOWN, reconciled_at__isnull=False)
+            .exclude(state__in=NEVER_SENT_STATES, sent=False).exists()):
         return 'A second review was already requested for this document and date.'
     if _unreconciled_unknown(encounter):
         return 'A previous request has an unknown outcome; reconcile it before asking again.'
@@ -849,7 +865,14 @@ def second_review_status(encounter):
 
 def request_second_review(encounter, user):
     """Queue the ONE bounded second review for the current assessment, asked for by a workspace owner or reviewer
-    (owner decision 2026-10-27: never queued by an assessment). Refused with the reason when a bound stands."""
+    (owner decision 2026-10-27: never queued by an assessment). Refused with the reason when a bound stands.
+
+    The stage is keyed by the assessment and by how many second reviews of this revision and date conclusively never
+    reached the provider: each releases another ask (_second_review_blocker), which the key of the ask it answered must
+    not refuse. The count only grows (runs are never removed, and those states are final), and it keeps the key as short
+    as a Resume's suffixes need (Job.idempotency_key holds 200 characters). Two asks at once still queue one stage (the
+    row lock and the busy check), and a stage stopped before it ran recorded no run, so its key stands and Resume runs
+    it."""
     with transaction.atomic():
         encounter = _locked(encounter)
         revision, context, assessment = (encounter.current_revision, encounter.current_context,
@@ -859,9 +882,12 @@ def request_second_review(encounter, user):
             raise Refused(reason)
         items, _ = _second_review_items(assessment)
         clear_stop(encounter)
+        released = models.ProviderRun.objects.filter(
+            revision=revision, purpose=models.ProviderRun.SECOND_REVIEW,
+            service_date=assessment.provider_run.service_date, state__in=NEVER_SENT_STATES, sent=False).count()
+        key = f'review2:{revision.pk}:{assessment.pk}' + (f':after-unsent:{released}' if released else '')
         job = enqueue(Job.REVIEW2, encounter=encounter, revision=revision, context=context,
-                      provider_run=assessment.provider_run, key=f'review2:{revision.pk}:{assessment.pk}',
-                      requested_by=user)
+                      provider_run=assessment.provider_run, key=key, requested_by=user)
         if job.state != Job.QUEUED:
             raise Refused('A second review was already requested for this assessment.')
         audit.record(encounter.workspace, 'provider.second_review_requested', encounter=encounter, actor=user,
@@ -1175,8 +1201,10 @@ def _run_answers(run, revision, context):
     on the previous context: the run in use may have been requested for another date.
     Whatever that run's outcome: a setting or billing change that leaves the request
     unchanged re-checks and never re-sends the primary request (ARCHITECTURE 5.4), so a
-    failed or not-sent request is never re-sent behind a metadata save. The re-check may
-    still make the one bounded second review its revision and date have not had (5.11).
+    failed or not-sent request is never re-sent behind a metadata save - except that a
+    save settling a held member date conflict makes a request whose one attempt
+    conclusively never reached the provider (change_context, _attempt_owed). The re-check
+    may still make the one bounded second review its revision and date have not had (5.11).
     """
     if run is None or not run.request_sha256:
         return False
@@ -1228,13 +1256,40 @@ def _run_in_use(revision):
     return run
 
 
+def _attempt_owed(encounter, run):
+    """Whether ``run`` - the run in use - is a primary attempt that conclusively never reached the provider, so the
+    request it carries still has no outcome: the adapter recorded it not sent (it does so only while the coding request
+    provably has not left; ARCHITECTURE 5.4), it carries its request, it went through the send door (started_at: a
+    reservation the stale sweep settled is never the run in use) and it is no hold, and no attempt of that request in
+    this encounter was sent and FAILED (the run a predict records where its send door met such a request carries it and
+    stands: _not_resent_run). A run whose outcome is unknown, failed or succeeded is never one."""
+    if (run is None or run.purpose != models.ProviderRun.PRIMARY or run.state != models.ProviderRun.NOT_SENT
+            or run.sent or not run.request_sha256 or run.started_at is None or 'held' in (run.scope or {})):
+        return False
+    return not models.ProviderRun.objects.filter(
+        encounter=encounter, provider=run.provider, adapter_version=run.adapter_version,
+        request_sha256=run.request_sha256, state=models.ProviderRun.FAILED, sent=True).exists()
+
+
+def _settles_member_conflict(previous, context):
+    """Whether a member's save settles the member date conflict the encounter was held on (session interpretation 19):
+    the context it replaces, of the same revision, held the service date as a member conflict - so nothing was sent for
+    it, and the hold said that correcting or clearing the metadata makes the request for the agreed date - and the new
+    one does not."""
+    return (previous is not None and previous.revision_id == context.revision_id
+            and gi_context.is_member_conflict((previous.facts or {}).get('service_date'))
+            and not gi_context.is_member_conflict((context.facts or {}).get('service_date')))
+
+
 def change_context(encounter, user, values):
     """Apply member-supplied metadata, snapshot a new context and re-assess.
 
     Re-assesses with the run already in use only when that run answers exactly the
-    request the new context would send; otherwise re-predicts (an identical retained
-    result is still reused for free by the predict stage, and a date the revision was
-    never routed for is routed first).
+    request the new context would send - and, for a save that settles a held member
+    date conflict, is not a primary attempt that conclusively never reached the
+    provider (_attempt_owed: the request the hold deferred is made); otherwise
+    re-predicts (an identical retained result is still reused for free by the predict
+    stage, and a date the revision was never routed for is routed first).
     """
     with transaction.atomic():
         encounter = _locked(encounter)
@@ -1253,6 +1308,7 @@ def change_context(encounter, user, values):
             # document's own.
             raise Refused('This document could not be read to the end, so its context cannot be changed and nothing '
                           'is sent for it. Upload it again, shorter or split.')
+        previous = encounter.current_context  # read before this save replaces it (_settles_member_conflict)
         merged = dict(encounter.user_values or {})
         for key, value in values.items():
             if value:
@@ -1269,7 +1325,15 @@ def change_context(encounter, user, values):
                      fields=sorted(values), context=str(context.pk))
         last_run = _run_in_use(revision)
         clear_stop(encounter)
-        if _run_answers(last_run, revision, context):
+        # Refutation p2 sends2-0 (repair gi2): a save that settles a held member date conflict makes the request the
+        # hold deferred when the run in use is a primary attempt that conclusively never reached the provider. The
+        # settled context asks for that attempt's own request, so re-checking with it left the hold's promise ("the
+        # request is made for the agreed date") unkept and the encounter failed on a request never made. Only that
+        # save, once per such save: every other save that leaves the request unchanged still re-checks (5.4; round 3
+        # pipeline3:0), and the predict applies every send rule (a retained answer reused, the unknown-outcome block,
+        # the failed-request door, single flight).
+        owed = _settles_member_conflict(previous, context) and _attempt_owed(encounter, last_run)
+        if _run_answers(last_run, revision, context) and not owed:
             enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=last_run,
                     key=f'assess:{context.pk}:{last_run.pk}', requested_by=user)
         else:

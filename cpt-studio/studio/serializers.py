@@ -255,7 +255,7 @@ def _report_json(report):
 ACTIVITY_SUMMARIES = {
     'encounter.created': 'Document added', 'revision.extracted': 'Text extracted',
     'revision.addendum': 'Addendum added', 'context.changed': 'Encounter context changed',
-    'provider.sending': 'Provider request sent', 'provider.finished': 'Provider response recorded',
+    'provider.sending': 'Provider request started', 'provider.finished': 'Provider request finished',
     'provider.reused': 'Retained provider result reused (no new request)',
     'provider.second_review_requested': 'Second provider review requested by a reviewer',
     'provider.reconciled': 'Unknown provider outcome reconciled', 'assessment.created': 'Checks completed',
@@ -264,11 +264,31 @@ ACTIVITY_SUMMARIES = {
     'decisions.invalidated': 'Earlier decisions invalidated by a source revision',
     'account.provisioned': 'Account provisioned',
 }
+# Repair gi2 (the recovery lens): 'provider.sending' is recorded before the exchange, so it says only that the attempt
+# started, and 'provider.finished' is worded from the outcome its own row recorded (every revision records the state and
+# the HTTP status there). An attempt the adapter recorded as not sent, or whose outcome is unknown, read "Provider request
+# sent" and "Provider response recorded" beside a run the Provider runs card listed as not sent. Any other recorded value
+# keeps the neutral 'Provider request finished'.
+FINISHED_SUMMARIES = {'succeeded': 'Provider response recorded', 'failed': 'Provider request failed',
+                      'unknown': 'Provider outcome unknown: no complete response was recorded',
+                      'not_sent': 'Provider request not sent'}
+
+
+def _activity_summary(event):
+    summary = ACTIVITY_SUMMARIES.get(event.event, event.event)
+    data = event.data if isinstance(event.data, dict) else {}
+    state = data.get('state')
+    if event.event != 'provider.finished' or not isinstance(state, str) or state not in FINISHED_SUMMARIES:
+        return summary
+    status = data.get('http_status')
+    if state == 'failed' and isinstance(status, int) and not isinstance(status, bool):
+        return f'{FINISHED_SUMMARIES[state]} (HTTP {status})'
+    return FINISHED_SUMMARIES[state]
 
 
 def _activity_json(event):
     actor = event.actor.label() if event.actor else 'CPT Studio'
-    return {'event': event.event, 'summary': ACTIVITY_SUMMARIES.get(event.event, event.event),
+    return {'event': event.event, 'summary': _activity_summary(event),
             'actor': actor, 'actor_kind': event.actor_kind, 'created_at': _iso(event.created_at),
             'data': {k: v for k, v in event.data.items() if k in {'status', 'method', 'state', 'action', 'code',
                                                                   'kind', 'fmt', 'usage', 'http_status', 'pages',
