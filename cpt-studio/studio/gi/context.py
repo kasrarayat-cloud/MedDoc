@@ -1313,7 +1313,7 @@ def _dated_service_line(text: str, ls: int, le: int) -> Optional[_Candidate]:
     gap = name_end
     while gap < le and text[gap] in ' \t:,-–—':  # "Colonoscopy: 10/14/2026": the service's own field
         gap += 1
-    runs, excluded, pos = [], [], name_end
+    runs, excluded, pos, unplaced = [], [], name_end, []
     for at in _GAP_DATE.finditer(text, name_end, le):  # the dates after the name ("#2" or a clock is none)
         run = _first_value(text, at.start(), le, births=False) if at.start() >= pos else None
         if run is None:
@@ -1324,10 +1324,17 @@ def _dated_service_line(text: str, ls: int, le: int) -> Optional[_Candidate]:
             excluded.append((run, label.start() if label else run[0]))
             continue
         other = _other_field(text, gap, run[0])
-        if other is not None:
+        if other == _AFTER_VALUE:
+            unplaced.append(run)
+        elif other is not None:
             excluded.append((run, other))
             continue
         runs.append(run)
+    if unplaced:  # fr-dr:3: a date after another field's value ended - the line states a date it cannot place: it is
+        # asked (speaking against the labelled date, as a line with two dates does) and reads no date - its text before
+        # the first of its dates - so no member date agrees with it alone
+        cut = _strip_span(text, start, min([r[0] for r in runs] + [label for _, label in excluded]))
+        return _Candidate(_span(text, *cut), None, source, reading, 'unread') if cut[0] < cut[1] else None
     if not runs:  # the line's only dates are dates of birth or other fields' ("Colonoscopy DOB: 01/01/1998")
         # kept as evidence that reads no date - its text before the first of those dates - never dropped: dropped, the
         # document was left no dated text and any member date was taken, a date of birth too ("Exam: Colonoscopy
@@ -1372,10 +1379,37 @@ _LINE_DATE_FIELD = cues.rx(r'(?:date' + _DATE_TIME + r'|' + _DATE_LABEL + r')(?:
                            + r'[ \t]*+\))?+')
 
 
+# The final refutation, fr-dr:3: where another field's VALUE ends before a later date - a semicolon, a comma, a spaced
+# dash, a field break, a bracket it does not open, or the field's own date (_GAP_DATE).
+_VALUE_END = re.compile(r'[;,]|[ \t][-–—][ \t]|\t| {2,}')
+_AFTER_VALUE = -1  # _other_field: the date follows another field whose value had ended - neither that field's nor
+# certainly the line's own
+
+
+def _value_ended(text: str, start: int, end: int) -> bool:
+    """Whether a field's value that starts at ``start`` ends before ``end`` (fr-dr:3; a dated line is short, so the
+    bracket scan reads at most its own line)."""
+    if _VALUE_END.search(text, start, end) or _GAP_DATE.search(text, start, end):
+        return True
+    depth = 0
+    for ch in text[start:end]:
+        if ch in '([':
+            depth += 1
+        elif ch in ')]':
+            if not depth:
+                return True  # the field stood inside a bracket that closes here
+            depth -= 1
+    return False
+
+
 def _other_field(text: str, gap: int, start: int) -> Optional[int]:
     """Where the label of the field a date at ``start`` follows begins, when that field is another one than the line's
     own date field (P2DN's fix round, issue 1); None when no field label stands between ``gap`` (after the service's
-    name) and the date, or the label is a bare date field or a date-of-service label."""
+    name) and the date, or the label is a bare date field or a date-of-service label. _AFTER_VALUE when that other
+    field's value ended before the date (the final refutation, fr-dr:3: "Re: Colonoscopy - Referral date: 10/13/2026;
+    performed 10/21/2026" gave the performed date to the referral field, so the subject line was silenced and the
+    labelled 10/14 it contradicts was sent): the date is not that field's, and the line states it in a place this
+    service cannot read - it is asked, never the line's own value."""
     colon = None
     for colon in _GAP_FIELD.finditer(text, gap, start):
         pass
@@ -1387,7 +1421,7 @@ def _other_field(text: str, gap: int, start: int) -> Optional[int]:
     s, e = _strip_span(text, lo, colon.start())
     if s >= e or _LINE_DATE_FIELD.fullmatch(text, s, e) is not None:
         return None
-    return s
+    return _AFTER_VALUE if _value_ended(text, colon.end(), start) else s
 
 
 def _settings(text: str, lay: Layout) -> Optional[list[tuple[str, Span]]]:
