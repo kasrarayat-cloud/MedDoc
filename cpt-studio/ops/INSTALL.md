@@ -165,15 +165,20 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   queued or left running is finished by the new pair under the new rules, and
   nothing is sent that no member asked for. A predict the previous pair queued
   (for an upload, a date change, a Resume or a reconciliation) sends its one
-  request, for the context remade under the new rules (a member's conflicting
-  service date is held, not sent). A re-assessment never asks for the bounded
-  second review: a reviewer does (ARCHITECTURE 5.11). When no recorded answer
-  answers the request the remade context makes (the new rules read a date the
-  old ones could not, or the previous pair sent nothing), the predict a
-  re-assessment or the stale-stage sweep queues for it runs as any other (a
-  disabled provider, a request that cannot be built, a retained answer and an
-  unknown outcome are recorded and shown as such) but stops where it would
-  send, with the reason, for a member's Resume.
+  request, for the context remade under the new rules, unless a recorded
+  answer is reused, an unknown outcome waits for its reconciliation, or that
+  request was already sent for this document and failed (a not-sent run then
+  names that failure; nothing is sent again); a member's conflicting service
+  date is held, not sent. A re-assessment never asks for the bounded second
+  review: a reviewer does (ARCHITECTURE 5.11).
+  When no recorded answer answers the request the remade context makes (the
+  new rules read a date the old ones could not, or the previous pair sent
+  nothing), the predict a re-assessment or the stale-stage sweep queues for it
+  runs as any other (a disabled provider, a request that cannot be built, a
+  retained answer, an unknown outcome and a request that already failed for
+  this document are recorded and shown as such) but stops where it would
+  send, with the reason, for a member's Resume (the encounter reads Stopped;
+  the Resume sends that request once).
   Encounters with nothing in flight are neither reprocessed nor sent until a
   member acts. To install with nothing in flight, let the queue drain (or Stop
   the encounters) before `app`.

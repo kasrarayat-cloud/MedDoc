@@ -199,7 +199,15 @@ revision's newest finished request, also when a Stop or an expired stage
 cancelled the assess that would have used it; a reconciled unknown outcome is
 not, so the attempt the reconciliation released is still made, and neither is a
 reserved run the stale sweep settled as not sent (it was never sent), nor a
-member date conflict's hold. The
+member date conflict's hold. A member service date that differs from the
+document's is that conflict: nothing is built, reused or sent (a `not_sent` run
+held for it, and the date question asked) until the metadata is corrected or
+cleared or an addendum settles it. A date the document leaves in question (a
+conflict within the document, or dated text the service cannot read or place)
+is no date: the request goes out without a date line, and a member's answer
+makes a second, dated request. The answer must be one of the dates the document
+states; where its dated text reads no calendar date, any member date is a
+conflict until an addendum dates the encounter (ARCHITECTURE 5.2). The
 document's own facts are read again inside this request under a
 `CONTEXT_REQUEST_SECONDS` wall clock; past it the change is refused (409) and
 nothing is changed. 409 while a stage is queued or running, before the text
@@ -234,7 +242,13 @@ stage starts and no provider request is sent while it stands. Resume (when
 `pipeline.can_resume`): lifts the Stop and re-runs the stage it cancelled, with
 the current context. A stage the system cancelled (it expired in the queue, or
 a worker stopped mid-stage) is resumable the same way; `pipeline.stopped_by_member`
-is false then, and the stage's `error` records what happened. A predict whose
+is false then, and the stage's `error` records what happened. So is the predict
+an upgrade queues when it remakes a context the installed revision recorded at a
+stage that never sends (an assess queued before the swap or resumed after it, or
+the stale sweep's settlement of a predict): it runs as any predict but stops
+where it would send, with the reason as its `error` ("Nothing was sent: after an
+upgrade this document was read again under the current rules, and ... Resume to
+send it."), and the Resume sends that request once (ARCHITECTURE 5.12). A predict whose
 provider outcome was already recorded when its worker stopped is settled by that
 outcome instead, so a Resume never re-sends a request that already failed. Reconcile: `{"provider_run_id": "uuid", "note": "..."}`
 (note 12–2,000 characters) after an `unknown` outcome; allows exactly one new
@@ -264,10 +278,13 @@ confirmed exclusion, which was never reinstated).
 `{"kind": "draft|reviewed", "fmt": "txt|csv"}` → `201 {"id", "filename", "sha256", "download_url"}`;
 409 with `details.blockers` when a reviewed report is not ready. The download
 streams the stored bytes as an attachment; its sha256 equals the response's.
-Format `cpt-studio-report@3`: the CSV's `decided_at` is the reviewer's own
+Format `cpt-studio-report@4` (the documented-service sections and columns of
+ARCHITECTURE 5.8 added to `@3`): the CSV's `decided_at` is the reviewer's own
 decision time; a carried decision also fills `decision_carried_from` and
 `decision_carried_at`. A CSV with no proposals has one placeholder row
-(`item_list` = `none`) carrying the report kind and SYNTHETIC. In both formats a
+(`item_list` = `none`) carrying the report kind and SYNTHETIC, before the
+encounter rows (`coding_completeness`, and one per unresolved service and per
+conflict). In both formats a
 C0 control character other than tab and line breaks, DEL and a C1 control are
 shown as `\xNN` (two lowercase hex digits), so no rendering of a file shows a line
 or row the file does not contain; a TXT line break of any form continues the

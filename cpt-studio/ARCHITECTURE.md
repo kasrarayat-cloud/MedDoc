@@ -346,7 +346,90 @@ member value that differs from a single documented value is a conflict**
 neither is used until they agree (2026-10-27: a member-entered service date 28
 years before the documented one had been used for every dated check, for the
 time readings and in the provider request). Dates read as ISO, US, "October 20,
-2026" and day-month-year ("20 October 2026", "20 Oct 2026").
+2026" and day-month-year ("20 October 2026", "20 Oct 2026", "20-Oct-2026").
+
+**The service date** (refutation r1 and its CONTEXT rounds 1-3, 2026-10-27;
+`_service_dates`, `_service_date_fact`). Every dated candidate outside a plan
+or history section is either the note's own date or kept as documented
+evidence, never dropped (a dropped candidate had let a member's 1998 date, or
+another occurrence's date, be sent):
+- labelled dates: a date-of-service label ("Date of service / procedure /
+  visit / encounter", "DOS", "Procedure date", "Visit date"), which may name
+  the time ("Date/Time of Service", "DOS/Time", "Visit Date & Time") and be
+  followed by a clock. A value the reader does not read as a date (a weekday
+  before it, a two-digit year, dashes, dots, year-first slashes, a day-first
+  date, "20th of October") is found by a scan - the label's own field on its
+  line, the same column of the next row under a label heading a table column,
+  or the next non-blank line under a label ending its line - and kept as
+  unread evidence; a value that is no calendar date ("02/30/2026") likewise;
+- dated titles in the first 12 non-empty lines: "<words> visit | encounter |
+  consultation | consult | note | report" with its date (or with the date
+  alone on the next line), a bare "Date:" line, and a subject line ("Re:",
+  "Regarding:", "Subject:") naming the encounter;
+- dated service lines near the top: a line naming a service this release codes
+  that ends with a date ("Colonoscopy - 10/14/2026"); that date is the line's
+  own only when no other field or date stands between the service's name and
+  it, and a date before the name is never its value.
+
+Each candidate reads as the note's own, unplaced (it may be the date), aside
+(another occurrence's) or another document's:
+- a label is aside when its own words, or a word attached to it, name another
+  occurrence ("Outside procedure date", "Prior DOS", "... (scheduled)",
+  "09/03/2026, outside facility", a bracket a history word opens after the
+  date), and unplaced when a qualifier stands across another field's label, a
+  sentence end or a field break, or when the label carries words this service
+  cannot place ("Initial visit date", "Referring visit date"). A qualifier
+  opening a field about something else ("Last name:", "Next colonoscopy:
+  10/2029") or with a date of its own nearer to it is passed over. Before a
+  capitalised label written one space after a lower-case word ("... colon
+  polyps Date of service:", a flattened header row) the words are another
+  field's value: a qualifier among them holds the date (unplaced). The line
+  above a label that opens its line is read too: a field label ending that
+  line with a qualifier heads the date ("Outside colonoscopy:" over "Procedure
+  date: 09/03/2026": aside); a field with a value, a heading, a title or a
+  sentence carrying a qualifier ("Next procedure: Colonoscopy", "Scheduled:
+  Yes", "OUTSIDE COLONOSCOPY") holds it, unless the qualifier is part of a
+  coded service's name ("Follow-up visit"). A phrase after the date that wraps
+  onto the next line in lower case or in a bracket is read there too;
+- only the first title naming this note can be its heading (own; unplaced
+  when qualified: "GI follow-up visit - 10/20/2026"). A title naming another
+  discipline's document - pathology, cytology, a biopsy, specimen or
+  laboratory report, radiology or imaging, anesthesia, nursing - is never the
+  heading, whatever its title word ("Surgical pathology consultation:
+  10/17/2026"); a coded service's name speaks only for the words it covers
+  ("Colonoscopy pathology report" is a pathology report). Neither is a report
+  title naming no coded service ("Procedure report - 10/14/2026"). A subject
+  line is unplaced; a later unqualified title is own beside an own heading;
+- a dated service line is evidence only, except beside a bare "Date:" line,
+  which names no encounter (a letter's date): there every dated line naming
+  the service, a sentence's included, is a candidate it must agree with.
+
+The date is the note's own read labelled dates when they agree, or, with
+none, its own read title - only when every candidate that could speak for this
+note's date agrees: beside an own label, every unplaced or unread label, the
+own title, a qualified first title and a subject line; beside an own title,
+every labelled date (one set aside as another occurrence's too, which the
+reader may have misread), a subject line and another document's title. A
+difference is a conflict with every side kept (the values listed when all are
+read): a title and a label that differ are asked, never a silent choice of the
+stronger source. With no usable own date every candidate is kept as evidence
+and the date is asked (`origin=missing`, the note says why). The candidates are
+compared by identity, so the work is linear in the labelled dates.
+
+A member date settles the date only when it agrees with the document: against
+a documented date it must equal it (otherwise it is a member conflict, and
+nothing is built or sent for the request: session interpretation 19); against
+a conflict within the document it must be one of the listed dates; against
+kept evidence it must be a date some candidate states as its own value - each
+candidate's evidence holds only its label, title or line and its own value, so
+a date of birth written beside the date of service ("DOS: 10/14/26 DOB:
+01/01/1998", a table whose header names both) is never one, and evidence that
+reads no calendar date holds every member date until the document is amended
+or the value cleared. With no dated evidence any member date supplies the
+fact. An agreeing member value is stored as the member's (`origin=user`, no
+evidence). A date asked of the member is no date in the provider request: the
+predict sends the request without a date line, and the member's answer makes a
+second, dated request (5.4: only a member conflict holds the request).
 
 ### 5.3 `studio/gi/profiles` + `studio/gi/detect` — routing
 
@@ -1015,8 +1098,10 @@ Send discipline (`jobs.py`): live mode requires `CPT_STUDIO_PROVIDER_MODE=live`,
 a configured `CPT_STUDIO_AUTHORIZATION_REF`, an active owner/reviewer
 membership, and a synthetic-attested revision. A `ProviderRun` is written
 `reserved` before any network I/O; single-flight via a PostgreSQL advisory
-lock; no automatic retry; `unknown` (sent, no response) blocks resubmission
-until a member records a reconciliation note. **Reuse**: if a `succeeded`
+lock; no automatic retry; `unknown` (sent, no response) blocks every further
+send for that encounter until a member records a reconciliation note (another
+encounter's identical request is not blocked, as on the installed revision:
+refutation phase 1 sends-3, a known limit). **Reuse**: if a `succeeded`
 run exists for the same provider + adapter version + request sha256, it is
 reused (`reused_from`) and no paid call is made. **Never re-sent after a
 failure**: a request the encounter already sent (any revision, whatever it was
@@ -1483,12 +1568,12 @@ preprocedure work on a procedure day is not a separate E/M.
 
 Wider reading (2026-10-27, from an independently written 43-document
 synthetic corpus and fresh paraphrase tests; `gi-routing@4`, `gi-context@2`):
-- Service date: a labelled date (also a table row "Date of service | …"), in
-  ISO, US, "14 Oct 2026", "14-Oct-2026" or "October 14, 2026" form; only when no
-  labelled date exists, the note's own dated title ("GI visit - 10/20/2026") or
-  bare "Date:" field in its first 12 non-empty lines, never in a plan or
-  history section or beside a qualifier (prior, last, next …). A member's value
-  that differs from the document's is a conflict with both kept (5.2).
+- Service date: read by the context (5.2, "The service date"): the note's own
+  labelled dates, or with none its own dated title or bare "Date:" field in its
+  first 12 non-empty lines, and only when every other candidate that could
+  speak for the note's date agrees; otherwise the date is asked, with every
+  candidate kept as evidence. A member's value that differs from the
+  document's is a conflict with both kept.
 - Structure: a numbered part ("PART 2 - PROCEDURE NOTE: EGD …") is read by the
   label after its number, so it never inherits the previous part's plan
   (routing too); "SMALL BOWEL CAPSULE ENDOSCOPY: INTERPRETATION AND REPORT" and
@@ -1620,8 +1705,9 @@ stay distinct: only practitioner sources are connected.
 ### 5.11 The bounded second review
 
 When an assessment leaves a documented service (or act) of a supported family
-without a supported proposal, the encounter offers ONE second review, and a
-workspace owner or reviewer asks for it (`POST .../second-review`,
+without a supported proposal, and both readers read that item as done today
+(5.12, second review gate), the encounter offers ONE second review about the
+items so marked, and a workspace owner or reviewer asks for it (`POST .../second-review`,
 `jobs.request_second_review`; the encounter view's `second_review` says whether
 it can be asked for and why not). An assessment never queues one: owner
 decision 2026-10-27 (narrow, install-first), after refutation r1 found the
@@ -1629,7 +1715,10 @@ reader's misreadings each turning into an automatic paid request. The request
 queues ONE `review2` job (idempotency key `review2:<revision>:<assessment>`)
 under the bounds the automatic one kept (`jobs._second_review_blocker`): never
 while a stage is queued or running, never for a revision and date that already
-had one, whatever its outcome (a reconciled unknown one releases another), only
+had one, whatever its outcome (a reconciled unknown one releases another; a run
+recorded as not sent or cancelled counts too, so a later ask for that revision
+and date is refused - a known limit - while a cancelled one that is still the
+latest stage can be resumed and then runs once), only
 for the current assessment of a primary request that succeeded and was not
 refused whole, only with a known, agreed service date, never while an outcome
 is unknown, never when its request repeats one the provider already answered
@@ -1645,7 +1734,7 @@ provider the text that documents those services (the services' report parts,
 ≤ 20,000 characters) with the date line, under the same send discipline as
 predict (`jobs._send`: single-flight advisory lock, the run written reserved
 before any I/O, Stop observed, no automatic retry, unknown outcomes recorded
-and blocking every further send until reconciled; an identical retained
+and blocking every further send for the encounter until reconciled; an identical retained
 second review is reused, not resent). `ProviderRun.purpose = second_review`,
 `ProviderRun.scope` = the excerpt offsets, the primary run and the items.
 The assessment that follows reads both runs (`Assessment.second_run`): the
@@ -1761,12 +1850,15 @@ rule, never a sentence patch). The rules this added, by module:
   absent; a member conflict is worded as one in the visit's own questions.
 - Context, refutation r1: a member value against a fact the document labels but this service cannot use (a labelled
   date that is no calendar date, a place-of-service code it does not recognise) is a member conflict with both sides
-  kept - never a silent replacement that is sent or that makes a held visit ready.
-- Context (`studio/gi/context.py`): only the first dated title line near the top can be the note's own date (a
-  qualified first title gives none; another unqualified dated title with another date is a conflict); a member value
-  settles a document-internal conflict only by choosing one of its values; a member conflict is described as one
-  (`is_member_conflict`, one predicate for every reader).
-- Second review gate (`engine._routing_agrees`, refutation r1): a second review is paid for only an unresolved item
+  kept - never a silent replacement that is sent or that makes a held visit ready. Dated text the reader does not read
+  as the date, or cannot place, is kept as evidence a member date must agree with (5.2).
+- Context (`studio/gi/context.py`): the service date is the rule of 5.2 ("The service date", CONTEXT rounds 1-3): every
+  candidate is the note's own or kept as evidence; only the first title naming this note can be its heading; a title
+  and a label that differ are asked; a member value settles a document-internal conflict only by choosing one of its
+  values, and agrees with kept evidence only through a date some candidate states as its own value; a member conflict
+  is described as one (`is_member_conflict`, one predicate for every reader).
+- Second review gate (`engine._routing_agrees`, refutation r1): a second review is offered (and, when a reviewer asks,
+  paid for) only about an unresolved item
   both readers read as done today - the routing-era reading of the item's own passage is performed (or its clause states
   it done and only routing's family summary doubts the service), or it is silent beside the strict check-box and
   form-field rule; a whole service needs routing's family reading performed. Each unresolved item records the answer
@@ -1785,9 +1877,24 @@ rule, never a sentence patch). The rules this added, by module:
 - Upgrade, refutation r1 (migrate lens): a context the installed revision recorded (`gi-context@1`, which kept a
   member's value as plain metadata) is remade under the current rules - bounded, as a member's change does - before any
   stage sends or assesses with it (`jobs._remade_context`, audit `context.remade`); a second review never runs on it.
+  Then (round ec5, migrate-5, and its skeptic; 5820f21b5, 6753a4d11, d5efff7c8): when the run in use answers the
+  remade context's request, the encounter is re-assessed with it; a predict a member's action queued (an upload, a date
+  change, a Resume, a reconciliation), or a remade member date conflict, goes on as any predict (the conflict is held);
+  a stage that never sends - an assess the installed pair queued or a member resumed, or the stale-stage sweep's
+  settlement of its predict - queues a predict (key `predict:<context>:after-upgrade`) that runs as any other (a
+  disabled provider, a request that cannot be built, a retained answer, an unknown outcome to reconcile, and a request
+  already sent for this document that failed, which records a not-sent run naming that failure, are each recorded and
+  shown as themselves) and stops only where it would send: the stage is cancelled with its reason, the encounter reads
+  `stopped`, and a member's Resume sends that request once. The reason says the request "differs from the one sent
+  before" only when the run in use carries another request that was sent (provider, adapter and body compared, as
+  `_run_answers` compares them; `REMADE_REQUEST_MESSAGE`), else that "no provider answer is recorded for the request"
+  (`REMADE_UNANSWERED_MESSAGE`). So nothing is sent at the swap that no member asked for.
 - Jobs (`studio/jobs.py`): nothing is built, reused or sent while the service date is a member-vs-document conflict
-  (session interpretation 19; the not-sent run carries `scope.held`, and the encounter waits on the date question);
-  no second review after a primary response refused whole, nor without a known service date.
+  (session interpretation 19; the not-sent run carries `scope.held`, and the encounter waits on the date question). A
+  date the document leaves in question (a conflict within the document, or missing with dated evidence) is no date:
+  the request is sent without a date line, and a member's answer makes a second, dated request. The bounded second
+  review is sent only when a workspace owner or reviewer asks for it (8985dde42; 5.11), never after a primary response
+  refused whole, nor without a known service date.
 - Reports (`cpt-studio-report@4`): UNRESOLVED and CONFLICTS print "none" only after a consistent reconciliation (the
   snapshot records `documented.reconciliation`: missing, inconsistent, partial or reconciled); every passage the new
   sections print is re-checked against the revision text; each provider run is "used by this assessment" only when
@@ -1814,9 +1921,11 @@ static roots. Provider credentials never reach the browser, logs or exports.
 | GET | `encounters/<id>` | full state: revision text + pages + extraction, context facts, routing summary, assessment (proposals by list, checks, clarifications), current decisions + history, jobs, provider runs (no secrets), activity, readiness |
 | POST | `encounters/<id>/decisions` | `{proposal_id, action, note, acknowledgement}` |
 | POST | `encounters/<id>/addenda` | `{text, clarification_id?, synthetic_attestation}` → new revision |
-| POST | `encounters/<id>/context` | `{service_date?, setting?, billing_context?}` → new context + assess |
+| POST | `encounters/<id>/context` | `{service_date?, setting?, billing_context?}` → new context; re-assessed with the run in use when it answers the new request, else re-predicted (a member date conflict is held: nothing is sent; 5.4) |
 | POST | `encounters/<id>/stop` | stop queued/running stages (before send) |
+| POST | `encounters/<id>/resume` | re-run the current revision's latest stage when it was cancelled (a Stop, the stale-stage sweep, a queue expiry, or the upgrade's predict that stopped where it would send) |
 | POST | `encounters/<id>/reconcile` | `{provider_run_id, note}` → allow one new attempt after `unknown` |
+| POST | `encounters/<id>/second-review` | a workspace owner or reviewer asks for the one bounded second review of the current assessment (5.11); 409 with the reason a bound stands |
 | POST | `encounters/<id>/reports` | `{kind, fmt}` → artifact id + sha256 |
 | GET | `reports/<id>/download` | stored bytes, attachment |
 | GET | `encounters/<id>/original` | original upload bytes, attachment |
