@@ -18,6 +18,8 @@ df-d:3  (fr-dr:1 with fr-dr:0) a date-of-service column cell of digits that are 
         made the unplaced row state no date: silent, where c3c034a08 asked.
 df-d:2  (fr-dr:2) any bracket but a format after a subject line's "Date" or date-of-service label made the field
         another field's, so "Date (performed): 10/21/2026" was silenced and the labelled 10/14 it contradicts sent.
+df-d:4  (fr-di:0, fr-dr:4) a date of birth beside a qualifier no longer passed the qualifier over, so the labelled date
+        was read as another occurrence's - silent - and another plain label's date was sent.
 
 Synthetic text only; no network (the suite's FakeProvider).
 """
@@ -378,3 +380,90 @@ class BracketThatIsNoFormatRequestTests(EndToEnd):
         self.assertEqual(self.dates_sent(encounter_id), [[]])
         self.set_context(encounter_id, {'service_date': '2026-10-21'})
         self.assert_never_sent(encounter_id, '2026-10-21')
+
+
+# --- df-d:4: a date of birth beside a qualifier makes the labelled date unplaced (asked), never another occurrence's -----
+
+QUALIFIERS = ('Repeat', 'Next', 'Planned', 'Outside', 'Index', 'Prior', 'Recent')
+BEFORE_FORMS = ('{Q} colonoscopy for Synthetic, Alex (DOB 01/01/1998) Procedure date: 10/14/2026',
+                '{Q} colonoscopy (DOB 01/01/1998) Procedure date: 10/14/2026',
+                '{Q} (DOB 01/01/1998) DOS: 10/14/2026',
+                '{Q} colonoscopy, Synthetic, Alex, born 01/01/1998, Date of service: 10/14/2026')
+AFTER_FORMS = ('Procedure date: 10/14/2026 for Synthetic, Alex (DOB 01/01/1998) {q}',
+               'Procedure date: 10/14/2026 (DOB 01/01/1998) {q}',
+               'Procedure date: 10/14/2026, for Synthetic, Alex, {q} DOB 01/01/1998')
+ADDENDUM = '\nAddendum\nDate of service: 10/21/2026\n'
+
+
+class DateOfBirthBesideAQualifierTests(DateAssertions, SimpleTestCase):
+    """df-d:4 (a3774bcb0, the final refutation's fr-di:0 and fr-dr:4): a date of birth between a qualifier and a labelled
+    date - before the label ("Repeat colonoscopy for Synthetic, Alex (DOB 01/01/1998) Procedure date: 10/14/2026"), or
+    between the date and a qualifier after it, or after that qualifier nearer to it than the date - had made c3c034a08
+    pass the qualifier over (it read the date of birth as the qualifier's own date). The fix round rightly stopped that
+    (a date of birth dates no occurrence: the office visit's planned 11/04 was sent), but the qualifier was then read as
+    attached to the label: another occurrence's date, which never speaks. So "Date of service: 10/21/2026" in an
+    addendum was documented and sent with 45385 ready where c3c034a08 asked (the two labels differ), also where the
+    installed revision asked (history words: "Outside colonoscopy (DOB ...) Procedure date:"). A date of birth between
+    a qualifier and the date neither passes the qualifier over nor attaches it: the date reads 'beside' - it speaks
+    against another labelled date (asked, as at c3c034a08), and as it may be another occurrence's it is never a value a
+    documented conflict lists nor a member's answer (held, as at 004bf808c: an office visit's member answer 11/04 is
+    never taken)."""
+
+    def test_beside_another_labelled_date_the_date_is_asked(self):
+        for qualifier in QUALIFIERS:
+            for form in BEFORE_FORMS + AFTER_FORMS:
+                line = form.format(Q=qualifier, q=qualifier.lower())
+                text = HEAD + 'Colonoscopy report\n' + line + '\n' + COLO_PLAIN + ADDENDUM
+                with self.subTest(line=line):
+                    self.assert_never(text, '2026-10-21', '2026-10-14')
+                    self.assertIn(date_fact(text).origin, ('conflict', 'missing'))
+                    self.assert_member_date(text, '2026-10-21')
+                    self.assert_member_conflict(text, '2026-10-14')  # it may be another occurrence's
+                    self.assert_member_conflict(text, ELENA_DATE)
+
+    def test_the_verifier_s_smallest_forms(self):
+        for text in (HEAD + 'Repeat (DOB 01/01/1998) DOS: 10/14/2026\nDOS: 10/21/2026\n',
+                     HEAD + 'Outside colonoscopy (DOB 01/01/1998) Procedure date: 10/14/2026\nDate of service: 10/21/2026\n'
+                     + COLO_PLAIN):
+            with self.subTest(text=text.splitlines()[1]):
+                self.assert_never(text, '2026-10-21')
+                self.assertIn(date_fact(text).origin, ('conflict', 'missing'))
+
+    def test_controls_the_fix_round_s_office_and_recall_lines_send_nothing(self):
+        # fr-di:0 and fr-di:1: a planned or recall date beside a date of birth is still never the note's own
+        for line, beside in (('Repeat colonoscopy for Synthetic, Alex (DOB 01/01/1998) Procedure date: 11/04/2026', True),
+                             ('Procedure date: 11/04/2026    DOB: 01/01/1998    Status: Scheduled', False),
+                             ('Due (DOB 01/01/1998) DOS: 11/04/2026', True)):
+            text = HEAD + 'GI office visit\n' + line + '\nAssessment and plan: colonoscopy will be scheduled.\n'
+            with self.subTest(line=line):
+                self.assert_never(text, '2026-11-04')
+                self.assert_member_conflict(text, ELENA_DATE)
+                if beside:  # read beside the qualifier: the planned date is never the member's answer (as at 004bf808c)
+                    self.assert_member_conflict(text, '2026-11-04')
+        text = (HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\n' + COLO_PLAIN
+                + 'Procedure date: 10/14/2029 for Synthetic, Alex (DOB 01/01/1998) follow-up\n')
+        self.assert_never(text, '2029-10-14')
+        self.assert_member_conflict(text, '2029-10-14')
+        self.assert_member_date(text, '2026-10-14')
+        # no date of birth: the qualifier attached to the label still makes it another occurrence's
+        text = HEAD + 'Colonoscopy report\nRepeat colonoscopy for Synthetic, Alex Procedure date: 10/14/2029\n' \
+            + COLO_PLAIN + 'Date of service: 10/14/2026\n'
+        self.assert_document(text, '2026-10-14')
+
+
+class DateOfBirthBesideAQualifierRequestTests(EndToEnd):
+    OFFICE = (HEAD + 'GI office visit\nRepeat colonoscopy for Synthetic, Alex (DOB 01/01/1998) Procedure date: 11/04/2026\n'
+              'Assessment and plan: colonoscopy will be scheduled.\n')
+
+    def test_the_office_line_s_planned_date_is_never_sent(self):
+        encounter_id = self.finished(self.OFFICE)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.set_context(encounter_id, {'service_date': '2026-11-04'})
+        self.assert_never_sent(encounter_id, '2026-11-04')
+
+    def test_q1_no_date_is_sent_where_the_labels_differ(self):
+        for line in ('Repeat colonoscopy for Synthetic, Alex (DOB 01/01/1998) Procedure date: 10/14/2026',
+                     'Outside colonoscopy (DOB 01/01/1998) Procedure date: 10/14/2026'):
+            with self.subTest(line=line):
+                encounter_id = self.finished(HEAD + 'Colonoscopy report\n' + line + '\n' + COLO_PLAIN + ADDENDUM)
+                self.assertEqual(self.dates_sent(encounter_id), [[]])

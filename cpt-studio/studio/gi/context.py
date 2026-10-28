@@ -343,6 +343,7 @@ class _Candidate:
     value: Optional[str]  # ISO date; None when the text is no calendar date or not read as one
     source: str  # 'label' (a date-of-service label) | 'title' (a dated title or "Date:" line) | 'field' ("Re: ...")
     reading: str  # 'own' | 'unplaced' (it may be the date) | 'aside' (another occurrence's) | 'other' (another document)
+    # | 'beside' (it may be the date or another occurrence's: a qualifier stands beside it across a date of birth, df-d:4)
     # 'read' | 'invalid' | 'unread' | 'empty' - a date-of-service field that states no date of its own (rule N3, P2DN's
     # fix round, issue 6): the label alone, never its field - or a dated line whose dates are all another field's or
     # dates of birth, its text before them; evidence that reads no date when the note states none, and never speaking
@@ -389,7 +390,7 @@ _OCCURRENCE_NOUN = cues.rx(r'\b(?:services?|procedures?|visits?|encounters?|appo
 _BRACKET_HISTORY = cues.rx(r'[ \t]*+[(\[][ \t]*+(?:' + '|'.join(w for _, w in _HISTORY_WORDS) + r')\b')
 _LEFTOVER_WORD = re.compile(r'[A-Za-z]{2,}')
 _THIS_SERVICE = tuple(p for _, p in cues.SERVICE_PATTERNS) + (cues.EM_VISIT, cues.TODAY)
-_READING = {'own': 'own', 'unplaced': 'unplaced', 'another': 'aside'}
+_READING = {'own': 'own', 'unplaced': 'unplaced', 'another': 'aside', 'beside': 'beside'}
 
 
 def _opens_field(text: str, label_start: int, label_end: int) -> bool:
@@ -564,7 +565,12 @@ def _line_reading(text: str, label_start: int, label_end: int, date_start: int, 
     # qualifier and the date passes nothing over (it dates no occurrence; "Repeat colonoscopy for ... (DOB 01/01/1998)
     # Procedure date:", "... DOB: 01/01/1998    Status: Scheduled"). A HISTORY word opening a field about something else
     # ("Outside records:", "Recent labs:") is still passed over: the installed revision never read those words.
-    reading = 'own'
+    # The differential round, df-d:4: nor does a date of birth attach the qualifier - standing between it and the label,
+    # between the date and it, or after it nearer to it than the date, it leaves the qualifier beside the date ('beside':
+    # it speaks against another labelled date - asked - but is never a member's answer, as it may be another
+    # occurrence's). Read as attached, the date was another occurrence's, which never speaks, and "Date of service:
+    # 10/21/2026" in an addendum was sent where c3c034a08 asked.
+    reading, beside = 'own', False
     for q in _OTHER_OCCURRENCE.finditer(text, lo, label_start):
         field = _qualifier_field(text, q.start(), q.end(), label_start, has_date)
         qualifier = DATE_QUALIFIER.fullmatch(q.group()) is not None
@@ -574,7 +580,9 @@ def _line_reading(text: str, label_start: int, label_end: int, date_start: int, 
         if field == 'else':
             continue
         if not opens and not _NOT_ATTACHED.search(_ROW_BAR.sub(' ', text[q.end():label_start])):
-            return 'another'
+            if not other_dates(q.end(), label_start):  # here only a date of birth can stand between them
+                return 'another'
+            beside = True  # df-d:4
         reading = 'unplaced'
     above = _line_above(text, label_start if phrase_start is None else phrase_start)
     if above is not None:  # refutation round 3, sk:5: the line above
@@ -606,10 +614,14 @@ def _line_reading(text: str, label_start: int, label_end: int, date_start: int, 
             reading = 'unplaced'
             continue
         if not _NOT_ATTACHED.search(_ROW_BAR.sub(' ', text[date_end:q.start()])):
-            return 'another'
+            after = other_dates(q.end(), hi)  # here only dates of birth (the dated ones were read above)
+            if not other_dates(date_end, q.start()) and not (after and after[0].start - q.end() < q.start() - date_end):
+                return 'another'
+            reading, beside = 'unplaced', True  # df-d:4
+            continue
         if qualifier:  # a history word across a field break does not place the date
             reading = 'unplaced'
-    return reading
+    return 'beside' if beside and reading == 'unplaced' else reading
 
 
 def _labelled_kind(text: str, label_start: int, label_end: int, date_start: int, date_end: int,
@@ -623,8 +635,8 @@ def _labelled_kind(text: str, label_start: int, label_end: int, date_start: int,
     if words and _OTHER_OCCURRENCE.search(words):
         return 'another', start
     reading = _line_reading(text, label_start, label_end, date_start, date_end, value, start)
-    if reading == 'another':
-        return 'another', start
+    if reading in ('another', 'beside'):  # df-d:4: 'beside'
+        return reading, start
     if reading == 'unplaced' or (words and not _names_this_service(words, words + ' ' + text[label_start:label_end])):
         return 'unplaced', start
     return 'own', label_start
@@ -1675,11 +1687,13 @@ def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
     # rule N3 (P2DN's fix round, issue 6): a field that states no date never speaks against the note's own date (a
     # PDF form's blank "Date of service:" beside its filled "dos: 2026-10-21" asked the date it states); with no own date
     # it is the evidence of the date asked, holding every member date
-    speaks = [c for c in labels if id(c) not in own_ids and c.reading in ('own', 'unplaced') and c.form != 'empty']
+    speaks = [c for c in labels if id(c) not in own_ids and c.reading in ('own', 'unplaced', 'beside')
+              and c.form != 'empty']
     support = list(speaks)  # what joins the date's evidence when it agrees: as before, labels only
     speaks += [c for c in found if c.source != 'label' and c.reading in ('own', 'unplaced') and c.form != 'empty']
     values = {c.value for c in lead}
-    unusable = [c for c in (speaks if lead else found) if c.form != 'read']
+    # df-d:4: a date read 'beside' speaks, but is no value a documented conflict lists, nor a member's answer
+    unusable = [c for c in (speaks if lead else found) if c.form != 'read' or c.reading == 'beside']
     note = ' '.join(text for present, text in (
         (any(c.form == 'invalid' for c in unusable), INVALID_DATE_NOTE),
         (any(c.form == 'unread' for c in unusable), UNREAD_DATE_NOTE),
@@ -1689,14 +1703,16 @@ def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
         (not own and any(c.source == 'label' and c.form == 'read' and c.reading == 'own' and c.alone and not c.installed
                          for c in found), FORM_DATE_NOTE),
         (not own and any(c.source != 'label' and c.form == 'read' for c in found), EVIDENCE_DATE_NOTE),
-        (not own and any(c.form == 'read' and c.reading in ('aside', 'other', 'unplaced') for c in found),
+        (any(c.reading == 'beside' for c in unusable)
+         or not own and any(c.form == 'read' and c.reading in ('aside', 'other', 'unplaced') for c in found),
          UNPLACED_DATE_NOTE)) if present)
     if lead and len(values) == 1 and all(c.form == 'read' and c.value in values for c in speaks):
         fact = _fact('service_date', [(c.value, s) for c in lead + support for s in c.spans])
         return fact if own else Fact('service_date', None, 'missing', fact.evidence, FORM_DATE_NOTE)
     unread = tuple(s for c in unusable for s in _evidence_spans(c))
     if lead:
-        fact = _fact('service_date', [(c.value, s) for c in lead + speaks if c.form == 'read' for s in c.spans])
+        fact = _fact('service_date', [(c.value, s) for c in lead + speaks if c.form == 'read' and c.reading != 'beside'
+                                      for s in c.spans])
         if not unusable:
             return fact
         return Fact('service_date', None, 'conflict', _sorted_spans(fact.evidence + unread), note)
@@ -1729,8 +1745,8 @@ class _ElsewhereSpan(Span):
 
 def _evidence_spans(c: _Candidate) -> tuple[Span, ...]:
     """A candidate's spans as the date's evidence: _ElsewhereSpan for a label or title read as another occurrence's or
-    another document's (fr-di:3)."""
-    if c.source in ('label', 'title') and c.reading in ('aside', 'other'):
+    another document's (fr-di:3), or as maybe another occurrence's (df-d:4, 'beside')."""
+    if c.source in ('label', 'title') and c.reading in ('aside', 'other', 'beside'):
         return tuple(_ElsewhereSpan(s.start, s.end, s.text) for s in c.spans)
     return c.spans
 
