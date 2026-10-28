@@ -1093,7 +1093,14 @@ two names are equal as words or both lie in the code's one-procedure class
 (46221 banding, 46600-46615 anoscopy; never a hemorrhoidectomy, and with no
 other procedure word in the name: "Anoscopy with rubber band ligation" beside
 46600 alone is still named); it is named when another `gi.other`
-code is selected). Each check: `{id, label, status ∈ pass | warn | fail | not_verified |
+code is selected; a performed family routing detects with no selected
+proposal is named whatever `services.unresolved` also lists for it - the check
+never passes with "Every performed service that routing detected in the
+document has a selected proposal" beside one, as the installed revision never
+did - except a family the reconciliation accounts for with another service's
+selected code: every service of it done today is included in another that a
+selected, non-excluded code covers (an EGD read as the endoscopic portion of an
+EUS whose code is selected; refutation p2, reports2:0)). Each check: `{id, label, status ∈ pass | warn | fail | not_verified |
 not_applicable | info, detail, source}`. Engine `cpt-studio-validation@3`.
 A selected, non-excluded `gi.other` code also speaks for the routed procedure
 line its passage opens with (`_Evaluation.speaks_for`: a passage's own sentence
