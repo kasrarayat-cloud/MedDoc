@@ -28,8 +28,9 @@ only; no network (the suite's FakeProvider, answering only the selections whose 
 from django.test import SimpleTestCase
 
 from studio.gi import context
+from studio.types import Span
 from tests.test_repairs_7c8_context import DateAssertions
-from tests.test_repairs_7c8_context3 import COLO_BODY, ELENA_DATE, HEAD, EndToEnd, date_fact
+from tests.test_repairs_7c8_context3 import BIRTH, COLO_BODY, ELENA_DATE, HEAD, EndToEnd, date_fact, evidence_text
 
 OFFICE = ('Established patient office visit for chronic constipation.\n'
           'Total time on the date of the encounter was 24 minutes.\n')
@@ -85,6 +86,109 @@ class LabelWordsTests(DateAssertions, SimpleTestCase):
                              '2026-10-14')
 
 
+class EmptyDateFieldTests(DateAssertions, SimpleTestCase):
+    """sk:3 (and the dates:0 class): a date-of-service label whose field opens with another field was dropped with
+    nothing left behind (round 2's rule A), so any member date was taken - 1998-01-01 was sent and 45385 excluded as
+    planned. The label is kept as evidence that reads no date: every member date is held, as for "Date of service:
+    20-Oct-26"."""
+
+    CASES = (
+        HEAD + 'Colonoscopy report\nDate of Service: Referral date: 10/13/2026\n' + COLO_BODY,
+        HEAD + 'Colonoscopy report\nDOS: N/A Referral date: 10/13/2026\n' + COLO_BODY,
+        HEAD + 'Colonoscopy report\nDate of service: Admission date: 10/13/2026\n' + COLO_BODY,
+        HEAD + 'Colonoscopy report\nDOS: Signed: 10/13/2026\n' + COLO_BODY,
+        HEAD + 'Colonoscopy report\nDate of service: DOB: 01/01/1998\n' + COLO_BODY,
+        HEAD + 'Colonoscopy report\nDate of Service | Provider\nN/A 10/13/2026 | Dr. A. Synthetic\n' + COLO_BODY,
+    )
+
+    def test_an_empty_date_field_is_kept_and_every_member_date_is_held(self):
+        for text in self.CASES:
+            with self.subTest(line=text.splitlines()[2]):
+                fact = date_fact(text)
+                self.assertEqual((fact.origin, fact.value), ('missing', None))
+                self.assertTrue(fact.evidence, 'the label is kept as evidence')
+                self.assertIsNone(context._date_readings(fact.evidence), evidence_text(text))
+                self.assertIn(context.UNREAD_DATE_NOTE, fact.note)
+                for value in (ELENA_DATE, '2026-10-13', '2026-10-14'):
+                    self.assert_member_conflict(text, value)
+
+    def test_the_date_another_candidate_states_still_answers(self):
+        text = HEAD + 'Colonoscopy report - 10/14/2026\nDate of Service: Referral date: 10/13/2026\n' + COLO_BODY
+        self.assert_member_date(text, '2026-10-14')
+        self.assert_member_conflict(text, '2026-10-13')
+        self.assert_member_conflict(text, ELENA_DATE)
+
+    def test_controls(self):
+        # a field that states nothing at all keeps nothing, as before: the member supplies the date
+        text = HEAD + 'Colonoscopy report\nDate of service: N/A\n' + COLO_BODY
+        self.assertEqual((date_fact(text).origin, date_fact(text).evidence), ('missing', ()))
+        self.assert_member_date(text, '2026-10-14')
+        # a date in a form the reader does not read is held as before
+        text = HEAD + 'Colonoscopy report\nDate of service: 20-Oct-26\n' + COLO_BODY
+        self.assert_member_conflict(text, '2026-10-20')
+
+
+class BirthLabelFormTests(DateAssertions, SimpleTestCase):
+    """sk:4 (dates:0, still reproducing): with a birth label the reader did not know, or a word between a date label and
+    the date, a date-of-service label's value was the date of birth - the member's 1998-01-01 agreed with it, was sent,
+    and 45385 was excluded. A label's own value opens its field; a date anywhere else in it is not the label's."""
+
+    FORMS = ('DOB/Age', 'Age/DOB', 'DOB (age)', 'Birth', 'Birthday', 'D-O-B', 'DOB/Age:', 'Birth:', '-- DOB/Age',
+             'TBD DOB', 'Birth date', 'DOB & Age')
+
+    def shapes(self, form):
+        return (HEAD + f'Colonoscopy report - 10/14/2026\nPatient: Alex Synthetic DOS: {form} 01/01/1998 MRN: 0000\n'
+                + COLO_BODY,
+                HEAD + f'Colonoscopy report - 10/14/2026\nPatient: Alex Synthetic DOS: {form} 01/01/1998 MRN 0000\n'
+                + COLO_BODY,
+                HEAD + f'Colonoscopy report - 10/14/2026\nPatient: Alex Synthetic DOS: -- {form} 01/01/1998 MRN 0000\n'
+                + COLO_BODY,
+                HEAD + f'Colonoscopy report\nDate of service: 10/14/2026\nVisit Date: {form} 01/01/1998\n' + COLO_BODY)
+
+    def test_a_date_of_birth_is_never_a_label_s_value(self):
+        for form in self.FORMS:
+            for text in self.shapes(form):
+                with self.subTest(form=form, line=text.splitlines()[2][:60]):
+                    self.assert_never(text, ELENA_DATE)
+                    self.assert_member_conflict(text, ELENA_DATE)
+                    self.assertFalse(any(BIRTH in quoted for quoted in evidence_text(text)), evidence_text(text))
+                    self.assert_member_date(text, '2026-10-14')  # the date the note states still answers
+
+    def test_a_label_s_value_opens_its_field(self):
+        text = HEAD + 'Colonoscopy report - 10/14/2026\nDOS: approx. 10/13/2026\n' + COLO_BODY
+        self.assert_member_conflict(text, '2026-10-13')  # a date after other words in the field is not the label's
+        self.assert_member_date(text, '2026-10-14')
+
+    def test_the_birth_label_forms_are_read_as_birth_labels(self):
+        for quoted in ('Birthday 01/01/1998 10/14/2026', 'Birth: 01/01/1998; colonoscopy 10/14/2026',
+                       'D-O-B 01/01/1998 seen 10/14/2026', 'DOB/Age: 01/01/1998 / 28, colonoscopy 10/14/2026',
+                       'Age/DOB 01/01/1998, colonoscopy 10/14/2026', 'DOB (age) 01/01/1998 colonoscopy 10/14/2026'):
+            with self.subTest(quoted=quoted):
+                self.assertEqual(context._date_readings((Span(0, len(quoted), quoted),)), {'2026-10-14'})
+        # a subject line's own date is its only date that is no date of birth, whatever form the birth label takes
+        for label in ('Birthday', 'D-O-B', 'DOB/Age'):
+            text = HEAD + f'Re: Colonoscopy - Synthetic, Alex ({label} 01/01/1998) - 10/14/2026\n' + COLO_BODY
+            with self.subTest(label=label):
+                self.assert_member_date(text, '2026-10-14')
+                self.assert_member_conflict(text, ELENA_DATE)
+        # a dated service line whose only date is a date of birth states no date of the service
+        text = HEAD + 'Colonoscopy - Synthetic, Alex - Birthday 01/01/1998\n' + COLO_BODY
+        self.assertEqual((date_fact(text).origin, date_fact(text).evidence), ('missing', ()))
+
+    def test_controls(self):
+        # a value that opens its field keeps answering: a weekday before the date, a value on the next line, a column
+        for text in (HEAD + 'Colonoscopy report\nDate of service: Tuesday, October 14, 2026\n\n' + COLO_BODY,
+                     HEAD + 'Colonoscopy report\nDate of service:\n10/14/2026\n\n' + COLO_BODY,
+                     HEAD + 'Colonoscopy report\nDate of Service | Provider\n10/14/2026 | Dr. A. Synthetic\n\n'
+                     + COLO_BODY):
+            with self.subTest(text=text.splitlines()[2]):
+                self.assert_member_date(text, '2026-10-14')
+                self.assert_member_conflict(text, ELENA_DATE)
+        # a birth word that labels no date is no birth label ("Birth control" in a sentence)
+        text = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\n\n' + COLO_BODY + 'Birth control since 2020.\n'
+        self.assert_document(text, '2026-10-14')
+
+
 class RequestTests(EndToEnd):
     """Every issue end to end: the date each provider request carries, and the dated check that excluded an act."""
 
@@ -99,6 +203,32 @@ class RequestTests(EndToEnd):
         for text, _, label in LabelWordsTests.CASES[1:]:
             with self.subTest(label=label):
                 self.assert_dateless(text, '45385')
+
+    def test_sk3_an_empty_date_field_holds_the_member_s_date(self):
+        for text in EmptyDateFieldTests.CASES[:2]:
+            with self.subTest(line=text.splitlines()[2]):
+                encounter_id = self.finished(text, service_date=ELENA_DATE)
+                self.assert_held(encounter_id)
+                self.assert_not_excluded(encounter_id, '45385')
+        # created without a member date (dateless), then the member's 1998-01-01: never sent, never excluded against
+        encounter_id = self.finished(EmptyDateFieldTests.CASES[0])
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.set_context(encounter_id, {'service_date': ELENA_DATE})
+        self.assert_never_sent(encounter_id, ELENA_DATE)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.assert_not_excluded(encounter_id, '45385')
+
+    def test_sk4_a_birth_label_form_or_a_word_before_the_date(self):
+        encounter_id = self.finished(HEAD + 'Colonoscopy report - 10/14/2026\nPatient: Alex Synthetic DOS: DOB/Age '
+                                     '01/01/1998 MRN 0000\n' + COLO_BODY, service_date=ELENA_DATE)
+        self.assert_held(encounter_id)
+        self.assert_not_excluded(encounter_id, '45385')
+        encounter_id = self.finished(HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nVisit Date: TBD DOB (age) '
+                                     '01/01/1998\n' + COLO_BODY)
+        self.set_context(encounter_id, {'service_date': ELENA_DATE})
+        self.assert_never_sent(encounter_id, ELENA_DATE)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.assert_not_excluded(encounter_id, '45385')
 
     def test_control_a_header_block_s_date_is_sent(self):
         encounter_id = self.finished(HEAD + 'Colonoscopy report\nPatient: Synthetic, Alex    DOB: 01/01/1998    MRN: '

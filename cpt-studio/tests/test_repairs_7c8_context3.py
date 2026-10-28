@@ -207,7 +207,6 @@ class MemberDateAgreesOnlyWithAStatedValueTests(DateAssertions, SimpleTestCase):
     def test_controls_a_readable_value_s_own_forms(self):
         # the value's first date-shaped run, with a weekday, a month name or an ordinal, is still the label's own
         for header, value in (('Date of service: Tuesday, October 20, 2026 at 9:15', '2026-10-20'),
-                              ('Date of service: see 10/20/2026', '2026-10-20'),
                               ('Date of Service | Provider | Location\n10/20/2026 | Dr. A. Synthetic | Office',
                                '2026-10-20'),
                               ('Date of service:\n\n\n20th October 2026, at the clinic', '2026-10-20')):
@@ -215,6 +214,12 @@ class MemberDateAgreesOnlyWithAStatedValueTests(DateAssertions, SimpleTestCase):
                 text = HEAD + header + '\n' + OFFICE_BODY
                 self.assert_member_date(text, value)
                 self.assert_member_conflict(text, ELENA_DATE)
+        # The 7c8 P2DATES fix round (sk:4): a label's own value OPENS its field. A date after another word in it is not
+        # the label's ("see 10/20/2026" as "TBD DOB (age) 01/01/1998", which took a member's 1998-01-01 and sent it):
+        # only a vocabulary could tell the two words apart, so the field states no date and every member date is held.
+        text = HEAD + 'Date of service: see 10/20/2026\n' + OFFICE_BODY
+        self.assert_member_conflict(text, '2026-10-20')
+        self.assert_member_conflict(text, ELENA_DATE)
 
 
 class MemberDateAgreesOnlyWithAStatedValueRequestTests(EndToEnd):

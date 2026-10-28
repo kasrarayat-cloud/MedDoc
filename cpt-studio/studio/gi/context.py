@@ -144,12 +144,19 @@ _NEUTRAL_WORDS = frozenset(('the', 'this', 'a', 'an'))
 #    question a labelled date, or be the only dated text (the date is then asked, as on the installed revision);
 # 3. a date of birth is no candidate's value and is never read from the evidence a member date must agree with;
 # 4. a member date is taken only when it is a date some candidate states as its own value (merge_user_values).
-_BIRTH_LABEL = r'(?:D\.?+[ \t]?+O\.?+[ \t]?+B\b\.?+|date[ \t]++of[ \t]++birth|birth[ \t]*+date|born(?:[ \t]++on)?+|b\.)'
+# The P2DATES skeptic (sk:4): "Birth", "Birthday" and "D-O-B" are birth labels too, and so is one joined to another
+# field's name by a slash or an ampersand, or followed by a bracketed word ("DOB/Age", "Age/DOB", "DOB (age)"): the date
+# after any of them was read as a date-of-service label's value. A closed list of birth LABELS, as rule 3 names them.
+_BIRTH_LABEL = (r'(?:D[.\-]?+[ \t]?+O[.\-]?+[ \t]?+B\b\.?+|date[ \t]++of[ \t]++birth|birth(?:[ \t]*+(?:date|day))?+'
+                r'|born(?:[ \t]++on)?+|b\.)')
+_BIRTH_FORM = (r'(?:[A-Za-z]{1,12}+[ \t]*+[/&][ \t]*+)?' + _BIRTH_LABEL
+               + r'(?:[ \t]*+[/&][ \t]*+[A-Za-z]{1,12}+|[ \t]*+\([ \t]*+[A-Za-z]{1,12}+[ \t]*+\))?+')
 # A date with a birth label right before it, in any position or bracket ("DOB: 01/01/1998", "(DOB 01/01/1998)",
-# "Date of birth - 01/01/1998", "born on 01/01/1998", "b. 01/01/1998"): read in the few characters before the date.
-_BIRTH_BEFORE = cues.rx(r'(?<![\w/.-])' + _BIRTH_LABEL + r'[ \t]*+(?:[:#=\u2013-][ \t]*+)?+(?:\([ \t]*+)?+$')
+# "Date of birth - 01/01/1998", "born on 01/01/1998", "b. 01/01/1998", "DOB (age) 01/01/1998"): read in the few
+# characters before the date.
+_BIRTH_BEFORE = cues.rx(r'(?<![\w/.-])' + _BIRTH_FORM + r'[ \t]*+(?:[:#=\u2013-][ \t]*+)?+(?:\([ \t]*+)?+$')
 _BIRTH_REACH = 32
-_BIRTH_HEAD = cues.rx(r'(?<![\w/.-])' + _BIRTH_LABEL + r'(?![\w/-])')
+_BIRTH_HEAD = cues.rx(r'(?<![\w/.-])' + _BIRTH_FORM + r'(?![\w/-])')
 # The header fields rule 1 allows beside a date of service: a closed allow-list of LABELS (the patient, a name, the
 # record, chart or account number, the date of birth, age, sex, the physician, the location or facility, the referring
 # physician; a patient's status or type, a place of service or care setting, the operator, assistant or anesthesia
@@ -166,7 +173,7 @@ _HEADER_LABEL = (r'(?:patient(?:[ \t]++(?:name|id|number|no\.?+|status|type))?+'
                  r'|facility(?:[ \t]++name)?+|site|place[ \t]++of[ \t]++service|POS|(?:care[ \t]++|service[ \t]++)?+setting'
                  r'|referring(?:[ \t]++(?:physician|provider|clinician|doctor))?+|referred[ \t]++by)')
 # A field's head on a header line: a date-of-service label, a birth label or a header label, each a whole label.
-_FIELD_HEAD = cues.rx(r'(?<![\w/.-])(?:(?P<svc>' + _DATE_LABEL + r')|(?P<birth>' + _BIRTH_LABEL + r')|(?P<hdr>'
+_FIELD_HEAD = cues.rx(r'(?<![\w/.-])(?:(?P<svc>' + _DATE_LABEL + r')|(?P<birth>' + _BIRTH_FORM + r')|(?P<hdr>'
                       + _HEADER_LABEL + r'))(?![\w/-])')
 _HDR_TAIL = re.compile(r'[ \t]*+(?:(?P<hash>#)[ \t]*+)?+(?P<sep>[:=])?+[ \t]*+')
 _BIRTH_TAIL = re.compile(r'[ \t]*+(?P<sep>[:#=\u2013-])?+[ \t]*+')
@@ -883,12 +890,18 @@ def _value_extent(text: str, start: int, end: int) -> Optional[tuple[int, int]]:
     (_first_value) before another field's label; that part whole when it has a digit and no date-shaped run; None when
     another field opens it or its only dates are dates of birth (refutation phase 2, dates:0: "DOS: DOB: 01/01/1998 MRN:
     0000", "Date of Service: Date of Birth: 01/01/1998" made the date of birth the label's value, so a member's
-    1998-01-01 agreed with it and was sent - an empty field states no date)."""
+    1998-01-01 agreed with it and was sent - an empty field states no date).
+
+    The P2DATES skeptic (sk:4): a date after other words in the field is not the label's own value either ("DOS: DOB/Age
+    01/01/1998", "Visit Date: TBD DOB (age) 01/01/1998" made the date of birth the value, under a birth label the reader
+    did not know, and a member's 1998-01-01 agreed with it and was sent). A label's own value opens its field (rule 4:
+    the date a candidate states as its own), so a field opened by anything else states no date - whatever the words."""
     other = _NEXT_LABEL.search(text, start, end)
     stop = other.start() if other is not None else end
+    start = _BLANKS.match(text, start, stop).end()
     found = _first_value(text, start, stop)
     if found is not None:
-        return found
+        return found if found[0] == start else None
     if _first_value(text, start, stop, births=False) is not None or not _DIGIT.search(text, start, stop):
         return None
     return _strip_span(text, start, stop)
@@ -970,6 +983,13 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
         # whose only dates are dates of birth states no date (refutation phase 2, rule 3)
         extent = _value_extent(text, where[0], where[1])
         if extent is None:
+            # The P2DATES skeptic (sk:3): a field that states no date of its own is never dropped with nothing left
+            # behind (round 2's rule A). "Date of Service: Referral date: 10/13/2026" kept nothing, so a member's
+            # 1998-01-01 was taken and sent. The label is kept as evidence that reads no date - the label alone, never
+            # its field, whose dates are not its own - so a member date is held unless another candidate states it.
+            tail = _LABEL_TAIL.match(text, m.end())
+            label_end = tail.end('sep') if tail.group('sep') not in (None, '|') else m.end('label')
+            found.append(_Candidate(_span(text, start, label_end), None, 'label', _READING[kind], 'unread'))
             continue
         value_start, value_end = extent
         if where[2]:  # a table column: the label's cell and its value's cell, never the cells between
