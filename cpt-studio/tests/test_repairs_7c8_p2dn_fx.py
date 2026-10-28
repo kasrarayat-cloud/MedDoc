@@ -603,3 +603,38 @@ class InstalledFormRequestTests(EndToEnd):
         self.set_context(clean, {'service_date': '2026-10-14'})
         self.assertEqual(self.dates_sent(clean), [[], ['Date of service: 2026-10-14']])
         self.assertEqual(self.bucket(clean, '45385'), 'selected')
+
+
+# --- 1, its follow-up: a dated line whose dates are all other fields' is evidence that reads no date ----------------
+
+NO_DATE_OF_ITS_OWN = (  # the fuzz's own shape ("Exam date" is no label of the closed list), and two plainer ones
+    HEAD + 'Exam: Colonoscopy Patient DOB: 01/01/1998 Exam date: 10/14/2026\n' + COLO_BODY,
+    HEAD + 'Colonoscopy report\nExam: Colonoscopy Patient DOB: 01/01/1998 Exam date: 2026-10-14\n' + COLO_BODY,
+    HEAD + 'Procedure: Colonoscopy    Referral date: 10/13/2026\n' + COLO_BODY,
+    HEAD + 'Colonoscopy DOB: 01/01/1998\n' + COLO_PLAIN,
+)
+
+
+class DatedLineStatingNoDateTests(DateAssertions, SimpleTestCase):
+    """Issue 1's rule, measured over the skeptics' 90,606 texts: a dated line whose dates are all another field's or
+    dates of birth was DROPPED - "Exam: Colonoscopy Patient DOB: 01/01/1998 Exam date: 10/14/2026" ("Exam date" is no
+    label of the closed list) left the document no dated text, so any member date was taken, its date of birth too (36
+    fuzz texts; P2DN read 10/14 there). Such a line is kept as evidence that reads no date - its text before the first of
+    those dates - so every member date is held until the document states the date; it never questions the note's own
+    date (it states none) and never stands beside a dated title's as a date of its own."""
+
+    def test_every_member_date_is_held(self):
+        for text in NO_DATE_OF_ITS_OWN:
+            with self.subTest(line=[line for line in text.splitlines() if ':' in line or 'DOB' in line][0][:60]):
+                fact = date_fact(text)
+                self.assertEqual((fact.origin, fact.value), ('missing', None))
+                self.assertTrue(fact.evidence)
+                for member in (ELENA_DATE, '2026-10-13', '2026-10-14'):
+                    self.assert_member_conflict(text, member)
+
+    def test_controls_beside_the_own_date_or_a_dated_title(self):
+        self.assert_document(HEAD + 'Date of service: 10/14/2026\nRe: Colonoscopy - Referral date: 10/13/2026\n'
+                             + COLO_BODY, '2026-10-14')
+        text = HEAD + 'Colonoscopy report - 10/14/2026\nProcedure: Colonoscopy    Referral date: 10/13/2026\n' + COLO_BODY
+        self.assert_member_date(text, '2026-10-14')
+        self.assert_member_conflict(text, '2026-10-13')

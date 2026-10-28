@@ -227,7 +227,10 @@ class BirthDateIsNeverAServiceDateTests(DateAssertions, SimpleTestCase):
         self.assert_member_date(text, '2026-10-14')
         self.assert_member_conflict(text, ELENA_DATE)
         text = HEAD + 'Colonoscopy DOB: 01/01/1998\n' + COLO_PLAIN
-        self.assertEqual((date_fact(text).origin, date_fact(text).evidence), ('missing', ()))
+        # P2DN's fix round: the line is kept as evidence that reads no date - its text before the date of birth - so the
+        # member's 1998-01-01 is held (this pin had it keep nothing, which let any member date be taken)
+        self.assertEqual((date_fact(text).origin, evidence_text(text)), ('missing', ['Colonoscopy']))
+        self.assert_member_conflict(text, ELENA_DATE)
         self.assertEqual(context._date_readings(date_fact(HEAD + 'Date: 01/01/1998\n\n' + COLO_PLAIN).evidence),
                          {'1998-01-01'})  # a date with no birth label is read as any other date
         # a labelled date beside a date of birth on its line is the note's own (the next field's label ends its field)

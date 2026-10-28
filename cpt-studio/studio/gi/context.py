@@ -341,8 +341,9 @@ class _Candidate:
     source: str  # 'label' (a date-of-service label) | 'title' (a dated title or "Date:" line) | 'field' ("Re: ...")
     reading: str  # 'own' | 'unplaced' (it may be the date) | 'aside' (another occurrence's) | 'other' (another document)
     # 'read' | 'invalid' | 'unread' | 'empty' - a date-of-service field that states no date of its own (rule N3, P2DN's
-    # fix round, issue 6): the label alone, never its field; evidence that reads no date when the note states none, and
-    # never speaking against the note's own date, as it states none that could differ
+    # fix round, issue 6): the label alone, never its field - or a dated line whose dates are all another field's or
+    # dates of birth, its text before them; evidence that reads no date when the note states none, and never speaking
+    # against the note's own date, as it states none that could differ
     form: str
     # A table column's value cell, kept beside the label heading it (span): never the cells between them. Every span a
     # candidate keeps holds no date but its own value (refutation round 3, sk:1), so the dates its evidence reads are the
@@ -1325,7 +1326,13 @@ def _dated_service_line(text: str, ls: int, le: int) -> Optional[_Candidate]:
             continue
         runs.append(run)
     if not runs:  # the line's only dates are dates of birth or other fields' ("Colonoscopy DOB: 01/01/1998")
-        return None
+        # kept as evidence that reads no date - its text before the first of those dates - never dropped: dropped, the
+        # document was left no dated text and any member date was taken, a date of birth too ("Exam: Colonoscopy
+        # Patient DOB: 01/01/1998 Exam date: 10/14/2026", "Exam date" no label of the closed list; 36 fuzz texts)
+        if not excluded:
+            return None
+        cut = _strip_span(text, start, min(label for _, label in excluded))
+        return _Candidate(_span(text, *cut), None, source, reading, 'empty') if cut[0] < cut[1] else None
     if len(runs) > 1:
         cut = _strip_span(text, start, min([r[0] for r in runs] + [label for _, label in excluded]))
         return _Candidate(_span(text, *cut), None, source, reading, 'unread')
@@ -1436,8 +1443,9 @@ FIELD_DATE_NOTE = ('A labelled date of service has other text in its field (a br
 FORM_DATE_NOTE = ('A labelled date of service is written in a form this release reads but does not send by itself (a '
                   'day-first date such as "14 Oct 2026", a label naming the time, or a table row), so it is asked; a '
                   "member's answer with that date is taken.")
-EMPTY_DATE_NOTE = ('A date-of-service field states no date of its own (it is empty, or holds no date, or another '
-                   "field's), so a member's date is held until the document states it.")
+EMPTY_DATE_NOTE = ('Dated text states no date of its own (an empty or non-date date-of-service field, or a line whose '
+                   "dates are another field's or a date of birth), so a member's date is held until the document "
+                   'states it.')
 
 
 def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
@@ -1483,7 +1491,7 @@ def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
     # it is the evidence of the date asked, holding every member date
     speaks = [c for c in labels if id(c) not in own_ids and c.reading in ('own', 'unplaced') and c.form != 'empty']
     support = list(speaks)  # what joins the date's evidence when it agrees: as before, labels only
-    speaks += [c for c in found if c.source != 'label' and c.reading in ('own', 'unplaced')]
+    speaks += [c for c in found if c.source != 'label' and c.reading in ('own', 'unplaced') and c.form != 'empty']
     values = {c.value for c in lead}
     unusable = [c for c in (speaks if lead else found) if c.form != 'read']
     note = ' '.join(text for present, text in (

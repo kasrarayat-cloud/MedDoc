@@ -605,10 +605,12 @@ class ServiceLineStatesOnlyItsOwnDateTests(DateAssertions, SimpleTestCase):
                 text = HEAD + line + '\n' + COLO_PLAIN
                 self.assert_asked(text, line)
                 self.assert_member_date(text, '2026-10-14')
-        # a line whose only date is another field's states no date of the service: it keeps nothing, as a date of birth
-        # alone does
+        # a line whose only date is another field's states no date of the service; P2DN's fix round: it is kept as
+        # evidence that reads no date - its text before that date - so the member's 1998-01-01 is held (this pin had it
+        # keep nothing, which let any member date be taken)
         text = HEAD + 'Colonoscopy DOB: ' + BIRTH + '\n' + VISIT_BODY
-        self.assertEqual((date_fact(text).origin, date_fact(text).evidence), ('missing', ()))
+        self.assertEqual((date_fact(text).origin, evidence_text(text)), ('missing', ['Colonoscopy']))
+        self.assert_member_conflict(text, ELENA_DATE)
 
 
 class ServiceLineStatesOnlyItsOwnDateRequestTests(EndToEnd):
