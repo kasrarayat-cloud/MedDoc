@@ -49,7 +49,7 @@ def check(item, check_id):
 
 
 BIDIRECTIONAL = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
-Same-session upper and lower endoscopy (fictional)
+Same-session upper and lower endoscopy (procedure)
 Date of service: 2026-10-14
 
 Place of service: Ambulatory surgery center
@@ -185,7 +185,7 @@ class DateConflictTests(SimpleTestCase):
 
 
 OFFICE_VISIT = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
-Gastroenterology office visit (fictional)
+Gastroenterology office visit (gi clinic)
 Date of service: 2026-10-14
 
 Place of service: Office

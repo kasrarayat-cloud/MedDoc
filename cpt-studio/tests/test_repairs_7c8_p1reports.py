@@ -24,7 +24,7 @@ LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/202
 APP = Path(settings.BASE_DIR) / 'studio' / 'static' / 'studio' / 'app.js'
 SYNTHETIC = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
 
-COLONOSCOPY = SYNTHETIC + """Colonoscopy report (fictional)
+COLONOSCOPY = SYNTHETIC + """Colonoscopy report (procedure)
 Date of service: 2026-10-16
 
 Procedure: Colonoscopy
@@ -270,9 +270,9 @@ class SecondReviewCheckNamesWhatItAccountsForTests(Harness):
 
 # --- reports-1: a documented visit no proposal accounts for --------------------------------------------------------
 
-EM_AND_COLONOSCOPY = SYNTHETIC + """Riverbend Digestive Health (fictional)
-Date of service: 2026-10-20
+EM_AND_COLONOSCOPY = SYNTHETIC + """Date of service: 2026-10-20
 
+Riverbend Digestive Health (fictional)
 Place of service: Office, in-person outpatient visit
 Patient status: Established patient, last seen 2026-03-02.
 
@@ -289,7 +289,7 @@ SEPARATE_EM = 'A significant, separately identifiable evaluation and management 
 SCOPE = ('45378', 'The colonoscope was advanced to the cecum and the examination was completed.')
 VISIT = ('99214', 'Total time on the date of the encounter was 32 minutes.')
 EVERY_SERVICE = 'Every documented service has a proposal'
-COLONOSCOPY_ALONE = SYNTHETIC + """Colonoscopy report (fictional)
+COLONOSCOPY_ALONE = SYNTHETIC + """Colonoscopy report (procedure)
 Date of service: 2026-10-21
 
 Place of service: Hospital outpatient department
@@ -487,7 +487,7 @@ class PendingReviewSaysWhatIsMissingTests(Harness):
 
 # --- reports-4: passages of a support that was not checked ---------------------------------------------------------
 
-SNARE_ONLY = SYNTHETIC + """Colonoscopy report (fictional)
+SNARE_ONLY = SYNTHETIC + """Colonoscopy report (procedure)
 Date of service: 2026-10-16
 
 Procedure: Colonoscopy
@@ -525,12 +525,12 @@ class NotCheckedPassagesAreNeverEvidenceTests(Harness):
         self.assertEqual((biopsy.status, biopsy.support['status'], biopsy.support['reason']),
                          ('needs_clarification', 'not_applicable', 'act_missing'))
         sources = [s['text'] for s in biopsy.support['source']]
-        self.assertIn('Colonoscopy report (fictional)', sources)  # stored as it was: the documented service's passages
+        self.assertIn('Colonoscopy report (procedure)', sources)  # stored as it was: the documented service's passages
         html = page(self.detail(encounter_id))['codes']
         self.assertNotIn(SHOWS_THE_ACT, html)
         self.assertIn(SERVICE_PASSAGES, html)
         self.assertNotIn('does not show the coded act', html)
-        title = mark_title(html, 'Colonoscopy report (fictional)')
+        title = mark_title(html, 'Colonoscopy report (procedure)')
         self.assertIsNotNone(title, 'the service passage is still highlighted for the reviewer')
         self.assertNotIn('Evidence for', title)
         self.assertIn('45380', title)

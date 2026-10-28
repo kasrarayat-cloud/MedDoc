@@ -246,9 +246,15 @@ class HeaderBlockTests(DateAssertions, SimpleTestCase):
                              '2026-10-15')
 
     def test_a_title_may_carry_a_number_that_is_no_date(self):
-        for title in ('Colonoscopy report (fictional) M1', 'Endoscopy Suite 3', 'Page 1 of 2'):
+        for title in ('Colonoscopy report M1', 'Colonoscopy procedure report 2 of 2', 'GI procedure note 1'):
             with self.subTest(title=title):
                 self.assert_document(HEAD + title + '\nDate of service: 10/14/2026\n\n' + COLO_BODY, '2026-10-14')
+        # the 7c8 fix round (P2DATES, sk:5/sk:7): a title holding a word outside the title words, or a line naming
+        # nothing (a letterhead, a stamp) in the label's block, is asked - an over-hold the labelled date answers
+        for title in ('Colonoscopy report (fictional) M1', 'Endoscopy Suite 3', 'Page 1 of 2'):
+            with self.subTest(title=title):
+                self.assert_asked(HEAD + title + '\nDate of service: 10/14/2026\n\n' + COLO_BODY, 'Date of service')
+                self.assert_member_date(HEAD + title + '\nDate of service: 10/14/2026\n\n' + COLO_BODY, '2026-10-14')
         for title in ('Colonoscopy report 09/03/2026 copy', 'Colonoscopy 2019', 'Report of Oct 2026'):
             with self.subTest(title=title):
                 self.assert_asked(HEAD + title + '\nDate of service: 10/14/2026\n\n' + COLO_BODY, 'Date of service')

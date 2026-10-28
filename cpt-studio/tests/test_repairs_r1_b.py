@@ -57,7 +57,7 @@ class ConsentPredicateTests(SimpleTestCase):
     subject only of an auxiliary predicate and only when no opening word governs it; a governed consent's phrase ends at
     its comma."""
 
-    REPORT = HEAD + ('Colonoscopy report (fictional)\nDate of service: 2026-10-14\n\nPlace of service: Hospital outpatient '
+    REPORT = HEAD + ('Colonoscopy report (procedure)\nDate of service: 2026-10-14\n\nPlace of service: Hospital outpatient '
                      'department\nIndication: Average-risk screening.\nProcedure: Colonoscopy\nTechnique: {line} The '
                      'colonoscope was advanced to the cecum and the examination was completed.\nFindings: Small internal '
                      'hemorrhoids.\nImpression: Rectal polyp, see above.\n')

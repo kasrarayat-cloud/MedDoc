@@ -23,7 +23,7 @@ TWO_DATES = OFFICE_NOTE.replace('Date of service: 2026-10-20\n',  # each label i
                                 'Date of service: 2026-10-20\n\nDate of service: 2026-10-23\n')
 UNDATED = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
 REPORT = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
-Colonoscopy report (fictional) M1
+Colonoscopy report (procedure) M1
 Date of service: 2026-10-16
 
 Place of service: Hospital outpatient department

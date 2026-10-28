@@ -41,7 +41,9 @@ class ServiceDateTests(SimpleTestCase):
                                'the duodenum.\n')
         self.assertEqual((facts['service_date'].value, facts['service_date'].origin), (None, 'missing'))
         self.assertEqual(gi_context._date_readings(facts['service_date'].evidence), {'2026-11-03'})
-        facts, _ = read(HEAD + 'Endoscopy unit\nProcedure date: 03-Nov-2026\n\nThe gastroscope was passed.\n')
+        # (the 7c8 fix round: a letterhead naming nothing directly above the label stands in its block, so the label
+        # stands under a title of this note here)
+        facts, _ = read(HEAD + 'Endoscopy report\nProcedure date: 03-Nov-2026\n\nThe gastroscope was passed.\n')
         self.assertEqual((facts['service_date'].value, facts['service_date'].origin), ('2026-11-03', 'document'))
 
     def test_a_labelled_date_in_a_table_row(self):

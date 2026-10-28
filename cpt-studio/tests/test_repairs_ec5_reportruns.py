@@ -41,7 +41,7 @@ VISIT = ('99213', 'Total time on the date of the encounter was 24 minutes.')
 # A colonoscopy whose snare removal is ready for review and whose separate forceps biopsy has no supported proposal,
 # so a reviewer may ask for the one bounded second review of it.
 COLONOSCOPY = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
-Colonoscopy report (fictional)
+Colonoscopy report (procedure)
 Date of service: 2026-10-16
 
 Procedure: Colonoscopy

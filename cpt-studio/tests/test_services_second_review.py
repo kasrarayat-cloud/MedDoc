@@ -22,7 +22,7 @@ LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/202
 # Each document opens with a header block - the title and header fields, then a blank line - so its labelled date is the
 # note's own (refutation phase 2, P2DATES, rule 1: a date beside body text in its block is asked).
 REPORT = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
-Colonoscopy report (fictional)
+Colonoscopy report (procedure)
 Date of service: 2026-10-16
 
 Place of service: Hospital outpatient department
@@ -296,7 +296,7 @@ class SecondReviewTests(TestCase):
         """Refutation r1 (sends lens): a whole service left without a proposal is accounted for only by a code the
         document supports as done; a biopsy code where no biopsy is documented stays an alternative, and the missing
         EGD stays unresolved instead of hiding behind a held proposal."""
-        text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\n'
+        text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (procedure)\n'
                 'Date of service: 2026-10-16\n\nPlace of service: Hospital outpatient department\nThe gastroscope was '
                 'advanced to the second portion of the duodenum. The mucosa was normal throughout.\n')
         self.provider.first = []

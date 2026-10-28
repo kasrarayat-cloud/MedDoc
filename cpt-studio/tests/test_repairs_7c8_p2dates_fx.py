@@ -25,6 +25,8 @@ sk:7  another discipline's undated title over a date-of-service label ("Cardiolo
 An over-hold (the date asked although a coder would know it) is a known limit; a wrong date sent is not. Synthetic text
 only; no network (the suite's FakeProvider, answering only the selections whose quote the request's text holds).
 """
+import time
+
 from django.test import SimpleTestCase
 
 from studio.gi import context
@@ -190,6 +192,11 @@ class BirthLabelFormTests(DateAssertions, SimpleTestCase):
         self.assert_document(text, '2026-10-14')
 
 
+DISCIPLINES = ('Cardiology', 'Surgical', 'General surgery', 'Oncology', 'Hematology', 'Pulmonology', 'Dermatology',
+               'Gynecology', 'Urology', 'Nephrology', 'Primary care', 'PCP', 'Emergency department', 'Urgent care',
+               'Pre-anesthesia', 'Radiology', 'Pathology', 'Surgical pathology')
+
+
 class BirthFieldValueTests(DateAssertions, SimpleTestCase):
     """sk:2: a "DOB" head's value - everything up to the next head - was never read, so a qualifier, a field or a
     sentence after a date of birth on a header line left the labelled date documented: it was sent, and 45385 was
@@ -291,6 +298,118 @@ class HeaderValueTests(DateAssertions, SimpleTestCase):
         self.assert_document(text, '2026-10-14')
 
 
+class TitleHeadingTests(DateAssertions, SimpleTestCase):
+    """sk:5 and sk:7: a line at the top counted as the document's title unless it held a word of the round-3
+    vocabulary, so "Cancelled colonoscopy", "Colonoscopy report" over "Recall procedure", or "Cardiology consultation"
+    above a date-of-service label let the label's date be sent (45385 excluded as planned, or needs_clarification)."""
+
+    def test_a_heading_with_a_qualifier_outside_any_list_is_asked(self):
+        self.assert_asked(HEAD + 'Cancelled colonoscopy\nProcedure date: 11/04/2026\n\n' + COLO_BODY, 'Procedure date')
+        self.assert_asked(HEAD + 'Colonoscopy report\nRecall procedure\nProcedure date: 11/04/2026\n\n' + COLO_BODY,
+                          'Procedure date')
+        for word in QUALIFIERS:
+            for noun in ('colonoscopy', 'procedure'):
+                for label in ('Procedure date', 'Date of service', 'DOS'):
+                    for title in ('', 'Colonoscopy report\n'):
+                        text = HEAD + f'{title}{word} {noun}\n{label}: 11/04/2026\n\n' + COLO_BODY
+                        with self.subTest(heading=f'{word} {noun}', label=label, title=bool(title)):
+                            self.assert_never(text, '2026-11-04')
+                            self.assert_member_date(text, '2026-11-04')
+
+    def test_a_heading_two_paragraphs_up_still_holds_the_date(self):
+        for heading in ('Cancelled colonoscopy', 'Recall procedure', 'Cardiology consultation'):
+            for title in ('', 'Colonoscopy report\n'):
+                with self.subTest(heading=heading, title=bool(title)):
+                    text = (HEAD + title + heading + '\n\nPatient: Synthetic, Alex\n\nProcedure date: 11/04/2026\n\n'
+                            + COLO_BODY)
+                    self.assert_never(text, '2026-11-04')
+        # a line naming nothing below the title is a heading, never a letterhead
+        for heading in ('CANCELLED', 'Recall', 'Pending authorization'):
+            with self.subTest(heading=heading):
+                text = (HEAD + 'Colonoscopy report\n' + heading + '\n\nPatient: Synthetic, Alex\n\nProcedure date: '
+                        '11/04/2026\n\n' + COLO_BODY)
+                self.assert_never(text, '2026-11-04')
+
+    def test_a_line_in_the_block_that_is_no_title_is_a_heading(self):
+        for line in ('CANCELLED', 'Recall', 'Endoscopy Suite 3', 'Page 1 of 2'):
+            with self.subTest(line=line):
+                self.assert_asked(HEAD + line + '\nDate of service: 11/04/2026\n\n' + COLO_BODY, 'Date of service')
+                self.assert_asked(HEAD + 'Colonoscopy report\n' + line + '\nDate of service: 11/04/2026\n\n' + COLO_BODY,
+                                  'Date of service')
+
+    def test_another_discipline_s_title_is_no_title_of_this_note(self):
+        self.assert_asked(HEAD + 'Cardiology consultation\nDate of service: 10/09/2026\n\n' + COLO_BODY,
+                          'Date of service')
+        for discipline in DISCIPLINES:
+            for word in ('consultation', 'consult', 'visit', 'note', 'report'):
+                for label in ('Date of service', 'Visit date'):
+                    text = HEAD + f'{discipline} {word}\n{label}: 10/09/2026\n\n' + COLO_BODY
+                    with self.subTest(title=f'{discipline} {word}', label=label):
+                        self.assert_never(text, '2026-10-09')
+                        self.assert_member_date(text, '2026-10-09')
+        # another discipline's name alone heads its own document wherever it stands: never a letterhead
+        for heading in ('Pathology', 'Surgical pathology', 'Radiology', 'Laboratory', 'Anesthesia'):
+            for title in ('', 'Colonoscopy report\n'):
+                with self.subTest(heading=heading, title=bool(title)):
+                    text = (HEAD + heading + '\n' + title + '\nPatient: Synthetic, Alex\n\nDate of service: 10/09/2026\n\n'
+                            + COLO_BODY)
+                    self.assert_never(text, '2026-10-09')
+        # the same title as the document's first line, with no banner above it
+        for title in ('Cardiology consultation', 'Pathology report', 'Radiology note', 'Discharge summary'):
+            with self.subTest(first_line=title):
+                self.assert_never(title + '\nDate of service: 10/09/2026\n\n' + COLO_BODY, '2026-10-09')
+
+    def test_controls_a_title_of_this_note(self):
+        for title in ('Colonoscopy report', 'COLONOSCOPY PROCEDURE REPORT', 'Screening colonoscopy', 'GI office visit',
+                      'Gastroenterology consultation', 'Upper endoscopy report', 'EGD procedure note',
+                      'Established patient visit - office progress note', 'Colonoscopy report - 10/14/2026',
+                      'Procedure report - upper endoscopy and colonoscopy in the same session', 'Telehealth visit',
+                      'Endoscopic ultrasound procedure report'):
+            with self.subTest(title=title):
+                self.assert_document(HEAD + title + '\nDate of service: 10/14/2026\n\n' + COLO_BODY, '2026-10-14')
+        # a letterhead above the title, outside the label's block, is the document's; so is its banner
+        for letterhead in ('Riverside Endoscopy Unit (fictional)', 'Northgate Ambulatory Endoscopy Center (fictional)',
+                           'St. Brigid Medical Center (fictional) - Advanced Endoscopy'):
+            with self.subTest(letterhead=letterhead):
+                text = (HEAD + '\n' + letterhead + '\nColonoscopy procedure report\n\nPatient: Alex Synthetic\n\n'
+                        'Synthetic record: SYN-0003\n\nDate of procedure: 2026-10-14\n\n' + COLO_BODY)
+                self.assert_document(text, '2026-10-14')
+        self.assert_document(HEAD + 'Date of service: 10/14/2026\n\n' + COLO_BODY, '2026-10-14')
+        self.assert_document('Riverside GI Associates\nDate of service: 10/14/2026\n\n' + COLO_BODY, '2026-10-14')
+        # a letterhead with no title below it, outside the label's block (the suite's office note)
+        self.assert_document(HEAD + 'Riverbend Digestive Health (fictional)\n\nPatient: Alex Synthetic\n\nDate of '
+                             'service: 10/14/2026\n\n' + COLO_BODY, '2026-10-14')
+
+
+class ReadingCostTests(SimpleTestCase):
+    """Every scan this round changes reads each line, field and title line once: the time doubles with the text, never
+    squares (a doubling ratio near 4 over two doublings; quadratic would be 16), and the largest is read far inside a
+    member's 15 s. The paste-cap figures through the bounded children are in the commit."""
+
+    SHAPES = {
+        'birth forms on one line': lambda n: HEAD + 'DOS: Age/DOB 01/01/1998 ' * n + '\n',
+        'fields opened by a field': lambda n: HEAD + 'DOS: Referral date: 10/13/2026 ' * n + '\n',
+        'words before dates': lambda n: HEAD + 'Visit date: TBD DOB (age) 01/01/1998 ' * n + '\n',
+        'phrase header lines': lambda n: HEAD + 'Provider: Dr. A. Synthetic (fictional)\n' * n + 'DOS: 10/14/2026\n\n',
+        'one long header value': lambda n: HEAD + 'Provider: Dr. ' + 'Ab ' * n + '\nDOS: 10/14/2026\n\n',
+        'one long birth value': lambda n: HEAD + 'DOB: 01/01/1998 ' + 'x ' * n + '\nDOS: 10/14/2026\n\n',
+        'labels beside phrase lines': lambda n: HEAD + 'Patient: X (fictional)\nDOS: 10/14/2026\n\n' * (n // 4),
+    }
+
+    def test_the_changed_readers_are_linear(self):
+        for name, make in self.SHAPES.items():
+            timings = []
+            for n in (4000, 8000, 16000):
+                text = make(n)
+                context._context.cache_clear()
+                started = time.perf_counter()
+                context.extract_context(text)
+                timings.append(time.perf_counter() - started)
+            with self.subTest(shape=name, timings=[round(t, 3) for t in timings]):
+                self.assertLess(timings[-1], 5)
+                self.assertLess(timings[-1], max(timings[0], 0.02) * 10)
+
+
 class RequestTests(EndToEnd):
     """Every issue end to end: the date each provider request carries, and the dated check that excluded an act."""
 
@@ -337,12 +456,20 @@ class RequestTests(EndToEnd):
             with self.subTest(lines=' / '.join(text.splitlines()[2:4])[:90]):
                 self.assert_dateless(text, '43239' if EGD_BODY in text else '45385')
 
+    def test_sk5_a_heading_outside_the_vocabulary(self):
+        self.assert_dateless(HEAD + 'Cancelled colonoscopy\nProcedure date: 11/04/2026\n\n' + COLO_BODY, '45385')
+        self.assert_dateless(HEAD + 'Colonoscopy report\nRecall procedure\nProcedure date: 11/04/2026\n\n' + COLO_BODY,
+                             '45385')
+
     def test_sk6_a_qualifier_in_a_header_value(self):
         for line in ('Patient status: pending authorization', 'Setting: cancelled',
                      'Provider: Dr. A. Synthetic (procedure postponed)'):
             with self.subTest(line=line):
                 self.assert_dateless(HEAD + 'EGD report\nProcedure date: 11/04/2026\n' + line + '\n\n' + EGD_BODY,
                                      '43239')
+
+    def test_sk7_another_discipline_s_undated_title(self):
+        self.assert_dateless(HEAD + 'Cardiology consultation\nDate of service: 10/09/2026\n\n' + COLO_BODY, '45385')
 
     def test_control_a_header_block_s_date_is_sent(self):
         encounter_id = self.finished(HEAD + 'Colonoscopy report\nPatient: Synthetic, Alex    DOB: 01/01/1998    MRN: '

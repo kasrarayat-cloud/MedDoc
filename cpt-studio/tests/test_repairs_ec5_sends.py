@@ -185,7 +185,10 @@ class IdenticalRequestTests(Base):
         for text in self.TITLE_FIRST:
             with self.subTest(first_line=text.splitlines()[0][-30:]):
                 before = self.sent()
-                encounter_id = self.create(text)
+                # the 7c8 fix round (P2DATES, sk:5/sk:7): a first line naming a document in words this service cannot
+                # place is no title of the note, so its labelled date is asked; the member answers it (the over-hold's
+                # remedy), and the request carries the same date as before
+                encounter_id = self.create(text, service_date='2026-10-16')
                 drain()
                 self.assertEqual(self.sent() - before, 1)
                 offered, items, span = self.whole_text_offered(encounter_id)
@@ -216,21 +219,23 @@ class IdenticalRequestTests(Base):
 
     def test_reverse_a_primary_identical_to_an_answered_second_review_reuses_it(self):
         source = f'{BANNER}\n{self.TITLE_FIRST[0]}'  # its report part, the excerpt, opens with the banner too
-        first = self.create(source)
+        first = self.create(source, service_date='2026-10-16')  # its date asked and answered, as above
         drain()
         self.assertEqual(self.ask(first).status_code, 201)
         drain()
         self.assertEqual(self.sent(), 2)
         excerpt = models.ProviderRun.objects.get(encounter_id=first, purpose='second_review').contexts[0]
         self.assertTrue(excerpt.startswith(BANNER))
-        twin = self.create(source)  # the same report again: its primary and, asked for, its second review are reused
+        twin = self.create(source, service_date='2026-10-16')  # the same report again: its primary and, asked for,
+        # its second review are reused
         drain()
         self.assertEqual(self.ask(twin).status_code, 201)
         drain()
         self.assertEqual(self.sent(), 2)
         second = models.ProviderRun.objects.get(encounter_id=twin, purpose='second_review')
         self.assertEqual((second.sent, second.state), (False, models.ProviderRun.SUCCEEDED))
-        pasted = self.create(excerpt)  # the excerpt as a note of its own: the answered second review is reused
+        pasted = self.create(excerpt, service_date='2026-10-16')  # the excerpt as a note of its own: the answered
+        # second review is reused
         drain()
         self.assertEqual(self.sent(), 2)
         run = models.ProviderRun.objects.get(encounter_id=pasted, purpose='primary')

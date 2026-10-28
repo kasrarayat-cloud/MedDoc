@@ -738,25 +738,63 @@ def _is_birth(text: str, start: int) -> bool:
             or start in _birth_cells(text))
 
 
-def _title_line(text: str, ls: int, le: int) -> bool:
-    """Whether a line near the top can be part of the document's title (rule 1): no field (a colon, unless it is a
-    dated title's own, "Colonoscopy report: 10/14/2026"), no "Date:" or "Re:" line, no sentence or list item, no date or
-    year but a dated title's own (a number that is no date is a title's: "M1", "Suite 3"), and no word of another occurrence that is not part of the name of a service this release
-    codes ("Office follow-up visit" names the visit itself; "Outside colonoscopy" is no title), no table row's bar. Fail
-    closed: a line this cannot place is not the title, so a block holding it is asked."""
+# The P2DATES skeptic (sk:5, sk:7): what a title of this note may say. A title-shaped line naming a service, an
+# encounter or a document ("Colonoscopy report", "GI office visit") is the document's title only when every word of it
+# is part of a name of a service this release codes or one of these words - the document, the encounter, this
+# release's discipline and settings, the kind of service, and the words joining them: a closed list of what a title
+# names, never a list of qualifiers. "Cancelled colonoscopy", "Recall procedure", "Cardiology consultation" or
+# "Colonoscopy report (draft)" is no title of this note, whatever its word.
+_TITLE_PLACED = frozenset((
+    'report', 'reports', 'note', 'notes', 'record', 'summary', 'procedure', 'procedures', 'procedural', 'visit',
+    'encounter', 'consultation', 'consult', 'exam', 'examination', 'evaluation', 'operative',
+    'gi', 'gastroenterology', 'gastrointestinal', 'digestive', 'endoscopy', 'endoscopic', 'office', 'clinic',
+    'outpatient', 'inpatient', 'hospital', 'ambulatory',
+    'screening', 'diagnostic', 'surveillance', 'therapeutic', 'interventional', 'advanced', 'upper', 'lower',
+    'flexible', 'bidirectional', 'combined', 'same', 'session', 'day', 'new', 'established', 'patient', 'progress',
+    'and', 'with', 'of', 'the', 'an', 'in', 'at', 'for', 'to', 'on', 'by', 'this'))
+# What makes a line name an encounter (a service's name, or these nouns) or a document (a note, a report, a summary, a
+# letter, or another discipline's document - _OTHER_DOCUMENT, where no service's name covers it).
+_TITLE_NAMES = cues.rx(r'\b(?:visits?|encounters?|consultations?|consults?|procedures?|appointments?|exams?'
+                       r'|examinations?|notes?|reports?|summary|summaries|letters?)\b')
+
+
+def _title_line(text: str, ls: int, le: int) -> Optional[str]:
+    """Whether a line near the top can be part of the document's title (rule 1), and what it names; None when it cannot:
+    a field (a colon, unless it is a dated title's own, "Colonoscopy report: 10/14/2026"), a "Date:" or "Re:" line, a
+    sentence or list item, a date or year but a dated title's own (a number that is no date is a title's: "M1", "Suite
+    3"), a word of another occurrence that is not part of the name of a service this release codes ("Office follow-up
+    visit" names the visit itself; "Outside colonoscopy" is no title), or a table row's bar. Fail closed: a line this
+    cannot place is not the title, so a block holding it is asked.
+
+    The P2DATES skeptic (sk:5, sk:7: the vocabulary alone decided title or heading, so "Cancelled colonoscopy", "Recall
+    procedure" or "Cardiology consultation" above a date-of-service label stood as the title and the label's date was
+    sent): 'placed' - it names a service, an encounter or a document and every word of it is a title's (_TITLE_PLACED);
+    'named' - it names one in words this service cannot place, or names another discipline's document; 'free' - it
+    names none (a banner, a letterhead: "Riverside Endoscopy Unit (fictional)", but a stamp "CANCELLED" alike)."""
     start, end = _strip_span(text, ls, le)
     if (start >= end or end - start > TITLE_LINE_CHARS or text[end - 1] in '.,;!?'
             or _LIST_MARKER.match(text, start, end) or text.find('|', start, end) >= 0):
-        return False  # a long line, a sentence, a list item or a table row
+        return None  # a long line, a sentence, a list item or a table row
     m = TITLE_DATE.match(text, ls, le)
     if m is not None:
         if m.group('field') is not None or not m.group('keyword'):
-            return False
+            return None
     elif text.find(':', start, end) >= 0 or _TITLE_DATED.search(text, start, end):
-        return False  # a field, or a date or year a title states but its grammar does not read (never one that hides)
+        return None  # a field, or a date or year a title states but its grammar does not read (never one that hides)
     names = [(n.start(), n.end()) for p in _THIS_SERVICE for n in p.finditer(text, start, end)]
-    return not any(not any(a <= q.start() and q.end() <= b for a, b in names)
-                   for q in _OTHER_OCCURRENCE.finditer(text, start, end))
+
+    def covered(a: int, b: int) -> bool:
+        return any(s <= a and b <= e for s, e in names)
+
+    if any(not covered(q.start(), q.end()) for q in _OTHER_OCCURRENCE.finditer(text, start, end)):
+        return None
+    other = any(not covered(o.start(), o.end()) for o in _OTHER_DOCUMENT.finditer(text, start, end))
+    if not names and not other and _TITLE_NAMES.search(text, start, end) is None:
+        return 'free'
+    if any(w.group().lower() not in _TITLE_PLACED and not covered(w.start(), w.end())
+           for w in _LEFTOVER_WORD.finditer(text, start, end)):
+        return 'named'  # no word of another discipline's document is a title word: such a title is named too
+    return 'placed'
 
 
 def _lone_value(text: str, start: int, end: int) -> bool:
@@ -837,10 +875,15 @@ class _Blocks:
     date alone ("Date of service: 2026-10-20") states it, as the member-conflict note invites. Linear: each line is read
     once.
 
-    The P2DATES skeptic (sk:6): the label's block itself - its paragraph and the line above it, P2FIX's block - holds
-    nothing but the title, header fields whose values are names, numbers or codes, and date labels. A header value
-    holding a phrase ("Provider: Dr. A. Synthetic (procedure postponed)", "Patient: Alex Synthetic (fictional)") may
-    stand in the header above the block, never in it."""
+    The P2DATES skeptic (sk:5, sk:6, sk:7). A title is read for what it names (_title_line): one naming a service, an
+    encounter or a document in words this service cannot place ends the header wherever it stands ("Cancelled
+    colonoscopy", "Recall procedure", "Cardiology consultation"). A line naming nothing stands above the title as its
+    letterhead ("Riverside Endoscopy Unit (fictional)" over "Colonoscopy procedure report"); below the title it is a
+    heading and ends the header ("Colonoscopy report" over "Recall"). The document's first line is its banner and stands
+    anywhere, when it names nothing. And the label's block itself - its paragraph and the line above it, P2FIX's block -
+    holds nothing but the title, header fields whose values are names, numbers or codes, and date labels: a letterhead
+    or a header value holding a phrase ("Provider: Dr. A. Synthetic (procedure postponed)", "Patient: Alex Synthetic
+    (fictional)") may stand in the header above the block, never in it."""
 
     def __init__(self, text: str):
         lines, pos = [], 0
@@ -862,21 +905,31 @@ class _Blocks:
             self.first[i] = self.first[i - 1] if i and not blank[i] and not blank[i - 1] else i
             self.above[i] = previous
             previous = i if not blank[i] else previous
+        opening = next((i for i in range(count) if not blank[i]), count)  # the document's first line
         tops = [0] + [i + 1 for i, (ls, le) in enumerate(lines)
                       if ADDENDUM_HEADER.fullmatch(text, *_strip_span(text, ls, le))]
         # per header: (first line, end line, the value stated, the first line stating another, the lines that may
         # stand in the header but never in a label's block)
         self.regions = []
         for top in tops:
-            end, bad, stated, value, titles, title = count, count, False, None, 0, top == 0
+            end, bad, stated, value, titles, title, placed = count, count, False, None, 0, top == 0, False
             outside = []
             for i in range(top, count):
                 if blank[i]:
                     continue
                 ls, le = lines[i]
-                if title and titles < TITLE_LINES and _title_line(text, ls, le):
+                kind = _title_line(text, ls, le) if title and titles < TITLE_LINES else None
+                if kind is not None:
                     titles += 1
-                    continue
+                    if kind == 'placed':
+                        placed = True
+                        continue
+                    if kind == 'free' and (i == opening or not placed):
+                        if i != opening:
+                            outside.append(i)  # a letterhead above the title: in the header, never in a label's block
+                        continue
+                    end = i  # a title naming what this service cannot place, or a line naming nothing below the title
+                    break
                 title = False
                 got = _header_line(text, ls, le)
                 if got is None:
