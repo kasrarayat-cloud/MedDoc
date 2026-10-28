@@ -1,0 +1,34 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+BAYVIEW GENERAL HOSPITAL (fictional) - Endoscopy Services
+
+Patient: Osric Varga-Nwosu (fictional)        MRN: SYN-101377
+Date of service: 2026-10-21
+Place of service: Hospital outpatient department
+Endoscopist: Liesel Mbatha-Carrington, MD (fictional)
+Anesthesia: MAC by Ferdinand Oyelaran, MD (fictional), anesthesiology (separately billed)
+
+PROCEDURE PLANNED: Esophagogastroduodenoscopy.
+PROCEDURE PERFORMED: Flexible transoral esophagoscopy with biopsy. The intended EGD could not be completed.
+
+INDICATION: Progressive dysphagia to solids over three months with 7 kg weight loss.
+
+NARRATIVE
+After topical pharyngeal anesthesia and induction by the anesthesia team, the standard gastroscope was introduced into the esophagus. The proximal and mid esophagus were normal. Beginning at 33 cm from the incisors there was a fungating, friable, circumferential mass that narrowed the lumen to about 8 mm and extended to at least 37 cm. The gastroscope would not pass through the narrowed segment despite gentle pressure, and an ultraslim endoscope was not available in the unit. The stomach and duodenum were therefore not examined.
+
+Eight cold forceps samples were taken from the mass at 33 to 35 cm and placed in a single jar. Mild oozing stopped on its own.
+
+Dilation was not attempted, so that staging EUS can assess the tumor without a fresh mucosal tear.
+
+SPECIMEN: Esophageal mass, 1 jar, to Bayview Hospital Pathology (fictional).
+COMPLICATIONS: None.
+
+IMPRESSION
+Malignant-appearing obstructing mass of the mid-to-distal esophagus, biopsied. Examination limited to the esophagus because the endoscope could not traverse the stricture.
+
+PLAN
+- CT of the chest, abdomen and pelvis this week.
+- EUS for staging is scheduled for 2026-10-30 at the regional cancer center.
+- Thoracic oncology referral placed; nutrition consult for a high-calorie liquid diet.
+
+L. Mbatha-Carrington, MD (fictional)

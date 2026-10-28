@@ -317,6 +317,39 @@ test('checkEvidenceMarks: every exact span of a selected proposal is marked, spl
   assert.deepEqual(failures(vb.checkEvidenceMarks(enc, marks, [cards[0], { id: 'card-p-colo', unlocated: 1 }])), ['dom.marks.known']);
 });
 
+// A source passage CPT Studio selected for a proposal (support.source), as the API serves it: offsets and text only.
+function sourceSpan(passage) {
+  const { start, end, text } = at(passage);
+  return { start, end, text };
+}
+
+// refutation p2, reports2:4: app.js marks a selected proposal's exact support.source passages ('<id>:s<n>',
+// documentLayout); the walk failed hard on them as "unknown or inexact spans". They are known; nothing else is.
+test('checkEvidenceMarks: the exact support.source passages of a selected proposal are known marks, and only those', () => {
+  const enc = encounter();
+  const [biopsy] = enc.assessment.proposals[0].evidence;
+  enc.assessment.proposals[1].support = { status: 'warn', source: [sourceSpan(EXTENT), sourceSpan(HISTORY)] };
+  const marks = [
+    { keys: ['p-flex:0', 'p-colo:0'], text: biopsy.text.slice(0, 40) },
+    { keys: ['p-flex:0'], text: biopsy.text.slice(40) },
+    { keys: ['p-flex:1'], text: '2. Normal mucosa from 20 cm to 50 cm; biopsies taken at 40 cm.' },
+    { keys: ['p-flex:1'], text: 'Plan' },
+    { keys: ['p-colo:s0'], text: EXTENT },
+    { keys: ['p-colo:s1'], text: HISTORY },
+  ];
+  const cards = [{ id: 'card-p-flex', unlocated: 0 }, { id: 'card-p-colo', unlocated: 0 }];
+  assert.deepEqual(failures(vb.checkEvidenceMarks(enc, marks, cards)), []);
+  // a passage that is not exact at its offsets stays unknown
+  const inexact = JSON.parse(JSON.stringify(enc));
+  inexact.assessment.proposals[1].support.source[1].text = 'not in the source';
+  assert.deepEqual(failures(vb.checkEvidenceMarks(inexact, marks, cards)), ['dom.marks.known']);
+  // so does one of a proposal that is not selected, and an index the proposal does not have
+  const alternative = JSON.parse(JSON.stringify(enc));
+  alternative.assessment.proposals[2].support = { status: 'warn', source: [sourceSpan(EXTENT)] };
+  assert.deepEqual(failures(vb.checkEvidenceMarks(alternative, [...marks, { keys: ['p-alt:s0'], text: EXTENT }], cards)), ['dom.marks.known']);
+  assert.deepEqual(failures(vb.checkEvidenceMarks(enc, [...marks, { keys: ['p-colo:s2'], text: EXTENT }], cards)), ['dom.marks.known']);
+});
+
 test('checkDecisionDom requires the decided badge, the reviewer and the agent label', () => {
   const enc = decided(decided(encounter(), 'p-flex', 'approve', 'n'), 'p-colo', 'reject', 'n');
   const made = [{ proposal_id: 'p-flex', code: '45331', action: 'approve', http_status: 201 }, { proposal_id: 'p-colo', code: '45380', action: 'reject', http_status: 201 }];
@@ -408,6 +441,20 @@ test('the DOM checks agree with the markup the live app.js renders', { skip: !fs
   const options = app.exportOptions({ draft: true, reviewed: false });
   assert.ok(options.includes('data-export-kind="draft" data-export-fmt="txt"') && options.includes('data-export-kind="draft" data-export-fmt="csv"'));
   assert.equal(options.includes('data-export-kind="reviewed"'), false);
+});
+
+// refutation p2, reports2:4: the support.source marks the live app.js renders - for a support that was checked and for
+// one that was not (not_applicable: the documented service's passages) - are read as known exact spans.
+test('the DOM checks read the support.source marks the live app.js renders as known', { skip: !fs.existsSync(APP) && 'studio/static/studio/app.js is not present' }, () => {
+  const app = require(APP);
+  for (const status of ['warn', 'not_applicable']) {
+    const enc = encounter();
+    enc.assessment.proposals[1].support = { status, source: [sourceSpan(EXTENT), sourceSpan(HISTORY)] };
+    const html = app.reviewView(enc, app.documentLayout(enc), 'codes', false);
+    const { marks, cards } = parseReview(html);
+    assert.ok(marks.some(m => m.keys.includes('p-colo:s0')) && marks.some(m => m.keys.includes('p-colo:s1')), status);
+    assert.deepEqual(failures(vb.checkEvidenceMarks(enc, marks, cards)), [], status);
+  }
 });
 
 // --- round 5: a confirmed exclusion has no code card (pipeline:3); the walk confirms only must_not_code (pipeline:5)
@@ -557,4 +604,15 @@ test('readDom reads a confirmed exclusion from its candidate row in the rendered
   assert.deepEqual(vb.checkDecisionDom(made, enc, dom.cards, dom.candidates).map(r => r.status), ['pass']);
   // and the same check fails when the row is missing, as it did when readDom dropped the rows
   assert.deepEqual(vb.checkDecisionDom(made, enc, dom.cards, []).map(r => r.status), ['fail']);
+});
+
+test('a STOP file in the evidence directory stops the batch before the next upload', () => {
+  const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'cpt-verify-stop-'));
+  try {
+    assert.equal(vb.stopRequested(dir), false);
+    fs.writeFileSync(path.join(dir, 'STOP'), '');
+    assert.equal(vb.stopRequested(dir), true);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

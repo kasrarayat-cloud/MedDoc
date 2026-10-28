@@ -2,7 +2,8 @@
 import unittest
 from pathlib import Path
 
-from studio.gi.context import USER_NOTE, extract_context, merge_user_values
+from studio.gi import context
+from studio.gi.context import USER_CONFLICT_NOTE, USER_NOTE, extract_context, merge_user_values
 from studio.types import CONTEXT_FACTS, Fact
 
 FIXTURES = Path(__file__).parent / 'fixtures' / 'gi'
@@ -187,12 +188,23 @@ class MergeUserValuesTests(unittest.TestCase):
         self.text = fixture('01-office-established-time-mdm.txt')
         self.facts = extract_context(self.text)
 
-    def test_user_value_overrides_as_metadata(self):
+    def test_user_value_is_metadata_and_never_overrides_the_document(self):
+        # The document gives 2026-10-21 and no billing context (session interpretation 11, ARCHITECTURE 5.2): the
+        # member's different date is a conflict with both sides kept, the billing context is supplied as metadata.
         merged = merge_user_values(self.facts, {'service_date': '2026-10-22', 'billing_context': 'facility'})
-        self.assertEqual(merged['service_date'], Fact('service_date', '2026-10-22', 'user', (), USER_NOTE))
+        self.assertEqual(merged['service_date'], Fact('service_date', None, 'conflict',
+                                                      self.facts['service_date'].evidence,
+                                                      USER_CONFLICT_NOTE.format(user='2026-10-22',
+                                                                                document='2026-10-21')))
         self.assertEqual(merged['billing_context'], Fact('billing_context', 'facility', 'user', (), USER_NOTE))
         self.assertEqual(merged['setting'], self.facts['setting'])
         self.assertEqual(self.facts['service_date'].value, '2026-10-21')  # input untouched
+        # a member date for a note that documents none, or one that agrees with the document, is metadata
+        undated = extract_context(self.text.replace('Date of service: 2026-10-21\n', ''))
+        self.assertEqual(undated['service_date'].origin, 'missing')
+        for facts, value in ((undated, '2026-10-22'), (self.facts, '2026-10-21')):
+            merged = merge_user_values(facts, {'service_date': value})
+            self.assertEqual(merged['service_date'], Fact('service_date', value, 'user', (), USER_NOTE))
 
     def test_empty_values_keep_the_document(self):
         merged = merge_user_values(self.facts, {'service_date': '', 'setting': '   '})
@@ -211,10 +223,97 @@ class MergeUserValuesTests(unittest.TestCase):
                 merge_user_values(self.facts, values)
 
     def test_patient_status_and_setting_values(self):
+        # The document gives an established patient seen in the office: different member values are conflicts with
+        # both sides kept; for a note that gives neither, the same values are supplied as metadata.
         merged = merge_user_values(self.facts, {'patient_status': 'new', 'setting': 'telehealth'})
+        for name, user, documented in (('patient_status', 'new', 'established'), ('setting', 'telehealth', 'office')):
+            self.assertEqual(merged[name], Fact(name, None, 'conflict', self.facts[name].evidence,
+                                                USER_CONFLICT_NOTE.format(user=user, document=documented)))
+        bare = extract_context('Follow-up of chronic constipation.\n')
+        self.assertEqual((bare['patient_status'].origin, bare['setting'].origin), ('missing', 'missing'))
+        merged = merge_user_values(bare, {'patient_status': 'new', 'setting': 'telehealth'})
         self.assertEqual((merged['patient_status'].value, merged['patient_status'].origin), ('new', 'user'))
-        self.assertEqual(merged['setting'].value, 'telehealth')
+        self.assertEqual((merged['setting'].value, merged['setting'].origin), ('telehealth', 'user'))
 
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class OwnTitleDateTests(unittest.TestCase):
+    """Without a labelled date, a dated title line near the top was the note's own date when it was the FIRST one: a
+    qualified first title gave none, and another unqualified dated title with another date was a conflict - never a value
+    taken from another document's title (a pathology report's own date had been read as the visit's and sent).
+    Refutation phase 2 (P2DN, rule N1): no dated title is ever the date - the installed revision's reading; a fax's or a
+    letter's "Date:" and another discipline's title had been sent - so each is asked, its date kept as the evidence a
+    member's answer must agree with (these pins had the first title documented)."""
+
+    def test_the_first_title_decides(self):
+        head = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
+        # the final refutation, fr-di:3: a dated title read as another document's ("Pathology report") or another
+        # occurrence's ("Next visit") is kept as evidence but never read as a date a member's answer agrees with (these
+        # pins had its date read too)
+        cases = (
+            ('GI follow-up visit: 2026-10-20\nPathology report: 2026-10-14\nEstablished patient.\n', {'2026-10-20'}),
+            ('GI consultation note: 2026-10-20\nPathology report: 2026-10-14\n', {'2026-10-20'}),
+            ('GI consultation note: 2026-10-20\nNext visit: 2026-12-01\n', {'2026-10-20'}),
+            ('Outside colonoscopy report: 2026-09-03\nGastroenterology consultation.\n', {'2026-09-03'}),
+            ('Post-procedure note: 2026-10-20\nUpper endoscopy.\n', {'2026-10-20'}),
+            ('Colonoscopy report: 14 Oct 2026\nThe colonoscope was advanced to the cecum.\n', {'2026-10-14'}),
+        )
+        for text, read in cases:
+            with self.subTest(text=text.split('\n')[0]):
+                fact = context.extract_context(head + text)['service_date']
+                self.assertEqual((fact.origin, fact.value), ('missing', None))
+                self.assertEqual(context._date_readings(fact.evidence), read)
+
+
+class MemberValueAgainstADocumentConflictTests(unittest.TestCase):
+    """A member value settles a conflict inside the document only by choosing one of its values; any other value is
+    a third side, kept with them (the Elena class: a member-entered 1998-01-01 against two documented dates)."""
+
+    TEXT = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nDate of service: 2026-10-20\n'
+            'Visit date: 2026-10-21\nEstablished patient office visit.\n')
+
+    def test_a_value_the_document_does_not_give_is_a_conflict(self):
+        facts = context.extract_context(self.TEXT)
+        self.assertEqual(facts['service_date'].origin, 'conflict')
+        merged = context.merge_user_values(facts, {'service_date': '1998-01-01'})['service_date']
+        self.assertEqual((merged.origin, merged.value), ('conflict', None))
+        self.assertTrue(context.is_member_conflict(merged))
+        self.assertIn('gives 1998-01-01; the document gives 2026-10-20 or 2026-10-21', merged.note)
+
+    def test_choosing_a_documented_value_settles_it(self):
+        facts = context.extract_context(self.TEXT)
+        merged = context.merge_user_values(facts, {'service_date': '2026-10-21'})['service_date']
+        self.assertEqual((merged.origin, merged.value), ('user', '2026-10-21'))
+
+
+class MemberValueAgainstAnUnusableDocumentedValueTests(unittest.TestCase):
+    """Refutation r1 (context lens): a member value against a fact the document labels but this service cannot use - a
+    labelled date that is no calendar date, a place-of-service code it does not recognise - is a member conflict with
+    both sides kept, never a silent replacement that is sent to the provider or makes a held visit ready."""
+
+    HEAD = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
+
+    def test_an_invalid_labelled_date(self):
+        for body in ('Date of service: 2026-10-20\nVisit date: 20/10/2026\n', 'Date of service: 14/10/2026\n',
+                     'Date of service: 2026-10-14\nProcedure date: 2026-10-20\nDOS: 02/30/2026\n'):
+            with self.subTest(body=body):
+                facts = context.extract_context(self.HEAD + body + 'Established patient office visit.\n')
+                merged = context.merge_user_values(facts, {'service_date': '1998-01-01'})['service_date']
+                self.assertEqual((merged.origin, merged.value), ('conflict', None))
+                self.assertTrue(context.is_member_conflict(merged))
+
+    def test_an_unrecognised_place_of_service_code(self):
+        facts = context.extract_context(self.HEAD + 'Place of service: 31\nChief complaint: Dysphagia.\n')
+        self.assertEqual(facts['setting'].origin, 'missing')
+        merged = context.merge_user_values(facts, {'setting': 'office'})['setting']
+        self.assertTrue(context.is_member_conflict(merged))
+        self.assertIn('Place of service: 31', merged.note)
+
+    def test_a_fact_the_document_does_not_label_takes_the_member_value(self):
+        facts = context.extract_context(self.HEAD + 'Established patient office visit.\n')
+        merged = context.merge_user_values(facts, {'service_date': '2026-10-20', 'setting': 'office'})
+        self.assertEqual((merged['service_date'].origin, merged['service_date'].value), ('user', '2026-10-20'))
+        self.assertEqual((merged['setting'].origin, merged['setting'].value), ('user', 'office'))

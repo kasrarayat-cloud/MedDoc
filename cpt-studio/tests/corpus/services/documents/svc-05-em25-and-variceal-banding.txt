@@ -1,0 +1,42 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+ST. AUBIN UNIVERSITY HOSPITAL (fictional) - Hepatology and Endoscopy
+Patient: Wendell Okafor-Lindqvist (fictional)      MRN: SYN-100488
+Date of service: 2026-10-14
+Place of service: On-campus hospital outpatient department (POS 22) - hepatology clinic, then endoscopy unit
+Physician: Priyanka Ravensworth, MD (fictional), Transplant Hepatology
+
+=====================================================================
+PART 1 - HEPATOLOGY CLINIC VISIT (established patient; last clinic visit 2026-07-15)
+=====================================================================
+This visit addresses his ascites and encephalopathy and is separate from the brief pre-procedure assessment for today's scheduled banding.
+
+History: 59-year-old man with alcohol-associated cirrhosis (abstinent since March 2025) who presents with three weeks of increasing abdominal girth and a 4 kg weight gain despite adherence to spironolactone 100 mg daily and a 2 g sodium diet. His wife has noticed day-time sleepiness and two episodes of confusion; he has been taking lactulose only once a day.
+
+Exam: Weight 88.2 kg. Mild asterixis. Moderate shifting dullness, no tenderness. 1+ ankle edema.
+
+Laboratory results from this morning, reviewed today: sodium 131 mmol/L, creatinine 1.1 mg/dL, total bilirubin 2.4 mg/dL; INR 1.5; platelets 68 K/uL. MELD-Na calculated at 18.
+
+Assessment:
+1. Decompensated cirrhosis with progression of ascites.
+2. Covert hepatic encephalopathy, inadequately treated.
+
+Plan:
+- Increase spironolactone to 150 mg daily and add furosemide 40 mg daily; repeat basic metabolic panel in one week.
+- Titrate lactulose to two to three soft stools daily; begin rifaximin 550 mg twice daily (prescriptions sent).
+- Diagnostic paracentesis is not needed today: no fever or abdominal pain.
+- Medical decision making: moderate complexity - chronic illness with progression, three unique laboratory results reviewed, prescription drug management.
+
+=====================================================================
+PART 2 - PROCEDURE NOTE: ESOPHAGOGASTRODUODENOSCOPY WITH VARICEAL BAND LIGATION
+=====================================================================
+Indication: Secondary prophylaxis after esophageal variceal hemorrhage on 2026-08-30. Prior band ligation sessions were performed on 2026-08-30 and 2026-09-21.
+Pre-procedure assessment: Airway and cardiopulmonary status unchanged from the pre-anesthesia evaluation; ASA class III. Informed consent confirmed.
+Anesthesia: Monitored anesthesia care with propofol administered by Leopold Haverkamp, CRNA (fictional), under the medical direction of an anesthesiologist; anesthesia services are documented and billed separately.
+
+Description: The gastroscope was introduced through the mouth and passed under direct vision to the second portion of the duodenum. Two columns of grade II varices with red wale signs were present in the distal 5 cm of the esophagus; post-banding scars from the earlier sessions were noted. Four bands were deployed, beginning at the gastroesophageal junction and spiraling upward. The stomach showed mild portal hypertensive gastropathy without gastric varices on retroflexion. The duodenum was unremarkable. No biopsies were obtained. Estimated blood loss minimal. He tolerated the procedure without complication.
+
+Impression: Grade II esophageal varices, ligated with four bands. Mild portal hypertensive gastropathy.
+Plan: Repeat EGD with band ligation in three to four weeks - booked for 2026-11-11 - until eradication. Continue carvedilol 6.25 mg twice daily.
+
+Signed: Priyanka Ravensworth, MD (fictional) - 2026-10-14 13:05

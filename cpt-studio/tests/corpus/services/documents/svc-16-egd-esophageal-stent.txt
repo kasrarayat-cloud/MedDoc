@@ -1,0 +1,28 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+MERCY RIDGE MEDICAL CENTER (fictional)
+Department of Gastroenterology - Therapeutic Endoscopy Report
+
+Patient: Thaddeus Oyinlola-Brandt (fictional)     MRN: SYN-101592
+Date of service: 2026-10-16
+Place of service: Hospital outpatient department
+Endoscopist: Ingrid Saavedra-Mensah, MD (fictional)
+Anesthesia: General endotracheal anesthesia by the Mercy Ridge anesthesia department; anesthesia professional services are billed separately.
+Facility: Facility services are billed by Mercy Ridge Medical Center.
+
+Indication: Unresectable adenocarcinoma of the distal esophagus with dysphagia to liquids (dysphagia score 3). Palliative stent requested by the oncology team.
+
+Procedure:
+A standard gastroscope reached a malignant stricture at 32 cm that it could not cross. An ultraslim 5.9 mm endoscope was then used; it traversed the tumor, which extended from 32 to 38 cm, and the stomach and duodenum to the second portion were examined and found normal. A stiff guidewire was left in the gastric antrum under fluoroscopy.
+Because the stricture admitted only the ultraslim instrument, the tumor was first dilated with a through-the-scope balloon to 12 mm.
+External radiopaque markers were placed at the proximal and distal tumor margins under fluoroscopy. A fully covered self-expanding metal stent, 23 mm by 12 cm, was advanced over the wire and deployed under combined fluoroscopic and endoscopic control, with its proximal flange 2 cm above the upper edge of the tumor. Endoscopic view confirmed good position and expansion; the scope was not passed through the newly deployed stent.
+Fluoroscopy time 3.4 minutes, operated by the endoscopy team.
+
+Estimated blood loss: Minimal.
+Complications: None immediate.
+
+Impression: Malignant distal esophageal stricture; pre-dilation to 12 mm followed by placement of a fully covered metal stent.
+
+Recommendations: Liquids today, advancing to a soft diet tomorrow. Chest radiograph in the morning to confirm expansion. Upright positioning after meals. Oncology follow-up as scheduled.
+
+I. Saavedra-Mensah, MD (fictional)

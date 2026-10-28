@@ -27,6 +27,7 @@ const SOURCE_KINDS = { pdf: 'PDF', docx: 'DOCX', txt: 'TXT', paste: 'Pasted text
 const METHOD_LABELS = { txt: 'Text file', docx: 'Word document', 'pdf-text': 'PDF text layer', 'pdf-ocr': 'PDF read with OCR', 'pdf-mixed': 'PDF text layer and OCR', paste: 'Pasted text', addendum: 'Text with addendum' };
 const STATE_TONES = { ready_for_review: 'green', reviewed: 'green', needs_clarification: 'amber', provider_unknown: 'amber', provider_failed: 'amber', extraction_failed: 'amber' };
 const STAGES = [['extract', 'Read the original document'], ['analyze', 'Identify documented services and context'], ['predict', 'Request CPT proposals from the provider'], ['assess', 'Check proposals against references and rules']];
+const SECOND_REVIEW_STAGE = ['review2', 'Second provider review (asked for by a reviewer)'];
 const STAGE_STATES = { queued: 'Waiting', running: 'In progress', succeeded: 'Done', failed: 'Failed', unknown: 'Outcome unknown', cancelled: 'Stopped' };
 const STAGE_LOOKS = { queued: ['muted', 'clock'], running: ['pending running', 'clock'], succeeded: ['', 'circle-check'], failed: ['pending', 'close'], unknown: ['pending', 'info'], cancelled: ['muted', 'stop'] };
 const CHECK_LABELS = { pass: 'Pass', warn: 'Warning', fail: 'Fail', not_verified: 'Not verified', not_applicable: 'Not applicable', info: 'Information' };
@@ -242,17 +243,19 @@ function layoutDocument(text, pages, spans) {
   };
 }
 
+// A member's value unlike the document's is that conflict (member_conflict, from context.is_member_conflict), never
+// conflicting documentation; any conflict is shown as one, never as not documented (refutation r1, context-5).
 function factValue(fact, labels, isDate = false) {
   if (!fact) return 'Not documented';
-  if (fact.origin === 'conflict') return 'Conflicting values documented';
+  if (fact.origin === 'conflict') return fact.member_conflict === true ? 'Member entry differs from the document' : 'Conflicting values documented';
   if (fact.origin === 'missing' || fact.value == null || fact.value === '' || fact.value === 'not_documented') return 'Not documented';
   const value = isDate ? (formatDate(fact.value, true) || String(fact.value)) : lookup(labels, fact.value, String(fact.value));
   return fact.origin === 'user' ? `${value} (entered)` : value;
 }
 
 function metaFact(fact, labels, name, isDate = false) {
+  if (fact?.origin === 'conflict') return fact.member_conflict === true ? `${name}: member entry differs from the document` : `${name} conflict`;
   if (!fact || fact.origin === 'missing' || fact.value == null || fact.value === '') return `${name} not documented`;
-  if (fact.origin === 'conflict') return `${name} conflict`;
   const value = isDate ? (formatDate(fact.value) || String(fact.value)) : lookup(labels, fact.value, String(fact.value));
   return fact.origin === 'user' ? `${value} (entered)` : value;
 }
@@ -338,7 +341,7 @@ function documentRow(encounter) {
   const kind = lookup(SOURCE_KINDS, encounter.source_kind, encounter.source_kind ? String(encounter.source_kind).toUpperCase() : '');
   const open = Number.isInteger(encounter.open_clarifications) && encounter.open_clarifications > 0 ? plural(encounter.open_clarifications, 'open question', 'open questions') : '';
   const meta = [kind, families, open].filter(Boolean).join(' · ');
-  return `<a class="document-row" href="#doc/${escapeHtml(encodeURIComponent(encounter.id))}"><span class="doc-row-main"><span class="doc-file-icon${tone === 'amber' ? ' amber' : ''}">${icon('file')}</span><span><strong>${escapeHtml(encounter.title || 'Untitled document')}</strong><small>${escapeHtml(meta)}</small></span></span><span>${stateBadge(encounter.state, encounter.state_label)}</span><span class="doc-row-date">${escapeHtml(formatDate(encounter.service_date) || 'Not documented')}</span>${icon('chevron', 'row-arrow')}</a>`;
+  return `<a class="document-row" href="#doc/${escapeHtml(encodeURIComponent(encounter.id))}"><span class="doc-row-main"><span class="doc-file-icon${tone === 'amber' ? ' amber' : ''}">${icon('file')}</span><span><strong>${escapeHtml(encounter.title || 'Untitled document')}</strong><small>${escapeHtml(meta)}</small></span></span><span>${stateBadge(encounter.state, encounter.state_label)}</span><span class="doc-row-date">${escapeHtml(formatDate(encounter.service_date) || (encounter.service_date_conflict === true ? 'In conflict' : 'Not documented'))}</span>${icon('chevron', 'row-arrow')}</a>`;
 }
 
 function listRows(name, encounters) {
@@ -364,7 +367,7 @@ function inviteMarkup(encounters) {
   const recent = encounters?.[0];
   if (encounters === null) return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>Loading recent documents…</strong><p>One moment.</p></span>`;
   if (!recent) return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>No documents yet</strong><p>Upload a synthetic GI document to see proposals beside the source.</p></span><button type="button" class="button secondary" data-action="upload">New document ${icon('plus')}</button>`;
-  const detail = ['Most recent', recent.state_label, formatDate(recent.service_date) || 'service date not documented'].filter(Boolean).join(' · ');
+  const detail = ['Most recent', recent.state_label, formatDate(recent.service_date) || (recent.service_date_conflict === true ? 'service date in conflict' : 'service date not documented')].filter(Boolean).join(' · ');
   return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>${escapeHtml(recent.title || 'Untitled document')}</strong><p>${escapeHtml(detail)}</p></span><button type="button" class="button secondary" data-open="${escapeHtml(recent.id)}">Open review ${icon('arrow')}</button>`;
 }
 
@@ -389,25 +392,44 @@ function messageView(title, detail, retry = false) {
   return `<section class="view-entrance"><a class="back-link" href="#documents">${icon('arrow')}All documents</a><div class="check-list-card"><p class="empty-state"><strong>${escapeHtml(title)}</strong><br>${escapeHtml(detail)}</p>${retry ? '<p class="empty-state"><button type="button" class="button secondary" data-action="retry">Try again</button></p>' : ''}</div></section>`;
 }
 
+// A support that was not checked (status not_applicable: the documented service or act is not established as performed)
+// says nothing either way about its passages (refutation 7c8, reports-4).
+function supportChecked(proposal) {
+  return proposal?.support?.status !== 'not_applicable';
+}
+
 function documentLayout(doc) {
   const spans = [];
   const codes = new Map();
+  const unchecked = new Set();
   for (const proposal of proposalsIn(doc.assessment, 'selected')) {
     (proposal.evidence || []).forEach((evidence, index) => {
       const key = `${proposal.id}:${index}`;
       spans.push({ ...evidence, key });
       codes.set(key, proposal.code);
     });
+    // Source passages CPT Studio selected because the provider's passages do not show the coded act - or, for a support
+    // that was not checked, the documented service's passages, which are never marked as evidence for the code.
+    (proposal.support?.source || []).forEach((evidence, index) => {
+      const key = `${proposal.id}:s${index}`;
+      spans.push({ ...evidence, key });
+      codes.set(key, proposal.code);
+      if (!supportChecked(proposal)) unchecked.add(key);
+    });
   }
   const layout = layoutDocument(doc.revision?.text || '', doc.revision?.pages, spans);
-  return { pages: layout.pages, unlocated: new Set(layout.unlocated), codes };
+  return { pages: layout.pages, unlocated: new Set(layout.unlocated), codes, unchecked };
 }
 
 function renderPieces(pieces, layout) {
   return pieces.map(piece => {
     if (!piece.keys) return escapeHtml(piece.text);
-    const codes = [...new Set(piece.keys.map(key => layout.codes.get(key)))].join(', ');
-    return `<button type="button" class="evidence-mark" data-evidence="${escapeHtml(piece.keys[0])}" data-keys="${escapeHtml(piece.keys.join(' '))}" title="${escapeHtml(`Evidence for ${codes}`)}">${escapeHtml(piece.text)}</button>`;
+    const unchecked = layout.unchecked || new Set();
+    const codesOf = keys => [...new Set(keys.map(key => layout.codes.get(key)))].join(', ');
+    const evidence = piece.keys.filter(key => !unchecked.has(key));
+    const service = piece.keys.filter(key => unchecked.has(key));
+    const title = [evidence.length ? `Evidence for ${codesOf(evidence)}` : '', service.length ? `Passage of the documented service for ${codesOf(service)}, not checked against the coded act` : ''].filter(Boolean).join('; ');
+    return `<button type="button" class="evidence-mark" data-evidence="${escapeHtml(piece.keys[0])}" data-keys="${escapeHtml(piece.keys.join(' '))}" title="${escapeHtml(title)}">${escapeHtml(piece.text)}</button>`;
   }).join('');
 }
 
@@ -498,11 +520,22 @@ function modifierNote(proposal) {
 }
 
 function evidenceChips(proposal, layout) {
-  return (proposal.evidence || []).map((evidence, index) => {
+  // A support that was not checked gives no check result for the provider's passages either (refutation 7c8, reports-4).
+  const checked = supportChecked(proposal);
+  const unrelated = new Set(checked && Array.isArray(proposal.support?.unrelated) ? proposal.support.unrelated : []);
+  const provider = (proposal.evidence || []).map((evidence, index) => {
     const key = `${proposal.id}:${index}`;
     if (layout.unlocated.has(key)) return `<span class="evidence-chip unlocated">${icon('info')}<span>${escapeHtml(`“${evidence?.text ?? ''}” — not found at this position in the current revision, so it is not highlighted.`)}</span></span>`;
-    return `<button type="button" class="evidence-chip" data-evidence="${escapeHtml(key)}">${icon('link')}<span>${escapeHtml(`“${evidence.text}”`)}</span></button>`;
-  }).join('');
+    const note = unrelated.has(index) ? ' — cited by the provider; does not show the coded act' : '';
+    return `<button type="button" class="evidence-chip" data-evidence="${escapeHtml(key)}">${icon('link')}<span>${escapeHtml(`“${evidence.text}”${note}`)}</span></button>`;
+  });
+  const source = (proposal.support?.source || []).map((evidence, index) => {
+    const key = `${proposal.id}:s${index}`;
+    if (layout.unlocated.has(key)) return '';
+    return `<button type="button" class="evidence-chip" data-evidence="${escapeHtml(key)}">${icon('link')}<span>${escapeHtml(`“${evidence.text}” — selected from the source by CPT Studio${checked ? '' : '; not checked against the coded act'}`)}</span></button>`;
+  });
+  const sourceLabel = source.some(Boolean) ? groupLabel(checked ? 'Source passages that show the coded act' : 'Passages of the documented service (not checked against the coded act)') : '';
+  return provider.join('') + sourceLabel + source.join('');
 }
 
 function clarificationQuestion(clarification, doc) {
@@ -513,7 +546,8 @@ function clarificationQuestion(clarification, doc) {
 function codeCard(proposal, doc, layout) {
   const count = (proposal.evidence || []).length;
   const units = Number.isInteger(proposal.units) && proposal.units > 1 ? `Units: ${proposal.units} · ` : '';
-  return `<article class="code-card" id="card-${escapeHtml(proposal.id)}" tabindex="-1"><div class="code-card-main"><div class="code-card-top"><span class="code-category">${escapeHtml(proposal.eyebrow || proposal.family_label || '')}</span>${proposalBadge(proposal)}</div><strong class="code-number">${escapeHtml(proposal.code)}</strong><h3>Description withheld</h3><span class="code-short-note">${escapeHtml(units + (proposal.descriptor?.label || 'No licensed CPT descriptor is connected.'))}</span>${proposal.rationale ? `<p class="code-rationale">${escapeHtml(proposal.rationale)}</p>` : ''}${clarificationsFor(proposal, doc).map(item => clarificationQuestion(item, doc)).join('')}</div><div class="evidence-section"><div class="evidence-label">${icon('link')}${escapeHtml(passagesLabel(count))}</div>${evidenceChips(proposal, layout)}${referenceNote(proposal)}${modifierNote(proposal)}</div>${decisionLine(proposal)}${cardActions(proposal)}</article>`;
+  const second = proposal.support?.origin === 'second_review' ? `<span class="small-badge">Second review</span>` : '';
+  return `<article class="code-card" id="card-${escapeHtml(proposal.id)}" tabindex="-1"><div class="code-card-main"><div class="code-card-top"><span class="code-category">${escapeHtml(proposal.eyebrow || proposal.family_label || '')}</span>${second}${proposalBadge(proposal)}</div><strong class="code-number">${escapeHtml(proposal.code)}</strong><h3>Description withheld</h3><span class="code-short-note">${escapeHtml(units + (proposal.descriptor?.label || 'No licensed CPT descriptor is connected.'))}</span>${proposal.rationale ? `<p class="code-rationale">${escapeHtml(proposal.rationale)}</p>` : ''}${clarificationsFor(proposal, doc).map(item => clarificationQuestion(item, doc)).join('')}</div><div class="evidence-section"><div class="evidence-label">${icon('link')}${escapeHtml(passagesLabel(count))}</div>${evidenceChips(proposal, layout)}${referenceNote(proposal)}${modifierNote(proposal)}</div>${decisionLine(proposal)}${cardActions(proposal)}</article>`;
 }
 
 function clarificationCard(clarification, doc) {
@@ -560,27 +594,178 @@ function candidateSection(title, proposals, fallback, doc) {
   return `${sectionHeading(title, proposals.length)}<div class="check-list-card">${items.join('')}</div>`;
 }
 
+const SERVICE_STATUS_LABELS = { performed: 'performed', incomplete: 'performed, incomplete', planned: 'planned', historical: 'historical', cancelled: 'cancelled', negated: 'documented as not performed', uncertain: 'not established' };
+const CODING_TONES = { incomplete: 'pending', pending_review: '', reviewed: '', not_established: 'muted' };
+
+// The encounter's coding completeness, kept apart from whether a proposal is ready for review.
+function codingBanner(doc) {
+  const coding = doc.coding;
+  if (!coding || !coding.statement) return '';
+  // pending_review is also a decided set waiting on a context change or processing: its title never says a proposal
+  // is left to review, and the statement says what is missing (refutation 7c8, reports-3).
+  const title = lookup({ incomplete: 'Coding for this encounter is incomplete', pending_review: 'Every documented service has a proposal; the review is not complete', reviewed: 'Every documented service has a reviewed decision', not_established: 'Coding completeness not established' }, coding.state, 'Coding completeness');
+  return `<div class="check-list-card">${checkItem(lookup(CODING_TONES, coding.state, 'pending'), coding.state === 'incomplete' ? 'info' : 'shield', title, coding.statement)}</div>`;
+}
+
+function serviceTitle(service, doc) {
+  const parts = [familyLabel(doc, service.family) || service.kind, lookup(SERVICE_STATUS_LABELS, service.status, service.status)];
+  if (service.completion && service.completion !== 'unknown' && ['performed', 'incomplete'].includes(service.status)) parts.push(`${service.completion} examination${service.extent ? ` (${service.extent})` : ''}`);
+  if (service.intent) parts.push(service.intent);
+  return parts.filter(Boolean).join(' · ');
+}
+
+function documentedServices(doc) {
+  const assessment = doc.assessment || {};
+  const inventory = assessment.services || {};
+  const services = Array.isArray(inventory.services) ? inventory.services : [];
+  if (!services.length) return '';
+  const completeness = assessment.completeness || {};
+  const unresolved = Array.isArray(completeness.unresolved_items) ? completeness.unresolved_items : [];
+  const bundled = Array.isArray(completeness.bundled) ? completeness.bundled : [];
+  const covered = completeness.covered || {};
+  // A code the reviewer rejected accounts for nothing in the review: shown as rejected (refutation r1, report-6).
+  const rejected = new Set((assessment.proposals || []).filter(proposal => proposal.bucket !== 'alternative' && proposal.decision_state === 'rejected').map(proposal => proposal.code));
+  const conflicts = Array.isArray(inventory.conflicts) ? inventory.conflicts : [];
+  const items = services.map(service => {
+    const lines = [];
+    const done = ['performed', 'incomplete'].includes(service.status);
+    const acts = (service.acts || []).filter(act => act.status === 'performed' && ['physician', 'unknown'].includes(act.role));
+    if (done && acts.length) lines.push(`Acts documented as done: ${[...new Set(acts.map(act => act.kind.replace(/_/g, ' ') + (act.anatomy?.length ? ` (${act.anatomy.join(', ')})` : '')))].join('; ')}.`);
+    const codes = done && Array.isArray(covered[service.id]) ? covered[service.id] : [];
+    const kept = codes.filter(code => !rejected.has(code));
+    const dropped = codes.filter(code => rejected.has(code));
+    if (kept.length) lines.push(`Accounted for by: ${kept.join(', ')}.`);
+    if (dropped.length) lines.push(`Rejected by the reviewer: ${dropped.join(', ')}${kept.length ? '' : '; no other selected code accounts for this service'}.`);
+    // Worded from the inclusion rule as the assessment recorded it (included_by: the selected codes of that service that
+    // include this examination), never from whether the service is listed: an EGD with a code of its own beside an EUS
+    // code that includes none was said to be included by it (refutation P2RA, EUS lens 1; refutation p2, reports2:0).
+    // Nothing recorded (an earlier assessment, a reading that decided nothing): the reading alone is stated.
+    // A code the reviewer rejected includes nothing in the review either (refutation P2FR, EUS-SECOND).
+    const includedBy = completeness.included_by && typeof completeness.included_by === 'object' && Array.isArray(completeness.included_by[service.id]) ? completeness.included_by[service.id].filter(code => !rejected.has(code)) : null;
+    if (done && service.included_in) lines.push(includedBy === null
+      ? `Read as part of ${service.included_in}.`
+      : includedBy.length
+        ? `Included in ${service.included_in}: that service's code includes this examination, so no code of its own is asked.`
+        : `Read as part of ${service.included_in}, but no selected code of that service includes this examination.`);
+    for (const item of unresolved.filter(entry => entry.service === service.id)) lines.push(`Unresolved: ${item.label}. No code is added for it and no alternative is promoted.`);
+    for (const item of bundled.filter(entry => entry.service === service.id)) lines.push(`Not separately reported: ${item.label} — ${item.why}`);
+    for (const conflict of conflicts.filter(entry => entry.service === service.id)) {
+      const sides = (conflict.sides || []).map(side => `${side.role} entry: ${side.status}${side.evidence?.[0]?.text ? ` (“${side.evidence[0].text.replace(/\s+/g, ' ').slice(0, 120)}”)` : ''}`).join('; ');
+      lines.push(`Conflict on ${conflict.subject.replace(/_/g, ' ')}: ${sides}. Both are kept; neither is chosen.`);
+    }
+    const tone = !done ? 'muted' : unresolved.some(entry => entry.service === service.id) || conflicts.some(entry => entry.service === service.id) ? 'pending' : '';
+    return checkItem(tone, done ? 'circle-check' : 'info', serviceTitle(service, doc), lines.join(' '));
+  });
+  const attributions = (inventory.attributions || []).map(item => item.role);
+  if (attributions.length) items.push(checkItem('muted', 'info', 'Another provider\'s services', `The document attributes ${attributions.join(', ')} services to their own providers; they are never coded for the performing physician.`));
+  // The API serves the reconciliation as the review leaves it: a code the reviewer reinstated counts as a selected one
+  // (refutation P2FR, EUS-SECOND), and that is said.
+  const reinstated = reinstatedCounted(doc);
+  if (reinstated.length) items.push(checkItem('muted', 'info', 'Counted with the reviewer\'s reinstatement', `The documented services are reconciled with ${reinstated.join(', ')}, which the reviewer reinstated, counted as selected.`));
+  return `${sectionHeading('Documented services', services.length)}<div class="check-list-card">${items.join('')}${secondReviewItem(doc)}</div>`;
+}
+
+// The codes a reviewer reinstated that the served reconciliation counts (completeness.reinstated).
+function reinstatedCounted(doc) {
+  const reinstated = doc?.assessment?.completeness?.reinstated;
+  return Array.isArray(reinstated) ? reinstated.filter(code => typeof code === 'string') : [];
+}
+
+// The second review a reviewer asked for whose own outcome is not recorded yet: the current revision's latest review2
+// stage, when no assessment came after it (one that ran is read by the assessment it queues) and it is waiting, running,
+// stopped or failed. The encounter view's reason is worked out as if none had been asked for, so it read "wait ... before
+// asking" while the request waited, and "available" once its request was used (refutation r1 re-check, ec5).
+function askedSecondReview(doc) {
+  const stages = Array.isArray(doc.pipeline?.stages) ? doc.pipeline.stages : [];
+  const kinds = stages.map(stage => stage?.kind);
+  const index = kinds.lastIndexOf('review2');
+  if (index < 0 || index < kinds.lastIndexOf('assess')) return null;
+  return ['queued', 'running', 'cancelled', 'failed'].includes(stages[index].state) ? stages[index] : null;
+}
+
+function sentence(text) {
+  const plain = String(text || '').trim();
+  return plain && !/[.!?]$/.test(plain) ? `${plain}.` : plain;
+}
+
+// The bounded second review is asked for by a reviewer, never queued by an assessment (owner decision 2026-10-27).
+function secondReviewItem(doc) {
+  const second = doc.second_review;
+  const items = Array.isArray(second?.items) ? second.items : [];
+  if (!items.length) return '';
+  const what = items.join('; ');
+  const asked = askedSecondReview(doc);
+  if (asked) {
+    const [title, said] = {
+      queued: ['Second provider review requested', 'A reviewer asked for it; it is waiting to run, and nothing has been sent yet.'],
+      running: ['Second provider review requested', 'A reviewer asked for it; it is running now.'],
+      // Resume re-runs the latest stage only, so it runs this one only when nothing came after it
+      cancelled: ['Second provider review stopped', `It was stopped before anything was sent${asked.error ? `: ${sentence(asked.error)}` : '.'}${doc.pipeline?.can_resume && doc.pipeline.stages.at(-1) === asked ? ' Resume processing runs it once.' : ''}`],
+      failed: ['Second provider review did not complete', `It did not complete${asked.error ? `: ${sentence(asked.error)}` : '.'}`],
+    }[asked.state];
+    return checkItem(asked.state === 'failed' ? 'pending' : 'muted', 'info', title, `${said} Unresolved: ${what}.`);
+  }
+  if (!second.available) return checkItem('muted', 'info', 'Second provider review', `${second.reason || 'Not available now.'} Unresolved: ${what}.`);
+  const body = `One more provider request, sent with only the text that documents ${items.length === 1 ? 'this item' : 'these items'}: ${what}. It is made once for this document and date; its codes fill only these items and each still needs a reviewer's decision.`;
+  const button = doc.permissions?.can_review && second.can_request ? `<div class="progress-actions"><button type="button" class="button secondary" data-action="second-review">Ask the provider once more</button></div>` : '';
+  return checkItem('pending', 'info', 'Second provider review available', body, button);
+}
+
 function unsupportedSection(assessment) {
   const items = Array.isArray(assessment.unsupported) ? assessment.unsupported : [];
   if (!items.length) return '';
   return `${sectionHeading('Services outside the GI profiles', items.length)}<div class="check-list-card">${items.map(item => checkItem('pending', 'info', [item.label || item.family, item.status].filter(Boolean).join(' · '), item.detail)).join('')}</div>`;
 }
 
-function emptySelectionCopy(assessment) {
+// The outcome of the second review made for the answer the current assessment reads (the API names it:
+// second_review.run), when its response was not read or not used; '' when none was made, or its response was read and
+// used. Worded from its run row, or from its own failed check when its response was refused whole (skeptic of
+// refutation 7c8 reports-5: an unknown, failed or refused second review left "No CPT codes were proposed").
+function secondReviewUnread(doc) {
+  const id = doc?.second_review?.run;
+  const run = id ? (Array.isArray(doc.provider_runs) ? doc.provider_runs : []).find(item => item?.id === id) : undefined;
+  if (!run) return '';
+  const items = Array.isArray(run.scope_items) && run.scope_items.length ? run.scope_items.join('; ') : 'the unresolved documented services';
+  const asked = `A second review was requested for: ${items}.`;
+  const none = 'This is not a finding that no codes apply.';
+  if (run.state === 'succeeded') {
+    if (doc.assessment?.second_run !== run.id) return `${asked} Its response has not been read by this assessment. ${none}`;
+    const check = (Array.isArray(doc.assessment.encounter_checks) ? doc.assessment.encounter_checks : []).find(item => item && item.id === 'provider.second_review');
+    return check && check.status === 'fail' && typeof check.detail === 'string' && check.detail ? check.detail : '';
+  }
+  if (run.state === 'unknown') return `${asked} It was sent, but its outcome is unknown: no response was recorded, so nothing from it was read.${run.reconciled ? ' A member reconciled it.' : ''} ${none}`;
+  if (run.state === 'failed') return `${asked} It failed${run.error ? `: ${sentence(run.error)}` : '.'} Nothing from it was used. ${none}`;
+  if (run.state === 'not_sent' || run.state === 'cancelled') return `${asked} Nothing was sent for it${run.error ? `: ${sentence(run.error)}` : '.'} ${none}`;
+  return `${asked} It has not finished, so nothing from it was read. ${none}`;
+}
+
+function emptySelectionCopy(assessment, doc) {
+  // A second review whose response was not read or not used is stated after whatever the panel says, so no wording
+  // here reads as covering every response for this document (skeptic of refutation 7c8 reports-5).
+  const second = secondReviewUnread(doc);
+  const and = text => (second ? `${text} ${second}` : text);
   // Codes a documentation check excluded still need a reviewer decision, so the panel never says nothing was
   // proposed while they wait below (round 5, bypass:6). Only the codes still waiting are counted, as readiness
   // counts them, so a decided set is never told it needs a decision (round 6, bypass:4).
   const excluded = proposalsIn(assessment, 'excluded');
   const reinstatable = excluded.filter(proposal => proposal.reinstatable);
   const waiting = reinstatable.filter(proposal => proposal.decision_state === 'undecided' || proposal.decision_state === 'reinstated').length;
-  if (waiting === 1) return 'One code that a documentation check excluded needs a reviewer\'s decision under Excluded candidates below.';
-  if (waiting) return `${waiting} codes that a documentation check excluded need a reviewer's decision under Excluded candidates below.`;
-  if (reinstatable.length) return 'Every code that a documentation check excluded has a decision; see Excluded candidates below.';
-  if (excluded.length || proposalsIn(assessment, 'alternative').length) return 'No code is selected for approval. The provider proposed only codes that were excluded or offered as alternatives; they are listed below.';
+  if (waiting === 1) return and('One code that a documentation check excluded needs a reviewer\'s decision under Excluded candidates below.');
+  if (waiting) return and(`${waiting} codes that a documentation check excluded need a reviewer's decision under Excluded candidates below.`);
+  if (reinstatable.length) return and('Every code that a documentation check excluded has a decision; see Excluded candidates below.');
+  if (excluded.length || proposalsIn(assessment, 'alternative').length) return and('No code is selected for approval. The provider proposed only codes that were excluded or offered as alternatives; they are listed below.');
   // A provider check that failed (a response refused whole, or no usable result) says why there are no proposals;
-  // "none were proposed" would misstate a response that was never read (round 7, bypass:1).
+  // "none were proposed" would misstate a response that was never read (round 7, bypass:1). So does the check of an
+  // assessment that read no response at all - its provider outcome unknown, failed, or the provider not run - whatever
+  // the check's status (refutation 7c8, reports-5: an unknown outcome is a 'warn').
   const provider = (Array.isArray(assessment.encounter_checks) ? assessment.encounter_checks : []).find(check => check && check.id === 'provider.status');
-  if (provider && provider.status === 'fail' && typeof provider.detail === 'string' && provider.detail) return provider.detail;
+  const read = assessment.summary?.provider_status;
+  const unread = typeof read === 'string' && read !== 'succeeded';
+  if (provider && (provider.status === 'fail' || unread) && typeof provider.detail === 'string' && provider.detail) return and(provider.detail);
+  if (unread) return and('No provider response was read for this revision, so there are no CPT proposals.');
+  // The primary response was read and selected nothing, but the second review's was not read or not used: the primary
+  // check's own wording, then that review's outcome - never "none were proposed".
+  if (second) return provider && typeof provider.detail === 'string' && provider.detail ? and(provider.detail) : second;
   return 'No CPT codes were proposed for this document.';
 }
 
@@ -589,8 +774,8 @@ function suggestionsPanel(doc, layout) {
   const selected = proposalsIn(assessment, 'selected');
   const inline = new Set(selected.flatMap(proposal => clarificationsFor(proposal, doc).map(item => item.id)));
   const general = openClarifications(doc).filter(item => !inline.has(item.id)).map(item => clarificationCard(item, doc));
-  const cards = selected.length ? selected.map(proposal => codeCard(proposal, doc, layout)) : [`<div class="check-list-card"><p class="card-empty">${escapeHtml(emptySelectionCopy(assessment))}</p></div>`];
-  return `<div class="card-stack">${general.join('')}${cards.join('')}</div>${unsupportedSection(assessment)}${candidateSection('Alternatives (not selected)', proposalsIn(assessment, 'alternative'), 'Offered by the provider as an alternative and not selected. Alternatives cannot be approved.', doc)}${candidateSection('Excluded candidates', proposalsIn(assessment, 'excluded'), 'Excluded from CPT-only results.', doc)}<div class="review-insight">${icon('shield')}<div><strong>The source remains the starting point</strong><p>The checks hold or exclude planned, historical, cancelled and uncertain services when they recognise the wording, and they can miss wording they do not recognise. Read the document before deciding; agreement between sources is not treated as verification.</p></div></div>`;
+  const cards = selected.length ? selected.map(proposal => codeCard(proposal, doc, layout)) : [`<div class="check-list-card"><p class="card-empty">${escapeHtml(emptySelectionCopy(assessment, doc))}</p></div>`];
+  return `<div class="card-stack">${codingBanner(doc)}${general.join('')}${cards.join('')}</div>${documentedServices(doc)}${unsupportedSection(assessment)}${candidateSection('Alternatives (never selectable)', proposalsIn(assessment, 'alternative'), 'Offered by the provider as an alternative and not selected. Alternatives cannot be approved.', doc)}${candidateSection('Excluded candidates', proposalsIn(assessment, 'excluded'), 'Excluded from CPT-only results.', doc)}<div class="review-insight">${icon('shield')}<div><strong>The source remains the starting point</strong><p>The checks hold or exclude planned, historical, cancelled and uncertain services when they recognise the wording, and they can miss wording they do not recognise. Read the document before deciding; agreement between sources is not treated as verification.</p></div></div>`;
 }
 
 function checkItems(checks) {
@@ -615,7 +800,12 @@ function referenceItems(sources) {
 function checksPanel(doc) {
   const assessment = doc.assessment;
   const perCode = proposalsIn(assessment, 'selected').map(proposal => `<div class="check-list-card">${groupLabel(`${proposal.code} · ${proposal.eyebrow || proposal.family_label || ''}`)}${checkItems(proposal.checks)}</div>`).join('');
-  return `<div class="card-stack"><div class="check-list-card">${groupLabel('Encounter')}${checkItems(assessment.encounter_checks)}</div>${perCode}<div class="check-list-card">${groupLabel('Reference sources')}${referenceItems(assessment.reference_sources)}</div></div><p class="checks-disclaimer">Checks come from the connected reference files and this service's own documentation rules. Anything they do not cover is shown as not verified, and agreement between sources is not treated as verification.</p>`;
+  // The encounter's checks are the assessment's: they predate a reinstatement the documented services count
+  // (refutation P2FR, EUS-SECOND).
+  const reinstated = reinstatedCounted(doc);
+  const documentedChecks = (Array.isArray(assessment.encounter_checks) ? assessment.encounter_checks : []).some(check => String(check?.id || '').startsWith('services.'));
+  const predates = reinstated.length && documentedChecks ? checkItem('muted', 'info', 'Made before the reviewer\'s reinstatement', `The documented-service checks were made when the assessment ran, before the reviewer reinstated ${reinstated.join(', ')}, and do not count ${reinstated.length === 1 ? 'it' : 'them'}; the documented services and coding completeness do.`) : '';
+  return `<div class="card-stack"><div class="check-list-card">${groupLabel('Encounter')}${checkItems(assessment.encounter_checks)}${predates}</div>${perCode}<div class="check-list-card">${groupLabel('Reference sources')}${referenceItems(assessment.reference_sources)}</div></div><p class="checks-disclaimer">Checks come from the connected reference files and this service's own documentation rules. Anything they do not cover is shown as not verified, and agreement between sources is not treated as verification.</p>`;
 }
 
 function timelineEntry(title, lines, struck = false) {
@@ -637,9 +827,12 @@ function activityPanel(doc) {
     const who = [decision.reviewer, decision.reviewer_kind === 'agent' ? 'agent-executed synthetic review — not clinical approval' : 'human reviewer', formatTimestamp(decision.created_at), decision.revision_number ? `revision ${decision.revision_number}` : ''];
     return timelineEntry(`${lookup(DECISION_TITLES, decision.action, 'Decision on')} ${decision.code || ''}`.trim(), [who.filter(Boolean).join(' · '), decision.carried_from ? 'Carried forward from an earlier assessment of the same revision.' : '', decision.note ? `Note: ${decision.note}` : '', invalid ? `Invalidated: ${invalid}` : ''], Boolean(invalid));
   });
+  // A second review is named on its row, with what it asked about, as both reports name it (refutation r1, report-10:
+  // the primary request and the second review read as two identical rows).
   const runEntries = runs.map(run => timelineEntry(
-    [lookup({ corti: 'Corti', replay: 'Replay' }, run.provider, run.provider || 'Provider'), lookup({ live: 'live', replay: 'REPLAY — recorded response, not live output' }, run.mode, run.mode || 'mode not recorded'), lookup(RUN_STATES, run.state, run.state || 'state not recorded')].join(' · '),
+    [lookup({ corti: 'Corti', replay: 'Replay' }, run.provider, run.provider || 'Provider'), lookup({ live: 'live', replay: 'REPLAY — recorded response, not live output' }, run.mode, run.mode || 'mode not recorded'), run.purpose === 'second_review' ? 'Second review' : '', lookup(RUN_STATES, run.state, run.state || 'state not recorded')].filter(Boolean).join(' · '),
     [[run.http_status ? `HTTP ${run.http_status}` : 'No HTTP response recorded', typeof run.latency_ms === 'number' ? `${(run.latency_ms / 1000).toFixed(1)} s` : '', usageText(run)].filter(Boolean).join(' · '),
+      run.purpose === 'second_review' && Array.isArray(run.scope_items) && run.scope_items.length ? `Asked about: ${run.scope_items.join('; ')}.` : '',
       run.reused_from ? 'Reused the stored response of an identical earlier request; no new provider call was made.' : '',
       run.reconciled ? 'Unknown outcome reconciled by a member.' : '', run.error ? `Error: ${run.error}` : '', formatTimestamp(run.created_at)]));
   const eventEntries = events.map(event => timelineEntry(event.summary || event.event || 'Event', [[event.actor || 'System', formatTimestamp(event.created_at)].filter(Boolean).join(' · ')]));
@@ -647,10 +840,13 @@ function activityPanel(doc) {
   return `<div class="card-stack">${card('Decisions', decisions, 'No decisions recorded yet.')}${card('Provider runs', runEntries, 'No provider request has been made for this document.')}${card('Activity', eventEntries, 'No activity recorded.')}</div>`;
 }
 
+// Each row shows the LATEST job of its stage (a context change, a resume or a second review runs a stage again: the
+// first one's "Done" was shown while the new one waited), and the second review's row appears once one was asked for.
 function progressCard(doc) {
   const stages = Array.isArray(doc.pipeline?.stages) ? doc.pipeline.stages : [];
-  const items = STAGES.map(([kind, label]) => {
-    const stage = stages.find(item => item.kind === kind);
+  const rows = stages.some(item => item?.kind === 'review2') ? [...STAGES, SECOND_REVIEW_STAGE] : STAGES;
+  const items = rows.map(([kind, label]) => {
+    const stage = [...stages].reverse().find(item => item?.kind === kind);
     if (!stage) return checkItem('muted', 'clock', label, 'Not started');
     const [tone, iconName] = lookup(STAGE_LOOKS, stage.state, ['pending', 'info']);
     return checkItem(tone, iconName, label, `${lookup(STAGE_STATES, stage.state, stage.state || 'Unknown')}${stage.error ? ` — ${stage.error}` : ''}`);
@@ -666,7 +862,7 @@ function infoCard(titleHtml, lines, actions = '') {
 function reconcileCard(doc) {
   const run = (doc.provider_runs || []).filter(item => item.state === 'unknown' && !item.reconciled).pop();
   const canReview = doc.permissions?.can_review;
-  const detail = run ? `<div class="clarification-question"><strong>Unreconciled request</strong><br>${escapeHtml([formatTimestamp(run.created_at), run.error].filter(Boolean).join(' · ') || 'No further detail was recorded.')}</div>` : '';
+  const detail = run ? `<div class="clarification-question"><strong>Unreconciled request</strong><br>${escapeHtml([run.purpose === 'second_review' ? 'Second review' : '', formatTimestamp(run.created_at), run.error].filter(Boolean).join(' · ') || 'No further detail was recorded.')}</div>` : '';
   const form = run && canReview ? `<form id="reconcileForm" data-run="${escapeHtml(run.id)}" novalidate><label class="field-label">Reconciliation note<textarea id="reconcileNote" rows="3" maxlength="2000" placeholder="What is known about this request…"></textarea></label><p class="form-error" id="reconcileError" role="alert" hidden></p><button type="submit" class="button primary">Record reconciliation ${icon('check')}</button></form>` : '';
   const viewer = run && !canReview ? '<p class="checks-disclaimer">Only owners and reviewers can record a reconciliation.</p>' : '';
   return `<div class="clarification-card"><span class="clarification-icon">${icon('help')}</span><h3>The provider outcome<br>is unknown.</h3><p>A request was sent but no response was recorded. Nothing is resent automatically: record what is known before one new attempt is allowed.</p>${detail}${form}${viewer}</div>`;
@@ -677,16 +873,29 @@ function stateCards(doc) {
   if (doc.pipeline?.busy) cards.push(progressCard(doc));
   const runs = doc.provider_runs || [];
   const stages = doc.pipeline?.stages || [];
-  if (doc.state === 'provider_unknown') cards.push(reconcileCard(doc));
+  // Any unreconciled unknown outcome, the second review's included: nothing is sent again until it is reconciled.
+  if (doc.state === 'provider_unknown' || runs.some(run => run.state === 'unknown' && !run.reconciled)) cards.push(reconcileCard(doc));
   if (doc.state === 'extraction_failed') {
     cards.push(infoCard('The text could not<br>be read.', ['No CPT proposals were requested because no text could be extracted; the reasons are listed above the document. Upload another copy, or paste the text instead.'], `<button type="button" class="button primary" data-action="upload">${icon('plus')}New document</button>`));
   }
   if (doc.state === 'provider_failed') {
-    const failed = runs.filter(run => run.state === 'failed').pop();
-    cards.push(infoCard('The provider request<br>failed.', [failed?.error ? `Error: ${failed.error}` : 'The provider did not return proposals.', 'Nothing was resent automatically, and any recorded usage is kept.']));
+    // The run this state reads, as the API names it (state_run): never one picked by recency - an earlier failed request
+    // for another date (ec5 re-check), nor a newer one a Stop or the sweep settled before sending (ec5 skeptic).
+    const failed = doc.state_run ? runs.find(run => run?.id === doc.state_run) : undefined;
+    if (failed?.state === 'succeeded') {
+      // A response refused whole (the state reads that run): read and not used, never a failed request nor one that
+      // returned no proposals; its own failed check says why (round 7 bypass:1; skeptic of refutation 7c8 reports-5).
+      const checks = Array.isArray(doc.assessment?.encounter_checks) ? doc.assessment.encounter_checks : [];
+      const own = failed.purpose === 'second_review' ? ['provider.second_review'] : ['provider.status', 'provider.problems'];
+      const said = own.map(id => checks.find(check => check && check.id === id)?.detail).filter(text => typeof text === 'string' && text);
+      cards.push(infoCard('The provider response<br>was not used.', [...(said.length ? said : ['The response was refused whole, so there are no CPT proposals from it.']), 'Nothing was resent automatically, and any recorded usage is kept.']));
+    } else {
+      cards.push(infoCard('The provider request<br>failed.', [failed?.error ? `Error: ${failed.error}` : 'The provider did not return proposals.', 'Nothing was resent automatically, and any recorded usage is kept.']));
+    }
   }
   if (doc.state === 'provider_not_run') {
-    const predict = stages.find(stage => stage.kind === 'predict');
+    // the latest predict is the one that did not run: an earlier one that ran says nothing about it
+    const predict = [...stages].reverse().find(stage => stage?.kind === 'predict');
     cards.push(infoCard('No proposals were<br>requested.', [predict?.error || (state.session?.provider_mode === 'disabled' ? 'Provider requests are disabled in this deployment.' : 'The provider step did not run for this revision.')]));
   }
   if (doc.state === 'stopped') {
@@ -1399,6 +1608,20 @@ function resumeProcessing(button) {
   });
 }
 
+function requestSecondReview(button) {
+  if (!state.doc) return undefined;
+  return guarded('second-review', async () => {
+    setBusy(button, true);
+    try {
+      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/second-review`, { method: 'POST', json: {} });
+      await afterChange('Second review requested.');
+    } catch (error) {
+      toast(error.message);
+      setBusy(button, false);
+    }
+  });
+}
+
 function submitReconcile(form) {
   if (!state.doc) return undefined;
   const note = $('#reconcileNote').value.trim();
@@ -1519,6 +1742,7 @@ function onClick(event) {
     addendum: () => openAddendum(action.dataset.clarification),
     stop: () => stopProcessing(action),
     resume: () => resumeProcessing(action),
+    'second-review': () => requestSecondReview(action),
     retry: route,
   })[action.dataset.action]?.();
 }
@@ -1606,6 +1830,7 @@ if (typeof module === 'object' && module.exports) {
     factValue, metaFact, exportStatusText, documentLayout, reviewView, documentRow, listBody, listDescription,
     inviteMarkup, overviewView, documentsView, howItWorksView, exportOptions, state, QUEUE_STATES, decisionLine,
     hasAgentDecision, candidateDecision, ACKNOWLEDGEMENTS, emptySelectionCopy, attestationText,
+    codingBanner, documentedServices, evidenceChips, secondReviewUnread,
   };
 }
 if (typeof document !== 'undefined') boot();

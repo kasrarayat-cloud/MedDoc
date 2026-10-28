@@ -337,9 +337,430 @@ Every printed box is then placed where it is drawn (`_I2_Places`) and widgets
 `billing_context` (professional | facility | not_documented),
 `patient_status` (new | established). `Fact = {value, origin ∈ {document,
 user, missing, conflict}, evidence: [{start,end,text}], note}`. Conflicting
-documented values → `conflict` (never pick one silently). User-supplied values
-(service date, setting, billing context) override with `origin=user` and are
-recorded as encounter metadata, never as clinical facts.
+documented values → `conflict` (never pick one silently). A member-supplied
+value (service date, setting, billing context) is encounter metadata, never a
+clinical fact: it supplies a fact the document does not give, or gives only as
+a conflict, and it may agree with the documented value (`origin=user`). **A
+member value that differs from a single documented value is a conflict**
+(`origin=conflict`, value none, the note names both): both sides are kept and
+neither is used until they agree (2026-10-27: a member-entered service date 28
+years before the documented one had been used for every dated check, for the
+time readings and in the provider request). Dates read as ISO, US, "October 20,
+2026" and day-month-year ("20 October 2026", "20 Oct 2026", "20-Oct-2026"); a
+labelled date is sent only in the first three (N7, below).
+
+**The service date** (refutation r1 and its CONTEXT rounds 1-3, 2026-10-27;
+refutation phase 2's rules N1-N6, 2026-10-28, P2DN, and N7 with P2DN's fix
+round; `_service_dates`, `_service_date_fact`). A document date reaches the
+provider request only from a date-of-service label's own value (N1), written as
+the installed revision reads one (N7). Every dated candidate outside a plan
+or history section is either that date or kept as documented evidence, never
+dropped (a dropped candidate had let a member's 1998 date, or another
+occurrence's date, be sent):
+- labelled dates: a date-of-service label ("Date of service / procedure /
+  visit / encounter", "DOS", "Procedure date", "Visit date"), which may name
+  the time ("Date/Time of Service", "DOS/Time", "Visit Date & Time") and be
+  followed by a clock. A value the reader does not read as a date (a weekday
+  before it, a two-digit year, dashes, dots, year-first slashes, a day-first
+  date, "20th of October") is found by a scan - the label's own field on its
+  line, the same column of the next row under a label heading a table column,
+  or the next non-blank line under a label ending its line - and kept as
+  unread evidence; a value that is no calendar date ("02/30/2026") likewise.
+  A label's own value opens its field (N2): a field that another field's
+  label opens ("Date of Service: Referral date: 10/13/2026") or whose only
+  date is a date of birth ("DOS: N/A Referral date: 10/13/2026", "Visit Date:
+  TBD DOB (age) 01/01/1998") states no date of its own and is kept as
+  evidence that reads no date - the label alone, never its field (N3). So is
+  any date-of-service FIELD - a label with
+  its separator, or alone on its line - that states no date: empty, "N/A",
+  "pending", its value after an alignment gap another field's ("DOS:    DOB:
+  01/01/1998"), or on no line below ("Date of service:" over "DOB: ..."; P2DN's
+  fix round, issue 6, N3 as written - each had kept nothing, so a member's
+  1998-01-01 was sent). Such a field never questions the note's own date - it
+  states none that could differ - but with no own date it holds every member
+  date until the document states one. Only a field that states no date is
+  silent: one that STATES a date it cannot place - a date-shaped value that is
+  no date of birth after other words in its field ("rescheduled to
+  10/14/2026", "~10/14/2026", "see 10/20/2026"), one value under a joined
+  header, a column or a stack whose positions do not match while a date
+  stands there - speaks against the labelled date: it is asked, the label
+  alone kept (a date after other words is not certainly the label's own value
+  - only a word list could tell "see" from "rescheduled to" - so no member
+  date agrees with it alone; the final refutation, fr-dr:0: read as stating
+  none, "Date of service: rescheduled to 10/14/2026" beside "Procedure date:
+  10/07/2026" sent 10/07). A label in prose has no field;
+- a header's values are its fields' by POSITION (P2DN's fix round, issues 3
+  and 4): a label heading a column of a space- or tab-aligned header row (two
+  to 24 cells, each a label with no digit) reads the cell at its place in the
+  row below; a label alone on its line in a run of label-only lines (at most 8
+  either side) reads the value line at its place in the run of value lines
+  below; a birth label joined to the date-of-service label ("DOB / Date of
+  Service:", "Date of Birth & DOS:", "Visit Date & Date of Birth:") names two
+  fields, and two values are theirs in order - the label's is kept beside it,
+  never the note's own date. Positions are checked by POSITION, never by count
+  (the final refutation, fr-dr:1: "Synthetic,  Alex" split at a double space
+  under "Patient" with the last cell empty, or a heading "PATIENT
+  INFORMATION:" counted into a stack and "1.5 cm ..." counted as a value, gave
+  the counts the header asked for and shifted the date of birth into the
+  date-of-service label's place - a member's 1998-01-01 was taken and sent):
+  each value cell must lie under its own head (it overlaps the columns from
+  its head's start to the next head's start) and every date or birth label's
+  column must hold a date alone (narrow heads over wide cells pass the first
+  test shifted), and a stack's value line must be of its label's kind (a date
+  or birth label's place holds a date alone - a clock or a full stop at most -
+  and any other label's place holds no date alone). Where the positions do not match (another cell count, a cell under
+  another head, a place of the other kind, a value missing, one value for two
+  names) no value is the label's: it states no date where none stands there,
+  and a date it cannot place - asked, the label alone - where one does
+  (fr-dr:0); every value of a joined header may be the date of birth. A stack
+  whose every label has its value line is then never read by the line below
+  its date label - that line is the first label's place (the differential
+  round, df-d:0: "Patient DOB:" or "Referral date:" over its own date, or a
+  date label's place holding "10/14/2026 (done)", made the date of birth or
+  the referral date the label's value, or a name its silent one) - and an
+  unplaced row is asked also where the label's own cell holds a digit
+  ("20261014"; df-d:3). These tests say where a date label's VALUE is: a birth
+  label's column cell is placed whatever the other columns hold, and by count
+  alone where the cells do not lie under their heads - then its date is no
+  value and no member's answer, but a dated line stating it is asked (df-d:1:
+  a date-of-service cell "TBD" had left the cell under "DOB" unmarked, and the
+  row's dated service line read the date of birth as its own);
+- dated titles in the first 12 non-empty lines: "<words> visit | encounter |
+  consultation | consult | note | report" with its date (or with the date
+  alone on the next line), a bare "Date:" or "Date/Time:" line (clocked or
+  not), and a subject line ("Re:", "Regarding:", "Subject:") naming the
+  encounter;
+- dated service lines near the top: a line naming a service this release codes
+  that ends with a date ("Colonoscopy - 10/14/2026"); the line's own date is its
+  only date after the service's first name that is no date of birth and follows
+  no other field's label - only a bare date field ("Date:", "Date/Time:") or a
+  date-of-service label gives the line its date (P2DN's fix round, issue 1:
+  "Procedure: Colonoscopy    Referral date: 10/13/2026" took the referral date,
+  a member's 10/13 agreed and was sent), a bracket after its label only when
+  it holds the date's format ("Date (mm/dd/yyyy):", "(DOS)"; the final
+  refutation, fr-dr:2: "Date (signed):" and "DOS (planned):" were read as the
+  line's own date field, so a member's signing or planned date was taken and
+  sent); any other bracket ("Date (performed):", "Date of service
+  (corrected):" - only a word list could tell it from another event's) leaves
+  the field's date one this service cannot place: the line is asked and reads
+  no date (the differential round, df-d:2: read as another field's, the line
+  was silent and the labelled 10/14 it contradicts was sent). Another field's
+  value ends - at a semicolon, a comma, a spaced dash, a
+  field break, a bracket it does not open, or its own date - and a date after
+  that end is not that field's; the line then states a date it cannot place
+  (neither the field's nor certainly the line's own): it is asked, speaking
+  against the labelled date, and reads no date (fr-dr:3: "Re: Colonoscopy -
+  Referral date: 10/13/2026; performed 10/21/2026" had its performed date
+  given to the referral field, the line silenced and the labelled 10/14 it
+  contradicts sent). A line with two such dates reads none;
+  a line whose dates are all other fields' or dates of birth states none and is
+  kept as evidence that reads no date - its text before them - never dropped
+  (dropped, "Exam: Colonoscopy Patient DOB: 01/01/1998 Exam date: 10/14/2026"
+  left no dated text and any member date was taken, its date of birth too); a
+  date before the name is never its value, and its evidence leaves those dates
+  out (N2).
+
+A date of birth is never a service date (N2; refutation phase 2, dates:0,
+dates:2 and interplay:0: a member's 1998-01-01 had agreed with a date of birth
+in an empty date-of-service field or on a dated service line, and was sent). A
+date with a birth label before it - DOB, D.O.B., D-O-B, date of birth, birth
+date, birthday, birth, born, b., their joined forms ("DOB/Age", "Age/DOB",
+"DOB (age)") and a bracketed format ("DOB (mm/dd/yyyy):") - in any position or
+bracket, at a birth label's place in a bar table, an aligned row, a stack or a
+joined header, or on the line under a birth label alone on its line when that
+line opens with the value, is no candidate's value, never agrees with a member
+date and is never read from the evidence a member date is matched against. A
+birth label is a LABEL (P2DN's fix round, issue 7): "b." in lower case wherever
+it stands, after a name too ("Re: Colonoscopy for Alex Synthetic b. 01/01/1998";
+the final refutation, fr-dr:5: refused there, the date of birth was the subject
+line's own and a member's 1998-01-01 was taken and sent), never a capital initial
+after a name ("Dr. Robin B. - 10/14/2026"). One space or tab after a word it may
+also be a list's letter ("Re: Colonoscopy part b. 10/21/2026"): its date stays
+no value and no member's answer, but a dated line stating it is asked, never
+silent (the differential round, df-d:5: silent, the line let the labelled 10/14
+it contradicts be sent); a birth word
+ending a line with other text ("To: Dr. Robin B.", "chronic hepatitis B.", an
+empty "DOB:" after a name) labels nothing; and the few characters before a date
+end at the date, never at the line break above it - each had made the line's
+own 10/14 a date of birth, dropped the dated line, and let a member's 1998-01-01
+be taken and sent.
+
+Each candidate reads as the note's own, unplaced (it may be the date), aside
+(another occurrence's) or another document's:
+- a label is aside when its own words, or a word attached to it, name another
+  occurrence ("Outside procedure date", "Prior DOS", "... (scheduled)",
+  "09/03/2026, outside facility", a bracket a history word opens after the
+  date), and unplaced when a qualifier stands across another field's label, a
+  sentence end or a field break, or when the label carries words this service
+  cannot place ("Initial visit date", "Referring visit date"). On the
+  label's own line a date qualifier is never passed over (below); a history
+  word opening a field about something else ("Outside records:", "Recent
+  labs:") is. Before a
+  capitalised label written one space after a lower-case word ("... colon
+  polyps Date of service:", a flattened header row) the words are another
+  field's value: a qualifier among them holds the date (unplaced). The line
+  above a label that opens its line is read too (a row whose first cell holds
+  the label does not open its line): a field label ending that
+  line with a qualifier heads the date ("Outside colonoscopy:" over "Procedure
+  date: 09/03/2026": aside); a field with a value, a heading, a title or a
+  sentence carrying a qualifier ("Next procedure: Colonoscopy", "Scheduled:
+  Yes", "OUTSIDE COLONOSCOPY") holds it, unless the qualifier is part of a
+  coded service's name ("Follow-up visit"). A phrase after the date that wraps
+  onto the next line in lower case or in a bracket is read there too;
+- only the first title naming this note reads as its own (unplaced when
+  qualified: "GI follow-up visit - 10/20/2026"), and so speaks for the note's
+  date. A title naming another discipline's document - pathology, cytology, a
+  biopsy, specimen or laboratory report, radiology or imaging, anesthesia,
+  nursing - is never the note's own, whatever its title word ("Surgical
+  pathology consultation: 10/17/2026"); a coded service's name speaks only for
+  the words it covers ("Colonoscopy pathology report" is a pathology report).
+  Neither is a report title naming no coded service ("Procedure report -
+  10/14/2026"). A subject line is unplaced; a later unqualified title is own
+  beside an own first title;
+- a dated service line is evidence only (aside); a subject line naming the
+  service is unplaced.
+
+A qualifier on the label's own line with a date of its own that is no date of
+birth - in its own field ("Rescheduled to: 10/14/2026", "Next colonoscopy:
+10/2029") or right by it ("Follow-up visit 10/20/2026.") - makes the line state
+two occurrences' dates: the date is asked (P2DN's fix round, issue 5: round 2
+passed such a qualifier over, and "Date of service: 10/07/2026 Rescheduled to:
+10/14/2026" sent the superseded 10/07 where the installed revision's same-line
+window held it). The final refutation, fr-dr:4, fr-di:0 and fr-di:1 (rule N7):
+a DATE qualifier on the label's own line that opens a field of its own is never
+passed over, whatever that field names ("Scheduled by: Front desk", "Requested
+by:", "Planned sedation: MAC", "Last name:", "Previous surgeries:") - the line
+may state another occurrence's date beside the label's, and the installed
+revision's same-line window held every such date - and a date of birth between a
+qualifier and the date passes nothing over ("Repeat colonoscopy for ... (DOB
+01/01/1998) Procedure date:", "... DOB: 01/01/1998    Status: Scheduled") and
+attaches nothing either: before the label, between the date and a qualifier after
+it, or after that qualifier nearer to it than the date, it leaves the qualifier
+beside the date - the date speaks against another labelled date (asked), and as it
+may be another occurrence's it is never a value a documented conflict lists nor a
+member's answer (the differential round, df-d:4: read as attached, the date was
+another occurrence's and silent, and an addendum's "Date of service: 10/21/2026"
+was sent). Passed
+over, a planned procedure's 11/04 was sent with an office visit's request, and a
+recall's 10/14/2029 instead of the encounter's 10/14/2026, where the installed
+revision sent no date or the encounter's. A history word opening a field about
+something else is still passed over (the installed revision never read those
+words), and so is a qualifier on the line above (the installed revision read the
+label's line only). Every date qualifier in the installed revision's same-line
+window now holds the label's date: a label read as the note's own is one the
+installed revision read too.
+
+The date is the note's own read labelled dates when they agree, and only those
+(N1): a label read as the note's own - the closed list above, at most with the
+name of a service this release codes ("Colonoscopy procedure date"), never one
+carrying words this service cannot place ("Initial visit date", "Cancelled
+procedure date": unplaced, asked; N4) - whose date stands alone in the label's
+own field (N5, below) and is written as the installed revision reads one (N7,
+below). It is the date only when every candidate that could
+speak for this note's date agrees: every unplaced or unread label, a labelled
+date that does not stand alone in its field, the note's own title, a qualified
+first title and a subject line. A difference is a conflict with every side
+kept (the values listed when all are read): a title and a label that differ
+are asked, never a silent choice of the stronger source. With no usable own
+date every candidate is kept as evidence and the date is asked
+(`origin=missing`, the note says why). The candidates are compared by
+identity, so the work is linear in the labelled dates.
+
+No dated title, bare "Date:" or "Date/Time:" line, dated service line or
+subject line is ever the date (N1). Beside an own labelled date such a
+candidate questions it when it differs, as above; as the only dated text it is
+the evidence of a date asked - the request goes out without a date line, and
+the member's answer agrees with a date it states. This is the installed
+revision 057a7d398's behaviour for those shapes: it read no date from a title
+or a "Date:" line, and sent none. Rounds 2 and 3 had taken them as the note's
+own, and a fax's "Date/Time: 10/27/2026 14:30", a letter's "Date:" above the
+encounter line it names and "Cardiology consultation: 10/09/2026" above a
+colonoscopy were sent as the date of service, the snare polypectomy done on
+10/14 excluded against them (refutation phase 2, dates:1, dates:3, dates:5);
+four rounds of qualifier words had each been refuted by the next paraphrase,
+so the rule is one of source, never of vocabulary. A document whose only dated
+text is its title or "Date:" line therefore asks its date, as the installed
+revision did.
+
+The label's own field (N5; refutation phase 2, dates:8: "Procedure date:
+11/04/2026 (pending authorization)" in an office visit and "(cancelled)" in an
+EGD report were sent). A labelled date stands alone when nothing but a clock
+follows it up to the end of its field: the end of the line (a full stop may
+close it), a row's cell bar, or the next field's label - after a field break
+(two or more spaces or a tab before "Place of service: Office" on the date's
+line) or, written with a capital, one space after the date ("DOS: 10/14/2026
+DOB: 01/01/1998", a flattened header row). The words before the next colon are
+that label only when they are ONE label (P2DN's fix round, issue 2: "11/04/2026
+Pending authorization. Status: open" read "Pending authorization." as part of
+the label "Status", and the planned date was sent): one to four words with no
+full stop, comma or semicolon ending a word before the last, no bracket but a
+format after the last, and written as a label is - one word, or a capitalised
+first word with no capitalised word after a word of its own ("Place of
+service", "Place of Service", "PLACE OF SERVICE"). Where the words may be the
+date's field's own and a label's ("Cancelled Status:", "pending authorization
+Status:", "Patient Name:") the start of the label cannot be told and the date
+is asked. A bracket, words or another date there make it a
+question: asked, its date kept as evidence a member's answer may agree with,
+and speaking against an own labelled date. Only the label's own field is read
+this way; the lines around it are read by the qualifier reach above, as before:
+no header region, header-label list or title-word list is read.
+
+The installed form (N7; P2DN's fix round, issue 8). The known-limit qualifier
+shapes below are a known limit only where the installed revision 057a7d398
+sends the same date; written in a form it did not read - a day-first date ("3
+Sep 2026", "03-Sep-2026", "3rd September 2026"), a label naming the time
+("Date/Time of Service", "DOS/Time"), a cell-bar separator ("| Date of service |
+09/03/2026 |") - they sent the outside or planned date where it sent none. So
+only a labelled date written as it reads one - a plain date-of-service label, a
+separator that is no cell bar, a date written year-first, month-first with
+slashes or with the month's name first - is ever the note's own date. One that
+would be the note's own but for its form is withheld: asked (a dateless
+request), never sent, and it leads the question as an own date leads the fact -
+every speaking candidate is measured against it, a difference is a conflict
+listing both, and the member's answer must agree with it (asked by its table
+row alone, a document's history line - "... colonoscopy on 2021-08-17" - would
+otherwise have been a date the member's answer agreed with). Nothing the
+installed revision sent is withheld for its form. A labelled date is the note's
+own only where no date qualifier stands in the installed revision's same-line
+window (the final refutation, fr-dr:4, fr-di:0, fr-di:1; above), so no date that
+window held is sent, and no date other than the one the installed revision sent:
+measured over 119,170 texts - the reading gate's 8,446, the corpus, the
+verification documents, the live encounters and every lens, verifier and skeptic
+case text - 0 texts send another date than 057a7d398. 83 constructed texts (none
+of the existing ones, each the same at c3c034a08) send the note's own labelled
+date where the installed revision sent none: 48 beside another labelled date
+this reader reads as another occurrence's ("Outside procedure date:", "Index
+DOS:", "... (index colonoscopy)"), which the installed revision read as a
+conflict, and 35 under a heading that ends a plan or history section in this
+release's section reader (studio/gi/sections; "PART 2 - PROCEDURE NOTE",
+"Section B: Procedure note") and not in the installed revision's. Measured
+against P2DN: 6 of the reading gate's 8,446 texts are
+asked (a day-first office note and five Word-table rows - exactly the gate's
+texts the installed revision left dateless), the corpus's svc-18 and svc-36
+(table rows), and the live Elena encounter ("Service date 20 October 2026 |
+..."), whose member's 1998-01-01 stays a held member conflict.
+
+A member date settles the date only when it agrees with the document: against
+a documented date it must equal it (otherwise it is a member conflict, and
+nothing is built or sent for the request: session interpretation 19); against
+a conflict within the document it must be one of the listed dates; against
+kept evidence it must be a date some candidate states as its own value (N3) -
+each candidate's evidence holds only its label, title or line and its own
+value, and never a date of birth (N2), so a date of birth written beside the
+date of service ("DOS: 10/14/26 DOB: 01/01/1998", a table whose header names
+both, "Re: Colonoscopy - Synthetic, Alex (DOB 01/01/1998) - 10/14/2026") is
+never one, and evidence that reads no calendar date - an unread value, or a
+date-of-service field that states none - holds every member date until the
+document is amended or the value cleared. A label or title this reader reads
+as another occurrence's ("Next procedure date: 11/04/2026", "Procedure date:
+11/04/2026 (scheduled)", "Last visit date") or another document's ("Surgical
+pathology report: 10/17/2026") is kept as evidence - quoted and shown as before
+- but a member date never agrees with it (the final refutation, fr-di:3: an
+office visit took the member's 11/04 - its next procedure's date - and sent it,
+while the correct 10/20 was held); a dated service line is evidence of the
+service's own date (N1) and still answers. With no dated evidence any member
+date supplies the fact. An agreeing member value is stored as the member's
+(`origin=user`, no evidence). A date asked of the member is no date in the
+provider request: the predict sends the request without a date line, and the
+member's answer makes a second, dated request (5.4: only a member conflict
+holds the request).
+
+The setting reader's cost (refutation phase 2, ctxcost:0 and ctxcost:1, both
+present at the installed revision; N6): the place-of-service pattern's
+whitespace runs are possessive ("POS", 96,000 spaces and no code had overrun
+the analyze stage's 60 s, and 48,000 a member's POST /context), and past
+`SETTING_STATEMENT_LIMIT` (200) setting phrases the setting is asked instead of
+every phrase being checked as a statement ("HOPD " 70,000 times had made a
+member's POST /context overrun its 15 s after the pipeline succeeded; a real
+note states its setting a few times, the corpus at most 8).
+
+**Known limits of the service date** (P2DN, recorded for the owner; each is
+pinned by a test named `..._known_limit_...` in
+`tests/test_repairs_7c8_p2dn.py`). Pre-existing qualifier gaps where the lines
+around a labelled date say it is another occurrence's date; each still
+documents, and sends, the qualified date only where the installed 057a7d398
+does - in a form it reads (N7):
+- refutation phase 2, dates:4: a qualifier more than 80 characters before the
+  label on a long flattened row ("Planned procedure: colonoscopy with possible
+  cold snare polypectomy under monitored anesthesia care Procedure Date:
+  11/04/2026");
+- dates:6: a heading above a block or a list ("Outside colonoscopy:" over
+  "Facility: ..." and "Procedure date: 09/03/2026", or over "- Procedure date:
+  ...");
+- dates:7: another field beside the label ("Status: Scheduled" or "Facility:
+  Outside hospital" on the next line); its "; outside colonoscopy." after the
+  date, in the label's own field, is asked by N5;
+- dates:8: a qualifier outside the reader's vocabulary in a field above
+  ("Recall:", "Cancelled procedure:") or before the label on a short row
+  ("Cancelled colonoscopy: yes Procedure Date: 11/04/2026"); its brackets after
+  the date are asked by N5;
+- the P2DATES skeptic's sk:5: a title-shaped line above ("Cancelled
+  colonoscopy", "Recall procedure");
+- sk:6: a status, setting or provider beside the label, on the next line or as
+  the next field on its own line ("Patient status: pending authorization",
+  "Setting: cancelled", "Provider: ... (procedure postponed)"; N5 ends the
+  label's field at the next field's label);
+- sk:7: another discipline's undated title over a date label ("Cardiology
+  consultation" over "Date of service: 10/09/2026").
+They stay because closing them by structure - a header block's lone labelled
+date only, the P2DATES variant on branch `wip/7c8-p2dates` - asked the date of
+nearly every real document (8 of the 11 live encounters, every PDF or Word
+upload, 8,416 of the reading gate's 8,446 texts), a capability loss the owner
+has not accepted; and closing them by vocabulary has leaked in every refutation
+round, each list of qualifier words refuted by the next paraphrase.
+
+Over-holds the fix round's rules accept (asked, never another date; the reviewer
+or the member settles them): a next field's label of several capitalised words
+right after the date ("Date of service: 10/14/2026    Patient Name: ..."); a
+dated qualifier field on the label's own line ("Procedure date: 10/14/2026
+Next colonoscopy: 10/2029"), as the installed revision held it; a header whose
+positions do not match; an empty date-of-service field in a document with no
+other date, which holds every member date until an addendum; and a labelled
+date in a day-first, time-naming or table-row form (N7). A birth label joined
+to the date label with no space ("DOB/DOS: 01/01/1998") is no date label at all
+- as at every earlier revision, the document then states no date and any
+member date supplies it.
+
+Over-holds the final refutation's rules accept (asked or held, never another
+date; none in the reading gate's texts, the corpus, the verification documents
+or the live encounters): a date qualifier opening a field of its own on the
+label's line ("Last name: Synthetic    Date of service: ...", "Previous
+surgeries:") asks the date, as the installed revision did; a date after other
+words in the date-of-service field ("rescheduled to 10/14/2026") is asked and a
+member's answer with it held, as a positional header's unplaced value is (the
+installed revision sent the other labelled date and took any member date); a
+subject line whose date follows another field's ended value ("Re: Colonoscopy -
+Synthetic, Alex (DOB: 01/01/1998) - 10/14/2026") asks the labelled date it
+agrees with, which the installed revision sent; and a member's answer equal to a
+date only another occurrence's or another document's dated label or title states
+- also where that reading is a known over-hold ("Nurse practitioner visit -
+10/20/2026", "Date of service: 10/14/2026 (recall due in 3 years)", "Surveillance
+colonoscopy for history of adenomatous polyps, procedure date 10/14/2026.") - is
+held until the document is amended or the value cleared, where the installed
+revision took any member date.
+
+The differential round (is the final refutation's fix round worse than
+c3c034a08 in a must-fix class?) found six date shapes it was, and its repairs
+return each to c3c034a08's outcome or to the safe direction - never another
+date: over the 8,510 existing texts (the reading gate's, the corpus, the
+verification documents and the live encounters) nothing changes, and over
+164,585 case texts (those and every lens, verifier and skeptic case of the last
+two rounds) no date is documented that 004bf808c does not document. Over-holds
+they accept (asked or held; none in the reading gate's texts, the corpus, the
+verification documents or the live encounters): a stack whose other label
+holds a date ("Patient DOB:", "Referral date:" over theirs) asks the date
+label's own value too, its member's answer held unless the note labels that
+date elsewhere (c3c034a08 read it: restoring that reopened a heading counted
+into the stack - fr-dr:1 - whose next line is a date); a date-of-service column
+cell of digits that agrees ("20261007") or states none ("2026") is asked as at
+c3c034a08; a subject line whose date field carries any bracket but a format, or
+whose date follows "b." after a word, is asked beside the labelled date it may
+agree with (fr-dr:2's "Date (signed):" and fr-dr:5's "... Alex Synthetic b.
+01/01/1998" lines too, as at c3c034a08); a recall line whose date of birth
+stands between its date and the qualifier ("Procedure date: 10/14/2029 for ...
+(DOB 01/01/1998) follow-up") asks the encounter's labelled date again, as at
+c3c034a08, and a member's answer equal to a date read beside such a qualifier is
+held where c3c034a08 took it.
 
 ### 5.3 `studio/gi/profiles` + `studio/gi/detect` — routing
 
@@ -351,7 +772,7 @@ recorded as encounter metadata, never as clinical facts.
 ranges used **only for routing**, `required_facts`, `procedure`, and
 `supported` (bool).
 
-`route(text, service_date) -> RoutingResult` (`gi-routing@3`) detects
+`route(text, service_date) -> RoutingResult` (`gi-routing@4`) detects
 documented services per family with: mention span, containing sentence span,
 section (procedure, findings, technique, impression, indication, history,
 plan, assessment, other), status (performed | incomplete | planned |
@@ -982,7 +1403,22 @@ that proposed nothing: the provider check fails ("The response from
 <provider> was not used, so there are no CPT proposals"), the problems check
 gives the reason, the readiness blocker reads "The provider response was not
 used" instead of "No CPT code was proposed", and the code panel shows the
-failed check's wording (round 7 bypass:1). Usage = `usageInfo.creditsConsumed`, basis
+failed check's wording (round 7 bypass:1). Where nothing is left to decide, the
+encounter's state is `provider_failed` reading that run (`state_run`), labelled
+"Provider response not used", never `no_codes` ("No CPT codes proposed"), and its
+card shows the same wording; a bounded second review refused whole reads as the
+primary does (skeptic of refutation 7c8, reports-5). A response read with nothing
+left to decide (`no_codes`) is labelled from its rows: beside a second review made
+for the answer the assessment reads that it did not read, that review's outcome
+("Second review outcome unknown", "... failed", "... not sent", "... not read
+yet"), as the panel and the readiness blocker state it (refutation p2,
+reports2:2); when the provider's codes are listed and none can be decided
+(excluded with no reinstatement - outside CPT-only results, no exact source
+evidence - or offered only as alternatives), "No code selected for approval",
+and the readiness blocker says "No code is selected for approval: the provider
+proposed only codes that were excluded or offered as alternatives", as the panel
+does; only an assessment that lists no code says that no CPT code was proposed
+(refutation p2, reports2:3). The state itself is unchanged. Usage = `usageInfo.creditsConsumed`, basis
 `provider_reported_credits_not_usd`.
 
 `ReplayProvider` (tests/dev only): returns recorded bytes for a known request
@@ -993,17 +1429,37 @@ Send discipline (`jobs.py`): live mode requires `CPT_STUDIO_PROVIDER_MODE=live`,
 a configured `CPT_STUDIO_AUTHORIZATION_REF`, an active owner/reviewer
 membership, and a synthetic-attested revision. A `ProviderRun` is written
 `reserved` before any network I/O; single-flight via a PostgreSQL advisory
-lock; no automatic retry; `unknown` (sent, no response) blocks resubmission
-until a member records a reconciliation note. **Reuse**: if a `succeeded`
+lock; no automatic retry; `unknown` (sent, no response) blocks every further
+send for that encounter until a member records a reconciliation note (another
+encounter's identical request is not blocked, as on the installed revision:
+refutation phase 1 sends-3, a known limit). **Reuse**: if a `succeeded`
 run exists for the same provider + adapter version + request sha256, it is
-reused (`reused_from`) and no paid call is made. Context-only changes that do
+reused (`reused_from`) and no paid call is made. **Never re-sent after a
+failure**: a request the encounter already sent (any revision, whatever it was
+made for) whose outcome was `failed` is never sent again, so a date round trip,
+a cleared date or a reconciliation's released attempt ends as that request did
+(provider_failed) and a second review that would repeat it is refused unless an
+answer to it is retained and reused (`jobs._failed_before`; round 7c8,
+refutation p1 sends-0..2). The predict that meets such a request records a
+`not_sent` run of its own carrying that request (`jobs._not_resent_run`: nothing
+sent, its error names the earlier failure) and re-assesses with it, as a
+predict that reuses an answer, sends, or cannot build its request ends with a
+run of its own: so the run the assessment reads is the revision's newest
+finished run, the run in use below and the run the installed revision reads
+after a rollback, and no later save on either sends that request (round 7c8
+skeptic: re-assessing with the older failed run left a newer one standing). Context-only changes that do
 not change the request (setting, billing context) never re-predict; whether the
 request changed is decided against the run in use, never the previous
 context. The run in use is the revision's newest request that finished,
 whether or not an assessment was made with it (a Stop during the send or a
 swept or expired assess cancels that assess); a reconciled unknown outcome no
 longer stands, so its one released attempt is made, and neither does a reserved
-run the stale sweep settled as not sent (no started_at: it was never sent). Every member action that can queue a stage runs under the encounter
+run the stale sweep settled as not sent (no started_at: it was never sent), nor
+a member date hold (`scope.held`: no request's outcome). A not-sent run recorded
+because no request could be built stands (it answers no request, so the next
+change re-predicts, and the send door keeps a request that failed unsent), as
+does the not-sent run a predict records for a request that failed (it carries
+that request). Every member action that can queue a stage runs under the encounter
 row lock and is refused while a stage is queued or running. The predict stage
 sends only the current revision's text with that revision's current context;
 each run records the service date it was built with, and assessment refuses
@@ -1053,7 +1509,30 @@ two names are equal as words or both lie in the code's one-procedure class
 (46221 banding, 46600-46615 anoscopy; never a hemorrhoidectomy, and with no
 other procedure word in the name: "Anoscopy with rubber band ligation" beside
 46600 alone is still named); it is named when another `gi.other`
-code is selected). Each check: `{id, label, status ∈ pass | warn | fail | not_verified |
+code is selected; a performed family routing detects with no selected
+proposal is named whatever `services.unresolved` also lists for it - the check
+never passes with "Every performed service that routing detected in the
+document has a selected proposal" beside one, as the installed revision never
+did - except a family the reconciliation accounts for with another service's
+selected code: every service of it done today is included in another one of
+whose selected, non-excluded codes includes its examination (an EGD read as the
+endoscopic portion of an upper-tract EUS whose selected code is an EGD-with-EUS
+code, `catalogue.includes_examination`; a sigmoidoscopy, colonoscopy, stoma or
+esophagoscopy EUS code includes no upper endoscopy; refutation p2, reports2:0).
+A family's services are those routing reads under it (`engine.legacy_family`:
+a push enteroscopy is read under the upper GI family gi-profiles@3 carved it out
+of), and when only some of them are so accounted for, the rest are named by
+their own family - "Small-bowel enteroscopy", never the examination the code
+includes (refutation P2RA, EUS lens 0: an EGD inside an EUS whose EGD-with-EUS
+code was selected let the check pass beside a push enteroscopy with no
+proposal, which the installed revision named). The family is keyed on routing's
+own reading as well: every mention routing reads as performed under it must
+name (by the inventory's own service names) a service done today that such a
+code includes; one naming a service the documented-service reading does not
+read as done today - a push enteroscopy routing reads as performed and that
+reading holds as uncertain - is named by its own family too, and a mention
+routing itself does not read as performed names nothing (refutation P2FR,
+EUS-SECOND 0)). Each check: `{id, label, status ∈ pass | warn | fail | not_verified |
 not_applicable | info, detail, source}`. Engine `cpt-studio-validation@3`.
 A selected, non-excluded `gi.other` code also speaks for the routed procedure
 line its passage opens with (`_Evaluation.speaks_for`: a passage's own sentence
@@ -1276,8 +1755,10 @@ Each of these questions is indexed once per code (the routed families' mention
 spans for the other-service question, each sentence's leading name, the
 own-procedure sentence readings), never rescanned per passage. An exclusion never presents the code's own passage as the
 service "documented as performed elsewhere". Routing and span status read
-dated history against the encounter's effective service date (a member value
-overrides the document's).
+dated history against the encounter's effective service date (the context's:
+the document's own date, or a member's date that agrees with the document or
+supplies one it does not give; none while the date is a conflict or asked,
+5.2 - a member value never overrides the document's).
 
 Validation reads routing's cues by prefix, a contract with 5.3:
 `uncertain: no performance evidence` (silent), `performed:` (an explicit
@@ -1365,7 +1846,16 @@ stream the stored bytes. TXT is the coding report; CSV is one row per item
 neutralisation (`=`, `+`, `-`, `@`, tab, CR prefixed with `'`). In both formats
 a C0 control other than tab and line breaks, DEL and a C1 control print as
 `\xNN`; in the TXT a line break of any form continues the value at seven
-spaces or deeper, below every structural line. Draft:
+spaces or deeper, below every structural line. Format `cpt-studio-report@4`
+adds CODING COMPLETENESS (the encounter's coding state, separate from the
+review status), DOCUMENTED SERVICES (status, completion, acts, the codes that
+account for them, bundled acts, other providers' services), UNRESOLVED
+DOCUMENTED SERVICES and CONFLICTS IN THE RECORD to the TXT, per proposal its
+evidence support, the source passages CPT Studio selected and a second-review
+origin; the CSV adds `evidence_support`, `source_passages`,
+`documented_service` and `proposal_origin` columns and one
+`coding_completeness` row, one `unresolved_service` row per unresolved item and
+one `conflict` row per conflict. Draft:
 "DRAFT — NOT REVIEWED", no "approved selections" section; its list of
 undecided and provisionally approved codes is titled "UNDECIDED — REVIEW NOT
 COMPLETE", or "UNDECIDED OR PROVISIONAL — THE REVIEWED REPORT IS AVAILABLE"
@@ -1377,6 +1867,424 @@ approved results; reviewer identity, kind and time; agent review labelled
 name + sha256, revision number + text sha256, assessment id, profile and
 engine versions, provider runs and usage, reference sources with releases,
 every not-verified item, open clarifications, SYNTHETIC — NOT FOR BILLING.
+
+### 5.9 `studio/gi/services` — documented services (engine @4)
+
+`build(text, service_date, routing, context_facts) -> ServiceInventory`
+(`gi-services@1`) is a source-based inventory of what the document says was
+done, read independently of any provider's codes. Per service: family and kind,
+status (performed | incomplete | planned | historical | cancelled | negated |
+uncertain), completion (complete | incomplete | unknown) and extent, intent,
+the date, clinician and setting the context gives, its evidence, the text span
+that documents it (`scope_start/end`), its lesions (noun, size, morphology,
+anatomy, specimen label, disposition removed | sampled | untreated | scheduled)
+and its acts (`ACT_KINDS`: biopsy, hot_biopsy, snare, emr, esd, ablation,
+bleeding_control, clip, tattoo, injection, band_ligation, dilation, stent,
+foreign_body, sphincterotomy, stone_extraction, lithotripsy, cholangioscopy,
+cannulation, peg, tube_replacement, tube_placement, myotomy, decompression,
+fundoplication, capsule_study, manometry, ph_monitoring, rectal_sensation,
+moderate_sedation, fna), each with its status, the role that documented it
+(physician | nursing | anesthesia | pathology | radiology | facility), anatomy,
+technique, lesion and exact passages. Also: conflicts (an act stated both as
+done and as not done for the same service and site, with every side kept),
+attributions (anesthesia, pathology, radiology or facility services the
+document gives to another provider — never coded for the performing
+physician) and problems.
+
+Reading rules, each decided within the clause and the service it belongs to:
+negation has a scope (a clause opening with "No / Neither / Without" covers
+every act it lists up to its predicate; "X was not <done> with A, B or C"
+denies A, B and C for X; a negated negative is positive — "was complete and
+was not discontinued", "not terminated early or interrupted"); "No other /
+further X" denies only acts beyond the documented ones; time belongs to the
+clause (a date or year in it, history and plan words, a history or plan
+section outside today's report; reviewing earlier records is today's work); an
+unresected lesion never makes a completed examination incomplete (completion
+is read only from extent and completion statements); a duct "dilated to 11 mm"
+is a finding, a dilation needs its instrument or an agent; a check-box row is
+read only when exactly one option is marked. Report parts: a report title
+naming one service owns its subsections to the next title; a bare service
+heading ("Colonoscopy") owns the lines to the next heading; nursing,
+anesthesia, pathology and radiology headings open role parts; an instrument
+("the colonoscope was passed to the cecum") names its service; an act whose
+anatomy its part's service cannot reach goes to the present service whose
+anatomy it is. The office E/M service is routing's E/M finding, or for a note
+routing reads no E/M in, the note's own evaluation wording (a sparse note still
+documents a visit, with its missing setting, status and basis); routine
+preprocedure work on a procedure day is not a separate E/M.
+
+Wider reading (2026-10-27, from an independently written 43-document
+synthetic corpus and fresh paraphrase tests; `gi-routing@4`, `gi-context@2`):
+- Service date: read by the context (5.2, "The service date"): the note's own
+  labelled dates whose date stands alone in the label's field, written as the
+  installed revision reads one (N7), and only when
+  every other candidate that could speak for the note's date agrees; a dated
+  title or a bare "Date:" field is evidence, never the date (refutation phase 2,
+  as on the installed revision); otherwise the date is asked, with every
+  candidate kept as evidence. A member's value that differs from the
+  document's is a conflict with both kept.
+- Structure: a numbered part ("PART 2 - PROCEDURE NOTE: EGD …") is read by the
+  label after its number, so it never inherits the previous part's plan
+  (routing too); "SMALL BOWEL CAPSULE ENDOSCOPY: INTERPRETATION AND REPORT" and
+  "PROCEDURE NOTE: <service>" are report titles; a "Study:" line is a procedure
+  line; a wrapped "Label: value" line stays one sentence.
+- Completion has a per-family endpoint: the cecum for a colonoscopy or a
+  capsule, beyond the pylorus for an EGD (or a PEG), deep cannulation for an
+  ERCP, the full examination for an EUS. It is read from routing's extent, from
+  the endpoint landmark stated reached, checked ("Extent reached: [X] Cecum")
+  or described as seen, or from deep cannulation; an insertion statement ("the
+  colonoscope was inserted into the rectum and advanced") is no extent (routing
+  too). A service without an endpoint (esophagoscopy, POEM, enteroscopy,
+  flexible sigmoidoscopy, physiology studies, a tube change) is incomplete only
+  when its discontinuation is documented, never from how far it went.
+- Routing disagreement: a performed service becomes uncertain only through a
+  contrary statement in today's report (negated or cancelled outside history,
+  indication and plan; planned or historical inside procedure, findings,
+  technique or impression). A planned repeat or an earlier examination named
+  elsewhere is another occurrence, never a doubt about today's acts.
+- Families: a PEG placed during an upper endoscopy is that EGD's act; an EGD
+  performed with an EUS of the upper GI tract is `included_in` the EUS (the EUS
+  code includes the examination: no code of its own is asked, its acts are
+  still reconciled); an EUS whose own passages, extent, lesions or acts name a
+  lower-tract site (colon, rectum, anus: `examined_regions`, the reading a
+  READ_UNDER rule reads an examination's tract with) includes no upper
+  endoscopy, and the EGD beside it stays a service of its own (refutation p2,
+  reports2:0: a rectal EUS's sigmoidoscopy EUS code was read as accounting for
+  the EGD);
+  manometry, pH and capsule acts go to their own family whatever part names
+  them; an unnamed endoscope in upper GI anatomy is an EGD; an act that more
+  than one service could take goes to the one documented as performed.
+- Attributions: anesthesia given by an anesthesia professional, specimens sent
+  to a pathology or cytology service, a facility's charges or technical
+  component, radiology's interpretation; a sentence that denies it attributes
+  nothing.
+- Conflicts: a specimen recorded as collected (a nursing or specimen row)
+  beside the physician's denied biopsy, with no tissue-taking act documented,
+  is a biopsy conflict; a limit on further acts ("No tissue was sampled beyond
+  the containers listed") and an act noun named as a place ("not passed
+  through the newly deployed stent") deny nothing.
+
+It is advisory, like routing (5.3): it reads declared wording and cannot be
+complete for open prose. It is bounded (sentences, acts, lesions and services
+are capped; a cap reached is a recorded problem, never a silent truncation),
+runs inside the assess child, and is validated (`validate`: every passage
+exact, every value in its vocabulary, every reference resolvable). An
+inventory with a validation problem decides nothing (the engine falls back to
+the routing-era reading for every code) and the problem is reported.
+
+### 5.10 `studio/gi/catalogue` + `studio/validation/reconcile` — coverage and reconciliation
+
+The coverage catalogue (`gi-catalogue@1`, rendered to `COVERAGE.md`) states per
+family its support level (supported | recognised | unsupported), required
+documentation, reconciled acts, acts not separately reported under an
+internal profile rule (a prophylactic clip, cannulation, a biopsy of a lesion
+removed at the same session, a lift injection before a resection, routine
+preprocedure work), unsupported acts (ESD), clarification questions,
+verification evidence and the rule checks applied. `CODES` maps a code number
+to the documented act it accounts for: an internal engineering profile for
+reconciliation only, never a CPT reference, never shown as a descriptor; a code
+missing from it is "coverage not established", never wrong.
+
+Per provider-selected code (`reconcile.match`): the documented service of its
+family decides its status — never a fragment of a provider passage read on its
+own. A service documented as planned / historical / cancelled / negated →
+excluded (reinstatable, the reviewer decides); uncertain → held; performed or
+incomplete → the act the code accounts for must be documented as done in that
+service: done → positive; denied → excluded (reinstatable); not documented →
+held with the question; in conflict → held with both sides. A base or E/M code
+needs the service itself. **Second opinion:** when the code's own passage is
+about the very act or service matched (it overlaps that act's or service's
+evidence) and the routing-era reading of that passage hedges or denies it, the
+code is held with both readings; a doubt on a passage about something else (a
+fragment of a findings sentence, an earlier visit) does not decide, nor does a
+doubt that is only the routing-era reader's unresolved negation in a passage
+the inventory reads, clause by clause, as this service's own positive
+statement ("The examination was complete and was not discontinued"); a hedge,
+a denial or a cancellation always holds. **Evidence
+support** (`evidence.support`): a provider passage supports the code when it
+overlaps the documented act's evidence (for an office visit, when it is a
+statement of this visit, not of another time); when none does, CPT Studio
+selects the source passages that show the act (`Proposal.support.source`,
+exact, shown and exported beside the provider's passages, which are labelled
+as not showing it). Exact quotation is necessary, never sufficient.
+
+Encounter level (`reconcile.reconcile`): every performed act the catalogue
+reconciles in a supported family, documented by the physician and not
+bundled, is covered by a selected, non-excluded proposal whose profile covers
+it, or listed as unresolved (`services.unresolved`, one per service and act
+kind; a service with no proposal at all is unresolved as a whole, except an
+office visit beside a same-day procedure and a service included in another
+while that other has no selected code or one that includes its examination
+(`inclusion_asks_no_code`; `CodeProfile.includes`: only the EGD-with-EUS codes
+include an upper endoscopy), and its unsupported acts are still named). The
+documented services word an included service's line from that rule itself, as
+the assessment records it (`completeness.included_by`: the selected,
+non-excluded codes of the including service that include the examination,
+`reconcile.includes_through`, the one test every reader of the rule uses):
+"included in <that service>: that service's code includes this examination"
+only while one does; otherwise the TXT and the page read "read as part of <that
+service>, but no selected code of that service includes this examination" -
+whether or not the service is listed, and beside a code of its own too
+(refutation P2RA, EUS lens 1: 43235 beside 45342 read "that service's code
+includes this examination ... so no code of its own is asked"); an assessment
+that recorded no such list reads "read as part of <that service>" alone. A code
+the reviewer rejected accounts for nothing and includes nothing: it is dropped
+from "accounted for by" and from the inclusion line alike. The documented
+services are read as the review leaves them (`review.reviewed_completeness`,
+`engine.reviewed_completeness`): an excluded code a reviewer reinstated and has
+not rejected is decided like a selected one, so the reconciliation is read
+again over the documented services the assessment recorded with it counted as
+selected - what it covers and includes, what stays unresolved, coding
+completeness and the second review's items - in the reports, the encounter
+view (`assessment.completeness`, which then names it in `reinstated`) and the
+second review alike, and the TXT and the page say so; the assessment's own
+record is never rewritten, and its encounter checks, made before the
+reinstatement, say that they do not count it (refutation P2FR, EUS-SECOND: an
+EGD-with-EUS code excluded on another act's cancel word, reinstated and
+approved, read "no selected code of that service includes this examination",
+with the EUS listed, coding incomplete and a second review offered for it).
+No code is added for an unresolved item and no alternative is promoted. Conflicts → `services.conflicts` and a
+service-scoped question with both sides; missing documentation → every
+materially necessary question for that service, asked together (a sparse visit
+note: setting, patient status and E/M basis), never twice for the same family
+and fact. `Assessment.completeness` records the unresolved, bundled and covered
+items and the reasons; `review.coding_completeness` adds the review state:
+`incomplete` (unresolved services, open conflicts or open questions — the
+supported proposals stay available for review), `pending_review`, `reviewed`.
+A documented service performed with no proposal that is not listed as
+unresolved (the office visit beside a same-day procedure) is recorded in
+`completeness.not_listed`, named, and keeps coding `incomplete`: no surface
+says every documented service has a proposal while one has none (refutation
+7c8, reports-1). The `services.unresolved` check names it and never passes
+beside one, and every closing line of UNRESOLVED names it, over a reading read
+in part and beside listed items too (its skeptic).
+It is never "verified": CPT membership and NCCI edits are not connected. A
+proposal being ready for review and the encounter's coding being complete are
+separate statements everywhere (UI banner, both reports, CSV row).
+
+Rules connected: CMS PFS RVU26D (presence and status for the date, global
+period → same-day E/M, endoscopic base family → multiple-endoscopy payment,
+PC/TC indicator → modifier 26 consideration in a facility setting) and the
+CMS practitioner MUE table (units per day). Modifier considerations (never
+assigned): separate lesions within one endoscopic family (59/XS — an NCCI PTP
+question, not connected), incomplete examination (52/53 — payer rule, not
+connected), screening that became therapeutic (PT/33 — payer rule, not
+connected), separately identifiable E/M (25). A selected anesthesia,
+pathology or radiology code for a service the document attributes to another
+provider is flagged (`services.attribution`). Practitioner and facility rules
+stay distinct: only practitioner sources are connected.
+
+### 5.11 The bounded second review
+
+When an assessment leaves a documented service (or act) of a supported family
+without a supported proposal, and both readers read that item as done today
+(5.12, second review gate), the encounter offers ONE second review about the
+items so marked, and a workspace owner or reviewer asks for it (`POST .../second-review`,
+`jobs.request_second_review`; the encounter view's `second_review` says whether
+it can be asked for and why not). An assessment never queues one: owner
+decision 2026-10-27 (narrow, install-first), after refutation r1 found the
+reader's misreadings each turning into an automatic paid request. The request
+queues ONE `review2` job (idempotency key `review2:<revision>:<assessment>`)
+under the bounds the automatic one kept (`jobs._second_review_blocker`): never
+while a stage is queued or running, never for a revision and date that already
+had one, whatever its outcome (a reconciled unknown one releases another; a run
+recorded as not sent or cancelled counts too, so a later ask for that revision
+and date is refused - a known limit - while a cancelled one that is still the
+latest stage can be resumed and then runs once), only
+for the current assessment of a primary request that succeeded and was not
+refused whole, only with a known, agreed service date, never while an outcome
+is unknown, never when its request repeats one the provider already answered
+as a primary request, and never when it repeats one the encounter already sent
+that failed (on any revision: an addendum that leaves the excerpt as it was
+makes the identical request) unless an answer to that identical second-review
+request is retained in the workspace: that answer is reused and nothing is sent
+(5.4 Reuse; a reuse is not a send), so the ask is accepted;
+`stage_review2` checks them again when it runs: a retained answer is reused
+first, then an unknown outcome blocks, then a request that failed is never sent
+again. It sends the
+provider the text that documents those services (the services' report parts,
+≤ 20,000 characters) with the date line, under the same send discipline as
+predict (`jobs._send`: single-flight advisory lock, the run written reserved
+before any I/O, Stop observed, no automatic retry, unknown outcomes recorded
+and blocking every further send for the encounter until reconciled; an identical retained
+second review is reused, not resent). `ProviderRun.purpose = second_review`,
+`ProviderRun.scope` = the excerpt offsets, the primary run and the items.
+The assessment that follows reads both runs (`Assessment.second_run`): the
+second review's passages are moved from the excerpt to the revision text and
+re-checked exactly; only a code it SELECTED that accounts for an unresolved
+item becomes a proposal (`support.origin = second_review`, labelled on the
+card and in both reports); every other code it lists is an alternative. A
+service read as part of another (an EGD inside an EUS) is accounted for by a
+code of that other service that includes its examination, as the
+reconciliation reads it once the code is selected (`reconcile.includes_through`),
+whatever that code's own acts leave to the reviewer (refutation P2RA, EUS lens
+2: an EGD-with-EUS code selected for the listed EGD was kept as an alternative
+that "accounts for no documented service or act the primary proposals left
+unresolved"). The
+primary run stays the run in use for context changes and reuse. A second-review
+stage that ends failed having sent nothing - no run recorded, or its run stopped
+before sending or not sent - leaves the assessment as it was: the encounter's
+state is the assessment's own, worded from that run, never `provider_failed`
+(refutation P2FR, ROLLBACK 1: an undo's close of a second review stopped before
+sending had read "Provider request failed" beside a request that succeeded). The encounter
+view's `second_review.run` names the newest second review made for the answer
+the current assessment reads, whatever its outcome; while its response was not
+read (unknown, failed, not sent) or not used (refused whole), the suggestions
+panel states that outcome from its row or its own failed check, never "No CPT
+codes were proposed" (skeptic of refutation 7c8, reports-5). The run is looked
+up on the shown assessment's own revision, so after an addendum, while the new
+revision is not assessed yet (stopped, or its predict blocked by an unknown
+outcome) and the page still shows the earlier assessment, the panel still
+states that assessment's second review (refutation p2, reports2:1).
+
+### 5.12 Repairs after the full-suite triage of WIP 3 (2026-10-27)
+
+The suite on WIP 3 failed 291 records in 129 tests that pass on the installed revision. Each failure was classified
+as an intended change of 5.9-5.11 (the test was updated, keeping what it pins) or a regression (repaired by a general
+rule, never a sentence patch). The rules this added, by module:
+
+- Reader (`studio/gi/services.py`):
+  - **Soft line wraps** (`reflow`, session interpretation 20): the reader reads a same-length view in which a line
+    break inside a sentence is a space - after a long line of prose that ends no sentence, label or answer, before a
+    line that continues it in lower case or after a word that cannot end a line; never around a check-box, option,
+    table, list or field row, nor inside an extraction block. Every passage is re-read from the text at its offsets,
+    and routing's box reader is given the text itself.
+  - **Sentence ends**: after a line that answers its own field (`_answered_line`, routing's own `_answered`,
+    `_OPTION_ROW` and spoken-answer readers), and at each line of an extraction block.
+  - **Time parts follow routing's section layout** (`_time_parts`): a history or plan section dates what it holds from
+    where the layout opens it to where the layout opens the next section; a history part ends at today's procedure
+    heading when today's report goes on under it; an extraction block interrupts a history or plan part; a
+    performance stated in an indication paragraph, not said to be today's, is held.
+  - **Clause reading**: a history or plan section dates a mention before a hedge is read; a service named as replaced
+    ("rather than EUS", "instead of") is negated, and its instrument in that clause documents nothing; "without (any)
+    complication(s)" ending its clause denies no act; a "not" inside a subordinate clause, or on a second predicate
+    coordinated with the act's own participle, never denies the act, and a coordinated subject with its own negated
+    predicate is its own clause (every other "not" still denies); a line listed under a label that denies
+    performance is held (`detect.denying_label_over`, routing's plan:C reader); a checked form-field line documents
+    its act only as the strict-box rules below allow; without a known service date a dated act statement is held,
+    never read as today's.
+  - **Modal predicates** (routing:18): an act or a service whose own predicate is under a modal - a perfect or a
+    conditional modal ("it would have been dilated", "Biopsies could have been taken but were not needed", "EGD with
+    biopsy would be done if ..."), a recommendation or a possibility ("EGD should be done.", "may be done") - or
+    inside a condition that opens its clause ("If colonoscopy were done today, ...") reads uncertain with a non-silent
+    cue (`HYPOTHETICAL`, `_hypothetical`), and no report, procedure line or form field promotes it; an act verb the
+    clause states for itself still decides ("Biopsies were taken and would be sent ..."), a plan section or plan word
+    still dates first, and a hypothetical reach completes no examination. A hypothetical act is therefore no
+    unresolved act (no second review is paid for it) and no act a diagnostic code leaves unreported.
+  - **Intent** is read like extent: a family routing reads takes routing's intent (`detect._intent`: today's
+    indication and procedure text only, never a question, a hedge, a pending confirmation, a denial, a plan or a
+    history; read for a colonoscopy, so another routed family states none, as the routing-era rationale did); a family
+    routing does not read takes the reader's own intent words, read with routing's intent doubts and its clause's
+    reading (`_intent_word`). A doubted intent raises no screening-became-therapeutic consideration.
+  - **Check boxes and form fields** (triage round 2, WIP 7-8; the owner's strict-box decision of 2026-10-25 applied to
+    this reader). A row's own reading decides it: an unselected option, an unread mark, boxes that disagree or a row
+    that cannot be paired hold, and the line the row is on never promotes that hold. A checked own box documents its
+    act only when the run of check-box lines it belongs to lies directly under a procedure list's label
+    ("Interventions:", "Procedures performed:"), or that label opens its own line, and a title, a statement or an
+    instrument already documents the service (`_in_a_procedure_list`, `_checked_in_a_procedure_list`): any other label
+    ("Consent obtained for:", "Equipment:", "Discussed today:"), a blank line, a line of prose or a field with its own
+    answer above the run, or the document's start, leaves it held - never ready, never excluded, and never a performed
+    act or service that would be sent for a paid second review. Plain item lines ("Biopsy", "1. Biopsy") and labels
+    naming an item ("Biopsy:") belong to the run. A checked or "Yes" PDF form field documents its act only through the
+    printed item it names on its page (routing's tie, `detect.checked_field_ties`) when that item is in such a list
+    (`_checked_field_in_a_procedure_list`); a field whose label alone names the act ("Biopsy: Yes" under a printed
+    "Biopsy recommended at follow-up?") is a doubt for the reviewer. A field's answer - never a participle in its
+    label - states its item: an answer with a denial or a doubt among other words, or with several printed options
+    ("None obtained", "zero", "Yes ___ No ___", "Yes / No (circle one)"), holds it (`ANSWER_DOUBT`); details ("3 from
+    the sigmoid colon") still state the act and a negated predicate ("not placed") still denies it. With no colon on
+    its line, a spaced dash after the item separates a typed field's label from its answer ("Biopsy taken - No"), and
+    the denial such a field gives only holds (`FIELD_DASH`). A bare object noun answered with nothing ("Stones: None",
+    "Stent: None") reports a finding, not a denied act. A checked row that routing reads as done only by its section's
+    default is held when its own label lists something else ("Risks discussed - \u2612 Biopsy", `_row_label`); a
+    landmark row ("Furthest point reached: [X] Cecum") is unaffected. An extraction block's option line ("Biopsy taken: no: checked") is decided by its
+    checked option.
+  - **Consent** (`_consent_object`): what a consent, an authorization or an approval is for is named, never stated done
+    ("Consent was obtained for biopsy and cold snare polypectomy", "Written consent for EGD with dilation was
+    obtained", "Prior authorization was obtained for colonoscopy"): its predicate is the consent's, so the item reads
+    uncertain - held, never excluded, never sent for a second review. So is an item after the predicate of a consent
+    that is the clause's subject ("Informed consent was obtained after explaining the risks of colonoscopy with
+    polypectomy"). An act with a predicate of its own in the clause ("... and biopsies were taken") is still done.
+  - **Service headings**: a label line (ending in ":" or "?") that names one service opens a bare service heading only
+    when it carries the service's name, its acts and heading words alone (`_bare_service_heading`): "Colonoscopy within
+    10 years:", "Last colonoscopy:" and "Colonoscopy up to date:" are questions, not reports of a service done today. A
+    title without a colon keeps its other words ("ERCP (UNSUCCESSFUL)").
+- Routing (`studio/gi/detect.py`): an insertion statement is no extent only when no extent label speaks
+  (`_insertion_only` beside the plan:B/B2/D/D2 label readings), which restores the incomplete readings it had lost.
+- Engine (`studio/validation/engine.py`):
+  - the routing-era reading is named, never dropped: a contrary or released passage of a ready code is named in its
+    status check (warn); a hold or an agreed exclusion carries both readings;
+  - a passage overlapping a routed office-visit mention is about the visit, so a hedge in the E/M's own time or
+    decision-making line holds it;
+  - a plan or history SECTION reading of the code's own act passage holds, never excludes;
+  - the own-passage release applies only to a passage naming the code's act kind that the reader does not read;
+  - a family carved out by gi-profiles@3 also counts for the family routing still reads it under, so uncovered "other
+    GI" procedures beside a manometry, capsule, anorectal, pH or feeding-tube code are named again;
+  - no office visit is pushed as unresolved on a procedure day the engine sees (and no second review is made for it);
+  - a bare status line is the procedure's own (it holds) by a structural signal, not a word list alone: a status
+    word, a hedge that is not on an observation ("were carried out?", "unclear if adequate"; never "A 5 mm lesion was
+    seen?", interpretation 9), or a routing-era reading from a check-box or status-option row (`_status_signal`);
+  - the routing-era reading of the code's own passage excludes the code only when that passage marks its item off
+    itself - an unchecked box, a denying field answer - never by prose beside another row ("A 6 mm polyp was removed."
+    beside a checked "Procedure cancelled" box is held, `_own_passage_decides`);
+  - an office visit's evidence support honours the routing-era E/M time reading, and a study's own result sentence
+    supports the study code;
+  - a member's encounter metadata that conflicts with the document is asked once, at the encounter, when nothing else
+    asks it.
+- Reconciliation (`studio/validation/reconcile.py`): an act read as uncertain is quoted as in doubt, never reported as
+  absent; a member conflict is worded as one in the visit's own questions.
+- Context, refutation r1: a member value against a fact the document labels but this service cannot use (a labelled
+  date that is no calendar date, a place-of-service code it does not recognise) is a member conflict with both sides
+  kept - never a silent replacement that is sent or that makes a held visit ready. Dated text the reader does not read
+  as the date, or cannot place, is kept as evidence a member date must agree with (5.2).
+- Context (`studio/gi/context.py`): the service date is the rule of 5.2 ("The service date", CONTEXT rounds 1-3,
+  refutation phase 2's N1-N6 and its fix round's N7): every candidate is the note's own or kept as evidence; only a
+  date-of-service label's own value standing alone in its field, written as the installed revision reads one, is ever
+  the date - no title or "Date:" line is; a title and a label that differ
+  are asked; a member value settles a document-internal conflict only by choosing one of its values, and agrees with
+  kept evidence only through a date some candidate states as its own value, never a date of birth; a member conflict
+  is described as one (`is_member_conflict`, one predicate for every reader).
+- Second review gate (`engine._routing_agrees`, refutation r1): a second review is offered (and, when a reviewer asks,
+  paid for) only about an unresolved item
+  both readers read as done today - the routing-era reading of the item's own passage is performed (or its clause states
+  it done and only routing's family summary doubts the service), or it is silent beside the strict check-box and
+  form-field rule; a whole service needs routing's family reading performed. Each unresolved item records the answer
+  (`second_review`), and `jobs._second_review_items` asks about marked items only. An item routing reads otherwise stays
+  listed for the reviewer and is never sent. A second review whose request repeats a primary request already answered
+  is never sent, and the primary reuse lookup matches a retained run of any purpose.
+- Reader, refutation r1: a "can/could be" possibility governed by a time still to come ("once anticoagulation is
+  held", "at a repeat colonoscopy") stays a possibility; a check-box run under a label that sits directly under an empty
+  plan heading ("Plan:" / "Procedure:" / "[x] ...") lists what is planned.
+- Cost, refutation r1 (cost lens): the sentence splitter reads the word before a stop from its last seven characters
+  and a newline's previous line only (a numeric appendix had been quadratic and failed the assess stage); conflicts
+  compare a pair of statements through a per-service index of performed acts (cubic before); the time parts look up
+  sections, marks and timed sections by bisection (quadratic before); and the analyze stage's mention cap also counts
+  this reader's own service and act vocabulary (`services.mention_count`), so a note naming "HRM" or "biopsy" thousands
+  of times is refused before it is read. Pinned by `tests/test_services_cost_r1.py`.
+- Upgrade, refutation r1 (migrate lens): a context the installed revision recorded (`gi-context@1`, which kept a
+  member's value as plain metadata) is remade under the current rules - bounded, as a member's change does - before any
+  stage sends or assesses with it (`jobs._remade_context`, audit `context.remade`); a second review never runs on it.
+  Then (round ec5, migrate-5, and its skeptic; 5820f21b5, 6753a4d11, d5efff7c8): when the run in use answers the
+  remade context's request, the encounter is re-assessed with it; a predict a member's action queued (an upload, a date
+  change, a Resume, a reconciliation), or a remade member date conflict, goes on as any predict (the conflict is held);
+  a stage that never sends - an assess the installed pair queued or a member resumed, or the stale-stage sweep's
+  settlement of its predict - queues a predict (key `predict:<context>:after-upgrade`) that runs as any other (a
+  disabled provider, a request that cannot be built, a retained answer, an unknown outcome to reconcile, and a request
+  already sent for this document that failed, which records a not-sent run naming that failure, are each recorded and
+  shown as themselves) and stops only where it would send: the stage is cancelled with its reason, the encounter reads
+  `stopped`, and a member's Resume sends that request once. The reason says the request "differs from the one sent
+  before" only when the run in use carries another request that was sent (provider, adapter and body compared, as
+  `_run_answers` compares them; `REMADE_REQUEST_MESSAGE`), else that "no provider answer is recorded for the request"
+  (`REMADE_UNANSWERED_MESSAGE`). So nothing is sent at the swap that no member asked for.
+- Jobs (`studio/jobs.py`): nothing is built, reused or sent while the service date is a member-vs-document conflict
+  (session interpretation 19; the not-sent run carries `scope.held`, and the encounter waits on the date question). A
+  date the document leaves in question (a conflict within the document, or missing with dated evidence) is no date:
+  the request is sent without a date line, and a member's answer makes a second, dated request. The bounded second
+  review is sent only when a workspace owner or reviewer asks for it (8985dde42; 5.11), never after a primary response
+  refused whole, nor without a known service date.
+- Reports (`cpt-studio-report@4`): UNRESOLVED and CONFLICTS print "none" only after a consistent reconciliation (the
+  snapshot records `documented.reconciliation`: missing, inconsistent, partial or reconciled); every passage the new
+  sections print is re-checked against the revision text; each provider run is "used by this assessment" only when
+  its own provider check did not fail; `ops/verify_downloads.py` reads a wrapped source passage as one entry.
 
 ## 6. Security
 
@@ -1399,9 +2307,11 @@ static roots. Provider credentials never reach the browser, logs or exports.
 | GET | `encounters/<id>` | full state: revision text + pages + extraction, context facts, routing summary, assessment (proposals by list, checks, clarifications), current decisions + history, jobs, provider runs (no secrets), activity, readiness |
 | POST | `encounters/<id>/decisions` | `{proposal_id, action, note, acknowledgement}` |
 | POST | `encounters/<id>/addenda` | `{text, clarification_id?, synthetic_attestation}` → new revision |
-| POST | `encounters/<id>/context` | `{service_date?, setting?, billing_context?}` → new context + assess |
+| POST | `encounters/<id>/context` | `{service_date?, setting?, billing_context?}` → new context; re-assessed with the run in use when it answers the new request, else re-predicted (a member date conflict is held: nothing is sent; 5.4) |
 | POST | `encounters/<id>/stop` | stop queued/running stages (before send) |
+| POST | `encounters/<id>/resume` | re-run the current revision's latest stage when it was cancelled (a Stop, the stale-stage sweep, a queue expiry, or the upgrade's predict that stopped where it would send) |
 | POST | `encounters/<id>/reconcile` | `{provider_run_id, note}` → allow one new attempt after `unknown` |
+| POST | `encounters/<id>/second-review` | a workspace owner or reviewer asks for the one bounded second review of the current assessment (5.11); 409 with the reason a bound stands |
 | POST | `encounters/<id>/reports` | `{kind, fmt}` → artifact id + sha256 |
 | GET | `reports/<id>/download` | stored bytes, attachment |
 | GET | `encounters/<id>/original` | original upload bytes, attachment |

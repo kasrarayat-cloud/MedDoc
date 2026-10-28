@@ -182,6 +182,10 @@ class ProposalAssessment:
     units: int
     fingerprint: str
     clarifications: tuple[ClarificationSpec, ...] = ()
+    # The documented service the code was matched to and how its passages relate to the coded act (reconcile.py):
+    # {'service': id, 'state', 'reason', 'acts': [...], 'status': pass|warn|fail|not_applicable, 'supporting': [index],
+    #  'unrelated': [index], 'source': [{start, end, text, page}]}; {} when no documented service was matched.
+    support: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -194,6 +198,8 @@ class AssessmentResult:
     unsupported: tuple[dict, ...]
     reference_sources: tuple[dict, ...]
     summary: dict = field(default_factory=dict)
+    services: dict = field(default_factory=dict)  # the documented-service inventory (gi/services.py), JSON form
+    completeness: dict = field(default_factory=dict)  # reconcile.completeness plus unresolved, bundled and covered
 
 
 @dataclass(frozen=True)

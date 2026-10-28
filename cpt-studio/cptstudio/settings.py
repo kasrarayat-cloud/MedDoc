@@ -160,7 +160,7 @@ PROVIDER_MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 # The assess stage routes the document again (validation's span readings read that routing's analysis) and then
 # validates, so it has the analyze stage's time and memory and as much again for the validation: a document the analyze
 # stage read within its limits is never sent and then left unassessed for repeating that work (round 7 bounded:1).
-JOB_DEADLINE_SECONDS = {'extract': 300, 'analyze': 60, 'predict': 180, 'assess': 120}
+JOB_DEADLINE_SECONDS = {'extract': 300, 'analyze': 60, 'predict': 180, 'assess': 120, 'review2': 180}
 # Routing and context extraction run in a forked child under these (studio/bounded.py): the stage's deadline
 # above, this growth of address space past what the worker already uses, and a shorter wall clock when a
 # member's context change runs the extraction inside a web request.

@@ -4,7 +4,7 @@ Each class reproduces one confirmed finding through the real router (JSON round-
 it), the real span reader and the engine, and pins the controls that must keep their reading. Synthetic text only;
 pure functions.
 """
-from studio.gi.profiles import PROFILES
+from studio.gi.profiles import PROFILES, family_for_code
 from tests.test_repairs_r3_validation_b import HEAD, VISIT, Case, check_of, real
 
 OFFICE = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n{line}\n'
@@ -116,7 +116,9 @@ class NoCodedTestDiscountTests(Case):
                 text = V7.format(cc='dysphagia and rectal bleeding.', body=body)
                 passage = cited or (body[len('Procedure: '):] if body.startswith('Procedure: ') else body)
                 proposals, _ = real(text, ('99213', VISIT), (code, passage))
-                self.assertVisitHeld(proposals, f'{OTHER_LABEL} is ', '99213')
+                # gi-profiles@3: the routed gi.other procedure still holds the visit, beside the test's own profile
+                self.assertVisitHeld(proposals, f'{OTHER_LABEL} and {PROFILES[family_for_code(code)].label} are ',
+                                     '99213')
                 self.assertIsNone(check_of(proposals['99213'], 'em.same_day_coverage'))
 
     def test_the_round_3_over_hold_returns_with_the_removal(self):
@@ -124,7 +126,8 @@ class NoCodedTestDiscountTests(Case):
         for code, line in (('91010', MANOMETRY), ('91122', 'Anorectal manometry was performed today.')):
             with self.subTest(code=code):
                 proposals, _ = real(V7.format(cc='dysphagia.', body=line), ('99213', VISIT), (code, line))
-                self.assertVisitHeld(proposals, f'{OTHER_LABEL} is documented as performed', '99213')
+                self.assertVisitHeld(proposals, f'{OTHER_LABEL} and {PROFILES[family_for_code(code)].label} are '
+                                                'documented as performed', '99213')
                 self.assertReady(proposals[code])
 
 
@@ -567,19 +570,28 @@ class EmNegativeAboutOtherServicesTests(Case):
     holds the E/M (hold-only: never silent, never an exclusion). A cue that plans, dates or denies the visit itself
     keeps excluding."""
 
+    # Engine @4 (ARCHITECTURE 5.10, interpretation 9): the documented visit decides an E/M's status. A passage the code
+    # cites that is about other services, or about another time, never decides it - neither an exclusion nor a hold -
+    # and it is named in the status check's warn, never dropped.
+    OTHER = 'it is not about the documented office / outpatient visit, so it does not decide'
+
     def test_the_retained_rowan_response_does_not_exclude_the_visit(self):
         from tests.test_repairs_r3_validation_b import encounter_check
         _, result = rowan_assessment()
         visit = next(p for p in result.proposals if p.code == '99213')
-        self.assertEqual((visit.bucket, visit.status), ('selected', 'needs_clarification'), visit.exclusion_reason)
+        self.assertEqual((visit.bucket, visit.status), ('selected', 'ready'), visit.exclusion_reason)
         self.assertFalse(visit.reinstatable)
         status = check_of(visit, 'service.status')
         self.assertNotIn('Documented as negated', status.detail)
         self.assertNotIn('Documented as historical', status.detail)
+        self.assertEqual(status.status, 'warn')
+        self.assertIn('“No laboratory testing, imaging, endoscopy or other procedure was performed at this encounter.”',
+                      status.detail)
+        self.assertIn(self.OTHER, status.detail)
         unproposed = encounter_check(result, 'services.unproposed')
         self.assertNotIn('Office / outpatient evaluation and management', unproposed.detail)
 
-    def test_each_channel_alone_holds_rather_than_excludes(self):
+    def test_each_channel_alone_is_named_and_never_excludes(self):
         text, _ = rowan_assessment()
         for passage in ('No laboratory testing, imaging, endoscopy or other procedure was performed at this encounter.',
                         'Further testing will be considered after review of the prior records; no procedure has been '
@@ -587,20 +599,32 @@ class EmNegativeAboutOtherServicesTests(Case):
             with self.subTest(passage=passage):
                 proposals, _ = real(text.replace('Date of service: 16 October 2026', 'Date of service: 2026-10-16'),
                                     ('99213', passage))
-                self.assertEqual((proposals['99213'].bucket, proposals['99213'].status),
-                                 ('selected', 'needs_clarification'))
+                visit = proposals['99213']
+                self.assertEqual((visit.bucket, visit.status), ('selected', 'ready'))
+                status = check_of(visit, 'service.status')
+                self.assertEqual(status.status, 'warn')
+                self.assertIn(f'“{passage}”', status.detail)
+                self.assertIn(self.OTHER, status.detail)
+                self.assertEqual(check_of(visit, 'evidence.support').status, 'warn')
+                self.assertEqual(visit.support['unrelated'], [0])
 
-    def test_controls_a_cue_about_the_visit_still_excludes(self):
+    def test_controls_a_cue_about_the_visit_is_named_and_never_excludes(self):
         from tests.test_repairs_status_r2_validation import ASSESSMENT_AND_PLAN
         text = ASSESSMENT_AND_PLAN.format(plan='Discussed colonoscopy; the patient will think about it. '
                                                'Return in three months.')
-        proposals, _ = real(text, ('99214', 'Return in three months.'))
-        self.assertEqual((proposals['99214'].bucket, proposals['99214'].reinstatable), ('excluded', True))
+        cases = [(text, '99214', 'Return in three months.')]
         from tests.test_repairs_r3_validation_b3 import V3
-        for line in ('Return office visit is scheduled for 2026-12-01.', 'Follow-up office visit.'):
+        cases += [(V3.format(extra=f'{line}\n'), '99213', line)
+                  for line in ('Return office visit is scheduled for 2026-12-01.', 'Follow-up office visit.')]
+        for document, code, line in cases:
             with self.subTest(line=line):
-                proposals, _ = real(V3.format(extra=f'{line}\n'), ('99213', line))
-                self.assertEqual((proposals['99213'].bucket, proposals['99213'].reinstatable), ('excluded', True))
+                proposals, _ = real(document, (code, line))
+                visit = proposals[code]
+                self.assertEqual((visit.bucket, visit.status, visit.reinstatable), ('selected', 'ready', False))
+                status = check_of(visit, 'service.status')
+                self.assertEqual(status.status, 'warn')
+                self.assertIn(f'A linked passage reads as planned: “{line}”', status.detail)
+                self.assertIn('it is about another time, so it does not decide', status.detail)
 
 
 # --- validation:8: services.unsupported names an excluded, reinstatable code outside the profiles --------------------
@@ -616,7 +640,9 @@ class UnsupportedExcludedTests(Case):
         from tests.test_repairs_r3_validation_b import encounter_check
         for plan, code in (('Plan: Rubber band ligation of the internal hemorrhoids.', '46221'),
                            ('Plan: Rubber band ligation of an internal hemorrhoid is scheduled for 2026-11-03.', '46221'),
-                           ('Plan: Barium enema next week.', '74270')):
+                           # 7c8 EXCL, sk:7: both readers must read the plan (the documented-service reader reads
+                           # no barium enema by its name alone; it reads the predicate)
+                           ('Plan: Barium enema will be performed next week.', '74270')):
             with self.subTest(code=code, plan=plan):
                 passage = plan[len('Plan: '):]
                 proposals, result = real(OFFICE.format(line=plan), ('99213', VISIT), (code, passage))

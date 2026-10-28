@@ -1,0 +1,39 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+WILLOWMERE ENDOSCOPY CENTER (fictional)
+Place of service: Ambulatory surgery center
+Date of service: 2026-10-15
+Patient: Benedetta Szymanski-Ward (fictional)    MRN: SYN-100562
+Endoscopist: Rafael Iwu-Delacroix, MD (fictional)
+
+PRE-PROCEDURE HISTORY AND PHYSICAL (same day)
+Reason for procedure: Chronic watery diarrhea, four to six stools daily for four months; infectious stool studies and celiac serology negative.
+Interval history: No change since the office referral. No fever. She completed the bowel preparation as instructed.
+Medications reviewed; sertraline 50 mg daily. No anticoagulants.
+Allergies: Penicillin (rash).
+Exam: Alert, oriented. Mallampati II. Heart regular without murmur; lungs clear. Abdomen soft, non-tender.
+ASA physical status: II.
+Assessment: Appropriate candidate for colonoscopy under anesthesia. Consent signed. Proceed as planned.
+
+COLONOSCOPY REPORT
+Anesthesia: Deep sedation with propofol administered by Gwendolyn Sato-Abernathy, MD (fictional), anesthesiologist; see separate anesthesia record.
+Preparation: Boston Bowel Preparation Scale 3-3-2, total 8.
+
+Procedure: After digital rectal examination, which was normal, the adult colonoscope was inserted and advanced to the cecum; the appendiceal orifice and ileocecal valve were photographed. The terminal ileum was intubated for about 5 cm and looked normal. The colon was examined carefully during withdrawal (withdrawal time 12 minutes). The mucosa appeared normal throughout, with a preserved vascular pattern and no polyps.
+
+Because microscopic colitis remains possible, random mucosal samples were taken with cold forceps:
+  - Jar 1: right colon - cecum, ascending colon and transverse colon (8 fragments).
+  - Jar 2: left colon - descending colon and sigmoid colon (8 fragments).
+
+Specimens were submitted to Harrow Valley Pathology (fictional) for interpretation; biopsy results pending.
+
+Complications: None.
+
+IMPRESSION
+1. Endoscopically normal colon and terminal ileum.
+2. Random biopsies of the right and left colon obtained to evaluate for microscopic colitis.
+
+RECOMMENDATIONS
+Await pathology. Loperamide as needed in the meantime. Office follow-up in three weeks to review results.
+
+Rafael Iwu-Delacroix, MD (fictional)

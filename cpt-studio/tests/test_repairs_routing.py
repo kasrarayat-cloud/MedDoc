@@ -199,8 +199,12 @@ class Status2CuelessNegationTests(unittest.TestCase):
         proposals, _ = run_engine(text, [('43260', 'Deep biliary cannulation was successful.'),
                                          ('43262', 'Sphincterotomy: not performed.'), ('43274', 'Stent: none.')])
         self.assertEqual(proposals['43260'].bucket, 'selected')
-        for code in ('43262', '43274'):
-            self.assertEqual(proposals[code].bucket, 'excluded', code)
+        self.assertEqual(proposals['43262'].bucket, 'excluded', '43262')
+        # 7c8 EXCL, sk:9: an exclusion needs both readers to read the same not-done status. The documented-service
+        # reader reads "Stent: none" as a finding (no stent present), never as a denial of the act (triage round 2:
+        # "Stones: None" had denied the sweep an ERCP documented), so routing's "negated: none" alone holds 43274 for the
+        # reviewer instead of excluding it.
+        self.assertEqual((proposals['43274'].bucket, proposals['43274'].status), ('selected', 'needs_clarification'))
 
     def test_case_c_eus_replaced_by_egd(self):
         text = (HEADER + 'Indication: Pancreatic cyst; EUS requested.\n'

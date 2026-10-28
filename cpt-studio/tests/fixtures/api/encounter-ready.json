@@ -5,7 +5,7 @@
  "state_label": "Needs clarification",
  "service_date": "2026-10-21",
  "families": [
-  "Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)",
+  "Upper GI endoscopy (EGD, esophagoscopy, POEM)",
   "Colonoscopy",
   "Office / outpatient evaluation and management"
  ],
@@ -109,7 +109,7 @@
   "families": [
    {
     "family": "gi.egd",
-    "label": "Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)",
+    "label": "Upper GI endoscopy (EGD, esophagoscopy, POEM)",
     "supported": true,
     "status": "performed",
     "mentions": [],
@@ -203,7 +203,7 @@
     "code": "43239",
     "code_kind": "cpt1",
     "family": "gi.egd",
-    "family_label": "Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)",
+    "family_label": "Upper GI endoscopy (EGD, esophagoscopy, POEM)",
     "eyebrow": "UPPER GI ENDOSCOPY",
     "supported": true,
     "profile_version": "gi.egd@1",
@@ -561,7 +561,7 @@
     "code": "43235",
     "code_kind": "cpt1",
     "family": "gi.egd",
-    "family_label": "Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)",
+    "family_label": "Upper GI endoscopy (EGD, esophagoscopy, POEM)",
     "eyebrow": "UPPER GI ENDOSCOPY",
     "supported": true,
     "profile_version": "gi.egd@1",

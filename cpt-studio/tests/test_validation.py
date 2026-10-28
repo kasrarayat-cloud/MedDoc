@@ -21,7 +21,7 @@ from studio.validation.engine import ENGINE_VERSION, assess
 DOS = date(2026, 10, 21)
 DISPLAY = 'UNVERIFIED PROVIDER WORDING'
 COLON, EGD, EM = 'gi.colonoscopy', 'gi.egd', 'gi.office_em'
-EGD_LABEL = 'Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)'
+EGD_LABEL = 'Upper GI endoscopy (EGD, esophagoscopy, POEM)'
 NOT_CONNECTED = {
     'cpt.membership': 'No licensed CPT edition is connected; code-set membership for the service date is not verified.',
     'cpt.descriptor': 'Description withheld — no licensed CPT descriptor is connected.',
@@ -160,10 +160,16 @@ def visit_context(**overrides):
 
 
 class EngineCase(SimpleTestCase):
+    """The routing-era reading: every passage reading here is stubbed and describes no real document, so the engine
+    runs with the documented-service inventory off (engine.READ_DOCUMENTED_SERVICES) - the path it falls back to.
+    The inventory's own decisions are tested in tests/test_services_*.py on real text."""
     maxDiff = None
 
     def setUp(self):
         self.statuses = {}
+        inventory_off = mock.patch('studio.validation.engine.READ_DOCUMENTED_SERVICES', False)
+        inventory_off.start()
+        self.addCleanup(inventory_off.stop)
         patcher = mock.patch.object(checks, 'span_status',
                                     side_effect=lambda text, start, end, service_date=None: self.statuses.get(
                                         text[start:end]))
@@ -830,15 +836,16 @@ class EncounterCheckTests(EngineCase):
         self.assertEqual(self.encounter_check(self.snare(), 'services.unproposed').status, 'pass')
 
     def test_performed_services_outside_the_profiles_are_listed(self):
-        note = Note('Date of service: 2026-10-21', 'Esophageal motility study performed today.')
-        phrase = 'Esophageal motility study performed today.'
+        # gi-profiles@3 profiles motility (91010 is gi.motility); a hydrogen breath test is still outside every profile
+        note = Note('Date of service: 2026-10-21', 'Hydrogen breath test performed today.')
+        phrase = 'Hydrogen breath test performed today.'
         self.statuses = {phrase: 'performed'}
         other = finding('gi.other', 'performed', mention(note, 'gi.other', 'performed', phrase))
-        result = self.run_engine(note, selected('91010', note.span(phrase)), findings=[other])
+        result = self.run_engine(note, selected('91065', note.span(phrase)), findings=[other])
         (entry,) = result.unsupported
-        self.assertEqual((entry['family'], entry['status'], entry['codes']), ('gi.other', 'performed', ['91010']))
+        self.assertEqual((entry['family'], entry['status'], entry['codes']), ('gi.other', 'performed', ['91065']))
         self.assertEqual(self.encounter_check(result, 'services.unsupported').status, 'warn')
-        self.assertEqual(self.check(self.proposal(result, '91010'), 'routing.family').status, 'not_verified')
+        self.assertEqual(self.check(self.proposal(result, '91065'), 'routing.family').status, 'not_verified')
 
     def test_extraction_status_is_reported_when_supplied(self):
         self.assertEqual(self.encounter_check(self.snare(), 'extraction.status').status, 'pass')
@@ -858,7 +865,7 @@ class EncounterCheckTests(EngineCase):
 
     def test_assessment_identity(self):
         result = self.snare()
-        self.assertEqual((result.engine_version, result.profiles_version), (ENGINE_VERSION, 'gi-profiles@2'))
+        self.assertEqual((result.engine_version, result.profiles_version), (ENGINE_VERSION, 'gi-profiles@3'))
         self.assertEqual(result.summary['service_date'], '2026-10-21')
 
 

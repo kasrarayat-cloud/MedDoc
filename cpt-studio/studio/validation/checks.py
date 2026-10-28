@@ -14,6 +14,7 @@ from dataclasses import dataclass, replace
 from datetime import date
 from typing import Mapping, Optional, Sequence
 
+from studio.gi.context import is_member_conflict
 from studio.gi.profiles import DETECTED_FAMILIES, PROFILES, PROFILES_VERSION, ServiceProfile
 from studio.reference.store import (KIND_LABELS, MUE, PFS, UNKNOWN_DATE_NOTE, applied_sources,
                                     modifier_only_prefix, source_applies)
@@ -485,7 +486,7 @@ def _section_cue(reading: Reading) -> str:
 def cite(reading: Reading) -> str:
     """'“<passage>” (cue “<cue>”, linked passage)'; routing readings say 'routing' instead. The cue is the one that
     decided the reading: for an explicit performance statement held because of its section, that section's cue."""
-    origin = 'linked passage' if reading.origin == 'evidence' else 'routing'
+    origin = {'evidence': 'linked passage', 'service': 'documented service'}.get(reading.origin, 'routing')
     cue = _section_cue(reading) if restated(reading) else next((c.strip() for c in reading.cues if c.strip()), '')
     detail = f'cue “{excerpt(cue)}”, {origin}' if cue else origin
     if reading.passage.strip():
@@ -671,25 +672,44 @@ def required_fact_states(profile: ServiceProfile, finding: Optional[FamilyFindin
     return tuple(states)
 
 
+MEMBER_ENTERED = 'Entered by a workspace member as encounter metadata (not clinical documentation)'
+
+
+def is_member_entered(fact: Optional[Fact]) -> bool:
+    """A value a workspace member supplied (origin 'user'): encounter metadata, never a clinical fact, so never listed
+    as documented (refutation r1, context-7: the facts.required check and the exported rationale said "Documented")."""
+    return fact is not None and fact.origin == 'user'
+
+
 def required_facts_check(profile: ServiceProfile, states: Sequence[FactState]) -> Optional[Check]:
     if not states:
         return None
-    documented = [f'{fact_label(s.name)} = {excerpt(str(s.fact.value))}' for s in states if not s.problem]
+    documented = [f'{fact_label(s.name)} = {excerpt(str(s.fact.value))}' for s in states
+                  if not s.problem and not is_member_entered(s.fact)]
+    supplied = [f'{fact_label(s.name)} = {excerpt(str(s.fact.value))}' for s in states
+                if not s.problem and is_member_entered(s.fact)]
     missing = [fact_label(s.name) for s in states if s.problem == 'missing']
-    conflicting = [fact_label(s.name) for s in states if s.problem == 'conflict']
+    conflicting = [fact_label(s.name) for s in states if s.problem == 'conflict' and not is_member_conflict(s.fact)]
+    entered = [fact_label(s.name) for s in states if s.problem == 'conflict' and is_member_conflict(s.fact)]
     parts = []
     if missing:
         parts.append(f'Not documented: {"; ".join(missing)}.')
     if conflicting:
         parts.append(f'Conflicting values documented: {"; ".join(conflicting)}.')
+    if entered:
+        parts.append(f'Member-entered encounter metadata differs from the document (both kept, neither used): '
+                     f'{"; ".join(entered)}.')
     if documented:
         parts.append(f'Documented: {"; ".join(documented)}.')
-    status = 'warn' if missing or conflicting else 'pass'
+    if supplied:
+        parts.append(f'{MEMBER_ENTERED}: {"; ".join(supplied)}.')
+    status = 'warn' if missing or conflicting or entered else 'pass'
     return Check('facts.required', 'Required documentation (CPT Studio profile)', status, ' '.join(parts),
                  f'cpt-studio:{profile.version}')
 
 
-def _conflict_values(fact: Fact) -> str:
+def conflict_values(fact: Fact) -> str:
+    """The values of a conflict as the document states them (its evidence quoted), for every reader that words one."""
     quoted = [f'“{excerpt(span.text)}”' for span in fact.evidence if span.text.strip()]
     return ', '.join(quoted) or excerpt(fact.note) or 'values not quoted'
 
@@ -703,9 +723,11 @@ def fact_clarifications(states: Sequence[FactState], profile: ServiceProfile, fa
         template = FACT_QUESTIONS.get(state.name)
         question = (template.format(label=profile.label) if template
                     else f'{profile.label}: confirm the documented {fact_label(state.name)}.')
-        if state.problem == 'conflict':
+        if state.problem == 'conflict' and is_member_conflict(state.fact):
+            reason = f'The {fact_label(state.name)} is in conflict. {state.fact.note}'
+        elif state.problem == 'conflict':
             reason = (f'The document gives conflicting values for the {fact_label(state.name)}: '
-                      f'{_conflict_values(state.fact)}.')
+                      f'{conflict_values(state.fact)}.')
         else:
             reason = f'The {fact_label(state.name)} is not documented; the {profile.label} profile requires it.'
         out.append(ClarificationSpec(scope='proposal', fact=state.name, question=question, reason=reason,
@@ -980,9 +1002,18 @@ def service_date_state(context: Mapping[str, Fact], service_date: Optional[date]
 
 def _date_problem(state: DateState) -> str:
     if state.origin == 'conflict':
-        return f'Conflicting dates of service are documented ({_conflict_values(state.fact)})'
+        if is_member_conflict(state.fact):
+            return f'The date of service is in conflict. {state.fact.note.rstrip(".")}'
+        return f'Conflicting dates of service are documented ({conflict_values(state.fact)})'
     if state.origin == 'unreadable':
         return f'The date of service “{excerpt(str(state.fact.value))}” is not a readable date'
+    # A dated label the reader kept as evidence but could not use (an unread date form, another occurrence's date, a
+    # qualified title) is documented text: it is quoted, never called "not documented" (refutation r1, context lens,
+    # handed back by the ec5 CONTEXT cluster).
+    quoted = next((span.text for span in (state.fact.evidence if state.fact is not None else ())
+                   if span.text.strip()), '')
+    if quoted:
+        return f'No usable date of service was read: the document states “{excerpt(quoted)}”, which is not read as one'
     return 'No date of service is documented'
 
 
@@ -1091,8 +1122,14 @@ def extraction_check(status: Optional[str], messages: Sequence[str]) -> Check:
     raise ValueError(f'Unknown extraction status {status!r}.')
 
 
-VISIT_NOT_MISSED = ('An E/M mention beside a same-day procedure is not counted as a missed service: a separate E/M '
-                    'needs significant, separately identifiable documentation.')
+# An E/M is not counted on a procedure day the engine sees: a procedure done today, or one whose performance today is
+# not established - so neither line says the procedure was done; and where the document states a significant,
+# separately identifiable E/M, that documentation is not what is missing (refutation 7c8, reports-1).
+VISIT_NOT_MISSED = ('An E/M mention beside a procedure done or possibly done the same day is not counted as a missed '
+                    'service: a separate E/M needs significant, separately identifiable documentation.')
+VISIT_NOT_MISSED_DOCUMENTED = ('An E/M beside a procedure done or possibly done the same day is not counted as a missed '
+                               'service, although the document states a significant, separately identifiable E/M: no '
+                               'selected proposal accounts for it.')
 # What routing recognises in document text. Coverage is never claimed beyond it: a service of another kind is
 # detected only from a selected code or where routing happens to recognise it.
 RECOGNISED = _join([PROFILES[family].label for family in DETECTED_FAMILIES])
@@ -1119,17 +1156,19 @@ def uncited_label(label: str, names: Sequence[str]) -> str:
     return f'{label} ({_join([f"“{excerpt(name)}”" for name in dict.fromkeys(names)])})'
 
 
-def unproposed_check(missed: Sequence[str], visit_beside_procedure: bool) -> Check:
-    """``visit_beside_procedure``: routing found an E/M service on a procedure day that was not counted as missed."""
+def unproposed_check(missed: Sequence[str], visit_beside_procedure: bool, separate_em: bool = False) -> Check:
+    """``visit_beside_procedure``: routing found an E/M service on a procedure day that was not counted as missed;
+    ``separate_em``: the document states a significant, separately identifiable E/M (separate_em_statement)."""
     label = 'Performed services without a proposal'
+    not_missed = VISIT_NOT_MISSED_DOCUMENTED if separate_em else VISIT_NOT_MISSED
     if missed:
         verb = 'is' if len(missed) == 1 else 'are'
         detail = f'Possible missed service: {_join(missed)} {verb} documented as performed with no selected proposal.'
         if visit_beside_procedure:
-            detail += f' {VISIT_NOT_MISSED}'
+            detail += f' {not_missed}'
         return Check('services.unproposed', label, 'warn', detail, COVERAGE_SOURCE)
     if visit_beside_procedure:
-        return Check('services.unproposed', label, 'info', VISIT_NOT_MISSED, COVERAGE_SOURCE)
+        return Check('services.unproposed', label, 'info', not_missed, COVERAGE_SOURCE)
     return Check('services.unproposed', label, 'pass', UNPROPOSED_PASS, COVERAGE_SOURCE)
 
 
@@ -1727,7 +1766,7 @@ def _V2_patterns() -> dict:
             'box': re.compile('|'.join(f'(?:{pattern})' for pattern in marks)),
             'rescheduled': detect._RESCHEDULED,
             'named_no': re.compile(detect._BOX_Q_LEAD + r'(?P<name>[A-Za-z][\w/()&-]*(?:[ \t]+[A-Za-z][\w/()&-]*){0,5}?)'
-                                   r'[ \t]+' + detect._BOX_Q_DONE + detect._BOX_Q_TODAY + detect._BOX_Q_SEP
+                                   r'[ \t]+' + detect._BOX_Q_DONE + detect._BOX_Q_TODAY + detect._BOX_Q_SEP_ONCE
                                    + detect._BOX_Q_DENIAL + r'(?![0-9A-Za-z_])', re.I)}
 
 

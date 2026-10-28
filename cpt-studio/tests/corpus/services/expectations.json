@@ -1,0 +1,2620 @@
+{
+ "schema": "cpt-studio-services-corpus@1",
+ "note": "Author expectations from reading the documents; NOT independent GI-coder adjudication; provisional.",
+ "documents": [
+  {
+   "id": "svc-01-em-new-office-mdm",
+   "file": "documents/svc-01-em-new-office-mdm.txt",
+   "tests": [
+    "em-new-patient",
+    "em-mdm-basis",
+    "planned-procedure-future-date",
+    "historical-procedure-in-history",
+    "mixed-dates"
+   ],
+   "service_date": "2026-10-06",
+   "services": [
+    {
+     "family": "gi.office_em",
+     "status": "performed",
+     "completion": null,
+     "acts": []
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.egd",
+     "status_in": [
+      "planned"
+     ]
+    },
+    {
+     "family": "gi.colonoscopy",
+     "status_in": [
+      "planned"
+     ]
+    },
+    {
+     "family": "gi.colonoscopy",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [],
+   "conflicts": [],
+   "attributions": [],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "99204"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. New patient is stated; moderate MDM is stated and supported (undiagnosed new problem with uncertain prognosis, external note plus two results reviewed and one test ordered, prescription drug management)."
+   }
+  },
+  {
+   "id": "svc-02-em-established-time",
+   "file": "documents/svc-02-em-established-time.txt",
+   "tests": [
+    "em-established-patient",
+    "em-time-basis",
+    "last-seen-date",
+    "planned-procedure-future-date",
+    "historical-procedure-in-history",
+    "date-format-variant"
+   ],
+   "service_date": "2026-10-09",
+   "services": [
+    {
+     "family": "gi.office_em",
+     "status": "performed",
+     "completion": null,
+     "acts": []
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.colonoscopy",
+     "status_in": [
+      "planned"
+     ]
+    },
+    {
+     "family": "gi.colonoscopy",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [],
+   "conflicts": [],
+   "attributions": [],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "99214"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. 34 minutes total time on the date of the encounter, established patient. The nursing-given vaccine is outside the GI families and is not counted here."
+   }
+  },
+  {
+   "id": "svc-03-em-sparse",
+   "file": "documents/svc-03-em-sparse.txt",
+   "tests": [
+    "em-sparse-missing-setting-status-basis",
+    "date-format-variant"
+   ],
+   "service_date": "2026-10-20",
+   "services": [
+    {
+     "family": "gi.office_em",
+     "status": "performed",
+     "completion": null,
+     "acts": []
+    }
+   ],
+   "not_done": [],
+   "acts_not_done": [],
+   "conflicts": [],
+   "attributions": [],
+   "questions": [
+    "setting",
+    "patient_status",
+    "em_basis"
+   ],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. No level can be assigned: place of service, new/established status, time and MDM elements are not documented; a coder would query."
+   }
+  },
+  {
+   "id": "svc-04-em-undated",
+   "file": "documents/svc-04-em-undated.txt",
+   "tests": [
+    "em-missing-service-date",
+    "em-established-patient",
+    "em-time-basis",
+    "dob-and-lab-dates-are-not-service-date"
+   ],
+   "service_date": null,
+   "services": [
+    {
+     "family": "gi.office_em",
+     "status": "performed",
+     "completion": null,
+     "acts": []
+    }
+   ],
+   "not_done": [],
+   "acts_not_done": [],
+   "conflicts": [],
+   "attributions": [],
+   "questions": [
+    "service_date"
+   ],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "99213"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. 22 minutes total time, established patient, office setting stated; the date of service must be supplied before the claim can be built."
+   }
+  },
+  {
+   "id": "svc-05-em25-and-variceal-banding",
+   "file": "documents/svc-05-em25-and-variceal-banding.txt",
+   "tests": [
+    "em-25-separately-identifiable",
+    "egd-variceal-banding",
+    "anesthesia-separate",
+    "historical-procedure-in-history",
+    "planned-procedure-future-date",
+    "biopsy-negated",
+    "two-services-one-day"
+   ],
+   "service_date": "2026-10-14",
+   "services": [
+    {
+     "family": "gi.office_em",
+     "status": "performed",
+     "completion": null,
+     "acts": []
+    },
+    {
+     "family": "gi.egd",
+     "status": "performed",
+     "completion": "complete",
+     "acts": [
+      {
+       "kind": "band_ligation",
+       "anatomy_includes": "esophag"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.egd",
+     "status_in": [
+      "historical"
+     ]
+    },
+    {
+     "family": "gi.egd",
+     "status_in": [
+      "planned"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.egd",
+     "kind": "band_ligation",
+     "status_in": [
+      "historical"
+     ]
+    },
+    {
+     "family": "gi.egd",
+     "kind": "band_ligation",
+     "status_in": [
+      "planned"
+     ]
+    },
+    {
+     "family": "gi.egd",
+     "kind": "biopsy",
+     "status_in": [
+      "negated"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "99214",
+     "43244"
+    ],
+    "modifier_considerations": [
+     "25 on 99214: separately identifiable management of ascites and encephalopathy on the procedure day"
+    ],
+    "note": "author expectation; not adjudicated. The brief pre-procedure assessment belongs to the banding; the clinic portion is moderate MDM."
+   }
+  },
+  {
+   "id": "svc-06-hp-and-colonoscopy-random-biopsies",
+   "file": "documents/svc-06-hp-and-colonoscopy-random-biopsies.txt",
+   "tests": [
+    "routine-pre-procedure-hp-not-em",
+    "biopsy-multiple-sites-one-code",
+    "pending-pathology",
+    "anesthesia-separate",
+    "pathology-separate"
+   ],
+   "service_date": "2026-10-15",
+   "services": [
+    {
+     "family": "gi.colonoscopy",
+     "status": "performed",
+     "completion": "complete",
+     "acts": [
+      {
+       "kind": "biopsy"
+      },
+      {
+       "kind": "biopsy"
+      }
+     ]
+    }
+   ],
+   "not_done": [],
+   "acts_not_done": [],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia",
+    "pathology"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "45380"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. One unit for random biopsies from right and left colon; the same-day H&P is the routine pre-procedure assessment and is not a separate E/M service."
+   }
+  },
+  {
+   "id": "svc-07-em-established-partner-mdm-high",
+   "file": "documents/svc-07-em-established-partner-mdm-high.txt",
+   "tests": [
+    "em-established-via-partner",
+    "em-mdm-high",
+    "last-seen-date",
+    "planned-procedure-future-date",
+    "historical-procedure-in-history"
+   ],
+   "service_date": "2026-10-23",
+   "services": [
+    {
+     "family": "gi.office_em",
+     "status": "performed",
+     "completion": null,
+     "acts": []
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.eus",
+     "status_in": [
+      "planned"
+     ]
+    },
+    {
+     "family": "gi.ercp",
+     "status_in": [
+      "planned"
+     ]
+    },
+    {
+     "family": "gi.egd",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.eus",
+     "kind": "fna",
+     "status_in": [
+      "planned"
+     ]
+    },
+    {
+     "family": "gi.ercp",
+     "kind": "stent",
+     "status_in": [
+      "planned"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "99215"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. Established: seen by a same-specialty partner in the same group on 2024-05-02 (within three years). High MDM: threat to bodily function, extensive data (independent image review, discussion with an external physician, tests), decision against hospitalization."
+   }
+  },
+  {
+   "id": "svc-08-egd-multisite-biopsy-list-negation",
+   "file": "documents/svc-08-egd-multisite-biopsy-list-negation.txt",
+   "tests": [
+    "list-negation",
+    "biopsy-multiple-sites-one-code",
+    "pending-pathology",
+    "moderate-sedation",
+    "pathology-separate"
+   ],
+   "service_date": "2026-10-12",
+   "services": [
+    {
+     "family": "gi.egd",
+     "status": "performed",
+     "completion": "complete",
+     "acts": [
+      {
+       "kind": "biopsy",
+       "anatomy_includes": "esophag"
+      },
+      {
+       "kind": "biopsy"
+      },
+      {
+       "kind": "biopsy"
+      },
+      {
+       "kind": "moderate_sedation"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.eus",
+     "status_in": [
+      "negated"
+     ]
+    },
+    {
+     "family": "gi.ercp",
+     "status_in": [
+      "negated"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.egd",
+     "kind": "dilation",
+     "status_in": [
+      "negated"
+     ]
+    },
+    {
+     "family": "gi.eus",
+     "kind": "fna",
+     "status_in": [
+      "negated"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [
+    "pathology"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "43239",
+     "99152"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. One unit of 43239 for esophageal, gastric and duodenal biopsies; 18 minutes intraservice moderate sedation by the endoscopist with an independent observer supports 99152 only."
+   }
+  },
+  {
+   "id": "svc-09-egd-balloon-dilation-impression-only",
+   "file": "documents/svc-09-egd-balloon-dilation-impression-only.txt",
+   "tests": [
+    "performed-only-in-impression",
+    "egd-balloon-dilation",
+    "biopsy-separate-site",
+    "historical-procedure-in-history",
+    "anesthesia-separate",
+    "pathology-separate",
+    "date-format-variant"
+   ],
+   "service_date": "2026-10-08",
+   "services": [
+    {
+     "family": "gi.egd",
+     "status": "performed",
+     "completion": "complete",
+     "acts": [
+      {
+       "kind": "biopsy",
+       "anatomy_includes": "esophag"
+      },
+      {
+       "kind": "dilation"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.egd",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.egd",
+     "kind": "foreign_body",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia",
+    "pathology"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "43249",
+     "43239"
+    ],
+    "modifier_considerations": [
+     "XS or 59 on 43239: biopsies of the proximal and mid esophagus are distinct from the distal ring that was dilated"
+    ],
+    "note": "author expectation; not adjudicated. The balloon dilation is documented only in the impression."
+   }
+  },
+  {
+   "id": "svc-10-egd-savary-dilation",
+   "file": "documents/svc-10-egd-savary-dilation.txt",
+   "tests": [
+    "egd-savary-dilation",
+    "historical-procedure-in-history",
+    "biopsy-negated",
+    "anesthesia-separate",
+    "date-format-variant"
+   ],
+   "service_date": "2026-10-14",
+   "services": [
+    {
+     "family": "gi.egd",
+     "status": "performed",
+     "completion": "complete",
+     "acts": [
+      {
+       "kind": "dilation",
+       "anatomy_includes": "esophag"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.egd",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.egd",
+     "kind": "dilation",
+     "status_in": [
+      "historical"
+     ]
+    },
+    {
+     "family": "gi.egd",
+     "kind": "biopsy",
+     "status_in": [
+      "historical"
+     ]
+    },
+    {
+     "family": "gi.egd",
+     "kind": "biopsy",
+     "status_in": [
+      "negated"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "43248"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. Guidewire-directed bougie dilation; fluoroscopy run by the GI team, so no radiology attribution."
+   }
+  },
+  {
+   "id": "svc-11-egd-ulcer-bleeding-control",
+   "file": "documents/svc-11-egd-ulcer-bleeding-control.txt",
+   "tests": [
+    "egd-bleeding-control",
+    "hemostasis-methods-one-act",
+    "inpatient-setting",
+    "anesthesia-separate",
+    "facility-separate",
+    "planned-repeat-procedure",
+    "biopsy-deferred"
+   ],
+   "service_date": "2026-10-17",
+   "services": [
+    {
+     "family": "gi.egd",
+     "status": "performed",
+     "completion": "complete",
+     "acts": [
+      {
+       "kind": "bleeding_control",
+       "anatomy_includes": "duoden"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.egd",
+     "status_in": [
+      "planned"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.egd",
+     "kind": "biopsy",
+     "status_in": [
+      "negated",
+      "planned"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia",
+    "facility"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "43255"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. Epinephrine injection, bipolar coagulation and clips are the hemostasis methods for one lesion: one unit of 43255 and no separate injection code."
+   }
+  },
+  {
+   "id": "svc-12-egd-peg",
+   "file": "documents/svc-12-egd-peg.txt",
+   "tests": [
+    "egd-peg",
+    "feeding-tube-peg-during-egd",
+    "moderate-sedation",
+    "checkbox-lines",
+    "historical-procedure-in-history",
+    "snare-word-not-polypectomy",
+    "biopsy-negated",
+    "inpatient-setting"
+   ],
+   "service_date": "2026-10-19",
+   "services": [
+    {
+     "family": "gi.egd",
+     "status": "performed",
+     "completion": "complete",
+     "acts": [
+      {
+       "kind": "peg"
+      },
+      {
+       "kind": "moderate_sedation"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.egd",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.egd",
+     "kind": "peg",
+     "status_in": [
+      "historical"
+     ]
+    },
+    {
+     "family": "gi.egd",
+     "kind": "biopsy",
+     "status_in": [
+      "negated"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "43246",
+     "99152",
+     "99153"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. 24 minutes intraservice moderate sedation supports 99152 plus one unit of 99153. The snare only grasped the guidewire; it is not a snare removal."
+   }
+  },
+  {
+   "id": "svc-13-tne-barrett-biopsy",
+   "file": "documents/svc-13-tne-barrett-biopsy.txt",
+   "tests": [
+    "transnasal-esophagoscopy",
+    "office-procedure",
+    "biopsy-multiple-levels-one-code",
+    "pending-pathology",
+    "pathology-separate",
+    "historical-procedure-in-history",
+    "ablation-negated"
+   ],
+   "service_date": "2026-10-07",
+   "services": [
+    {
+     "family": "gi.egd",
+     "status": "performed",
+     "completion": null,
+     "acts": [
+      {
+       "kind": "biopsy"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.egd",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.egd",
+     "kind": "ablation",
+     "status_in": [
+      "negated"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [
+    "pathology"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "43198"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. Transnasal examination confined to the esophagus: esophagoscopy code range, one unit for the three biopsy levels. The conditional 3-5 year surveillance is not listed as planned."
+   }
+  },
+  {
+   "id": "svc-14-esophagoscopy-stricture-not-traversed",
+   "file": "documents/svc-14-esophagoscopy-stricture-not-traversed.txt",
+   "tests": [
+    "esophagoscopy-egd-not-completed",
+    "incomplete-procedure",
+    "dilation-negated",
+    "planned-procedure-future-date",
+    "anesthesia-separate",
+    "pathology-separate"
+   ],
+   "service_date": "2026-10-21",
+   "services": [
+    {
+     "family": "gi.egd",
+     "status": "incomplete",
+     "completion": "incomplete",
+     "acts": [
+      {
+       "kind": "biopsy"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.eus",
+     "status_in": [
+      "planned"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.egd",
+     "kind": "dilation",
+     "status_in": [
+      "negated"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia",
+    "pathology"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "43202"
+    ],
+    "modifier_considerations": [
+     "alternative reading: 43239 with 52 if the payer treats the attempt as a reduced EGD"
+    ],
+    "note": "author expectation; not adjudicated. The endoscope could not pass the obstructing mass; stomach and duodenum were not examined, so the service rendered is an esophagoscopy with biopsy."
+   }
+  },
+  {
+   "id": "svc-15-egd-rfa-barrett",
+   "file": "documents/svc-15-egd-rfa-barrett.txt",
+   "tests": [
+    "rfa-barrett",
+    "biopsy-negated",
+    "historical-biopsy",
+    "planned-procedure",
+    "anesthesia-separate"
+   ],
+   "service_date": "2026-10-13",
+   "services": [
+    {
+     "family": "gi.egd",
+     "status": "performed",
+     "completion": "complete",
+     "acts": [
+      {
+       "kind": "ablation"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.egd",
+     "status_in": [
+      "historical"
+     ]
+    },
+    {
+     "family": "gi.egd",
+     "status_in": [
+      "planned"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.egd",
+     "kind": "biopsy",
+     "status_in": [
+      "negated"
+     ]
+    },
+    {
+     "family": "gi.egd",
+     "kind": "biopsy",
+     "status_in": [
+      "historical"
+     ]
+    },
+    {
+     "family": "gi.egd",
+     "kind": "ablation",
+     "status_in": [
+      "planned"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "43270"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. Circumferential plus focal ablation in one session is one unit; guidewire passage is included."
+   }
+  },
+  {
+   "id": "svc-16-egd-esophageal-stent",
+   "file": "documents/svc-16-egd-esophageal-stent.txt",
+   "tests": [
+    "esophageal-stent",
+    "dilation-bundled-into-stent",
+    "anesthesia-separate",
+    "facility-separate"
+   ],
+   "service_date": "2026-10-16",
+   "services": [
+    {
+     "family": "gi.egd",
+     "status": "performed",
+     "completion": "complete",
+     "acts": [
+      {
+       "kind": "dilation"
+      },
+      {
+       "kind": "stent"
+      }
+     ]
+    }
+   ],
+   "not_done": [],
+   "acts_not_done": [],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia",
+    "facility"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "43266"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. Pre-stent balloon dilation and guidewire passage are included in the stent code; fluoroscopy run by the endoscopy team."
+   }
+  },
+  {
+   "id": "svc-17-poem",
+   "file": "documents/svc-17-poem.txt",
+   "tests": [
+    "poem",
+    "fundoplication-negated",
+    "closure-clips-integral",
+    "historical-procedure-in-history",
+    "historical-motility-study",
+    "anesthesia-separate",
+    "facility-separate"
+   ],
+   "service_date": "2026-10-22",
+   "services": [
+    {
+     "family": "gi.egd",
+     "status": "performed",
+     "completion": null,
+     "acts": [
+      {
+       "kind": "myotomy"
+      },
+      {
+       "kind": "clip"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.motility",
+     "status_in": [
+      "historical"
+     ]
+    },
+    {
+     "family": "gi.egd",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.egd",
+     "kind": "fundoplication",
+     "status_in": [
+      "negated"
+     ]
+    },
+    {
+     "family": "gi.egd",
+     "kind": "dilation",
+     "status_in": [
+      "historical"
+     ]
+    },
+    {
+     "family": "gi.egd",
+     "kind": "injection",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia",
+    "facility"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "43497"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. The submucosal bleb and the closure clips are part of the myotomy service; the prior pneumatic dilation, botulinum injection and manometry are history."
+   }
+  },
+  {
+   "id": "svc-18-colo-snare-plus-separate-biopsy-table",
+   "file": "documents/svc-18-colo-snare-plus-separate-biopsy-table.txt",
+   "tests": [
+    "word-table",
+    "separate-lesions",
+    "hot-snare",
+    "cold-forceps-removal-is-biopsy",
+    "no-other-biopsies-phrase",
+    "historical-procedure-in-history",
+    "anesthesia-separate",
+    "pathology-separate",
+    "pending-pathology"
+   ],
+   "service_date": "2026-10-05",
+   "services": [
+    {
+     "family": "gi.colonoscopy",
+     "status": "performed",
+     "completion": "complete",
+     "acts": [
+      {
+       "kind": "snare",
+       "anatomy_includes": "transverse colon",
+       "lesion": "L1"
+      },
+      {
+       "kind": "biopsy",
+       "anatomy_includes": "rectum",
+       "lesion": "L2"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.colonoscopy",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia",
+    "pathology"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "45385",
+     "45380"
+    ],
+    "modifier_considerations": [
+     "XS or 59 on 45380: separate lesion (rectum) from the snared transverse polyp"
+    ],
+    "note": "author expectation; not adjudicated"
+   }
+  },
+  {
+   "id": "svc-19-colo-biopsy-then-snare-same-lesion",
+   "file": "documents/svc-19-colo-biopsy-then-snare-same-lesion.txt",
+   "tests": [
+    "same-lesion-biopsy-then-snare",
+    "hot-snare",
+    "pending-pathology",
+    "anesthesia-separate",
+    "pathology-separate",
+    "date-format-variant"
+   ],
+   "service_date": "2026-10-13",
+   "services": [
+    {
+     "family": "gi.colonoscopy",
+     "status": "performed",
+     "completion": "complete",
+     "acts": [
+      {
+       "kind": "biopsy",
+       "anatomy_includes": "sigmoid colon",
+       "lesion": "L1"
+      },
+      {
+       "kind": "snare",
+       "anatomy_includes": "sigmoid colon",
+       "lesion": "L1"
+      }
+     ]
+    }
+   ],
+   "not_done": [],
+   "acts_not_done": [],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia",
+    "pathology"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "45385"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. Forceps sampling of the polyp that was then removed by snare is not reported separately. The conditional three-year repeat is not listed as planned."
+   }
+  },
+  {
+   "id": "svc-20-colo-cold-hot-snare-hot-biopsy",
+   "file": "documents/svc-20-colo-cold-hot-snare-hot-biopsy.txt",
+   "tests": [
+    "hot-vs-cold-snare",
+    "hot-biopsy-forceps",
+    "multiple-snares-one-code",
+    "moderate-sedation",
+    "screening-to-therapeutic",
+    "pathology-separate"
+   ],
+   "service_date": "2026-10-19",
+   "services": [
+    {
+     "family": "gi.colonoscopy",
+     "status": "performed",
+     "completion": "complete",
+     "acts": [
+      {
+       "kind": "hot_biopsy",
+       "anatomy_includes": "cecum",
+       "lesion": "L1"
+      },
+      {
+       "kind": "snare",
+       "anatomy_includes": "descending colon",
+       "lesion": "L2"
+      },
+      {
+       "kind": "snare",
+       "anatomy_includes": "sigmoid colon",
+       "lesion": "L3"
+      },
+      {
+       "kind": "moderate_sedation"
+      }
+     ]
+    }
+   ],
+   "not_done": [],
+   "acts_not_done": [],
+   "conflicts": [],
+   "attributions": [
+    "pathology"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "45385",
+     "45384",
+     "99152",
+     "99153"
+    ],
+    "modifier_considerations": [
+     "XS or 59 on 45384: separate lesion from the snared polyps",
+     "33 (commercial) or PT (Medicare) on the therapeutic codes: screening indication"
+    ],
+    "note": "author expectation; not adjudicated. Hot and cold snare removals are one unit of 45385; 31 minutes intraservice sedation supports 99152 plus one unit of 99153."
+   }
+  },
+  {
+   "id": "svc-21-colo-emr-tattoo-clips-nursing-conflict",
+   "file": "documents/svc-21-colo-emr-tattoo-clips-nursing-conflict.txt",
+   "tests": [
+    "emr-lift-injection",
+    "tattoo",
+    "prophylactic-clip-not-hemostasis",
+    "nursing-checklist-conflict",
+    "checkbox-lines",
+    "historical-procedure",
+    "planned-procedure",
+    "anesthesia-separate",
+    "pathology-separate"
+   ],
+   "service_date": "2026-10-20",
+   "services": [
+    {
+     "family": "gi.colonoscopy",
+     "status": "performed",
+     "completion": "complete",
+     "acts": [
+      {
+       "kind": "emr",
+       "anatomy_includes": "ascending colon",
+       "lesion": "L1"
+      },
+      {
+       "kind": "tattoo",
+       "lesion": "L1"
+      },
+      {
+       "kind": "clip",
+       "lesion": "L1"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.colonoscopy",
+     "status_in": [
+      "historical"
+     ]
+    },
+    {
+     "family": "gi.colonoscopy",
+     "status_in": [
+      "planned"
+     ]
+    }
+   ],
+   "acts_not_done": [],
+   "conflicts": [
+    {
+     "family": "gi.colonoscopy",
+     "subject": "tattoo"
+    }
+   ],
+   "attributions": [
+    "anesthesia",
+    "pathology"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "45390",
+     "45381"
+    ],
+    "modifier_considerations": [
+     "XS or 59 on 45381: the tattoo is distinct from the lift injection included in the EMR; payer policy varies"
+    ],
+    "note": "author expectation; not adjudicated. Clips were prophylactic closure, not control of bleeding. The nursing checklist records the tattoo as not performed, contradicting the physician; resolve before reporting 45381."
+   }
+  },
+  {
+   "id": "svc-22-colo-incomplete-poor-prep",
+   "file": "documents/svc-22-colo-incomplete-poor-prep.txt",
+   "tests": [
+    "incomplete-colonoscopy-prep",
+    "planned-repeat-procedure-future-date",
+    "historical-procedure-in-history",
+    "biopsy-negated",
+    "anesthesia-separate"
+   ],
+   "service_date": "2026-10-08",
+   "services": [
+    {
+     "family": "gi.colonoscopy",
+     "status": "incomplete",
+     "completion": "incomplete",
+     "acts": []
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.colonoscopy",
+     "status_in": [
+      "planned"
+     ]
+    },
+    {
+     "family": "gi.colonoscopy",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.colonoscopy",
+     "kind": "snare",
+     "status_in": [
+      "historical"
+     ]
+    },
+    {
+     "family": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status_in": [
+      "negated"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "45378"
+    ],
+    "modifier_considerations": [
+     "53 on 45378: diagnostic colonoscopy that did not reach the cecum; payer rules on 52 versus 53 for inadequate preparation vary"
+    ],
+    "note": "author expectation; not adjudicated"
+   }
+  },
+  {
+   "id": "svc-23-colo-incomplete-obstruction",
+   "file": "documents/svc-23-colo-incomplete-obstruction.txt",
+   "tests": [
+    "incomplete-colonoscopy-obstruction",
+    "tattoo",
+    "biopsy",
+    "planned-procedure",
+    "anesthesia-separate",
+    "pathology-separate"
+   ],
+   "service_date": "2026-10-13",
+   "services": [
+    {
+     "family": "gi.colonoscopy",
+     "status": "incomplete",
+     "completion": "incomplete",
+     "acts": [
+      {
+       "kind": "biopsy",
+       "anatomy_includes": "sigmoid colon",
+       "lesion": "L1"
+      },
+      {
+       "kind": "tattoo",
+       "lesion": "L1"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.colonoscopy",
+     "status_in": [
+      "planned"
+     ]
+    }
+   ],
+   "acts_not_done": [],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia",
+    "pathology"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "45380",
+     "45381"
+    ],
+    "modifier_considerations": [
+     "52 on 45380 and 45381: therapeutic colonoscopy that did not reach the cecum"
+    ],
+    "note": "author expectation; not adjudicated"
+   }
+  },
+  {
+   "id": "svc-24-colo-screening-complete-not-discontinued",
+   "file": "documents/svc-24-colo-screening-complete-not-discontinued.txt",
+   "tests": [
+    "not-discontinued-phrase",
+    "completed-without-interruption-phrase",
+    "screening-normal",
+    "moderate-sedation",
+    "biopsy-negated",
+    "snare-negated",
+    "planned-future-screening"
+   ],
+   "service_date": "2026-10-26",
+   "services": [
+    {
+     "family": "gi.colonoscopy",
+     "status": "performed",
+     "completion": "complete",
+     "acts": [
+      {
+       "kind": "moderate_sedation"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.colonoscopy",
+     "status_in": [
+      "planned"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status_in": [
+      "negated"
+     ]
+    },
+    {
+     "family": "gi.colonoscopy",
+     "kind": "snare",
+     "status_in": [
+      "negated"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "45378",
+     "99152"
+    ],
+    "modifier_considerations": [
+     "33 on 45378: preventive screening with a commercial payer; Medicare would use a HCPCS screening code instead"
+    ],
+    "note": "author expectation; not adjudicated. 21 minutes intraservice moderate sedation supports 99152 only."
+   }
+  },
+  {
+   "id": "svc-25-colo-screening-to-therapeutic-extent-missing",
+   "file": "documents/svc-25-colo-screening-to-therapeutic-extent-missing.txt",
+   "tests": [
+    "screening-to-therapeutic",
+    "missing-extent",
+    "cold-snare",
+    "multiple-snares-one-code",
+    "anesthesia-separate",
+    "pathology-separate",
+    "historical-procedure-undated"
+   ],
+   "service_date": "2026-10-23",
+   "services": [
+    {
+     "family": "gi.colonoscopy",
+     "status": "performed",
+     "completion": null,
+     "acts": [
+      {
+       "kind": "snare",
+       "anatomy_includes": "transverse colon",
+       "lesion": "L1"
+      },
+      {
+       "kind": "snare",
+       "anatomy_includes": "descending colon",
+       "lesion": "L2"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.colonoscopy",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia",
+    "pathology"
+   ],
+   "questions": [
+    "extent"
+   ],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "45385"
+    ],
+    "modifier_considerations": [
+     "PT on 45385: Medicare screening that became therapeutic",
+     "52 on 45385 only if the cecum was not reached; extent must be queried"
+    ],
+    "note": "author expectation; not adjudicated"
+   }
+  },
+  {
+   "id": "svc-26-colo-lst-referred-for-emr",
+   "file": "documents/svc-26-colo-lst-referred-for-emr.txt",
+   "tests": [
+    "lesion-referred-for-emr",
+    "emr-planned-not-done",
+    "tattoo",
+    "biopsy-deliberately-not-taken",
+    "checkbox-lines",
+    "planned-procedure-future-date",
+    "anesthesia-separate"
+   ],
+   "service_date": "2026-10-02",
+   "services": [
+    {
+     "family": "gi.colonoscopy",
+     "status": "performed",
+     "completion": "complete",
+     "acts": [
+      {
+       "kind": "tattoo",
+       "lesion": "L1"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.colonoscopy",
+     "status_in": [
+      "planned"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.colonoscopy",
+     "kind": "emr",
+     "status_in": [
+      "planned"
+     ]
+    },
+    {
+     "family": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status_in": [
+      "negated"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "45381"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. Only the tattoo was done today; the EMR is a future service at another unit."
+   }
+  },
+  {
+   "id": "svc-27-flexsig-biopsy-impression-only",
+   "file": "documents/svc-27-flexsig-biopsy-impression-only.txt",
+   "tests": [
+    "performed-only-in-impression",
+    "flex-sig-biopsy",
+    "biopsy-multiple-sites-one-code",
+    "pathology-separate",
+    "unsedated"
+   ],
+   "service_date": "2026-10-09",
+   "services": [
+    {
+     "family": "gi.flex_sig",
+     "status": "performed",
+     "completion": null,
+     "acts": [
+      {
+       "kind": "biopsy",
+       "anatomy_includes": "rectum"
+      },
+      {
+       "kind": "biopsy",
+       "anatomy_includes": "sigmoid colon"
+      }
+     ]
+    }
+   ],
+   "not_done": [],
+   "acts_not_done": [],
+   "conflicts": [],
+   "attributions": [
+    "pathology"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "45331"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. The biopsies are documented only in the impression; one unit for rectal and sigmoid sites."
+   }
+  },
+  {
+   "id": "svc-28-flexsig-hemorrhoid-banding-nursing-conflict",
+   "file": "documents/svc-28-flexsig-hemorrhoid-banding-nursing-conflict.txt",
+   "tests": [
+    "flex-sig-band-ligation",
+    "nursing-checklist-conflict",
+    "biopsy-negated",
+    "historical-procedure-in-history",
+    "checkbox-lines",
+    "office-procedure"
+   ],
+   "service_date": "2026-10-15",
+   "services": [
+    {
+     "family": "gi.flex_sig",
+     "status": "performed",
+     "completion": null,
+     "acts": [
+      {
+       "kind": "band_ligation"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.colonoscopy",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.flex_sig",
+     "kind": "biopsy",
+     "status_in": [
+      "negated"
+     ]
+    }
+   ],
+   "conflicts": [
+    {
+     "family": "gi.flex_sig",
+     "subject": "biopsy"
+    }
+   ],
+   "attributions": [],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "45350"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. Three columns banded in one session: one unit. The nursing record of a rectal specimen conflicts with the physician's statement that no biopsies were obtained."
+   }
+  },
+  {
+   "id": "svc-29-flexsig-volvulus-decompression",
+   "file": "documents/svc-29-flexsig-volvulus-decompression.txt",
+   "tests": [
+    "flex-sig-decompression",
+    "decompression-tube-bundled",
+    "inpatient-setting",
+    "facility-separate",
+    "historical-procedure-in-history",
+    "biopsy-negated",
+    "tattoo-negated"
+   ],
+   "service_date": "2026-10-18",
+   "services": [
+    {
+     "family": "gi.flex_sig",
+     "status": "performed",
+     "completion": null,
+     "acts": [
+      {
+       "kind": "decompression",
+       "anatomy_includes": "sigmoid"
+      },
+      {
+       "kind": "tube_placement"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.flex_sig",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.flex_sig",
+     "kind": "decompression",
+     "status_in": [
+      "historical"
+     ]
+    },
+    {
+     "family": "gi.flex_sig",
+     "kind": "biopsy",
+     "status_in": [
+      "negated"
+     ]
+    },
+    {
+     "family": "gi.flex_sig",
+     "kind": "tattoo",
+     "status_in": [
+      "negated"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [
+    "facility"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "45337"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. Placement of the decompression tube is included in the decompression code."
+   }
+  },
+  {
+   "id": "svc-30-eus-pancreas-fnb-node-not-sampled",
+   "file": "documents/svc-30-eus-pancreas-fnb-node-not-sampled.txt",
+   "tests": [
+    "eus-full-fnb",
+    "lymph-node-not-sampled",
+    "completed-without-interruption-phrase",
+    "celiac-neurolysis-negated",
+    "planned-procedure-future-date",
+    "historical-procedure-in-history",
+    "anesthesia-separate",
+    "pathology-separate"
+   ],
+   "service_date": "2026-10-16",
+   "services": [
+    {
+     "family": "gi.eus",
+     "status": "performed",
+     "completion": "complete",
+     "acts": [
+      {
+       "kind": "fna",
+       "anatomy_includes": "pancreatic head",
+       "lesion": "L1"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.ercp",
+     "status_in": [
+      "planned"
+     ]
+    },
+    {
+     "family": "gi.egd",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.eus",
+     "kind": "fna",
+     "status_in": [
+      "negated"
+     ]
+    },
+    {
+     "family": "gi.eus",
+     "kind": "injection",
+     "status_in": [
+      "negated"
+     ]
+    },
+    {
+     "family": "gi.ercp",
+     "kind": "stent",
+     "status_in": [
+      "planned"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia",
+    "pathology"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "43242"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. Full upper EUS (esophagus, stomach, duodenum) with FNB of the mass. The negated FNA is the peripancreatic lymph node (L2), not the mass; celiac plexus neurolysis was not performed."
+   }
+  },
+  {
+   "id": "svc-31-eus-limited-esophageal-wall",
+   "file": "documents/svc-31-eus-limited-esophageal-wall.txt",
+   "tests": [
+    "eus-limited",
+    "fna-negated",
+    "moderate-sedation",
+    "egd-included-in-eus",
+    "historical-procedure-undated"
+   ],
+   "service_date": "2026-10-09",
+   "services": [
+    {
+     "family": "gi.eus",
+     "status": "performed",
+     "completion": null,
+     "acts": [
+      {
+       "kind": "moderate_sedation"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.egd",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.eus",
+     "kind": "fna",
+     "status_in": [
+      "negated"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "43237",
+     "99152"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. EUS limited to the esophageal wall during an EGD to the duodenum: the endoscopic portion is included in the limited-EUS code. 19 minutes intraservice moderate sedation supports 99152."
+   }
+  },
+  {
+   "id": "svc-32-ercp-sphincterotomy-stone-extraction",
+   "file": "documents/svc-32-ercp-sphincterotomy-stone-extraction.txt",
+   "tests": [
+    "ercp-sphincterotomy-stone",
+    "radiology-separate",
+    "anesthesia-separate",
+    "stent-negated",
+    "historical-procedure-in-history",
+    "inpatient-setting"
+   ],
+   "service_date": "2026-10-12",
+   "services": [
+    {
+     "family": "gi.ercp",
+     "status": "performed",
+     "completion": "complete",
+     "acts": [
+      {
+       "kind": "cannulation"
+      },
+      {
+       "kind": "sphincterotomy"
+      },
+      {
+       "kind": "stone_extraction"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.eus",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.ercp",
+     "kind": "stent",
+     "status_in": [
+      "negated"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia",
+    "radiology"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "43262",
+     "43264"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. Radiological supervision and interpretation is reported by radiology, not by the endoscopist."
+   }
+  },
+  {
+   "id": "svc-33-ercp-biliary-stent-brushing",
+   "file": "documents/svc-33-ercp-biliary-stent-brushing.txt",
+   "tests": [
+    "ercp-stent",
+    "sphincterotomy-bundled-into-stent",
+    "brushing-not-biopsy",
+    "biopsy-negated",
+    "historical-procedure-undated",
+    "anesthesia-separate",
+    "pathology-separate"
+   ],
+   "service_date": "2026-10-21",
+   "services": [
+    {
+     "family": "gi.ercp",
+     "status": "performed",
+     "completion": "complete",
+     "acts": [
+      {
+       "kind": "cannulation"
+      },
+      {
+       "kind": "sphincterotomy"
+      },
+      {
+       "kind": "stent"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.eus",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.ercp",
+     "kind": "biopsy",
+     "status_in": [
+      "negated"
+     ]
+    },
+    {
+     "family": "gi.eus",
+     "kind": "fna",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia",
+    "pathology"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "43274"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. Sphincterotomy in the same duct is included in the stent code; brush cytology is part of the ERCP and is not a biopsy."
+   }
+  },
+  {
+   "id": "svc-34-ercp-failed-cannulation",
+   "file": "documents/svc-34-ercp-failed-cannulation.txt",
+   "tests": [
+    "ercp-failed-cannulation",
+    "incomplete-procedure",
+    "list-negation",
+    "planned-procedure-future-date",
+    "anesthesia-separate",
+    "inpatient-setting"
+   ],
+   "service_date": "2026-10-24",
+   "services": [
+    {
+     "family": "gi.ercp",
+     "status": "incomplete",
+     "completion": "incomplete",
+     "acts": []
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.ercp",
+     "status_in": [
+      "planned"
+     ]
+    },
+    {
+     "family": "gi.eus",
+     "status_in": [
+      "planned"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.ercp",
+     "kind": "sphincterotomy",
+     "status_in": [
+      "negated"
+     ]
+    },
+    {
+     "family": "gi.ercp",
+     "kind": "stent",
+     "status_in": [
+      "negated"
+     ]
+    },
+    {
+     "family": "gi.ercp",
+     "kind": "stone_extraction",
+     "status_in": [
+      "negated"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "43260"
+    ],
+    "modifier_considerations": [
+     "53 or 52 on 43260: unsuccessful cannulation; payer guidance varies"
+    ],
+    "note": "author expectation; not adjudicated"
+   }
+  },
+  {
+   "id": "svc-35-push-enteroscopy-apc",
+   "file": "documents/svc-35-push-enteroscopy-apc.txt",
+   "tests": [
+    "push-enteroscopy-ablation",
+    "non-bleeding-angioectasia-ablation",
+    "historical-procedure-in-history",
+    "historical-capsule",
+    "anesthesia-separate"
+   ],
+   "service_date": "2026-10-07",
+   "services": [
+    {
+     "family": "gi.enteroscopy",
+     "status": "performed",
+     "completion": null,
+     "acts": [
+      {
+       "kind": "ablation",
+       "anatomy_includes": "jejun"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.capsule",
+     "status_in": [
+      "historical"
+     ]
+    },
+    {
+     "family": "gi.egd",
+     "status_in": [
+      "historical"
+     ]
+    },
+    {
+     "family": "gi.colonoscopy",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "44369"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. Non-bleeding angioectasias treated with APC: ablation rather than control of bleeding; one unit for all five lesions. The conditional deep enteroscopy is not listed as planned."
+   }
+  },
+  {
+   "id": "svc-36-balloon-enteroscopy-apc-biopsy-table",
+   "file": "documents/svc-36-balloon-enteroscopy-apc-biopsy-table.txt",
+   "tests": [
+    "word-table",
+    "balloon-enteroscopy",
+    "separate-lesions",
+    "tattoo-negated",
+    "historical-capsule-undated",
+    "anesthesia-separate",
+    "pathology-separate"
+   ],
+   "service_date": "2026-10-19",
+   "services": [
+    {
+     "family": "gi.enteroscopy",
+     "status": "performed",
+     "completion": null,
+     "acts": [
+      {
+       "kind": "ablation",
+       "anatomy_includes": "jejunum",
+       "lesion": "L1"
+      },
+      {
+       "kind": "ablation",
+       "anatomy_includes": "jejunum",
+       "lesion": "L2"
+      },
+      {
+       "kind": "biopsy",
+       "anatomy_includes": "jejunum",
+       "lesion": "L3"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.capsule",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.enteroscopy",
+     "kind": "tattoo",
+     "status_in": [
+      "negated"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia",
+    "pathology"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "44369",
+     "44361"
+    ],
+    "modifier_considerations": [
+     "XS or 59 on 44361: biopsy of a separate lesion from the ablated angioectasias"
+    ],
+    "note": "author expectation; not adjudicated. Depth stops in the mid jejunum (ileum not reached)."
+   }
+  },
+  {
+   "id": "svc-37-capsule-small-bowel",
+   "file": "documents/svc-37-capsule-small-bowel.txt",
+   "tests": [
+    "capsule-endoscopy",
+    "physician-interpretation",
+    "mixed-dates",
+    "planned-procedure-future-date",
+    "historical-procedure-in-history",
+    "facility-separate"
+   ],
+   "service_date": "2026-10-13",
+   "services": [
+    {
+     "family": "gi.capsule",
+     "status": "performed",
+     "completion": "complete",
+     "acts": [
+      {
+       "kind": "capsule_study"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.enteroscopy",
+     "status_in": [
+      "planned"
+     ]
+    },
+    {
+     "family": "gi.egd",
+     "status_in": [
+      "historical"
+     ]
+    },
+    {
+     "family": "gi.colonoscopy",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.enteroscopy",
+     "kind": "ablation",
+     "status_in": [
+      "planned"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [
+    "facility"
+   ],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "91110"
+    ],
+    "modifier_considerations": [
+     "26 on 91110: the hospital owns the equipment and reports the technical component"
+    ],
+    "note": "author expectation; not adjudicated. The documented date of service is the ingestion date; the reading date (2026-10-14) and the planned enteroscopy date are not the service date."
+   }
+  },
+  {
+   "id": "svc-38-bravo-96h",
+   "file": "documents/svc-38-bravo-96h.txt",
+   "tests": [
+    "wireless-ph-96h",
+    "egd-negated",
+    "historical-motility-study",
+    "mixed-dates",
+    "office-procedure"
+   ],
+   "service_date": "2026-10-05",
+   "services": [
+    {
+     "family": "gi.reflux",
+     "status": "performed",
+     "completion": null,
+     "acts": [
+      {
+       "kind": "ph_monitoring"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.motility",
+     "status_in": [
+      "historical"
+     ]
+    },
+    {
+     "family": "gi.egd",
+     "status_in": [
+      "negated"
+     ]
+    }
+   ],
+   "acts_not_done": [],
+   "conflicts": [],
+   "attributions": [],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "91035"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. One service covers placement, the 96-hour recording and interpretation; the report-signing date is not the service date. The surgeon's possible fundoplication is outside the GI families and is not listed."
+   }
+  },
+  {
+   "id": "svc-39-hrm-and-ph-impedance",
+   "file": "documents/svc-39-hrm-and-ph-impedance.txt",
+   "tests": [
+    "hrm",
+    "ph-impedance",
+    "two-services-one-day",
+    "mixed-dates"
+   ],
+   "service_date": "2026-10-20",
+   "services": [
+    {
+     "family": "gi.motility",
+     "status": "performed",
+     "completion": null,
+     "acts": [
+      {
+       "kind": "manometry"
+      }
+     ]
+    },
+    {
+     "family": "gi.reflux",
+     "status": "performed",
+     "completion": null,
+     "acts": [
+      {
+       "kind": "ph_monitoring"
+      }
+     ]
+    }
+   ],
+   "not_done": [],
+   "acts_not_done": [],
+   "conflicts": [],
+   "attributions": [],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "91010",
+     "91038"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. HRM plus a pH-impedance recording longer than one hour."
+   }
+  },
+  {
+   "id": "svc-40-hrm-achalasia-poem-planned",
+   "file": "documents/svc-40-hrm-achalasia-poem-planned.txt",
+   "tests": [
+    "hrm",
+    "planned-poem",
+    "option-discussed-not-chosen",
+    "historical-radiology-study"
+   ],
+   "service_date": "2026-10-15",
+   "services": [
+    {
+     "family": "gi.motility",
+     "status": "performed",
+     "completion": null,
+     "acts": [
+      {
+       "kind": "manometry"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.egd",
+     "status_in": [
+      "planned"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.egd",
+     "kind": "myotomy",
+     "status_in": [
+      "planned"
+     ]
+    },
+    {
+     "family": "gi.egd",
+     "kind": "dilation",
+     "status_in": [
+      "negated",
+      "cancelled"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "91010"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. POEM is a future service; pneumatic dilation was discussed and declined; the esophagram is a prior radiology study, so no radiology attribution for this date."
+   }
+  },
+  {
+   "id": "svc-41-anorectal-manometry-bet",
+   "file": "documents/svc-41-anorectal-manometry-bet.txt",
+   "tests": [
+    "anorectal-manometry",
+    "rectal-sensation-compliance",
+    "balloon-expulsion-test"
+   ],
+   "service_date": "2026-10-16",
+   "services": [
+    {
+     "family": "gi.anorectal",
+     "status": "performed",
+     "completion": null,
+     "acts": [
+      {
+       "kind": "manometry"
+      },
+      {
+       "kind": "rectal_sensation"
+      }
+     ]
+    }
+   ],
+   "not_done": [],
+   "acts_not_done": [],
+   "conflicts": [],
+   "attributions": [],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "91122",
+     "91120"
+    ],
+    "modifier_considerations": [
+     "91120 with 91122 is an NCCI pair; separate reporting depends on payer policy for the distinct sensation and compliance study"
+    ],
+    "note": "author expectation; not adjudicated. The balloon expulsion test has no separate code; biofeedback is a referral only."
+   }
+  },
+  {
+   "id": "svc-42-gtube-bedside-replacement",
+   "file": "documents/svc-42-gtube-bedside-replacement.txt",
+   "tests": [
+    "gtube-replacement-bedside",
+    "no-imaging",
+    "historical-procedure-in-history",
+    "inpatient-setting"
+   ],
+   "service_date": "2026-10-18",
+   "services": [
+    {
+     "family": "gi.feeding_tube",
+     "status": "performed",
+     "completion": null,
+     "acts": [
+      {
+       "kind": "tube_replacement"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.egd",
+     "status_in": [
+      "historical"
+     ]
+    },
+    {
+     "family": "gi.feeding_tube",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.egd",
+     "kind": "peg",
+     "status_in": [
+      "historical"
+     ]
+    },
+    {
+     "family": "gi.feeding_tube",
+     "kind": "tube_replacement",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [],
+   "questions": [],
+   "unsupported": [],
+   "provisional_codes": {
+    "codes": [
+     "43762"
+    ],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. Percutaneous replacement through a mature tract without imaging or endoscopic guidance and without tract revision."
+   }
+  },
+  {
+   "id": "svc-43-egd-gastric-esd",
+   "file": "documents/svc-43-egd-gastric-esd.txt",
+   "tests": [
+    "esd-unsupported",
+    "clip-negated",
+    "bleeding-control-negated",
+    "marking-is-not-ablation",
+    "historical-biopsy",
+    "anesthesia-separate",
+    "pathology-separate",
+    "facility-separate"
+   ],
+   "service_date": "2026-10-26",
+   "services": [
+    {
+     "family": "gi.egd",
+     "status": "performed",
+     "completion": "complete",
+     "acts": [
+      {
+       "kind": "esd",
+       "anatomy_includes": "antrum"
+      }
+     ]
+    }
+   ],
+   "not_done": [
+    {
+     "family": "gi.egd",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "acts_not_done": [
+    {
+     "family": "gi.egd",
+     "kind": "clip",
+     "status_in": [
+      "negated"
+     ]
+    },
+    {
+     "family": "gi.egd",
+     "kind": "bleeding_control",
+     "status_in": [
+      "negated"
+     ]
+    },
+    {
+     "family": "gi.egd",
+     "kind": "biopsy",
+     "status_in": [
+      "historical"
+     ]
+    }
+   ],
+   "conflicts": [],
+   "attributions": [
+    "anesthesia",
+    "pathology",
+    "facility"
+   ],
+   "questions": [],
+   "unsupported": [
+    "esd"
+   ],
+   "provisional_codes": {
+    "codes": [],
+    "modifier_considerations": [],
+    "note": "author expectation; not adjudicated. ESD has no specific CPT code; the author would expect an unlisted-procedure code chosen under payer policy. Not adjudicated."
+   }
+  }
+ ]
+}

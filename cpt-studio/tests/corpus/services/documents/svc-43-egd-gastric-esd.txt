@@ -1,0 +1,30 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+KESTREL POINT UNIVERSITY HOSPITAL (fictional)
+Advanced Endoscopy - Endoscopic Submucosal Dissection
+
+Patient: Henrike Abiodun-Castellan (fictional)        MRN: SYN-104357
+Date of service: 2026-10-26
+Place of service: Hospital outpatient department, overnight observation
+Endoscopist: Sebastian Oyelaran-Hoek, MD (fictional)
+Anesthesia: General endotracheal anesthesia, department of anesthesiology (separate record and billing).
+Facility: Hospital facility services billed by Kestrel Point University Hospital.
+
+Indication: An 18 mm flat-elevated lesion with a central depression (Paris 0-IIa+IIc) on the lesser curvature of the gastric antrum. Biopsies at an outside EGD on 2026-08-14 showed high-grade dysplasia with a focus suspicious for intramucosal carcinoma. CT staging was negative.
+
+Procedure
+1. Survey: The gastroscope was advanced to the second portion of the duodenum; the esophagus, stomach apart from the target lesion, and duodenum were normal. Magnifying narrow-band imaging showed a clear demarcation line without signs of deep invasion.
+2. Marking: Coagulation dots were placed about 5 mm outside the lesion margin with the knife tip.
+3. Dissection: After submucosal injection of glycerol solution with indigo carmine, a circumferential mucosal incision was made outside the marks. Submucosal dissection was carried out with a 1.5 mm needle-type knife through a transparent distal cap. Small vessels encountered during dissection were coagulated with hemostatic forceps before division; there was no active bleeding requiring treatment.
+4. The lesion was removed en bloc (32 x 26 mm specimen), pinned on cork and sent to pathology.
+5. The resection base was inspected and left open; no clips were placed.
+
+Complications: None; no perforation.
+
+Specimen: Gastric antrum ESD specimen to the Kestrel Point pathology department (fictional).
+
+Impression: En bloc endoscopic submucosal dissection of a 0-IIa+IIc lesion of the gastric antrum.
+
+Plan: Admit overnight; nothing by mouth until a morning assessment, then clear liquids. High-dose PPI for eight weeks. Review histology at the gastric neoplasia conference.
+
+S. Oyelaran-Hoek, MD (fictional)

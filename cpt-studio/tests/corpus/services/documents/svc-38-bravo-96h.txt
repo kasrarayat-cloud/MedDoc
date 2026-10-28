@@ -1,0 +1,30 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Esophageal Function Laboratory, Marlowe Digestive Center (fictional)
+WIRELESS ESOPHAGEAL pH MONITORING (96-HOUR) - REPORT
+
+Patient: Theodric Adeyinka-Moss (fictional)      MRN: SYN-103818
+Date of service: 2026-10-05 (capsule placement)
+Recording period: 2026-10-05 10:20 through 2026-10-09 10:20 (96 hours)
+Report signed: 2026-10-12
+Place of service: Office-based physiology laboratory (POS 11)
+Physician: Eleonora Vasquez-Obi, MD (fictional)
+
+Indication: Heartburn and regurgitation refractory to PPI; candidate for anti-reflux surgery; prior studies off therapy have been inconclusive.
+Medication status: Off proton pump inhibitor for 7 days and off H2 blockers for 48 hours before placement.
+
+Placement
+The wireless pH capsule was placed transorally without endoscopy. Position was set 6 cm above the proximal border of the lower esophageal sphincter, which had been located at 42 cm from the nares on high-resolution manometry performed on 2026-09-28 (separate study, reported previously). The capsule was attached by suction and its signal was confirmed before the patient left. No EGD was performed with this placement.
+
+Results by day (acid exposure time, percent of time pH below 4)
+Day 1: 7.2%    Day 2: 5.1%    Day 3: 4.0%    Day 4: 6.3%
+Total: 5.6%    Worst day: 7.2%
+Reflux symptom association: heartburn - symptom index 68%, symptom association probability 97%. Regurgitation - SI 40%, SAP 88%.
+
+Interpretation
+Acid exposure above 6% on two of four days and a positive symptom association for heartburn indicate conclusive pathologic acid reflux.
+
+Plan
+Results to the referring surgeon to support fundoplication planning.
+
+E. Vasquez-Obi, MD (fictional)

@@ -21,6 +21,9 @@ from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
 
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
 NO_DATE_NOTE = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
+# A member's date for a note that documents none: a later member date is a date change. A note's own documented date
+# is never changed by a member's value, which is a conflict instead (session interpretation 11).
+FIRST_DATE = '2026-10-20'
 RECONCILE_NOTE = 'Checked the provider console: no response was recorded.'
 
 
@@ -79,7 +82,7 @@ class ReconcileReleasesOneAttemptTests(ApiHarness, TestCase):
 
     def test_reconcile_is_refused_while_a_predict_is_queued(self):
         self.provider.outcome = 'unknown'
-        encounter_id = self.create()
+        encounter_id = self.create(NO_DATE_NOTE, service_date=FIRST_DATE)
         drain()
         self.assertEqual(len(self.provider.sent), 1)
         run_id = self.unknown_run_id(encounter_id)
@@ -149,7 +152,7 @@ class ContextChangeRepredictTests(ApiHarness, TestCase):
     """provider:2 and fidelity:1 — the run in use is compared on its own request, not the previous context."""
 
     def test_setting_change_after_stopped_date_change_repredicts_for_the_new_date(self):
-        encounter_id = self.create()
+        encounter_id = self.create(NO_DATE_NOTE, service_date=FIRST_DATE)
         drain()
         self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context',
                                    {'service_date': '2026-10-22'}).status_code, 201)

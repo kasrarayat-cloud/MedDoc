@@ -1,0 +1,50 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+LAKESIDE GASTROENTEROLOGY ASSOCIATES (fictional)
+Outpatient Consultation - New Patient
+
+Patient: Delphine Arkwright (fictional)        DOB: 1974-03-18        MRN: SYN-100201
+Date of service: 2026-10-06
+Place of service: Office (POS 11)
+Referring clinician: Tomasz Ellery, MD (fictional), primary care
+Visit type: New patient - she has not previously been seen by any clinician in our gastroenterology group.
+
+CHIEF COMPLAINT
+Iron deficiency anemia and intermittent bright red blood per rectum.
+
+HISTORY OF PRESENT ILLNESS
+Ms. Arkwright is a 52-year-old woman sent to us after routine laboratory work in September showed a microcytic anemia. She describes three months of fatigue and, since early summer, small streaks of bright red blood on the tissue about twice a month. She has had no melena, hematemesis, unintentional weight loss or change in stool caliber. She also reports burning epigastric discomfort after meals that wakes her some nights. For knee pain she takes ibuprofen 400 mg on most days.
+
+GI history: an outside colonoscopy in 2019 was described to her as normal; the report is not available to us. She has never had an upper endoscopy.
+
+PAST MEDICAL HISTORY: Osteoarthritis of both knees. Hypothyroidism.
+MEDICATIONS: Levothyroxine 75 mcg daily. Ibuprofen as above.
+ALLERGIES: None known.
+FAMILY HISTORY: Father diagnosed with colon cancer at age 71.
+SOCIAL HISTORY: Never smoker. Two or three glasses of wine per week.
+
+REVIEW OF SYSTEMS: Fatigue and exertional breathlessness. Otherwise negative across 10 systems.
+
+PHYSICAL EXAMINATION
+BP 118/72, HR 88, BMI 27.4. Conjunctival pallor. Heart regular, lungs clear. Abdomen soft, mildly tender in the epigastrium, no masses or organomegaly. Rectal examination deferred to the time of endoscopy.
+
+DATA REVIEWED
+- Primary care note of 2026-09-22 (external record) reviewed in full.
+- CBC from 2026-09-19: hemoglobin 9.8 g/dL, MCV 71 fL.
+- Ferritin from 2026-09-19: 6 ng/mL.
+- Ordered today: tissue transglutaminase IgA with total serum IgA.
+
+ASSESSMENT
+1. Iron deficiency anemia with intermittent hematochezia - a new problem whose source is not yet established and whose prognosis is uncertain until endoscopic evaluation. Considerations include colorectal neoplasia given her father's history, NSAID injury of the upper tract, and celiac disease.
+2. Dyspepsia in the setting of daily NSAID use.
+
+PLAN
+- Bidirectional endoscopy (EGD and colonoscopy) is scheduled for 2026-11-06 at the ambulatory surgery center. Risks, benefits and alternatives were reviewed and she wishes to proceed.
+- Discontinue ibuprofen; acetaminophen for knee pain instead.
+- Begin pantoprazole 40 mg by mouth once daily before breakfast; prescription transmitted to her pharmacy.
+- Celiac serology as ordered above.
+- Oral iron per her primary care clinician; repeat CBC after the endoscopic work-up.
+
+MEDICAL DECISION MAKING: Moderate. One undiagnosed new problem with uncertain prognosis; review of an external note, review of two unique test results and one unique test ordered; prescription drug management.
+
+Electronically signed: Corin Vasquez-Hale, MD (fictional), Gastroenterology - 2026-10-06 16:42

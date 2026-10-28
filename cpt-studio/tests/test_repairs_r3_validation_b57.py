@@ -1,6 +1,7 @@
 """Regressions for refutation round 3, validation:5 and validation:7: gi.other procedures read mention by mention
 for coverage and for the same-day E/M hold. Real routing, the real span reader and the engine; synthetic text only.
 """
+from studio.gi.profiles import PROFILES, family_for_code
 from studio.reference.store import InMemoryReferenceLookup
 from studio.validation import checks
 from tests.test_repairs_r3_validation_b import (HEAD, REFERENCE, ROWS, VISIT, Case, check_of, encounter_check,
@@ -78,7 +79,9 @@ class Validation7XxxTestTests(Case):
                            ('Anorectal manometry was performed today.', '91122')):
             with self.subTest(code=code):
                 proposals, result = real(V7.format(line=line), ('99213', VISIT), (code, line))
-                self.assertVisitHeld(proposals, 'Other GI service is documented as performed', '99213')
+                # gi-profiles@3: the routed gi.other mention still holds the visit, and so does the test's own profile
+                label = PROFILES[family_for_code(code)].label
+                self.assertVisitHeld(proposals, f'Other GI service and {label} are documented as performed', '99213')
                 self.assertReady(proposals[code])
                 self.assertIsNone(check_of(proposals['99213'], 'em.same_day_coverage'))
 
@@ -109,7 +112,8 @@ class Validation7XxxTestTests(Case):
     def test_controls_an_xxx_test_beside_an_uncoded_banding_still_holds(self):
         text = V7.format(line=f'{MANOMETRY}\n{BANDING}')
         proposals, _ = real(text, ('99213', VISIT), ('91010', MANOMETRY))
-        self.assertVisitHeld(proposals, 'Other GI service is documented as performed', '99213')
+        self.assertVisitHeld(proposals, 'Other GI service and Motility and manometry are documented as performed',
+                             '99213')
 
 
 

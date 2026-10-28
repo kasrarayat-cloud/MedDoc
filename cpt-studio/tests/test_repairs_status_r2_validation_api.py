@@ -229,10 +229,12 @@ class Review0ReinstatedProcedureApiTests(ApiCase, TestCase):
                                      ('46221', 'Rubber band ligation of an internal hemorrhoid was performed today '
                                                'without complication.'))
         visit = self.proposal(encounter_id, '99213')
-        self.assertEqual(visit['bucket'], 'excluded')
-        gate = next(c for c in visit['checks'] if c['id'] == 'review.reinstatement')
-        self.assertEqual(gate['status'], 'warn')
-        self.assertEqual(self.decide(encounter_id, '99213', 'reinstate').status_code, 201)
+        # Engine @4: today's documented visit decides the E/M (interpretation 9), so it is selected rather than excluded;
+        # beside the same-day procedure it is held for a separately identifiable E/M, and approval stays refused.
+        self.assertEqual((visit['bucket'], visit['status'], visit['allowed_actions']),
+                         ('selected', 'needs_clarification', ['reject']))
+        self.assertIn('separate_em', [c['fact'] for c in self.detail(encounter_id)['clarifications']
+                                      if c['proposal_id'] == visit['id']])
         self.assertEqual(self.decide(encounter_id, '99213', 'approve').status_code, 409)
 
 

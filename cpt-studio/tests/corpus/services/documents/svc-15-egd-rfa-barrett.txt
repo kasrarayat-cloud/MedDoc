@@ -1,0 +1,30 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Ardenwood Medical Center (fictional) - Advanced Endoscopy
+EGD WITH RADIOFREQUENCY ABLATION
+
+Patient name: Philippa Rautenbach-Oyelowo (fictional)
+MRN: SYN-101489
+Date of service: 2026-10-13
+Place of service: Hospital outpatient department
+Endoscopist: Mateus Lindgren-Achebe, MD (fictional)
+Anesthesia: Propofol deep sedation by Clarissa Fenwick-Obi, MD (fictional), anesthesiology; separate anesthesia record and billing.
+
+Background
+Barrett's esophagus, Prague C4 M5, with low-grade dysplasia confirmed by two expert gastrointestinal pathologists on surveillance biopsies obtained 2026-07-08. No visible lesions at that examination. This is her first ablation session.
+
+Procedure
+1. Survey endoscopy: The gastroscope was advanced through the esophagus and stomach to the second portion of the duodenum. The Barrett's segment extended from 35 to 40 cm with the top of the gastric folds at 40 cm. Careful high-definition and narrow-band inspection showed no nodules or depressions. No biopsies were obtained today.
+2. Circumferential ablation: After the mucosa was cleaned with 1% N-acetylcysteine, a guidewire was left in the antrum and a self-sizing circumferential RFA balloon catheter was positioned at the proximal margin. Two overlapping applications at 10 J/cm2 were delivered from 35 to 40 cm, with the coagulum removed and the catheter cleaned between passes.
+3. Focal ablation: Residual tongues at 35 cm were treated with a focal ablation catheter mounted on the endoscope tip, 12 J/cm2, two applications each.
+4. Treatment of the entire visible Barrett's segment was completed. No bleeding or deep injury was seen.
+
+Impression
+Barrett's esophagus with low-grade dysplasia (C4 M5), treated with circumferential and focal radiofrequency ablation.
+
+Plan
+- Clear liquids for 24 hours, then soft diet for one week.
+- Pantoprazole 40 mg twice daily, sucralfate suspension four times daily for two weeks; acetaminophen for chest discomfort.
+- The next ablation session is planned in about three months.
+
+M. Lindgren-Achebe, MD (fictional)

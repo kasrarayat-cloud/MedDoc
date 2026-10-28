@@ -1,0 +1,653 @@
+"""Repair round 7c8, the final refutation's dates track (FR-dates; studio/gi/context.py, the service date).
+
+The final refutation attacked the integration head c3c034a08 (P2DN and its fix round) with two lenses, DATES-RULES and
+DATES-INSTALLED; each finding below was demonstrated by the lens and reproduced by an independent verifier, end to end
+through POST /api/encounters and POST /context with the suite's FakeProvider. Each is reproduced here first, then
+repaired by a general rule of SOURCE or of the STRUCTURE of the label's own field - never a header-block requirement,
+never a vocabulary of qualifiers, never a sentence the tests name - and rule N7 stays: nothing is sent that the
+installed revision 057a7d398 would not send.
+
+fr-dr:5  a lower-case "b." after a name ("Alex Synthetic b. 01/01/1998") was no birth label, so the date of birth was a
+         subject line's own date: the note's labelled 10/14 became a question and a member's 1998-01-01 was taken.
+fr-dr:2  a bracket after a bare "Date" or a date-of-service label on a dated line ("Date (signed):", "DOS (planned):")
+         was read as the line's own date field, so the signing or planned date was the line's date: the labelled 10/14
+         became a question and a member's 10/27 or 11/04 was taken and sent.
+fr-dr:3  a date after another field's label on a subject line was that field's even after its value had ended ("Re:
+         Colonoscopy - Referral date: 10/13/2026; performed 10/21/2026"): the line's own dated statement was silenced,
+         and the labelled 10/14 it contradicts was sent.
+fr-dr:0  a date-of-service field that STATES a date the reader cannot take as its value ("rescheduled to 10/14/2026",
+         one value under a joined "DOB / Date of Service:", a stack whose values cannot be placed) was kept as evidence
+         that reads no date (form 'empty'), which never speaks: another labelled date was sent though the document gives
+         a different one.
+fr-dr:1  the positional header readers matched values to labels by COUNT: an extra split in a cell, or a heading
+         and a findings line counted into a stack, shifted the date of birth into the date-of-service label's place, so
+         a member's 1998-01-01 was taken and sent.
+fr-dr:4, fr-di:0, fr-di:1  a date qualifier opening a field of its own on the label's line ("Scheduled by:",
+         "Requested by:", "Planned sedation:"), or with only a date of birth between it and the date, was passed over:
+         a planned procedure's or a recall's date was sent where 057a7d398 sent none, or another date than it sent (N7).
+fr-di:3  a member date agreeing only with a dated label or title the reader itself reads as another occurrence's or
+         another document's ("Next procedure date: 11/04/2026", "Surgical pathology report: 10/17/2026") was taken and
+         sent, while the member's correct date was held.
+
+Synthetic text only; no network (the suite's FakeProvider).
+"""
+from django.test import SimpleTestCase
+
+from studio.gi import context
+from tests.test_repairs_7c8_context import DateAssertions
+from tests.test_repairs_7c8_context3 import COLO_BODY, ELENA_DATE, HEAD, EndToEnd, date_fact, evidence_text
+
+BIRTH = '01/01/1998'
+
+
+# --- fr-dr:5: "b." is a birth label as it is written - lower case - after a name too --------------------------------
+
+B_AFTER_A_NAME = (  # the finding's line, its smallest form, and paraphrases: one space or a tab after a word
+    'Re: Colonoscopy for Alex Synthetic b. 01/01/1998',
+    'Re: EGD b. 01/01/1998',
+    'Re: Colonoscopy for Alex b. 01/01/1998',
+    'Regarding: Colonoscopy, Alex Synthetic\tb. 01/01/1998',
+    'Subject: EGD for Synthetic Alex b. 1998-01-01',
+    'Re: Colonoscopy for Alex Synthetic b. January 1, 1998',
+)
+
+
+class LowerCaseBirthLabelAfterANameTests(DateAssertions, SimpleTestCase):
+    """fr-dr:5 (10bdfeb2f, P2DN's fix round issue 7, re-opened a62a18c85's gap): _BIRTH_LABEL read "b." only where no
+    letter and one space or tab stood before it, so in "Re: Colonoscopy for Alex Synthetic b. 01/01/1998" the date of
+    birth was the subject line's own date. Beside the note's own "Date of service: 10/14/2026" it made a document
+    conflict listing 1998-01-01 (a dateless request where 057a7d398 sent 10/14), and a member's 1998-01-01 - entered at
+    upload or as the answer to the date question - was taken as a listed documented value and sent. The issue-7 false
+    positive was only a CAPITAL initial ("Alex B."), which the lower-case "b" already refuses: "b." written so is a
+    birth label wherever it stands (rule N2). The differential round, df-d:5: one space after a word it may also be a
+    list's letter ("Re: Colonoscopy part b. 10/21/2026", silenced, let the labelled 10/14 it contradicts be sent where
+    c3c034a08 asked), so its date stays no value and no member's agreement, but the line states it: asked (re-decided
+    pins below: beside the labelled 10/14 such a line is asked, no longer documented; the 1998-01-01 is still held)."""
+
+    def test_the_note_s_own_date_is_asked_and_the_date_of_birth_never_taken(self):
+        for line in B_AFTER_A_NAME:
+            text = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\n' + line + '\n' + COLO_BODY
+            with self.subTest(line=line):
+                self.assert_never(text, '2026-10-14', ELENA_DATE)  # df-d:5: asked, never documented
+                self.assert_member_date(text, '2026-10-14')
+                self.assert_member_conflict(text, ELENA_DATE)
+                self.assertFalse(any('1998' in quoted for quoted in evidence_text(text)), evidence_text(text))
+
+    def test_alone_the_line_states_no_date_of_the_service(self):
+        # the verifier's related shape: no labelled date - the line keeps its text before the date of birth, which reads
+        # no date, so a member's 1998-01-01 is held
+        for line in B_AFTER_A_NAME:
+            text = HEAD + 'Colonoscopy report\n' + line + '\n' + COLO_BODY
+            with self.subTest(line=line):
+                self.assert_never(text, ELENA_DATE)
+                self.assert_member_conflict(text, ELENA_DATE)
+
+    def test_controls_a_capital_initial_is_still_no_birth_label(self):
+        # issue 7's own shapes: "B." after a name is an initial; the line's own 10/14 answers, a member's 1998 is held
+        for line in ('Re: Colonoscopy for Synthetic, Alex B. - 10/14/2026', 'EGD - Dr. Robin B. - 10/14/2026',
+                     'Colonoscopy - Synthetic, Alex (b. 01/01/1998) - 10/14/2026',
+                     'Colonoscopy - Synthetic, Alex, b. 01/01/1998 - 10/14/2026'):
+            text = HEAD + line + '\n' + COLO_BODY
+            with self.subTest(line=line):
+                self.assert_member_date(text, '2026-10-14')
+                self.assert_member_conflict(text, ELENA_DATE)
+
+
+class LowerCaseBirthLabelAfterANameRequestTests(EndToEnd):
+    TEXT = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nRe: Colonoscopy for Alex Synthetic b. 01/01/1998\n' \
+        + COLO_BODY
+
+    def test_the_member_s_date_of_birth_is_held_and_the_note_s_date_asked(self):
+        held = self.finished(self.TEXT, service_date=ELENA_DATE)
+        self.assert_held(held)
+        self.assert_never_sent(held, ELENA_DATE)
+        own = self.finished(self.TEXT)
+        self.assertEqual(self.dates_sent(own), [[]])  # df-d:5: asked, as c3c034a08 asked
+        self.assertEqual(self.bucket(own, '45385'), 'selected')
+
+    def test_the_answer_path_never_sends_the_date_of_birth(self):
+        encounter_id = self.finished(HEAD + 'Colonoscopy report\nRe: Colonoscopy for Alex Synthetic b. 01/01/1998\n'
+                                     + COLO_BODY)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.set_context(encounter_id, {'service_date': ELENA_DATE})
+        self.assert_never_sent(encounter_id, ELENA_DATE)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+
+
+# --- fr-dr:2: only a date format in a bracket keeps a "Date" field the line's own ---------------------------------------
+
+BRACKET_WORDS = ('signed', 'dictated', 'referral', 'ordered', 'report', 'planned')
+BRACKET_DATES = {'signed': '10/27/2026', 'dictated': '10/26/2026', 'referral': '10/13/2026', 'ordered': '10/12/2026',
+                 'report': '10/28/2026', 'planned': '11/04/2026'}
+BRACKET_LAYOUTS = {  # the note's own date or a dated text naming it, above a subject line
+    'labelled date': 'Colonoscopy report\nDate of service: 10/14/2026\n',
+    'dated title': 'Colonoscopy report - 10/14/2026\n',
+    'letter date': 'Date: 10/14/2026\n',
+    'dated service line': 'Colonoscopy - 10/14/2026\n',
+}
+
+
+def iso(us):
+    month, day, year = us.split('/')
+    return f'{year}-{month}-{day}'
+
+
+class BracketAfterADateFieldTests(DateAssertions, SimpleTestCase):
+    """fr-dr:2 (87fb157ca dropped a62a18c85's _GAP_FIELD; 10bdfeb2f's issue-1 rule - a date after ANOTHER field's label is
+    that field's - read any bracket of up to 20 characters after "date" or a date-of-service label as part of the line's
+    own date field): "Re: Colonoscopy - Date (signed): 10/27/2026" and "DOS (planned): 11/04/2026" gave the subject line
+    the signing or planned date, so beside "Date of service: 10/14/2026" the note's own date became a question (a
+    dateless request where a62a18c85 and 057a7d398 sent 10/14), and a member's 10/27 or 11/04 - at upload or as the
+    answer - was taken as a listed documented value and sent (45385 excluded against the planned date). A bracket that
+    names another event makes the field another field's: only a date format ("(mm/dd/yyyy)") or "(DOS)" keeps it the
+    line's own date field. The differential round, df-d:2: only a word list could tell such a bracket from one naming
+    THIS service ("Date (performed):", silenced, let the labelled 10/14 it contradicts be sent where c3c034a08 asked),
+    so the field's date is one this service cannot place: the subject line is asked - it speaks against the labelled
+    date - and reads no date, so the other event's date is still never a member's answer (re-decided pins below: the
+    labelled 10/14 beside such a subject line is asked, no longer documented)."""
+
+    def test_the_finding_s_lines_beside_the_labelled_date(self):
+        for subject, other in (('Re: Colonoscopy - Date (signed): 10/27/2026', '2026-10-27'),
+                               ('Re: Colonoscopy - DOS (planned): 11/04/2026', '2026-11-04')):
+            text = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\n' + subject + '\n' + COLO_BODY
+            with self.subTest(subject=subject):
+                self.assert_never(text, '2026-10-14', other)  # df-d:2: asked, never documented
+                self.assert_member_date(text, '2026-10-14')
+                self.assert_member_conflict(text, other)
+
+    def test_the_family_in_four_layouts(self):
+        for layout, top in BRACKET_LAYOUTS.items():
+            for word in BRACKET_WORDS:
+                for label in ('Date', 'DOS', 'Date of service'):
+                    other = BRACKET_DATES[word]
+                    text = HEAD + top + f'Re: Colonoscopy - {label} ({word}): {other}\n' + COLO_BODY
+                    with self.subTest(layout=layout, line=text.splitlines()[-4]):
+                        self.assert_never(text, iso(other))
+                        self.assert_member_conflict(text, iso(other))
+                        # asked (the labelled date beside the subject line too, df-d:2), and the 10/14 above answers
+                        self.assert_never(text, '2026-10-14')
+                        self.assert_member_date(text, '2026-10-14')
+
+    def test_controls_a_date_format_keeps_the_line_s_own_date_field(self):
+        for subject in ('Re: Colonoscopy - Date (mm/dd/yyyy): 10/14/2026', 'Re: Colonoscopy - Date (MM/DD/YYYY): 10/14/2026',
+                        'Re: Colonoscopy - Date of service (DOS): 10/14/2026', 'Re: Colonoscopy - Date: 10/14/2026',
+                        'Re: Colonoscopy - DOS (yyyy-mm-dd): 2026-10-14'):
+            text = HEAD + 'Colonoscopy report\n' + subject + '\n' + COLO_BODY
+            with self.subTest(subject=subject):
+                self.assert_member_date(text, '2026-10-14')
+                self.assert_member_conflict(text, ELENA_DATE)
+        # another field's label without a bracket is still another field's (issue 1)
+        text = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nRe: Colonoscopy - Signed: 10/27/2026\n' + COLO_BODY
+        self.assert_document(text, '2026-10-14')
+        self.assert_member_conflict(text, '2026-10-27')
+
+
+class BracketAfterADateFieldRequestTests(EndToEnd):
+    TEXT = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nRe: Colonoscopy - Date (signed): 10/27/2026\n' \
+        + COLO_BODY
+    PLANNED = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nRe: Colonoscopy - DOS (planned): 11/04/2026\n' \
+        + COLO_BODY
+
+    def test_the_note_s_date_is_asked_and_the_other_event_s_date_held(self):
+        own = self.finished(self.TEXT)
+        self.assertEqual(self.dates_sent(own), [[]])  # df-d:2: asked, as c3c034a08 asked
+        self.assertEqual(self.bucket(own, '45385'), 'selected')
+        for text, other in ((self.TEXT, '2026-10-27'), (self.PLANNED, '2026-11-04')):
+            with self.subTest(other=other):
+                held = self.finished(text, service_date=other)
+                self.assert_held(held)
+                self.assert_never_sent(held, other)
+
+    def test_the_answer_path_never_sends_the_signing_date(self):
+        # the verifier's E7: the head asked (a dateless request), then took the member's 10/27 as a listed value and sent
+        # a second paid request with it
+        encounter_id = self.finished(self.TEXT)
+        self.set_context(encounter_id, {'service_date': '2026-10-27'})
+        self.assert_never_sent(encounter_id, '2026-10-27')
+        self.assertEqual(self.dates_sent(encounter_id), [[]])  # df-d:2: the first request asked, the 10/27 held
+
+
+# --- fr-dr:3: a field's value ends; a date after its end is not that field's ------------------------------------------
+
+COLO_PLAIN_BODY = ('PROCEDURE NOTE: Colonoscopy\nTechnique: The colonoscope was advanced to the cecum.\n'
+                   'Findings: A 5 mm sigmoid polyp was removed with a cold snare.\n')
+AFTER_THE_VALUE = (  # the finding's line, its three variants, the smallest form and an undated field
+    'Re: Colonoscopy - Referral date: 10/13/2026; performed 10/21/2026',
+    'Re: Colonoscopy - Ordered: 10/13/2026, done 10/21/2026',
+    'Re: Colonoscopy - Referral date: 10/13/2026 - performed on 10/21/2026',
+    'Re: Colonoscopy (referral date: 10/13/2026) performed 10/21/2026',
+    'Re: Colonoscopy - Ref: 10/13/2026; 10/21/2026',
+    'Re: Colonoscopy - Referral: Dr. Synthetic; performed 10/21/2026',
+    'Regarding: EGD - Ordered: 10/13/2026    10/21/2026',
+)
+
+
+class DateAfterAFieldSValueEndedTests(DateAssertions, SimpleTestCase):
+    """fr-dr:3 (10bdfeb2f's issue-1 rule): _other_field gave a date to the last colon's field whatever stood between
+    them, so in "Re: Colonoscopy - Referral date: 10/13/2026; performed 10/21/2026" the performed date was the referral
+    field's: both dates were excluded, the subject line kept as evidence that reads no date (form 'empty', which never
+    speaks), and the labelled "Date of service: 10/14/2026" it contradicts was documented and sent with 45385 ready
+    (a62a18c85 asked). A field's value ends - at a semicolon, a comma, a spaced dash, a bracket it does not open, a field
+    break or the field's own date - and a date after that end is not that field's: the line states a date this service
+    cannot place (neither the field's nor certainly the line's own), so the line speaks against the labelled date (asked)
+    and its evidence reads no date (every member date it alone would agree with is held)."""
+
+    def test_beside_the_labelled_date_the_date_is_asked(self):
+        for line in AFTER_THE_VALUE:
+            text = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\n' + line + '\n' + COLO_PLAIN_BODY
+            with self.subTest(line=line):
+                self.assert_never(text, '2026-10-14')
+                self.assertIn(date_fact(text).origin, ('conflict', 'missing'))
+                self.assert_member_date(text, '2026-10-14')
+                self.assert_member_conflict(text, '2026-10-21')
+                self.assert_member_conflict(text, '2026-10-13')
+
+    def test_under_a_dated_title_no_other_field_s_date_is_taken(self):
+        for line in AFTER_THE_VALUE:
+            text = HEAD + 'Colonoscopy report - 10/14/2026\n' + line + '\n' + COLO_PLAIN_BODY
+            with self.subTest(line=line):
+                self.assert_member_date(text, '2026-10-14')
+                self.assert_member_conflict(text, '2026-10-13')
+                self.assert_member_conflict(text, ELENA_DATE)
+
+    def test_controls_the_field_s_own_date_is_still_the_field_s(self):
+        # issue 1's shapes: the date right after another field's label is that field's; the labelled date stands
+        for line in ('Re: Colonoscopy - Referral date: 10/13/2026', 'Re: Colonoscopy - Signed: 10/27/2026',
+                     'Re: Colonoscopy for Alex Synthetic, DOB (mm/dd/yyyy): 01/01/1998'):
+            text = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\n' + line + '\n' + COLO_PLAIN_BODY
+            with self.subTest(line=line):
+                self.assert_document(text, '2026-10-14')
+        # no field before the date: the line's own date, which questions the labelled one (the verifier's control)
+        self.assert_conflict(HEAD + 'Date of service: 10/14/2026\nRe: Colonoscopy performed 10/21/2026\n'
+                             + COLO_PLAIN_BODY, '2026-10-14', '2026-10-21')
+        # a date right after the service's name keeps the line's own date beside a later field's
+        self.assert_member_date(HEAD + 'EGD 10/14/2026    Signed: 10/27/2026\n' + COLO_PLAIN_BODY, '2026-10-14')
+
+
+class DateAfterAFieldSValueEndedRequestTests(EndToEnd):
+    def test_no_date_is_sent_where_the_subject_line_differs(self):
+        text = (HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nRe: Colonoscopy - Referral date: 10/13/2026; '
+                'performed 10/21/2026\n' + COLO_PLAIN_BODY)
+        encounter_id = self.finished(text)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.assert_not_excluded(encounter_id, '45385')
+        self.set_context(encounter_id, {'service_date': '2026-10-21'})
+        self.assert_never_sent(encounter_id, '2026-10-21')
+
+
+# --- fr-dr:0: a field that states a date it cannot place speaks; only a field that states none is silent --------------
+
+OPENERS = ('rescheduled to {D}', 'corrected to {D}', '(rescheduled) {D}', '[{D}]', 'approx. {D}', 'on {D}', '"{D}"',
+           'actual {D}', 'performed {D}', 'amended to {D}', '(corrected) {D}', '~{D}', '*{D}*')
+STATED_LAYOUTS = {  # A: another labelled date above; A2: below; B: an addendum's corrected field
+    'A': 'Colonoscopy report\nProcedure date: 10/07/2026\nDate of service: {F}\n',
+    'A2': 'Colonoscopy report\nDate of service: {F}\nProcedure date: 10/07/2026\n',
+    'B': 'Colonoscopy report\nDate of service: 10/07/2026\nIndication: screening\n\nAddendum\nDate of service: {F}\n',
+}
+UNPLACED = {  # the finding's J1 and ES1 and the verifier's smallest M4: a date the label's place cannot be told for
+    'J1 joined, one value': 'Colonoscopy report\nProcedure date: 10/07/2026\nDOB / Date of Service: 10/14/2026\n',
+    'M4 joined, one value': 'DOS: 10/07/2026\nDOB / DOS: 10/14/2026\n',
+    'ES1 stack, a value missing': 'Colonoscopy report\nProcedure date: 10/07/2026\nDOB:\nDate of service:\n10/14/2026\n',
+    'column, a cell missing': 'Colonoscopy report\nProcedure date: 10/07/2026\nDOB            Date of Service\n'
+                              '10/14/2026\n',
+}
+
+
+class FieldStatingADateItCannotPlaceTests(DateAssertions, SimpleTestCase):
+    """fr-dr:0 (b41f5c6ee, P2DN's fix round issue 6): every date-of-service field the reader could not take a value from
+    was kept as evidence that reads no date - form 'empty', which never speaks against the note's own date, "as it states
+    none that could differ". That holds for a field that states no date ("N/A", blank, only a date of birth), and it was
+    false for one that STATES a date: "Date of service: rescheduled to 10/14/2026" (the value not opening its field), a
+    joined "DOB / Date of Service: 10/14/2026" (one value for two names) or a stack whose value lines cannot be placed
+    ("DOB:" / "Date of service:" / "10/14/2026") beside "Procedure date: 10/07/2026" documented 10/07, which was sent and
+    45385 done on 10/14 excluded as planned (13 openers x 2 layouts: 26 of 26; a62a18c85 and 87fb157ca..3dcfe0ee9 asked).
+    Such a field speaks again (unread, asked), keeping the label alone - a date after other words is not certainly the
+    label's value (P2DN's pinned "see 10/20/2026": only a word list could tell it from "TBD"), and a value whose place
+    cannot be told may be a date of birth (rule N2) - so no member date agrees with it alone. Only a field stating no date
+    stays silent."""
+
+    def test_the_finding_s_four_shapes_ask_the_date(self):
+        for name, text in (('E1', HEAD + STATED_LAYOUTS['A'].format(F='rescheduled to 10/14/2026') + COLO_BODY),
+                           ('E2x', HEAD + STATED_LAYOUTS['B'].format(F='corrected to 10/14/2026') + COLO_BODY),
+                           ('J1', HEAD + UNPLACED['J1 joined, one value'] + COLO_BODY),
+                           ('ES1', HEAD + UNPLACED['ES1 stack, a value missing'] + COLO_BODY)):
+            with self.subTest(name=name):
+                self.assert_never(text, '2026-10-07')
+                self.assertIn(date_fact(text).origin, ('conflict', 'missing'))
+                self.assert_member_conflict(text, ELENA_DATE)
+
+    def test_the_openers_family_asks_the_date(self):
+        for layout, shape in STATED_LAYOUTS.items():
+            for opener in OPENERS:
+                text = HEAD + shape.format(F=opener.format(D='10/14/2026')) + COLO_BODY
+                with self.subTest(layout=layout, field=opener):
+                    self.assert_never(text, '2026-10-07', '2026-10-14')
+                    self.assertIn(date_fact(text).origin, ('conflict', 'missing'))
+                    self.assert_member_conflict(text, ELENA_DATE)
+                    self.assertFalse(any('10/14/2026' in quoted for quoted in evidence_text(text)), evidence_text(text))
+        for opener in OPENERS:  # the verifier's smallest M1: two DOS lines
+            text = HEAD + 'DOS: 10/07/2026\nDOS: ' + opener.format(D='10/14/2026') + '\n'
+            with self.subTest(smallest=opener):
+                self.assert_never(text, '2026-10-07')
+
+    def test_a_number_glued_to_the_date_still_states_it(self):
+        # a number before the date reads with it as one date-shaped run ("2 10/14/2026", "2, 10/14/2026"): the field still
+        # states the date (the date starts there), so it is asked, never silent
+        for field in ('approx 2 10/14/2026', 'no. 2, 10/14/2026', 'room 12 - 10/14/2026', '#1 10/14/2026'):
+            text = HEAD + STATED_LAYOUTS['A'].format(F=field) + COLO_BODY
+            with self.subTest(field=field):
+                self.assert_never(text, '2026-10-07', '2026-10-14')
+                self.assertIn(date_fact(text).origin, ('conflict', 'missing'))
+
+    def test_a_date_whose_place_cannot_be_told_asks_and_is_never_its_value(self):
+        for name, shape in UNPLACED.items():
+            text = HEAD + shape + COLO_BODY
+            with self.subTest(shape=name):
+                self.assert_never(text, '2026-10-07')
+                self.assertIn(date_fact(text).origin, ('conflict', 'missing'))
+                self.assert_member_conflict(text, ELENA_DATE)
+                self.assertFalse(any('10/14/2026' in quoted for quoted in evidence_text(text)
+                                     if quoted.startswith(('DOB', 'Date of Service', 'Date of service', 'DOS'))),
+                                 evidence_text(text))
+
+    def test_controls_a_field_stating_no_date_stays_silent(self):
+        # N3's intended silence: no digit, blank, only a date of birth, another field's label opening it
+        for line in ('Procedure date: N/A', 'Procedure date: TBD', 'Procedure date:', 'Procedure date: DOB: 01/01/1998',
+                     'Visit Date: TBD DOB (age) 01/01/1998', 'Procedure date: DOB/Age 01/01/1998',
+                     'Procedure date: N/A Referral date: 10/13/2026'):
+            text = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\n' + line + '\n' + COLO_BODY
+            with self.subTest(line=line):
+                self.assert_document(text, '2026-10-14')
+                self.assert_member_conflict(text, ELENA_DATE)
+        # the reading gate's PDF form: a blank "Date of service:" over other labels, its form field filled below
+        text = (HEAD + 'Endoscopy unit - procedure form\nDate of service:\nProcedure performed:\nExtent reached:\n\n'
+                '[PDF form fields on page 1]\ndos: 2026-10-14\nprocedure: Colonoscopy, screening, to the cecum\n'
+                + COLO_BODY)
+        self.assert_document(text, '2026-10-14')
+        # a stack and a joined header whose positions match still read their own values
+        self.assert_member_date(HEAD + 'DOB:\nDate of service:\n01/01/1998\n10/14/2026\n' + COLO_BODY, '2026-10-14')
+        self.assert_member_date(HEAD + 'DOB / Date of Service: 01/01/1998 / 10/14/2026\n' + COLO_BODY, '2026-10-14')
+
+
+class FieldStatingADateItCannotPlaceRequestTests(EndToEnd):
+    E1 = HEAD + STATED_LAYOUTS['A'].format(F='rescheduled to 10/14/2026') + COLO_BODY
+
+    def test_e1_e2x_j1_es1_send_no_date(self):
+        for name, text in (('E1', self.E1),
+                           ('E2x', HEAD + STATED_LAYOUTS['B'].format(F='corrected to 10/14/2026') + COLO_BODY),
+                           ('J1', HEAD + UNPLACED['J1 joined, one value'] + COLO_BODY),
+                           ('ES1', HEAD + UNPLACED['ES1 stack, a value missing'] + COLO_BODY)):
+            with self.subTest(name=name):
+                encounter_id = self.finished(text)
+                self.assertEqual(self.dates_sent(encounter_id), [[]])
+                self.assert_not_excluded(encounter_id, '45385')
+
+    def test_e1m_nothing_is_sent_for_a_date_the_field_states_after_other_words(self):
+        # the member's answer agrees only with a date some candidate states as its own value: the field's 10/14 is asked
+        # (a capability the installed revision had, which took any member date), never sent unasked
+        encounter_id = self.finished(self.E1, service_date='2026-10-14')
+        self.assert_held(encounter_id)
+        self.assert_never_sent(encounter_id, '2026-10-07', '2026-10-14')
+
+
+# --- fr-dr:1: a header's values are placed by POSITION - a column under its head, a stack's place by its kind ---------
+
+SHIFTED = {  # counts that match, positions that do not (the finding's C2, C7, C10, S3; the verifier's smallest forms)
+    'C2 a name split at a double space': 'Patient            DOB           Date of Service    Endoscopist\n'
+                                         'Synthetic,  Alex   01/01/1998    10/14/2026\n',
+    'C10 a title split at a double space': 'Physician               DOB           Date of Service    Room\n'
+                                           'Dr.  Robin Synthetic    01/01/1998    10/14/2026\n',
+    'smallest column': 'Patient    DOB    DOS\nDoe,  Jane    01/01/1998\n',
+    'narrow heads over wide cells': 'Patient   DOB   DOS   X\nSynthetic,  Alex   01/01/1998   10/14/2026\n',
+    'a last cell split, the date cell empty': 'Patient  DOB  DOS  Endoscopist\nAlex  01/01/1998  Dr.  Robin\n',
+    'C2 tab-separated': 'Patient\tDOB\tDate of Service\tEndoscopist\nSynthetic,  Alex\t01/01/1998\t10/14/2026\n',
+    'S3 a heading over the stack': 'PATIENT INFORMATION:\nDate of service:\nDOB:\n10/14/2026\n01/01/1998\n'
+                                   '1.5 cm sigmoid polyp removed with a cold snare.\n',
+    'smallest stack': 'INFO:\nDOS:\nDOB:\n10/14/2026\n01/01/1998\n1.5 cm polyp.\n',
+    'a stack, a sentence opening with a fraction': 'Date of service:\nDOB:\n01/01/1998\n3/4 of the colon was prepped.\n',
+}
+
+
+class HeaderValuesArePlacedByPositionTests(DateAssertions, SimpleTestCase):
+    """fr-dr:1 (10bdfeb2f, P2DN's fix round issue 4): _column took the cell at the label's place whenever the row below
+    had as many cells as the header, and _stacked_value the value line at the label's place whenever the stack had as
+    many value lines as label lines - counts, never positions. "Synthetic,  Alex" (two spaces) under "Patient" split into
+    two cells while "Endoscopist" was left empty, so the date-of-service column read the date of birth (4 = 4); in a
+    stack "PATIENT INFORMATION:" counted as a label and "1.5 cm ..." as a value opening with a date, so every place was
+    shifted by one. The date of birth became the label's value and a member's 1998-01-01 was taken and sent, where
+    a62a18c85 held it (and the member's correct 10/14 was then refused). ARCHITECTURE 5.2's own rule - where the
+    positions do not match no value is the label's - is now checked by POSITION: a value cell lies under its own head
+    (it overlaps the columns from its head's start to the next head's) and a date or birth label's column holds a date
+    alone, and a stack's value line is of its label's kind (a date or birth label's place holds a date alone, any other
+    label's place holds no date alone)."""
+
+    def test_the_date_of_birth_is_never_the_label_s_value(self):
+        for name, rows in SHIFTED.items():
+            for top in ('Colonoscopy report - 10/14/2026\n', 'Date: 10/14/2026\nRe: Colonoscopy\n', ''):
+                text = HEAD + top + rows + COLO_BODY
+                with self.subTest(shape=name, top=top[:12]):
+                    self.assert_never(text, ELENA_DATE)
+                    self.assert_member_conflict(text, ELENA_DATE)
+                    self.assertFalse(any(BIRTH in quoted for quoted in evidence_text(text)), evidence_text(text))
+                    if top:  # the dated text above still answers the question
+                        self.assert_member_date(text, '2026-10-14')
+
+    def test_another_date_column_s_value_is_never_the_label_s(self):
+        # a split name shifts an admission date into the date-of-service column, a date alone of the right kind: only
+        # the position tells it is the admission column's (the cell stands under "Admit date"), so it is never the label's
+        for top in ('Colonoscopy report - 10/14/2026\n', ''):
+            text = (HEAD + top + 'Patient            Admit date    Date of Service    Room\n'
+                    'Synthetic,  Alex   10/12/2026    10/14/2026\n' + COLO_BODY)
+            with self.subTest(top=top[:12]):
+                self.assert_member_conflict(text, '2026-10-12')
+                self.assertFalse(any('10/12/2026' in quoted for quoted in evidence_text(text)), evidence_text(text))
+
+    def test_controls_aligned_columns_and_stacks_read_their_own_values(self):
+        for rows in ('Patient            DOB           Date of Service    Endoscopist\n'
+                     'Synthetic, Alex    01/01/1998    10/14/2026         Dr. Robin\n',
+                     'Physician              DOB           Date of Service    Room\n'
+                     'Dr. Robin Synthetic    01/01/1998    10/14/2026         2\n',
+                     'Patient   DOB   DOS   X\nAlex   01/01/1998   10/14/2026   Y\n',
+                     'D.O.B.        DOS\n01/01/1998        10/14/2026\n',
+                     'DOB            Date of Service\n01/01/1998     10/14/2026\n',
+                     'Date of Service    DOB\n10/14/2026         01/01/1998\n',
+                     'DOB\tDate of Service\n01/01/1998\t10/14/2026\n',
+                     'DOB:        Procedure Date:\n01/01/1998  10/14/2026\n',
+                     'Patient:\nDOB:\nDate of service:\nSynthetic, Alex\n01/01/1998\n10/14/2026\n',
+                     'DOB\nDate of Service\n01/01/1998\n10/14/2026 09:15\n',
+                     'Date of service:\nDOB:\n10/14/2026\n01/01/1998\n'):
+            text = HEAD + rows + COLO_BODY
+            with self.subTest(rows=rows.splitlines()[:2]):
+                self.assert_member_date(text, '2026-10-14')
+                self.assert_member_conflict(text, ELENA_DATE)
+                self.assertFalse(any(BIRTH in quoted for quoted in evidence_text(text)), evidence_text(text))
+
+
+class HeaderValuesArePlacedByPositionRequestTests(EndToEnd):
+    def test_c2_s3_c10b_the_member_s_1998_is_held(self):
+        for name, top in (('C2 a name split at a double space', 'Colonoscopy report - 10/14/2026\n'),
+                          ('S3 a heading over the stack', 'Colonoscopy report - 10/14/2026\n'),
+                          ('C10 a title split at a double space', '')):
+            text = HEAD + top + SHIFTED[name] + COLO_BODY
+            with self.subTest(shape=name):
+                encounter_id = self.finished(text, service_date=ELENA_DATE)
+                self.assert_held(encounter_id)
+                self.assert_never_sent(encounter_id, ELENA_DATE)
+
+
+# --- fr-dr:4, fr-di:0, fr-di:1: a date qualifier on the label's line is never passed over (N7) ------------------------
+
+OFFICE_VISIT = ('Office visit note\nHistory: Synthetic patient seen in clinic for constipation; colonoscopy discussed.\n'
+                'Assessment and plan: colonoscopy with possible polypectomy will be performed at the endoscopy unit.\n')
+QUALIFIER_FIELDS = ('Scheduled by', 'Requested by', 'Planned by', 'Scheduled at', 'Due for', 'Follow-up with',
+                    'Proposed by', 'Tentative per', 'Rescheduled by', 'Due at', 'Next steps')
+OFFICE_LINES = (  # the DATES-INSTALLED lens's EQ1-EQ3, ER1, ER2a and the verifiers' smallest forms
+    'Scheduled by: Front desk    Procedure date: 11/04/2026',
+    'Procedure date: 11/04/2026    Requested by: Dr. Robin Synthetic',
+    'Planned sedation: MAC    DOS: 11/04/2026',
+    'Repeat colonoscopy for Synthetic, Alex (DOB 01/01/1998) Procedure date: 11/04/2026',
+    'Procedure date: 11/04/2026    DOB: 01/01/1998    Status: Scheduled',
+    'Due by:  DOS: 11/04/2026',
+    'Due (DOB 01/01/1998) DOS: 11/04/2026',
+    'DOS: 11/04/2026 Due by:',
+    'Procedure date: 11/04/2026    Due    DOB: 01/01/1998',
+)
+RECALL = {  # the DATES-INSTALLED lens's F2a and F2b, and the verifier's smallest forms
+    'F2a': 'Repeat colonoscopy:\nDate of service: 10/14/2026\n' + 'Procedure: Colonoscopy\nTechnique: The colonoscope was '
+           'advanced to the cecum.\nFindings: A 5 mm sigmoid polyp was removed with a cold snare.\n'
+           'Scheduled by: Front desk    Procedure date: 10/14/2029\n',
+    'F2b': 'Colonoscopy report\nDate of service: 10/14/2026 (history of colon polyps)\nProcedure: Colonoscopy\nTechnique: '
+           'The colonoscope was advanced to the cecum.\nFindings: A 5 mm sigmoid polyp was removed with a cold snare.\n'
+           'Recall:\nProcedure date: 10/14/2029    DOB: 01/01/1998    Status: Scheduled\n',
+    'smallest': 'DOS: 1/1/2026, s/p\nDue by: X DOS: 1/1/2029\n',
+    'heading': 'Findings: A 5 mm polyp was removed with a cold snare.\nLast:\nDOS: 10/14/2026\nDue by: X DOS: 10/14/2029\n',
+}
+
+
+class DateQualifierOnTheLabelSLineTests(DateAssertions, SimpleTestCase):
+    """fr-dr:4, fr-di:0 and fr-di:1 (round 2's c2:1 pass-over, kept by 3dcfe0ee9; at a62a18c85 and every P2DN commit,
+    never at 057a7d398): _line_reading passed over a date qualifier on the label's own line when it opened a field whose
+    label names no occurrence ("Scheduled by: Front desk", "Requested by:", "Planned sedation: MAC") and when only a date
+    of birth stood between it and the date ("Repeat colonoscopy for ... (DOB 01/01/1998) Procedure date:", "... DOB:
+    01/01/1998    Status: Scheduled"). So a planned procedure's 11/04 was sent with an office visit's request (7,168 +
+    1,728 family texts), and a recall's 10/14/2029 was sent where the encounter's own 10/14/2026 had been set aside (384 of
+    384) - where 057a7d398's same-line window held the date: a date the head sent that the installed revision did not,
+    which N7 says cannot happen. A date qualifier on the label's line that opens a field of its own is never passed over
+    - whatever that field names, the line states another occurrence's date beside the label's, and the date is asked -
+    and a date of birth between a qualifier and the date passes nothing over (it dates no occurrence, rule N2). A history
+    word opening a field about something else ("Outside records:") is still passed over, as the installed revision's
+    window never read history words."""
+
+    def test_a_qualifier_field_after_or_before_the_label_asks_the_date(self):
+        for field in QUALIFIER_FIELDS:
+            for line in (f'Procedure date: 11/04/2026    {field}: Dr. Robin Synthetic',
+                         f'Procedure date: 11/04/2026 {field}: Dr. Robin Synthetic',
+                         f'{field}: Dr. Robin Synthetic    Procedure date: 11/04/2026',
+                         f'DOS: 11/04/2026\t{field}:'):
+                text = HEAD + 'GI office visit\n' + line + '\n' + OFFICE_VISIT
+                with self.subTest(line=line):
+                    self.assert_never(text, '2026-11-04')
+
+    def test_the_office_visit_lines_send_no_planned_date(self):
+        for line in OFFICE_LINES:
+            for top in ('GI office visit\n', ''):
+                text = HEAD + top + line + '\n' + OFFICE_VISIT
+                with self.subTest(line=line, top=bool(top)):
+                    self.assert_never(text, '2026-11-04')
+                    self.assert_member_conflict(text, ELENA_DATE)
+
+    def test_a_recall_s_date_is_never_the_note_s(self):
+        for name, shape in RECALL.items():
+            text = HEAD + shape
+            with self.subTest(shape=name):
+                self.assert_never(text, '2029-10-14', '2029-01-01')
+
+    def test_controls_a_history_word_s_field_and_the_line_above(self):
+        for text in (HEAD + 'Colonoscopy report\nDate of service: 10/14/2026    Recent labs: normal\n' + COLO_BODY,
+                     HEAD + 'Colonoscopy report\nOutside records: none    Date of service: 10/14/2026\n' + COLO_BODY,
+                     HEAD + 'Colonoscopy report\nLast colonoscopy: 05/01/2019\nDate of service: 10/14/2026\n' + COLO_BODY,
+                     HEAD + 'Colonoscopy report\nDate of service: 10/14/2026    DOB: 01/01/1998\n' + COLO_BODY,
+                     HEAD + 'Colonoscopy report\nDate of service: 10/14/2026    Endoscopist: Dr. Robin Synthetic\n'
+                     + COLO_BODY):
+            with self.subTest(lines=text.splitlines()[1:3]):
+                self.assert_document(text, '2026-10-14')
+
+
+class DateQualifierOnTheLabelSLineRequestTests(EndToEnd):
+    VISIT = ('99213', 'seen in clinic for constipation')
+
+    def test_the_office_visit_sends_no_planned_date(self):
+        for line in OFFICE_LINES[:5]:
+            text = HEAD + 'GI office visit\n' + line + '\n' + OFFICE_VISIT
+            with self.subTest(line=line):
+                encounter_id = self.finished(text)
+                self.assertEqual(self.dates_sent(encounter_id), [[]])
+
+    def test_the_recall_s_date_is_never_sent(self):
+        for name in ('F2a', 'F2b'):
+            with self.subTest(shape=name):
+                encounter_id = self.finished(HEAD + RECALL[name])
+                self.assert_never_sent(encounter_id, '2029-10-14')
+                self.assert_not_excluded(encounter_id, '45385')
+
+
+# --- fr-di:3: a member date never agrees with another occurrence's or another document's dated label or title ---------
+
+OFFICE_NOTE_TEXT = ('GI office visit\nPatient: Synthetic, Alex    MRN: 0000\nHistory of present illness: Synthetic patient '
+                    'seen in clinic for constipation. Colonoscopy discussed.\nAssessment: Chronic constipation.\n')
+ELSEWHERE = (  # (text, the date only another occurrence's or another document's dated text states)
+    (HEAD + OFFICE_NOTE_TEXT + 'Next procedure date: 11/04/2026\n', '2026-11-04'),
+    (HEAD + OFFICE_NOTE_TEXT + 'Procedure date: 11/04/2026 (scheduled)\n', '2026-11-04'),
+    (HEAD + 'Next procedure date: 11/04/2026\n', '2026-11-04'),
+    (HEAD + 'Surgical pathology report: 10/17/2026\n' + COLO_BODY, '2026-10-17'),
+    (HEAD + 'GI follow-up visit - 10/20/2026\nLast visit date: 04/15/2026\n' + OFFICE_NOTE_TEXT, '2026-04-15'),
+    (HEAD + 'Initial visit date: 10/20/2026\nPrior procedure date: 05/01/2019\n' + OFFICE_NOTE_TEXT, '2019-05-01'),
+    (HEAD + 'Outside colonoscopy:\nProcedure date: 09/03/2026\n' + OFFICE_NOTE_TEXT, '2026-09-03'),
+)
+
+
+class MemberDateNeverAgreesWithAnotherOccurrenceTests(DateAssertions, SimpleTestCase):
+    """fr-di:3 (4331b244b, round 2's rule A: every candidate kept as evidence; at a62a18c85 and the head, never a
+    regression - 057a7d398 took every member date): with no date of the note's own, every read candidate's spans were the
+    evidence a member date is matched against - the ones this reader itself reads as ANOTHER occurrence's ('aside': "Next
+    procedure date: 11/04/2026", "... (scheduled)", "Last visit date") or another document's ('other': "Surgical
+    pathology report: 10/17/2026") included. So an office visit's member answer 11/04 - the next procedure's date, which
+    the fact's own note says is not taken as the date of service - was taken and sent in a paid request, while the
+    member's correct 10/20 was held. Such a label or title is kept as evidence - quoted and shown as before - but a member
+    date never agrees with it: it agrees only with a date some candidate states as its OWN value (rule N3). A dated service
+    line ("Colonoscopy on 2026-10-21.") is evidence of the service's own date and still answers (rule N1)."""
+
+    def test_another_occurrence_s_date_is_never_the_member_s_answer(self):
+        for text, elsewhere in ELSEWHERE:
+            with self.subTest(text=text.splitlines()[1][:40], date=elsewhere):
+                self.assert_never(text, elsewhere)
+                self.assert_member_conflict(text, elsewhere)
+                fact = date_fact(text)
+                self.assertTrue(fact.evidence, 'kept as evidence')  # quoted, as before
+                self.assertTrue(any(elsewhere[5:7] in quoted for quoted in evidence_text(text)), evidence_text(text))
+
+    def test_controls_a_date_some_candidate_states_as_its_own_answers(self):
+        for text, own in ((HEAD + 'Findings\nColonoscopy on 2026-10-21.\n', '2026-10-21'),
+                          (HEAD + 'GI visit - 10/20/2026\n' + OFFICE_NOTE_TEXT, '2026-10-20'),
+                          (HEAD + 'GI follow-up visit - 10/20/2026\nLast visit date: 04/15/2026\n' + OFFICE_NOTE_TEXT,
+                           '2026-10-20'),
+                          (HEAD + 'Initial visit date: 10/20/2026\nPrior procedure date: 05/01/2019\n' + OFFICE_NOTE_TEXT,
+                           '2026-10-20'),
+                          (HEAD + 'Re: Colonoscopy on 10/14/2026\n' + COLO_BODY, '2026-10-14'),
+                          (HEAD + 'Date: 10/14/2026\n' + COLO_BODY, '2026-10-14'),
+                          (HEAD + 'Date of service: 14 Oct 2026\n' + COLO_BODY, '2026-10-14')):
+            with self.subTest(text=text.splitlines()[1][:40]):
+                self.assert_member_date(text, own)
+                self.assert_member_conflict(text, ELENA_DATE)
+
+    def test_the_evidence_is_stored_and_compared_as_any_span(self):
+        # the marker is invisible outside the member's agreement: the same fields, equal to a plain span, plain JSON
+        from studio.types import Span, to_jsonable
+        fact = date_fact(ELSEWHERE[0][0])
+        quoted = fact.evidence[0]
+        self.assertEqual(quoted, Span(quoted.start, quoted.end, quoted.text))
+        self.assertEqual(Span(quoted.start, quoted.end, quoted.text), quoted)
+        self.assertEqual(to_jsonable(fact)['evidence'], [{'start': quoted.start, 'end': quoted.end, 'text': quoted.text}])
+
+
+class MemberDateNeverAgreesWithAnotherOccurrenceRequestTests(EndToEnd):
+    VISIT = ('99213', 'seen in clinic for constipation')
+    TEXT = HEAD + OFFICE_NOTE_TEXT + 'Next procedure date: 11/04/2026\n'
+
+    def test_em1_the_next_procedure_s_date_is_never_sent(self):
+        encounter_id = self.finished(self.TEXT, service_date='2026-11-04')
+        self.assert_held(encounter_id)
+        self.assert_never_sent(encounter_id, '2026-11-04')
+
+    def test_em3_the_answer_path_never_sends_it(self):
+        encounter_id = self.finished(self.TEXT)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.set_context(encounter_id, {'service_date': '2026-11-04'})
+        self.assert_never_sent(encounter_id, '2026-11-04')
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+
+    def test_ep1_another_document_s_date_is_never_sent(self):
+        encounter_id = self.finished(HEAD + 'Surgical pathology report: 10/17/2026\n' + COLO_BODY,
+                                     service_date='2026-10-17')
+        self.assert_held(encounter_id)
+        self.assert_never_sent(encounter_id, '2026-10-17')

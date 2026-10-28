@@ -2,6 +2,7 @@
 from django.conf import settings
 
 from . import models, review
+from .gi.context import is_member_conflict
 from .gi.profiles import PROFILES, profile
 
 
@@ -56,6 +57,21 @@ def _service_date(encounter):
     return (fact or {}).get('value') if (fact or {}).get('origin') in {'document', 'user'} else None
 
 
+def _service_date_conflict(encounter):
+    """Whether the service date is a conflict (within the document, or a member's against it): the list says so,
+    never "not documented" (refutation r1, context-5)."""
+    context = encounter.current_context
+    fact = (context.facts or {}).get('service_date') if context else None
+    return (fact or {}).get('origin') == 'conflict'
+
+
+def _context_facts(context):
+    """The stored context facts, each with ``member_conflict`` (context.is_member_conflict): the one predicate every
+    reader that words a conflict asks, so the screen never calls a member's value conflicting documentation."""
+    facts = (context.facts or {}) if context else {}
+    return {name: {**fact, 'member_conflict': is_member_conflict(fact)} for name, fact in facts.items()}
+
+
 def _source_kind(revision):
     if revision is None:
         return None
@@ -72,7 +88,9 @@ def _source_kind(revision):
 def encounter_summary(encounter):
     return {
         'id': str(encounter.pk), 'title': encounter.title, 'state': encounter.state,
-        'state_label': review.state_label(encounter.state), 'service_date': _service_date(encounter),
+        # worded from the run a provider_failed state reads: a response refused whole is "not used" (7c8 reports-5)
+        'state_label': review.encounter_state_label(encounter), 'service_date': _service_date(encounter),
+        'service_date_conflict': _service_date_conflict(encounter),
         'families': _family_labels(encounter), 'source_kind': _source_kind(encounter.current_revision),
         'open_clarifications': encounter.clarifications.filter(state=models.Clarification.OPEN,
                                                                assessment=encounter.current_assessment_id).count()
@@ -175,6 +193,7 @@ def _proposal_json(proposal, current, assessment, membership, clarification_ids)
                        'label': 'Description withheld — no licensed CPT descriptor is connected.'},
         'evidence': proposal.evidence, 'rationale': proposal.rationale, 'units': proposal.units,
         'checks': proposal.checks, 'modifier_considerations': proposal.modifier_considerations,
+        'support': proposal.support or {},
         'clarification_ids': clarification_ids.get(proposal.pk, []),
         'decision': _decision_json(decision) if decision else None,
         'decision_state': DECISION_STATES.get(decision.action, 'undecided') if decision else 'undecided',
@@ -201,7 +220,11 @@ def _assessment_json(encounter, membership):
         'engine_version': assessment.engine_version, 'created_at': _iso(assessment.created_at),
         'proposals': proposals, 'encounter_checks': assessment.encounter_checks,
         'unsupported': assessment.unsupported, 'reference_sources': assessment.reference_sources,
-        'summary': assessment.summary,
+        'summary': assessment.summary, 'services': assessment.services or {},
+        # as the review leaves it: a code the reviewer reinstated counts as a selected one, as in the reports
+        # (review.reviewed_completeness; refutation P2FR, EUS-SECOND)
+        'completeness': review.reviewed_completeness(assessment, current) or {},
+        'second_run': str(assessment.second_run_id) if assessment.second_run_id else None,
     }
     return data, clarifications
 
@@ -219,7 +242,8 @@ def _provider_run_json(run):
             'usage_basis': run.usage_basis, 'request_sha256': run.request_sha256,
             'response_sha256': run.response_sha256,
             'reused_from': str(run.reused_from_id) if run.reused_from_id else None, 'error': run.error,
-            'reconciled': run.reconciled_at is not None, 'created_at': _iso(run.created_at)}
+            'reconciled': run.reconciled_at is not None, 'created_at': _iso(run.created_at),
+            'purpose': run.purpose, 'scope_items': list((run.scope or {}).get('items', []))}
 
 
 def _report_json(report):
@@ -233,6 +257,7 @@ ACTIVITY_SUMMARIES = {
     'revision.addendum': 'Addendum added', 'context.changed': 'Encounter context changed',
     'provider.sending': 'Provider request sent', 'provider.finished': 'Provider response recorded',
     'provider.reused': 'Retained provider result reused (no new request)',
+    'provider.second_review_requested': 'Second provider review requested by a reviewer',
     'provider.reconciled': 'Unknown provider outcome reconciled', 'assessment.created': 'Checks completed',
     'decision.recorded': 'Review decision recorded', 'report.generated': 'Report generated',
     'pipeline.stopped': 'Processing stopped', 'pipeline.resumed': 'Processing resumed',
@@ -251,17 +276,18 @@ def _activity_json(event):
 
 
 def encounter_detail(encounter, membership):
-    from .jobs import busy  # local import: jobs imports this module's peers
+    from .jobs import busy, second_review_status  # local import: jobs imports this module's peers
 
     assessment, clarifications = _assessment_json(encounter, membership)
     revision = encounter.current_revision
     jobs = list(encounter.jobs.filter(revision=revision).order_by('created_at')) if revision else []
+    state_run = review.state_run(encounter)
     return {
         **encounter_summary(encounter),
         'created_by': encounter.created_by.label(),
         'permissions': {'can_review': membership.can_review},
         'revision': _revision_json(revision),
-        'context': {'facts': encounter.current_context.facts if encounter.current_context else {},
+        'context': {'facts': _context_facts(encounter.current_context),
                     'user_values': encounter.user_values or {}},
         'routing': _routing_json(encounter),
         'pipeline': {'busy': busy(encounter), 'can_stop': busy(encounter) and membership.can_review,
@@ -271,11 +297,16 @@ def encounter_detail(encounter, membership):
                      'stages': [{'kind': j.kind, 'state': j.state, 'error': j.error,
                                  'finished_at': _iso(j.finished_at)} for j in jobs]},
         'provider_runs': [_provider_run_json(r) for r in encounter.provider_runs.order_by('created_at')],
+        # The run the provider_failed state reads, named so the page never picks one by recency (ec5 skeptic).
+        'state_run': str(state_run.pk) if state_run is not None else None,
+        'second_review': {**second_review_status(encounter),
+                          'can_request': membership.can_review},
         'assessment': assessment,
         'clarifications': [_clarification_json(c) for c in clarifications],
         'decisions': {'history': [_decision_json(d) for d in encounter.decisions.select_related(
             'proposal', 'reviewer', 'revision').order_by('sequence')]},
         'readiness': review.readiness(encounter),
+        'coding': review.coding_completeness(encounter),
         'reports': [_report_json(r) for r in encounter.reports.order_by('-generated_at')],
         'activity': [_activity_json(e) for e in encounter.audit_events.select_related('actor').order_by('created_at')],
     }

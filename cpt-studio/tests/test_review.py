@@ -438,8 +438,14 @@ class ReadinessTests(ReviewCase):
         self.assertTrue(self.ready()['reviewed'])
 
     def test_no_proposed_code_is_never_reviewed(self):
+        # An alternative was proposed and cannot be decided: the blocker says so, never that no code was proposed
+        # (refutation p2, reports2:3); a response with no code keeps "No CPT code was proposed".
         self.reassess(pf.result(pf.proposal('alt:0', '45380', [pf.CECUM_PASSAGE], bucket='alternative')),
                       setting='office')
+        self.assertEqual(self.ready(), {'draft': True, 'reviewed': False, 'blockers': [
+            'No code is selected for approval: the provider proposed only codes that were excluded or offered as '
+            'alternatives']})
+        self.reassess(pf.result(), setting='asc')
         self.assertEqual(self.ready(), {'draft': True, 'reviewed': False, 'blockers': ['No CPT code was proposed']})
 
     def test_unsettled_provider_results_block(self):

@@ -30,17 +30,34 @@ Timestamps are ISO-8601 UTC. Text offsets are Python code-point offsets into
 ```json
 {"encounters": [{
   "id": "uuid", "title": "Colonoscopy report", "state": "ready_for_review", "state_label": "Ready for review",
-  "service_date": "2026-10-21", "families": ["Colonoscopy", "Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)"],
+  "service_date": "2026-10-21", "service_date_conflict": false,
+  "families": ["Colonoscopy", "Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)"],
   "source_kind": "pdf", "open_clarifications": 0, "created_at": "..."
 }]}
 ```
+
+`service_date` is the documented or member-entered date, else null; `service_date_conflict` is true when the date is
+a conflict (within the document, or a member's date against the document's), so the list shows it as one, never as
+not documented.
 
 Encounter `state` ∈ `processing`, `stopped`, `extraction_failed`,
 `processing_failed`, `provider_not_run`, `provider_failed`, `provider_unknown`,
 `needs_clarification`, `ready_for_review`, `reviewed`, `no_codes`.
 `counts.queue` in the session counts `needs_clarification`, `ready_for_review`
 and `provider_unknown`.
-`state_label` is the human label (design vocabulary).
+`state_label` is the human label (design vocabulary). A response refused whole
+(the primary's, or the bounded second review's) is never `no_codes`: with nothing
+left to decide the state is `provider_failed`, its `state_run` the refused run,
+labelled "Provider response not used". A `no_codes` state is labelled from its
+rows: beside a second review made for the answer the assessment reads that the
+assessment did not read, that review's outcome ("Second review outcome unknown",
+"Second review failed", "Second review not sent", "Second review not read yet");
+otherwise, when the provider's codes are listed and none can be decided (excluded
+with no reinstatement, or offered only as alternatives), "No code selected for
+approval"; only an assessment that lists no code is "No CPT codes proposed"
+(refutation p2, reports2:2 and reports2:3). The readiness blocker reads the same
+rows: "No code is selected for approval: the provider proposed only codes that
+were excluded or offered as alternatives", or "No CPT code was proposed".
 
 ## POST /api/encounters (multipart/form-data)
 
@@ -63,12 +80,12 @@ Fields: `file` (PDF/DOCX/TXT) **or** `text` (pasted note); `title` (optional);
     "text": "...", "text_sha256": "...", "pages": [{"page": 1, "start": 0, "end": 812}]
   },
   "context": {"facts": {
-      "service_date": {"value": "2026-10-21", "origin": "document", "evidence": [{"start": 10, "end": 37, "text": "Date of service: 2026-10-21"}], "note": ""},
-      "setting": {"value": "office", "origin": "document", "evidence": [], "note": ""},
-      "billing_context": {"value": "not_documented", "origin": "missing", "evidence": [], "note": "..."},
-      "patient_status": {"value": "established", "origin": "document", "evidence": [], "note": ""}},
+      "service_date": {"value": "2026-10-21", "origin": "document", "evidence": [{"start": 10, "end": 37, "text": "Date of service: 2026-10-21"}], "note": "", "member_conflict": false},
+      "setting": {"value": "office", "origin": "document", "evidence": [], "note": "", "member_conflict": false},
+      "billing_context": {"value": "not_documented", "origin": "missing", "evidence": [], "note": "...", "member_conflict": false},
+      "patient_status": {"value": "established", "origin": "document", "evidence": [], "note": "", "member_conflict": false}},
     "user_values": {}},
-  "routing": {"version": "gi-routing@3", "document_kind": "procedure_report", "families": [
+  "routing": {"version": "gi-routing@4", "document_kind": "procedure_report", "families": [
       {"family": "gi.colonoscopy", "label": "Colonoscopy", "supported": true, "status": "performed",
        "mentions": [{"status": "performed", "section": "procedure", "cues": ["..."], "span": {"start": 0, "end": 0, "text": ""}}],
        "facts": [{"name": "extent", "value": "cecum", "origin": "document", "evidence": [], "note": ""}],
@@ -79,6 +96,7 @@ Fields: `file` (PDF/DOCX/TXT) **or** `text` (pasted note); `title` (optional);
                      "latency_ms": 6123.4, "usage": {"creditsConsumed": 0.0281}, "usage_basis": "provider_reported_credits_not_usd",
                      "request_sha256": "...", "response_sha256": "...", "reused_from": null, "error": "",
                      "reconciled": false, "created_at": "..."}],
+  "state_run": null,
   "assessment": {
     "id": "uuid", "profiles_version": "gi-profiles@2", "engine_version": "...", "created_at": "...",
     "proposals": [{
@@ -114,12 +132,20 @@ Fields: `file` (PDF/DOCX/TXT) **or** `text` (pasted note); `title` (optional);
 }
 ```
 
+A context fact's `member_conflict` is true when a workspace member's value differs from the document's single value
+(both kept, neither used): the screen words it as that conflict, never as conflicting documentation or as not
+documented.
+
 Proposal `bucket` ∈ selected | alternative | excluded. `status` ∈ ready |
 needs_clarification | excluded | informational (alternatives). `decision_state`
 ∈ undecided | approved | rejected | reinstated | exclusion_confirmed. `allowed_actions` is computed by
 the server and is the only source of truth for which buttons are enabled. `approve_withheld_by` is the
 same for every member: on a reinstated exclusion it names the check that withholds approve
 (`review.reinstatement` or `em.same_day_if_reinstated`), and it is null otherwise.
+
+`state_run` is the id of the provider run a `provider_failed` state reads (the failed stage's own request, else the
+run the current assessment read), and null in every other state. The page explains the failure with that run's error,
+never with a run picked by recency: a newer request stopped or settled before sending is not the run in use.
 
 ## POST /api/encounters/{id}/decisions
 
@@ -136,7 +162,11 @@ outcome: it offers `confirm` (agree with the exclusion) and `reinstate`, and
 confirm the exclusion or reinstate it" until one of the two is recorded. A
 confirmed exclusion stays in the excluded list of every report, with the
 confirming reviewer named; `revoke` undoes it. An exclusion for scope or
-evidence (`reinstatable` false) offers nothing and needs no decision. A reinstated exclusion offers
+evidence (`reinstatable` false) offers nothing and needs no decision. A reinstated exclusion that is
+not rejected is decided like a selected code, so the encounter view's `assessment.completeness`, the
+reports' documented services, `coding` and `second_review` count it as one: the reconciliation is read
+again with it counted, `completeness.reinstated` names it, and the stored assessment is unchanged. A
+reinstated exclusion offers
 `approve` only while its `review.reinstatement` check passes (the gates a
 selected code meets: required facts, the separately identifiable E/M on a
 procedure day, a known service date); otherwise only `reject` and `revoke`.
@@ -165,17 +195,60 @@ string: a listed choice, or null or `''` to clear the user value; any other type
 boolean, a list, an object) answers 400. A service date is a string in `YYYY-MM-DD` form only
 (also on upload). Re-assesses with the provider run in use only when that run answers
 exactly the request the new context would send; otherwise re-predicts (an
-identical retained result is reused at no cost). The run in use is the current
+identical retained result is reused at no cost; a request this document already
+sent that failed is never sent again: the predict records a `not_sent` run that
+carries that request and names the failure, and re-assesses with it). The run in
+use is the current
 revision's newest finished request, also when a Stop or an expired stage
 cancelled the assess that would have used it; a reconciled unknown outcome is
 not, so the attempt the reconciliation released is still made, and neither is a
-reserved run the stale sweep settled as not sent (it was never sent). The
+reserved run the stale sweep settled as not sent (it was never sent), nor a
+member date conflict's hold. A member service date that differs from the
+document's is that conflict: nothing is built, reused or sent (a `not_sent` run
+held for it, and the date question asked) until the metadata is corrected or
+cleared or an addendum settles it. A date the document leaves in question (a
+conflict within the document; dated text the service cannot read or place - a
+date-of-service field stating a date after other words in its field, or where a
+header's positions do not match; a
+labelled date with a bracket or words after it in its field, or written in a
+form the installed revision did not send - a day-first date, a label naming the
+time, a table row; or dated text the service keeps only as evidence - a dated
+title, a "Date:" line, a dated line naming the service - which is never the
+date by itself) is no date: the request goes out without a date line, and a
+member's answer makes a second, dated request. The answer must be one of the
+dates the document states as some dated text's own value - the withheld
+labelled date's where there is one - never a date of birth, another field's
+date, or a date only a label or title read as another occurrence's or another
+document's states ("Next procedure date: ...", "Surgical pathology report:
+..."); where its dated text reads no calendar date (an empty or non-date
+date-of-service field among it), any member date is a conflict until an
+addendum dates the encounter (ARCHITECTURE 5.2). The
 document's own facts are read again inside this request under a
 `CONTEXT_REQUEST_SECONDS` wall clock; past it the change is refused (409) and
 nothing is changed. 409 while a stage is queued or running, before the text
 is extracted, or when the revision's analysis never finished (it overran its
 limits, the document names procedures more often than the service reads, or it
 failed): nothing is ever sent for a document that could not be read.
+
+## POST /api/encounters/{id}/second-review
+
+Asks for the one bounded second review of the current assessment
+(ARCHITECTURE 5.11); owners and reviewers only (403 otherwise). 201
+`{"second_review": "queued"}`, or 409 with the reason a bound stands (the
+same reason the encounter view's `second_review.reason` shows). The encounter
+view carries `"second_review": {"available": bool, "reason": "...", "items":
+["<unresolved item>", ...], "can_request": bool, "run": "uuid" | null}`; `items` is empty when no
+documented service is left without a supported proposal. `run` is the id (in
+`provider_runs`) of the newest second review made for the answer the current
+assessment reads, whatever its outcome, and null when none was: while its
+response was not read (unknown, failed, not sent) or not used (refused whole),
+the page states that outcome and never says that no CPT codes were proposed.
+The current assessment is the one `assessment` shows, and `run` is looked up on
+that assessment's own revision: after an addendum, while the new revision is not
+assessed yet (stopped, or its predict blocked by an unknown outcome), the page
+still shows the earlier assessment and still states its second review's
+outcome (refutation p2, reports2:1). An
+assessment never queues a second review (owner decision 2026-10-27).
 
 ## POST /api/encounters/{id}/stop · /resume · /reconcile
 
@@ -184,11 +257,18 @@ stage starts and no provider request is sent while it stands. Resume (when
 `pipeline.can_resume`): lifts the Stop and re-runs the stage it cancelled, with
 the current context. A stage the system cancelled (it expired in the queue, or
 a worker stopped mid-stage) is resumable the same way; `pipeline.stopped_by_member`
-is false then, and the stage's `error` records what happened. A predict whose
+is false then, and the stage's `error` records what happened. So is the predict
+an upgrade queues when it remakes a context the installed revision recorded at a
+stage that never sends (an assess queued before the swap or resumed after it, or
+the stale sweep's settlement of a predict): it runs as any predict but stops
+where it would send, with the reason as its `error` ("Nothing was sent: after an
+upgrade this document was read again under the current rules, and ... Resume to
+send it."), and the Resume sends that request once (ARCHITECTURE 5.12). A predict whose
 provider outcome was already recorded when its worker stopped is settled by that
 outcome instead, so a Resume never re-sends a request that already failed. Reconcile: `{"provider_run_id": "uuid", "note": "..."}`
 (note 12–2,000 characters) after an `unknown` outcome; allows exactly one new
-attempt, for the current revision's current context. Context, resume and
+attempt, for the current revision's current context (never a re-send of a
+request this document already sent that failed). Context, resume and
 reconcile each run under the encounter's row lock and answer 409 while any
 stage is queued or running, so one member action yields at most one provider
 attempt.
@@ -213,10 +293,13 @@ confirmed exclusion, which was never reinstated).
 `{"kind": "draft|reviewed", "fmt": "txt|csv"}` → `201 {"id", "filename", "sha256", "download_url"}`;
 409 with `details.blockers` when a reviewed report is not ready. The download
 streams the stored bytes as an attachment; its sha256 equals the response's.
-Format `cpt-studio-report@3`: the CSV's `decided_at` is the reviewer's own
+Format `cpt-studio-report@4` (the documented-service sections and columns of
+ARCHITECTURE 5.8 added to `@3`): the CSV's `decided_at` is the reviewer's own
 decision time; a carried decision also fills `decision_carried_from` and
 `decision_carried_at`. A CSV with no proposals has one placeholder row
-(`item_list` = `none`) carrying the report kind and SYNTHETIC. In both formats a
+(`item_list` = `none`) carrying the report kind and SYNTHETIC, before the
+encounter rows (`coding_completeness`, and one per unresolved service and per
+conflict). In both formats a
 C0 control character other than tab and line breaks, DEL and a C1 control are
 shown as `\xNN` (two lowercase hex digits), so no rendering of a file shows a line
 or row the file does not contain; a TXT line break of any form continues the

@@ -17,7 +17,7 @@ from tests.test_repairs_r3_validation_b import HEAD, VISIT, Case, encounter_chec
 
 V8 = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nChief complaint: Heartburn.\n'
       '{line}\nMedical decision making: moderate.\nTotal time: 32 minutes.\n')
-EGD_HELD = 'Upper GI endoscopy (EGD, esophagoscopy, enteroscopy) is '
+EGD_HELD = 'Upper GI endoscopy (EGD, esophagoscopy, POEM) is '
 
 
 class Validation8AssessmentHedgeTests(Case):

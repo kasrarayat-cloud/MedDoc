@@ -7,9 +7,10 @@ validation:2 follow-up withdrew only its own new arm (a findings sentence openin
 (checks._VAL_doubted) now withdraws the routed mention and the procedure line themselves. Hold-only: such a passage is
 held as section_only, never excluded. Synthetic text only; pure functions.
 """
+from studio.gi.profiles import INVENTORY_FAMILIES, family_for_code
 from tests.test_repairs_r3_validation_b import HEAD, Case, check_of, real
 
-REPORT = HEAD + 'Procedure: {proc}\nIndication: Symptoms.\nFindings: {find}\nImpression: Findings as described.\n'
+REPORT =HEAD + 'Procedure: {proc}\nIndication: Symptoms.\nFindings: {find}\nImpression: Findings as described.\n'
 RULE_WORDING = 'is not read as documenting that service as done on that date'
 
 
@@ -104,7 +105,15 @@ class IncompleteFamilyLineTests(Case):
             with self.subTest(code=code):
                 item = real(text, (code, line))[0][code]
                 self.assertReady(item)
-                self.assertIn(f'Documented as {documented}: “{line}”', check_of(item, 'service.status').detail)
+                status = check_of(item, 'service.status').detail
+                if family_for_code(code) in INVENTORY_FAMILIES:
+                    # engine @4: the documented service decides and words the status; the code's own line shows the
+                    # service, and the incomplete examination stays shown
+                    self.assertIn(f'is documented as {documented}', status)
+                    self.assertEqual(check_of(item, 'evidence.support').status, 'pass')
+                    self.assertEqual(check_of(item, 'service.incomplete').status, 'warn')
+                else:
+                    self.assertIn(f'Documented as {documented}: “{line}”', status)
         # a passage its section alone made performed keeps the plain wording
         item = real(REPORT.format(proc='Anoscopy', find='Grade 2 internal hemorrhoids.'),
                     ('46221', 'Procedure: Anoscopy'))[0]['46221']

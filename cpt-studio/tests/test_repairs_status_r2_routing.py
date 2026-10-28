@@ -95,7 +95,7 @@ def clarified(proposal):
 
 class VersionTests(unittest.TestCase):
     def test_the_routing_version_is_bumped_once(self):
-        self.assertEqual(detect.ROUTING_VERSION, 'gi-routing@3')
+        self.assertEqual(detect.ROUTING_VERSION, 'gi-routing@4')
 
 
 GI03_LINE = 'Colonoscopy with cold snare polypectomy and cold forceps biopsy.'

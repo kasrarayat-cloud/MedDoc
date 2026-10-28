@@ -9,8 +9,12 @@ from django.utils import timezone
 
 from studio import jobs, models, review
 from studio.providers.base import ProviderUnavailable
-from tests.test_pipeline_api import drain
-from tests.test_repairs_pipeline import LIVE, NO_DATE_NOTE, ApiHarness
+from tests.test_pipeline_api import OFFICE_NOTE, drain
+from tests.test_repairs_pipeline import FIRST_DATE, LIVE, NO_DATE_NOTE, ApiHarness
+
+# A note that documents no place of service: a member's setting supplies it, and a later one changes it. A member's
+# setting beside a documented one is a conflict instead (session interpretation 11).
+NO_SETTING_NOTE = OFFICE_NOTE.replace('Place of service: Office, in-person outpatient visit\n', '')
 
 
 class _WorkerDied(BaseException):
@@ -53,8 +57,8 @@ class SweptReservedRunIsNoOutcomeTests(ApiHarness, TestCase):
         self.assertEqual(models.Job.objects.get(pk=job.pk).state, models.Job.CANCELLED)
         return run
 
-    def swept(self, how='is_stopped'):
-        encounter_id = self.create()
+    def swept(self, how='is_stopped', text=OFFICE_NOTE):
+        encounter_id = self.create(text)
         jobs.run_job(jobs.claim_next())  # extract
         jobs.run_job(jobs.claim_next())  # analyze
         sends = len(self.provider.requests)
@@ -97,16 +101,17 @@ class SweptReservedRunIsNoOutcomeTests(ApiHarness, TestCase):
         self.assert_attempt_made(encounter_id)
 
     def test_a_second_setting_change_then_re_checks_without_sending(self):
-        encounter_id = self.swept()
+        encounter_id = self.swept(text=NO_SETTING_NOTE)
         self.change(encounter_id, {'setting': 'office'})
         self.change(encounter_id, {'setting': 'asc'})
         self.assert_attempt_made(encounter_id, sends=1)
 
     def test_after_a_failed_request_for_another_date(self):
-        # The run in use falls back past the swept run to the failed request for the document's date; the request
-        # for the new date differs from it, so the attempt for the new date is made, once.
+        # The run in use falls back past the swept run to the failed request for the first date; the request for the
+        # new date differs from it, so the attempt for the new date is made, once. The note documents no date of its
+        # own, so the member's dates apply (a documented date would make a different member date a conflict).
         self.provider.outcomes = ['failed']
-        encounter_id = self.create()
+        encounter_id = self.create(NO_DATE_NOTE, service_date=FIRST_DATE)
         drain()
         self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'provider_failed')
         self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context',
@@ -203,8 +208,11 @@ class RunInUseTests(ApiHarness, TestCase):
         self.assertEqual(jobs._run_in_use(self.revision), answered)
 
     def test_a_run_recorded_without_a_request_stands(self):
+        # Restored in round 7c8 (the P1SENDS skeptic, sk:2): refutation p1's first repair made this run no outcome, so a
+        # cleared date re-assessed past the revision's newest run, rows the installed revision misread after a rollback.
+        # The run stands, as the installed revision reads it; the predict's send door keeps a failed request unsent.
         unbuilt = self.make_run(request_sha256='', request_body={}, contexts=[], error='No credentials are configured.',
-                           finished_at=timezone.now())
+                                finished_at=timezone.now())
         self.assertEqual(jobs._run_in_use(self.revision), unbuilt)
 
     def test_other_finished_states_without_a_start_still_stand(self):

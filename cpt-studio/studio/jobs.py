@@ -1,4 +1,4 @@
-"""Pipeline jobs: extract -> analyze -> predict -> assess (ARCHITECTURE section 5).
+"""Pipeline jobs: extract -> analyze -> predict -> assess [-> review2 -> assess] (ARCHITECTURE section 5).
 
 One worker claims queued jobs with SELECT ... FOR UPDATE SKIP LOCKED. Every
 stage is idempotent (unique idempotency key), must start before its deadline,
@@ -28,12 +28,19 @@ from .providers import get_provider, normalizer_for
 from .providers.base import ProviderUnavailable
 from .reference.store import prefetched_lookup, selected_codes
 from .storage import read_original
-from .types import Fact, PageSpan, ProviderRequest, RoutingResult, from_jsonable, sha256_json, to_jsonable
+from .types import (EvidenceSpan, Fact, NormalizedResponse, PageSpan, ProviderCode, ProviderRequest, RoutingResult,
+                    from_jsonable, sha256_json, to_jsonable)
 from .validation.engine import assess as run_assessment
 
 log = logging.getLogger(__name__)
 
-CONTEXT_VERSION = 'gi-context@1'
+CONTEXT_VERSION = 'gi-context@2'
+# Context versions recorded under other merge rules (gi-context@1, the installed revision 057a7d39, kept a member's value
+# as plain metadata): a stage remakes such a context before it sends or assesses anything (_remade_context).
+EARLIER_CONTEXT_VERSIONS = ('gi-context@1',)
+MEMBER_DATE_CONFLICT_MESSAGE = ('Nothing was sent: the service date entered as encounter metadata differs from the '
+                                'documented one. Correct or clear the metadata (or add an addendum), and the request is '
+                                'made for the agreed date.')
 PROVIDER_LOCK_KEY = 0x435054535455  # 'CPTSTU': CPT Studio's own single-flight key
 QUEUE_DEADLINE = timedelta(minutes=30)  # a job that cannot start within this window expires
 Job = models.Job
@@ -79,6 +86,34 @@ def start_pipeline(revision, requested_by):
     clear_stop(revision.encounter)
     return enqueue(Job.EXTRACT, encounter=revision.encounter, revision=revision,
                    key=f'extract:{revision.pk}', requested_by=requested_by)
+
+
+def _member_date_hold(encounter, revision, provider, requested_by):
+    """The not-sent run session interpretation 19 records for a context whose service date is a member conflict: the
+    request has no date it could carry, so nothing is built, reused or sent, and the run says why."""
+    return models.ProviderRun.objects.create(
+        encounter=encounter, revision=revision, provider=provider.name, adapter_version=provider.adapter_version,
+        request_sha256='', request_body={}, contexts=[], state=models.ProviderRun.NOT_SENT,
+        error=MEMBER_DATE_CONFLICT_MESSAGE, authorization_ref=settings.AUTHORIZATION_REF, requested_by=requested_by,
+        service_date=None, finished_at=timezone.now(), scope={'held': models.ProviderRun.HELD_MEMBER_DATE_CONFLICT})
+
+
+def _queue_predict(encounter, revision, context, *, key, requested_by):
+    """Queue the predict for ``context`` - unless it is the current revision's current context and its service date is
+    a member conflict. Then the hold is recorded here, where it is decided, and only the assess that reads it is queued:
+    never a job that can send and whose hold only this revision's predict stage knows (refutation r1, migrate lens: the
+    installed revision's worker, restored after a failed replacement or reinstalled, read the conflict as 'no date' and
+    sent the request without one). Every other predict is queued as before; one for a context that is no longer current
+    is skipped by every revision's predict stage."""
+    fact = (context.facts or {}).get('service_date') if context is not None else None
+    if not gi_context.is_member_conflict(fact) or not models.Encounter.objects.filter(
+            pk=encounter.pk, current_revision_id=revision.pk, current_context_id=context.pk).exists():
+        return enqueue(Job.PREDICT, encounter=encounter, revision=revision, context=context, key=key,
+                       requested_by=requested_by)
+    provider = get_provider()
+    run = _member_date_hold(encounter, revision, provider, requested_by) if provider is not None else None
+    return enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=run,
+                   key=f'assess:{context.pk}:{run.pk}' if run else f'{key}:no-provider', requested_by=requested_by)
 
 
 # --- helpers -----------------------------------------------------------------
@@ -177,6 +212,9 @@ def _analyze_child(text, user_values, mention_limit):
     mention is read in its list window, and a long list of one service's name overran the stage). Every later stage
     reads only a revision this stage read."""
     named = gi_detect.service_mention_count(text)
+    if named <= mention_limit:  # and the documented-service reader's own vocabulary, which is wider (refutation r1)
+        from .gi import services as gi_services
+        named = max(named, gi_services.mention_count(text, mention_limit))
     if named > mention_limit:
         return named
     document_facts = gi_context.extract_context(text)
@@ -190,14 +228,16 @@ def _route_child(text, service_date):
 
 
 def _assess_child(text, service_date, pages, context, normalized, reference, provider_status, extraction_status,
-                  extraction_messages):
+                  extraction_messages, second=None, second_scope=None):
     """The routing for ``service_date`` and the validation assessment that reads it, in one child: validation's span
-    readings reuse the routing analysis the child already made."""
+    readings reuse the routing analysis the child already made. The documented-service inventory is read here too
+    (engine @4), under the same deadline and memory limit."""
     data = to_jsonable(gi_detect.route(text, service_date))
     result = run_assessment(
         text=text, pages=pages, context=context, routing=from_jsonable(RoutingResult, data), normalized=normalized,
         reference=reference, service_date=service_date, provider_status=provider_status,
-        extraction_status=extraction_status, extraction_messages=extraction_messages)
+        extraction_status=extraction_status, extraction_messages=extraction_messages, second=second,
+        second_scope=second_scope)
     return data, result
 
 
@@ -243,6 +283,54 @@ def addendum_block(revision):
 
 def _unreconciled_unknown(encounter):
     return encounter.provider_runs.filter(state=models.ProviderRun.UNKNOWN, reconciled_at__isnull=True).exists()
+
+
+FAILED_BEFORE_MESSAGE = ('Nothing was sent: this request was sent before for this document and failed, and an '
+                         'identical request is never sent again.')
+FAILED_BEFORE_ERROR = ' Its error then: {error}'
+
+
+def _failed_before(encounter, provider, request):
+    """This encounter's newest run - any revision, whatever it was made for - that SENT ``request`` (provider, adapter
+    version and body hash, as _run_answers compares them) and FAILED; None when there is none.
+
+    Such a request is never sent again (refutation p1, sends-0..2: a date round trip, a cleared date after one whose
+    request could not be built, a reconciliation's released attempt and an addendum that left a second review's excerpt
+    as it was each re-sent one byte-identical). Each send door asks it after reusing a retained answer to the same
+    request and after the unknown-outcome block, and before anything that sends: the predict records a not-sent run
+    carrying the request (_not_resent_run) and re-assesses with it, the second review sends nothing and is refused when
+    asked for. Another encounter's runs are not read: an upload is a member's new request."""
+    return (models.ProviderRun.objects.filter(
+        encounter=encounter, provider=provider.name, adapter_version=provider.adapter_version,
+        request_sha256=request.canonical_sha256, state=models.ProviderRun.FAILED, sent=True)
+        .order_by('-created_at').first())
+
+
+def _not_resent_run(job, encounter, revision, provider, request, service_date, failed):
+    """The run a predict records where the send door met ``request`` already sent for this encounter that FAILED
+    (``failed``): nothing is sent, and the run says so and gives that failure's error. It carries the request, so it
+    answers it as the run in use - this revision's, and the installed revision's after a rollback: both read the
+    revision's newest finished run, so neither sends that request behind a later save. Its start is recorded, as a
+    reused run's is: it went through the send door, so no revision reads it as a reservation the stale sweep settled
+    unsent, which still owes its attempt (round 7c8 skeptic, sk:2 and sk:3)."""
+    now = timezone.now()
+    error = FAILED_BEFORE_MESSAGE + (FAILED_BEFORE_ERROR.format(error=failed.error) if failed.error else '')
+    return models.ProviderRun.objects.create(
+        encounter=encounter, revision=revision, provider=provider.name, adapter_version=provider.adapter_version,
+        request_sha256=request.canonical_sha256, request_body=request.body, contexts=list(request.contexts),
+        state=models.ProviderRun.NOT_SENT, sent=False, error=error, authorization_ref=settings.AUTHORIZATION_REF,
+        requested_by=job.requested_by, service_date=service_date, started_at=now, finished_at=now)
+
+
+def _retained_second_review(encounter, provider, request):
+    """The workspace's retained answer to the second-review ``request`` (the original SUCCEEDED run, not a reuse of
+    one), which stage_review2 reuses with nothing sent; None when there is none. The blocker asks the same lookup, so
+    the offer and the stage never disagree about a reuse (round 7c8 skeptic: the offer refused, as a request that had
+    failed here, one another encounter's identical request had since had answered)."""
+    return models.ProviderRun.objects.filter(
+        encounter__workspace=encounter.workspace, provider=provider.name, adapter_version=provider.adapter_version,
+        request_sha256=request.canonical_sha256, state=models.ProviderRun.SUCCEEDED, reused_from__isnull=True,
+        purpose=models.ProviderRun.SECOND_REVIEW).order_by('created_at').first()
 
 
 # --- stages ------------------------------------------------------------------
@@ -308,8 +396,7 @@ def stage_analyze(job):
         if locked.current_revision_id == revision.pk:
             locked.current_context = context
             locked.save(update_fields=['current_context', 'updated_at'])
-    enqueue(Job.PREDICT, encounter=encounter, revision=revision, context=context, key=f'predict:{context.pk}',
-            requested_by=job.requested_by)
+    _queue_predict(encounter, revision, context, key=f'predict:{context.pk}', requested_by=job.requested_by)
     return {'context': str(context.pk), 'routing': str(routing.pk)}
 
 
@@ -331,6 +418,68 @@ def _finish_run(run, exchange):
     run.save()
 
 
+def _remade_context(job):
+    """A stage given a context an earlier version recorded (gi-context@1 kept a member's value as plain metadata, where
+    the current rules keep a differing value as a conflict) remakes it under the current rules - bounded, as a member's
+    change does - makes it current and starts again from it; nothing is sent or assessed on the old one (refutation r1:
+    after the upgrade a queued, resumed or swept encounter sent a member date the current rules hold as a conflict).
+    Returns the job's result, or None when the context is current."""
+    context, encounter, revision = job.context, job.encounter, job.revision
+    if context is None or context.version not in EARLIER_CONTEXT_VERSIONS or context.revision_id != revision.pk:
+        return None
+    fresh = make_context(encounter, revision)
+    with transaction.atomic():
+        locked = models.Encounter.objects.select_for_update().get(pk=encounter.pk)
+        if locked.current_revision_id != revision.pk or locked.current_context_id != context.pk:
+            return {'skipped': 'the context is not the current one for this revision; nothing was sent'}
+        locked.current_context = fresh
+        locked.save(update_fields=['current_context', 'updated_at'])
+    audit.record(encounter.workspace, 'context.remade', encounter=encounter, context=str(fresh.pk),
+                 previous=str(context.pk), previous_version=context.version)
+    last_run = _run_in_use(revision)
+    remade = f'the context was recorded by {context.version}; it was remade under {CONTEXT_VERSION}'
+    if _run_answers(last_run, revision, fresh):
+        enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=fresh, provider_run=last_run,
+                key=f'assess:{fresh.pk}:{last_run.pk}', requested_by=job.requested_by)
+    elif job.kind == Job.PREDICT or gi_context.is_member_conflict((fresh.facts or {}).get('service_date')):
+        # the request a member's action queued (an upload, a date change, a Resume, a reconciliation), or the hold
+        _queue_predict(encounter, revision, fresh, key=f'predict:{fresh.pk}', requested_by=job.requested_by)
+    else:
+        # Refutation r1, migrate-5 (ec5): this stage never sends - an assess the earlier revision queued or a member
+        # resumed, or the stale-stage sweep's settlement of its predict - so neither does the predict it queues for the
+        # remade context. That predict runs as any other (a disabled provider, a request that cannot be built, a
+        # retained answer, an unknown outcome to reconcile: each recorded and shown as itself) and stops only where it
+        # would send, for a member's Resume (stage_predict; ec5 skeptic: a stop recorded here for every request the
+        # run in use does not answer said "differs from the one sent before. Resume to send it." where nothing had
+        # been sent, where nothing could be built, and while an unknown outcome blocked every send).
+        _queue_predict(encounter, revision, fresh, key=_upgrade_predict_key(fresh), requested_by=job.requested_by)
+    return {'skipped': remade}
+
+
+REMADE_REQUEST_MESSAGE = ('Nothing was sent: after an upgrade this document was read again under the current rules, '
+                          'and the request they make for it differs from the one sent before. Resume to send it.')
+REMADE_UNANSWERED_MESSAGE = ('Nothing was sent: after an upgrade this document was read again under the current '
+                             'rules, and no provider answer is recorded for the request they make for it. Resume to '
+                             'send it.')
+
+
+def _upgrade_predict_key(context):
+    """The key of the predict an upgrade's remake queues at a stage that never sends: that predict never sends."""
+    return f'predict:{context.pk}:after-upgrade'
+
+
+def _remade_request_message(revision, request):
+    """Why the upgrade's predict stopped where it would send ``request``, worded from what is recorded: "differs from
+    the one sent before" only when the run in use carries another request (provider, adapter and body, as _run_answers
+    compares them) that was sent."""
+    run = _run_in_use(revision)
+    sent = run is not None and run.sent and bool(run.request_sha256)
+    if sent and (run.provider, run.adapter_version, run.request_sha256) != (
+            request.provider, request.adapter_version, request.canonical_sha256):
+        return REMADE_REQUEST_MESSAGE
+    return REMADE_UNANSWERED_MESSAGE
+
+
 def stage_predict(job):
     revision, encounter, context = job.revision, job.encounter, job.context
     encounter.refresh_from_db()
@@ -339,6 +488,9 @@ def stage_predict(job):
     if context is None or context.revision_id != revision.pk or encounter.current_context_id != context.pk:
         # Provider input is only ever the current revision's text with that revision's current context.
         return {'skipped': 'the context is not the current one for this revision; nothing was sent'}
+    remade = _remade_context(job)
+    if remade is not None:
+        return remade
     provider = get_provider()
     service_date = context_service_date(context)
     assess_key = f'assess:{context.pk}'
@@ -350,6 +502,15 @@ def stage_predict(job):
     if provider is None:
         next_assess(None)
         return {'provider': 'disabled'}
+    if gi_context.is_member_conflict((context.facts or {}).get('service_date')):
+        # Session interpretation 19: a member-entered service date that differs from the document's is a conflict with
+        # both sides kept (interpretation 11), so the request has no date it can carry. Nothing is built, reused or
+        # sent while it stands - a dateless request would be paid for and discarded once the date is settled - and the
+        # encounter asks the date question. Correcting or clearing the metadata starts the request for its date. Every
+        # path that queues a predict records this hold itself (_queue_predict); this holds one queued any other way.
+        run = _member_date_hold(encounter, revision, provider, job.requested_by)
+        next_assess(run)
+        return {'provider': 'not_sent', 'reason': 'member-entered service date conflicts with the document'}
     if not models.RoutingRun.objects.filter(revision=revision, service_date=service_date).exists():
         # Nothing is sent for a date this revision was never routed for (round 6 pipeline:0): after a date change the
         # new date is routed first, in one bounded child under the analyze deadline, so a document that cannot be read
@@ -367,7 +528,8 @@ def stage_predict(job):
         next_assess(run)
         return {'provider': 'not_sent'}
 
-    # Reuse a retained result for the identical request instead of paying twice.
+    # Reuse a retained result for the identical request instead of paying twice - whatever the run was made for: a
+    # second review's excerpt pasted as a note of its own is the same question (refutation r1: it was resent).
     prior = models.ProviderRun.objects.filter(
         encounter__workspace=encounter.workspace, provider=provider.name, adapter_version=provider.adapter_version,
         request_sha256=request.canonical_sha256, state=models.ProviderRun.SUCCEEDED, reused_from__isnull=True,
@@ -388,16 +550,35 @@ def stage_predict(job):
     if _unreconciled_unknown(encounter):
         return {'blocked': 'a previous request has an unknown outcome; reconcile it before sending again'}
 
-    if provider.mode == 'live':
-        if not settings.SYNTHETIC_ONLY or revision.synthetic_attested_at is None:
-            raise StageFailure('Live provider calls require a synthetic-attested document.')
-        if not settings.AUTHORIZATION_REF:
-            raise StageFailure('Live provider calls are not authorized on this installation.')
-        membership = models.Membership.objects.filter(user=job.requested_by, workspace=encounter.workspace,
-                                                      active=True).first()
-        if membership is None or not membership.can_review:
-            raise StageFailure('Only an owner or reviewer of this workspace can start a live provider request.')
+    failed = _failed_before(encounter, provider, request)
+    if failed is not None:
+        # Refutation p1, sends-0 and sends-2: this request was sent before and FAILED, so it is never sent again - not
+        # after a date round trip or a cleared date, and not as a reconciliation's released attempt. The stage ends as
+        # that request did (provider_failed), with a run of its own, as a predict that reuses, sends or cannot build
+        # its request ends: re-assessing with the OLDER failed run left a newer one as the revision's newest finished
+        # run, which is the run in use for every later save here (a member date never sent was then never attempted
+        # again) and for the installed revision after a rollback (its setting save re-sent the failed request; round
+        # 7c8 skeptic, sk:2 and sk:3).
+        run = _not_resent_run(job, encounter, revision, provider, request, service_date, failed)
+        next_assess(run)
+        return {'provider': 'not_resent', 'run': str(run.pk)}
 
+    _live_gate(job, provider, revision, encounter)
+    if job.idempotency_key == _upgrade_predict_key(context):
+        # Refutation r1, migrate-5 (ec5): the predict an upgrade's remake queued at a stage that never sends stops here,
+        # where it would send - the system's stop, with the reason - and only a member's Resume sends the request.
+        raise StageCancelled(_remade_request_message(revision, request))
+
+    run = _send(job, provider, request, service_date=service_date)
+    next_assess(run)
+    return {'provider': run.state, 'run': str(run.pk)}
+
+
+def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PRIMARY, scope=None):
+    """One provider attempt under the send discipline (ARCHITECTURE 5.4): single-flight by advisory lock, the run
+    written 'reserved' before any network I/O, a Stop observed before sending, no automatic retry, and the outcome -
+    including an unknown one - recorded with the raw bytes and usage."""
+    encounter, revision = job.encounter, job.revision
     with connection.cursor() as cursor:
         cursor.execute('SELECT pg_try_advisory_lock(%s)', [PROVIDER_LOCK_KEY])
         if not cursor.fetchone()[0]:
@@ -407,7 +588,7 @@ def stage_predict(job):
             encounter=encounter, revision=revision, provider=provider.name, adapter_version=provider.adapter_version,
             request_sha256=request.canonical_sha256, request_body=request.body, contexts=list(request.contexts),
             state=models.ProviderRun.RESERVED, authorization_ref=settings.AUTHORIZATION_REF,
-            requested_by=job.requested_by, service_date=service_date)
+            requested_by=job.requested_by, service_date=service_date, purpose=purpose, scope=scope or {})
         job.refresh_from_db(fields=['stop_requested_at'])
         if job.stop_requested_at or is_stopped(encounter.pk):
             run.state = models.ProviderRun.CANCELLED
@@ -420,16 +601,28 @@ def stage_predict(job):
         run.save(update_fields=['state', 'started_at'])
         audit.record(encounter.workspace, 'provider.sending', encounter=encounter, run=str(run.pk),
                      provider=provider.name, mode=provider.mode, request_sha256=request.canonical_sha256,
-                     run_identity=str(run.run_identity))
+                     run_identity=str(run.run_identity), purpose=purpose)
         exchange = provider.send(request, deadline_s=settings.PROVIDER_READ_TIMEOUT_SECONDS + 30)
         _finish_run(run, exchange)
         audit.record(encounter.workspace, 'provider.finished', encounter=encounter, run=str(run.pk),
-                     state=run.state, http_status=run.http_status, usage=run.usage, latency_ms=run.latency_ms)
+                     state=run.state, http_status=run.http_status, usage=run.usage, latency_ms=run.latency_ms,
+                     purpose=purpose)
     finally:
         with connection.cursor() as cursor:
             cursor.execute('SELECT pg_advisory_unlock(%s)', [PROVIDER_LOCK_KEY])
-    next_assess(run)
-    return {'provider': run.state, 'run': str(run.pk)}
+    return run
+
+
+def _live_gate(job, provider, revision, encounter):
+    if provider.mode == 'live':
+        if not settings.SYNTHETIC_ONLY or revision.synthetic_attested_at is None:
+            raise StageFailure('Live provider calls require a synthetic-attested document.')
+        if not settings.AUTHORIZATION_REF:
+            raise StageFailure('Live provider calls are not authorized on this installation.')
+        membership = models.Membership.objects.filter(user=job.requested_by, workspace=encounter.workspace,
+                                                      active=True).first()
+        if membership is None or not membership.can_review:
+            raise StageFailure('Only an owner or reviewer of this workspace can start a live provider request.')
 
 
 class StageCancelled(Exception):
@@ -455,28 +648,304 @@ def stage_assess(job):
     encounter.refresh_from_db()
     if encounter.current_revision_id != revision.pk:
         return {'skipped': 'a newer revision exists'}
+    if context is not None and encounter.current_context_id == context.pk:
+        remade = _remade_context(job)
+        if remade is not None:
+            return remade
     revision.refresh_from_db()
     if run is not None and run_service_date(run) != context_service_date(context):
         raise StageFailure('The provider result was requested for a different service date than this context; '
                            'it was not used. Change the context again to request proposals for this date.')
     provider_status, normalized = _provider_inputs(run)
-    reference = prefetched_lookup(selected_codes(normalized))
+    second = _second_run_for(revision, run)
+    second_normalized = _second_inputs(second) if second is not None else None
+    reference = prefetched_lookup(tuple(sorted(set(selected_codes(normalized)) | set(selected_codes(second_normalized)))))
     service_date = context_service_date(context)
     data, result = _bounded(
         _assess_child, revision.text, service_date, tuple(PageSpan(**p) for p in revision.pages),
         context_facts(context), normalized, reference, provider_status, revision.extraction_status,
-        tuple(revision.messages), seconds=settings.JOB_DEADLINE_SECONDS['assess'],
-        memory_bytes=settings.ASSESS_MEMORY_BYTES)
+        tuple(revision.messages), second_normalized, dict(second.scope) if second is not None else None,
+        seconds=settings.JOB_DEADLINE_SECONDS['assess'], memory_bytes=settings.ASSESS_MEMORY_BYTES)
     routing_run = _record_routing(revision, data, service_date)
     try:
         assessment = review.persist_assessment(encounter=encounter, revision=revision, context=context,
-                                               routing_run=routing_run, provider_run=run, result=result)
+                                               routing_run=routing_run, provider_run=run, result=result,
+                                               second_run=second)
     except ValueError as exc:
         raise StageFailure(f'The assessment was not recorded: {exc}') from exc
-    return {'assessment': str(assessment.pk), 'provider_status': provider_status}
+    # The bounded second review is never queued here: a workspace owner or reviewer asks for it
+    # (request_second_review; owner decision 2026-10-27, narrow install-first).
+    out = {'assessment': str(assessment.pk), 'provider_status': provider_status}
+    if second is not None:
+        out['second_review'] = str(second.pk)
+    return out
 
 
-STAGES = {Job.EXTRACT: stage_extract, Job.ANALYZE: stage_analyze, Job.PREDICT: stage_predict, Job.ASSESS: stage_assess}
+# --- the bounded second review (ARCHITECTURE 5.11) ------------------------------------------------------------------
+
+SECOND_REVIEW_REASONS = ('no_proposal', 'not_covered')
+SECOND_REVIEW_MAX_CHARS = 20_000  # a longer excerpt is not sent (a second review is about one report, not a chart)
+
+
+def _second_review_items(assessment):
+    """(the unresolved documented services a second review may ask about, (start, end) of the text that documents
+    them or None)."""
+    # as the review leaves them: an item a code the reviewer reinstated accounts for is not asked about again
+    # (refutation P2FR, EUS-SECOND: the second review was offered for an EUS its reinstated, approved code accounts for)
+    completeness = review.reviewed_completeness(assessment) or {}
+    # only items both readers read as done today (engine._routing_agrees); an assessment without the mark asks nothing
+    items = [u for u in completeness.get('unresolved_items', []) if u.get('reason') in SECOND_REVIEW_REASONS
+             and u.get('second_review') is True]
+    if not items:
+        return [], None
+    services = {s.get('id'): s for s in (assessment.services or {}).get('services', [])}
+    spans = []
+    for item in items:
+        service = services.get(item.get('service')) or {}
+        if service.get('scope_end', 0) > service.get('scope_start', 0):
+            spans.append((service['scope_start'], service['scope_end']))
+        spans += [(ev['start'], ev['end']) for ev in item.get('evidence', [])]
+    if not spans:
+        return items, None
+    return items, (min(a for a, _ in spans), max(b for _, b in spans))
+
+
+def _answer_of(run):
+    """What a primary run's outcome is: the provider's answer (the same response) to the same request."""
+    return (run.provider, run.adapter_version, run.request_sha256, run.response_sha256)
+
+
+def _second_run_for(revision, run, *, any_outcome=False):
+    """The second review that succeeded on this revision and date for the primary answer ``run`` carries: made for
+    ``run`` itself or for any run carrying the same answer to the same request - the retained run it reuses, or another
+    run reusing that same retained run (refutation r1, sends-2 / context-2: after a member date conflict was cleared, or
+    a date changed and changed back, the reused primary never found the paid second review, so its code disappeared from
+    the decision set and another could not be asked for; ec5: also when that second review had been made for a primary
+    that was itself a reuse, as when the same report is uploaded twice in a workspace). ``any_outcome``: the newest
+    one made for that answer, whatever its outcome (second_review_status names it for the page)."""
+    found = _second_runs_for(revision, run, any_outcome=any_outcome)
+    return found[0] if found else None
+
+
+def _second_runs_for(revision, run, *, any_outcome=False):
+    """Every second review _second_run_for matches for the answer ``run`` carries (on this revision and date), newest
+    first: a reconciled unknown one releases another ask, so an older one can stand behind a newer one (refutation P2FR,
+    ROLLBACK 0: a retry that failed hid an older second review whose outcome is unknown)."""
+    if run is None or run.state != models.ProviderRun.SUCCEEDED or run.purpose != models.ProviderRun.PRIMARY:
+        return []
+    seconds = models.ProviderRun.objects.filter(revision=revision, purpose=models.ProviderRun.SECOND_REVIEW,
+                                                service_date=run.service_date)
+    if not any_outcome:
+        seconds = seconds.filter(state=models.ProviderRun.SUCCEEDED)
+    seconds = list(seconds.order_by('-created_at'))
+    made_for = set()
+    for second in seconds:
+        try:
+            made_for.add(uuid.UUID(str((second.scope or {}).get('primary_run'))))
+        except ValueError:
+            continue
+    answers = {str(primary.pk): _answer_of(primary) for primary in models.ProviderRun.objects.filter(
+        pk__in=made_for, revision=revision, purpose=models.ProviderRun.PRIMARY, state=models.ProviderRun.SUCCEEDED)}
+    return [second for second in seconds
+            if answers.get(str((second.scope or {}).get('primary_run'))) == _answer_of(run)]
+
+
+def _second_inputs(second):
+    """The second review's normalized response with its passages moved from the excerpt to the revision text (the
+    engine re-checks each against the revision, never assumes it)."""
+    provider_status, normalized = _provider_inputs(second)
+    if provider_status != 'succeeded' or normalized is None:
+        return None
+    offset = int((second.scope or {}).get('start', 0))
+
+    def moved(code):
+        spans = tuple(EvidenceSpan(0, e.start + offset, e.end + offset, e.text, e.exact, e.page)
+                      for e in code.evidence if e.context_index == 0)
+        return ProviderCode(code.role, code.system, code.code, code.display, spans, code.parent_code, code.index)
+    return NormalizedResponse(normalized.provider, normalized.adapter_version,
+                              tuple(moved(c) for c in normalized.codes), normalized.internal_context,
+                              normalized.problems, normalized.refused)
+
+
+def _second_review_blocker(encounter, revision, context, assessment):
+    """Why the one bounded second review cannot be asked for now, or '' when it can (5.11). The bounds are the ones the
+    automatic second review kept (interpretations 10, 19, 22): once per revision and service date whatever its outcome
+    (only a reconciled unknown one releases another), only for the current assessment of a usable primary response,
+    only with a known, unconflicted service date, never while a request has an unknown outcome. stage_review2 checks
+    them again when it runs. Cheap checks first: the encounter view reads this on every refresh."""
+    if busy(encounter):
+        return 'Wait for processing to finish (or stop it) before asking for a second review.'
+    if (assessment is None or revision is None or context is None or assessment.revision_id != revision.pk
+            or assessment.context_id != context.pk):
+        return 'There is no current assessment to review again.'
+    items, span = _second_review_items(assessment)
+    if not items:
+        return 'No documented service is left without a supported proposal.'
+    if span is None or span[1] - span[0] > SECOND_REVIEW_MAX_CHARS:
+        return (f'The text that documents the unresolved services is longer than a second review sends '
+                f'({SECOND_REVIEW_MAX_CHARS:,} characters).')
+    run = assessment.provider_run
+    if run is None or run.state != models.ProviderRun.SUCCEEDED or run.purpose != models.ProviderRun.PRIMARY:
+        return 'Only a successful provider response can be reviewed again.'
+    if run.service_date is None or context_service_date(context) != run.service_date:
+        return 'A second review needs a known, agreed date of service: answer the date question first.'
+    if _second_run_for(revision, run) is not None:
+        return 'A second review was already made for this document and date.'
+    earlier = models.ProviderRun.objects.filter(revision=revision, purpose=models.ProviderRun.SECOND_REVIEW,
+                                                service_date=run.service_date)
+    if earlier.exclude(state=models.ProviderRun.UNKNOWN, reconciled_at__isnull=False).exists():
+        return 'A second review was already requested for this document and date.'
+    if _unreconciled_unknown(encounter):
+        return 'A previous request has an unknown outcome; reconcile it before asking again.'
+    provider = get_provider()
+    if provider is None:
+        return 'The provider is not configured on this installation.'
+    try:
+        _, normalized = _provider_inputs(run)
+    except StageFailure as exc:
+        return str(exc)
+    if normalized is None or normalized.refused:
+        return 'The provider refused the request whole, so a second review has nothing to fill.'
+    try:
+        request = provider.build_request(revision.text[span[0]:span[1]], run.service_date)
+    except ProviderUnavailable:
+        return ''  # stage_review2 records the not-sent run and its reason
+    if request.canonical_sha256 == run.request_sha256 or models.ProviderRun.objects.filter(
+            encounter__workspace=encounter.workspace, provider=provider.name, adapter_version=provider.adapter_version,
+            request_sha256=request.canonical_sha256, state=models.ProviderRun.SUCCEEDED,
+            purpose=models.ProviderRun.PRIMARY).exists():
+        return ('The text that documents the unresolved services is a request the provider already answered, so a '
+                'second review would ask nothing new.')
+    if (_failed_before(encounter, provider, request) is not None
+            and _retained_second_review(encounter, provider, request) is None):
+        # refutation p1, sends-1: the once-per-revision bound alone let an addendum re-offer the identical request.
+        # Only where no answer to it is retained: one is reused and nothing is sent, as stage_review2 does - reuse,
+        # then the unknown-outcome block, then this (round 7c8 skeptic: a reuse is not a send, 5.4).
+        return ('The text that documents the unresolved services is a request already sent for this document that '
+                'failed, and an identical request is never sent again.')
+    return ''
+
+
+def second_review_status(encounter):
+    """What the encounter view shows about the bounded second review: whether one can be asked for now, why not, the
+    unresolved items it would ask about, and ``run``: the second review made for the answer the current assessment
+    (the one the view shows, on its own revision) reads, whatever its outcome (None when none was), so the page states
+    the outcome of one whose response was not read
+    or not used, never that no code was proposed (skeptic of refutation 7c8 reports-5: an unknown, failed or refused
+    second review left the panel saying "No CPT codes were proposed for this document")."""
+    revision, context, assessment = (encounter.current_revision, encounter.current_context,
+                                     encounter.current_assessment)
+    items = _second_review_items(assessment)[0] if assessment is not None else []
+    reason = _second_review_blocker(encounter, revision, context, assessment) if items else ''
+    # Made for the answer the SHOWN assessment reads, on that assessment's own revision: while a newer revision is not
+    # assessed yet (an addendum, then Stop, or a predict an unknown outcome blocks) the page still shows this one, so it
+    # still states its second review's outcome (refutation p2, reports2:1: naming a run only for an assessment of the
+    # current revision left the panel saying "No CPT codes were proposed" beside the unknown-outcome reconcile card).
+    made = (_second_run_for(assessment.revision, assessment.provider_run, any_outcome=True)
+            if assessment is not None else None)
+    return {'available': bool(items) and not reason, 'reason': reason,
+            'items': [item.get('label', '') for item in items][:8], 'run': str(made.pk) if made is not None else None}
+
+
+def request_second_review(encounter, user):
+    """Queue the ONE bounded second review for the current assessment, asked for by a workspace owner or reviewer
+    (owner decision 2026-10-27: never queued by an assessment). Refused with the reason when a bound stands."""
+    with transaction.atomic():
+        encounter = _locked(encounter)
+        revision, context, assessment = (encounter.current_revision, encounter.current_context,
+                                         encounter.current_assessment)
+        reason = _second_review_blocker(encounter, revision, context, assessment)
+        if reason:
+            raise Refused(reason)
+        items, _ = _second_review_items(assessment)
+        clear_stop(encounter)
+        job = enqueue(Job.REVIEW2, encounter=encounter, revision=revision, context=context,
+                      provider_run=assessment.provider_run, key=f'review2:{revision.pk}:{assessment.pk}',
+                      requested_by=user)
+        if job.state != Job.QUEUED:
+            raise Refused('A second review was already requested for this assessment.')
+        audit.record(encounter.workspace, 'provider.second_review_requested', encounter=encounter, actor=user,
+                     items=[item.get('label', '') for item in items][:8])
+        review.refresh_state(encounter)
+    return job
+
+
+def stage_review2(job):
+    revision, encounter, context, primary = job.revision, job.encounter, job.context, job.provider_run
+    encounter.refresh_from_db()
+    if encounter.current_revision_id != revision.pk:
+        return {'skipped': 'a newer revision exists; nothing was sent'}
+    if context is None or encounter.current_context_id != context.pk or context.version in EARLIER_CONTEXT_VERSIONS:
+        return {'skipped': 'the context changed; nothing was sent'}
+    assessment = encounter.current_assessment
+    if (assessment is None or assessment.revision_id != revision.pk or assessment.context_id != context.pk
+            or primary is None or assessment.provider_run_id != primary.pk):
+        return {'skipped': 'the assessment changed; nothing was sent'}
+    provider = get_provider()
+    if provider is None:
+        return {'skipped': 'the provider is disabled; nothing was sent'}
+    service_date = context_service_date(context)
+    if service_date != primary.service_date:
+        return {'skipped': 'the service date changed; nothing was sent'}
+    items, span = _second_review_items(assessment)
+    if not items or span is None or span[1] - span[0] > SECOND_REVIEW_MAX_CHARS:
+        return {'skipped': 'nothing to ask about; nothing was sent'}
+    start, end = span
+    scope = {'start': start, 'end': end, 'primary_run': str(primary.pk), 'assessment': str(assessment.pk),
+             'items': [item.get('label', '') for item in items][:8]}
+
+    def next_assess(run):
+        enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=primary,
+                key=f'assess:{context.pk}:{primary.pk}:review2:{run.pk}', requested_by=job.requested_by)
+
+    try:
+        request = provider.build_request(revision.text[start:end], service_date)
+    except ProviderUnavailable as exc:
+        run = models.ProviderRun.objects.create(
+            encounter=encounter, revision=revision, provider=provider.name, adapter_version=provider.adapter_version,
+            request_sha256='', request_body={}, contexts=[], state=models.ProviderRun.NOT_SENT, error=str(exc),
+            authorization_ref=settings.AUTHORIZATION_REF, requested_by=job.requested_by, service_date=service_date,
+            purpose=models.ProviderRun.SECOND_REVIEW, scope=scope, finished_at=timezone.now())
+        next_assess(run)
+        return {'second_review': 'not_sent'}
+    if request.canonical_sha256 == primary.request_sha256 or models.ProviderRun.objects.filter(
+            encounter__workspace=encounter.workspace, provider=provider.name, adapter_version=provider.adapter_version,
+            request_sha256=request.canonical_sha256, state=models.ProviderRun.SUCCEEDED,
+            purpose=models.ProviderRun.PRIMARY).exists():
+        # The excerpt is the whole text (a report that opens with its title): the request repeats a primary request
+        # already answered, so it asks nothing new and is never sent (refutation r1: a byte-identical paid resend).
+        return {'skipped': 'the second review would repeat a primary request already answered; nothing was sent'}
+    prior = _retained_second_review(encounter, provider, request)
+    if prior is not None:
+        run = models.ProviderRun.objects.create(
+            encounter=encounter, revision=revision, provider=prior.provider, adapter_version=prior.adapter_version,
+            request_sha256=prior.request_sha256, request_body=prior.request_body, contexts=prior.contexts,
+            state=models.ProviderRun.SUCCEEDED, sent=False, http_status=prior.http_status,
+            provider_request_id=prior.provider_request_id, response_sha256=prior.response_sha256,
+            response_bytes=bytes(prior.response_bytes), usage={}, usage_basis='reused_retained_result_no_new_usage',
+            authorization_ref=settings.AUTHORIZATION_REF, requested_by=job.requested_by, reused_from=prior,
+            service_date=service_date, purpose=models.ProviderRun.SECOND_REVIEW, scope=scope,
+            started_at=timezone.now(), finished_at=timezone.now())
+        audit.record(encounter.workspace, 'provider.reused', encounter=encounter, run=str(run.pk), reused_from=str(prior.pk),
+                     purpose=models.ProviderRun.SECOND_REVIEW)
+        next_assess(run)
+        return {'second_review': 'reused', 'run': str(run.pk)}
+    if _unreconciled_unknown(encounter):
+        return {'blocked': 'a previous request has an unknown outcome; reconcile it before sending again'}
+    if _failed_before(encounter, provider, request) is not None:
+        # Refutation p1, sends-1: an addendum that left the excerpt as it was made a new revision, whose own bound let
+        # the identical FAILED request be sent again. Nothing changed, so the assessment stands as it is.
+        return {'skipped': 'the second review would repeat a request sent before for this document that failed; '
+                           'nothing was sent'}
+    _live_gate(job, provider, revision, encounter)
+    run = _send(job, provider, request, service_date=service_date, purpose=models.ProviderRun.SECOND_REVIEW,
+                scope=scope)
+    next_assess(run)
+    return {'second_review': run.state, 'run': str(run.pk)}
+
+
+STAGES = {Job.EXTRACT: stage_extract, Job.ANALYZE: stage_analyze, Job.PREDICT: stage_predict, Job.ASSESS: stage_assess,
+          Job.REVIEW2: stage_review2}
 
 
 # --- worker ------------------------------------------------------------------
@@ -542,15 +1011,17 @@ def mark_stale():
             # yet queued) is settled by that run, exactly as the stage would have settled it, so a Resume can
             # never re-send an identical request that already failed. Read before reserved runs are settled below.
             finished = None
-            if job.kind == Job.PREDICT and job.context_id:
+            sends = job.kind in (Job.PREDICT, Job.REVIEW2)
+            if sends and job.context_id:
+                purpose = models.ProviderRun.PRIMARY if job.kind == Job.PREDICT else models.ProviderRun.SECOND_REVIEW
                 finished = (models.ProviderRun.objects
-                            .filter(revision=job.revision, created_at__gte=job.started_at,
+                            .filter(revision=job.revision, created_at__gte=job.started_at, purpose=purpose,
                                     state__in=(models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED,
                                                models.ProviderRun.UNKNOWN, models.ProviderRun.NOT_SENT))
                             .order_by('-created_at').first())
             sending = models.ProviderRun.objects.filter(revision=job.revision, state=models.ProviderRun.SENDING)
             reserved = models.ProviderRun.objects.filter(revision=job.revision, state=models.ProviderRun.RESERVED)
-            unknown = job.kind == Job.PREDICT and sending.exists()
+            unknown = sends and sending.exists()
             for run in sending:
                 run.state, run.error, run.finished_at = (models.ProviderRun.UNKNOWN,
                                                          'The worker stopped while the request was in flight.',
@@ -561,8 +1032,10 @@ def mark_stale():
                                                          'The worker stopped before sending.', timezone.now())
                 run.save(update_fields=['state', 'error', 'finished_at'])
             if finished is not None and not unknown:
+                primary = finished if job.kind == Job.PREDICT else job.provider_run
                 enqueue(Job.ASSESS, encounter=job.encounter, revision=job.revision, context=job.context,
-                        provider_run=finished, key=f'assess:{job.context_id}:{finished.pk}',
+                        provider_run=primary, key=f'assess:{job.context_id}:{primary.pk}'
+                        + ('' if job.kind == Job.PREDICT else f':review2:{finished.pk}'),
                         requested_by=job.requested_by)
                 job.state, job.error = Job.SUCCEEDED, ''
                 job.result = {'provider': finished.state, 'run': str(finished.pk),
@@ -658,9 +1131,12 @@ def resume(encounter, user):
         else:
             kind, provider_run = last.kind, last.provider_run
         clear_stop(encounter)
-        job = enqueue(kind, encounter=encounter, revision=last.revision, context=context,
-                      provider_run=provider_run, key=f'{last.idempotency_key}:resume:{uuid.uuid4()}',
-                      requested_by=user)
+        key = f'{last.idempotency_key}:resume:{uuid.uuid4()}'
+        if kind == Job.PREDICT:
+            job = _queue_predict(encounter, last.revision, context, key=key, requested_by=user)
+        else:
+            job = enqueue(kind, encounter=encounter, revision=last.revision, context=context,
+                          provider_run=provider_run, key=key, requested_by=user)
         audit.record(encounter.workspace, 'pipeline.resumed', encounter=encounter, actor=user, stage=last.kind)
         review.refresh_state(encounter)
     return job
@@ -685,8 +1161,8 @@ def reconcile(encounter, run, user, note):
         revision, context = encounter.current_revision, encounter.current_context
         clear_stop(encounter)
         if context is not None and revision is not None and context.revision_id == revision.pk:
-            enqueue(Job.PREDICT, encounter=encounter, revision=revision, context=context,
-                    key=f'predict:{context.pk}:after-reconcile:{run.pk}', requested_by=user)
+            _queue_predict(encounter, revision, context, key=f'predict:{context.pk}:after-reconcile:{run.pk}',
+                           requested_by=user)
         audit.record(encounter.workspace, 'provider.reconciled', encounter=encounter, actor=user, run=str(run.pk))
         review.refresh_state(encounter)
     return True
@@ -698,8 +1174,9 @@ def _run_answers(run, revision, context):
     Compared on the request itself (provider, adapter and canonical request hash), never
     on the previous context: the run in use may have been requested for another date.
     Whatever that run's outcome: a setting or billing change that leaves the request
-    unchanged re-checks and never sends (ARCHITECTURE 5.4), so a failed or not-sent
-    request is never re-sent behind a metadata save.
+    unchanged re-checks and never re-sends the primary request (ARCHITECTURE 5.4), so a
+    failed or not-sent request is never re-sent behind a metadata save. The re-check may
+    still make the one bounded second review its revision and date have not had (5.11).
     """
     if run is None or not run.request_sha256:
         return False
@@ -723,9 +1200,11 @@ def _run_in_use(revision):
 
     A run the stale-stage sweep settled as not sent because its worker stopped after reserving it is no outcome at
     all: it carries its request but never reached the send (no started_at), so the attempt it reserved still has to
-    be made, as a Resume of that predict makes it (round 4, pipeline:2). Every other not-sent run stands: one the
-    provider exchange answered went through the send, and one recorded when no request could be built carries no
-    request to compare.
+    be made, as a Resume of that predict makes it (round 4, pipeline:2). Neither is a hold (below). Every other
+    not-sent run stands: one the provider exchange answered went through the send, one recorded when no request could
+    be built carries no request to compare (a save after it re-predicts, and the predict's send door, not this reading,
+    keeps a request that failed unsent), and one a predict recorded where that door met a request that FAILED carries
+    that request (_not_resent_run).
     """
     from django.db.models import Q
 
@@ -733,7 +1212,17 @@ def _run_in_use(revision):
                 models.ProviderRun.UNKNOWN)
     reserved_then_swept = (Q(state=models.ProviderRun.NOT_SENT) & Q(started_at__isnull=True)
                            & ~Q(request_sha256=''))
-    run = revision.provider_runs.filter(state__in=finished).exclude(reserved_then_swept).order_by('-created_at').first()
+    # A held run (a member date conflict: scope.held) is a hold, not the outcome of any request: it carries none to
+    # compare, so standing as the run in use it let a cleared conflict re-send the byte-identical request that had
+    # FAILED before it (ec5 integration, from the REPORTRUNS skeptic; 5.4: never re-sent behind a metadata save). The
+    # installed revision (057a7d39) reads a hold, like a second review, as its run in use (it skips neither); what a
+    # rollback does about rows only this revision writes is the installer's (refutation p1, migrate-1). Refutation
+    # p1's first repair skipped every run without a request the same way; that let a cleared date re-assess past the
+    # revision's newest run, rows the installed revision misread after a rollback (round 7c8 skeptic, sk:2), so only
+    # the hold is skipped.
+    held = Q(state=models.ProviderRun.NOT_SENT) & Q(scope__has_key='held')
+    run = (revision.provider_runs.filter(state__in=finished, purpose=models.ProviderRun.PRIMARY)
+           .exclude(reserved_then_swept).exclude(held).order_by('-created_at').first())
     if run is None or (run.state == models.ProviderRun.UNKNOWN and run.reconciled_at is not None):
         return None
     return run
@@ -784,7 +1273,6 @@ def change_context(encounter, user, values):
             enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=last_run,
                     key=f'assess:{context.pk}:{last_run.pk}', requested_by=user)
         else:
-            enqueue(Job.PREDICT, encounter=encounter, revision=revision, context=context,
-                    key=f'predict:{context.pk}', requested_by=user)
+            _queue_predict(encounter, revision, context, key=f'predict:{context.pk}', requested_by=user)
         review.refresh_state(encounter)
     return context

@@ -258,7 +258,7 @@ test('ready fixture: one combined list of selected codes, separate alternatives 
   for (const eyebrow of ['UPPER GI ENDOSCOPY', 'COLONOSCOPY', 'EVALUATION &amp; MANAGEMENT']) assert.ok(html.includes(eyebrow), eyebrow);
   assert.equal(count(html, 'data-decision="approve"'), 2);
   assert.equal(count(html, 'data-decision="reject"'), 3);
-  assert.ok(html.includes('Alternatives (not selected)'));
+  assert.ok(html.includes('Alternatives (never selectable)'));
   assert.ok(html.includes('Excluded candidates'));
   assert.equal(count(html, 'class="check-item muted"'), 4);
   assert.equal(count(html, '<h3>Description withheld</h3>'), 3);
@@ -447,18 +447,76 @@ test('an encounter whose only proposals are documentation-check exclusions never
 });
 
 // round 7, bypass:1: a provider response refused whole was never read, so the panel never says nothing was proposed.
-test('a provider check that failed gives the panel its reason, and only a failed one does', () => {
+// refutation 7c8, reports-5: nor of a response the assessment never read at all (summary.provider_status unknown,
+// failed or not_run), whatever its check's status - an unknown outcome is a 'warn'. Only a response that was read and
+// selected nothing is "No CPT codes were proposed".
+test('a provider check that failed, or a response never read, gives the panel its reason; a response read does not', () => {
   const detail = 'The response from corti (corti-coding@2) was not used, so there are no CPT proposals. This is not a finding that no codes apply.';
-  const refused = { proposals: [], encounter_checks: [{ id: 'extraction.status', status: 'fail', detail: 'Other.' }, { id: 'provider.status', status: 'fail', detail }] };
+  const refused = { proposals: [], summary: { provider_status: 'succeeded' }, encounter_checks: [{ id: 'extraction.status', status: 'fail', detail: 'Other.' }, { id: 'provider.status', status: 'fail', detail }] };
   assert.equal(app.emptySelectionCopy(refused), detail);
   const html = render({ ...excludedDoc({}), assessment: { ...excludedDoc({}).assessment, ...refused } });
   assert.equal(html.includes('No CPT codes were proposed for this document.'), false);
   assert.ok(html.includes('was not used, so there are no CPT proposals'), html);
-  for (const status of ['warn', 'pass', 'not_verified']) {
-    const read = { proposals: [], encounter_checks: [{ id: 'provider.status', status, detail: 'Read.' }] };
-    assert.equal(app.emptySelectionCopy(read), 'No CPT codes were proposed for this document.', status);
+  for (const summary of [{ provider_status: 'succeeded' }, undefined]) {
+    for (const status of ['warn', 'pass', 'not_verified']) {
+      const read = { proposals: [], summary, encounter_checks: [{ id: 'provider.status', status, detail: 'Read.' }] };
+      assert.equal(app.emptySelectionCopy(read), 'No CPT codes were proposed for this document.', status);
+    }
   }
   assert.equal(app.emptySelectionCopy({ proposals: [], encounter_checks: [{ id: 'provider.status', status: 'fail' }] }), 'No CPT codes were proposed for this document.');
+  const unknown = 'The proposal provider request was sent but its outcome is unknown, so there are no CPT proposals; a workspace member must reconcile it before any new attempt. This is not a finding that no codes apply.';
+  for (const [provider_status, status, said] of [['unknown', 'warn', unknown], ['not_run', 'not_verified', 'The proposal provider was not run for this revision, so there are no CPT proposals.'], ['failed', 'fail', 'Did not return a usable result.']]) {
+    const unread = { proposals: [], summary: { provider_status }, encounter_checks: [{ id: 'provider.status', status, detail: said }] };
+    assert.equal(app.emptySelectionCopy(unread), said, provider_status);
+    const page = render({ ...excludedDoc({}), assessment: { ...excludedDoc({}).assessment, ...unread } });
+    assert.equal(page.includes('No CPT codes were proposed for this document.'), false, provider_status);
+  }
+  assert.equal(app.emptySelectionCopy({ proposals: [], summary: { provider_status: 'unknown' }, encounter_checks: [] }), 'No provider response was read for this revision, so there are no CPT proposals.');
+});
+
+// skeptic of refutation 7c8 reports-5: the second review made for the answer the assessment reads (second_review.run)
+// whose response was not read (unknown, failed, not sent) or not used (refused whole) is stated after the panel's own
+// wording, never left behind "No CPT codes were proposed"; one read and used, or none made, changes nothing.
+test('a second review whose response was not read or not used is stated in the panel, never read as nothing proposed', () => {
+  const ready = fixture('encounter-ready.json');
+  const primary = 'corti (corti-coding@2) returned no selected CPT-labelled code (0 candidate or alternatives, which cannot be approved).';
+  const assessment = { ...ready.assessment, proposals: [], summary: { provider_status: 'succeeded' }, encounter_checks: [{ id: 'provider.status', status: 'warn', detail: primary }] };
+  const second = { ...ready.provider_runs[0], id: UUID, purpose: 'second_review', state: 'unknown', http_status: null, error: 'Read timed out after the request was sent.', reconciled: false, scope_items: ['colonoscopy (documented as performed) has no supported proposal'] };
+  const asked = 'A second review was requested for: colonoscopy (documented as performed) has no supported proposal.';
+  const none = 'This is not a finding that no codes apply.';
+  const doc = (run, extra = {}) => ({ ...ready, provider_runs: [...ready.provider_runs, run], second_review: { available: false, reason: '', items: [], can_request: true, run: run.id }, assessment: { ...assessment, ...extra } });
+  for (const [run, said] of [
+    [second, 'It was sent, but its outcome is unknown: no response was recorded, so nothing from it was read.'],
+    [{ ...second, reconciled: true }, 'It was sent, but its outcome is unknown: no response was recorded, so nothing from it was read. A member reconciled it.'],
+    [{ ...second, state: 'failed', http_status: 500, error: 'HTTP 500 from the provider.' }, 'It failed: HTTP 500 from the provider. Nothing from it was used.'],
+    [{ ...second, state: 'not_sent', error: 'The excerpt could not be sent' }, 'Nothing was sent for it: The excerpt could not be sent.'],
+    [{ ...second, state: 'succeeded', error: '' }, 'Its response has not been read by this assessment.'],
+  ]) {
+    const page = doc(run);
+    const expected = `${primary} ${asked} ${said} ${none}`;
+    assert.equal(app.secondReviewUnread(page), `${asked} ${said} ${none}`, run.state);
+    assert.equal(app.emptySelectionCopy(page.assessment, page), expected, run.state);
+    const html = render(page);
+    assert.equal(html.includes('No CPT codes were proposed for this document.'), false, run.state);
+    assert.ok(html.includes(app.escapeHtml(expected)), run.state);
+  }
+  // refused whole: the review's own failed check, as the primary's refused response gives its own (round 7 bypass:1)
+  const refused = 'A second review was requested for: colonoscopy. Its response was not used (it selects 65 codes, more than the 64 this adapter accepts).';
+  const read = { ...second, state: 'succeeded', error: '' };
+  const refusedDoc = doc(read, { second_run: UUID, encounter_checks: [...assessment.encounter_checks, { id: 'provider.second_review', status: 'fail', detail: refused }] });
+  assert.equal(app.emptySelectionCopy(refusedDoc.assessment, refusedDoc), `${primary} ${refused}`);
+  // a listed alternative keeps its wording, then the review's outcome
+  const listed = doc(second, { proposals: [{ bucket: 'alternative' }] });
+  assert.ok(app.emptySelectionCopy(listed.assessment, listed).startsWith('No code is selected for approval.'));
+  assert.ok(app.emptySelectionCopy(listed.assessment, listed).endsWith(`${asked} It was sent, but its outcome is unknown: no response was recorded, so nothing from it was read. ${none}`));
+  // controls: read and used (its check did not fail), no run named, or no second_review at all: nothing is added
+  const used = doc(read, { second_run: UUID, encounter_checks: [...assessment.encounter_checks, { id: 'provider.second_review', status: 'warn', detail: 'Added no proposal.' }] });
+  assert.equal(app.secondReviewUnread(used), '');
+  assert.equal(app.emptySelectionCopy(used.assessment, used), 'No CPT codes were proposed for this document.');
+  const unnamed = { ...doc(second), second_review: { available: false, reason: '', items: [], run: null } };
+  assert.equal(app.emptySelectionCopy(unnamed.assessment, unnamed), 'No CPT codes were proposed for this document.');
+  assert.equal(app.emptySelectionCopy(assessment), 'No CPT codes were proposed for this document.');
+  assert.equal(app.emptySelectionCopy(assessment, ready), 'No CPT codes were proposed for this document.');
 });
 
 // round 6, bypass:3: whether a reinstated code can be approved is the code's own gate, never the member's action list.
@@ -521,4 +579,183 @@ test('the review dialog takes its attestation from attestationText (the server e
   const source = fs.readFileSync(path.join(__dirname, '..', '..', 'studio', 'static', 'studio', 'app.js'), 'utf8');
   assert.ok(source.includes("$('#reviewAckText').textContent = attestationText(state.session);"));
   assert.equal(source.split("$('#reviewAckText').textContent =").length - 1, 1, 'one writer of the attestation text');
+});
+
+test('the bounded second review is offered to a reviewer as a request, never shown as made', () => {
+  const service = { id: 'S1', family: 'gi.colonoscopy', kind: 'colonoscopy', status: 'performed', acts: [] };
+  const base = { assessment: { services: { services: [service] }, completeness: { unresolved_items: [
+    { service: 'S1', label: 'forceps biopsy of the <b>lesion</b>', reason: 'not_covered', second_review: true }] } } };
+  const offered = { available: true, reason: '', items: ['forceps biopsy of the <b>lesion</b>'], can_request: true };
+  const reviewer = app.documentedServices({ ...base, permissions: { can_review: true }, second_review: offered });
+  assert.equal(count(reviewer, 'data-action="second-review"'), 1);
+  assert.ok(reviewer.includes('Second provider review available'));
+  assert.ok(reviewer.includes('&lt;b&gt;lesion&lt;/b&gt;') && !reviewer.includes('<b>lesion</b>'));
+  const viewer = app.documentedServices({ ...base, permissions: { can_review: false },
+    second_review: { ...offered, can_request: false } });
+  assert.equal(count(viewer, 'data-action="second-review"'), 0);
+  const refused = app.documentedServices({ ...base, permissions: { can_review: true },
+    second_review: { available: false, reason: 'A second review was already made for this document and date.',
+      items: offered.items, can_request: true } });
+  assert.equal(count(refused, 'data-action="second-review"'), 0);
+  assert.ok(refused.includes('already made for this document and date'));
+  const none = app.documentedServices({ ...base, permissions: { can_review: true },
+    second_review: { available: false, reason: '', items: [], can_request: true } });
+  assert.ok(!none.includes('Second provider review'));
+});
+
+// Repair round ec5 (REPORTRUNS): the page says which provider request each run was, and describes a second review a
+// reviewer asked for until its own outcome is recorded (refutation r1 report-10; the 8985dde42 request re-checked).
+test('provider runs name the second review and what it asked about, as both reports do', () => {
+  const base = fixture('encounter-ready.json');
+  const primary = { ...base.provider_runs[0], purpose: 'primary', scope_items: [] };
+  const second = { ...primary, id: UUID, purpose: 'second_review', scope_items: ['forceps biopsy of the <b>lesion</b>'] };
+  const timeline = render({ ...base, provider_runs: [primary, second] }, 'timeline');
+  assert.equal(count(timeline, 'Second review'), 1);
+  assert.ok(timeline.includes('<strong>Corti · live · Succeeded</strong>'));
+  assert.ok(timeline.includes('<strong>Corti · live · Second review · Succeeded</strong>'));
+  assert.ok(timeline.includes('<p>Asked about: forceps biopsy of the &lt;b&gt;lesion&lt;/b&gt;.</p>'));
+  for (const [state, label] of [['not_sent', 'Not sent'], ['unknown', 'Outcome unknown']]) {
+    const shown = render({ ...base, provider_runs: [primary, { ...second, state }] }, 'timeline');
+    assert.ok(shown.includes(`<strong>Corti · live · Second review · ${label}</strong>`), state);
+  }
+  // a payload without a purpose (recorded before the second review existed) keeps its plain row
+  assert.equal(count(render(base, 'timeline'), 'Second review'), 0);
+});
+
+test('the reconciliation card names an unknown second review', () => {
+  const doc = fixture('encounter-provider-unknown.json');
+  const unknown = { ...doc.provider_runs[0], purpose: 'second_review', scope_items: ['forceps biopsy'] };
+  const answered = { ...doc.provider_runs[0], id: UUID, state: 'succeeded', purpose: 'primary', error: '' };
+  const html = render({ ...doc, state: 'provider_unknown', provider_runs: [answered, unknown] });
+  assert.ok(html.includes('<strong>Unreconciled request</strong><br>Second review · 23 Oct 2026, 14:02 UTC · Read timed out'));
+  assert.ok(render(doc).includes('<strong>Unreconciled request</strong><br>23 Oct 2026, 14:02 UTC · Read timed out'));
+});
+
+test('a second review asked for is described until its outcome is recorded, and never offered again', () => {
+  const service = { id: 'S1', family: 'gi.colonoscopy', kind: 'colonoscopy', status: 'performed', acts: [] };
+  const assessment = { services: { services: [service] }, completeness: { unresolved_items: [
+    { service: 'S1', label: 'forceps biopsy', reason: 'not_covered', second_review: true }] } };
+  const done = ['extract', 'analyze', 'predict', 'assess'].map(kind => ({ kind, state: 'succeeded', error: '' }));
+  const view = (review2, second, pipeline = {}) => app.documentedServices({
+    assessment, permissions: { can_review: true }, pipeline: { stages: [...done, ...review2], ...pipeline },
+    second_review: { items: ['forceps biopsy'], can_request: true, ...second } });
+  const waiting = view([{ kind: 'review2', state: 'queued', error: '' }],
+    { available: false, reason: 'Wait for processing to finish (or stop it) before asking for a second review.' });
+  assert.ok(waiting.includes('<strong>Second provider review requested</strong><p>A reviewer asked for it; it is waiting to run, and nothing has been sent yet. Unresolved: forceps biopsy.</p>'));
+  assert.ok(!waiting.includes('before asking'));
+  assert.ok(view([{ kind: 'review2', state: 'running', error: '' }], { available: false }).includes('it is running now.'));
+  // stopped or failed, its request is used: the page never offers it again, whatever availability says
+  const stopped = view([{ kind: 'review2', state: 'cancelled', error: 'Stopped by a workspace member.' }],
+    { available: true, reason: '' }, { can_resume: true });
+  assert.ok(stopped.includes('<strong>Second provider review stopped</strong><p>It was stopped before anything was sent: Stopped by a workspace member. Resume processing runs it once. Unresolved: forceps biopsy.</p>'));
+  assert.equal(count(stopped, 'data-action="second-review"'), 0);
+  assert.ok(!view([{ kind: 'review2', state: 'cancelled', error: '' }], { available: true }).includes('Resume processing'));
+  // Resume re-runs the latest stage: a later cancelled stage is what it would run, not this review
+  const behind = view([{ kind: 'review2', state: 'cancelled', error: 'Stopped by a workspace member.' }, { kind: 'predict', state: 'cancelled', error: '' }],
+    { available: true }, { can_resume: true });
+  assert.ok(behind.includes('It was stopped before anything was sent: Stopped by a workspace member. Unresolved'));
+  const failed = view([{ kind: 'review2', state: 'failed', error: 'Only an owner or reviewer of this workspace can start a live provider request.' }],
+    { available: true, reason: '' });
+  assert.ok(failed.includes('<strong>Second provider review did not complete</strong><p>It did not complete: Only an owner or reviewer of this workspace can start a live provider request. Unresolved: forceps biopsy.</p>'));
+  assert.equal(count(failed, 'data-action="second-review"'), 0);
+  // an assessment after it (the review ran and was read, or the context changed): the server's answer speaks again
+  const later = view([{ kind: 'review2', state: 'cancelled', error: 'Stopped by a workspace member.' }, { kind: 'assess', state: 'succeeded', error: '' }],
+    { available: true, reason: '' });
+  assert.equal(count(later, 'data-action="second-review"'), 1);
+  const answered = view([{ kind: 'review2', state: 'succeeded', error: '' }],
+    { available: false, reason: 'The text that documents the unresolved services is a request the provider already answered, so a second review would ask nothing new.' });
+  assert.ok(answered.includes('<strong>Second provider review</strong><p>The text that documents the unresolved services is a request the provider already answered'));
+});
+
+test('progress rows show the latest job of each stage, and the second review once one was asked for', () => {
+  const processing = fixture('encounter-processing.json');
+  assert.equal(render(processing).includes('Second provider review'), false);
+  const stages = [...['extract', 'analyze', 'predict', 'assess'].map(kind => ({ kind, state: 'succeeded', error: '' })),
+    { kind: 'review2', state: 'succeeded', error: '' }, { kind: 'assess', state: 'queued', error: '' }];
+  const html = render({ ...processing, pipeline: { ...processing.pipeline, stages } });
+  assert.ok(html.includes('<strong>Check proposals against references and rules</strong><p>Waiting</p>'));
+  assert.ok(html.includes('<strong>Second provider review (asked for by a reviewer)</strong><p>Done</p>'));
+  const redated = [...stages.slice(0, 4), { kind: 'predict', state: 'running', error: '' }];
+  assert.ok(render({ ...processing, pipeline: { ...processing.pipeline, stages: redated } })
+    .includes('<strong>Request CPT proposals from the provider</strong><p>In progress</p>'));
+});
+
+test('the provider-not-run card gives the reason of the latest predict, not of one that ran before it', () => {
+  const ready = fixture('encounter-ready.json');
+  const stages = [...['extract', 'analyze', 'predict', 'assess'].map(kind => ({ kind, state: 'succeeded', error: '' })),
+    { kind: 'predict', state: 'failed', error: 'Live provider calls are not authorized on this installation.' }];
+  const html = render({ ...ready, state: 'provider_not_run', pipeline: { ...ready.pipeline, stages } });
+  assert.ok(html.includes('<p>Live provider calls are not authorized on this installation.</p>'));
+  assert.ok(!html.includes('did not run for this revision'));
+});
+
+test('the provider-failed card gives the reason of the run the state reads (state_run), never one picked by recency', () => {
+  const ready = fixture('encounter-ready.json');
+  const old = { ...ready.provider_runs[0], state: 'failed', http_status: 500, error: 'HTTP 500 from the provider.', purpose: 'primary' };
+  const refused = { ...old, id: UUID, state: 'not_sent', http_status: null, error: 'The credentials could not be read; nothing was sent.' };
+  const html = render({ ...ready, state: 'provider_failed', provider_runs: [old, refused], state_run: refused.id });
+  assert.ok(html.includes('<p>Error: The credentials could not be read; nothing was sent.</p>'));
+  assert.ok(!html.includes('<p>Error: HTTP 500 from the provider.</p>'));
+  assert.ok(render({ ...ready, state: 'provider_failed', provider_runs: [old], state_run: old.id }).includes('<p>Error: HTTP 500 from the provider.</p>'));
+  // a newer request a Stop cancelled (or the sweep settled) before sending is not the run the state reads
+  const stopped = { ...old, id: '00000000-0000-4000-8000-000000000002', state: 'cancelled', http_status: null, error: 'Stopped before sending; nothing was sent.' };
+  const back = render({ ...ready, state: 'provider_failed', provider_runs: [old, stopped], state_run: old.id });
+  assert.ok(back.includes('<p>Error: HTTP 500 from the provider.</p>'));
+  assert.ok(!back.includes('Stopped before sending'));
+  // no run named: the card names none, never a guess
+  const unnamed = render({ ...ready, state: 'provider_failed', provider_runs: [old, stopped], state_run: null });
+  assert.ok(unnamed.includes('<p>The provider did not return proposals.</p>'));
+  assert.ok(!unnamed.includes('<p>Error:'));
+});
+
+// skeptic of refutation 7c8 reports-5: a response refused whole is provider_failed reading that (succeeded) run; its card
+// says the response was not used, with its own failed check - never "The provider request failed" nor "did not return".
+test('the provider-failed card of a response refused whole says it was not used, with its own check', () => {
+  const ready = fixture('encounter-ready.json');
+  const refusedRun = { ...ready.provider_runs[0], id: UUID, state: 'succeeded', http_status: 200, error: '', purpose: 'primary' };
+  const status = 'The response from corti (corti-coding@2) was not used, so there are no CPT proposals. This is not a finding that no codes apply.';
+  const problems = '1 problem reading the provider response: The provider response was not used: it selects 65 codes, more than the 64 this adapter accepts';
+  const checks = [{ id: 'provider.status', status: 'fail', detail: status }, { id: 'provider.problems', status: 'warn', detail: problems }];
+  const html = render({ ...ready, state: 'provider_failed', provider_runs: [refusedRun], state_run: UUID, assessment: { ...ready.assessment, encounter_checks: checks } });
+  assert.ok(html.includes('The provider response<br>was not used.'), html);
+  assert.ok(html.includes(`<p>${app.escapeHtml(status)}</p>`));
+  assert.ok(html.includes(`<p>${app.escapeHtml(problems)}</p>`));
+  assert.ok(!html.includes('The provider request<br>failed.'));
+  assert.ok(!html.includes('The provider did not return proposals.'));
+  // the second review's refusal reads its own check, never the primary's
+  const second = { ...refusedRun, purpose: 'second_review' };
+  const own = 'A second review was requested for: colonoscopy. Its response was not used (it selects 65 codes, more than the 64 this adapter accepts).';
+  const read = [{ id: 'provider.status', status: 'warn', detail: 'corti returned no selected CPT-labelled code.' }, { id: 'provider.second_review', status: 'fail', detail: own }];
+  const page = render({ ...ready, state: 'provider_failed', provider_runs: [{ ...refusedRun, id: '00000000-0000-4000-8000-000000000003' }, second], state_run: UUID, assessment: { ...ready.assessment, encounter_checks: read } });
+  assert.ok(page.includes('The provider response<br>was not used.'));
+  assert.ok(page.includes(`<p>${app.escapeHtml(own)}</p>`));
+  assert.ok(!page.includes('<p>corti returned no selected CPT-labelled code.</p>'));
+});
+
+// refutation 7c8, reports-4: a support that was not checked (not_applicable) keeps the documented service's passages as
+// its source; they are never "passages that show the coded act" nor marked as evidence for the code, and its provider
+// passages carry no check result either.
+test('the passages of a support that was not checked are never shown as showing the coded act', () => {
+  const ready = fixture('encounter-ready.json');
+  const text = ready.revision.text;
+  const { key, exact, ...heading } = cpSpan(text, 'UPPER ENDOSCOPY', 'x');
+  const withSupport = support => {
+    const proposals = ready.assessment.proposals.map((proposal, index) => (index ? proposal : { ...proposal, support }));
+    return { ...ready, assessment: { ...ready.assessment, proposals } };
+  };
+  const notChecked = withSupport({ status: 'not_applicable', reason: 'act_missing', supporting: [], unrelated: [0], source: [heading],
+    detail_support: 'Not checked: the documented service or act is not established as performed.' });
+  const html = render(notChecked);
+  assert.ok(!html.includes('Source passages that show the coded act'), 'never "passages that show the coded act"');
+  assert.ok(html.includes('Passages of the documented service (not checked against the coded act)'));
+  assert.ok(html.includes('“UPPER ENDOSCOPY” — selected from the source by CPT Studio; not checked against the coded act'));
+  assert.ok(!html.includes('cited by the provider; does not show the coded act'), 'no check result for a passage not checked');
+  assert.ok(html.includes('title="Passage of the documented service for 43239, not checked against the coded act">UPPER ENDOSCOPY</button>'));
+  assert.ok(!html.includes('title="Evidence for 43239">UPPER ENDOSCOPY</button>'));
+  // control: a checked support whose provider passage does not show the act still says so, and marks what does
+  const checked = render(withSupport({ status: 'warn', supporting: [], unrelated: [0], source: [heading] }));
+  assert.ok(checked.includes('Source passages that show the coded act'));
+  assert.ok(checked.includes('cited by the provider; does not show the coded act'));
+  assert.ok(checked.includes('title="Evidence for 43239">UPPER ENDOSCOPY</button>'));
+  assert.ok(!checked.includes('not checked against the coded act'));
 });

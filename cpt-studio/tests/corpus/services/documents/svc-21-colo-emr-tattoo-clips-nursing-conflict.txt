@@ -1,0 +1,33 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+HALCYON VALLEY HOSPITAL (fictional) - Endoscopy Department
+
+PHYSICIAN PROCEDURE REPORT: COLONOSCOPY WITH ENDOSCOPIC MUCOSAL RESECTION
+Patient: Cornelius Mbeki-Larsson (fictional)    MRN: SYN-102044
+Date of service: 2026-10-20
+Place of service: Hospital outpatient department
+Endoscopist: Saoirse Adebayo-Klein, MD (fictional)
+Anesthesia: MAC by Halcyon Valley anesthesia services (Dr. Ezra Moncrieff (fictional)); separate record.
+
+Indication: 30 mm laterally spreading lesion in the ascending colon found at an outside colonoscopy on 2026-09-03 and referred for resection.
+
+Procedure: The colonoscope was advanced to the cecum, identified by the appendiceal orifice and ileocecal valve. Preparation was adequate (BBPS 7).
+In the mid ascending colon there was a 30 mm granular-type laterally spreading lesion (LST-G, homogeneous), Kudo IIIL/IV, without features of deep invasion. Submucosal lift was achieved with saline mixed with methylene blue and dilute epinephrine. The lesion was removed by piecemeal endoscopic mucosal resection with a 15 mm stiff snare in five pieces. The resection margin was treated with snare-tip soft coagulation. The defect was then closed with four through-the-scope clips as prophylaxis against delayed bleeding; there was no bleeding during or after the resection.
+To mark the site for future surveillance, the colon wall 3 cm distal to the defect was tattooed with carbon-particle ink, two submucosal injections of 1 mL each after a saline test bleb.
+
+Specimens: Resected pieces in one jar, to Halcyon Valley Pathology (fictional).
+Complications: None.
+Impression: 30 mm LST-G of the ascending colon removed by piecemeal EMR; defect clipped; site tattooed distally.
+Plan: Clear liquids today. Surveillance colonoscopy with scar inspection in six months.
+
+S. Adebayo-Klein, MD (fictional)
+
+---------------------------------------------------------------------
+NURSING INTRA-PROCEDURE CHECKLIST (completed by Pilar Udeh, RN (fictional))
+Time-out completed          [X] Yes   [ ] No
+Specimen collected          [X] Yes - jar 1, ascending colon
+Tattoo injection            [ ] Performed   [X] Not performed
+Clips used                  [X] 4 through-the-scope clips
+Endoscopic hemostasis       [ ] Yes   [X] No
+Patient handed off to PACU  10:47
+---------------------------------------------------------------------

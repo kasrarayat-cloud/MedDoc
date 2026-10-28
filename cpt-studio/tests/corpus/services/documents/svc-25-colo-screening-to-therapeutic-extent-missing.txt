@@ -1,0 +1,32 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Quarry Lane Surgery Center (fictional)
+Colonoscopy Report
+
+Patient: Theophilus Brandvold-Eze (fictional), age 61     Medicare beneficiary
+MRN: SYN-102486
+Date of service: 2026-10-23
+Place of service: Ambulatory surgery center
+Physician: Margarethe Oyelaran-Pike, MD (fictional)
+Anesthesia: Propofol sedation by the anesthesia team (Adaeze Collingwood, CRNA (fictional)); anesthesia services billed separately.
+
+Indication: Screening colonoscopy, average risk. Last colonoscopy more than ten years ago, outside records unavailable.
+
+Procedure
+The colonoscope was inserted into the rectum and advanced under direct vision. The colon was then inspected carefully on withdrawal, including retroflexion in the rectum. Withdrawal time was 10 minutes. Bowel preparation was good.
+
+Findings
+- Transverse colon: a 7 mm sessile polyp, removed with a cold snare and retrieved.
+- Descending colon: a 4 mm sessile polyp, also resected with a cold snare and retrieved.
+- Otherwise normal mucosa in the examined colon.
+
+Specimens: Two jars sent to Quarry Lane Pathology Services (fictional).
+Complications: None.
+
+Impression
+Screening colonoscopy that became therapeutic: two small polyps (transverse and descending colon) removed by cold snare polypectomy.
+
+Plan
+Await histology to set the surveillance interval.
+
+M. Oyelaran-Pike, MD (fictional)

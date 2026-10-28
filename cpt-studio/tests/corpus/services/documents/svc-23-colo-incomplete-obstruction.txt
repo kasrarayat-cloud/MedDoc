@@ -1,0 +1,31 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+ELDERGROVE MEDICAL CENTER (fictional) - GI Procedure Report
+
+Patient name: Bartholomew Nwachukwu-Sato (fictional)
+MRN: SYN-102263
+Date of service: 2026-10-13
+Place of service: Hospital outpatient department
+Gastroenterologist: Henrietta Lowenstein-Abe, MD (fictional)
+Anesthesia: Deep sedation with propofol by Odile Pemberton, CRNA (fictional), Eldergrove anesthesia department (separate record).
+
+Indication: Change in bowel habit with narrow stools, iron deficiency anemia and 5 kg weight loss.
+
+Procedure narrative:
+The adult colonoscope was advanced through the rectum into the sigmoid colon. At 25 cm from the anal verge a friable, ulcerated, circumferential mass narrowed the lumen to a few millimeters. The adult colonoscope could not be passed; a pediatric colonoscope was tried and also failed to traverse the mass. The colon proximal to the mass could not be evaluated, and the procedure was ended at that level.
+
+Six cold forceps biopsies were taken from the mass and placed in one container. The bowel wall about 3 cm distal to the lower edge of the mass was tattooed with carbon-particle ink in three quadrants (1 mL per site) for surgical localization.
+
+Specimen: sigmoid mass biopsies, to Eldergrove Pathology Department (fictional).
+Complications: None.
+
+Impression:
+1. Near-obstructing, malignant-appearing mass of the sigmoid colon at 25 cm; biopsied and tattooed distally.
+2. Incomplete colonoscopy - the instrument could not be advanced beyond the mass.
+
+Plan:
+- CT of the chest, abdomen and pelvis and a CEA level.
+- Urgent colorectal surgery referral.
+- Completion colonoscopy of the proximal colon is planned within three to six months after resection.
+
+H. Lowenstein-Abe, MD (fictional)

@@ -1,0 +1,26 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Motility Center at Saint Orrin Hospital (fictional)
+ESOPHAGEAL MANOMETRY REPORT (HIGH RESOLUTION)
+
+Patient: Ambrose Nakashima-Oduro (fictional)      MRN: SYN-104030
+Date of service: 2026-10-15
+Place of service: Hospital outpatient department
+Physician: Genevieve Oyelowo-Strand, MD (fictional)
+
+Referral question: Progressive dysphagia to solids and liquids with regurgitation and 6 kg weight loss. A timed barium esophagram on 2026-10-03 (read by radiology) showed a dilated esophagus with a bird's-beak narrowing.
+
+Technique: After topical anesthesia, a high-resolution solid-state catheter was passed transnasally and positioned across the esophagogastric junction. The protocol included 10 supine and 5 upright single water swallows, multiple rapid swallows and a rapid drink challenge.
+
+Measurements:
+- Integrated relaxation pressure (supine, median): 28 mmHg (elevated).
+- Basal lower esophageal sphincter pressure: 41 mmHg.
+- Peristalsis: 100% failed swallows; panesophageal pressurization in 3 of 10 supine swallows.
+- Rapid drink challenge: impaired esophagogastric junction emptying with pressurization.
+
+Diagnosis: Type II achalasia (Chicago Classification v4.0).
+
+Discussion and plan:
+Treatment options were reviewed with the patient. Pneumatic dilation was discussed but he chose not to pursue it. Peroral endoscopic myotomy (POEM) is scheduled for 2026-11-18 at the interventional endoscopy unit, with a pre-procedure liquid diet for 48 hours.
+
+G. Oyelowo-Strand, MD (fictional)

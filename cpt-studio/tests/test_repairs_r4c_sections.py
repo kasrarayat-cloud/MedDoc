@@ -16,6 +16,7 @@ import unittest
 from studio.gi.sections import layout
 from tests.test_repairs_r3_sections import (EMR_LINE, HEADER, NOT_TODAY, POSITIVE, clarified, emr_note, fact_value, family,
                                             read, ready, routed, run_engine, word_document)
+from tests.test_repairs_r3_forms_routing import outcome
 
 
 def kind_at(text, phrase):
@@ -897,10 +898,13 @@ class Declared6DenyingLabelSpellingsTests(HeldOrReadyAssertions, unittest.TestCa
         self.assertTrue(held(run_engine(text, [('43249', D6_EGD)])['43249']))
 
     def test_other_labels_are_unchanged(self):
-        for label in ('Additional procedures:', '1. Additional procedures:', 'Procedures (all performed):'):
+        # A neutral list label's items are not read as done (session interpretation 23, known limit sec:1): under
+        # "Additional procedures:" the dilation is held for the reviewer, never ready and never excluded.
+        for label, want in (('Additional procedures:', 'held'), ('1. Additional procedures:', 'held'),
+                            ('Procedures (all performed):', 'ready')):
             text = d6_note(label)
             with self.subTest(label=label):
-                self.assertTrue(ready(run_engine(text, [('43249', D6_EGD)])['43249']))
+                self.assertEqual(outcome(run_engine(text, [('43249', D6_EGD)])['43249']), want)
 
 
 

@@ -1,0 +1,28 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Brightwater Endoscopy Suites (fictional)
+SCREENING COLONOSCOPY
+
+Name: Leopoldine Achterberg-Oyo (fictional)         MRN: SYN-102371
+Date of service: 2026-10-26
+Place of service: Ambulatory surgery center
+Physician: Caspian Mwale-Lindholm, MD (fictional)
+
+Indication: Average-risk colorectal cancer screening; age 45; no prior colonoscopy; no family history of colorectal neoplasia.
+
+Sedation: I administered moderate sedation (midazolam 4 mg IV, fentanyl 75 mcg IV) with Rosalind Pike, RN (fictional), present throughout as an independent trained observer. Intraservice time was 21 minutes, from 07:58 to 08:19.
+
+Procedure
+The colonoscope was advanced to the cecum, identified by the appendiceal orifice and the ileocecal valve, and the terminal ileum was entered for a short distance. The procedure was not discontinued; it was completed without interruption. Preparation was excellent (BBPS 9). The withdrawal lasted 10 minutes with careful inspection behind folds, followed by retroflexion in the rectum.
+
+Findings
+No polyps, masses, diverticula or vascular lesions. Normal terminal ileum. Normal retroflexed view of the rectum.
+No biopsies were taken, and because no polyps were found there was nothing to remove with snare or forceps.
+
+Complications: None.
+
+Impression: Normal screening colonoscopy to the terminal ileum.
+
+Recommendation: Next screening colonoscopy in 10 years.
+
+C. Mwale-Lindholm, MD (fictional)

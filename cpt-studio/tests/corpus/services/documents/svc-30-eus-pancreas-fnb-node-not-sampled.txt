@@ -1,0 +1,36 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+TALLOWMERE CANCER INSTITUTE (fictional) - Endoscopic Ultrasound Report
+
+Patient: Seraphina Kovacs-Ndiaye (fictional)        MRN: SYN-102951
+Date of service: 2026-10-16
+Place of service: Hospital outpatient department
+Endosonographer: Matthias Owusu-Lindgren, MD (fictional)
+Anesthesia: MAC provided by Tallowmere anesthesiology (Dr. Imogen Achebe (fictional)); separately billed.
+Cytopathology: Rapid on-site evaluation by Philippa Quaye, MD (fictional), of the Tallowmere pathology department; final interpretation to be reported by pathology.
+
+INDICATION
+Pancreatic head mass on CT, weight loss and new-onset diabetes. Her only prior endoscopy was an EGD on 2023-11-03 for dyspepsia, which was normal.
+
+PROCEDURE
+A linear echoendoscope was passed through the mouth. Endosonographic examination was carried out from the esophagus, the stomach, the duodenal bulb and the second portion of the duodenum. The examination was completed without interruption.
+
+FINDINGS
+1. Pancreatic head: a 28 x 24 mm hypoechoic, irregular mass abutting the superior mesenteric vein over less than 180 degrees; no arterial involvement.
+2. Bile duct: common bile duct dilated to 12 mm upstream of the mass.
+3. Pancreatic duct: 4 mm in the body.
+4. Lymph nodes: a 9 mm round hypoechoic peripancreatic lymph node; it was not sampled because the needle path would have crossed the primary tumor.
+5. Liver: no lesions in the visualized left lobe. No ascites.
+
+TISSUE ACQUISITION
+Fine-needle biopsy of the pancreatic head mass was performed transduodenally with a 22-gauge Franseen-tip needle, three passes using the fanning technique. On-site evaluation confirmed adequate cellularity. Celiac plexus neurolysis was not performed.
+
+COMPLICATIONS: None.
+
+IMPRESSION
+Pancreatic head mass, 28 mm, resectable to borderline on endosonography; FNB obtained. Peripancreatic lymph node seen, not sampled.
+
+PLAN
+ERCP with biliary stent placement is scheduled for 2026-10-21. Multidisciplinary tumor board review after final pathology.
+
+M. Owusu-Lindgren, MD (fictional)

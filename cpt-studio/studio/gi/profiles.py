@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 CATEGORY_SLUG = 'gastroenterology'
 CATEGORY_NAME = 'Gastroenterology'
-PROFILES_VERSION = 'gi-profiles@2'
+PROFILES_VERSION = 'gi-profiles@3'
 
 
 @dataclass(frozen=True)
@@ -44,8 +44,8 @@ def _p(slug, label, eyebrow, supported, ranges, *, excluded=(), required=(), pro
                           procedure=procedure, note=note)
 
 
-EUS_CODES = ('43231', '43232', '43237', '43238', '43242', '43253', '43259', '44406', '44407', '45341', '45342', '45391',
-             '45392', '76975')
+EUS_CODES = ('43231', '43232', '43237', '43238', '43240', '43242', '43253', '43259', '44406', '44407', '45341', '45342',
+             '45391', '45392', '76975')
 # Inside the colonoscopy number range but not colonoscopy: they route on to 'outside the GI profiles'.
 NOT_COLONOSCOPY = ('45395', '45397', '45399')
 
@@ -53,10 +53,12 @@ PROFILES: dict[str, ServiceProfile] = {p.slug: p for p in (
     _p('gi.office_em', 'Office / outpatient evaluation and management', 'EVALUATION & MANAGEMENT', True,
        [('99202', '99205'), ('99211', '99215'), ('99242', '99245'), ('99417', '99417')],
        required=('setting', 'patient_status', 'em_basis')),
-    _p('gi.egd', 'Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)', 'UPPER GI ENDOSCOPY', True,
-       [('43180', '43233'), ('43235', '43270'), ('44360', '44379'), ('43210', '43210')],
+    _p('gi.egd', 'Upper GI endoscopy (EGD, esophagoscopy, POEM)', 'UPPER GI ENDOSCOPY', True,
+       [('43180', '43233'), ('43235', '43270'), ('43210', '43210'), ('43497', '43497')],
        excluded=EUS_CODES + tuple(str(c) for c in range(43260, 43271) if c not in (43266, 43270)),
        required=('extent',), procedure=True),
+    _p('gi.enteroscopy', 'Small-bowel enteroscopy', 'ENTEROSCOPY', True,
+       [('44360', '44386')], required=('extent',), procedure=True),
     _p('gi.colonoscopy', 'Colonoscopy', 'COLONOSCOPY', True,
        [('45378', '45399'), ('44388', '44408')], excluded=EUS_CODES + NOT_COLONOSCOPY,
        required=('extent',), procedure=True),
@@ -69,6 +71,13 @@ PROFILES: dict[str, ServiceProfile] = {p.slug: p for p in (
     _p('gi.ercp', 'ERCP', 'ERCP', True,
        [('43260', '43265'), ('43273', '43278'), ('74328', '74330')],
        required=('cannulation',), procedure=True),
+    _p('gi.capsule', 'Capsule endoscopy', 'CAPSULE ENDOSCOPY', True, [('91110', '91113')], procedure=True),
+    _p('gi.motility', 'Motility and manometry', 'MOTILITY', True,
+       [('91010', '91022'), ('91040', '91040'), ('91117', '91117')], procedure=True),
+    _p('gi.reflux', 'pH and impedance monitoring', 'pH / IMPEDANCE', True, [('91030', '91038')], procedure=True),
+    _p('gi.anorectal', 'Anorectal testing', 'ANORECTAL TESTING', True, [('91120', '91122')], procedure=True),
+    _p('gi.feeding_tube', 'Feeding-tube procedures', 'FEEDING TUBE', True,
+       [('43762', '43763'), ('49440', '49452')], procedure=True),
     _p('gi.sedation', 'Moderate sedation by the performing physician', 'MODERATE SEDATION', False,
        [('99151', '99157')],
        note='Sedation checks are not implemented in this release; review required.'),
@@ -77,17 +86,21 @@ PROFILES: dict[str, ServiceProfile] = {p.slug: p for p in (
        note='Only office/outpatient E/M is profiled in this release; review required.'),
     _p('gi.other', 'Other GI service', 'OTHER GI SERVICE', False,
        [('43450', '43453'), ('43752', '43761'), ('45300', '45327'), ('46600', '46615'), ('46221', '46250'),
-        ('91010', '91299'), ('47000', '47001'), ('49082', '49084')],
+        ('91065', '91065'), ('91200', '91299'), ('47000', '47001'), ('49082', '49084')],
        note='Recognised as a GI service without a profile in this release; review required.'),
     _p('gi.unsupported', 'Service outside the GI profiles', 'OUTSIDE GI PROFILES', False, [],
        note='Not covered by any GI profile in this release; review required.'),
 )}
 
-FAMILY_ORDER = ('gi.office_em', 'gi.egd', 'gi.eus', 'gi.ercp', 'gi.colonoscopy', 'gi.flex_sig',
+FAMILY_ORDER = ('gi.office_em', 'gi.egd', 'gi.enteroscopy', 'gi.eus', 'gi.ercp', 'gi.colonoscopy', 'gi.flex_sig',
+                'gi.capsule', 'gi.motility', 'gi.reflux', 'gi.anorectal', 'gi.feeding_tube',
                 'gi.sedation', 'gi.em_other', 'gi.other', 'gi.unsupported')
 
 # Families that routing (gi/detect.py) recognises in document text.
 DETECTED_FAMILIES = ('gi.office_em', 'gi.egd', 'gi.colonoscopy', 'gi.flex_sig', 'gi.eus', 'gi.ercp')
+# Families the documented-service inventory (gi/services.py) reads and the coverage catalogue reconciles.
+INVENTORY_FAMILIES = DETECTED_FAMILIES + ('gi.enteroscopy', 'gi.capsule', 'gi.motility', 'gi.reflux', 'gi.anorectal',
+                                          'gi.feeding_tube')
 
 
 def family_for_code(code: str) -> str:

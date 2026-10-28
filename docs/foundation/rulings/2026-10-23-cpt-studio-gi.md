@@ -381,3 +381,301 @@ What it changes, so a later session does not re-derive it:
   limit (`cpt-studio/ACCURACY-RESIDUALS.md` and the PR body) and does not block.
 - This supersedes interpretation 6's stopping rule for the end of this PR only;
   the hold-only rule and every gate stay as they are.
+
+## Owner directive, 2026-10-27 — repair and expand the shared GI coding core
+
+Received directly from the owner in session meddoc-pro-94 (909be030) on 27 October 2026, as pasted instruction
+text, after the install of revision 2734a6f3 and the owner's own synthetic test of encounter
+cb96adb2-2044-4160-9c69-12dbcbbc8028 ("GI_Complex_Case_Elena_Hartwell"). Recorded by the receiving session before
+the work that depends on it is committed for review. Verbatim:
+
+> Repair and expand CPT Studio’s shared GI coding core at https://cpt.quillmd.com. Carry the work through implementation, installation and meaningful verification. Preserve the approved design and one GI workspace.
+>
+> This is a general engine repair. Do not solve it with patient-name exceptions, document fingerprints, expected-code injection or patches that recognize individual test sentences.
+>
+> 1. Establish the actual installed state
+>
+> Inspect the current revision, active deployment owner, application code, retained documents, raw Corti responses, processing traces and existing tests. Coordinate deployment through one owner.
+>
+> Do not assume the previously reported revision is still current. Preserve the original failures, provider responses, decisions, audit history and downloaded reports. Keep app.quillmd.com, VoiceAssistMain and unrelated server resources unchanged.
+>
+> 2. Diagnose the shared failures before assigning their cause
+>
+> Trace the original ten GI tests and the Elena encounter:
+>
+> cb96adb2-2044-4160-9c69-12dbcbbc8028
+>
+> Its uploaded PDF has SHA256:
+> 861a9940d0509fdf7c8de4745a1d798db5724679e1efd03e840f73538a51aeb5
+>
+> Observed Elena findings:
+> - 43239 was proposed but held; its exported evidence omitted the actual biopsy actions.
+> - 45385 was proposed with an incorrect incomplete-procedure warning despite documentation that the examination was complete and not discontinued.
+> - 45380 was absent despite a separate descending-colon lesion sampled with forceps.
+> - Physician and nursing entries conflict about tattoo injection. Determine whether the application detected this; the CSV alone does not establish that.
+> - The export contains two undecided proposals, twelve informational alternatives and no approvals.
+>
+> Earlier tests also reported current E/M services classified as historical, an omitted EUS suggestion and incomplete clarification questions.
+>
+> For each failure, establish whether it originated in document extraction, Corti, adaptation, evidence selection, local validation or export. Do not blame the provider or application without tracing the actual data.
+>
+> 3. Implement a shared representation of documented services
+>
+> For each service, retain its source document and revision, service date, clinician, setting, anatomy, lesion identity, technique, extent, completion, supporting passages and uncertainty.
+>
+> Distinguish:
+> - Performed, historical, planned, negated and uncertain services.
+> - Complete examinations from incomplete examinations.
+> - Lesions sampled, removed, untreated or scheduled for later treatment.
+> - Separate lesions from multiple actions on the same lesion.
+> - Routine procedure-related work from separately documented E/M.
+> - Endoscopist services from anesthesia, pathology and facility services.
+>
+> Interpret negation and time within the relevant clause and service. An unrelated historical reference must not invalidate a current service. An unresected lesion must not make a completed colonoscopy incomplete.
+>
+> Use validated structured data and bounded extraction. Diagnose schema or validation failures rather than silently discarding unsupported parts of a response.
+>
+> 4. Add evidence and completeness verification
+>
+> Exact quotation matching is necessary but insufficient. Verify that each passage supports the proposed action, anatomy, technique and date.
+>
+> Build a source-based inventory of documented services independently of the proposed code list. Reconcile that inventory with Corti’s suggestions so missing services become visible.
+>
+> If a documented service has no supported proposal, expose it as unresolved and use a bounded second review when justified. Do not invent a code, automatically promote an alternative or repeatedly resend the same request.
+>
+> Ask all materially necessary clarification questions for the affected service. Preserve both sides of genuine conflicts. Keep supported services available for review while clearly showing that the encounter remains incomplete.
+>
+> Separate “this proposal is ready for review” from “the entire encounter has complete, verified coding.”
+>
+> 5. Expand GI coverage through internal service profiles
+>
+> Keep one user-facing GI workspace. Maintain an explicit coverage catalogue for:
+> - Office/outpatient E/M.
+> - EGD, esophagoscopy, colonoscopy and flexible sigmoidoscopy.
+> - EUS and ERCP.
+> - Enteroscopy and capsule studies.
+> - Motility/manometry, pH/impedance and anorectal testing.
+> - Feeding-tube procedures and advanced endoscopic treatments.
+>
+> Define the required documentation, supported interventions, exclusions, clarification requirements and verification evidence for each family.
+>
+> Complete the shared repair across currently supported families. Add broader families through the same architecture, with actual implementation and validation. Clearly identify any remaining unsupported service; do not silently omit it or advertise comprehensive GI coverage before it is established.
+>
+> 6. Connect authoritative rules without inventing verification
+>
+> Inventory the authorized CPT content, guidance and applicable dated CMS/payer references actually available to this product.
+>
+> Apply appropriate code-version, bundling, units, modifier, provider and setting checks. Keep practitioner and facility rules distinct.
+>
+> Do not hardcode unofficial descriptors or claim that code membership, modifiers or rules were verified when the necessary source is unavailable. Keep licensing and source gaps explicit while continuing independent engineering work.
+>
+> Do not sign agreements, buy subscriptions or credits, change payment settings or process real patients.
+>
+> 7. Verify the core across documents and services
+>
+> Use retained responses first to diagnose and test shared logic economically.
+>
+> Add meaningful regressions covering paraphrases, mixed dates, negation, separate lesions, combined procedures, incomplete documentation, conflicting checkboxes, pending pathology and completed versus discontinued examinations. Include Word, digital PDF and scanned/OCR input.
+>
+> Keep expected answers outside the coding input and implementation logic.
+>
+> After installation, perform purposeful fresh synthetic tests through the ordinary HTTPS interface: upload, processing, review, saved decisions, reload and actual report download. Identify automated synthetic approvals accurately.
+>
+> Arrange independent GI-coder adjudication for the accuracy benchmark. If qualified adjudication is unavailable, label expectations provisional and report that limitation rather than claiming clinical validation.
+>
+> Report separately:
+> - Supported procedure families.
+> - Correct complete code-and-modifier sets.
+> - Missed services.
+> - Unsupported additions.
+> - Clarification and conflict handling.
+> - Human-review requirements.
+> - Browser, persistence and export integrity.
+>
+> Do not treat browser passes, exact quotations or file-integrity checks as coding-accuracy percentages. Do not promise 100% accuracy.
+>
+> 8. Execution and delivery
+>
+> Use the existing standing authority for necessary private synthetic testing. Do not reinstate superseded $8.15 or nine/ten-call funding gates. Preserve historical usage, reservations and unknown costs.
+>
+> Use small purposeful batches, finite deadlines, duplicate prevention and a working Stop path. Reconcile unknown execution outcomes before another submission. Actual provider authentication, quota or payment failures remain operational constraints.
+>
+> Deliver the installed revision, demonstrated root causes, general repairs, coverage matrix, fresh acceptance results, preserved failures, measured usage and exact remaining dependencies. Continue through repair and verification; do not stop after producing a plan or passing isolated unit tests.
+
+### Session interpretation, 2026-10-27 — recorded, not owner-ruled
+
+8. **The documented-service inventory is deterministic** (`studio/gi/services.py`, a clause-level reader run in the
+   bounded assess child, its output validated by `services.validate`). No new runtime model, provider, key or
+   account is added: choosing a coding engine stays the owner's separate decision (first brief), and a new key is a
+   class (d) item. The inventory is advisory, like routing.
+9. **Hold-only combination.** The documented service decides a code's status, but the routing-era reading is a
+   second opinion that can only hold: a hedge, denial or cancellation in the code's own passage about that service
+   holds it, a disagreement is never a new exclusion, and routing's own doubt about a family holds its codes. What it
+   no longer does is let a fragment about something else, or a passage about another time, decide (the Elena 43239
+   hold, the gi-01 and gi-05 E/M exclusions).
+10. **The second review is automatic and bounded**: once per revision and service date, only after a successful
+    primary request, only for a documented service of a supported family left without a supported proposal, with the
+    text that documents that service, under the full send discipline. Its codes fill only unresolved items. It is an
+    additional provider request funded by the standing authority; its usage is recorded like any other.
+11. **A member-entered context value that differs from the document's is a conflict** with both sides kept, not an
+    override (the Elena encounter's member-entered 1998-01-01 against a documented 20 October 2026). It is resolved by
+    correcting or clearing the metadata or by an addendum.
+12. **No qualified GI-coder adjudication is available to this session.** Every expectation in the regression corpus
+    and the held-out acceptance set is an author expectation, labelled provisional; no accuracy percentage is claimed.
+13. **Routing's family doubt is narrowed to today's report** (refines 9). Routing reads a family from its NAME, so
+    its one-line family summary is often about another occurrence: a planned repeat in the plan ("Repeat colonoscopy
+    in three years"), an earlier examination in the indication ("found at an outside colonoscopy on 2026-09-03", "no
+    prior colonoscopy"). Read against the documented acts, that summary made clearly performed procedures uncertain
+    (7 of 43 corpus documents). It now holds a performed service only through a contrary statement in today's own
+    report: negated or cancelled outside history, indication and plan, or planned or historical inside procedure,
+    findings, technique or impression. Routing's own doubt about today's service (a hedge, an ambiguous box row)
+    still holds, as 9 says.
+14. **An unresolved negation the inventory resolves does not hold a code.** When the routing-era reader's only doubt
+    is a negation it could not resolve ("The examination was complete and was not discontinued") in a passage the
+    inventory reads, clause by clause, as this service's own positive statement (its performance, a performed act,
+    a completion read as complete), the code is not held for it; the detail names both readings. A hedge, a denial
+    or a cancellation still holds. This is the Elena 45385 hold the earlier repair left in place.
+15. **How three services are modelled** (provisional, for adjudication): a PEG placed during an upper endoscopy is
+    that EGD's act, not a feeding-tube service; an EGD performed with an EUS is kept and marked included in the EUS
+    (no code of its own is asked, its acts are still reconciled), where the corpus author modelled one EUS service;
+    a procedure documented as "PROCEDURE PERFORMED: transoral esophagoscopy … the intended EGD could not be
+    completed" is a performed esophagoscopy (no endpoint), where the corpus author expected an incomplete EGD. The
+    three differences are recorded with their reasons in cpt-studio/tests/corpus/services/known_differences.json.
+16. **The 43-document corpus is a development corpus.** The reader was repaired against it, so it is committed as a
+    regression guard (tests/test_services_corpus.py), never reported as an accuracy measure. The live acceptance set
+    (10 documents) is held out: it was written separately, and its documents and expectations were neither read
+    nor run through the reader while repairing. The repairing sessions saw only its file names, sizes, one-line
+    titles and source hashes (909be030 at 02:46Z, after the WIP 2 reader repairs; bc7df129 while taking over).
+17. **No CPT fact is asserted without a connected source.** The coverage catalogue no longer says ESD "has no
+    specific CPT code; reported as an unlisted procedure"; it says no code profile exists here and a coder decides.
+18. **One deployment owner.** At 02:51Z on 27 October 2026 the owner chose "Take over now" in session
+    meddoc-pro-01 (bc7df129) and stopped 909be030 (meddoc-pro-94), whose last commit was WIP 2 (9eb82f0d) and
+    whose refutation workflow (wf_ce4e77bb-c22) died with it before any lens finished. From then on bc7df129 is the
+    single owner of this branch, its install and its live verification.
+19. **Nothing is sent while the service date is a member-vs-document conflict** (refines 11; bc7df129). A conflicted
+    context has no date a request could carry, and a dateless request would be paid for and discarded once the date is
+    settled. The predict stage records a not-sent run that says so (`ProviderRun.scope` `held: member_date_conflict`);
+    the encounter is needs_clarification on the date question, not "provider failed"; correcting or clearing the
+    metadata starts the request for the agreed date, and an identical retained result is reused. Setting, patient
+    status and billing never enter a request, so their member conflicts only hold, as 11 says. The installed revision
+    sent the member's date itself (the Elena 1998-01-01 request); WIP 3 sent a dateless request instead.
+20. **The reader reads a soft line wrap as a space** (bc7df129, from a format harness that read every corpus document
+    as text, as Word, as a digital PDF wrapped at 90 characters, and as a scan read with real OCR in the image). On
+    WIP 3 the digital PDF read differently from the text in 13 of 43 documents and the scan in 38 of 43: a wrapped
+    sentence line looked like a heading, and the attribution, lesion and act readers stop at line breaks. The reader
+    now reads a same-length view of the text (`services.reflow`) in which a line break inside a sentence is a space:
+    only after a long line of prose (25+ characters, 4+ words) that ends no sentence, label or answer of its own
+    (`_answered_line`, the rule sentences are cut at), before a line that continues it in lower case or after a word
+    that cannot end a line; never around a check-box, option, table, list or field row, nor inside an extraction
+    block. Every offset and passage stays the text's own (each passage is re-read from the text at its offsets, and
+    routing's box reader is given the text itself). The digital-PDF reading of every corpus document is a regression
+    test with each remaining difference recorded with its reason (`tests/test_services_formats_corpus.py`,
+    `format_known_differences.json`); a scanned report and a scanned sample of the corpus are read with real OCR
+    wherever tesseract is installed (CI and the image). Proper-noun wraps and OCR misreads remain known limits.
+21. **How this change's refutation pass finishes** (bc7df129). One full round runs on the finished diff, with nine
+    lenses (false release, missed service, negation and time, provider sends, report and UI truth, cost and bounds,
+    migration and upgrade, document formats, member-entered context), every finding re-run by a skeptic and graded as
+    interpretation 6 grades it. Each repair of a blocking finding is then attacked once more by its own skeptic before
+    merge, because in rounds 1-7 about a quarter of each round's findings were the previous round's repairs. Confirmed
+    misreadings that do not block are recorded in `cpt-studio/ACCURACY-RESIDUALS.md` and the PR body. This takes the
+    shape of the owner's 2026-10-25 decision for this change; the owner can overrule it.
+22. **Refinements of 10 and 11 found by the triage skeptics** (bc7df129). A member value settles a conflict INSIDE the
+    document only by choosing one of its values; any other value is a third side kept with them (a member-entered
+    1998-01-01 against two documented dates had been accepted). A member conflict that no question asks about is asked
+    once at the encounter, both sides named. The bounded second review (10) is never made after a primary response
+    refused whole, nor while the service date is unknown, and without a known service date a dated act statement is
+    held, never read as today's (a dated history line had produced a phantom performed service and a paid second
+    review). The note's own dated title is only the FIRST dated title line near the top; a qualified one gives no date.
+23. **A neutral list label's items are not read as done** (bc7df129, triage round 1 routing_level). Under a label that
+    neither states nor denies performance ("Additional procedures:" over "EGD with balloon dilation.") the listed
+    service is held for the reviewer, never ready and never excluded. Graded UNCLEAR: a coder may read the list as done,
+    so this over-holds by design and is recorded as known limit sec:1 rather than repaired by a word list.
+24. **The owner's strict-box decision (2026-10-25) applied to the documented-service reader** (bc7df129, triage round 2
+    skeptics). A checked box or a checked "Yes" form field documents its act only inside a list of what was done, read
+    structurally (the label directly over its run, or a printed item its field names), and only in a service a title, a
+    statement or an instrument already documents; anywhere else it holds. What a consent or an authorization is for is
+    held the same way. Removing the box promotions entirely was tried and rejected: it held 95 records the installed
+    revision makes ready on unambiguous rows (an accepted-capability loss this session may not take), while the
+    fail-closed form sends no second review for any of the fourteen consent, equipment, education, office and form-field
+    documents in test_services_second_review (the skeptics' and this session's), and still sends one for a checked box
+    under "Interventions:" (its positive control).
+
+## Owner decision, 2026-10-27 (session ec5e7910) — narrow, install-first
+
+Asked in session ec5e7910 at about 16:00Z on 27 October 2026, after the session found that refutation round r1 had left
+63 blocking findings on this branch (seven repaired, integrated as `wip/r1-integ` b7715733) and that the account's
+weekly usage stood at 92% with no extra usage enabled. Verbatim:
+
+> With ~8% weekly usage left, how should I get the GI-core repair to installation?
+> — Narrow, install-first (Recommended): Make the second Corti review reviewer-requested, never automatic. That removes most wrongful paid sends. Fix only the must-fix classes: wrong date sent to Corti, re-sending an identical request, reports or the UI misstating saved state, rollback safety, time/memory. Record the remaining misreadings as known limits; the reviewer still decides every code. Then tests, PR, CI, merge, install, and a fresh HTTPS Word/PDF walk with real downloads. This overrules interpretation 21 for this change. It may still run out before the install; if so I stop at a pushed checkpoint.
+
+The owner's answer: **"Narrow, install-first (Recommended)"**.
+
+What it changes, so a later session does not re-derive it:
+- The bounded second review (interpretation 10) is made only when a workspace owner or reviewer asks for it, for the
+  current assessment, under every bound 10, 19 and 22 set (once per revision and service date, a usable primary
+  response, a known and unconflicted date, the identical-request rule). An assessment never queues one.
+- Interpretation 21's grading is overruled for this change only. The merge is blocked by the must-fix classes of the
+  owner's 2026-10-25 decision (read in full: a request sent to Corti that should not be sent, including a wrong or
+  conflicting date and an identical re-send; stage time or memory limits; a report, export or screen that misstates
+  persisted state; a code approved or removed from the decision set without a reviewer's decision; data loss; rollback
+  safety; security). Every other confirmed r1 misreading is a known limit in `cpt-studio/ACCURACY-RESIDUALS.md` and the
+  PR body; the reviewer decides every code.
+
+### Session interpretation, 2026-10-27 (ec5e7910) — recorded, not owner-ruled
+
+25. **One deployment owner, again.** Session 06f227b1 (which took this branch over from bc7df129 at 13:01Z) stopped at
+    its account's usage limit at 15:03Z, and its repair workflows ended with it; no session was running at 15:50Z. The
+    owner started session ec5e7910 to continue, so from 15:50Z ec5e7910 is the single owner of this branch, its install
+    and its live verification. 06f227b1's unfinished cluster edits stay where it left them (worktrees
+    `.worktrees/cpt-r1fix-*`, backups `fix/partial/*.patch` in the save directory); the commits of this session name
+    what they adopt from them.
+26. **One deployment owner, again (7c8d38da).** Session ec5e7910 stopped at its account's weekly limit at 17:50Z on 27
+    October 2026 (every later message was answered with the limit notice), and its workflow wf_d9952ac0-e1f lost seven
+    agents mid-run. The owner opened session 7c8d38da and told it to continue, so from 19:20Z 7c8d38da is the single
+    owner of this branch, its install and its live verification. Edits ec5e7910's agents had proven but not committed
+    are committed by 7c8d38da, each commit naming its origin; ec5e7910's integration branch `wip/ec5-integ` carries on,
+    and the unfinished cluster work continues in worktrees `.worktrees/cpt-7c8-*` branched from its head.
+
+### Session interpretation, 2026-10-28 (7c8d38da) — recorded, not owner-ruled
+
+27. **A status exclusion is a recommendation; a misread one is a known limit.** The must-fix class "a code approved or
+    removed from the decision set without a reviewer's decision" (owner decisions of 2026-10-25 and 2026-10-27) is read
+    with interpretation 5, which the code enforces at the integrated head 2fc8cde3d: every exclusion a documentation
+    (status) check makes is reinstatable (`studio/validation/engine.py`, `reinstatable=s.excluded`; only an exclusion
+    for scope or for no exact evidence is not, as at the installed revision) and stays in the decision set, and no
+    reviewed report exists until the reviewer confirms it or reinstates the code (`studio/review.py`,
+    `_assessment_blockers`: "<code> was excluded by a documentation check: confirm the exclusion or reinstate it").
+    The decision set is the selected and the excluded proposals (as the installer's own rollback rules read it). A
+    misreading that recommends excluding an act the document states done today - both readers reading it planned,
+    historical, cancelled or negated - is therefore a wrong recommendation the reviewer decides, recorded as a known
+    limit in `cpt-studio/ACCURACY-RESIDUALS.md`, like a misreading that makes a code ready or held. Class 4 stays for: an
+    approval without a reviewer; a code that leaves the decision set (neither selected nor excluded) without one, as
+    refutation phase 1's reports-0 did; an exclusion for a status reason that is not reinstatable or confirmable; and a
+    reviewed report or export produced while an exclusion is undecided. Session ec5e7910's cluster brief had graded
+    every exclusion of a done-today act as class 4; the repairs made under it stand (they remove wrong
+    recommendations), and from refutation phase 2 (2026-10-28) such findings are graded by this interpretation. The
+    owner's own list in the "Narrow, install-first" decision ("wrong date sent to Corti, re-sending an identical
+    request, reports or the UI misstating saved state, rollback safety, time/memory") names no exclusion and says "the
+    reviewer still decides every code". The owner may overrule this; the PR body and the install report say so.
+28. **The service date is read by its source, and nothing is sent that the installed revision would not send.**
+    Refutation phase 2 found the date sent to Corti taken from sources that are not this encounter's date of service:
+    a fax's clocked "Date/Time:", a letter's "Date:", another discipline's dated title, a date of birth, a label's
+    value with a bracket after it. Four rounds of qualifier words had each been refuted by the next paraphrase. The
+    first repair (branch `wip/7c8-p2dates`) required a clean header block around the label: it closed every finding
+    and asked the date of 8 of the 11 live encounters ("Date of procedure: 2026-10-14 ... not read as one"), of every
+    PDF or Word upload and of 8,416 of the reading gate's 8,446 texts - a capability loss this session may not take
+    (class b), so it was not merged. The rule this change carries instead (P2DN, then its skeptics' and the final
+    refutation's fix rounds; ARCHITECTURE 5.2):
+    - a document date is sent only from a date-of-service label's own value standing alone in its field (N1, N5);
+      a dated title, a bare "Date:" or "Date/Time:" line, a letter's line, a dated service line or prose is evidence
+      that can make the date a question, never the date - the installed revision's behaviour for those shapes. This
+      supersedes interpretation 22's last sentence: no dated title gives the date;
+    - a date of birth is never a candidate (N2); a member date is taken only when it equals a date some candidate
+      states as its own value, never one the reader reads as another occurrence's (N3, N4);
+    - only a labelled date written in a form the installed revision 057a7d398 reads is ever sent (N7): a day-first
+      date, a table row's date or a label naming a time is asked.
+    The family no structural rule closed without that capability loss - a labelled date the lines around it qualify
+    as another occurrence's (a heading, a title, a field above or beside it) - stays as the installed revision has
+    it, pinned as known limits, and is open for the owner: keep it, accept the structural rule's asks, or rule a
+    narrower trade. The owner may overrule any of this; the PR body says so.

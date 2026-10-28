@@ -1,0 +1,24 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Tallowmere Cancer Institute (fictional) - Pancreaticobiliary Endoscopy
+
+Procedure: Endoscopic retrograde cholangiopancreatography
+Patient: Gwendolyn Afolayan-Strick (fictional)      MRN: SYN-103288
+Date of service: 2026-10-21
+Place of service: Hospital outpatient department
+Endoscopist: Leander Okwuosa-Hale, MD (fictional)
+Anesthesia: MAC by Tallowmere anesthesiology; separate record.
+Fluoroscopy: Performed and interpreted by the endoscopist.
+
+Indication: Malignant-appearing distal biliary obstruction from a pancreatic head mass (EUS-guided biopsy at another hospital showed atypical cells); bilirubin 9.6 mg/dL.
+
+Description:
+The duodenoscope was advanced to the major papilla, which was bulging and slightly distorted. Using a wire-guided sphincterotome, deep cannulation of the bile duct was obtained on the second attempt. Cholangiography demonstrated a tight 2.5 cm stricture of the distal common bile duct with upstream dilation to 13 mm and dilated intrahepatic ducts. A 6 mm biliary sphincterotomy was made to facilitate stent placement. Two cytology brushes were passed across the stricture and the brushings were collected for cytology. A fully covered self-expanding metal stent, 10 mm by 60 mm, was then deployed across the stricture under fluoroscopic and endoscopic guidance, with prompt drainage of dark bile and contrast. No biopsy forceps were used. The pancreatic duct was not entered.
+
+Specimens: Biliary brushings to the Tallowmere cytopathology laboratory (fictional) for interpretation.
+Complications: None.
+
+Impression: Malignant-appearing distal biliary stricture; biliary sphincterotomy, brush cytology and placement of a fully covered metal biliary stent.
+Plan: Monitor liver tests; oncology and hepatobiliary surgery review at tumor board next week.
+
+L. Okwuosa-Hale, MD (fictional)

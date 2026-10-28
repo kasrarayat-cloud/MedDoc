@@ -1,0 +1,29 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Copperfield Ambulatory Endoscopy (fictional)
+
+COLONOSCOPY - INCOMPLETE EXAMINATION
+
+Patient: Winifred Adesanya-Holm (fictional)     MRN: SYN-102158
+Date of service: 2026-10-08
+Place of service: Ambulatory surgery center
+Physician: Lorcan Mabuza-Fitzroy, MD (fictional)
+Anesthesia: Propofol by a certified registered nurse anesthetist from Copperfield Anesthesia Associates (fictional); separately billed.
+
+INDICATION: Surveillance. At colonoscopy on 2020-04-14 a single 5 mm tubular adenoma was removed with a cold snare.
+
+PREPARATION: Split-dose PEG solution. She reports finishing only half of the second dose because of nausea.
+
+PROCEDURE
+The colonoscope was inserted into the rectum and advanced with abundant irrigation. Solid and semi-solid stool coated the left colon (BBPS left segment 1) and the transverse colon (BBPS 1). Large-volume washing and suctioning did not clear the lumen. At the hepatic flexure the stool became packed and solid, and the examination was ended there: the cecum was not reached, and the ascending colon and cecum were not seen. Within the segments that could be inspected, no masses or large polyps were seen, although small lesions could easily have been hidden. No biopsies were taken.
+
+COMPLICATIONS: None.
+
+IMPRESSION
+Incomplete colonoscopy, terminated at the hepatic flexure because of inadequate bowel preparation (BBPS 0-1-1).
+
+PLAN
+- Repeat colonoscopy with an extended two-day preparation is scheduled for 2026-11-12.
+- Antiemetic before the preparation; low-residue diet for three days beforehand.
+
+L. Mabuza-Fitzroy, MD (fictional)

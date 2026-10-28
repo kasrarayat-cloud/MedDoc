@@ -1,0 +1,26 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+MERIDIAN COMMUNITY HOSPITAL (fictional) - GI LAB
+OPERATIVE NOTE
+
+Date: 14-Oct-2026
+Place of service: Hospital outpatient department
+Patient: Agnieszka Fairweather (fictional), 71 years     MRN SYN-100937
+Operator: Desmond Achebe-Lund, MD (fictional)
+Sedation: Monitored anesthesia care - see the separate record of the anesthesia team.
+
+Pre-operative diagnosis: Recurrent dysphagia from a peptic stricture of the distal esophagus.
+Post-operative diagnosis: Same.
+
+History: She has had two prior bougie dilations at this hospital, on 2023-03-07 (to 15 mm) and 2024-01-19 (to 16 mm). The stricture was biopsied on 2025-05-02 and showed only reactive squamous changes. She has been on pantoprazole twice daily but has missed doses.
+
+Procedure in detail: With the patient in the left lateral position the gastroscope was inserted transorally. A smooth, short, concentric stricture was encountered at 36 cm with an estimated lumen of 11 mm; the endoscope crossed it with mild resistance. Stomach and duodenum to the second portion were normal. Under fluoroscopic monitoring a Savary guidewire was positioned with its spring tip in the gastric antrum, and the endoscope was withdrawn while the wire was held in place. Savary-Gilliard dilators of 14 mm, 15 mm and 16 mm were then advanced over the wire in sequence; moderate resistance was felt with the 15 and 16 mm dilators and a small amount of blood was seen on the last one. The wire and dilator were removed together. On a second look the stricture showed a short linear mucosal split with no deep tear and no perforation. Biopsies were not taken today.
+
+Fluoroscopy time: 0.9 minutes, operated by the GI lab team.
+Estimated blood loss: Less than 5 mL.
+Condition: Stable to recovery.
+
+Assessment: Peptic stricture of the distal esophagus dilated to 16 mm over a guidewire.
+Plan: Pantoprazole 40 mg twice daily without missed doses; clear liquids today, then soft foods. No routine repeat dilation is being scheduled; she will call if swallowing worsens.
+
+D. Achebe-Lund, MD (fictional)

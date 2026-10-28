@@ -79,6 +79,43 @@ def state_label(state):
     return STATE_LABELS.get(state, 'Unknown state')
 
 
+# provider_failed when the run it reads is a response refused whole (_refused_run): read and not used, so it is neither a
+# failed request nor one that proposed nothing (skeptic of refutation 7c8 reports-5).
+REFUSED_LABEL = 'Provider response not used'
+# no_codes (nothing left to decide) beside a second review made for the answer the assessment reads that the assessment
+# did not read: that review's outcome, from its row, never "No CPT codes proposed" of a response nobody read (refutation
+# p2, reports2:2) - as the panel and the readiness blocker state it.
+SECOND_REVIEW_LABELS = {ProviderRun.UNKNOWN: 'Second review outcome unknown', ProviderRun.FAILED: 'Second review failed',
+                        ProviderRun.NOT_SENT: 'Second review not sent', ProviderRun.CANCELLED: 'Second review not sent',
+                        ProviderRun.SUCCEEDED: 'Second review not read yet'}
+# no_codes where the provider's codes are all listed and none can be decided - excluded with no reinstatement (outside
+# CPT-only results, no exact source evidence) or offered only as alternatives: codes were proposed, so never "No CPT
+# codes proposed" (refutation p2, reports2:3), worded as the panel words it.
+NOT_REVIEWABLE_LABEL = 'No code selected for approval'
+
+
+def encounter_state_label(encounter):
+    """The label of the encounter's stored state, worded from the rows: a provider_failed state reading a response refused
+    whole says that the response was not used; a no_codes state says how the second review made for the answer the
+    assessment reads ended when the assessment did not read it, else that no code is selected for approval when the
+    provider's codes are listed and none can be decided."""
+    if encounter.state == 'provider_failed':
+        run = state_run(encounter)
+        if run is not None and run.state == ProviderRun.SUCCEEDED:
+            return REFUSED_LABEL
+    if encounter.state == 'no_codes':
+        assessment = live_assessment(encounter)
+        if assessment is not None:
+            # one query for the many rows with no second review (the documents list labels every row)
+            second = (_unread_second_review(assessment) if encounter.provider_runs.filter(
+                purpose=ProviderRun.SECOND_REVIEW).exists() else None)
+            if second is not None:
+                return SECOND_REVIEW_LABELS.get(second.state, 'Second review not finished')
+            if assessment.proposals.exists():  # nothing is reviewable in a no_codes state (_review_state)
+                return NOT_REVIEWABLE_LABEL
+    return state_label(encounter.state)
+
+
 def status_label(status):
     return STATUS_LABELS.get(status, 'Unknown status')
 
@@ -318,12 +355,18 @@ def _check_result(result, text):
         if item.bucket == SELECTED and not exact_evidence(to_jsonable(item.evidence), text):
             raise ValueError(f'Proposal {item.key} ({item.code}) has no exact evidence in this revision; '
                              'it cannot be a selected proposal.')
+        source = (item.support or {}).get('source') or []
+        if any(not (type(sp.get('start')) is int and type(sp.get('end')) is int and 0 <= sp['start'] < sp['end'] <= len(text)
+                    and text[sp['start']:sp['end']] == sp.get('text')) for sp in source):
+            raise ValueError(f'Proposal {item.key} ({item.code}) cites a source passage that does not match this '
+                             'revision; it was not recorded.')
 
 
-def _same_assessment(previous, digest, revision, context, routing_run, provider_run):
+def _same_assessment(previous, digest, revision, context, routing_run, provider_run, second_run=None):
     return (previous is not None and previous.sha256 == digest and previous.revision_id == revision.pk
             and previous.context_id == context.pk and previous.routing_id == routing_run.pk
-            and previous.provider_run_id == (provider_run.pk if provider_run else None))
+            and previous.provider_run_id == (provider_run.pk if provider_run else None)
+            and previous.second_run_id == (second_run.pk if second_run else None))
 
 
 def _clarification(encounter, assessment, spec, proposal):
@@ -505,7 +548,7 @@ def _carry_decisions(previous, assessment, proposals, revision, context):
     return carried, len(ordered) - carried
 
 
-def persist_assessment(*, encounter, revision, context, routing_run, provider_run, result):
+def persist_assessment(*, encounter, revision, context, routing_run, provider_run, result, second_run=None):
     """Record an AssessmentResult as the encounter's current assessment, in one transaction.
 
     Creates the immutable Assessment and Proposal rows and the Clarification
@@ -520,16 +563,17 @@ def persist_assessment(*, encounter, revision, context, routing_run, provider_ru
         revision = SourceRevision.objects.get(pk=revision.pk)
         _check_inputs(locked, revision, context, routing_run, provider_run)
         previous = locked.current_assessment
-        if _same_assessment(previous, digest, revision, context, routing_run, provider_run):
+        if _same_assessment(previous, digest, revision, context, routing_run, provider_run, second_run):
             encounter.state = refresh_state(locked)
             return previous
         _check_result(result, revision.text)
         assessment = Assessment.objects.create(
             encounter=locked, revision=revision, context=context, routing=routing_run, provider_run=provider_run,
-            profiles_version=result.profiles_version, engine_version=result.engine_version,
+            second_run=second_run, profiles_version=result.profiles_version, engine_version=result.engine_version,
             reference_sources=to_jsonable(result.reference_sources),
             encounter_checks=to_jsonable(result.encounter_checks), unsupported=to_jsonable(result.unsupported),
-            summary=to_jsonable(result.summary), sha256=digest)
+            summary=to_jsonable(result.summary), services=to_jsonable(result.services),
+            completeness=to_jsonable(result.completeness), sha256=digest)
         # One INSERT for every proposal (round 6 bounded:5): a row per query held the assess stage in the worker.
         rows = Proposal.objects.bulk_create([
             Proposal(
@@ -539,7 +583,7 @@ def persist_assessment(*, encounter, revision, context, routing_run, provider_ru
                 provider_display=item.provider_display, evidence=to_jsonable(item.evidence),
                 rationale=item.rationale, checks=to_jsonable(item.checks),
                 modifier_considerations=list(item.modifier_considerations), units=item.units,
-                fingerprint=item.fingerprint, position=position)
+                fingerprint=item.fingerprint, position=position, support=to_jsonable(item.support))
             for position, item in enumerate(result.proposals)])
         proposals = {row.key: row for row in rows}
         raised = _create_clarifications(locked, assessment, result, proposals)
@@ -592,6 +636,9 @@ def _assessment_blockers(encounter, assessment):
         blockers.append('The provider was not run')
     elif run.state in UNSETTLED_RUN_STATES:
         blockers.append('The provider outcome is unknown')
+    elif run.state == ProviderRun.NOT_SENT and (run.scope or {}).get('held') == ProviderRun.HELD_MEMBER_DATE_CONFLICT:
+        # interpretation 19: held on purpose, never a failure (refutation r1, context lens)
+        blockers.append('Nothing was sent: the service date entered as encounter metadata conflicts with the document')
     elif run.state != ProviderRun.SUCCEEDED:
         blockers.append('The provider request failed')
     open_clarifications = list(assessment.clarifications.filter(state=Clarification.OPEN))
@@ -625,11 +672,162 @@ def _assessment_blockers(encounter, assessment):
             blockers.append(f'{proposal.code} has no decision')
     if run is not None and run.state == ProviderRun.SUCCEEDED and reviewable == 0:
         # A succeeded run's provider check fails only when its response was refused whole, unread: the provider's
-        # codes were never read, so nothing may say that none was proposed (round 7 bypass:1).
-        refused = any(check.get('id') == 'provider.status' and check.get('status') == 'fail'
-                      for check in assessment.encounter_checks)
-        blockers.append('The provider response was not used' if refused else 'No CPT code was proposed')
+        # codes were never read, so nothing may say that none was proposed (round 7 bypass:1) - the merged second
+        # review's as the primary's (skeptic of refutation 7c8 reports-5).
+        refused = _refused_run(assessment) is not None
+        # Nor while the second review made for this answer was not read: none was proposed in what was read only
+        # (found while refuting the reports-5 repairs: "No CPT code was proposed" beside an unknown or failed one).
+        unread = '' if refused else _second_review_unread(assessment)
+        if refused:
+            blockers.append('The provider response was not used')
+        else:
+            # Codes the provider proposed that nobody can decide - excluded with no reinstatement, or offered only as
+            # alternatives (nothing here is reviewable) - were proposed: said as the panel says it, never "No CPT code
+            # was proposed" beside the stored response and its own provider check (refutation p2, reports2:3).
+            what = (f'No code is selected for approval: the {"response that was read" if unread else "provider"} '
+                    'proposed only codes that were excluded or offered as alternatives'
+                    if assessment.proposals.exists() else
+                    f'No CPT code was proposed{" in the response that was read" if unread else ""}')
+            blockers.append(f'{what}; the second review {unread}' if unread else what)
     return blockers
+
+
+SECOND_REVIEW_ENDED = {ProviderRun.UNKNOWN: 'has an unknown outcome', ProviderRun.FAILED: 'failed',
+                       ProviderRun.NOT_SENT: 'was not sent', ProviderRun.CANCELLED: 'was not sent',
+                       ProviderRun.SUCCEEDED: 'has not been read yet'}
+
+
+def _unread_second_review(assessment):
+    """The second review made for the answer the assessment reads (jobs._second_run_for, whatever its outcome) when the
+    assessment did not read it; None when none was made or the assessment read it."""
+    from .jobs import _second_run_for  # local import: jobs imports this module
+    second = _second_run_for(assessment.revision, assessment.provider_run, any_outcome=True)
+    if second is None or second.pk == assessment.second_run_id:
+        return None
+    return second
+
+
+def _unread_second_reviews(assessment):
+    """Every second review made for the answer the assessment reads (jobs._second_runs_for, whatever its outcome) that
+    the assessment did not read, newest first: behind a newer retry an older one can stand whose outcome is unknown
+    (refutation P2FR, ROLLBACK 0)."""
+    from .jobs import _second_runs_for  # local import: jobs imports this module
+    return [second for second in _second_runs_for(assessment.revision, assessment.provider_run, any_outcome=True)
+            if second.pk != assessment.second_run_id]
+
+
+def _second_review_unread(assessment):
+    """How the second review made for the answer the assessment reads ended when the assessment did not read it; '' when
+    none was made or the assessment read it."""
+    second = _unread_second_review(assessment)
+    return '' if second is None else SECOND_REVIEW_ENDED.get(second.state, 'has not finished')
+
+
+def _refused_run(assessment):
+    """The run whose response the assessment read and refused whole - its own provider check failed on a succeeded
+    run: provider.status for the primary, provider.second_review for the merged second review - or None. (A succeeded
+    run's check fails only for a refusal: provider checks, round 7 bypass:1; engine._second_review_check.)"""
+    failed = {check.get('id') for check in assessment.encounter_checks or [] if check.get('status') == 'fail'}
+    for check_id, run in (('provider.status', assessment.provider_run), ('provider.second_review',
+                                                                        assessment.second_run)):
+        if run is not None and run.state == ProviderRun.SUCCEEDED and check_id in failed:
+            return run
+    return None
+
+
+def _decisions_waiting(assessment):
+    """(waiting, reviewable): the proposals a reviewer decides, and those of them with no decision that stands - counted
+    as readiness counts them (_assessment_blockers)."""
+    current = current_decisions(assessment)
+    waiting = reviewable = 0
+    for proposal in assessment.proposals.all():
+        decision = current.get(proposal.pk)
+        if not _reviewable(proposal, decision):
+            continue
+        reviewable += 1
+        if decision is None or decision.action not in (APPROVE, REJECT, CONFIRM):
+            waiting += 1
+    return waiting, reviewable
+
+
+def _sentence(text):
+    plain = str(text).strip()
+    return plain if not plain or plain.endswith(('.', '!', '?')) else f'{plain}.'
+
+
+def reinstated_codes(assessment, current=None):
+    """(code, family) of the excluded proposals a reviewer reinstated and has not rejected (their current decision is
+    the reinstatement, or an approval that rests on it): decided like selected codes, so counted as selected ones
+    wherever a documented service's code is stated (reviewed_completeness)."""
+    current = current_decisions(assessment) if current is None else current
+    return [(proposal.code, proposal.family) for proposal in assessment.proposals.filter(bucket=EXCLUDED)
+            if current.get(proposal.pk) is not None and current[proposal.pk].action in (REINSTATE, APPROVE)]
+
+
+def reviewed_completeness(assessment, current=None):
+    """The documented-service reconciliation the assessment recorded, as the review leaves it: with the codes a reviewer
+    reinstated counted as selected ones (engine.reviewed_completeness; refutation P2FR, EUS-SECOND). The assessment's
+    own record when none is reinstated. The reports, the encounter view, coding completeness and the bounded second
+    review's items all read this one view."""
+    completeness = assessment.completeness or {}
+    # an assessment not persisted (a reading the engine just made) carries no reviewer's decision
+    reinstated = reinstated_codes(assessment, current) if completeness and getattr(assessment, 'pk', None) else []
+    if not reinstated:
+        return completeness
+    from .validation import engine  # local import: the engine is only needed when a code was reinstated
+    proposals = list(assessment.proposals.exclude(bucket=ALTERNATIVE))
+    return engine.reviewed_completeness(
+        assessment.services, completeness, [(p.code, p.family) for p in proposals if p.bucket == SELECTED], reinstated,
+        [(p.support or {}).get('service') for p in proposals if (p.support or {}).get('service')])
+
+
+def coding_completeness(encounter):
+    """Whether the ENCOUNTER's coding is complete - kept apart from whether one proposal is ready for review.
+
+    'incomplete' while a documented service has no supported proposal, a conflict in the record is unanswered, or a
+    question is open; 'pending_review' when every documented service has a proposal and the reviewed report cannot be
+    produced yet - its statement counts the decisions missing, or, when every proposal is decided, names what readiness
+    still waits for (refutation 7c8, reports-3); 'reviewed' when the reviewed report could be produced. Never 'verified':
+    code-set membership and NCCI edits are not connected, and the documented-service reading can miss wording it does
+    not recognise."""
+    assessment = live_assessment(encounter)
+    if assessment is None:
+        return {'state': 'not_established', 'statement': 'The current revision has not been assessed yet.',
+                'reasons': []}
+    base = dict(reviewed_completeness(assessment) or {})  # a reinstated code counts (refutation P2FR, EUS-SECOND)
+    if not base:
+        return {'state': 'not_established', 'reasons': [],
+                'statement': 'This assessment was made before the documented-service reconciliation existed, so its '
+                             'completeness is not established.'}
+    reasons = [r for r in base.get('reasons', []) if 'open question' not in r]
+    open_questions = assessment.clarifications.filter(state=Clarification.OPEN).count()
+    if open_questions:
+        reasons.append(f'{open_questions} open question{"s" if open_questions != 1 else ""}')
+    standing = ('Code-set membership and NCCI edits are not verified (no licensed source is connected), and the '
+                'documented-service reading can miss wording it does not recognise.')
+    if reasons:
+        return {'state': 'incomplete', 'reasons': reasons,
+                'statement': 'Coding for this encounter is incomplete: ' + '; '.join(reasons) + '. Supported proposals '
+                             'stay available for review. ' + standing}
+    ready = readiness(encounter)
+    if ready['reviewed']:
+        return {'state': 'reviewed', 'reasons': [],
+                'statement': 'Every documented service has a proposal with a reviewer\'s decision. This is reviewed, '
+                             'not verified, coding. ' + standing}
+    # A decision is said to be missing only of the proposals that have none: a decided set waiting on a context change,
+    # processing or a gate is told what it waits for (refutation 7c8, reports-3: "each still needs a reviewer's
+    # decision" beside current approvals that carried unchanged once the re-assessment ran).
+    waiting, reviewable = _decisions_waiting(assessment)
+    if waiting:
+        missing = ('each still needs a reviewer\'s decision' if waiting == reviewable else
+                   f'{waiting} of {reviewable} still need{"s" if waiting == 1 else ""} a reviewer\'s decision')
+        return {'state': 'pending_review', 'reasons': [],
+                'statement': f'Every documented service has a proposal; {missing}. ' + standing}
+    lead = ('Every documented service has a proposal with a reviewer\'s decision' if reviewable
+            else 'No proposal waits for a reviewer\'s decision')
+    return {'state': 'pending_review', 'reasons': [],
+            'statement': f'{lead}, but the review is not complete. '
+                         + ''.join(f'{_sentence(blocker)} ' for blocker in ready['blockers']) + standing}
 
 
 def readiness(encounter):
@@ -654,19 +852,33 @@ def readiness(encounter):
 
 
 def _failed_stage_state(encounter, revision, job):
+    """(state, run): the state a failed or unknown stage leaves, with the stage's own request when that state is
+    provider_failed (else None); (None, None) when the assessment's own state stands."""
     if job.kind == Job.EXTRACT:
-        return 'extraction_failed'
-    if job.kind != Job.PREDICT:
-        return 'processing_failed'
+        return 'extraction_failed', None
+    if job.kind not in (Job.PREDICT, Job.REVIEW2):
+        return 'processing_failed', None
     if job.state == Job.UNKNOWN:
-        return 'provider_unknown'
-    run = (encounter.provider_runs.filter(revision=revision, created_at__gte=job.created_at)
+        return 'provider_unknown', None
+    purpose = ProviderRun.PRIMARY if job.kind == Job.PREDICT else ProviderRun.SECOND_REVIEW
+    run = (encounter.provider_runs.filter(revision=revision, created_at__gte=job.created_at, purpose=purpose)
            .order_by('-created_at', '-pk').first())
     if run is None:
-        return 'provider_not_run'
+        # A second review that failed before recording its run sent nothing and left the assessment as it was: the
+        # assessment's own state stands, and the second-review card says why it did not complete (ec5 re-check: it read
+        # "Provider not run" beside the primary request's proposals). None: derive the state from the assessment.
+        return (None if job.kind == Job.REVIEW2 else 'provider_not_run'), None
     if run.state in UNSETTLED_RUN_STATES:
-        return 'provider_unknown'
-    return 'processing_failed' if run.state == ProviderRun.SUCCEEDED else 'provider_failed'
+        return 'provider_unknown', None
+    if job.kind == Job.REVIEW2 and run.state in (ProviderRun.NOT_SENT, ProviderRun.CANCELLED):
+        # Nor did one whose request was never sent - stopped before sending, or settled as not sent when the stage was
+        # closed: no request failed, so never provider_failed ("The provider request failed" beside a primary answer
+        # that succeeded, refutation P2FR, ROLLBACK 1: an undo then left that state to 057a7d39, which labels it by its
+        # name). None: the assessment's own state, worded from that run ('Second review not sent').
+        return None, None
+    if run.state == ProviderRun.SUCCEEDED:
+        return 'processing_failed', None
+    return 'provider_failed', run
 
 
 def _review_state(encounter, assessment):
@@ -720,29 +932,63 @@ def can_resume(encounter):
 
 
 def _derive_state(encounter):
+    return _state_and_run(encounter)[0]
+
+
+def _state_and_run(encounter):
+    """(state, run): the derived state and, for provider_failed, the provider run that state reads - the failed stage's
+    own request, else the run the live assessment read - so a screen explains the failure with that run, never with one
+    picked by recency (ec5 skeptic, new:provider-failed-card-older-run: a request stopped or swept before sending is
+    newer than the run in use). None for every other state."""
     revision = encounter.current_revision
     if revision is None or _active_jobs(encounter):
-        return 'processing'
+        return 'processing', None
     if revision.extraction_status == SourceRevision.FAILED:
-        return 'extraction_failed'
+        return 'extraction_failed', None
     latest = encounter.jobs.filter(revision=revision).order_by('-created_at', '-pk').first()
     if latest is not None and latest.state == Job.CANCELLED:
-        return 'stopped'
+        return 'stopped', None
     if revision.extraction_status == SourceRevision.PENDING:
-        return 'processing' if latest is None else 'extraction_failed'
+        return ('processing' if latest is None else 'extraction_failed'), None
     if latest is not None and latest.state in (Job.FAILED, Job.UNKNOWN):
-        return _failed_stage_state(encounter, revision, latest)
+        failed, run = _failed_stage_state(encounter, revision, latest)
+        if failed is not None:
+            return failed, run
     assessment = live_assessment(encounter)
     if assessment is None or assessment.context_id != encounter.current_context_id:
-        return 'provider_unknown' if _unreconciled_unknown(encounter) else 'processing'
+        return ('provider_unknown' if _unreconciled_unknown(encounter) else 'processing'), None
     run = assessment.provider_run
     if run is None:
-        return 'provider_not_run'
-    if run.state in UNSETTLED_RUN_STATES:
-        return 'provider_unknown'
+        return 'provider_not_run', None
+    if run.state in UNSETTLED_RUN_STATES or _unreconciled_unknown(encounter):
+        # An outcome still unknown - the second review's included - blocks every further send until a member reconciles
+        # it, so the encounter waits on that, whatever the run in use says (refutation r1, sends-5: a second review the
+        # provider never answered left "Ready for review", then "Reviewed" and off the review queue, while the same
+        # runs left by a worker that died mid-send read "Provider outcome unknown").
+        return 'provider_unknown', None
+    if run.state == ProviderRun.NOT_SENT and (run.scope or {}).get('held') == ProviderRun.HELD_MEMBER_DATE_CONFLICT:
+        # nothing was sent on purpose: the date question is open, and the encounter waits on it, not on the provider
+        return _review_state(encounter, assessment), None
     if run.state != ProviderRun.SUCCEEDED:
-        return 'provider_failed'
-    return _review_state(encounter, assessment)
+        return 'provider_failed', run
+    state = _review_state(encounter, assessment)
+    refused = _refused_run(assessment) if state == 'no_codes' else None
+    if refused is not None:
+        # A response refused whole - the primary's or the second review's - was never read, so 'no_codes' ("No CPT codes
+        # proposed") would report it as one that proposed nothing (round 7 bypass:1; skeptic of refutation 7c8
+        # reports-5): the provider gave no usable result, and the state reads that run. Only in place of 'no_codes': a
+        # question or a proposal to decide still holds the encounter for the reviewer.
+        return 'provider_failed', refused
+    return state, None
+
+
+def state_run(encounter):
+    """The provider run the encounter's provider_failed state reads, or None: also when the stored state (the one the
+    API serves) is not provider_failed, so the run named always explains the state shown."""
+    if encounter.state != 'provider_failed':
+        return None
+    state, run = _state_and_run(encounter)
+    return run if state == 'provider_failed' else None
 
 
 def refresh_state(encounter):

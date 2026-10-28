@@ -20,13 +20,14 @@ from django.db import transaction
 from django.utils import timezone
 
 from . import audit, review
+from .gi.context import is_member_conflict
 from .gi.profiles import PROFILES
 from .models import Clarification, Decision, Encounter, Membership, Proposal, ReportArtifact
 from .types import CONTEXT_FACTS, sha256_json
 
 DRAFT, REVIEWED = ReportArtifact.DRAFT, ReportArtifact.REVIEWED
 KINDS = (DRAFT, REVIEWED)
-FORMAT_VERSION = 'cpt-studio-report@3'
+FORMAT_VERSION = 'cpt-studio-report@4'
 HEADLINES = {DRAFT: 'CPT STUDIO CODING REPORT — DRAFT — NOT REVIEWED', REVIEWED: 'CPT STUDIO CODING REPORT — REVIEWED'}
 SYNTHETIC_LINE = 'SYNTHETIC DATA — NOT FOR BILLING OR CLAIMS'
 SYNTHETIC_CELL = 'SYNTHETIC — NOT FOR BILLING'
@@ -56,7 +57,10 @@ LISTS = ('approved', 'rejected', 'undecided', 'excluded', 'alternative')
 CSV_COLUMNS = ('report_kind', 'encounter_id', 'revision_number', 'source_sha256', 'text_sha256', 'assessment_id',
                'proposal_id', 'item_list', 'code', 'code_kind', 'family', 'family_label', 'status', 'decision', 'reviewer',
                'reviewer_kind', 'decided_at', 'decision_carried_from', 'decision_carried_at', 'units', 'evidence',
-               'checks', 'not_verified', 'modifier_considerations', 'exclusion_reason', 'synthetic')
+               'checks', 'not_verified', 'modifier_considerations', 'exclusion_reason', 'synthetic',
+               'evidence_support', 'source_passages', 'documented_service', 'proposal_origin')
+# Rows that are not proposals: what the documented-service reconciliation found (format @4).
+ENCOUNTER_LISTS = ('coding_completeness', 'unresolved_service', 'conflict')
 # A line break inside stored text always continues at least this deep: deeper than any structural line of
 # the TXT (headings at column 0, list lines at 2, item detail at 5), so stored text can never forge one.
 CONTINUATION = '       '
@@ -66,6 +70,12 @@ REFERENCE_KEYS = ('key', 'kind', 'publisher', 'title', 'release', 'url', 'sha256
                   'effective_end', 'applies', 'connected', 'note', 'license_note', 'scope_note')
 ORIGIN_WORDING = {'document': 'documented', 'user': 'member-supplied encounter metadata, not a clinical fact',
                   'missing': 'not documented', 'conflict': 'conflicting documentation'}
+# A member's value unlike the document's single one (context.is_member_conflict) is that conflict, never conflicting
+# documentation (refutation r1, context-5).
+MEMBER_CONFLICT_WORDING = 'member-entered encounter metadata differs from the document'
+# Informational codes: provider candidates and alternatives, and codes the bounded second review selected that account
+# for no unresolved service - none of them selectable, not all of them "never selected" (refutation r1, report lens).
+ALTERNATIVES_TITLE = 'ALTERNATIVES — INFORMATIONAL, NEVER SELECTABLE'
 
 
 class ReportNotReady(ValueError):
@@ -187,7 +197,106 @@ def _item(proposal, decision, kind, text):
         'checks': [_check(c) for c in proposal.checks or []],
         'modifier_considerations': [str(m) for m in proposal.modifier_considerations or []],
         'fingerprint': proposal.fingerprint, 'decision': _decision(decision),
+        'support': _support(proposal.support or {}, text),
     }
+
+
+def _support(support, text):
+    """What the proposal was matched to in the documented services, and how its passages relate to the coded act;
+    source passages are re-checked against the revision text, never assumed."""
+    if not support:
+        return {}
+    source = [{'start': s['start'], 'end': s['end'], 'text': s['text']} for s in support.get('source') or []
+              if isinstance(s.get('start'), int) and isinstance(s.get('end'), int)
+              and 0 <= s['start'] < s['end'] <= len(text) and text[s['start']:s['end']] == s.get('text')]
+    return {'origin': support.get('origin', 'primary'), 'service': support.get('service', ''),
+            'state': support.get('state', ''), 'status': support.get('status', ''),
+            'detail': support.get('detail_support', ''), 'match': support.get('detail', ''),
+            'unrelated': list(support.get('unrelated') or []), 'source': source}
+
+
+def _exact_spans(spans, text):
+    """The passages that match the revision text at their offsets, as everywhere in a report: never assumed."""
+    return [{'start': s['start'], 'end': s['end'], 'text': s['text']} for s in spans or () if _matches(s, text)]
+
+
+def _unresolved_item(item, text):
+    spans = item.get('evidence') or []
+    exact = _exact_spans(spans, text)
+    return {'service': item.get('service', ''), 'family': item.get('family', ''), 'label': item.get('label', ''),
+            'reason': item.get('reason', ''), 'evidence': exact, 'unmatched_evidence': len(spans) - len(exact)}
+
+
+def _conflict_side(side, text):
+    spans = side.get('evidence') or []
+    exact = _exact_spans(spans, text)
+    return {'role': side.get('role', ''), 'status': side.get('status', ''), 'text': exact[0]['text'] if exact else '',
+            'exact': bool(exact)}
+
+
+def _services(assessment, text, rejected=frozenset(), completeness=None):
+    """The documented services as the assessment recorded them (format @4), for the report. Their passages are
+    re-checked against the revision text: an inventory that failed validation is still stored (it decides nothing).
+    ``rejected``: the codes the reviewer rejected, which account for nothing in the review - printed as rejected, never
+    as accounting for a service (refutation r1, report-6), nor as including another service's examination (refutation
+    P2FR, EUS-SECOND: "included in S2: that service's code includes this examination" beside the rejected 43242, the
+    only code of S2 that includes it). ``completeness``: the reconciliation as the review leaves it
+    (review.reviewed_completeness: a code the reviewer reinstated counts as a selected one), else as recorded."""
+    inventory = assessment.services or {}
+    completeness = (assessment.completeness or {}) if completeness is None else completeness
+    # the selected codes of the service each included service is read as part of that include its examination, as the
+    # assessment recorded them (refutation P2RA, EUS lens 1); None where nothing was recorded (an assessment made
+    # before the record existed, or a reading that decided nothing)
+    included_by = completeness.get('included_by') if isinstance(completeness.get('included_by'), dict) else {}
+    out = []
+    for service in inventory.get('services') or []:
+        acts = [a for a in service.get('acts') or [] if a.get('status') == 'performed'
+                and a.get('role') in ('physician', 'unknown')]
+        codes = list((completeness.get('covered') or {}).get(service.get('id'), []))
+        including = included_by.get(service.get('id'))
+        including = [code for code in including if code not in rejected] if isinstance(including, list) else None
+        out.append({'id': service.get('id', ''), 'family': service.get('family', ''),
+                    'family_label': _family_label(service.get('family', '')), 'status': service.get('status', ''),
+                    'completion': service.get('completion', ''), 'extent': service.get('extent', ''),
+                    'intent': service.get('intent', ''),
+                    'acts': sorted({a.get('kind', '').replace('_', ' ') + (f' ({", ".join(a.get("anatomy") or [])})'
+                                                                            if a.get('anatomy') else '')
+                                    for a in acts}),
+                    'covered_by': [code for code in codes if code not in rejected],
+                    'rejected_by_reviewer': [code for code in codes if code in rejected],
+                    'included_in': service.get('included_in', ''),
+                    'included_by': including})
+    # the codes a reviewer reinstated that the reconciliation below counts (named only when there are some)
+    reinstated = [code for code in completeness.get('reinstated') or [] if isinstance(code, str)]
+    return {
+        **({'reinstated': reinstated} if reinstated else {}),
+        'services': out,
+        'unresolved': [_unresolved_item(u, text) for u in completeness.get('unresolved_items') or []],
+        'not_listed': [n.get('label', '') for n in completeness.get('not_listed') or [] if n.get('label')],
+        'bundled': [{'label': b.get('label', ''), 'why': b.get('why', '')} for b in completeness.get('bundled') or []],
+        'conflicts': [{'service': c.get('service', ''), 'subject': c.get('subject', ''),
+                       'sides': [_conflict_side(side, text) for side in c.get('sides') or []]}
+                      for c in inventory.get('conflicts') or []],
+        'attributions': [a.get('role', '') for a in inventory.get('attributions') or []],
+        'problems': list(inventory.get('problems') or []) + list(completeness.get('inventory_problems') or []),
+        'catalogue_version': completeness.get('catalogue_version', ''),
+        'inventory_version': inventory.get('version', ''),
+        'reconciliation': _reconciliation(inventory, completeness),
+    }
+
+
+def _reconciliation(inventory, completeness):
+    """What the UNRESOLVED and CONFLICTS sections can state. 'missing': no reconciliation was recorded (an assessment
+    made before it existed); 'inconsistent': the reading failed validation and decided nothing (ARCHITECTURE 5.9), so
+    nothing was reconciled; 'partial': the reading recorded a problem (a cap, a sentence read in part), so it speaks
+    only for the services it read; 'reconciled' otherwise. Only 'reconciled' may say 'none'."""
+    if not completeness:
+        return 'missing'
+    if completeness.get('inventory_problems'):
+        return 'inconsistent'
+    if inventory.get('problems'):
+        return 'partial'
+    return 'reconciled'
 
 
 def _clarification(question):
@@ -231,7 +340,9 @@ def _provider_runs(encounter, assessment):
         'request_sha256': run.request_sha256, 'response_sha256': run.response_sha256,
         'reused_from': str(run.reused_from_id) if run.reused_from_id else None,
         'reconciled': run.reconciled_at is not None, 'created_at': _ts(run.created_at),
-        'used_by_assessment': run.pk == assessment.provider_run_id,
+        'used_by_assessment': run.pk in (assessment.provider_run_id, assessment.second_run_id),
+        'purpose': run.purpose,
+        'held': (run.scope or {}).get('held', ''),
     } for run in encounter.provider_runs.select_related('revision').order_by('created_at', 'pk')]
 
 
@@ -292,6 +403,11 @@ def snapshot(encounter, kind):
                        'routing_sha256': assessment.routing.sha256,
                        'encounter_checks': [_check(c) for c in assessment.encounter_checks or []]},
         'readiness': ready,
+        'coding': review.coding_completeness(encounter),
+        'documented': _services(assessment, revision.text,
+                                {item['code'] for item in items if item['list'] == 'rejected'},
+                                review.reviewed_completeness(assessment, current)),
+        'second_review': str(assessment.second_run_id) if assessment.second_run_id else None,
         'proposals': items,
         'clarifications': [_clarification(q) for q in questions],
         'not_verified': _not_verified(items, assessment),
@@ -369,6 +485,14 @@ def _item_block(number, item, kind):
     if item['unmatched_evidence']:
         lines.append(f'{pad}  ({item["unmatched_evidence"]} cited passage(s) did not match the revision text '
                      'exactly and are not shown)')
+    support = item.get('support') or {}
+    if support.get('origin') == 'second_review':
+        lines.append(f'{pad}Origin: selected by the provider in the bounded second review of an unresolved service')
+    if support.get('status'):
+        lines.append(f'{pad}Evidence support: {support["status"]} — {_indent(support.get("detail", ""), pad + "  ")}')
+        for span in support.get('source') or []:
+            lines.append(f'{pad}  + source passage selected by CPT Studio: '
+                         f'{_indent(_evidence_line(span), pad + "    ")}')
     if item['rationale']:
         lines.append(f'{pad}Rationale: {_indent(item["rationale"], pad + "  ")}')
     if item['modifier_considerations']:
@@ -409,7 +533,8 @@ def _context_section(snap):
         fact = facts[name]
         origin = fact['origin']
         value = fact['value'] if fact['value'] and origin in ('document', 'user') else None
-        wording = ORIGIN_WORDING.get(origin, f'origin {origin}')
+        wording = (MEMBER_CONFLICT_WORDING if is_member_conflict(fact)
+                   else ORIGIN_WORDING.get(origin, f'origin {origin}'))
         line = f'  {_human(name).capitalize()}: ' + (f'{_human(value)} ({wording})' if value else wording)
         if fact['note']:
             line += f' — {fact["note"]}'
@@ -457,7 +582,12 @@ def _excluded_section(snap):
 
 
 def _alternatives_section(snap):
-    lines = [f'{_short_line(item)} — provider alternative, never selectable'
+    """Every informational code, never selectable. A code the bounded second review listed says so: one it SELECTED
+    and CPT Studio did not add is worded as selected (its stored reason), never as a candidate the provider did not
+    select (refutation r1, report lens)."""
+    lines = [f'{_short_line(item)} — '
+             + ('second-review alternative' if (item.get('support') or {}).get('origin') == 'second_review'
+                else 'provider alternative') + ', never selectable'
              + (f': {item["exclusion_reason"]}' if item['exclusion_reason'] else '')
              for item in snap['proposals'] if item['list'] == 'alternative']
     return lines or ['  None.']
@@ -473,6 +603,14 @@ def _checks_section(snap):
     if encounter_checks:
         lines.append('  Encounter')
         lines += [_check_line(check) for check in encounter_checks]
+        reinstated = (snap.get('documented') or {}).get('reinstated')
+        if reinstated and any(str(check.get('id', '')).startswith('services.') for check in encounter_checks):
+            # the checks are the assessment's: they predate a reinstatement the sections above count (refutation P2FR,
+            # EUS-SECOND: "documented as performed with no selected proposal" beside the reinstated, approved 43242)
+            lines.append(f'    The documented-service checks were made when the assessment ran, before the reviewer '
+                         f'reinstated {", ".join(reinstated)}, and do not count '
+                         + ('it' if len(reinstated) == 1 else 'them')
+                         + '; DOCUMENTED SERVICES, UNRESOLVED and CODING COMPLETENESS do.')
     return lines or ['  No checks were recorded.']
 
 
@@ -509,19 +647,37 @@ def _not_verified_section(snap):
 
 def _provider_section(snap):
     lines = []
-    # A succeeded run whose provider check failed was refused whole: the assessment read none of its codes, so it is
-    # never "used by this assessment" (round 7 bypass:1).
-    refused = any(check['id'] == 'provider.status' and check['status'] == 'fail'
-                  for check in snap['assessment']['encounter_checks'])
+    # A succeeded run whose OWN provider check failed was refused whole: the assessment read none of its codes, so it is
+    # never "used by this assessment" (round 7 bypass:1). The primary run's check is provider.status; the bounded
+    # second review's (ARCHITECTURE 5.11) is provider.second_review, and either may be refused while the other is used.
+    failed = {check['id'] for check in snap['assessment']['encounter_checks'] if check['status'] == 'fail'}
     for run in snap['provider_runs']:
         mode = 'REPLAY (recorded response, not live output)' if run['mode'] == 'replay' else run['mode']
         status = f' · HTTP {run["http_status"]}' if run['http_status'] else ''
+        second = run.get('purpose') == 'second_review'
         used = ''
         if run['used_by_assessment']:
-            used = (' · read by this assessment; its response was not used'
-                    if refused and run['state'] == 'succeeded' else ' · used by this assessment')
-        lines.append(f'  - {run["provider"]} · {mode} · {run["state"]}{status} · revision {run["revision_number"]}'
-                     f' · requested {run["created_at"]}{used}')
+            refused = ('provider.second_review' if second else 'provider.status') in failed
+            # "Used" only of a response this assessment read and did not refuse: a failed request returned none it
+            # could use and an unknown outcome none at all (refutation r1, report-7: both read "used by this
+            # assessment" beside a failed or unknown provider check).
+            if run['state'] == 'unknown':
+                used = ' · read by this assessment; its outcome is unknown, so nothing from it was used'
+            elif run['state'] != 'succeeded':
+                used = ' · read by this assessment; it returned no usable response, so nothing from it was used'
+            else:
+                used = (' · read by this assessment; its response was not used' if refused
+                        else ' · used by this assessment')
+        if run['state'] in ('not_sent', 'cancelled'):
+            # nothing was requested, so nothing was used and no request time is given (refutation r1, report-7: a held
+            # run read "requested ... used"; a run a Stop cancelled before sending read "requested")
+            used = (' · nothing was sent: the service date entered as encounter metadata conflicts with the document'
+                    if run.get('held') == 'member_date_conflict' else ' · nothing was sent')
+            lines.append(f'  - {run["provider"]} · {mode} · {run["state"]} · revision {run["revision_number"]}'
+                         + (' · bounded second review' if second else '') + f' · recorded {run["created_at"]}{used}')
+        else:
+            lines.append(f'  - {run["provider"]} · {mode} · {run["state"]}{status} · revision {run["revision_number"]}'
+                         + (' · bounded second review' if second else '') + f' · requested {run["created_at"]}{used}')
         usage = json.dumps(run['usage'], sort_keys=True, ensure_ascii=False) if run['usage'] else 'none reported'
         lines.append(f'    Usage: {usage}' + (f' ({run["usage_basis"]})' if run['usage_basis'] else ''))
         lines.append(f'    Request sha256: {run["request_sha256"] or "none"} · '
@@ -564,6 +720,132 @@ def _audit_section(snap):
         if entry['invalidated']:
             lines.append(f'      Invalidated {entry["invalidated"]["at"]}: {entry["invalidated"]["reason"]}')
     return lines or ['  No review decisions have been recorded.']
+
+
+def _coding_section(snap):
+    coding = snap.get('coding') or {}
+    return [f'  State: {coding.get("state", "not_established")}', f'  {coding.get("statement", "")}']
+
+
+def _documented_section(snap):
+    documented = snap.get('documented') or {}
+    lines = []
+    for service in documented.get('services') or []:
+        bits = [service['family_label'], service['status']]
+        if service.get('completion') and service['completion'] != 'unknown' and service['status'] in (
+                'performed', 'incomplete'):
+            bits.append(f'{service["completion"]} examination' + (f' ({service["extent"]})' if service.get('extent')
+                                                                  else ''))
+        if service.get('intent'):
+            bits.append(service['intent'])
+        lines.append(f'  - {service["id"]}: ' + ' · '.join(bits))
+        if service.get('acts'):
+            lines.append(f'      acts documented as done: {"; ".join(service["acts"])}')
+        if service.get('covered_by'):
+            lines.append(f'      accounted for by: {", ".join(service["covered_by"])}')
+        if service.get('rejected_by_reviewer'):
+            lines.append(f'      rejected by the reviewer: {", ".join(service["rejected_by_reviewer"])}'
+                         + ('' if service.get('covered_by') else ' — no other selected code accounts for this service'))
+        if service.get('included_in'):
+            # worded from the inclusion rule as the assessment recorded it (included_by: the selected codes of that
+            # service that include this examination), never from whether the service is listed: an EGD with a code of
+            # its own beside an EUS code that includes none was said to be included by it (refutation P2RA, EUS lens 1;
+            # refutation p2, reports2:0)
+            if service.get('included_by'):
+                lines.append(f'      included in {service["included_in"]}: that service\'s code includes this examination')
+            elif service.get('included_by') is not None:
+                lines.append(f'      read as part of {service["included_in"]}, but no selected code of that service '
+                             'includes this examination')
+            else:
+                lines.append(f'      read as part of {service["included_in"]}')
+    for item in documented.get('bundled') or []:
+        lines.append(f'  - not separately reported: {item["label"]} — {item["why"]}')
+    if documented.get('attributions'):
+        lines.append(f'  - attributed to another provider (never coded here): {", ".join(documented["attributions"])}')
+    for problem in documented.get('problems') or []:
+        lines.append(f'  - reading problem: {problem}')
+    if documented.get('inventory_version'):
+        reconciled = ('; not reconciled: the reading was inconsistent and decided nothing'
+                      if documented.get('reconciliation') == 'inconsistent'
+                      else f', reconciled by {documented.get("catalogue_version", "")}')
+        if documented.get('reinstated'):
+            # the reconciliation counts the codes a reviewer reinstated as selected ones (refutation P2FR, EUS-SECOND)
+            reconciled += (' with the code' + ('s' if len(documented['reinstated']) != 1 else '')
+                           + f' the reviewer reinstated ({", ".join(documented["reinstated"])}) counted as selected')
+        lines.append(f'  Read by {documented["inventory_version"]}{reconciled}'
+                     ' (internal profiles; advisory: wording the reader does not recognise is not covered).')
+    return lines or ['  - none recorded (this assessment predates the documented-service reconciliation)']
+
+
+# What UNRESOLVED and CONFLICTS say when no reconciliation stands behind a 'none' (no '[' or '(': the download
+# verifier reads '  - label [reason]' and '  - subject (service)' lines as items).
+NOT_ESTABLISHED = {
+    'missing': ('not established: no documented-service reconciliation is recorded for this assessment, so a '
+                'documented service without a supported proposal is not listed',
+                'not established: no documented-service reading is recorded for this assessment'),
+    'inconsistent': ('not established: the documented-service reading was inconsistent and decided nothing, so no '
+                     'documented service was reconciled with the proposals',
+                     'not established: the documented-service reading was inconsistent and decided nothing'),
+}
+NO_EXACT_PASSAGE = 'no passage matches the revision text exactly'
+# A reading that recorded a problem (a cap, a sentence read in part) speaks only for what it read - which can be part of
+# a service it read, so the closing line never says only whole services can be missing (refutation r1, report-8). It
+# reads "<none|no other> among what was read[, except ...]: <why>".
+READ_IN_PART = ('the documented-service reading reported a problem, listed under DOCUMENTED SERVICES, so a service or '
+                'act in the part it did not read is not listed',
+                'the documented-service reading reported a problem')
+
+
+def _unestablished(documented, which, lines, unlisted=''):
+    """The closing line of UNRESOLVED (which=0) or CONFLICTS (which=1) when no reconciliation stands behind 'none';
+    None when one does. ``unlisted``: UNRESOLVED's clause naming the documented services no proposal accounts for that
+    are not listed, so the line over a reading read in part never says that a service it read without a proposal is
+    absent (skeptic of refutation 7c8 reports-1: "none among what was read" beside an office visit it had read)."""
+    state = documented.get('reconciliation', 'missing')
+    if state in NOT_ESTABLISHED:
+        return f'  - {NOT_ESTABLISHED[state][which]}'
+    if state == 'partial':
+        return f'  - {"no other" if lines else "none"} among what was read{unlisted}: {READ_IN_PART[which]}'
+    return None
+
+
+def _unresolved_section(snap):
+    documented = snap.get('documented') or {}
+    lines = []
+    for item in documented.get('unresolved') or []:
+        lines.append(f'  - {item["label"]} [{item["reason"]}]')
+        lines += [f'      {_indent(_evidence_line(span), "        ")}' for span in item.get('evidence') or []]
+        if item.get('unmatched_evidence'):
+            lines.append(f'      ({item["unmatched_evidence"]} passage(s) did not match the revision text exactly '
+                         'and are not shown)')
+    # A documented service no proposal accounts for that is not listed as unresolved (an office visit beside a same-day
+    # procedure) is named on every closing line, never covered by "every documented act" (refutation 7c8, reports-1)
+    # nor by "none among what was read", and beside listed items too (its skeptic)
+    others = (', except ' + ', '.join(documented['not_listed']) + ', which no proposal accounts for and which is not '
+              'listed as unresolved') if documented.get('not_listed') else ''
+    closing = _unestablished(documented, 0, lines, others)
+    if closing:
+        return lines + [closing]
+    if lines and others:
+        return lines + ['  - no other: every other documented act the catalogue reconciles has a selected proposal or '
+                        f'is not separately reported{others}']
+    return lines or ['  - none: every documented act the catalogue reconciles has a selected proposal or is not '
+                     f'separately reported{others}']
+
+
+def _conflicts_section(snap):
+    documented = snap.get('documented') or {}
+    lines = []
+    for conflict in documented.get('conflicts') or []:
+        lines.append(f'  - {conflict["subject"].replace("_", " ")} ({conflict["service"]}); both sides kept, neither '
+                     'chosen:')
+        for side in conflict['sides']:
+            lines.append(f'      {side["role"]} entry, {side["status"]}: ' + (f'"{_indent(side["text"], "        ")}"'
+                                                                              if side['exact'] else NO_EXACT_PASSAGE))
+    closing = _unestablished(documented, 1, lines)
+    if closing:
+        return lines + [closing]
+    return lines or ['  - none']
 
 
 def _review_status(snap):
@@ -612,8 +894,12 @@ def render_txt(snap) -> bytes:
     if snap['agent_review']:
         lines.append(AGENT_LINE)
     lines += [f'Generated: {snap["generated_at"]} · format {snap["format_version"]}', *_review_status(snap)]
-    sections = [('ENCOUNTER, SOURCE AND REVISION', _source_section(snap)),
-                ('ENCOUNTER CONTEXT', _context_section(snap))]
+    sections = [('CODING COMPLETENESS', _coding_section(snap)),
+                ('ENCOUNTER, SOURCE AND REVISION', _source_section(snap)),
+                ('ENCOUNTER CONTEXT', _context_section(snap)),
+                ('DOCUMENTED SERVICES', _documented_section(snap)),
+                ('UNRESOLVED DOCUMENTED SERVICES — NO SUPPORTED PROPOSAL', _unresolved_section(snap)),
+                ('CONFLICTS IN THE RECORD', _conflicts_section(snap))]
     if kind == REVIEWED:
         sections.append(('APPROVED SELECTIONS', _numbered(snap, 'approved', kind)))
     sections.append(('REJECTED — EXCLUDED FROM APPROVED RESULTS', _rejected_section(snap)))
@@ -624,7 +910,7 @@ def render_txt(snap) -> bytes:
                  else 'UNDECIDED — REVIEW NOT COMPLETE')
         sections.append((title, _numbered(snap, 'undecided', kind)))
     sections += [('EXCLUDED CANDIDATES', _excluded_section(snap)),
-                 ('ALTERNATIVES — PROVIDER CANDIDATES, NEVER SELECTED', _alternatives_section(snap)),
+                 (ALTERNATIVES_TITLE, _alternatives_section(snap)),
                  ('CHECKS', _checks_section(snap)),
                  ('OPEN CLARIFICATIONS', _clarifications_section(snap)),
                  ('NOT VERIFIED', _not_verified_section(snap)),
@@ -670,8 +956,34 @@ def _csv_row(snap, item):
            'decision_carried_at': decision.get('carried_at') or '', 'units': item['units'], 'evidence': evidence,
            'checks': ';'.join(f'{c["id"]}={c["status"]}' for c in item['checks']),
            'not_verified': _not_verified_cell(item), 'modifier_considerations': ' | '.join(item['modifier_considerations']),
-           'exclusion_reason': item['exclusion_reason']}
+           'exclusion_reason': item['exclusion_reason'],
+           'evidence_support': (item.get('support') or {}).get('status', ''),
+           'source_passages': ' | '.join(f'"{s["text"]}" [{s["start"]}-{s["end"]}]'
+                                         for s in (item.get('support') or {}).get('source') or []),
+           'documented_service': (item.get('support') or {}).get('service', ''),
+           'proposal_origin': (item.get('support') or {}).get('origin', '') or ('primary' if item.get('support') else '')}
     return [row[column] for column in CSV_COLUMNS]
+
+
+def _encounter_rows(snap):
+    """One coding-completeness row, then one row per unresolved documented service and per conflict (format @4)."""
+    base = {**dict.fromkeys(CSV_COLUMNS, ''), **_identity_cells(snap)}
+    coding = snap.get('coding') or {}
+    rows = [{**base, 'item_list': 'coding_completeness', 'status': coding.get('state', ''),
+             'exclusion_reason': coding.get('statement', '')}]
+    documented = snap.get('documented') or {}
+    for item in documented.get('unresolved') or []:
+        rows.append({**base, 'item_list': 'unresolved_service', 'family': item['family'],
+                     'family_label': _family_label(item['family']), 'status': item['reason'],
+                     'documented_service': item['service'], 'exclusion_reason': item['label'],
+                     'evidence': ' | '.join(f'"{s["text"]}" [{s["start"]}-{s["end"]}]' for s in item['evidence'])})
+    for conflict in documented.get('conflicts') or []:
+        rows.append({**base, 'item_list': 'conflict', 'documented_service': conflict['service'],
+                     'status': conflict['subject'],
+                     'evidence': ' | '.join(f'{side["role"]} {side["status"]}: '
+                                            + (f'"{side["text"]}"' if side['exact'] else NO_EXACT_PASSAGE)
+                                            for side in conflict['sides'])})
+    return [[row[column] for column in CSV_COLUMNS] for row in rows]
 
 
 def _placeholder_row(snap):
@@ -688,7 +1000,7 @@ def render_csv(snap) -> bytes:
     writer.writerow([neutralise(column) for column in CSV_COLUMNS])
     order = {name: index for index, name in enumerate(LISTS)}
     rows = [_csv_row(snap, item) for item in sorted(snap['proposals'], key=lambda i: order[i['list']])]
-    for row in rows or [_placeholder_row(snap)]:
+    for row in (rows or [_placeholder_row(snap)]) + _encounter_rows(snap):
         # Control characters are shown escaped here too (round 3, review3:5): a cited passage carrying ESC/CSI,
         # backspace or DEL must not redraw a row when the file is printed in a terminal.
         writer.writerow([neutralise(_visible(cell) if isinstance(cell, str) else cell) for cell in row])

@@ -24,7 +24,9 @@
  * desktop (1440x1000) and mobile (390x844) screenshots of the review screen.
  *
  * Nothing is retried: a failure is recorded and the run continues with the next document
- * (or stops with --stop-on-failure). Everything is written to EVIDENCE_DIR/evidence.json,
+ * (or stops with --stop-on-failure). A file named STOP in EVIDENCE_DIR stops the run before
+ * the next upload (the batch's Stop path; a document already uploaded finishes as the
+ * application processes it, and its own Stop is the encounter's Stop button). Everything is written to EVIDENCE_DIR/evidence.json,
  * which ops/verify_downloads.py then re-checks file by file. Exit 0 when every document
  * passed, 1 when anything failed, 2 on a usage error before any upload.
  */
@@ -154,6 +156,15 @@ function exactSpans(p, points) {
 // The UI marks a span only when it is exact and not flagged exact:false.
 function markableSpans(p, points) {
   return exactSpans(p, points).filter(({ span }) => span.exact !== false);
+}
+
+// The source passages CPT Studio selected for a proposal (support.source), exact at their offsets: app.js marks each as
+// '<id>:s<n>' (documentLayout), whether its support was checked or not (refutation p2, reports2:4: the walk failed
+// hard on them as "unknown or inexact spans").
+function markableSourceSpans(p, points) {
+  return (p.support?.source || []).map((span, index) => ({ span, index }))
+    .filter(({ span }) => span && (span.context_index ?? 0) === 0 && span.exact !== false
+      && cpSlice(points, span.start, span.end) === span.text);
 }
 
 function settle(promise) {
@@ -395,6 +406,7 @@ function checkEvidenceMarks(enc, marks, cards) {
   for (const p of proposalsOf(enc).filter(item => item.bucket === 'selected')) {
     const exact = markableSpans(p, points);
     exact.forEach(({ index }) => known.add(`${p.id}:${index}`));
+    markableSourceSpans(p, points).forEach(({ index }) => known.add(`${p.id}:s${index}`));
     const card = cards.find(c => c.id === `card-${p.id}`);
     out.push(check(`dom.card.${p.code}`, 'hard', Boolean(card), card ? 'code card shown' : 'no code card'));
     if (card) {
@@ -866,6 +878,11 @@ async function main(argv) {
     const problems = sessionProblems(evidence.session, opts);
     if (problems.length) throw new Error(`refusing to upload: ${problems.join('; ')}`);
     for (const item of inputs.documents) {
+      if (stopRequested(opts.out)) {
+        evidence.run_error = 'stopped: a STOP file is present in the evidence directory; no further upload was made';
+        process.stdout.write(`${evidence.run_error}\n`);
+        break;
+      }
       process.stdout.write(`${item.doc.id} ${item.delivery.format} ... `);
       const record = await verifyDocument(page, opts, inputs.manifest, item, sink);
       evidence.documents.push(record);
@@ -889,8 +906,12 @@ async function main(argv) {
   return complete && evidence.summary.failed === 0 ? 0 : 1;
 }
 
+function stopRequested(outDir) {
+  return fs.existsSync(path.join(outDir, 'STOP'));
+}
+
 module.exports = {
-  parseArgs, UsageError, cpSlice, safeName, sessionProblems, checkPipeline, checkExtraction, checkContext, checkRouting,
+  stopRequested, parseArgs, UsageError, cpSlice, safeName, sessionProblems, checkPipeline, checkExtraction, checkContext, checkRouting,
   checkEvidenceExact, checkMustNotCode, checkClarifications, checkIncomplete, planDecisions, planConfirmations, checkReadiness,
   checkPersistence, checkEvidenceMarks, checkDecisionDom, expectedDownloads, checkDownloads, checkListing, summarize,
   documentResult, readDom,

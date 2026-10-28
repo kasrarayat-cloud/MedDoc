@@ -17,8 +17,11 @@ from tests.support import pipeline_factories as pf
 APPROVED = 'APPROVED SELECTIONS'
 REJECTED = 'REJECTED — EXCLUDED FROM APPROVED RESULTS'
 UNDECIDED = 'UNDECIDED — REVIEW NOT COMPLETE'
-TITLES = ('ENCOUNTER, SOURCE AND REVISION', 'ENCOUNTER CONTEXT', APPROVED, REJECTED, UNDECIDED, 'EXCLUDED CANDIDATES',
-          'ALTERNATIVES — PROVIDER CANDIDATES, NEVER SELECTED', 'CHECKS', 'OPEN CLARIFICATIONS', 'NOT VERIFIED',
+# Format @4 (ARCHITECTURE 5.8): CODING COMPLETENESS first, the documented-service sections after the context.
+TITLES = ('CODING COMPLETENESS', 'ENCOUNTER, SOURCE AND REVISION', 'ENCOUNTER CONTEXT', 'DOCUMENTED SERVICES',
+          'UNRESOLVED DOCUMENTED SERVICES — NO SUPPORTED PROPOSAL', 'CONFLICTS IN THE RECORD', APPROVED, REJECTED,
+          UNDECIDED, 'EXCLUDED CANDIDATES',
+          'ALTERNATIVES — INFORMATIONAL, NEVER SELECTABLE', 'CHECKS', 'OPEN CLARIFICATIONS', 'NOT VERIFIED',
           'PROVIDER USAGE', 'REFERENCE SOURCES', 'AUDIT — DECISION HISTORY')
 
 
@@ -131,7 +134,7 @@ class TxtReportTests(ReportCase):
                       'date. (a reviewer may reinstate it; no reviewer has confirmed this exclusion)',
                       section(text, 'EXCLUDED CANDIDATES'))
         self.assertIn('45380 · Colonoscopy — provider alternative, never selectable',
-                      section(text, 'ALTERNATIVES — PROVIDER CANDIDATES, NEVER SELECTED'))
+                      section(text, 'ALTERNATIVES — INFORMATIONAL, NEVER SELECTABLE'))
         checks = section(text, 'CHECKS')
         self.assertIn('  43239 (undecided)\n    [PASS] evidence.exact — Exact source evidence', checks)
         self.assertIn('[NOT_VERIFIED] ncci.ptp', checks)
@@ -184,6 +187,53 @@ class TxtReportTests(ReportCase):
         self.assertIn('Note: Looks fine.', section(text, UNDECIDED))
         self.assertIn('       APPROVED SELECTIONS', text)
 
+    def test_an_unreconciled_assessment_never_reports_no_unresolved_service_or_conflict(self):
+        """Format @4: 'none' under UNRESOLVED or CONFLICTS is a statement about a reconciliation, so it needs one. An
+        assessment made before the documented-service reconciliation, or whose reading was inconsistent (it decided
+        nothing, ARCHITECTURE 5.9), establishes neither; a reading that reported a problem establishes them only
+        for the services it read. A missed service must never read as accounted for."""
+        unresolved_title, conflicts_title = 'UNRESOLVED DOCUMENTED SERVICES — NO SUPPORTED PROPOSAL', 'CONFLICTS IN THE RECORD'
+
+        def bodies(services, completeness):
+            pf.assess(self.s.encounter, replace(pf.standard_result(), services=services, completeness=completeness))
+            text = self.txt('draft')
+            return section(text, unresolved_title), section(text, conflicts_title), section(text, 'DOCUMENTED SERVICES')
+
+        unresolved, conflicts, _ = (section(self.txt('draft'), unresolved_title),
+                                    section(self.txt('draft'), conflicts_title), None)
+        self.assertEqual(unresolved, '  - not established: no documented-service reconciliation is recorded for this '
+                                     'assessment, so a documented service without a supported proposal is not listed')
+        self.assertEqual(conflicts, '  - not established: no documented-service reading is recorded for this assessment')
+        service = {'id': 'S1', 'family': 'gi.egd', 'kind': 'egd', 'status': 'performed', 'completion': 'complete',
+                   'acts': []}
+        inventory = {'version': 'gi-services@1', 'services': [service], 'conflicts': [], 'attributions': [],
+                     'problems': []}
+        reconciled = {'state': 'incomplete', 'reasons': [], 'unresolved_items': [], 'bundled': [], 'covered': {},
+                      'catalogue_version': 'gi-catalogue@1', 'inventory_problems': []}
+        inconsistent = {**reconciled, 'reasons': ['the documented-service reading was inconsistent'],
+                        'inventory_problems': ['S1: a passage does not match the revision text at its offsets.']}
+        unresolved, conflicts, documented = bodies(inventory, inconsistent)
+        self.assertEqual(unresolved, '  - not established: the documented-service reading was inconsistent and decided '
+                                     'nothing, so no documented service was reconciled with the proposals')
+        self.assertEqual(conflicts, '  - not established: the documented-service reading was inconsistent and decided '
+                                    'nothing')
+        self.assertIn('not reconciled: the reading was inconsistent', documented)
+        self.assertNotIn('reconciled by', documented)
+        capped = {**inventory, 'problems': ['The sentence cap was reached; later text was not read for services.']}
+        unresolved, conflicts, _ = bodies(capped, {**reconciled, 'reasons': ['the documented-service reading reported '
+                                                                              'a problem']})
+        # ec5 (refutation r1, report-8): what was not read can be part of a service that was read
+        self.assertEqual(unresolved, '  - none among what was read: the documented-service reading reported a '
+                                     'problem, listed under DOCUMENTED SERVICES, so a service or act in the part it did '
+                                     'not read is not listed')
+        self.assertEqual(conflicts, '  - none among what was read: the documented-service reading reported a problem')
+        # control: a consistent, complete reading with nothing unresolved still says so
+        unresolved, conflicts, documented = bodies(inventory, reconciled)
+        self.assertEqual(unresolved, '  - none: every documented act the catalogue reconciles has a selected proposal or '
+                                     'is not separately reported')
+        self.assertEqual(conflicts, '  - none')
+        self.assertIn('Read by gi-services@1, reconciled by gi-catalogue@1', documented)
+
     def test_context_section_shows_origin_and_exact_evidence(self):
         context = section(self.txt('draft'), 'ENCOUNTER CONTEXT')
         start = pf.GI_NOTE.index(pf.DATE_PASSAGE)
@@ -204,7 +254,7 @@ class TxtReportTests(ReportCase):
         self.assertIn(f'Extracted text: {len(pf.GI_NOTE)} characters · sha256 {revision.text_sha256}', source)
         self.assertIn(f'Assessment: {self.assessment.pk}', source)
         self.assertIn(f'sha256 {self.assessment.sha256}', source)
-        self.assertIn(f'profiles gi-profiles@2 · engine {pf.ENGINE_VERSION} · routing {pf.ROUTING_VERSION}', source)
+        self.assertIn(f'profiles gi-profiles@3 · engine {pf.ENGINE_VERSION} · routing {pf.ROUTING_VERSION}', source)
 
     def test_uploaded_and_addendum_revisions_name_their_root_file(self):
         enc = f.encounter(self.s.workspace, self.s.reviewer, title='Uploaded synthetic note')
@@ -263,6 +313,36 @@ class TxtReportTests(ReportCase):
         for _, entry in reports.NOT_CONNECTED:
             self.assertIn(entry, not_connected)
 
+    def test_each_provider_run_is_reported_used_only_when_its_own_response_was_read(self):
+        """Format @4 (ARCHITECTURE 5.11): an assessment reads two runs when a bounded second review was made. Each run
+        is "used by this assessment" only when ITS OWN provider check says its response was read: the primary's
+        provider.status, the second review's provider.second_review; a failed one was refused whole (round 7
+        bypass:1). The second-review run is named, so its usage is attributable."""
+        def usage_lines(primary_status, second_status):
+            checks = (pf.check('provider.status', primary_status), pf.check('provider.second_review', second_status),
+                      pf.check('extraction.status', 'pass'), pf.check('service_date', 'pass'))
+            enc, rev = self.s.encounter, self.s.revision
+            primary, second = pf.provider_run(enc, rev), pf.provider_run(enc, rev)
+            models.ProviderRun.objects.filter(pk=second.pk).update(purpose=models.ProviderRun.SECOND_REVIEW)
+            ctx = pf.context(enc, rev)
+            review.persist_assessment(encounter=enc, revision=rev, context=ctx, routing_run=pf.routing(rev),
+                                      provider_run=primary, second_run=models.ProviderRun.objects.get(pk=second.pk),
+                                      result=replace(pf.standard_result(), encounter_checks=checks))
+            usage = section(self.txt('draft'), 'PROVIDER USAGE')
+            linked = [line for line in usage.split('\n') if line.startswith('  - ') and 'by this assessment' in line]
+            self.assertEqual(len(linked), 2, usage)  # earlier runs of the encounter are listed, never as used
+            named = [line for line in linked if ' · bounded second review' in line]
+            self.assertEqual(len(named), 1, linked)
+            return next(line for line in linked if line not in named), named[0]
+
+        primary, second = usage_lines('pass', 'fail')
+        self.assertTrue(primary.endswith(' · used by this assessment'), primary)
+        self.assertTrue(second.endswith(' · read by this assessment; its response was not used'), second)
+        primary, second = usage_lines('fail', 'info')
+        self.assertTrue(primary.endswith(' · read by this assessment; its response was not used'), primary)
+        self.assertTrue(second.endswith(' · used by this assessment'), second)
+        self.assertNotIn('not used', second)
+
     def test_recorded_not_connected_sources_are_never_listed_as_connected(self):
         recorded = pf.reference_source(key='cms-ncci-ptp', title='NCCI PTP edits', release='', applies=False,
                                        connected=False, license_note='Recorded licence wording.',
@@ -309,6 +389,42 @@ class TxtReportTests(ReportCase):
         self.assertIn('(1 cited passage(s) did not match the revision text exactly and are not shown)', text)
         self.assertNotIn('FABRICATED', text)
         self.assertNotIn(b'FABRICATED', self.csv('draft'))
+
+    def test_inexact_documented_service_passages_are_never_printed(self):
+        """Format @4: an unresolved item's evidence and a conflict's quoted sides are re-checked against the revision
+        text like every other passage in a report. The engine stores an inventory that failed validation (it decides
+        nothing, ARCHITECTURE 5.9), so a passage that does not match its offsets can be persisted; it is counted,
+        never shown."""
+        exact = pf.evidence(pf.GI_NOTE, pf.EGD_PASSAGE)
+        good = {'start': exact.start, 'end': exact.end, 'text': pf.EGD_PASSAGE}
+        bad = {**good, 'text': 'FABRICATED PASSAGE NOT IN THE NOTE'}
+        services = {'version': 'gi-services@1', 'problems': [], 'attributions': [],
+                    'services': [{'id': 'S1', 'family': 'gi.egd', 'kind': 'egd', 'status': 'performed', 'acts': []}],
+                    'conflicts': [{'id': 'S1-C1', 'service': 'S1', 'subject': 'biopsy', 'lesion': '',
+                                   'sides': [{'role': 'nursing', 'status': 'performed', 'evidence': [bad]},
+                                             {'role': 'physician', 'status': 'negated', 'evidence': [bad, good]}]}]}
+        completeness = {'state': 'incomplete', 'reasons': ['the documented-service reading was inconsistent'],
+                        'unresolved_items': [{'service': 'S1', 'family': 'gi.egd', 'act': 'biopsy', 'reason': 'no_proposal',
+                                              'label': 'forceps biopsy in the upper endoscopy', 'evidence': [bad, good]}],
+                        'bundled': [], 'covered': {}, 'catalogue_version': 'gi-catalogue@1',
+                        'inventory_problems': ['S1-C1: a passage does not match the revision text at its offsets.']}
+        pf.assess(self.s.encounter, replace(pf.standard_result(), services=services, completeness=completeness))
+        text = self.txt('draft')
+        self.assertNotIn('FABRICATED', text)
+        self.assertNotIn(b'FABRICATED', self.csv('draft'))
+        unresolved = section(text, 'UNRESOLVED DOCUMENTED SERVICES — NO SUPPORTED PROPOSAL')
+        self.assertIn(f'"{pf.EGD_PASSAGE}" [chars {exact.start}–{exact.end}]', unresolved)
+        self.assertIn('(1 passage(s) did not match the revision text exactly and are not shown)', unresolved)
+        conflicts = section(text, 'CONFLICTS IN THE RECORD')
+        self.assertIn('nursing entry, performed: no passage matches the revision text exactly', conflicts)
+        self.assertIn(f'physician entry, negated: "{pf.EGD_PASSAGE}"', conflicts)
+        rows = parse_csv(self.csv('draft'))
+        data = [dict(zip(rows[0], row)) for row in rows[1:]]
+        (unresolved_row,) = [r for r in data if r['item_list'] == 'unresolved_service']
+        self.assertEqual(unresolved_row['evidence'], f'"{pf.EGD_PASSAGE}" [{exact.start}-{exact.end}]')
+        (conflict_row,) = [r for r in data if r['item_list'] == 'conflict']
+        self.assertEqual(conflict_row['evidence'], 'nursing performed: no passage matches the revision text exactly | '
+                                                   f'physician negated: "{pf.EGD_PASSAGE}"')
 
     def test_provider_display_text_never_appears(self):
         for kind in ('draft', 'reviewed'):
@@ -376,7 +492,14 @@ class CsvReportTests(ReportCase):
         data = [dict(zip(rows[0], row)) for row in rows[1:]]
         self.assertEqual([(r['item_list'], r['code']) for r in data],
                          [('approved', '43239'), ('rejected', '45385'), ('excluded', '45378'),
-                          ('alternative', '45380')])
+                          ('alternative', '45380'), ('coding_completeness', '')])
+        # Format @4: after the proposals, the encounter's coding state (no unresolved or conflict rows: this
+        # hand-built assessment records no documented-service reconciliation).
+        coding = data[4]
+        self.assertEqual((coding['report_kind'], coding['encounter_id'], coding['assessment_id'], coding['status']),
+                         ('reviewed', str(self.s.encounter.pk), str(self.assessment.pk), 'not_established'))
+        self.assertIn('completeness is not established', coding['exclusion_reason'])
+        self.assertEqual((coding['proposal_id'], coding['decision'], coding['evidence']), ('', '', ''))
         approved = data[0]
         self.assertEqual((approved['report_kind'], approved['encounter_id'], approved['revision_number']),
                          ('reviewed', str(self.s.encounter.pk), '1'))
@@ -394,7 +517,7 @@ class CsvReportTests(ReportCase):
         self.assertEqual(data[1]['modifier_considerations'], 'Consider whether modifier 59 applies.')
         self.assertEqual(data[2]['exclusion_reason'], 'The colonoscopy is planned, not performed on this date.')
         self.assertEqual({r['synthetic'] for r in data}, {'SYNTHETIC — NOT FOR BILLING'})
-        self.assertEqual({r['family_label'] for r in data[1:]}, {'Colonoscopy'})
+        self.assertEqual({r['family_label'] for r in data[1:4]}, {'Colonoscopy'})
 
     def test_draft_never_lists_an_approval_as_approved(self):
         self.s.decide('sel:0', 'approve')

@@ -48,7 +48,7 @@ from studio.gi import sections as gi_sections
 from studio.gi.sections import Layout, layout
 from studio.types import Fact, FamilyFinding, RoutingResult, ServiceMention, Span
 
-ROUTING_VERSION = 'gi-routing@3'
+ROUTING_VERSION = 'gi-routing@4'
 PROCEDURE_FAMILIES = tuple(f for f in DETECTED_FAMILIES if PROFILES[f].procedure)
 # Within one mention the strongest reading wins; "performed" never beats a doubt.
 STATUS_PRECEDENCE = ('negated', 'historical', 'cancelled', 'incomplete', 'planned', 'uncertain', 'performed')
@@ -1263,6 +1263,12 @@ _BOX_Q_TODAY = r'(?:[ \t]+today)?'
 # The separator: ':', '?', '=', '|', a dash, a tab or two spaces, after the label's own '?' or ':' (a form block's
 # "<label>: <value>" for a label that asks: "Procedure performed?: No").
 _BOX_Q_SEP = r'[ \t]*(?:[?:][ \t]*)?(?:[:?=|\u2013\u2014-]|\t| {2,})[ \t]*'
+# The same separator before a denial, read once (an atomic group). A denial opens with a letter, so only the
+# separator's longest reading can be followed by one, and the group's first reading is its longest: the matches are
+# the same. Without the group a run of spaces before an answer that is no denial was split every way among the
+# separator's three runs of spaces - cubic in the run: 'Colonoscopy performed' and 4,000 spaces took the analyze
+# stage past its limit (refutation p2, cost2:2).
+_BOX_Q_SEP_ONCE = r'(?>' + _BOX_Q_SEP + r')'
 # The answers that say no, or that this reader cannot read as done: "No", "None", "N", "Not done", "Not performed",
 # "Not completed", "N/A", "NA", "Not applicable".
 _BOX_Q_DENIAL = r'(?:no|none|n|not\s+(?:done|performed|completed)|n/a|na|not\s+applicable)'
@@ -1278,7 +1284,7 @@ _B3_STATUS_KEY = re.compile(_BOX_Q_LEAD + r'(?:(?:procedure|case|exam|examinatio
 # completed? no" (round 4 release:8), "- Procedure performed: No", "Was the procedure performed? No", "Procedure
 # performed<tab>No". The grammar's lead and the procedure's word, a done verb, a separator, then a denial that opens the
 # value, whatever follows it.
-_PERFORMED_ANSWERED_NO = re.compile(_BOX_Q_LEAD + _BOX_Q_NOUN + r'[ \t]+' + _BOX_Q_DONE + _BOX_Q_TODAY + _BOX_Q_SEP
+_PERFORMED_ANSWERED_NO = re.compile(_BOX_Q_LEAD + _BOX_Q_NOUN + r'[ \t]+' + _BOX_Q_DONE + _BOX_Q_TODAY + _BOX_Q_SEP_ONCE
                                     + _BOX_Q_DENIAL + r'(?![0-9A-Za-z_])', re.I)
 
 
@@ -1312,7 +1318,7 @@ def _performed_answer_denies(an: Analysis, ls: int, le: int) -> bool:
 # performed - no complications": _B3_ASKED_END).
 _B3_ASKED_END = r'(?=[ \t]*(?:[.,;:!(\u2013\u2014-]|\Z))'
 _B3_SERVICE_ANSWERED_NO = re.compile(_BOX_Q_LEAD + r'(?P<noun>[A-Za-z](?:[^\n?:=|\t.;]|\.(?=\S)){0,59}?)[ \t]+' + _BOX_Q_DONE + _BOX_Q_TODAY
-                                     + _BOX_Q_SEP + _BOX_Q_DENIAL + r'(?![0-9A-Za-z_])' + _B3_ASKED_END, re.I)
+                                     + _BOX_Q_SEP_ONCE + _BOX_Q_DENIAL + r'(?![0-9A-Za-z_])' + _B3_ASKED_END, re.I)
 _B3_ASKED_NO = 'uncertain: the line \'{}\' asks whether the service it names was done and answers no'
 # A noun qualified as earlier asks about another time, not today's service (round 4d integration, BOXES3 verifier's new
 # problem 3: "Prior colonoscopy performed? No" under Indication held today's colonoscopy). The noun also ends at a
@@ -3256,7 +3262,7 @@ def _box_checked_option(an: Analysis, start: int, end: int) -> Optional[Reading]
 # "Procedure cancelled | No"; never "Procedure cancelled, no sedation given.", "Procedure cancelled: no driver
 # available." or "Procedure cancelled: No-show", where "no" opens the reason).
 _BOX_ANSWER_LEAD = re.compile(_BOX_Q_LEAD + r'(?:' + _BOX_Q_NOUN + r'[ \t]+)?', re.I)
-_BOX_ANSWER_TAIL = re.compile(_BOX_Q_TODAY + _BOX_Q_SEP + _BOX_Q_DENIAL
+_BOX_ANSWER_TAIL = re.compile(_BOX_Q_TODAY + _BOX_Q_SEP_ONCE + _BOX_Q_DENIAL
                               + r'(?:[ \t]*[,;(]|[ \t]+[–—-]|\.[ \t]+|[ \t.]*$)', re.I)
 BOX_ANSWER_REACH = 80  # how far a status question's lead or answer is read from its reference (bounds the work)
 
@@ -3455,9 +3461,13 @@ def _sentence_index(an: Analysis, pos: int) -> int:
 
 
 def _clauses_in(an: Analysis, s: int, e: int) -> list[tuple[int, int]]:
+    """The clauses inside [s, e), read from the first one at s by index (refutation r1 cost lens, ec5 cost: a slice
+    from there copied every later clause of the document at each call - a list of 133,000 "A," lines, each its own
+    clause, took the analyze stage past its limit)."""
     clauses = an.lay.clauses
     found = []
-    for c in clauses[bisect.bisect_left(clauses, (s, -1)):]:
+    for i in range(bisect.bisect_left(clauses, (s, -1)), len(clauses)):
+        c = clauses[i]
         if c[0] >= e:
             break
         if c[1] <= e:
@@ -3524,7 +3534,8 @@ def _family_sentences(an: Analysis, attributed: list[Optional[str]], family: str
 
 def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                denied: Optional[list] = None, doubted: Optional[list] = None, *,
-               cut: Optional[list] = None, cut_denials: Optional[list] = None) -> tuple[list, list]:
+               cut: Optional[list] = None, cut_denials: Optional[list] = None,
+               labelled: Optional[list] = None) -> tuple[list, list]:
     """(reached, blocked) as (depth, label, clause span) for landmarks read as
     part of a performed or incomplete service. A landmark is reached only from a
     reading with no unresolved negation; a denied advancement ("it was not advanced
@@ -3541,7 +3552,9 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
     declared:11: "Extent: cecum | Prep quality: Good"; _S2_read_by_the_cut), and ``cut_denials`` every blocked or denied
     hit with its match, its clause window and whether its own reading denies it outright (hit, start, end, window start,
     window end, explicit: negated, cancelled or incomplete), so that a denial in the family's text can still keep such a
-    label from reading as reached (_S2_cut_denied, round 4d regression:3)."""
+    label from reading as reached (_S2_cut_denied, round 4d regression:3). ``labelled``, when given, collects every
+    landmark an extent label names (cues.EXTENT_LABEL_BEFORE right before it: "Extent: Cecum | Scope: Olympus",
+    "Intended extent: cecum"), whatever its reading: the document's own statement of the extent (_insertion_only)."""
     text = an.text
     reached, blocked = [], []
     for s, e in sentences:
@@ -3560,6 +3573,8 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                     if clause is None:
                         clause = _span(text, cs, ce)
                     hit = (depth, label, clause)
+                    if labelled is not None and cues.EXTENT_LABEL_BEFORE.search(text, ws, m.start()):
+                        labelled.append(hit)
                     if status in ('performed', 'incomplete') and cues.REACHED_BEYOND.search(pre):
                         reached.append(hit)
                     elif base in ('performed', 'incomplete', 'negated') and (
@@ -5217,15 +5232,32 @@ def _interventions(an: Analysis, attributed: list[Optional[str]], family: str) -
     return _joined('interventions', found)
 
 
+_INSERTED_AT = re.compile(r'\b(?:inserted|introduced|placed|passed)\b[^.;]{0,40}?\b(?:into|in|through|via)\s+(?:the\s+)?'
+                          r'(?:rectum|anus|anal\s+canal|esophagus|oesophagus|mouth|oropharynx)\b'
+                          r'|\bper\s+(?:rectum|anum|os)\b|\b(?:inserted|introduced)\s+(?:transorally|transanally|orally)\b',
+                          re.A | re.I)
+
+
+def _insertion_only(depth: int, span: Span, denials, labelled=()) -> bool:
+    """The deepest landmark reached is the first one, read only from the instrument's insertion ("The colonoscope was
+    inserted into the rectum and advanced under direct vision"), nothing denies or doubts a deeper reach, and no extent
+    label names a landmark (``labelled``, read or not): the text states where the examination started, not how far it
+    went. An extent label is the document's own statement of the extent, so beside one the label readings decide as
+    before (round 4c-2 plan:B, B2, D, D2: an unread, shorter, denied or aimed label keeps the procedure incomplete)."""
+    return depth == 1 and not denials and not labelled and bool(_INSERTED_AT.search(span.text))
+
+
 def _colon_extent(an: Analysis, sentences) -> Optional[Fact]:
-    unread, denied, doubted, cut, cut_denials = [], [], [], [], []
+    unread, denied, doubted, cut, cut_denials, labelled = [], [], [], [], [], []
     reached, blocked = _landmarks(an, sentences, cues.LOWER_LANDMARKS, unread, denied, doubted, cut=cut,
-                                  cut_denials=cut_denials)
+                                  cut_denials=cut_denials, labelled=labelled)
     reached, withhold = _S2_cut_denied(an, reached, cut, cut_denials, cues.LOWER_LANDMARKS,  # round 4d regression:3
                                        cues.CECUM_DEPTH, sub_acts=True)
     if not reached or withhold:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
+    if depth < cues.CECUM_DEPTH and _insertion_only(depth, span, blocked + denied + doubted, labelled):
+        return None  # "inserted into the rectum and advanced": where the examination starts, never how far it went
     if depth < cues.CECUM_DEPTH:
         if _P2_unread_reaches(unread, cues.CECUM_DEPTH) and not _P2_denied_beyond(blocked + denied, depth):
             return None  # round 4c-2 plan:B: an unread label names the cecum or beyond
@@ -5260,14 +5292,17 @@ def _expected_upper_depth(an: Analysis) -> int:
 def _upper_extent(an: Analysis, sentences, incomplete: bool) -> Optional[Fact]:
     """The deepest landmark reached; incomplete when the service is documented as incomplete
     or that landmark lies short of the depth the named procedure calls for."""
-    unread, denied, doubted, cut, cut_denials = [], [], [], [], []
+    unread, denied, doubted, cut, cut_denials, labelled = [], [], [], [], [], []
     reached, blocked = _landmarks(an, sentences, cues.UPPER_LANDMARKS, unread, denied, doubted, cut=cut,
-                                  cut_denials=cut_denials)
+                                  cut_denials=cut_denials, labelled=labelled)
     reached, withhold = _S2_cut_denied(an, reached, cut, cut_denials, cues.UPPER_LANDMARKS,  # round 4d regression:3
                                        _expected_upper_depth(an))
     if not reached or withhold:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
+    if depth < _expected_upper_depth(an) and not incomplete and _insertion_only(depth, span, blocked + denied + doubted,
+                                                                                 labelled):
+        return None  # "introduced into the esophagus": where the examination starts, never how far it went
     if depth < _expected_upper_depth(an) and _P2_unread_reaches(unread, _expected_upper_depth(an)) \
             and not _P2_denied_beyond(blocked + denied, depth):
         return None  # round 4c-2 plan:B: an unread label names the depth the procedure calls for
@@ -6026,7 +6061,7 @@ def _B3_attestation_above_refuses(an: Analysis, line_start: int) -> bool:
         return False  # round 4d integration (BOXES3 verifier, new problem 2): "Allergies confirmed: none." is not it
     if _B3_ATTEST_DENIED.search(text, start, end):
         return True  # "Attestation: I do not attest to a separate service today."
-    field = _B2_FIELD.match(text, start, end)
+    field = _b2_field(text, start, end)
     if (field is not None and _B3_words(text, field.end(), end, B3_ABOVE_ANSWER_WORDS) <= B3_ABOVE_ANSWER_WORDS
             and _B2_attestation_line_refuses(an, start, end)):
         return True
@@ -6093,10 +6128,22 @@ def _box_answer_affirms(an: Analysis, start: int, end: int) -> bool:
 
 # --- round 4c-2 box2:F: a refusal in the line under the separately identifiable E/M statement ---------------------------
 # A field line under the statement: a list marker, a short label and the shared separator (_BOX_Q_LEAD, _BOX_Q_SEP: one
-# grammar with the status lines), except that a word's own hyphen ("Same-day", "Follow-up") separates nothing.
-_B2_FIELD = re.compile(_BOX_Q_LEAD + r"(?P<label>[A-Za-z][\w /'-]{0,30}?)(?!(?<=[A-Za-z0-9])[-\u2013\u2014][A-Za-z0-9])"
+# grammar with the status lines), except that a word's own hyphen ("Same-day", "Follow-up") separates nothing. A label
+# never runs on into two spaces: two spaces are the separator, so a shorter label always matched first wherever one could
+# (7c8 COST skeptic: a label that could end anywhere in a long run of spaces made each failing match cubic in the run, and
+# a few hundred padded attestation lines overran the analyze stage); the matches are the same.
+_B2_FIELD = re.compile(_BOX_Q_LEAD + r"(?P<label>[A-Za-z](?:[\w/'-]| (?! )){0,30}?)"
+                       r"(?!(?<=[A-Za-z0-9])[-\u2013\u2014][A-Za-z0-9])"
                        + _BOX_Q_SEP + r"(?=\S)", re.I)  # a value follows: "Attested?" alone is no field
 _B2_MARK = re.compile(_BOX_ANY_MARK)
+
+
+def _b2_field(text: str, start: int, end: int):
+    """_B2_FIELD over the line [start, end) less its trailing whitespace: a field's value must follow its separator, so
+    no match can end in that whitespace, and leaving it out spares the pattern every split of it (7c8 COST skeptic)."""
+    while end > start and text[end - 1].isspace():
+        end -= 1
+    return _B2_FIELD.match(text, start, end)
 # An attestation word negated in itself ("Unattested", "Disagree", "Unconfirmed"): an attestation word and a word the
 # statement's own line would refuse at once.
 _B2_DENIED = re.compile(r'\b(?:un|non-?|dis)(?:attest|agree|confirm|acknowledg)\w*', re.A | re.I)
@@ -6116,7 +6163,7 @@ def _B2_attestation_line_refuses(an: Analysis, start: int, end: int) -> bool:
     text = an.text
     if not (_BOX_ATTEST_WORD.search(text, start, end) or _B2_DENIED.search(text, start, end)):
         return False
-    field = _B2_FIELD.match(text, start, end)
+    field = _b2_field(text, start, end)
     if field is None:
         if _B2_contrary(text, start, end):
             return True
@@ -6963,6 +7010,63 @@ def status_for_span(text: str, start: int, end: int,
         raise ValueError(f'span [{start}, {end}) is not a non-empty range inside the text (length {len(text)}).')
     reading = _read_span(_analysis(text, _checked_date(service_date, 'status_for_span()'))[0], start, end)
     return reading.status, reading.cues
+
+
+def denying_label_over(text: str, pos: int, service_date: Optional[date] = None) -> Optional[str]:
+    """The label that denies performance over the list the line at ``pos`` belongs to ("Procedures not performed:",
+    "Cancelled procedures:", "[ ] Not done:"), read exactly as routing reads it (_denying_label_above: LABEL_ITEMS lines
+    back in the same section, stopping at a blank line or at another label line); None when there is none. For the
+    documented-service reader (gi/services), so that both readers hold the same listed lines (round 4c-2 plan:C)."""
+    if not isinstance(text, str):
+        raise TypeError('denying_label_over() needs the canonical text as str.')
+    if not 0 <= pos < len(text):
+        return None
+    return _denying_label_above(_analysis(text, _checked_date(service_date, 'denying_label_over()'))[0], pos)
+
+
+def own_box_checked(text: str, start: int, end: int, service_date: Optional[date] = None) -> bool:
+    """Whether the item at [start, end) is governed by a checked box of its own in every reading of its row
+    (_box_checked_in_every_reading: "(x) Cold snare polypectomy", "Biopsy: [x]"; never "Biopsy: \u2612 Cold snare
+    polypectomy", whose box one reading gives the other item). For the documented-service reader (gi/services), which
+    reads such an item, where routing finds its line silent, as the one marked option of its row (ARCHITECTURE 5.9)."""
+    if not isinstance(text, str):
+        raise TypeError('own_box_checked() needs the canonical text as str.')
+    if not (0 <= start < end <= len(text)):
+        return False
+    return _box_checked_in_every_reading(_analysis(text, _checked_date(service_date, 'own_box_checked()'))[0], start,
+                                         end)
+
+def checked_field_ties(text: str, start: int, end: int, service_date: Optional[date] = None) -> tuple:
+    """The printed lines or cells on its own page that the checked or "Yes" form-field line holding [start, end) names
+    (routing's tie, _form_fields), as (start, end) pairs: () when that is no checked field line, when the lines of its
+    label disagree, or when it names nothing printed on its page. For the documented-service reader (gi/services), which
+    trusts such a field only through the printed list its item is in (the owner's strict-box decision, 2026-10-25)."""
+    if not isinstance(text, str):
+        raise TypeError('checked_field_ties() needs the canonical text as str.')
+    if not (0 <= start < end <= len(text)):
+        return ()
+    fields = _form_fields(_analysis(text, _checked_date(service_date, 'checked_field_ties()'))[0])
+    line = _within(fields.checked, fields.checked_starts, start, end)
+    field = _FIELD_CHECKED.fullmatch(line.line) if line is not None else None
+    if field is None:
+        return ()
+    headers = [h for h in FORM_HEADER.finditer(text) if h.start() < line.start]
+    if not headers:
+        return ()
+    page_end = headers[-1].start()
+    page_start = 0
+    if len(headers) > 1:  # the page's printed text starts where the previous block ends (_form_fields)
+        blank = _BLANK_LINE.search(text, headers[-2].end(), page_end)
+        page_start = blank.start() if blank else page_end
+    key = _label_key(field.group('label'))
+    ties = []
+    for named in fields.named:
+        if named.state != 'on' or not page_start <= named.start < page_end:
+            continue
+        tied = _FIELD_CHECKED.fullmatch(named.line)
+        if tied is not None and _label_key(tied.group('label')) == key:
+            ties.append((named.start, named.end))
+    return tuple(ties)
 
 
 def own_status_for_span(text: str, start: int, end: int,
