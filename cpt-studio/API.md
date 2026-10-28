@@ -204,14 +204,17 @@ document's is that conflict: nothing is built, reused or sent (a `not_sent` run
 held for it, and the date question asked) until the metadata is corrected or
 cleared or an addendum settles it. A date the document leaves in question (a
 conflict within the document; dated text the service cannot read or place; a
-labelled date with a bracket or words after it in its field; or dated text the
-service keeps only as evidence - a dated title, a "Date:" line, a dated line
-naming the service - which is never the date by itself) is no date: the request
-goes out without a date line, and a member's answer makes a second, dated
-request. The answer must be one of the dates the document states as some dated
-text's own value, never a date of birth; where its dated text reads no calendar
-date, any member date is a conflict until an addendum dates the encounter
-(ARCHITECTURE 5.2). The
+labelled date with a bracket or words after it in its field, or written in a
+form the installed revision did not send - a day-first date, a label naming the
+time, a table row; or dated text the service keeps only as evidence - a dated
+title, a "Date:" line, a dated line naming the service - which is never the
+date by itself) is no date: the request goes out without a date line, and a
+member's answer makes a second, dated request. The answer must be one of the
+dates the document states as some dated text's own value - the withheld
+labelled date's where there is one - never a date of birth or another field's
+date; where its dated text reads no calendar date (an empty or non-date
+date-of-service field among it), any member date is a conflict until an
+addendum dates the encounter (ARCHITECTURE 5.2). The
 document's own facts are read again inside this request under a
 `CONTEXT_REQUEST_SECONDS` wall clock; past it the change is refused (409) and
 nothing is changed. 409 while a stage is queued or running, before the text
