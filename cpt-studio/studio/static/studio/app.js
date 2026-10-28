@@ -403,6 +403,13 @@ function queueReasonLabels(encounter) {
   return [...new Set(said.filter(Boolean))];
 }
 
+// A list row's service date the reader kept as evidence but could not use (encounter_summary's service_date_evidence):
+// quoted, never "not documented", as the review page's chip quotes it (gi2 integration, occurrence RC5). '' when none.
+function listedDateEvidence(encounter, prefix) {
+  const text = typeof encounter?.service_date_evidence === 'string' ? encounter.service_date_evidence.trim() : '';
+  return text ? `${prefix}“${excerpt(text, 32)}”` : '';
+}
+
 function documentRow(encounter, queued = false) {
   const tone = reviewedIncomplete(encounter) ? 'amber' : lookup(STATE_TONES, encounter.state, 'gray');
   const families = Array.isArray(encounter.families) && encounter.families.length ? encounter.families.join(' · ') : categoryName();
@@ -410,7 +417,7 @@ function documentRow(encounter, queued = false) {
   const open = Number.isInteger(encounter.open_clarifications) && encounter.open_clarifications > 0 ? plural(encounter.open_clarifications, 'open question', 'open questions') : '';
   const meta = [kind, families, open, ...(queued ? queueReasonLabels(encounter) : [])].filter(Boolean).join(' · ');
   const status = reviewedIncomplete(encounter) ? badge('amber', rowStateLabel(encounter)) : stateBadge(encounter.state, encounter.state_label);
-  return `<a class="document-row" href="#doc/${escapeHtml(encodeURIComponent(encounter.id))}"><span class="doc-row-main"><span class="doc-file-icon${tone === 'amber' ? ' amber' : ''}">${icon('file')}</span><span><strong>${escapeHtml(encounter.title || 'Untitled document')}</strong><small>${escapeHtml(meta)}</small></span></span><span>${status}</span><span class="doc-row-date">${escapeHtml(formatDate(encounter.service_date) || (encounter.service_date_conflict === true ? 'In conflict' : 'Not documented'))}</span>${icon('chevron', 'row-arrow')}</a>`;
+  return `<a class="document-row" href="#doc/${escapeHtml(encodeURIComponent(encounter.id))}"><span class="doc-row-main"><span class="doc-file-icon${tone === 'amber' ? ' amber' : ''}">${icon('file')}</span><span><strong>${escapeHtml(encounter.title || 'Untitled document')}</strong><small>${escapeHtml(meta)}</small></span></span><span>${status}</span><span class="doc-row-date">${escapeHtml(formatDate(encounter.service_date) || (encounter.service_date_conflict === true ? 'In conflict' : listedDateEvidence(encounter, 'Not read: ') || 'Not documented'))}</span>${icon('chevron', 'row-arrow')}</a>`;
 }
 
 function listRows(name, encounters) {
@@ -436,7 +443,7 @@ function inviteMarkup(encounters) {
   const recent = encounters?.[0];
   if (encounters === null) return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>Loading recent documents…</strong><p>One moment.</p></span>`;
   if (!recent) return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>No documents yet</strong><p>Upload a synthetic GI document to see proposals beside the source.</p></span><button type="button" class="button secondary" data-action="upload">New document ${icon('plus')}</button>`;
-  const detail = ['Most recent', rowStateLabel(recent), formatDate(recent.service_date) || (recent.service_date_conflict === true ? 'service date in conflict' : 'service date not documented')].filter(Boolean).join(' · ');
+  const detail = ['Most recent', rowStateLabel(recent), formatDate(recent.service_date) || (recent.service_date_conflict === true ? 'service date in conflict' : listedDateEvidence(recent, 'service date not read: ') || 'service date not documented')].filter(Boolean).join(' · ');
   return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>${escapeHtml(recent.title || 'Untitled document')}</strong><p>${escapeHtml(detail)}</p></span><button type="button" class="button secondary" data-open="${escapeHtml(recent.id)}">Open review ${icon('arrow')}</button>`;
 }
 
@@ -1965,7 +1972,7 @@ if (typeof module === 'object' && module.exports) {
   module.exports = {
     escapeHtml, lookup, parseIsoDate, formatDate, formatTimestamp, readCookie, safeDownloadUrl, pollDelay, parseRoute,
     passagesLabel, codeUnitOffsets, mergeSpans, pageRanges, paragraphRanges, paragraphPieces, layoutDocument,
-    factValue, metaFact, exportStatusText, documentLayout, reviewView, documentRow, listBody, listDescription,
+    factValue, metaFact, exportStatusText, documentLayout, reviewView, documentRow, listBody, listDescription, listedDateEvidence,
     inviteMarkup, overviewView, documentsView, howItWorksView, exportOptions, state, QUEUE_STATES, decisionLine,
     hasAgentDecision, candidateDecision, ACKNOWLEDGEMENTS, emptySelectionCopy, attestationText,
     codingBanner, documentedServices, evidenceChips, secondReviewUnread, inQueue, candidateGroups, serviceDateChip,

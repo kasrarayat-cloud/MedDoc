@@ -69,6 +69,21 @@ def _service_date_conflict(encounter):
     return (fact or {}).get('origin') == 'conflict'
 
 
+def _service_date_evidence(encounter):
+    """The documented text the reader kept as the evidence of a service date it could not use (origin missing, with
+    evidence): the lists quote it instead of saying "not documented", as the review page's date chip does (gi2
+    integration; occurrence RC5 left the list cell and the overview card saying "Not documented"). '' otherwise."""
+    context = encounter.current_context
+    fact = (context.facts or {}).get('service_date') if context else None
+    if not fact or fact.get('origin') != 'missing' or fact.get('value') not in (None, ''):
+        return ''
+    for item in fact.get('evidence') or []:
+        text = ' '.join(str((item or {}).get('text') or '').split()) if isinstance(item, dict) else ''
+        if text:
+            return text[:120]
+    return ''
+
+
 def _context_facts(context):
     """The stored context facts, each with ``member_conflict`` (context.is_member_conflict): the one predicate every
     reader that words a conflict asks, so the screen never calls a member's value conflicting documentation."""
@@ -145,6 +160,7 @@ def encounter_summary(encounter):
         # worded from the run a provider_failed state reads: a response refused whole is "not used" (7c8 reports-5)
         'state_label': review.encounter_state_label(encounter), 'service_date': _service_date(encounter),
         'service_date_conflict': _service_date_conflict(encounter),
+        'service_date_evidence': _service_date_evidence(encounter),
         'families': _family_labels(encounter), 'source_kind': _source_kind(encounter.current_revision),
         'open_clarifications': encounter.clarifications.filter(state=models.Clarification.OPEN,
                                                                assessment=encounter.current_assessment_id).count()

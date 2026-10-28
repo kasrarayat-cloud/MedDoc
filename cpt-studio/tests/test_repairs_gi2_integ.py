@@ -3,7 +3,10 @@ Synthetic data only; the provider is an in-process fake."""
 from django.test import TestCase, override_settings
 
 from studio import models
-from tests.test_pipeline_api import drain
+from tests.test_pipeline_api import FakeProvider, drain
+from tests.test_repairs_ec5_reportfacts import browser
+from tests.test_repairs_gi2_present import LETTER, NO_PLACE, UNDATED, VISIT_TIME
+from tests.test_repairs_gi2_present import Harness as PresentHarness
 from tests.test_repairs_pipeline import LIVE, ApiHarness
 
 
@@ -55,3 +58,34 @@ class OneSubActReadPerSentenceTests(TestCase):
         self.assertTrue(calls)
         self.assertEqual(len(calls), len(set(calls)), 'a sentence was read again for the same family')
         self.assertEqual(routed, detect.route(text, date(2026, 10, 19)))
+
+
+@override_settings(**LIVE)
+class ListedDateQuotesTheKeptEvidenceTests(PresentHarness):
+    """gi2 integration (present's open must-fix concern, occurrence RC5): the documents/queue list's SERVICE DATE cell
+    and the overview card said "Not documented" for a date the reader kept as evidence and asks, while the review page
+    and the checks quote it."""
+
+    def run_documents(self, text):
+        self.use(FakeProvider(selections=[('99213', VISIT_TIME)]))
+        encounter_id = self.create(text)
+        drain()
+        row = self.row(encounter_id)
+        shown = browser('{row: app.documentRow(data.row), invite: app.inviteMarkup([data.row])}', {'row': row})
+        return row, shown
+
+    def test_a_kept_date_is_quoted_in_the_list_and_on_the_overview(self):
+        row, shown = self.run_documents(LETTER)
+        self.assertEqual(row['service_date_evidence'], 'Date: 10/27/2026')
+        self.assertIn('Not read: “Date: 10/27/2026”', shown['row'])
+        self.assertIn('service date not read: “Date: 10/27/2026”', shown['invite'])
+        self.assertNotIn('ot documented', shown['row'] + shown['invite'])
+
+    def test_control_nothing_stated_stays_not_documented_and_a_documented_date_is_the_date(self):
+        row, shown = self.run_documents(UNDATED)
+        self.assertEqual(row['service_date_evidence'], '')
+        self.assertIn('Not documented', shown['row'])
+        self.assertIn('service date not documented', shown['invite'])
+        row, shown = self.run_documents(NO_PLACE)
+        self.assertEqual((row['service_date'], row['service_date_evidence']), ('2026-10-20', ''))
+        self.assertNotIn('Not read', shown['row'])
