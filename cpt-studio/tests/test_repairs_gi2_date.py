@@ -21,11 +21,12 @@ A field that may state another day keeps the installed reading (asked): a date, 
 ordinal day or a weekday outside the durations, or a number opening the field. A qualified date label ("Initial date of
 service: 2 hours after arrival") is no quantity's label and keeps the installed reading too.
 
-The member note (the occurrence investigation's R4 (ii)): a member's date equal to a date the document states only where
-the reader reads it as another occurrence's or another document's (or possibly one) was held with "the document gives
-“Date of service: 10/14/2026”. Both are kept and neither is used until they agree" - as if the two dates differed. The
-note now says that the document states that date only there. What is held, sent and stored is unchanged; the note keeps
-the installed prefix every reader (and a rollback to 2b82889f) recognises a member conflict by.
+The member note (the occurrence investigation's R4 (ii)): a member's date equal to a date the reader reads in the
+document only as another occurrence's or another document's (or possibly one) was held with "the document gives “Date
+of service: 10/14/2026”. Both are kept and neither is used until they agree" - as if the two dates differed. The note
+now says how this service reads that date (never what the document states nowhere else: the same day may be written in
+a form it does not read). What is held, sent and stored is unchanged; the note keeps the installed prefix every reader
+(and a rollback to 2b82889f) recognises a member conflict by.
 
 Every text here is synthetic (fictional patients); no network (the suite's FakeProvider).
 """
@@ -265,8 +266,8 @@ class MemberDateOfAnotherOccurrenceNoteTests(SimpleTestCase):
         (HEAD + 'Colonoscopy report\nNext procedure date: 11/04/2026\nLast visit date: 04/15/2026\n' + COLO_BODY,
          '2026-04-15', 'Last visit date: 04/15/2026'),
     )
-    PHRASE = ("the document states that date only where this service reads it as another occurrence's or another "
-              "document's date, or as possibly one")
+    PHRASE = ("this service reads that date in the document as another occurrence's or another document's date, or as "
+              "possibly one")
 
     def test_the_note_says_the_document_gives_that_date_only_as_another_occurrence_s(self):
         for text, member, quoted in self.CASES:
@@ -289,6 +290,15 @@ class MemberDateOfAnotherOccurrenceNoteTests(SimpleTestCase):
         fact = merged_date(text, '2026-11-04')
         self.assertIn('“Next procedure date: 11/04/2026”', fact.note)
         self.assertNotIn('Last visit date', fact.note)
+
+    def test_the_note_never_says_the_document_states_it_nowhere_else(self):
+        # the same day may also be written where this service reads no date ("Date of service: 11/04/26", a two-digit
+        # year): the note speaks of what the service reads, never of everything the document states
+        text = HEAD + 'Office visit\nDate of service: 11/04/26\nNext procedure date: 11/04/2026\nAssessment: reflux.\n'
+        fact = merged_date(text, '2026-11-04')
+        self.assertTrue(context.is_member_conflict(fact), fact.note)
+        self.assertIn(self.PHRASE, fact.note)
+        self.assertNotIn('only', fact.note)
 
     def test_another_date_keeps_the_installed_note(self):
         text, _, quoted = self.CASES[0]

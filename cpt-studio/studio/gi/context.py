@@ -1889,13 +1889,15 @@ USER_CONFLICT_NOTE = ('Encounter metadata entered by a workspace member gives {u
                       'Both are kept and neither is used until they agree: correct the metadata, clear it, or add an '
                       'addendum to the document.')
 _USER_CONFLICT_PREFIX = USER_CONFLICT_NOTE.split('{', 1)[0]
-# GI round 2 (the occurrence investigation's R4 (ii)): a member's date equal to a date the document states only where
-# this reader reads it as another occurrence's or another document's date, or as possibly one (_ElsewhereSpan: fr-di:3,
-# df-d:4), is held as before - but USER_CONFLICT_NOTE said 'the document gives “Date of service: 10/14/2026”. Both are
-# kept and neither is used until they agree', as if the two dates differed. This note says why they are held. It opens
-# with USER_CONFLICT_NOTE's prefix, by which every reader - and a rollback to 2b82889f - knows a member conflict.
-USER_ELSEWHERE_NOTE = (_USER_CONFLICT_PREFIX + '{user}; the document states that date only where this service reads it '
-                       "as another occurrence's or another document's date, or as possibly one ({document}), not as this "
+# GI round 2 (the occurrence investigation's R4 (ii)): a member's date equal to a date this reader reads in the document
+# as another occurrence's or another document's, or as possibly one (_ElsewhereSpan: fr-di:3, df-d:4), and never as
+# this encounter's, is held as before - but USER_CONFLICT_NOTE said 'the document gives “Date of service: 10/14/2026”.
+# Both are kept and neither is used until they agree', as if the two dates differed. This note says why it is held. It
+# speaks of what this service READS, never of everything the document states: the same day may also be written in a
+# form it does not read ("Date of service: 11/04/26" beside "Next procedure date: 11/04/2026"). It opens with
+# USER_CONFLICT_NOTE's prefix, by which every reader - and a rollback to 2b82889f - knows a member conflict.
+USER_ELSEWHERE_NOTE = (_USER_CONFLICT_PREFIX + "{user}; this service reads that date in the document as another "
+                       "occurrence's or another document's date, or as possibly one ({document}), and not as this "
                        "encounter's date of service. Both are kept and neither is used: correct the metadata, clear it, "
                        'or add an addendum to the document.')
 
@@ -1990,7 +1992,7 @@ def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> di
             if readings is not None and value in readings:
                 merged[name] = Fact(name, value, 'user', (), USER_NOTE)
                 continue
-            # GI round 2, R4 (ii): a date the document states only as another occurrence's or another document's (or
+            # GI round 2, R4 (ii): a date this reader reads only as another occurrence's or another document's (or
             # possibly one) is said to be so, quoting the spans that state it - never as if the two dates differed
             elsewhere = [ev for ev in documented.evidence if isinstance(ev, _ElsewhereSpan)
                          and value in _span_dates(ev)] if name == 'service_date' else []
