@@ -68,6 +68,19 @@ class DateAssertions:
             self.assert_member_date(text, value)
         self.assert_member_conflict(text, ELENA_DATE)
 
+    def assert_question(self, text, *values):
+        """Asked (refutation phase 2, P2DN rules N1 and N5): no date is documented - a conflict between date labels, or
+        dated text that is evidence only (a dated title, a "Date:" line) or a labelled date with more in its field - and
+        each value the document states answers the question, while a date it does not state is a member conflict.
+        Rounds 2-3 pinned some of these as a documented date or a documented conflict with a dated title; a title is
+        evidence now, never the date, so the same text is asked."""
+        fact = date_fact(text)
+        self.assertIn((fact.origin, fact.value), (('conflict', None), ('missing', None)),
+                      [e.text for e in fact.evidence])
+        for value in values:
+            self.assert_member_date(text, value)
+        self.assert_member_conflict(text, ELENA_DATE)
+
     def assert_asked(self, text, *evidence):
         """No usable date: asked, with the documented date text kept as evidence a member value must agree with."""
         fact = date_fact(text)
@@ -110,7 +123,8 @@ class PlannedDateIsNeverTheServiceDateTests(DateAssertions, SimpleTestCase):
         for text, titled in cases:
             with self.subTest(text=text.splitlines()[2][:60]):
                 self.assert_never(text, '2026-11-04')
-                self.assert_conflict(text, titled, '2026-11-04')
+                # refutation phase 2 (P2DN, rule N1): a title is evidence only, so this is asked; both dates answer it
+                self.assert_question(text, titled, '2026-11-04')
 
     def test_alone_the_planned_date_is_asked(self):
         for line, planned in (('Scheduled: Yes    Procedure date: 11/04/2026', '2026-11-04'),
@@ -126,10 +140,13 @@ class PlannedDateIsNeverTheServiceDateTests(DateAssertions, SimpleTestCase):
     def test_controls_a_field_about_something_else_is_passed_over(self):
         for line in ('Last name: Synthetic    First name: Alex    DOS: 10/14/2026',
                      'Procedure date: 10/14/2026    Next colonoscopy: 10/2029',
-                     'Procedure date: 10/14/2026    Previous surgeries: appendectomy',
-                     'Date of service: 10/14/2026 (capsule placement) Recording started at 9:00 AM'):
+                     'Procedure date: 10/14/2026    Previous surgeries: appendectomy'):
             with self.subTest(line=line):
                 self.assert_document(HEAD + line + '\n' + COLO_PLAIN, '2026-10-14')
+        # refutation phase 2 (P2DN, rule N5): a bracket after the date in the label's own field asks it; the labelled
+        # date answers the question
+        self.assert_question(HEAD + 'Date of service: 10/14/2026 (capsule placement) Recording started at 9:00 AM\n'
+                             + COLO_PLAIN, '2026-10-14')
 
     def test_controls_a_clock_never_detaches_a_qualifier_from_its_date(self):
         # "at 8:00 AM (scheduled)" qualifies the planned date itself: another occurrence's, so beside the note's own
@@ -167,7 +184,7 @@ class PrecedingFieldValueIsNotTheLabelsTests(DateAssertions, SimpleTestCase):
                 text = (HEAD + f'Date: {m}/{d}/{y}\nIndication: Personal history of colon polyps Date of service: '
                                '10/14/2026\n' + COLO_BODY)
                 self.assert_never(text, letter)
-                self.assert_conflict(text, '2026-10-14', letter)
+                self.assert_question(text, '2026-10-14', letter)  # a letter's "Date:" is evidence (phase 2, rule N1)
 
     def test_a_sentence_s_history_words_never_let_a_member_date_replace_it(self):
         text = HEAD + 'Surveillance colonoscopy for history of adenomatous polyps, procedure date 10/14/2026.\n' + COLO_PLAIN
@@ -259,7 +276,7 @@ class QualifierOfAnotherItemTests(DateAssertions, SimpleTestCase):
         for text, other, labelled in cases:
             with self.subTest(text=text.splitlines()[2][:60]):
                 self.assert_never(text, other)
-                self.assert_conflict(text, other, labelled)
+                self.assert_question(text, other, labelled)  # titles and "Date:" lines are evidence (phase 2, rule N1)
 
     def test_alone_the_labelled_date_is_asked_and_answered(self):
         text = HEAD + 'Date of service: 10/14/2026 (recall due in 3 years)\n' + COLO_PLAIN
@@ -290,7 +307,7 @@ class OutsideOrIndexDateTests(DateAssertions, SimpleTestCase):
             with self.subTest(line=line[:60]):
                 text = self.TITLED + line + '\n' + COLO_PLAIN
                 self.assert_never(text, other)
-                self.assert_conflict(text, '2026-10-14', other)
+                self.assert_question(text, '2026-10-14', other)  # the title is evidence (phase 2, rule N1)
 
     def test_alone_a_bracketed_history_word_holds_the_date(self):
         for line in ('Procedure date: 09/03/2026 (outside facility; cold snare polypectomy of two adenomas).',
@@ -327,16 +344,22 @@ class AnotherDocumentOrLetterTests(DateAssertions, SimpleTestCase):
             with self.subTest(re_line=re_line):
                 text = HEAD + 'Date: 10/27/2026\n' + re_line + '\nDear Dr. Synthetic,\n' + OFFICE_BODY
                 self.assert_never(text, '2026-10-27')
-                self.assert_conflict(text, '2026-10-27', '2026-10-20')
+                self.assert_question(text, '2026-10-27', '2026-10-20')  # both are evidence (phase 2, rule N1)
 
     def test_controls_this_service_s_titles(self):
-        self.assert_document(HEAD + 'EGD report - 10/14/2026\nTechnique: advanced to the duodenum.\n', '2026-10-14')
-        self.assert_document(HEAD + 'Endoscopic ultrasound report: 10/14/2026\nThe echoendoscope was passed.\n',
-                             '2026-10-14')
-        self.assert_document(HEAD + 'GI visit - 10/20/2026\n' + VISIT_BODY, '2026-10-20')
-        self.assert_document(HEAD + 'Hepatology clinic note - 9/28/2026\n' + VISIT_BODY, '2026-09-28')
-        self.assert_document(HEAD + 'Procedure (fictional)\nDate: 14-Oct-2026\nEGD with Savary dilation.\n',
-                             '2026-10-14')
+        # refutation phase 2 (P2DN, rule N1): this service's own dated titles are evidence too, never the date (a title
+        # of another discipline read as this note's had been sent; the installed revision sent no title's date): the
+        # date is asked, and the member's answer with the title's date settles it
+        for text, value in ((HEAD + 'EGD report - 10/14/2026\nTechnique: advanced to the duodenum.\n', '2026-10-14'),
+                            (HEAD + 'Endoscopic ultrasound report: 10/14/2026\nThe echoendoscope was passed.\n',
+                             '2026-10-14'),
+                            (HEAD + 'GI visit - 10/20/2026\n' + VISIT_BODY, '2026-10-20'),
+                            (HEAD + 'Hepatology clinic note - 9/28/2026\n' + VISIT_BODY, '2026-09-28')):
+            with self.subTest(title=text.splitlines()[1]):
+                self.assert_asked(text, text.splitlines()[1])
+                self.assert_member_date(text, value)
+        self.assert_asked(HEAD + 'Procedure (fictional)\nDate: 14-Oct-2026\nEGD with Savary dilation.\n',
+                          'Date: 14-Oct-2026')
 
 
 class UnreadDateFormsAreKeptTests(DateAssertions, SimpleTestCase):
@@ -396,7 +419,7 @@ class DatedServiceLineTests(DateAssertions, SimpleTestCase):
             with self.subTest(re_line=re_line):
                 text = HEAD + 'Date: 10/27/2026\n' + re_line + '\nDear Dr. Synthetic,\n' + COLO_PLAIN
                 self.assert_never(text, '2026-10-27')
-                self.assert_conflict(text, '2026-10-27', '2026-10-14')
+                self.assert_question(text, '2026-10-27', '2026-10-14')  # both are evidence (phase 2, rule N1)
 
     def test_controls(self):
         self.assert_document(HEAD + 'Colonoscopy - 09/03/2026\nDate of service: 10/14/2026\n' + COLO_PLAIN,
@@ -426,9 +449,7 @@ class AskedDateIsAnswerableTests(DateAssertions, SimpleTestCase):
     def test_text_that_reads_no_date_beside_text_that_does_never_blocks_the_answer(self):
         # an unread label beside the title: asked (it may differ), and answered by the date the title reads
         text = HEAD + 'GI visit - 10/20/2026\nLast visit date: 04/15/26\n' + VISIT_BODY
-        fact = date_fact(text)
-        self.assertEqual((fact.origin, fact.value), ('conflict', None), fact.note)
-        self.assert_member_date(text, '2026-10-20')
+        self.assert_question(text, '2026-10-20')  # (refutation phase 2, rule N1: the title is evidence; asked)
         self.assert_member_conflict(text, ELENA_DATE)
         # text that reads no date at all can never be shown to agree: the document is amended or the value cleared
         alone = HEAD + 'Date of service: 20-Oct-26\n' + VISIT_BODY
@@ -450,11 +471,14 @@ class PopulationControlsTests(DateAssertions, SimpleTestCase):
         self.assert_document(HEAD + 'Date of service: 2026-10-20\n' + VISIT_BODY, '2026-10-20')
         self.assert_document(HEAD + 'MRN: SYN-100201 Date of service: 2026-10-06 Place of service: Office (POS 11)\n',
                              '2026-10-06')
-        self.assert_document(HEAD + 'Date of service: 2026-10-05 (capsule placement)\n', '2026-10-05')
         elena = HEAD + 'Report | Patient Synthetic | Service date 20 October 2026 | Endoscopist Dr. A. Synthetic\n'
         self.assert_document(elena, '2026-10-20')
         self.assert_member_conflict(elena, ELENA_DATE)
-        self.assert_document(HEAD + 'GI consultation note: 2026-10-20\nNext visit: 2026-12-01\n', '2026-10-20')
+        # refutation phase 2 (P2DN): a bracket after the labelled date in its own field (rule N5, the corpus's svc-38)
+        # and a dated title (rule N1, the installed revision's reading) ask the date - an over-hold, never another
+        # date - and the member's answer with the date they state settles it
+        self.assert_question(HEAD + 'Date of service: 2026-10-05 (capsule placement)\n', '2026-10-05')
+        self.assert_question(HEAD + 'GI consultation note: 2026-10-20\nNext visit: 2026-12-01\n', '2026-10-20')
         planned = HEAD + 'Chief complaint: reflux.\nPlan\nColonoscopy scheduled.\nProcedure date: 2026-11-04\n'
         self.assertEqual((date_fact(planned).origin, date_fact(planned).evidence), ('missing', ()))
 

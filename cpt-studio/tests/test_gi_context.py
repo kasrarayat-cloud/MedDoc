@@ -241,24 +241,29 @@ if __name__ == '__main__':
 
 
 class OwnTitleDateTests(unittest.TestCase):
-    """Without a labelled date, only the FIRST dated title line near the top can be the note's own date. A qualified
-    first title gives none, and another unqualified dated title with another date is a conflict - never a value taken
-    from another document's title (a pathology report's own date had been read as the visit's and sent)."""
+    """Without a labelled date, a dated title line near the top was the note's own date when it was the FIRST one: a
+    qualified first title gave none, and another unqualified dated title with another date was a conflict - never a value
+    taken from another document's title (a pathology report's own date had been read as the visit's and sent).
+    Refutation phase 2 (P2DN, rule N1): no dated title is ever the date - the installed revision's reading; a fax's or a
+    letter's "Date:" and another discipline's title had been sent - so each is asked, its date kept as the evidence a
+    member's answer must agree with (these pins had the first title documented)."""
 
     def test_the_first_title_decides(self):
         head = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
         cases = (
-            ('GI follow-up visit: 2026-10-20\nPathology report: 2026-10-14\nEstablished patient.\n', 'missing', None),
-            ('GI consultation note: 2026-10-20\nPathology report: 2026-10-14\n', 'conflict', None),
-            ('GI consultation note: 2026-10-20\nNext visit: 2026-12-01\n', 'document', '2026-10-20'),
-            ('Outside colonoscopy report: 2026-09-03\nGastroenterology consultation.\n', 'missing', None),
-            ('Post-procedure note: 2026-10-20\nUpper endoscopy.\n', 'document', '2026-10-20'),
-            ('Colonoscopy report: 14 Oct 2026\nThe colonoscope was advanced to the cecum.\n', 'document', '2026-10-14'),
+            ('GI follow-up visit: 2026-10-20\nPathology report: 2026-10-14\nEstablished patient.\n',
+             {'2026-10-20', '2026-10-14'}),
+            ('GI consultation note: 2026-10-20\nPathology report: 2026-10-14\n', {'2026-10-20', '2026-10-14'}),
+            ('GI consultation note: 2026-10-20\nNext visit: 2026-12-01\n', {'2026-10-20', '2026-12-01'}),
+            ('Outside colonoscopy report: 2026-09-03\nGastroenterology consultation.\n', {'2026-09-03'}),
+            ('Post-procedure note: 2026-10-20\nUpper endoscopy.\n', {'2026-10-20'}),
+            ('Colonoscopy report: 14 Oct 2026\nThe colonoscope was advanced to the cecum.\n', {'2026-10-14'}),
         )
-        for text, origin, value in cases:
+        for text, read in cases:
             with self.subTest(text=text.split('\n')[0]):
                 fact = context.extract_context(head + text)['service_date']
-                self.assertEqual((fact.origin, fact.value), (origin, value))
+                self.assertEqual((fact.origin, fact.value), ('missing', None))
+                self.assertEqual(context._date_readings(fact.evidence), read)
 
 
 class MemberValueAgainstADocumentConflictTests(unittest.TestCase):

@@ -2,14 +2,27 @@
   "schema": "cpt-studio-services-corpus-known-differences@1",
   "note": "Readings that differ from the author's provisional expectations, kept on purpose with the reason. A GI coder's adjudication may settle either side.",
   "documents": {
+    "svc-03-em-sparse": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DN, rule N1): the document's only dated text is its title \"GI visit - 10/20/2026\", which is evidence and never the date of service by itself (the installed revision sent no date for it either), so the date is asked - a dateless request - and the member's answer with that date settles it."
+    },
     "svc-10-egd-savary-dilation": {
       "differences": [
         {
           "kind": "act.missing",
           "subject": "gi.egd dilation"
+        },
+        {
+          "kind": "date",
+          "subject": "service_date"
         }
       ],
-      "reason": "The dilation is read as performed, but its sentence names no site: the stricture is located only as '36 cm', and the reader does not turn a distance from the incisors into anatomy. The expectation names the esophagus."
+      "reason": "The dilation is read as performed, but its sentence names no site: the stricture is located only as '36 cm', and the reader does not turn a distance from the incisors into anatomy. The expectation names the esophagus. Refutation phase 2 (P2DN, rule N1): the document's only dated text is a bare \"Date: 14-Oct-2026\" line, which is evidence and never the date of service by itself (the installed revision sent no date for it either), so the date is asked - a dateless request - and the member's answer with that date settles it."
     },
     "svc-14-esophagoscopy-stricture-not-traversed": {
       "differences": [
@@ -36,6 +49,24 @@
         }
       ],
       "reason": "The reader keeps the upper endoscopy as a performed service marked included in the EUS (included_in: the EUS code includes the examination, so no code of its own is asked), where the expectation models one EUS service. The moderate sedation documented in the header is therefore an act of the included EGD rather than of the EUS."
+    },
+    "svc-38-bravo-96h": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DN, rule N5): the labelled date \"Date of service: 2026-10-05 (capsule placement)\" is followed in the label's own field by a bracket naming the part of a multi-day study it dates, so it is not taken as the date of service by itself; the date is asked - a dateless request - and the member's answer with the labelled date settles it."
+    },
+    "svc-39-hrm-and-ph-impedance": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DN, rule N5): the labelled date \"Date of service: 2026-10-20 (manometry and catheter placement); recording ended 2026-10-21\" is followed in the label's own field by a bracket and another date naming the parts of a two-day study, so it is not taken as the date of service by itself; the date is asked - a dateless request - and the member's answer with the labelled date settles it."
     }
   }
 }

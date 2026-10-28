@@ -35,17 +35,28 @@ def kinds(svc, status='performed'):
 
 class ServiceDateTests(SimpleTestCase):
     def test_day_month_year_with_hyphens(self):
+        facts, _ = read(HEAD + 'Endoscopy unit\nDate of service: 03-Nov-2026\nThe gastroscope was passed to the second '
+                               'part of the duodenum.\n')
+        self.assertEqual((facts['service_date'].value, facts['service_date'].origin), ('2026-11-03', 'document'))
+        # refutation phase 2 (P2DN, rule N1): a bare "Date:" line is evidence, never the date - the date is read (the
+        # member's answer agrees with it) and asked; this pin had the "Date:" line documented
         facts, _ = read(HEAD + 'Endoscopy unit\nDate: 03-Nov-2026\nThe gastroscope was passed to the second part of '
                                'the duodenum.\n')
-        self.assertEqual((facts['service_date'].value, facts['service_date'].origin), ('2026-11-03', 'document'))
+        fact = facts['service_date']
+        self.assertEqual((fact.value, fact.origin), (None, 'missing'))
+        self.assertEqual(gi_context._date_readings(fact.evidence), {'2026-11-03'})
 
     def test_a_labelled_date_in_a_table_row(self):
         facts, _ = read(HEAD + 'Field | Value\nProcedure date | 2026-09-30\nScope | adult colonoscope\n')
         self.assertEqual(facts['service_date'].value, '2026-09-30')
 
     def test_a_dated_note_title(self):
+        # refutation phase 2 (P2DN, rule N1): a dated title is evidence, never the date (the installed revision's
+        # reading): asked, its date read for the member's answer; this pin had the title documented
         facts, _ = read(HEAD + '\nHepatology clinic note - 9/28/2026\n\nSeen for ascites follow-up.\n')
-        self.assertEqual(facts['service_date'].value, '2026-09-28')
+        fact = facts['service_date']
+        self.assertEqual((fact.value, fact.origin), (None, 'missing'))
+        self.assertEqual(gi_context._date_readings(fact.evidence), {'2026-09-28'})
 
     def test_a_dated_title_never_beats_a_labelled_date_and_a_qualified_one_is_no_date(self):
         facts, _ = read(HEAD + 'Office visit - 2026-09-01\nDate of service: 2026-09-02\nSeen today.\n')
