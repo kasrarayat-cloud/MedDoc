@@ -1157,7 +1157,12 @@ def resume(encounter, user):
         else:
             kind, provider_run = last.kind, last.provider_run
         clear_stop(encounter)
-        key = f'{last.idempotency_key}:resume:{uuid.uuid4()}'
+        # One fresh suffix on the stage's own key, never a chain: each Resume used to append ':resume:<uuid>' (44
+        # characters) to the previous Resume's key, so the third or fourth Resume in a row overflowed the 200-character
+        # key column (an HTTP 500, nothing recorded; refutation gi2, sends known limit 'third Resume'). Nothing parses
+        # the suffix; the stage's own key stays the prefix (_upgrade_predict_key compares the whole key, so a resumed
+        # upgrade predict still sends, as before).
+        key = f"{last.idempotency_key.split(':resume:', 1)[0]}:resume:{uuid.uuid4()}"
         if kind == Job.PREDICT:
             job = _queue_predict(encounter, last.revision, context, key=key, requested_by=user)
         else:

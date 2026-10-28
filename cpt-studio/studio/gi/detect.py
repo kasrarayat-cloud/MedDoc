@@ -4381,7 +4381,19 @@ def _only_a_sub_act(an: Analysis, attributed: list[Optional[str]], family: str, 
     """Whether the sentence [s, e), which says something was not completed or was aborted, speaks only of
     a sub-act (the terminal ileum, the ileocecal valve, retroflexion) of a procedure that reached its
     expected extent: then it is no incompleteness of the procedure. A landmark short of that extent in the
-    same sentence ("could not be advanced beyond the splenic flexure") keeps it the procedure's."""
+    same sentence ("could not be advanced beyond the splenic flexure") keeps it the procedure's.
+
+    Memoised per family and sentence (gi2 integration, cost): every status reference in one sentence asked the same
+    question and each answer rescanned the whole sentence, so one pasted line repeating "The procedure was not aborted,"
+    grew quadratically and passed the analyze stage's limit. The answer depends only on the family, the sentence and the
+    analysis (``attributed`` is fixed per analysis, as _reached_expected_depth's own memo assumes)."""
+    key = ('only-a-sub-act', family, s, e)
+    if key not in an.memo:
+        an.memo[key] = _only_a_sub_act_read(an, attributed, family, s, e)
+    return an.memo[key]
+
+
+def _only_a_sub_act_read(an: Analysis, attributed: list[Optional[str]], family: str, s: int, e: int) -> bool:
     if family not in ('gi.colonoscopy', 'gi.egd') or not _SUB_ACT.search(an.text, s, e):
         return False
     table = cues.LOWER_LANDMARKS if family == 'gi.colonoscopy' else cues.UPPER_LANDMARKS
