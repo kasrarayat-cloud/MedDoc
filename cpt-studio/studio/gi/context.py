@@ -140,14 +140,21 @@ _NEUTRAL_WORDS = frozenset(('the', 'this', 'a', 'an'))
 # birth a label's field or a dated line held, and was sent). The birth LABELS are a closed list: DOB, D.O.B., D-O-B,
 # date of birth, birth date, birthday, birth, born, b., and their joined forms - joined to another field's name by a
 # slash or an ampersand, or followed by a bracketed word ("DOB/Age", "Age/DOB", "DOB (age)"; the P2DATES skeptic's sk:4).
+# P2DN's fix round, issue 7: "b." is the birth label only as it is written - lower case, opening its field ("(b.
+# 01/01/1998)", ", b. 01/01/1998") - never a capital initial after a name ("Dr. Robin B. - 10/14/2026", "Synthetic, Alex
+# B. - 10/14/2026"), which made the line's own date a date of birth, so the dated line was dropped and a member's
+# 1998-01-01 taken and sent. A bracket after the label may hold its format ("DOB (mm/dd/yyyy):", "Date of Birth
+# (MM/DD/YYYY):"; issue 1: the date after it was read as another field's value the member's 1998-01-01 agreed with).
 _BIRTH_LABEL = (r'(?:D[.\-]?+[ \t]?+O[.\-]?+[ \t]?+B\b\.?+|date[ \t]++of[ \t]++birth|birth(?:[ \t]*+(?:date|day))?+'
-                r'|born(?:[ \t]++on)?+|b\.)')
+                r'|born(?:[ \t]++on)?+|(?<![A-Za-z][ \t])(?-i:b)\.)')
 _BIRTH_FORM = (r'(?:[A-Za-z]{1,12}+[ \t]*+[/&][ \t]*+)?' + _BIRTH_LABEL
-               + r'(?:[ \t]*+[/&][ \t]*+[A-Za-z]{1,12}+|[ \t]*+\([ \t]*+[A-Za-z]{1,12}+[ \t]*+\))?+')
+               + r'(?:[ \t]*+[/&][ \t]*+[A-Za-z]{1,12}+|[ \t]*+\([ \t]*+[A-Za-z][A-Za-z/.\- ]{0,14}+\))?+')
 # A date with a birth label right before it ("DOB: 01/01/1998", "(DOB 01/01/1998)", "Date of birth - 01/01/1998", "born
 # on 01/01/1998", "b. 01/01/1998", "DOB (age) 01/01/1998"): read in the few characters before the date.
-_BIRTH_BEFORE = cues.rx(r'(?<![\w/.-])' + _BIRTH_FORM + r'[ \t]*+(?:[:#=\u2013-][ \t]*+)?+(?:\([ \t]*+)?+$')
-_BIRTH_REACH = 32
+# The few characters before the date end at the date (\Z, never $: $ matches before a line break too, so a birth word
+# ending the line above read the next line's first date as its value - P2DN's fix round, issue 7).
+_BIRTH_BEFORE = cues.rx(r'(?<![\w/.-])' + _BIRTH_FORM + r'[ \t]*+(?:[:#=\u2013-][ \t]*+)?+(?:\([ \t]*+)?+\Z')
+_BIRTH_REACH = 40
 _BIRTH_HEAD = cues.rx(r'(?<![\w/.-])' + _BIRTH_FORM + r'(?![\w/-])')
 _BIRTH_TAIL = re.compile(r'[ \t]*+(?P<sep>[:#=\u2013-])?+[ \t]*+')
 
@@ -587,6 +594,7 @@ class _Rows:
 
     def __init__(self, text: str):
         self.text, self._bars, self._below, self._cells, self._breaks = text, {}, {}, {}, None
+        self._aligned, self._above = {}, {}
 
     def line(self, pos: int) -> tuple[int, int]:
         """The line holding ``pos``: one index of the text's line breaks, bisected (never a scan per label: many labels
@@ -631,6 +639,41 @@ class _Rows:
             self._cells[rs] = [(edges[i] + 1, edges[i + 1]) for i in range(len(edges) - 1)]
         return self._cells[rs]
 
+    def aligned(self, ls: int, le: int) -> list[tuple[int, int]]:
+        """The line's cells as a space- or tab-aligned row writes them: the non-blank runs between field breaks (a tab,
+        or two blanks or more), stripped; read once per line (P2DN's fix round, issue 4)."""
+        if ls not in self._aligned:
+            found, pos = [], ls
+            for gap in _CELL_GAP.finditer(self.text, ls, le):
+                s, e = _strip_span(self.text, pos, gap.start())
+                if s < e:
+                    found.append((s, e))
+                pos = gap.end()
+            s, e = _strip_span(self.text, pos, le)
+            if s < e:
+                found.append((s, e))
+            self._aligned[ls] = found
+        return self._aligned[ls]
+
+    def above(self, ls: int) -> Optional[tuple[int, int]]:
+        """The line right above the line starting at ``ls`` when it is not blank (no blank line between), else None."""
+        if ls not in self._above:
+            found = None
+            if ls > 0:
+                ps = self.text.rfind('\n', 0, ls - 1) + 1
+                if not _blank_to(self.text, ps, ls - 1):
+                    found = (ps, ls - 1)
+            self._above[ls] = found
+        return self._above[ls]
+
+    def next_line(self, le: int) -> Optional[tuple[int, int]]:
+        """The line right below the line ending at ``le`` when it is not blank (no blank line between), else None."""
+        if le >= len(self.text):
+            return None
+        ne = self.text.find('\n', le + 1)
+        ne = len(self.text) if ne < 0 else ne
+        return None if _blank_to(self.text, le + 1, ne) else (le + 1, ne)
+
 
 def _strip_span(text: str, start: int, end: int) -> tuple[int, int]:
     while start < end and text[start] in ' \t\r':
@@ -652,15 +695,141 @@ _BLANKS = re.compile(r'[ \t\r]*+')
 
 def _blank_to(text: str, start: int, end: int) -> bool:
     """Whether [start, end) holds nothing but blanks: a scan of its leading blanks only (never a slice of a long line)."""
-    return _BLANKS.match(text, start, end).end() >= end
+    return start >= end or _BLANKS.match(text, start, end).end() >= end
+
+
+# P2DN's fix round, issues 3, 4 and 7 (rule N2 "in any position, any row"): a header names its fields in order, and each
+# value is its own field's BY POSITION - a column by its column, a stacked label by its place in the stack, a joined
+# header ("DOB / Date of Service: 01/01/1998 / 10/14/2026") by its place in the header. Where the positions do not match
+# (more values than names, a stack with a value missing) no value is the label's: it states no date (fail closed). A
+# space- or tab-aligned row ("DOB            Date of Service" over "01/01/1998     10/14/2026") or a stack ("DOB:" /
+# "Date of service:" / "01/01/1998" / "10/14/2026") left the date of birth the label's value, so a member's 1998-01-01
+# was taken and sent while the 10/14 the note states was held; a birth label joined to the label made the date of birth
+# the documented service date, sent with no member at all. A birth word ending a line labels the next line only when it
+# is the line's only text and the next line opens with the value: "To: Dr. Robin B." or "chronic hepatitis B." above
+# "Colonoscopy 10/14/2026", or "DOB" heading the LAST column, marked 10/14 as a date of birth (issue 7).
+_NO_VALUE = object()  # a field label whose value cannot be located: it states no date of its own
+_CELL_GAP = re.compile(r'[ \t]{2,}+|\t')  # a field break between aligned cells (possessive: a long run is read once)
+_HEADER_CELL = re.compile(r"[A-Za-z][^\d:#|\n]{0,60}+[:#]?+")  # a whole cell that is a label: no digit, a colon at its end
+HEADER_CELLS = 24  # a row with more aligned cells than this is never read as a header row
+_LABEL_LINE = cues.rx(r'(?:(?P<dos>' + _DATE_LABEL + r')|(?P<birth>' + _BIRTH_FORM + r'))[ \t]*+[:#]?+'
+                      r"|[A-Za-z][^\d:#|\n]{0,40}+:")
+STACK_REACH = 8  # label-only lines read above and below a stacked label; a longer run is never read by position
+_JOINER = r'[ \t]*+(?:[/&+,]|\band\b)[ \t]*+'
+_JOINED_BEFORE = cues.rx(r'(?<![\w/.-])' + _BIRTH_FORM + _JOINER + r'\Z')
+_JOINED_AFTER = cues.rx(_JOINER + r'(?:' + _BIRTH_FORM + r')(?![\w/-])')
+
+
+def _header_row(text: str, rows: '_Rows', ls: int, le: int) -> Optional[list[tuple[int, int]]]:
+    """The cells of a space- or tab-aligned header row - two cells or more, each a label alone - or None."""
+    cells = rows.aligned(ls, le)
+    if not 2 <= len(cells) <= HEADER_CELLS or not all(_HEADER_CELL.fullmatch(text, s, e) for s, e in cells):
+        return None
+    return cells
+
+
+def _column(text: str, rows: '_Rows', ls: int, le: int, cell_start: int, label_end: int, cell_tail: int):
+    """For a label that is a whole cell of an aligned header row: the cell at its position in the row below, or
+    _NO_VALUE when the row below has another number of cells; None when the label heads no aligned column (it is not
+    one cell's only text, or runs across two cells)."""
+    cells = _header_row(text, rows, ls, le)
+    if cells is None:
+        return None
+    k = bisect.bisect_left(cells, (cell_start, -1))
+    if k >= len(cells) or cells[k][0] != cell_start or label_end > cells[k][1] \
+            or not _blank_to(text, cell_tail, cells[k][1]):
+        return None
+    row = rows.below(le)
+    values = rows.aligned(*row) if row is not None else []
+    return values[k] if len(values) == len(cells) else _NO_VALUE
+
+
+def _line_label(text: str, ls: int, le: int) -> Optional[str]:
+    """'dos' | 'birth' | 'other' when the line holds nothing but a label ("DOB", "Date of service:", "Patient:")."""
+    s, e = _strip_span(text, ls, le)
+    if not s < e <= s + 64:
+        return None
+    m = _LABEL_LINE.fullmatch(text, s, e)
+    return None if m is None else 'dos' if m.group('dos') else 'birth' if m.group('birth') else 'other'
+
+
+def _opens_with_date(text: str, start: int, end: int) -> bool:
+    return _VALUE_DATE_START.match(text, _strip_span(text, start, end)[0], end) is not None
+
+
+def _stacked_value(text: str, rows: '_Rows', ls: int, le: int):
+    """For a label alone on its line: (the line holding its value, whether read by position) - the value line at the
+    label's place in the run of value lines under a stack of label-only lines, or the next line when it opens with a
+    date - else None, or _NO_VALUE when the stack's values cannot be placed."""
+    up, cur = [], ls
+    for _ in range(STACK_REACH + 1):
+        line = rows.above(cur)
+        if line is None or _line_label(text, *line) is None:
+            break
+        up.append(line)
+        cur = line[0]
+    down, cur = [], le
+    for _ in range(STACK_REACH + 1):
+        line = rows.next_line(cur)
+        if line is None or _line_label(text, *line) is None:
+            break
+        down.append(line)
+        cur = line[1]
+    if len(up) > STACK_REACH or len(down) > STACK_REACH:
+        return _NO_VALUE
+    lines = up[::-1] + [(ls, le)] + down
+    here = len(up)
+    kinds = [_line_label(text, *line) for line in lines]
+    if len(lines) > 1:
+        values, line = [], rows.below(lines[-1][1])
+        while line is not None and len(values) < len(lines) and _line_label(text, *line) is None:
+            values.append(line)
+            line = rows.next_line(line[1])
+        if len(values) == len(lines) and all(kind == 'other' or _opens_with_date(text, *values[i])
+                                              for i, kind in enumerate(kinds)):
+            return values[here], True
+        other = 'birth' if kinds[here] == 'dos' else 'dos'
+        if here != len(lines) - 1 or other in kinds:
+            return _NO_VALUE
+    row = rows.below(le)  # one label above its value, or the last of labels of another kind: the next line
+    return (row, False) if row is not None and _opens_with_date(text, *row) else None
+
+
+def _joined(text: str, rows: '_Rows', label_start: int, label_end: int):
+    """A birth label joined to the date-of-service label in one header ("DOB / Date of Service:", "Date of Birth &
+    DOS:", "Visit Date & Date of Birth:"): (the separator's end, the label's own value runs, the birth value runs), by
+    position - two names, two values in their order; otherwise the label states no value and every value may be the
+    date of birth. None when no birth label is joined to it."""
+    ls, le = rows.line(label_start)
+    before = _JOINED_BEFORE.search(text, max(ls, label_start - 48), label_start)
+    after = None if before is not None else _JOINED_AFTER.match(text, label_end, le)
+    if before is None and after is None:
+        return None
+    tail = _LABEL_TAIL.match(text, label_end if before is not None else after.end())
+    sep_end = tail.end('sep') if tail.group('sep') not in (None, '|') else tail.start()
+    end = _field_end(text, tail.end(), le) if tail.end() < le else tail.end()
+    runs, pos = [], tail.end()
+    while pos < end and len(runs) < 3:
+        run = _first_value(text, pos, end, births=False)
+        if run is None:
+            break
+        runs.append(run)
+        pos = run[1]
+    own = 1 if before is not None else 0
+    if len(runs) == 2:
+        return sep_end, (runs[own],), (runs[1 - own],)
+    return sep_end, (), tuple(runs)
 
 
 @functools.lru_cache(maxsize=16)
 def _birth_cells(text: str) -> frozenset:
     """Where a date of birth starts whose birth label is not right before it (rule N2, "any row"): the cell under a
     birth label heading a table column ("Patient | DOB | Date of Service" above "Synthetic, Alex | 01/01/1998 |
-    10/14/2026"), and the value on the line under a birth label that ends its line ("Date of birth:" above
-    "01/01/1998"). One pass over the birth labels; each line's bars and the row under it are read once (_Rows)."""
+    10/14/2026"), or an aligned column ("DOB            Date of Service" above "01/01/1998     10/14/2026"); the value
+    line at a birth label's place in a stack, or the line under a birth label alone on its line when it opens with the
+    value ("Date of birth:" above "01/01/1998"); the value at a birth label's place in a joined header ("DOB / Date of
+    Service: 01/01/1998 / 10/14/2026"). One pass over the birth labels and one over the date labels; each line's cells
+    and the row under it are read once (_Rows)."""
     found, rows = set(), _Rows(text)
     for m in _BIRTH_HEAD.finditer(text):
         ls, le = rows.line(m.start())
@@ -678,18 +847,25 @@ def _birth_cells(text: str) -> frozenset:
                 value = _first_value(text, *cells[col], births=False)
                 if value is not None:
                     found.add(value[0])
-        elif _blank_to(text, tail, le):
-            row = rows.below(le)
-            if row is not None:
-                value = _first_value(text, row[0], min(row[1], row[0] + VALUE_REACH), births=False)
-                if value is not None:
-                    found.add(value[0])
+            continue
+        column = _column(text, rows, ls, le, m.start(), m.end(), tail)
+        if column is None and _blank_to(text, ls, m.start()) and _blank_to(text, tail, le):
+            stacked = _stacked_value(text, rows, ls, le)  # the birth label alone on its line
+            column = stacked[0] if isinstance(stacked, tuple) else None
+        if column is not None and column is not _NO_VALUE:
+            value = _first_value(text, column[0], min(column[1], column[0] + VALUE_REACH), births=False)
+            if value is not None:
+                found.add(value[0])
+    for m in DATE_LABEL.finditer(text):
+        joined = _joined(text, rows, m.start('label'), m.end('label'))
+        if joined is not None:
+            found.update(run[0] for run in joined[2])
     return frozenset(found)
 
 
 def _is_birth(text: str, start: int) -> bool:
     """Whether the date starting at ``start`` is a date of birth (rule N2): its birth label is right before it, in any
-    bracket, or heads its table column or the line above it (_birth_cells)."""
+    bracket, or heads its column, its row's place or the line above it (_birth_cells)."""
     return (_BIRTH_BEFORE.search(text, max(0, start - _BIRTH_REACH), start) is not None
             or start in _birth_cells(text))
 
@@ -788,6 +964,15 @@ def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int
     tail = _LABEL_TAIL.match(text, m.end())
     pos, sep, gap = tail.end(), tail.group('sep'), tail.group('gap')
     line_start, line_end = rows.line(m.start())
+    # P2DN's fix round, issue 4: a label heading a column of a space- or tab-aligned header row reads the cell at its
+    # position in the row below, never the row's first value; a label alone on its line in a stack of labels reads the
+    # value line at its place (_stacked_value). Where the positions do not match it states no date (_NO_VALUE).
+    column = _column(text, rows, line_start, line_end, m.start(), m.end(),
+                     tail.end('sep') if sep is not None else m.end())
+    if column is not None:
+        if column is _NO_VALUE or column[1] - m.start() > GAP_REACH or not _DIGIT.search(text, *column):
+            return _NO_VALUE
+        return column[0], column[1], True
     if pos < line_end and '\t' not in gap and '  ' not in gap:
         end = _field_end(text, pos, line_end)
         if sep is None and not _VALUE_DATE_START.match(text, pos, max(end, pos)):
@@ -814,6 +999,12 @@ def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int
         return start, end, True
     if pos < line_end:
         return None
+    if _blank_to(text, line_start, m.start()):
+        stacked = _stacked_value(text, rows, line_start, line_end)
+        if stacked is None or stacked is _NO_VALUE:
+            return stacked
+        (start, end), positional = stacked
+        return start, _field_end(text, start, end), positional
     row = rows.below(line_end)
     if row is None:
         return None
@@ -833,6 +1024,10 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
         read.add(m.start())
         if lay.section_at(m.start()).kind in NOT_CURRENT_SECTIONS:
             continue
+        joined = _joined(text, rows, m.start('label'), m.end('label'))
+        if joined is not None:  # P2DN's fix round, issue 3: a birth label joined to the label
+            found.append(_joined_candidate(text, m.start('label'), m.end('label'), joined))
+            continue
         value = date_from_match(m)
         kind, start = _labelled_kind(text, m.start('label'), m.end('label'), m.start('date'), m.end(), value)
         # rule N5 (refutation phase 2, P2DN): the date is the note's own only when it stands alone in its own field
@@ -843,8 +1038,18 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
         # refutation r1, context-3, and round 2, c2:8: a labelled date the reader does not read is documented date text
         if m.start() in read or lay.section_at(m.start()).kind in NOT_CURRENT_SECTIONS:
             continue
+        joined = _joined(text, rows, m.start('label'), m.end('label'))
+        if joined is not None:
+            found.append(_joined_candidate(text, m.start('label'), m.end('label'), joined))
+            continue
         where = _label_value(text, m, rows)
         if where is None:
+            continue
+        if where is _NO_VALUE:  # P2DN's fix round, issue 4: a header's positions do not match - it states no date
+            kind, start = _labelled_kind(text, m.start('label'), m.end('label'), m.end(), m.end(), None)
+            tail = _LABEL_TAIL.match(text, m.end())
+            label_end = tail.end('sep') if tail.group('sep') not in (None, '|') else m.end('label')
+            found.append(_Candidate(_span(text, start, label_end), None, 'label', _READING[kind], 'unread'))
             continue
         kind, start = _labelled_kind(text, m.start('label'), m.end('label'), where[0], where[1], None)
         # refutation round 3, sk:1: the evidence is the label and its own value, never the text beside it; and a field
@@ -866,6 +1071,24 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
             span, extra = _span(text, start, value_end), ()
         found.append(_Candidate(span, None, 'label', _READING[kind], 'unread', extra))
     return tuple(found) + _title_candidates(text, lay)
+
+
+def _joined_candidate(text: str, label_start: int, label_end: int, joined) -> _Candidate:
+    """A date-of-service label joined to a birth label in one header (P2DN's fix round, issue 3: "DOB / Date of Service:
+    01/01/1998" documented the date of birth and sent it with no member at all): its own value is the one at its place
+    in the header (_joined), kept beside the label - never the date of birth - and never the note's own date (two
+    fields share the label's field, rule N5); with no value of its own it is kept as evidence that reads no date."""
+    sep_end, own, _births = joined
+    if not own:
+        kind, start = _labelled_kind(text, label_start, label_end, label_end, label_end, None)
+        return _Candidate(_span(text, start, max(sep_end, label_end)), None, 'label', _READING[kind], 'unread')
+    value_start, value_end = own[0]
+    full = FULL_DATE.fullmatch(text, value_start, value_end)
+    day = date_from_match(full) if full is not None else None
+    form = 'read' if day else ('invalid' if full is not None else 'unread')
+    kind, start = _labelled_kind(text, label_start, label_end, value_start, value_end, day)
+    return _Candidate(_span(text, start, max(sep_end, label_end)), day.isoformat() if day else None, 'label',
+                      _READING[kind], form, (_span(text, value_start, value_end),), alone=False)
 
 
 def _title_names(words: str, keyword: Optional[str]) -> str:
@@ -1008,17 +1231,34 @@ def _dated_service_line(text: str, ls: int, le: int) -> Optional[_Candidate]:
     # agreed with it and was sent, and the line's own 10/14 answer was held. A line with two such dates states none the
     # reader can tell ("Re: EGD referral 09/01/2026 10/14/2026"): it is kept, reading no date. Its evidence holds no
     # other date, so a member date agrees only with the line's own.
-    runs, born, pos = [], [], name_end
+    # P2DN's fix round, issue 1 (a regression of that rule against a62a18c85): a date after ANOTHER field's label is that
+    # field's, never the line's ("Procedure: Colonoscopy    Referral date: 10/13/2026", "Re: Colonoscopy - Signed:
+    # 10/27/2026", "Visit Date: today Ordered: 10/13/2026"): the referral, order or signing date agreed with a member's
+    # date, which was sent, and beside the note's own labelled 10/14 the subject line made it a question. Only a bare date
+    # field ("Date:", "Date/Time:") or a date-of-service label after the service's name gives the line its date
+    # (_other_field); a line whose dates are all other fields' or dates of birth states no date of the service.
+    gap = name_end
+    while gap < le and text[gap] in ' \t:,-–—':  # "Colonoscopy: 10/14/2026": the service's own field
+        gap += 1
+    runs, excluded, pos = [], [], name_end
     for at in _GAP_DATE.finditer(text, name_end, le):  # the dates after the name ("#2" or a clock is none)
         run = _first_value(text, at.start(), le, births=False) if at.start() >= pos else None
         if run is None:
             continue
-        (born if _is_birth(text, run[0]) else runs).append(run)
         pos = run[1]
-    if not runs:  # the line's only dates are dates of birth ("Colonoscopy DOB: 01/01/1998")
+        if _is_birth(text, run[0]):
+            label = _BIRTH_BEFORE.search(text, max(start, run[0] - _BIRTH_REACH), run[0])
+            excluded.append((run, label.start() if label else run[0]))
+            continue
+        other = _other_field(text, gap, run[0])
+        if other is not None:
+            excluded.append((run, other))
+            continue
+        runs.append(run)
+    if not runs:  # the line's only dates are dates of birth or other fields' ("Colonoscopy DOB: 01/01/1998")
         return None
     if len(runs) > 1:
-        cut = _strip_span(text, start, min(r[0] for r in runs + born))
+        cut = _strip_span(text, start, min([r[0] for r in runs] + [label for _, label in excluded]))
         return _Candidate(_span(text, *cut), None, source, reading, 'unread')
     own = runs[0]
     full = FULL_DATE.match(text, own[0], own[1])
@@ -1026,15 +1266,41 @@ def _dated_service_line(text: str, ls: int, le: int) -> Optional[_Candidate]:
     day = date_from_match(full) if whole else None
     form = 'read' if day else ('invalid' if whole else 'unread')
     value = day.isoformat() if day else None
-    before = [r for r in born if r[1] <= own[0]]
+    before = sorted((run, label) for run, label in excluded if run[1] <= own[0])
     if not before:
         return _Candidate(_span(text, start, own[1]), value, source, reading, form)
-    # a date of birth between the name and the line's own date: the evidence is the line around it, never the birth date
-    label = _BIRTH_BEFORE.search(text, max(start, before[0][0] - _BIRTH_REACH), before[0][0])
-    head = _strip_span(text, start, label.start() if label else before[0][0])
-    tail = _strip_span(text, before[-1][1], own[1])
+    # a date of birth or another field's date between the name and the line's own date: the evidence is the line around
+    # it, never that date
+    head = _strip_span(text, start, before[0][1])
+    tail = _strip_span(text, before[-1][0][1], own[1])
     spans = [_span(text, *s) for s in (head, tail) if s[0] < s[1]]
     return _Candidate(spans[0], value, source, reading, form, extra=tuple(spans[1:]))
+
+
+# P2DN's fix round, issue 1: the field a date on a dated line follows - the last colon (not a clock's) between the
+# service's name and the date, its label running back to the field's start (a field break, a cell bar, another field's
+# colon, a comma, a semicolon or a spaced dash). Only a bare date field or a date-of-service label is the line's own.
+_GAP_FIELD = re.compile(r'(?<!\d)[:=]|[:=](?!\d)')
+_FIELD_START = re.compile(r'[ \t]{2,}+|\t|[:=|,;]|[ \t][-–—][ \t]')
+_LINE_DATE_FIELD = cues.rx(r'(?:date' + _DATE_TIME + r'|' + _DATE_LABEL + r')(?:[ \t]*+\([^()\n]{0,20}+\))?+')
+
+
+def _other_field(text: str, gap: int, start: int) -> Optional[int]:
+    """Where the label of the field a date at ``start`` follows begins, when that field is another one than the line's
+    own date field (P2DN's fix round, issue 1); None when no field label stands between ``gap`` (after the service's
+    name) and the date, or the label is a bare date field or a date-of-service label."""
+    colon = None
+    for colon in _GAP_FIELD.finditer(text, gap, start):
+        pass
+    if colon is None:
+        return None
+    lo = gap
+    for brk in _FIELD_START.finditer(text, gap, colon.start()):
+        lo = brk.end()
+    s, e = _strip_span(text, lo, colon.start())
+    if s >= e or _LINE_DATE_FIELD.fullmatch(text, s, e) is not None:
+        return None
+    return s
 
 
 def _settings(text: str, lay: Layout) -> Optional[list[tuple[str, Span]]]:
