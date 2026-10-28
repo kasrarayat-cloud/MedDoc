@@ -52,7 +52,7 @@ from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
 from tests.test_repairs_r4d_sections2 import S3_QUESTION, HeldOrReadyAssertions, s3_note
 from tests.test_repairs_r3_sections import read
 
-HEADER = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n'
+HEADER = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n\n'
 DAY = date(2026, 10, 21)
 MIB = 1024 * 1024
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')

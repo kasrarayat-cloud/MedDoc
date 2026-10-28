@@ -19,12 +19,13 @@ from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
 
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
 DOCUMENTED = date(2026, 10, 20)  # OFFICE_NOTE's own date
-TWO_DATES = OFFICE_NOTE.replace('Date of service: 2026-10-20\n',
-                                'Date of service: 2026-10-20\nDate of service: 2026-10-23\n')
-UNDATED = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
+TWO_DATES = OFFICE_NOTE.replace('Date of service: 2026-10-20\n\n',
+                                'Date of service: 2026-10-20\n\nDate of service: 2026-10-23\n\n')
+UNDATED = OFFICE_NOTE.replace('Date of service: 2026-10-20\n\n', '')
 REPORT = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
 Colonoscopy report (fictional) M1
 Date of service: 2026-10-16
+
 Place of service: Hospital outpatient department
 The colonoscope was advanced to the cecum and the examination was completed.
 A 6 mm polyp in the rectum was removed with a cold snare.

@@ -31,6 +31,7 @@ def acts(svc, kind, status=None):
 COLON_TWO_LESIONS = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
 Lower Endoscopy Report
 Date of service: 2026-10-14
+
 Proceduralist: Dr. Ana Fictional, MD
 Technique
 The colonoscope was passed to the cecum, which was identified by the appendiceal orifice. Withdrawal was careful.
@@ -74,6 +75,7 @@ class SeparateLesionsTests(SimpleTestCase):
 NEGATED_LIST = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
 Upper Endoscopy Report
 Date of service: 2026-10-14
+
 The gastroscope was introduced and advanced through the esophagus and stomach into the second part of the duodenum.
 Two cold forceps biopsies were taken from the gastric body for histology.
 Neither endoscopic ultrasound, needle aspiration, ERCP, banding, stent placement nor dilation was carried out at this
@@ -95,7 +97,7 @@ class NegationScopeTests(SimpleTestCase):
 
     def test_a_negated_negative_is_complete(self):
         text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy Report\n'
-                'Date of service: 2026-10-14\nThe colonoscope reached the cecum. The study was completed and was not '
+                'Date of service: 2026-10-14\n\nThe colonoscope reached the cecum. The study was completed and was not '
                 'terminated early or interrupted. A 5 mm polyp in the rectum was removed with a cold snare.\n')
         colon = service(inventory(text), 'gi.colonoscopy')
         self.assertEqual(colon.status, 'performed')
@@ -103,7 +105,7 @@ class NegationScopeTests(SimpleTestCase):
 
     def test_a_discontinued_examination_is_incomplete(self):
         text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy Report\n'
-                'Date of service: 2026-10-14\nThe colonoscope was advanced to the hepatic flexure. The procedure was '
+                'Date of service: 2026-10-14\n\nThe colonoscope was advanced to the hepatic flexure. The procedure was '
                 'discontinued there because of solid stool; the cecum was not reached.\n')
         colon = service(inventory(text), 'gi.colonoscopy')
         self.assertEqual(colon.status, 'incomplete')
@@ -115,7 +117,7 @@ class NegationScopeTests(SimpleTestCase):
 
     def test_a_dilated_duct_is_a_finding_not_a_dilation(self):
         text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nERCP Report\n'
-                'Date of service: 2026-10-14\nThe common bile duct was dilated to 12 mm with two stones. A biliary '
+                'Date of service: 2026-10-14\n\nThe common bile duct was dilated to 12 mm with two stones. A biliary '
                 'sphincterotomy was performed and the stones were cleared with a balloon.\n')
         ercp = service(inventory(text), 'gi.ercp')
         self.assertFalse(acts(ercp, 'dilation'))
@@ -126,6 +128,7 @@ class NegationScopeTests(SimpleTestCase):
 CHECKLIST_CONFLICT = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
 Colonoscopy Procedure Note
 Date of service: 2026-10-14
+
 The cecum was intubated. A 7 mm polyp in the descending colon was removed by cold snare. The polyp site was not
 marked; no India ink or other tattoo was injected.
 Nursing record
@@ -145,7 +148,7 @@ class ConflictTests(SimpleTestCase):
 
     def test_different_sites_are_not_a_conflict(self):
         text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper Endoscopy Report\n'
-                'Date of service: 2026-10-14\nThe scope reached the second portion of the duodenum. Biopsies were '
+                'Date of service: 2026-10-14\n\nThe scope reached the second portion of the duodenum. Biopsies were '
                 'taken from the antrum. The duodenum looked normal and was not biopsied.\n')
         self.assertEqual(inventory(text).conflicts, ())
 
@@ -153,7 +156,7 @@ class ConflictTests(SimpleTestCase):
 class TimeTests(SimpleTestCase):
     def test_history_and_plan_do_not_make_today_s_service_another_time(self):
         text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy Report\n'
-                'Date of service: 2026-10-14\nPrior colonoscopy in 2021 removed an adenoma. Today the colonoscope was '
+                'Date of service: 2026-10-14\n\nPrior colonoscopy in 2021 removed an adenoma. Today the colonoscope was '
                 'advanced to the cecum and a 4 mm rectal polyp was taken with cold forceps. Pathology is pending. '
                 'Repeat colonoscopy is planned in 2029.\n')
         colon = service(inventory(text), 'gi.colonoscopy')
@@ -173,7 +176,7 @@ class EvaluationAndManagementTests(SimpleTestCase):
 
     def test_routine_preprocedure_work_is_not_a_separate_visit(self):
         text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy Report\n'
-                'Date of service: 2026-10-14\nThe routine preprocedure history update and consent were completed; no '
+                'Date of service: 2026-10-14\n\nThe routine preprocedure history update and consent were completed; no '
                 'separate evaluation and management service was documented today. The colonoscope reached the '
                 'cecum and a 5 mm cecal polyp was removed with a cold snare.\n')
         inv = inventory(text)
@@ -183,7 +186,7 @@ class EvaluationAndManagementTests(SimpleTestCase):
 
 class ContextConflictTests(SimpleTestCase):
     def test_a_member_date_unlike_the_document_s_is_a_conflict(self):
-        text = 'Visit date: 2026-10-14\nOffice visit.'
+        text = 'Visit date: 2026-10-14\n\nOffice visit.'
         merged = gi_context.merge_user_values(gi_context.extract_context(text), {'service_date': '2001-02-03'})
         self.assertEqual(merged['service_date'].origin, 'conflict')
         self.assertIsNone(merged['service_date'].value)
@@ -194,7 +197,7 @@ class ContextConflictTests(SimpleTestCase):
         text = 'Office visit with no date.'
         merged = gi_context.merge_user_values(gi_context.extract_context(text), {'service_date': '2026-10-14'})
         self.assertEqual((merged['service_date'].origin, merged['service_date'].value), ('user', '2026-10-14'))
-        text = 'Date of service: 2026-10-14\nOffice visit.'
+        text = 'Date of service: 2026-10-14\n\nOffice visit.'
         merged = gi_context.merge_user_values(gi_context.extract_context(text), {'service_date': '2026-10-14'})
         self.assertEqual(merged['service_date'].value, '2026-10-14')
 

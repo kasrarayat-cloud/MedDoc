@@ -44,7 +44,7 @@ from tests.test_services_second_review import LIVE, REPORT, TwoPassProvider, res
 VISIT = ('99213', 'Total time on the date of the encounter was 24 minutes.')
 SNARE = ('45385', 'was removed with a cold snare')
 BIOPSY = ('45380', 'was sampled with cold biopsy forceps')
-UNDATED_NOTE = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
+UNDATED_NOTE = OFFICE_NOTE.replace('Date of service: 2026-10-20\n\n', '')
 MEMBER_CONFLICT = '2026-09-01'  # differs from OFFICE_NOTE's documented 2026-10-20
 # sk:0: the installed revision 057a7d39 can read a document's service date otherwise than this revision (the skeptic's
 # probe a_dates proved it with its real code: a report's title gave this revision 2026-10-14, a labelled outside

@@ -15,7 +15,7 @@ from studio.types import EvidenceSpan, NormalizedResponse, PageSpan, ProviderCod
 from studio.validation.engine import assess
 from studio.gi.context import extract_context
 
-HEADER = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n'
+HEADER = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n\n'
 DOS = date(2026, 10, 21)
 NOT_PERFORMED = ('planned', 'historical', 'cancelled', 'negated', 'uncertain')
 SILENT = 'uncertain: no performance evidence'
@@ -63,7 +63,7 @@ def run_engine(text, picks):
 class Status0InSpanNegationTests(unittest.TestCase):
     """status:0 — a negation inside an evidence span that names no service governs the span."""
 
-    TEXT = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\nProcedure: Colonoscopy\n'
+    TEXT = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n\nProcedure: Colonoscopy\n'
             'Findings: The colonoscope was advanced to the cecum. The colonic mucosa was normal. No biopsies were '
             'taken. No polypectomy was performed.\n')
 
@@ -106,7 +106,7 @@ class Status0InSpanNegationTests(unittest.TestCase):
 class Status1CoordinatedNegationTests(unittest.TestCase):
     """status:1 — "neither ... nor", elliptical "X was not" and "but not the X" negate X."""
 
-    NEITHER = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n'
+    NEITHER = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n\n'
                'Indication: EUS for evaluation of a pancreatic cyst.\n'
                'Neither EUS nor ERCP was performed today because the patient had eaten breakfast.\nPlan: Reschedule.\n')
     ELLIPSIS = (HEADER + 'Indication: Dysphagia and a pancreatic cyst.\nProcedure: EGD was performed; EUS was not.\n'
@@ -481,7 +481,7 @@ class Status11SeparateEmTests(unittest.TestCase):
 class Status12ComplicationNegationTests(unittest.TestCase):
     """status:12 — "No <service> complications" negates the complications, not the service."""
 
-    TEXT = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n'
+    TEXT = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n\n'
             'Place of service: office (POS 11)\nEstablished patient office visit.\nProcedure: Flexible sigmoidoscopy\n'
             'Findings: The sigmoidoscope was advanced to 40 cm. A biopsy was taken from the rectum.\n'
             'Complications: No flexible sigmoidoscopy complications.\nMedical decision making: moderate.\n'

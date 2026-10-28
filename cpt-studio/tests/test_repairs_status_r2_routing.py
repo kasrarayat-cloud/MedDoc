@@ -28,7 +28,7 @@ from studio.types import (EvidenceSpan, NormalizedResponse, PageSpan, ProviderCo
 from studio.validation import engine as validation_engine
 from studio.validation.engine import assess
 
-HEADER = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n'
+HEADER = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n\n'
 DOCS = Path(__file__).resolve().parent.parent / 'ops' / 'verification' / 'documents'
 NOT_TODAY = ('planned', 'historical', 'cancelled', 'negated')
 POSITIVE = ('performed', 'incomplete')
@@ -226,7 +226,7 @@ class Status0NoCascadeIntoExclusionTests(unittest.TestCase):
         self.assertEqual(family(text, 'gi.colonoscopy'), 'uncertain')
 
 
-STATUS1 = ('SYNTHETIC TEST NOTE - NOT A REAL PATIENT\nDate of service: 2026-10-21\nPlace of service: Office (POS 11)\n'
+STATUS1 = ('SYNTHETIC TEST NOTE - NOT A REAL PATIENT\nDate of service: 2026-10-21\n\nPlace of service: Office (POS 11)\n'
            'Established patient office visit for rectal bleeding.\nHistory of present illness: Two weeks of intermittent '
            'bright red blood per rectum. Prior flexible sigmoidoscopy in 2022 was normal.\nProcedure: Flexible '
            'sigmoidoscopy to evaluate rectal bleeding.\nFindings: The sigmoidoscope was advanced to 40 cm. A biopsy was '
@@ -602,7 +602,7 @@ class Status7ColonlessHeadingTests(unittest.TestCase):
         self.assertEqual(extract_context(text)['setting'].value, 'office')
 
 
-DISCUSSED = ('SYNTHETIC TEST NOTE - NOT A REAL PATIENT\nDate of service: 2026-10-21\nPlace of service: Office (POS 11)\n'
+DISCUSSED = ('SYNTHETIC TEST NOTE - NOT A REAL PATIENT\nDate of service: 2026-10-21\n\nPlace of service: Office (POS 11)\n'
              'Established patient office visit.\nChief complaint: Change in bowel habits.\n{section}\n'
              'Medical decision making: moderate.\nTotal time: 32 minutes.\n')
 VISIT = [('99214', 'Established patient office visit.')]
@@ -817,7 +817,7 @@ class AsScheduledTests(unittest.TestCase):
     service kept, never a future; "is scheduled", "scheduled for <date>", "will be" and "to be scheduled" stay
     planned."""
 
-    BANDING = ('SYNTHETIC TEST NOTE - NOT A REAL PATIENT\nDate of service: 2026-10-21\nPlace of service: Office (POS 11)\n'
+    BANDING = ('SYNTHETIC TEST NOTE - NOT A REAL PATIENT\nDate of service: 2026-10-21\n\nPlace of service: Office (POS 11)\n'
                'Established patient.\nChief complaint: Rectal bleeding.\nAssessment and plan:\nGrade II internal '
                'hemorrhoids.\nRubber band ligation of an internal hemorrhoid was performed today as scheduled.\n'
                'Medical decision making: low.\nTotal time on the date of the encounter was 24 minutes.\n')
@@ -944,7 +944,7 @@ class Status17IntentFromAQuestionTests(unittest.TestCase):
                 self.assertEqual(fact_value(self.note(indication), 'gi.colonoscopy', 'intent'), intent)
 
 
-SEPARATE_BASE = ('SYNTHETIC TEST NOTE - NOT A REAL PATIENT\nDate of service: 2026-10-21\nPlace of service: Office (POS 11)\n'
+SEPARATE_BASE = ('SYNTHETIC TEST NOTE - NOT A REAL PATIENT\nDate of service: 2026-10-21\n\nPlace of service: Office (POS 11)\n'
                  'Established patient office visit for rectal bleeding.\nProcedure: Flexible sigmoidoscopy with biopsy.\n'
                  'Findings: The sigmoidoscope was advanced to 40 cm. A biopsy was taken from the rectum.\n'
                  'Medical decision making: moderate.\nTotal time: 32 minutes.\n')
@@ -990,7 +990,7 @@ class Status14SeparateEmStatementTests(unittest.TestCase):
                 self.assertEqual(fact.value, 'documented')
 
     def test_a_dated_statement_needs_the_date_of_service(self):
-        undated_note = SEPARATE_BASE.replace('Date of service: 2026-10-21\n', '')
+        undated_note = SEPARATE_BASE.replace('Date of service: 2026-10-21\n\n', '')
         self.assertIsNone(separate_em(undated_note + 'On 2026-10-21 a significant, separately identifiable E/M service was '
                                                      'provided.\n'))
         self.assertIsNotNone(separate_em(undated_note + 'A significant, separately identifiable E/M service was '
@@ -1246,7 +1246,7 @@ class Status9FactsFromAnotherProcedureTests(unittest.TestCase):
         self.assertEqual(fact_value(text, 'gi.colonoscopy', 'polyp_count'), '2')
 
 
-OFFICE_NOTE = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\nPlace of service: Office (POS 11)\n'
+OFFICE_NOTE = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n\nPlace of service: Office (POS 11)\n'
                'Established patient office visit.\n{body}\nChief complaint: rectal bleeding.\n'
                'Medical decision making: moderate.\nTotal time: 32 minutes.\n')
 BOX_OFF, BOX_ON = '\N{BALLOT BOX}', '\N{BALLOT BOX WITH X}'
@@ -1262,7 +1262,7 @@ class Status19OtherProcedureTests(unittest.TestCase):
     own procedure, an examination, a test, "none", or a name led by a negation, a condition or a plan.
     Each mention is a procedure of its own, read alone by the ordinary status machinery."""
 
-    CLAIM = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\nPlace of service: Office (POS 11)\n'
+    CLAIM = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n\nPlace of service: Office (POS 11)\n'
              'Established patient office visit.\nChief complaint: rectal bleeding.\n'
              'Procedure: Rubber band ligation of an internal hemorrhoid was performed today without complication.\n'
              'Medical decision making: moderate.\nTotal time: 32 minutes.\n')

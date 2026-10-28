@@ -51,6 +51,7 @@ def check(item, check_id):
 BIDIRECTIONAL = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
 Same-session upper and lower endoscopy (fictional)
 Date of service: 2026-10-14
+
 Place of service: Ambulatory surgery center
 Upper endoscopy report
 The gastroscope was advanced to the second portion of the duodenum. Mild antral erythema was seen. No gastric ulcer
@@ -136,6 +137,7 @@ def check_encounter(result, check_id):
 OFFICE = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
 Gastroenterology clinic visit - progress note
 Date of service: 2026-10-14
+
 Place of service: Office
 Patient status: Established; last seen by Dr. Fictional on 2026-05-02.
 History: colonoscopy in 2022 with two adenomas removed.
@@ -185,6 +187,7 @@ class DateConflictTests(SimpleTestCase):
 OFFICE_VISIT = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
 Gastroenterology office visit (fictional)
 Date of service: 2026-10-14
+
 Place of service: Office
 Patient status: Established patient.
 Chief complaint
@@ -281,7 +284,7 @@ class CatalogueTests(SimpleTestCase):
             self.assertFalse(hasattr(profile, 'descriptor'))
 
 
-SERVICE_STATEMENT = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nDate of service: 2026-10-14\n'
+SERVICE_STATEMENT = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nDate of service: 2026-10-14\n\n'
                      'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. {findings}\n')
 CECUM_STATEMENT = 'The colonoscope was advanced to the cecum.'
 

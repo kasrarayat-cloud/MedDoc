@@ -23,7 +23,7 @@ from studio.types import (EvidenceSpan, NormalizedResponse, PageSpan, ProviderCo
                           to_jsonable)
 from studio.validation.engine import assess
 
-HEADER = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n'
+HEADER = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n\n'
 DOCS = Path(__file__).resolve().parent.parent / 'ops' / 'verification' / 'documents'
 POSITIVE = ('performed', 'incomplete')
 SILENT = 'uncertain: no performance evidence'
@@ -637,7 +637,7 @@ class V2HedgeAfterTheNameTests(unittest.TestCase):
 
 HYPOTHETICAL_EGD = (HEADER + 'Procedure: EGD\nFindings: The gastroscope was advanced to the second part of the duodenum. '
                     'The mucosa was normal.\nImpression: Normal EGD. {X}\n')
-OFFICE = ('SYNTHETIC TEST NOTE - NOT A REAL PATIENT\nDate of service: 2026-10-21\nPlace of service: Office (POS 11)\n'
+OFFICE = ('SYNTHETIC TEST NOTE - NOT A REAL PATIENT\nDate of service: 2026-10-21\n\nPlace of service: Office (POS 11)\n'
           'Established patient office visit for rectal bleeding.\nHistory of present illness: Rectal bleeding for two '
           'weeks.\nAssessment: Hemorrhoids. {X}\nMedical decision making: moderate.\nTotal time: 32 minutes.\n')
 VISIT = 'Established patient office visit for rectal bleeding.'

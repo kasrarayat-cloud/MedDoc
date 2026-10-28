@@ -43,6 +43,7 @@ VISIT = ('99213', 'Total time on the date of the encounter was 24 minutes.')
 COLONOSCOPY = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
 Colonoscopy report (fictional)
 Date of service: 2026-10-16
+
 Procedure: Colonoscopy
 The colonoscope was advanced to the cecum and the examination was completed.
 A 6 mm polyp in the rectum was removed with a cold snare.
@@ -529,7 +530,7 @@ class LatestStageExplainsTests(Pipeline):
 
     def test_the_card_gives_the_failed_predicts_own_reason(self):
         self.use(FakeProvider(selections=[VISIT]))
-        undated = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
+        undated = OFFICE_NOTE.replace('Date of service: 2026-10-20\n\n', '')
         encounter_id = self.create(undated, service_date='2026-10-20')
         drain()
         reply = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': '2026-10-22'})
@@ -554,7 +555,7 @@ class FailedCardNamesTheRunInUseTests(Pipeline):
 
     def test_the_card_gives_the_reason_of_the_run_in_use(self):
         self.use(FailsThenRefusesToSend(selections=[VISIT]))
-        undated = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
+        undated = OFFICE_NOTE.replace('Date of service: 2026-10-20\n\n', '')
         encounter_id = self.create(undated, service_date='2026-10-20')
         drain()
         reply = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': '2026-10-22'})
@@ -589,7 +590,7 @@ class FailedCardNamesTheRunTheStateReadsTests(Pipeline):
     went back to the failed request's date re-assessed with it (nothing was resent) and the card gave the newer run's
     "nothing was sent" instead of the HTTP 500 the state reports."""
 
-    UNDATED = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
+    UNDATED = OFFICE_NOTE.replace('Date of service: 2026-10-20\n\n', '')
     CARD = 'The provider request | failed. | Error: HTTP 500 from the provider (synthetic).'
 
     def failed_then_redated(self):

@@ -62,7 +62,7 @@ class PageJoinInsideASentenceTests(SimpleTestCase):
     colonoscopy as incomplete (a warning and a 52/53 consideration: the Elena 45385 class). A page join is the line
     break it replaces: inside a sentence it is a soft wrap, for routing's stop cue and for the reader."""
 
-    PAGE_1 = (f'{BANNER}\nSCREENING COLONOSCOPY\nDate of service: 2026-10-26\nProcedure: Colonoscopy.\n'
+    PAGE_1 = (f'{BANNER}\nSCREENING COLONOSCOPY\nDate of service: 2026-10-26\n\nProcedure: Colonoscopy.\n'
               'The colonoscope was advanced to the cecum. The procedure was not')
     PAGE_2 = 'discontinued; it was completed without interruption.'
 
@@ -86,14 +86,14 @@ class PageJoinInsideASentenceTests(SimpleTestCase):
         self.assert_complete(text, ())
 
     def test_a_family_without_an_endpoint_reads_the_join_as_the_reader_alone(self):
-        page_1 = (f'{BANNER}\nFLEXIBLE SIGMOIDOSCOPY REPORT\nDate of service: 2026-10-26\n'
+        page_1 = (f'{BANNER}\nFLEXIBLE SIGMOIDOSCOPY REPORT\nDate of service: 2026-10-26\n\n'
                   'The sigmoidoscope was advanced to 60 cm in the descending colon. The procedure was not')
         text, pages = pdf(page_1, self.PAGE_2)
         self.assert_complete(text, pages, code='45330', cite='FLEXIBLE SIGMOIDOSCOPY REPORT', family='gi.flex_sig',
                              completion='unknown')
 
     def test_a_page_join_between_no_and_biopsies_reads_as_on_one_page(self):
-        page_1 = (f'{BANNER}\nSCREENING COLONOSCOPY\nDate of service: 2026-10-26\nThe colonoscope was advanced to the '
+        page_1 = (f'{BANNER}\nSCREENING COLONOSCOPY\nDate of service: 2026-10-26\n\nThe colonoscope was advanced to the '
                   'cecum. The examination was complete. No polyps were found, and no')
         page_2 = 'biopsies were taken. Withdrawal time was 9 minutes.'
         codes = [('45378', 'SCREENING COLONOSCOPY'), ('45380', 'biopsies were taken')]
@@ -110,7 +110,7 @@ class PageJoinInsideASentenceTests(SimpleTestCase):
 
     def test_a_real_stop_across_a_page_join_stays_a_stop(self):
         # control: a finished sentence ends page 1; page 2 says the procedure was discontinued
-        page_1 = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-26\nThe colonoscope was advanced to the '
+        page_1 = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-26\n\nThe colonoscope was advanced to the '
                   'splenic flexure; the cecum was not reached.')
         page_2 = 'The procedure was discontinued because of poor preparation.'
         text, pages = pdf(page_1, page_2)
@@ -120,7 +120,7 @@ class PageJoinInsideASentenceTests(SimpleTestCase):
 
     def test_a_typed_blank_line_is_never_a_page_join(self):
         # the same two lines in a text file, with a blank line typed between them: no page spans, so no join
-        text = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-26\n'
+        text = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-26\n\n'
                 'At colonoscopy on 2020-04-14 a single 5 mm tubular adenoma was\n\nremoved with a cold snare.\n')
         self.assertEqual(services.reflow(text), text)
         spans = (PageSpan(1, 0, text.index('\n\nremoved') + 1), PageSpan(2, text.index('removed'), len(text)))
@@ -129,7 +129,7 @@ class PageJoinInsideASentenceTests(SimpleTestCase):
     def test_a_dated_history_sentence_across_a_page_join_stays_history(self):
         # formats-2: "At colonoscopy on 2020-04-14 a single 5 mm tubular adenoma was" / "removed with a cold snare." read
         # as today's snare (45378 held as base_included, the 2020 snare listed unresolved)
-        page_1 = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-08\nPlace of service: Ambulatory surgery '
+        page_1 = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-08\n\nPlace of service: Ambulatory surgery '
                   'center\nINDICATION: Surveillance. At colonoscopy on 2020-04-14 a single 5 mm tubular adenoma was')
         page_2 = ('removed with a cold snare.\n\nPROCEDURE\nThe colonoscope was advanced to the cecum and the examination '
                   'was complete. No polyps were\nseen.')
@@ -143,7 +143,7 @@ class PageJoinInsideASentenceTests(SimpleTestCase):
 
     def test_a_denial_across_a_page_join_is_read_as_a_denial(self):
         # formats-2 V3b: "The polyp was not" / "removed with a cold snare because ..." read as a performed snare
-        page_1 = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-08\nThe colonoscope was advanced to the cecum.'
+        page_1 = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-08\n\nThe colonoscope was advanced to the cecum.'
                   '\nFINDINGS: In the distal sigmoid colon there was an 8 mm sessile polyp. The polyp was not')
         page_2 = 'removed with a cold snare because the patient had taken clopidogrel that morning.'
         text, pages = pdf(page_1, page_2)
@@ -154,7 +154,7 @@ class PageJoinInsideASentenceTests(SimpleTestCase):
     def test_an_instrument_and_its_predicate_across_a_page_join_document_the_service(self):
         # formats-5 (b): "... the gastroscope was" / "inserted transorally and advanced ..." read no EGD at all, so
         # coding read complete with a documented service missing
-        page_1 = (f'{BANNER}\nOPERATIVE NOTE\nDate of service: 2026-10-14\nWith the patient in the left lateral position '
+        page_1 = (f'{BANNER}\nOPERATIVE NOTE\nDate of service: 2026-10-14\n\nWith the patient in the left lateral position '
                   'the gastroscope was')
         page_2 = 'inserted transorally and advanced to the second portion of the duodenum.\nThe examination was normal.'
         for text, pages in (pdf(page_1 + '\n' + page_2), pdf(page_1, page_2)):
@@ -174,7 +174,7 @@ class WrappedCheckBoxRowTests(SimpleTestCase):
     a performed act. The row continues on a next line that goes on in lower case with no mark of its own, or on a row
     line that opens with the lower-case tail of a label begun above; it never runs on into another row."""
 
-    HEAD = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-14\n'
+    HEAD = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-14\n\n'
             'The colonoscope was advanced to the cecum. The examination was complete.\n'
             'The colon wall distal to the lesion was tattooed with carbon-particle ink.\nNURSING CHECKLIST\n')
     CITE = [('45381', 'The colon wall distal to the lesion was tattooed with carbon-particle ink.')]
@@ -216,7 +216,7 @@ class WrappedCheckBoxRowTests(SimpleTestCase):
 
     def test_a_wrapped_note_is_read_under_its_row(self):
         # formats-1: the note's tail was read as a performed biopsy (a phantom act, a conflict and an unresolved item)
-        text, pages = pdf(f'{BANNER}\nColonoscopy report (fictional)\nDate of service: 2026-10-02\n'
+        text, pages = pdf(f'{BANNER}\nColonoscopy report (fictional)\nDate of service: 2026-10-02\n\n'
                           'The colonoscope was advanced to the cecum.\nBiopsy:  [ ] Taken   [X] Not taken - not\n'
                           'sampled before resection\n')
         result = run(text, [('45378', 'The colonoscope was advanced to the cecum.')], pages)[0]
@@ -230,7 +230,7 @@ class WrappedCheckBoxRowTests(SimpleTestCase):
     def test_a_wrapped_note_of_a_row_that_lists_nothing_done_holds(self):
         # formats-1 H2: "Removed today: [ ] Yes [X] No - such lesions are" / "lifted and resected at the EMR unit" read
         # a performed EMR (an unresolved item, and a paid second review at the time)
-        text, pages = pdf(f'{BANNER}\nCOLONOSCOPY REPORT (fictional)\nDate of service: 2026-10-02\n'
+        text, pages = pdf(f'{BANNER}\nCOLONOSCOPY REPORT (fictional)\nDate of service: 2026-10-02\n\n'
                           'Colonoscopy was performed to the cecum.\nLesion 1\nDescription: 35 mm flat lesion\n'
                           'Removed today:  [ ] Yes   [X] No - such lesions are\nlifted and resected at the EMR unit\n')
         result = run(text, [('45378', 'Colonoscopy was performed to the cecum.')], pages)[0]
@@ -248,7 +248,7 @@ class SemicolonWrapTests(SimpleTestCase):
     PLACEMENT = 'The wireless pH capsule was placed transorally without endoscopy.'
 
     def reading(self, indication: str):
-        text, pages = pdf(f'{BANNER}\nDate of service: 2026-10-05\n{indication}\n{self.PLACEMENT}')
+        text, pages = pdf(f'{BANNER}\nDate of service: 2026-10-05\n\n{indication}\n{self.PLACEMENT}')
         result = run(text, (), pages)[0]
         return (services_of(result), [(u['family'], u['reason']) for u in result.completeness['unresolved_items']],
                 result.completeness['state'])
@@ -273,7 +273,7 @@ class ParagraphWithoutBlankLineTests(SimpleTestCase):
     'not performed' statement; with 45378 alone, the biopsy hidden and 45378 READY). A line break the reader keeps
     before a line that opens with a capital and a clause of its own ends the sentence, as a blank line does."""
 
-    M1 = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-14\nThe colonoscope was advanced to the cecum.\n\n'
+    M1 = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-14\n\nThe colonoscope was advanced to the cecum.\n\n'
           'No polyps; no masses\n\nBiopsies were taken.\n')
 
     def test_the_pdf_reads_the_biopsy_paragraph_as_the_text_does(self):
@@ -294,7 +294,7 @@ class ParagraphWithoutBlankLineTests(SimpleTestCase):
                           'Retroflexion in the rectum was performed; no hemorrhoids',
                           'No polyps or masses were seen in the colon or the rectum, no diverticula'):
             with self.subTest(paragraph=paragraph):
-                text = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-14\nThe colonoscope was advanced to '
+                text = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-14\n\nThe colonoscope was advanced to '
                         f'the cecum.\n{paragraph}\nRandom biopsies were obtained from the right and left colon.\n')
                 result = run(text, [('45380', 'Random biopsies were obtained')])[0]
                 self.assertEqual(acts_of(result, 'biopsy'), [('biopsy', 'performed')])
@@ -306,7 +306,7 @@ class ParagraphWithoutBlankLineTests(SimpleTestCase):
                  ('Biopsies were sent to Dr.\nSmith Laboratory (fictional) for review.', None))  # no predicate of its own
         for sentence, status in cases:
             with self.subTest(sentence=sentence):
-                text = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-14\nThe colonoscope was advanced to '
+                text = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-14\n\nThe colonoscope was advanced to '
                         f'the cecum.\n{sentence}\n')
                 cuts = services._sentences(services.reflow(text))
                 start = text.index(sentence.split('\n')[0])
@@ -324,7 +324,7 @@ class AnsweredFieldRowTests(SimpleTestCase):
     EGD = 'The upper endoscope was advanced to the second portion of the duodenum.'
 
     def read(self, row: str):
-        text, pages = pdf(f'{BANNER}\nUPPER ENDOSCOPY REPORT\nDate of service: 2026-10-14\n{self.EGD}\n{row}')
+        text, pages = pdf(f'{BANNER}\nUPPER ENDOSCOPY REPORT\nDate of service: 2026-10-14\n\n{self.EGD}\n{row}')
         return run(text, [('43239', self.EGD)], pages)[0]
 
     def test_an_answered_field_row_keeps_its_break_before_a_lower_case_line(self):
@@ -365,7 +365,7 @@ class TitleLineTests(SimpleTestCase):
         for opener in ('pH sensor placed at prior manometry.', 'pH catheter in place for 24 hours.',
                        's/p transnasal catheter placement 5 cm above the LES; recording 24 hours off PPI.'):
             with self.subTest(opener=opener):
-                head = f'{BANNER}\nDate of service: 2026-10-14\nESOPHAGEAL pH IMPEDANCE MONITORING REPORT\n'
+                head = f'{BANNER}\nDate of service: 2026-10-14\n\nESOPHAGEAL pH IMPEDANCE MONITORING REPORT\n'
                 control = self.reading(head + opener[0].upper() + opener[1:] + '\nAcid exposure 7.9%.\n')
                 result = self.reading(head + opener + '\nAcid exposure 7.9%.\n')
                 self.assertEqual(services_of(control), [('gi.reflux', 'performed', 'unknown')])
@@ -375,7 +375,7 @@ class TitleLineTests(SimpleTestCase):
                                  [('gi.reflux', 'no_proposal')])
 
     def test_a_title_case_title_keeps_its_break(self):
-        text = (f'{BANNER}\nDate of service: 2026-10-14\nEsophageal pH-Impedance Monitoring Report\n'
+        text = (f'{BANNER}\nDate of service: 2026-10-14\n\nEsophageal pH-Impedance Monitoring Report\n'
                 'pH catheter in place for 24 hours.\nAcid exposure 7.9%.\n')
         result = self.reading(text, [('91038', 'Acid exposure 7.9%')])
         self.assertEqual(services_of(result), [('gi.reflux', 'performed', 'unknown')])
@@ -389,7 +389,7 @@ class TitleLineTests(SimpleTestCase):
     def test_a_title_set_on_two_lines_reads_as_one_title(self):
         # formats-5 (d): a scan's narrower lines set the title on two lines; the feeding-tube replacement it names went
         # unread (no service, coding read complete)
-        body = ('Date of service: 2026-10-18\nProcedure: A new 20 Fr balloon gastrostomy tube was inserted through the '
+        body = ('Date of service: 2026-10-18\n\nProcedure: A new 20 Fr balloon gastrostomy tube was inserted through the '
                 'existing tract.\n')
         one = self.reading(f'{BANNER}\nBEDSIDE PROCEDURE NOTE: GASTROSTOMY TUBE REPLACEMENT\n{body}')
         two = self.reading(f'{BANNER}\nBEDSIDE PROCEDURE NOTE: GASTROSTOMY TUBE\nREPLACEMENT\n{body}')

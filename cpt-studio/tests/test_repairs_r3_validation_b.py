@@ -19,7 +19,7 @@ from studio.validation import checks
 from studio.validation.engine import assess
 from tests.test_validation import MUE_INFO, PFS_INFO, pfs
 
-HEAD = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n'
+HEAD = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n\n'
 ROWS = {(code, ''): pfs(days='XXX', mult='0') for code in ('99213', '99214', '91010', '91110', '91122')}
 ROWS.update({('46221', ''): pfs(days='010'), ('46600', ''): pfs(), ('45300', ''): pfs(), ('45378', ''): pfs(),
              ('45380', ''): pfs(mult='3', base='45378'), ('45385', ''): pfs(mult='3', base='45378'),

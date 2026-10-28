@@ -298,7 +298,7 @@ class ReinstatementGateTests(ApiHarness, TestCase):
         # Engine @4: a code whose service is documented as performed today is no longer excluded by a passage about a
         # planned repeat (interpretation 9), so the exclusion reinstated here is one the documented service makes: an
         # act the document denies, in a colonoscopy whose facts are documented.
-        note = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\nProcedure: Colonoscopy\n'
+        note = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n\nProcedure: Colonoscopy\n'
                 'Findings: The colonoscope was advanced to the cecum. The colon was normal. No biopsies were taken.\n'
                 'Plan: Repeat colonoscopy in 3 years.\n')
         self.provider.selections = [('45380', 'No biopsies were taken.')]
@@ -375,7 +375,7 @@ class UncheckedBoxEvidenceTests(ApiHarness, TestCase):
     """A provider code citing an unchecked box ("☐ Biopsy") is excluded, never ready."""
 
     def test_code_citing_an_unchecked_box_is_excluded(self):
-        note = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n'
+        note = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n\n'
                 'Procedure: Colonoscopy to the cecum. A 6 mm polyp was seen.\n\u2610 Biopsy\n')
         self.provider.selections = [('45380', '\u2610 Biopsy')]
         encounter_id = self.create(note)

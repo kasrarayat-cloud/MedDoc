@@ -67,7 +67,7 @@ def heading_titles(text, day=DAY):
 
 # --- boxes-4: a heading that carries the service's own attributes is that service's heading -------------------------
 
-TWO_SERVICES = (HEAD + 'PROCEDURE REPORT\nDate of service: 10/14/2026\nProcedures: EGD and colonoscopy\n{egd}\n'
+TWO_SERVICES = (HEAD + 'PROCEDURE REPORT\nDate of service: 10/14/2026\n\nProcedures: EGD and colonoscopy\n{egd}\n'
                 'The endoscope was advanced to the second portion of the duodenum and the examination was completed. Two '
                 'biopsies were taken with cold forceps.\n{colon}\nThe colonoscope was advanced to the cecum and the '
                 'examination was completed. A 5 mm polyp was removed with a cold snare.\nImpression: Gastritis. Colon '
@@ -106,7 +106,7 @@ class QualifiedServiceHeadingTests(SimpleTestCase):
                 self.assert_both_acts_read(egd, colon)
 
     def test_another_wording_and_position(self):
-        text = (HEAD + 'Endoscopy report\nDate of service: 10/14/2026\nProcedures performed: upper endoscopy, colonoscopy\n'
+        text = (HEAD + 'Endoscopy report\nDate of service: 10/14/2026\n\nProcedures performed: upper endoscopy, colonoscopy\n'
                 'Screening colonoscopy:\nThe colonoscope was passed to the cecum. A 7 mm sessile polyp was seen in the '
                 'sigmoid colon. It was removed with a cold snare and retrieved.\nDiagnostic upper endoscopy:\nThe gastroscope '
                 'was passed to the second part of the duodenum. Cold forceps biopsies were obtained.\n')
@@ -119,7 +119,7 @@ class QualifiedServiceHeadingTests(SimpleTestCase):
         for egd, colon in (('EGD (diagnostic):', 'Colonoscopy (screening):'), ('Diagnostic EGD:', 'Surveillance colonoscopy:'),
                            ('EGD performed:', 'Colonoscopy to the cecum:'),
                            ('EGD (10/14/2026):', 'Colonoscopy (10/14/2026):')):
-            text = (HEAD + 'Endoscopy unit\nDate of service: 10/14/2026\n' + egd + '\nThe gastroscope was advanced to the '
+            text = (HEAD + 'Endoscopy unit\nDate of service: 10/14/2026\n\n' + egd + '\nThe gastroscope was advanced to the '
                     'second portion of the duodenum. Two biopsies were taken with cold forceps.\n' + colon + '\nThe '
                     'colonoscope was advanced to the cecum. A 5 mm polyp was removed with a cold snare.\n')
             with self.subTest(egd=egd, colon=colon):
@@ -151,7 +151,7 @@ class QualifiedServiceHeadingTests(SimpleTestCase):
     def test_an_office_note_question_opens_no_service(self):
         for label in ('Colonoscopy within 10 years:', 'Colonoscopy up to date:', 'Colonoscopy prep tolerance:',
                       'Colonoscopy (with propofol):'):
-            text = (HEAD + 'Gastroenterology office visit\nDate of service: 10/14/2026\nEstablished patient office visit '
+            text = (HEAD + 'Gastroenterology office visit\nDate of service: 10/14/2026\n\nEstablished patient office visit '
                     'for heartburn.\n' + label + '\nYes\nAssessment: GERD.\n')
             with self.subTest(label=label):
                 self.assertNotIn(label, heading_titles(text))

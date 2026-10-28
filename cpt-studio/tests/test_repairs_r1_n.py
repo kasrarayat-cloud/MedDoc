@@ -16,13 +16,13 @@ from studio.validation.engine import assess
 
 HEAD = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
 DAY = date(2026, 10, 14)
-COLONOSCOPY = HEAD + ('Procedure date: 10/14/2026\nPROCEDURE NOTE: Colonoscopy\nIndication: Screening colonoscopy, average '
+COLONOSCOPY = HEAD + ('Procedure date: 10/14/2026\n\nPROCEDURE NOTE: Colonoscopy\nIndication: Screening colonoscopy, average '
                       'risk.\nTechnique: The colonoscope was advanced to the cecum, identified by the appendiceal orifice and '
                       'ileocecal valve.\nFindings:\nThe preparation was good. {x}\nImpression: See findings.\n')
-EGD = HEAD + ('Procedure date: 10/14/2026\nPROCEDURE NOTE: EGD\nIndication: Dyspepsia.\nTechnique: The upper endoscope was '
+EGD = HEAD + ('Procedure date: 10/14/2026\n\nPROCEDURE NOTE: EGD\nIndication: Dyspepsia.\nTechnique: The upper endoscope was '
               'advanced to the second portion of the duodenum.\nFindings:\nThe esophagus was normal. {x}\nImpression: See '
               'findings.\n')
-SIGMOIDOSCOPY = HEAD + ('Procedure date: 10/14/2026\nPROCEDURE NOTE: Flexible sigmoidoscopy\nIndication: Rectal bleeding.\n'
+SIGMOIDOSCOPY = HEAD + ('Procedure date: 10/14/2026\n\nPROCEDURE NOTE: Flexible sigmoidoscopy\nIndication: Rectal bleeding.\n'
                         'Technique: The sigmoidoscope was advanced to the descending colon.\nFindings:\n{x}\nImpression: '
                         'See findings.\n')
 COLON_BASE = ('45378', 'The colonoscope was advanced to the cecum')
@@ -149,7 +149,7 @@ class ReplacementCueTests(SimpleTestCase):
         self.assertEqual(statuses(COLONOSCOPY.format(x='A 6 mm sessile polyp was seen in the sigmoid colon. The polyp '
                                                        'was photographed instead of being removed by cold snare.'),
                                   'snare'), ['negated'])
-        text = HEAD + ('Procedure date: 10/14/2026\nPROCEDURE NOTE: EGD\nTechnique: Because the echoendoscope was '
+        text = HEAD + ('Procedure date: 10/14/2026\n\nPROCEDURE NOTE: EGD\nTechnique: Because the echoendoscope was '
                        'unavailable, an EGD was performed rather than EUS. The upper endoscope was advanced to the second '
                        'portion of the duodenum.\nImpression: Normal.\n')
         self.assertEqual([s.status for s in inventory(text).services if s.family == 'gi.eus'], ['negated'])

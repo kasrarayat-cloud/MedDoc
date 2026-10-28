@@ -112,7 +112,7 @@ class Review0GateTests(TestCase):
 def office_note(plan_lines, *, procedure_lines=(), time_line='Total time on the date of the encounter was 24 minutes.'):
     procedure = ('\nProcedure\n' + '\n'.join(procedure_lines) + '\n') if procedure_lines else ''
     return ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\n'
-            'Date of service: 2026-10-20\nPlace of service: Office, in-person outpatient visit\n'
+            'Date of service: 2026-10-20\n\nPlace of service: Office, in-person outpatient visit\n'
             'Patient status: Established patient, last seen 2026-03-02.\n\nChief complaint\nRectal bleeding.\n'
             f'{procedure}\nAssessment and plan\n' + '\n'.join(plan_lines) + '\n\n'
             'Medical decision making\nLow: one stable chronic illness; prescription drug management.\n\n'
@@ -266,7 +266,7 @@ class Status4ApiTests(MultiEvidenceApiCase, TestCase):
     """status:4 — EUS named only as requested: the EGD passage does not make 43259 approvable."""
 
     def test_status4_an_uncertain_family_is_not_approvable(self):
-        note = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n'
+        note = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n\n'
                 'Indication: Dysphagia. Pancreatic cyst on CT; EUS requested by the referring physician.\n'
                 'Procedure: EGD\nFindings: The endoscope was advanced to the second part of the duodenum. '
                 'Normal EGD.\n')
@@ -281,7 +281,7 @@ class Status13ApiTests(MultiEvidenceApiCase, TestCase):
     """status:13 — one Corti code with a performed and a hedged evidence passage is not approvable."""
 
     def test_status13_a_hedged_second_passage_is_not_approvable(self):
-        note = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\nProcedure: Colonoscopy\n'
+        note = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n\nProcedure: Colonoscopy\n'
                 'Findings: The colonoscope was advanced to the cecum. A 5 mm cecal lesion was seen. It is unclear '
                 'whether biopsies were taken.\n')
         encounter_id = self.run_note(note, ('45380', 'The colonoscope was advanced to the cecum.',

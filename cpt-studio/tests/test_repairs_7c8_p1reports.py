@@ -26,6 +26,7 @@ SYNTHETIC = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\
 
 COLONOSCOPY = SYNTHETIC + """Colonoscopy report (fictional)
 Date of service: 2026-10-16
+
 Procedure: Colonoscopy
 The colonoscope was advanced to the cecum and the examination was completed.
 A 6 mm polyp in the rectum was removed with a cold snare.
@@ -271,6 +272,7 @@ class SecondReviewCheckNamesWhatItAccountsForTests(Harness):
 
 EM_AND_COLONOSCOPY = SYNTHETIC + """Riverbend Digestive Health (fictional)
 Date of service: 2026-10-20
+
 Place of service: Office, in-person outpatient visit
 Patient status: Established patient, last seen 2026-03-02.
 
@@ -289,6 +291,7 @@ VISIT = ('99214', 'Total time on the date of the encounter was 32 minutes.')
 EVERY_SERVICE = 'Every documented service has a proposal'
 COLONOSCOPY_ALONE = SYNTHETIC + """Colonoscopy report (fictional)
 Date of service: 2026-10-21
+
 Place of service: Hospital outpatient department
 Procedure: Colonoscopy
 The colonoscope was advanced to the cecum and the examination was completed.
@@ -369,7 +372,7 @@ class UncountedVisitIsNamedWithoutOverstatingTests(SimpleTestCase):
 
     def test_a_visit_beside_a_possible_procedure_is_named_without_saying_it_was_done(self):
         from tests.test_services_reconcile import run
-        text = (SYNTHETIC + 'Date of service: 2026-10-21\nPlace of service: Office\nEstablished patient office visit '
+        text = (SYNTHETIC + 'Date of service: 2026-10-21\n\nPlace of service: Office\nEstablished patient office visit '
                 'for rectal bleeding.\nMedical decision making: moderate.\nTotal time on the date of the encounter was '
                 '32 minutes.\nIt is unclear whether a colonoscopy was performed today.\n')
         result = run(text, [])
@@ -403,7 +406,7 @@ class VisitNotCountedSaysWhyTruthfullyTests(SimpleTestCase):
     def test_control_without_that_statement_the_rule_is_given_and_a_possible_procedure_is_not_called_done(self):
         from studio.validation import checks
         for text in (EM_AND_COLONOSCOPY.replace(SEPARATE_EM, ''),
-                     SYNTHETIC + 'Date of service: 2026-10-21\nPlace of service: Office\nEstablished patient office '
+                     SYNTHETIC + 'Date of service: 2026-10-21\n\nPlace of service: Office\nEstablished patient office '
                      'visit for rectal bleeding.\nMedical decision making: moderate.\nTotal time on the date of the '
                      'encounter was 32 minutes.\nIt is unclear whether a colonoscopy was performed today.\n'):
             with self.subTest(text=text[-60:]):
@@ -486,6 +489,7 @@ class PendingReviewSaysWhatIsMissingTests(Harness):
 
 SNARE_ONLY = SYNTHETIC + """Colonoscopy report (fictional)
 Date of service: 2026-10-16
+
 Procedure: Colonoscopy
 The colonoscope was advanced to the cecum and the examination was completed.
 A 6 mm polyp in the rectum was removed with a cold snare.

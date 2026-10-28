@@ -13,7 +13,7 @@ from django.test import SimpleTestCase
 from studio.gi import detect
 
 DAY = date(2026, 10, 21)
-HEAD = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n'
+HEAD = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n\n'
 
 
 def scan_family(an, start, end):
@@ -149,7 +149,7 @@ _ROUTE = detect.route
 NEW_DATE = date(2026, 10, 22)  # OFFICE_NOTE documents 2026-10-20
 # A note with no date of its own: a member's date supplies it, and a later member date is a date change. A member's
 # date beside a documented one is a conflict instead (session interpretation 11), and nothing is routed for it.
-UNDATED_NOTE = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
+UNDATED_NOTE = OFFICE_NOTE.replace('Date of service: 2026-10-20\n\n', '')
 
 
 class LiveEncounter:

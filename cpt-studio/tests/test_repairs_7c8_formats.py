@@ -70,7 +70,7 @@ class PageFurnitureAtAPageJoinTests(SimpleTestCase):
     today's and a snare the note says was not done read READY. A page's furniture is skipped when the join is decided,
     and never read into the sentence; routing's stop cue reads a negation across it too."""
 
-    PAGE_1 = (f'{BANNER}\nSCREENING COLONOSCOPY\nDate of service: 2026-10-26\nProcedure: Colonoscopy.\n'
+    PAGE_1 = (f'{BANNER}\nSCREENING COLONOSCOPY\nDate of service: 2026-10-26\n\nProcedure: Colonoscopy.\n'
               'The colonoscope was advanced to the cecum. The procedure was not')
     PAGE_2 = 'discontinued; it was completed without interruption.'
     CITE = [('45378', 'SCREENING COLONOSCOPY')]
@@ -129,7 +129,7 @@ class PageFurnitureAtAPageJoinTests(SimpleTestCase):
                 self.assertNotIn(furniture, flow[text.index('Procedure: Colonoscopy.'):])
 
     def test_a_real_stop_after_a_finished_page_stays_a_stop(self):  # control (must not change)
-        page_1 = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-26\nThe colonoscope was advanced to the '
+        page_1 = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-26\n\nThe colonoscope was advanced to the '
                   'splenic flexure; the cecum was not reached.\nPage 1 of 2')
         page_2 = 'Page 2 of 2\nThe procedure was discontinued because of poor preparation.'
         text, pages = pdf(page_1, page_2)
@@ -140,7 +140,7 @@ class PageFurnitureAtAPageJoinTests(SimpleTestCase):
     def test_a_heading_after_a_finished_sentence_is_no_furniture(self):  # control (must not change)
         # page 1 ends with a finished sentence and page 2 opens with a section heading over a lower-case line: the
         # heading is the document's, never skipped as furniture
-        page_1 = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-26\nThe colonoscope was advanced to the '
+        page_1 = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-26\n\nThe colonoscope was advanced to the '
                   'cecum and the examination was complete.')
         page_2 = 'FINDINGS\nrandom biopsies were taken from the right and left colon.'
         text, pages = pdf(page_1, page_2)
@@ -148,7 +148,7 @@ class PageFurnitureAtAPageJoinTests(SimpleTestCase):
 
     def test_an_instrument_and_its_predicate_across_the_furniture(self):
         # sk:2, formats-5 (b): the performed EGD went unread and coding read complete
-        page_1 = (f'{BANNER}\nOPERATIVE NOTE\nDate of service: 2026-10-14\nWith the patient in the left lateral '
+        page_1 = (f'{BANNER}\nOPERATIVE NOTE\nDate of service: 2026-10-14\n\nWith the patient in the left lateral '
                   'position the gastroscope was')
         page_2 = 'inserted transorally and advanced to the second portion of the duodenum.\nThe examination was normal.'
         for pages in ((page_1 + '\n' + page_2,), (page_1 + '\nPage 1 of 2', page_2), (page_1, 'Page 2 of 2\n' + page_2)):
@@ -161,7 +161,7 @@ class PageFurnitureAtAPageJoinTests(SimpleTestCase):
 
     def test_a_dated_history_sentence_across_the_furniture_stays_history(self):
         # sk:3, formats-2 (a): the 2020 snare read as today's (45378 held as base_included, the snare unresolved)
-        page_1 = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-08\nPlace of service: Ambulatory surgery '
+        page_1 = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-08\n\nPlace of service: Ambulatory surgery '
                   'center\nINDICATION: Surveillance. At colonoscopy on 2020-04-14 a single 5 mm tubular adenoma was')
         page_2 = ('removed with a cold snare.\n\nPROCEDURE\nThe colonoscope was advanced to the cecum and the examination '
                   'was complete. No polyps were\nseen.')
@@ -176,7 +176,7 @@ class PageFurnitureAtAPageJoinTests(SimpleTestCase):
 
     def test_a_denial_across_the_furniture_is_never_ready(self):
         # sk:3, formats-2 (b, V3b): a snare the note says was not done read performed and 45385 READY
-        page_1 = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-08\nThe colonoscope was advanced to the '
+        page_1 = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-08\n\nThe colonoscope was advanced to the '
                   'cecum.\nFINDINGS: In the distal sigmoid colon there was an 8 mm sessile polyp. The polyp was not')
         page_2 = 'removed with a cold snare because the patient had taken clopidogrel that morning.'
         for pages in ((page_1 + '\nPage 1 of 2', page_2), (page_1, 'Page 2 of 2\n' + page_2)):
@@ -195,7 +195,7 @@ class RoutingStopAcrossFurnitureTests(SimpleTestCase):
     def status(self, text):
         return [(f.family, f.status) for f in detect.route(text, date(2026, 10, 26)).findings]
 
-    HEAD = f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-26\nThe colonoscope was advanced to the cecum. '
+    HEAD = f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-26\n\nThe colonoscope was advanced to the cecum. '
 
     def test_a_heading_before_a_capitalised_stop_is_no_furniture(self):  # control
         text = self.HEAD + 'The scope was not\n\nIMPRESSION\nDiscontinued at the splenic flexure because of looping.\n'
@@ -226,7 +226,7 @@ class WrappedRowContinuationTests(SimpleTestCase):
     conflict and an unresolved item). A row whose option or note cannot end where its line does goes on in the next
     line whatever its case, when that line has no mark of its own and opens no clause, row, field or item of its own."""
 
-    HEAD = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-14\n'
+    HEAD = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-14\n\n'
             'The colonoscope was advanced to the cecum. The examination was complete.\n'
             'The colon wall distal to the lesion was tattooed with carbon-particle ink.\nNURSING CHECKLIST\n')
     CITE = [('45381', 'The colon wall distal to the lesion was tattooed with carbon-particle ink.')]
@@ -273,7 +273,7 @@ class WrappedRowContinuationTests(SimpleTestCase):
                 got = sorted(x for x in corpus_reading(result.text, result.pages) if x[0] == 'conflict')
                 self.assertEqual(got, expected)
 
-    NOTE_HEAD = (f'{BANNER}\nCOLONOSCOPY REPORT (fictional)\nDate of service: 2026-10-02\n'
+    NOTE_HEAD = (f'{BANNER}\nCOLONOSCOPY REPORT (fictional)\nDate of service: 2026-10-02\n\n'
                  'Colonoscopy was performed to the cecum.\nLesion 1\nDescription: 35 mm flat lesion\n')
     NOTE_CITE = [('45378', 'Colonoscopy was performed to the cecum.')]
 
@@ -321,7 +321,7 @@ class ParagraphOpeningWithANumeralOrAVerbTests(SimpleTestCase):
 
     def document(self, paragraph: str, blank: bool):
         sep = '\n\n' if blank else '\n'
-        return (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-14\nThe colonoscope was advanced to the '
+        return (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-14\n\nThe colonoscope was advanced to the '
                 f'cecum.{sep}No polyps; no masses{sep}{paragraph}\n')
 
     def readings(self, paragraph: str, codes):
@@ -353,7 +353,7 @@ class ParagraphOpeningWithANumeralOrAVerbTests(SimpleTestCase):
                          'A single sessile polyp with a central depression was seen in the descending colon\nMeasuring 6 mm in size.'):
             with self.subTest(sentence=sentence):
                 first, second = sentence.split('\n')
-                text = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-14\nThe colonoscope was advanced to '
+                text = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-14\n\nThe colonoscope was advanced to '
                         f'the cecum.\n{sentence}\n')
                 cuts = services._sentences(services.reflow(text))
                 self.assertTrue(any(s <= text.index(first) and text.index(second) < e for s, e in cuts))
@@ -374,7 +374,7 @@ class TitleNamingAServiceTests(SimpleTestCase):
             result.completeness['state']
 
     def test_a_service_heading_keeps_its_break_before_a_lower_case_opener(self):
-        head = f'{BANNER}\nDate of service: 2026-10-14\n'
+        head = f'{BANNER}\nDate of service: 2026-10-14\n\n'
         for title, family in (('24-HOUR ESOPHAGEAL pH MONITORING', 'gi.reflux'),
                               ('WIRELESS pH CAPSULE STUDY', 'gi.reflux'),
                               ('AMBULATORY pH MONITORING (BRAVO)', 'gi.reflux'),
@@ -395,7 +395,7 @@ class TitleNamingAServiceTests(SimpleTestCase):
         self.assertEqual(services.reflow(text).count('\n'), 1)
 
     def test_a_title_set_on_several_short_heading_lines(self):
-        body = ('Date of service: 2026-10-18\nProcedure: A new 20 Fr balloon gastrostomy tube was inserted through the '
+        body = ('Date of service: 2026-10-18\n\nProcedure: A new 20 Fr balloon gastrostomy tube was inserted through the '
                 'existing tract.\n')
         one = self.reading(f'{BANNER}\nGASTROSTOMY TUBE REPLACEMENT\n{body}')
         self.assertEqual(one, ([('gi.feeding_tube', 'performed', 'unknown')], [('gi.feeding_tube', 'no_proposal')],
@@ -425,7 +425,7 @@ class HistoryWordsOpeningASentenceTests(SimpleTestCase):
             result.completeness['state']
 
     def test_the_pdf_reads_as_the_text(self):
-        source = (f'{BANNER}\nDate of service: 2026-10-05\nIndication: Heartburn refractory to proton pump inhibitor '
+        source = (f'{BANNER}\nDate of service: 2026-10-05\n\nIndication: Heartburn refractory to proton pump inhibitor '
                   f'therapy; candidate for surgery. Prior studies have been inconclusive.\n{self.PLACEMENT}\n')
         expected = ([('gi.reflux', 'performed', 'unknown')], [('gi.reflux', 'no_proposal')], 'incomplete')
         self.assertEqual(self.reading(source), expected)
@@ -434,13 +434,13 @@ class HistoryWordsOpeningASentenceTests(SimpleTestCase):
         self.assertEqual(self.reading(text, pages), expected)
 
     def test_a_history_heading_still_opens_a_history_part(self):  # control
-        text = (f'{BANNER}\nDate of service: 2026-10-05\nPrior studies:\nWireless pH capsule placed in 2024; acid '
+        text = (f'{BANNER}\nDate of service: 2026-10-05\n\nPrior studies:\nWireless pH capsule placed in 2024; acid '
                 f'exposure 9%.\nToday: {self.PLACEMENT}\n')
         parts = services.parts(text)
         heading = text.index('Prior studies:')
         self.assertTrue(any(p.kind == 'history' and p.start <= heading < p.end for p in parts))
         # a history sentence that opens no labelled section's paragraph still heads the lines after it, as before
-        text = (f'{BANNER}\nDate of service: 2026-10-05\nPast medical history is notable for the following.\n'
+        text = (f'{BANNER}\nDate of service: 2026-10-05\n\nPast medical history is notable for the following.\n'
                 'Polypectomy.\nHemorrhoid banding.\n')
         item = text.index('Polypectomy.')
         self.assertTrue(any(p.kind == 'history' and p.start <= item < p.end for p in services.parts(text)))
@@ -463,7 +463,7 @@ class LabelAnsweredOnTheNextLineTests(SimpleTestCase):
     def test_the_pdf_reads_as_the_one_line_text(self):
         for answer in ('no, pt on apixaban.', 'No, pt on apixaban.', 'no', 'No', 'N', 'none'):
             with self.subTest(answer=answer):
-                source = f'{BANNER}\nUPPER ENDOSCOPY REPORT\nDate of service: 2026-10-14\n{self.EGD}\n{self.LABEL} {answer}\n'
+                source = f'{BANNER}\nUPPER ENDOSCOPY REPORT\nDate of service: 2026-10-14\n\n{self.EGD}\n{self.LABEL} {answer}\n'
                 control = self.read(source)
                 self.assertNotIn(('biopsy', 'performed'), control[0])
                 self.assertNotEqual(control[1], 'ready')
@@ -486,7 +486,7 @@ class ActFrameReadsThePageJoinTests(SimpleTestCase):
     and 46221 was EXCLUDED for two rubber bands the document places today ("... two rubber bands were" / "placed on
     the internal hemorrhoids today."). It reads the same page-joined view as build()."""
 
-    HEAD = (f'{BANNER}\nProcedure date: 10/14/2026\nPROCEDURE NOTE: Anoscopy with hemorrhoid banding\nIndication: '
+    HEAD = (f'{BANNER}\nProcedure date: 10/14/2026\n\nPROCEDURE NOTE: Anoscopy with hemorrhoid banding\nIndication: '
             'Bleeding internal hemorrhoids.\nFindings: Grade 2 internal hemorrhoids were seen.\n')
 
     def test_a_banding_across_a_page_join_is_never_excluded(self):
@@ -519,7 +519,7 @@ class FieldAnswerCostTests(SimpleTestCase):
 
     def test_the_assess_stage_reads_many_spaced_rows_in_time(self):
         from tests.test_repairs_r7_cost import assess_child
-        text = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-21\n'  # the date assess_child assesses for
+        text = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-21\n\n'  # the date assess_child assesses for
                 + ''.join(f'Colonoscopy {i}: the procedure was not' + ' ' * 170 + 'discontinued; it was completed.\n'
                           for i in range(120)))
         at = text.index('COLONOSCOPY REPORT')
@@ -546,9 +546,9 @@ class AnotherEventsDateAfterTheActsOwnTodayTests(SimpleTestCase):
     after the date. A date inside a clause another event opens (because, after, since ...) is that event's whenever
     the clause has a predicate of its own, before or after the date; the act is never excluded on it."""
 
-    HEAD = (f'{BANNER}\nProcedure date: 10/14/2026\nPROCEDURE NOTE: Colonoscopy\nTechnique: The colonoscope was advanced '
+    HEAD = (f'{BANNER}\nProcedure date: 10/14/2026\n\nPROCEDURE NOTE: Colonoscopy\nTechnique: The colonoscope was advanced '
             'to the cecum.\nFindings: ')
-    ANOSCOPY = (f'{BANNER}\nProcedure date: 10/14/2026\nPROCEDURE NOTE: Anoscopy with hemorrhoid banding\nIndication: '
+    ANOSCOPY = (f'{BANNER}\nProcedure date: 10/14/2026\n\nPROCEDURE NOTE: Anoscopy with hemorrhoid banding\nIndication: '
                 'Bleeding internal hemorrhoids.\nFindings: ')
 
     def test_the_act_stated_done_today_is_never_excluded(self):

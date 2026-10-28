@@ -23,7 +23,7 @@ from studio.types import (EvidenceSpan, NormalizedResponse, PageSpan, ProviderCo
                           to_jsonable)
 from studio.validation.engine import assess
 
-HEADER = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n'
+HEADER = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n\n'
 NOT_TODAY = ('planned', 'historical', 'cancelled', 'negated')
 POSITIVE = ('performed', 'incomplete')
 
@@ -273,7 +273,7 @@ class Routing11WrapAfterAVerbTests(unittest.TestCase):
 
     def test_a_letterhead_title_and_field_lines_stay_apart(self):
         text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nHarborview Digestive Health (fictional practice)\n'
-                'Established patient visit - office progress note\nDate of service: 2026-10-21\nPlace of service: Office '
+                'Established patient visit - office progress note\nDate of service: 2026-10-21\n\nPlace of service: Office '
                 '(POS 11)\nEstablished patient office visit.\n')
         for line in ('Established patient visit', 'Date of service', 'Place of service', 'Established patient office'):
             with self.subTest(line=line):

@@ -18,10 +18,10 @@ from studio.validation.engine import assess
 
 HEAD = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
 DAY = date(2026, 10, 14)
-COLONOSCOPY = HEAD + ('Procedure date: 10/14/2026\nPROCEDURE NOTE: Colonoscopy\nIndication: Screening colonoscopy, average '
+COLONOSCOPY = HEAD + ('Procedure date: 10/14/2026\n\nPROCEDURE NOTE: Colonoscopy\nIndication: Screening colonoscopy, average '
                       'risk.\nTechnique: The colonoscope was advanced to the cecum, identified by the appendiceal orifice and '
                       'ileocecal valve.\nFindings:\nThe preparation was good. {x}\nImpression: See findings.\n')
-EGD = HEAD + ('Procedure date: 10/14/2026\nPROCEDURE NOTE: EGD\nIndication: Dyspepsia.\nTechnique: The upper endoscope was '
+EGD = HEAD + ('Procedure date: 10/14/2026\n\nPROCEDURE NOTE: EGD\nIndication: Dyspepsia.\nTechnique: The upper endoscope was '
               'advanced to the second portion of the duodenum.\nFindings:\nThe esophagus was normal. {x}\nImpression: See '
               'findings.\n')
 COLON_BASE = ('45378', 'The colonoscope was advanced to the cecum')
@@ -325,11 +325,11 @@ class DocumentationStampTests(SimpleTestCase):
     adds reads by its own words, and its code is never excluded on the stamp."""
 
     NOTES = (
-        (HEAD + 'Procedure date: 10/14/2026\nPROCEDURE NOTE: EGD\nIndication: Dyspepsia.\nTechnique: The upper endoscope '
+        (HEAD + 'Procedure date: 10/14/2026\n\nPROCEDURE NOTE: EGD\nIndication: Dyspepsia.\nTechnique: The upper endoscope '
                 'was advanced to the second portion of the duodenum.\nFindings: The esophagus was normal.\nImpression: '
                 'Normal.\n', 'Cold forceps biopsies were also taken from the duodenum to exclude celiac disease.', 'biopsy',
          '43239'),
-        (HEAD + 'Procedure date: 10/14/2026\nPROCEDURE NOTE: Colonoscopy\nTechnique: The colonoscope was advanced to the '
+        (HEAD + 'Procedure date: 10/14/2026\n\nPROCEDURE NOTE: Colonoscopy\nTechnique: The colonoscope was advanced to the '
                 'cecum.\nFindings: The colon was normal.\nImpression: Normal.\n',
          'A 5 mm sigmoid polyp was also removed with a cold snare.', 'snare', '45385'),
     )
@@ -370,7 +370,7 @@ class NoDocumentedServiceTests(SimpleTestCase):
     "(DOB ...)"). The documented-service reader reads that passage's own act: where it reads the act done today, the two
     readers disagree and the code is held; where it agrees (a plan line, an earlier date), the exclusion stands."""
 
-    ANOSCOPY = HEAD + ('Procedure date: 10/14/2026\nPROCEDURE NOTE: Anoscopy with hemorrhoid banding\nIndication: Bleeding '
+    ANOSCOPY = HEAD + ('Procedure date: 10/14/2026\n\nPROCEDURE NOTE: Anoscopy with hemorrhoid banding\nIndication: Bleeding '
                        'internal hemorrhoids.\nFindings:\nGrade 2 internal hemorrhoids were seen. {x}\nImpression: See '
                        'findings.\n')
 

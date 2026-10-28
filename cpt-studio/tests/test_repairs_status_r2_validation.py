@@ -23,7 +23,7 @@ from tests.test_validation import (EGD, EGD_LABEL, EM, MUE_INFO, MUE_ROWS, PFS_I
                                    finding, pfs, selected, visit_context)
 
 DOS = date(2026, 10, 21)
-HEAD = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n'
+HEAD = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n\n'
 SILENT_CUE = 'uncertain: no performance evidence in its sentence or section'
 REFERENCE = InMemoryReferenceLookup([PFS_INFO, MUE_INFO], {
     PFS_INFO.key: {**PFS_ROWS, ('43259', ''): pfs(base='43235'), ('45331', ''): pfs(base='45330'),

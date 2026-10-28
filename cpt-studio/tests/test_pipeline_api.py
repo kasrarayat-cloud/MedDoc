@@ -16,6 +16,7 @@ OFFICE_NOTE = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL 
 Riverbend Digestive Health (fictional)
 Date of service: 2026-10-20
 Place of service: Office, in-person outpatient visit
+
 Patient status: Established patient, last seen 2026-03-02.
 
 Chief complaint

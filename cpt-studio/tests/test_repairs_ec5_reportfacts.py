@@ -126,7 +126,7 @@ class VisitQuestionNamesADocumentedConflictTests(SimpleTestCase):
 
 
 SYNTHETIC = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
-EUS = (SYNTHETIC + 'Date of service: 2026-10-14\nIndication: EUS for evaluation of a pancreatic head mass.\n'
+EUS = (SYNTHETIC + 'Date of service: 2026-10-14\n\nIndication: EUS for evaluation of a pancreatic head mass.\n'
        'Procedure: Upper endoscopic ultrasound.\nFindings: The echoendoscope was advanced to the second portion of the '
        'duodenum. A 2 cm hypoechoic mass in the pancreatic head was sampled by fine-needle aspiration with three '
        'passes. Cold forceps biopsies were taken from the gastric antrum.\n')
@@ -203,7 +203,7 @@ class EusForcepsBiopsyIsNeverHiddenTests(SimpleTestCase):
                          ([('S1', 'biopsy', 'unsupported')], []))
 
 
-COLONOSCOPY = (SYNTHETIC + 'Procedure report\nDate of service: 2026-10-14\nProcedure: Colonoscopy.\n'
+COLONOSCOPY = (SYNTHETIC + 'Procedure report\nDate of service: 2026-10-14\n\nProcedure: Colonoscopy.\n'
                'Findings: The colonoscope was advanced to the cecum. A 7 mm sessile polyp in the sigmoid colon was '
                'removed with a cold snare.\nImpression: Polyp removed.\n')
 POLYP = 'A 7 mm sessile polyp in the sigmoid colon was removed with a cold snare.'
@@ -246,7 +246,7 @@ class RejectedCodeAccountsForNothingTests(ApiCase, TestCase):
         self.assertNotIn('Rejected by the reviewer', self.screen(encounter_id))
 
 
-TWO_DATES = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', 'Date of service: 2026-10-20\nDate of service: 2026-10-23\n')
+TWO_DATES = OFFICE_NOTE.replace('Date of service: 2026-10-20\n\n', 'Date of service: 2026-10-20\n\nDate of service: 2026-10-23\n\n')
 MEMBER_SIDE = 'member-entered encounter metadata differs from the document'
 SCREEN = ('[app.factValue(data.facts.service_date, null, true), app.metaFact(data.facts.service_date, null, '
           '"Service date", true), app.factValue(data.facts.setting, {office: "Office", telehealth: "Telehealth"}), '
@@ -325,7 +325,7 @@ class MemberConflictIsNeverConflictingDocumentationTests(ApiCase, TestCase):
 SEGMENTS = ', '.join(f'segment {i} of the colon showed normal vascular pattern without erythema' for i in range(1, 17))
 LONG_FINDINGS = ('Findings: The colonoscope was advanced to the cecum and on careful withdrawal ' + SEGMENTS
                  + ', and a 4 mm polyp in the transverse colon was removed with cold forceps biopsy.')
-READ_IN_PART = (SYNTHETIC + 'Procedure report\nDate of service: 2026-10-14\nProcedure: Colonoscopy.\n' + POLYP + '\n'
+READ_IN_PART = (SYNTHETIC + 'Procedure report\nDate of service: 2026-10-14\n\nProcedure: Colonoscopy.\n' + POLYP + '\n'
                 + LONG_FINDINGS + '\nImpression: Polyps removed.\n')
 UNRESOLVED_TITLE = 'UNRESOLVED DOCUMENTED SERVICES — NO SUPPORTED PROPOSAL'
 
@@ -371,7 +371,7 @@ class ReadInPartSpeaksForWhatWasReadTests(ApiCase, TestCase):
 
 # --- findings that no longer reproduce at 8985dde42: kept as guards ---------------------------------------------------
 
-EUS_BESIDE_COLONOSCOPY = (SYNTHETIC + 'Date of service: 2026-10-14\nEUS: Normal pancreas and common bile duct; no mass.\n'
+EUS_BESIDE_COLONOSCOPY = (SYNTHETIC + 'Date of service: 2026-10-14\n\nEUS: Normal pancreas and common bile duct; no mass.\n'
                           'Colonoscopy: The colonoscope was advanced to the cecum. ' + POLYP + '\n')
 
 
@@ -430,7 +430,7 @@ class CoverageClaimsOnlyWhatRunsTests(SimpleTestCase):
         self.assertEqual(sorted(path for path in cited if not (root / path).exists()), [])
 
 
-MANOMETRY = (SYNTHETIC + 'Date of service: 2026-10-14\nPlace of service: Hospital outpatient department\n'
+MANOMETRY = (SYNTHETIC + 'Date of service: 2026-10-14\n\nPlace of service: Hospital outpatient department\n'
              'Billing: professional\nProcedure: High-resolution esophageal manometry.\n'
              'Findings: Esophageal manometry was performed and showed normal peristalsis.\n')
 STUDY = 'Esophageal manometry was performed and showed normal peristalsis.'
@@ -485,7 +485,7 @@ RECTAL_EUS = ('Rectal endoscopic ultrasound report\nThe radial echoendoscope was
 UPPER_EUS = ('Endoscopic ultrasound report\nThe linear echoendoscope was advanced to the second portion of the duodenum. '
              'A 2 cm hypoechoic mass in the pancreatic head was sampled by fine-needle aspiration with three passes. Cold '
              'forceps biopsies were taken from the duodenal bulb.\n')
-SESSION = SYNTHETIC + 'Date of service: 2026-10-14\nPlace of service: Ambulatory surgery center\n'
+SESSION = SYNTHETIC + 'Date of service: 2026-10-14\n\nPlace of service: Ambulatory surgery center\n'
 ANTRAL = 'Cold forceps biopsies were taken from the gastric antrum.'
 NODE_FNA = 'was sampled by fine-needle aspiration with two passes'
 NOT_UPPER = ('the document does not place it at an upper GI site of an upper GI examination, so no upper GI endoscopy of '
@@ -602,7 +602,7 @@ DENIAL = 'no tattoo or other submucosal injection was given at this session'
 TATTOO = 'The polypectomy site in the sigmoid colon was tattooed with India ink.'
 DENIED_LATE = ('Findings: The colonoscope was advanced to the cecum and on careful withdrawal ' + SEGMENTS + ', and '
                + DENIAL + '.')
-DENIED_IN_TAIL = (SYNTHETIC + 'Procedure report\nDate of service: 2026-10-14\nProcedure: Colonoscopy.\n' + POLYP + ' '
+DENIED_IN_TAIL = (SYNTHETIC + 'Procedure report\nDate of service: 2026-10-14\n\nProcedure: Colonoscopy.\n' + POLYP + ' '
                   + TATTOO + '\n' + DENIED_LATE + '\nImpression: Polyp removed.\n')
 NONE_STATED = 'No act is stated both as done and as not done for the same service and site.'
 NOT_READ = ('The documented-service reading reported a problem (see services.inventory), so an act in the part it did '

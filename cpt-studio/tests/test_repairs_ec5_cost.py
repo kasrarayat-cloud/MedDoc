@@ -92,7 +92,7 @@ OLD_NEG_OPENING = r'^(?:[\s\-*•(]*(?:[A-Z]{1,3}\d{1,2}|\d{1,2}[.)])?\s*)*'  # 
 
 
 def bulleted(spaces):
-    return HEAD + 'Date of service: 2026-10-14\n*' + ' ' * spaces + 'Colonoscopy was performed to the cecum.\n'
+    return HEAD + 'Date of service: 2026-10-14\n\n*' + ' ' * spaces + 'Colonoscopy was performed to the cecum.\n'
 
 
 class NegationOpeningTests(SimpleTestCase):
@@ -106,7 +106,7 @@ class NegationOpeningTests(SimpleTestCase):
                 self.assertIn('45378', proposals)
 
     def test_a_dash_rule_run_into_the_sentence_is_read_within_the_limit(self):
-        text = HEAD + 'Date of service: 2026-10-14\n' + '- ' * 40 + 'Colonoscopy was performed to the cecum.\n'
+        text = HEAD + 'Date of service: 2026-10-14\n\n' + '- ' * 40 + 'Colonoscopy was performed to the cecum.\n'
         services_read, _, _ = build_bounded(text)
         self.assertEqual(services_read, [('gi.colonoscopy', 'performed')])
 
@@ -136,7 +136,7 @@ class NegationOpeningTests(SimpleTestCase):
         for line, status in (('- No biopsies were taken.', 'negated'), ('A1 No biopsies were taken.', 'negated'),
                              ('2) No biopsies were taken.', 'negated'), ('* Biopsies were taken.', 'performed'),
                              ('(1) Biopsies were taken.', 'performed')):
-            text = HEAD + 'Date of service: 2026-10-14\nColonoscopy report\nThe colonoscope was advanced to the ' \
+            text = HEAD + 'Date of service: 2026-10-14\n\nColonoscopy report\nThe colonoscope was advanced to the ' \
                 'cecum.\n' + line + '\n'
             with self.subTest(line=line):
                 self.assertIn(('gi.colonoscopy', 'biopsy', status), build_bounded(text)[1])
@@ -149,7 +149,7 @@ OLD_AFTER_MARKS = r'(?:[ \t,:\-–—)]+|'
 
 
 def heading_line(line):
-    return HEAD + 'Date of service: 2026-10-14\n' + line + '\nThe colonoscope was advanced to the cecum.\n'
+    return HEAD + 'Date of service: 2026-10-14\n\n' + line + '\nThe colonoscope was advanced to the cecum.\n'
 
 
 class HeadingDateTests(SimpleTestCase):
@@ -223,7 +223,7 @@ def shipped_clauses(text, start, end):
 
 
 def one_run(spaces):
-    return HEAD + 'Date of service: 2026-10-14\nColonoscopy was performed with mucosa' + ' ' * spaces + 'pink.\n'
+    return HEAD + 'Date of service: 2026-10-14\n\nColonoscopy was performed with mucosa' + ' ' * spaces + 'pink.\n'
 
 
 class ClauseCutTests(SimpleTestCase):
@@ -278,11 +278,11 @@ class ClauseCutTests(SimpleTestCase):
 
 def lesion_lines(lines, unit='AVM', per_line=300):
     line = ' '.join([unit] * per_line) + '.'
-    return (HEAD + 'Date of service: 2026-10-14\nColonoscopy was performed to the cecum.\n\n'
+    return (HEAD + 'Date of service: 2026-10-14\n\nColonoscopy was performed to the cecum.\n\n'
             + '\n'.join([line] * lines) + '\n')
 
 
-LESION_NOTE = (HEAD + 'Date of service: 2026-10-14\nColonoscopy report\nThe colonoscope was advanced to the cecum.\n'
+LESION_NOTE = (HEAD + 'Date of service: 2026-10-14\n\nColonoscopy report\nThe colonoscope was advanced to the cecum.\n'
                'A 6 mm sessile polyp in the sigmoid colon was removed with a cold snare (jar A).\n'
                'The 6 mm polyp was retrieved.\n'
                'A 4 mm polyp in the rectum was not removed.\n'
@@ -341,7 +341,7 @@ class LesionReadTests(SimpleTestCase):
 
     def test_lesions_past_the_services_cap_are_still_a_recorded_problem(self):
         """A sized lesion is read to be recorded, so the 61st is still the recorded cap problem, never dropped."""
-        text = (HEAD + 'Date of service: 2026-10-14\nColonoscopy report\nThe colonoscope was advanced to the cecum.\n'
+        text = (HEAD + 'Date of service: 2026-10-14\n\nColonoscopy report\nThe colonoscope was advanced to the cecum.\n'
                 + ''.join(f'A {n} mm polyp in the sigmoid colon was removed with a cold snare.\n' for n in range(1, 63)))
         inv, _ = self.reads(text)
         self.assertEqual(len(inv.services[0].lesions), services.MAX_LESIONS_PER_SERVICE)
@@ -352,7 +352,7 @@ class LesionReadTests(SimpleTestCase):
 # --- cost-4: an unnamed endoscope's anatomy is read once per sentence ----------------------------------------------
 
 def endoscopes(n, tail=' was advanced to the stomach and duodenum.'):
-    return HEAD + 'Date of service: 2026-10-14\n' + ' '.join(['endoscope'] * n) + tail + '\n'
+    return HEAD + 'Date of service: 2026-10-14\n\n' + ' '.join(['endoscope'] * n) + tail + '\n'
 
 
 class UnnamedEndoscopeTests(SimpleTestCase):
@@ -382,10 +382,10 @@ class UnnamedEndoscopeTests(SimpleTestCase):
 
     def test_an_unnamed_endoscope_is_named_by_its_sentences_anatomy_as_before(self):
         """The control: upper anatomy alone names the EGD; lower or no anatomy names nothing."""
-        for text, expected in ((HEAD + 'Date of service: 2026-10-14\nThe endoscope was advanced to the second portion of '
+        for text, expected in ((HEAD + 'Date of service: 2026-10-14\n\nThe endoscope was advanced to the second portion of '
                                 'the duodenum and the stomach was examined.\n', [('gi.egd', 'performed')]),
-                               (HEAD + 'Date of service: 2026-10-14\nThe endoscope was advanced to the cecum.\n', []),
-                               (HEAD + 'Date of service: 2026-10-14\nThe endoscope was cleaned.\n', [])):
+                               (HEAD + 'Date of service: 2026-10-14\n\nThe endoscope was advanced to the cecum.\n', []),
+                               (HEAD + 'Date of service: 2026-10-14\n\nThe endoscope was cleaned.\n', [])):
             inv, _ = self.anatomy_reads(text)
             with self.subTest(text=text[len(HEAD):80]):
                 self.assertEqual([(s.family, s.status) for s in inv.services if s.family != 'gi.office_em'], expected)
@@ -427,7 +427,7 @@ class _Analysis:
 
 def comma_rows(lines):
     rows = '\n'.join('ABCDEFGH'[i % 8] + ',' for i in range(lines))
-    return (HEAD + 'UPPER ENDOSCOPY REPORT\nDate of service: 2026-10-14\nEsophagogastroduodenoscopy was performed to '
+    return (HEAD + 'UPPER ENDOSCOPY REPORT\nDate of service: 2026-10-14\n\nEsophagogastroduodenoscopy was performed to '
             'the second portion of the duodenum.\n\nGrid:\n' + rows + '\nand nothing else of note.\n')
 
 

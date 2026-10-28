@@ -48,7 +48,7 @@ class ServiceDateTests(SimpleTestCase):
         self.assertEqual(facts['service_date'].value, '2026-09-28')
 
     def test_a_dated_title_never_beats_a_labelled_date_and_a_qualified_one_is_no_date(self):
-        facts, _ = read(HEAD + 'Office visit - 2026-09-01\nDate of service: 2026-09-02\nSeen today.\n')
+        facts, _ = read(HEAD + 'Office visit - 2026-09-01\nDate of service: 2026-09-02\n\nSeen today.\n')
         # Refutation round 2 (rule B, c2:1): the note's own dated title and its labelled date that differs are a
         # conflict - asked, both kept - never a silent choice of either (a planned procedure's labelled date had won
         # over a report's title this way, was sent, and an act done that day was excluded against it). This pin had
@@ -234,7 +234,7 @@ A covered metal stent was deployed across the distal esophageal stricture.
 
 class ActWordingTests(SimpleTestCase):
     def _egd(self, body):
-        _, inv = read(HEAD + 'Date of service: 2026-10-14\nUpper endoscopy report\n' + body)
+        _, inv = read(HEAD + 'Date of service: 2026-10-14\n\nUpper endoscopy report\n' + body)
         return one(inv, 'gi.egd')
 
     def test_moderate_sedation_by_the_endoscopist(self):
@@ -268,7 +268,7 @@ class ActWordingTests(SimpleTestCase):
         self.assertIn('clip', kinds(egd))
 
     def test_a_limit_on_further_sampling_is_not_a_denied_biopsy(self):
-        _, inv = read(HEAD + 'Date of service: 2026-10-14\nUpper endoscopy report\nThe gastroscope was passed to the '
+        _, inv = read(HEAD + 'Date of service: 2026-10-14\n\nUpper endoscopy report\nThe gastroscope was passed to the '
                              'duodenum. Antral biopsies were taken with cold forceps. No tissue was sampled beyond the '
                              'containers listed above.\n')
         self.assertEqual(inv.conflicts, ())
@@ -293,7 +293,7 @@ A 10 mm by 60 mm covered metal stent was then deployed across the distal strictu
 
 class AttributionTests(SimpleTestCase):
     def roles(self, sentence):
-        _, inv = read(HEAD + 'Date of service: 2026-10-14\nColonoscopy report\nThe colonoscope reached the cecum.\n'
+        _, inv = read(HEAD + 'Date of service: 2026-10-14\n\nColonoscopy report\nThe colonoscope reached the cecum.\n'
                       + sentence + '\n')
         return {a.role for a in inv.attributions}
 
@@ -334,7 +334,7 @@ Specimen collected   [X] Yes   [ ] No
 
 class SentenceTests(SimpleTestCase):
     def test_a_wrapped_field_value_stays_one_sentence(self):
-        text = HEAD + ('Date of service: 2026-10-14\nColonoscopy report\nThe colonoscope reached the cecum.\n'
+        text = HEAD + ('Date of service: 2026-10-14\n\nColonoscopy report\nThe colonoscope reached the cecum.\n'
                        'Rectum: a separate 4 mm flat lesion was sampled with cold forceps for\nhistology (jar C).\n')
         _, inv = read(text)
         lesion = next(l for l in one(inv, 'gi.colonoscopy').lesions if l.anatomy == 'rectum')
@@ -365,18 +365,18 @@ class NegationScopeTests(SimpleTestCase):
     """A "not" that governs another predicate never denies the act; every other one still does (fail-closed)."""
 
     def test_a_negation_on_another_predicate_leaves_the_act(self):
-        _, inv = read(HEAD + 'Date of service: 2026-10-14\nColonoscopy report\nThe colonoscope was advanced to the '
+        _, inv = read(HEAD + 'Date of service: 2026-10-14\n\nColonoscopy report\nThe colonoscope was advanced to the '
                              'cecum. A 30 mm laterally spreading lesion in the ascending colon was tattooed and not '
                              'removed; it is referred for EMR.\n')
         self.assertIn('tattoo', kinds(one(inv, 'gi.colonoscopy')))
-        _, inv = read(HEAD + 'Date of service: 2026-10-14\nColonoscopy report\nThe colonoscope was advanced to the '
+        _, inv = read(HEAD + 'Date of service: 2026-10-14\n\nColonoscopy report\nThe colonoscope was advanced to the '
                              'cecum. Biopsies of the sigmoid colon were obtained and a dilation was not performed.\n')
         svc = one(inv, 'gi.colonoscopy')
         self.assertIn('biopsy', kinds(svc))
         self.assertIn('dilation', kinds(svc, 'negated'))
 
     def test_a_negation_in_a_subordinate_clause_leaves_the_mention(self):
-        _, inv = read(HEAD + 'Date of service: 2026-10-14\nOffice visit\nPlan: possible EGD with PEG placement if '
+        _, inv = read(HEAD + 'Date of service: 2026-10-14\n\nOffice visit\nPlan: possible EGD with PEG placement if '
                              'oral intake does not improve.\n')
         egd = [s for s in inv.services if s.family == 'gi.egd']
         self.assertTrue(all(s.status != 'negated' for s in egd), [(s.status, s.cues) for s in egd])
@@ -385,11 +385,11 @@ class NegationScopeTests(SimpleTestCase):
         for line, kind in (('Biopsies were not obtained.', 'biopsy'), ('The polyp was not removed with a snare.', 'snare'),
                            ('Cold forceps biopsy was not performed because of anticoagulation.', 'biopsy')):
             with self.subTest(line=line):
-                _, inv = read(HEAD + 'Date of service: 2026-10-14\nColonoscopy report\nThe colonoscope was advanced to '
+                _, inv = read(HEAD + 'Date of service: 2026-10-14\n\nColonoscopy report\nThe colonoscope was advanced to '
                                      'the cecum. ' + line + '\n')
                 svc = one(inv, 'gi.colonoscopy')
                 self.assertNotIn(kind, kinds(svc))
-        _, inv = read(HEAD + 'Date of service: 2026-10-14\nOffice visit\nThe patient did not undergo EGD today.\n')
+        _, inv = read(HEAD + 'Date of service: 2026-10-14\n\nOffice visit\nThe patient did not undergo EGD today.\n')
         self.assertTrue(all(s.status not in services.POSITIVE for s in inv.services if s.family == 'gi.egd'))
 
 
@@ -400,7 +400,7 @@ class MemberConflictQuestionTests(SimpleTestCase):
     def test_a_conflicting_setting_is_asked_at_the_encounter(self):
         for body in ('Place of service: 11 - Office\nGastroenterology office visit for heartburn.\n',
                      'Gastroenterology office visit for heartburn.\n'):
-            text = HEAD + 'Date of service: 2026-10-20\n' + body
+            text = HEAD + 'Date of service: 2026-10-20\n\n' + body
             facts = gi_context.merge_user_values(gi_context.extract_context(text), {'setting': 'asc'})
             day = date(2026, 10, 20)
             result = assess(text=text, pages=(), context=facts, routing=detect.route(text, day),
@@ -451,7 +451,7 @@ class HypotheticalWordingTests(SimpleTestCase):
     non-silent cue - never performed - so it is no unresolved act (no paid second review) and no act a diagnostic code
     leaves unreported; an act verb the clause states for itself still reads, and a hypothetical reach completes nothing."""
 
-    EGD = (HEAD + 'Date of service: 2026-10-21\nProcedure: EGD\nFindings: The gastroscope was passed to the second part '
+    EGD = (HEAD + 'Date of service: 2026-10-21\n\nProcedure: EGD\nFindings: The gastroscope was passed to the second part '
            'of the duodenum. The mucosa looked normal. {sentence}\n')
     GASTRO = 'The gastroscope was passed to the second part of the duodenum.'
 
@@ -493,14 +493,14 @@ class HypotheticalWordingTests(SimpleTestCase):
                          'The colonoscope was inserted into the rectum. It would have been passed to the cecum, but the '
                          'preparation was poor.'):
             with self.subTest(findings=findings):
-                _, inv = read(HEAD + f'Date of service: 2026-10-21\nProcedure: Colonoscopy\nFindings: {findings}\n')
+                _, inv = read(HEAD + f'Date of service: 2026-10-21\n\nProcedure: Colonoscopy\nFindings: {findings}\n')
                 self.assertNotEqual(one(inv, 'gi.colonoscopy').completion, 'complete')
-        _, inv = read(HEAD + 'Date of service: 2026-10-21\nProcedure: Colonoscopy\nFindings: The colonoscope was passed '
+        _, inv = read(HEAD + 'Date of service: 2026-10-21\n\nProcedure: Colonoscopy\nFindings: The colonoscope was passed '
                              'to the cecum and would have been advanced into the ileum had the valve allowed.\n')
         self.assertEqual(one(inv, 'gi.colonoscopy').completion, 'complete')
 
     def test_an_office_note_s_modal_service_is_no_missed_service(self):
-        office = (HEAD + 'Date of service: 2026-10-21\nPlace of service: Office (POS 11)\nEstablished patient office '
+        office = (HEAD + 'Date of service: 2026-10-21\n\nPlace of service: Office (POS 11)\nEstablished patient office '
                   'visit for dysphagia.\nAssessment: Dysphagia. {sentence}\nMedical decision making: moderate.\n')
         for sentence in ('EGD with biopsy would be done if the dysphagia persists.', 'EGD should be done.',
                          'If an EGD were done today, the sedation risk would be high.',
@@ -519,24 +519,24 @@ class HypotheticalWordingTests(SimpleTestCase):
     def test_a_listing_or_its_report_never_promotes_a_hypothetical(self):
         day = date(2026, 10, 21)
         # a procedure line lists the service: the reader's own reading (routing=None) keeps the modal predicate
-        text = (HEAD + 'Date of service: 2026-10-21\nProcedures: EGD; colonoscopy would have been performed had the '
+        text = (HEAD + 'Date of service: 2026-10-21\n\nProcedures: EGD; colonoscopy would have been performed had the '
                 'preparation been adequate.\nFindings: The gastroscope was passed to the second part of the duodenum.\n')
         inv = services.build(text, service_date=day, routing=None, context_facts=gi_context.extract_context(text))
         self.assertEqual(one(inv, 'gi.colonoscopy').status, 'uncertain')
         # ... or an act
-        _, inv = read(HEAD + 'Date of service: 2026-10-21\nProcedure: EGD; balloon dilation would be performed for any '
+        _, inv = read(HEAD + 'Date of service: 2026-10-21\n\nProcedure: EGD; balloon dilation would be performed for any '
                              'stricture.\nFindings: The gastroscope was passed to the second part of the duodenum.\n')
         egd = one(inv, 'gi.egd')
         self.assertNotIn('dilation', kinds(egd))
         self.assertIn('dilation', kinds(egd, 'uncertain'))
         # inside its own report the hypothetical sentence documents nothing of the service
         sentence = 'Colonoscopy would have been completed sooner had the preparation been adequate.'
-        _, inv = read(HEAD + 'Date of service: 2026-10-21\nCOLONOSCOPY REPORT\nThe colonoscope was advanced to the cecum. '
+        _, inv = read(HEAD + 'Date of service: 2026-10-21\n\nCOLONOSCOPY REPORT\nThe colonoscope was advanced to the cecum. '
                       + sentence + '\n')
         self.assertNotIn(sentence, [e.text for e in one(inv, 'gi.colonoscopy').evidence])
 
     def test_a_plan_line_keeps_its_planned_reading(self):
-        _, inv = read(HEAD + 'Date of service: 2026-10-21\nPlace of service: Office (POS 11)\nEstablished patient office '
+        _, inv = read(HEAD + 'Date of service: 2026-10-21\n\nPlace of service: Office (POS 11)\nEstablished patient office '
                              'visit for dysphagia.\nAssessment: Dysphagia.\nPlan: EGD should be done.\n')
         self.assertEqual(one(inv, 'gi.egd').status, 'planned')
 
@@ -548,10 +548,10 @@ class IntentTests(SimpleTestCase):
     does not read, the reader's own intent words are read with the same doubts. A doubted intent is no screening
     intent, so no screening-became-therapeutic consideration is raised for it."""
 
-    COLON = (HEAD + 'Date of service: 2026-10-21\nIndication: {indication}\nProcedure: Colonoscopy\nFindings: The '
+    COLON = (HEAD + 'Date of service: 2026-10-21\n\nIndication: {indication}\nProcedure: Colonoscopy\nFindings: The '
              'colonoscope was passed to the cecum. A 4 mm sigmoid polyp was removed with a cold snare.\n')
     SNARE = 'A 4 mm sigmoid polyp was removed with a cold snare.'
-    LOWER = (HEAD + 'Date of service: 2026-10-21\nLOWER ENDOSCOPY REPORT\nIndication: {indication}\nThe colonoscope was '
+    LOWER = (HEAD + 'Date of service: 2026-10-21\n\nLOWER ENDOSCOPY REPORT\nIndication: {indication}\nThe colonoscope was '
              'passed to the cecum. The colon was normal.\n')
 
     def screening_consideration(self, text):
@@ -572,7 +572,7 @@ class IntentTests(SimpleTestCase):
 
     def test_a_service_routing_does_not_read_as_done_takes_no_intent_from_its_plan(self):
         # routing reads a planned or doubted colonoscopy's intent from the plan; today's service never takes it
-        text = (HEAD + 'Date of service: 2026-10-21\nProcedure: Colonoscopy?\nFindings: A 4 mm sigmoid polyp was removed '
+        text = (HEAD + 'Date of service: 2026-10-21\n\nProcedure: Colonoscopy?\nFindings: A 4 mm sigmoid polyp was removed '
                 'with a cold snare.\nPlan: Screening colonoscopy in 10 years.\n')
         self.assertEqual(detect.route(text, date(2026, 10, 21)).finding('gi.colonoscopy').status, 'uncertain')
         _, inv = read(text)
@@ -587,7 +587,7 @@ class IntentTests(SimpleTestCase):
         self.assertEqual(one(inv, 'gi.colonoscopy').intent, 'surveillance')
 
     def test_another_service_takes_no_intent_from_the_colonoscopy_s_words(self):
-        text = (HEAD + 'Date of service: 2026-10-21\nIndication: Average-risk screening colonoscopy; epigastric pain.\n'
+        text = (HEAD + 'Date of service: 2026-10-21\n\nIndication: Average-risk screening colonoscopy; epigastric pain.\n'
                 'Procedures: EGD and colonoscopy\nFindings: The gastroscope was passed to the second part of the '
                 'duodenum and gastric biopsies were taken. The colonoscope was passed to the cecum. The colon was '
                 'normal.\n')
@@ -613,7 +613,7 @@ class BoxAndFieldRowTests(SimpleTestCase):
     """Check-box rows and form fields as the documented-service reader reads them (the boxes_text triage of the GI core
     repair). A row's own reading is never overruled by the line it is on, a field's answer - never a participle in its
     label - states its item, and a checked box documents its act only in a list of what was done."""
-    REPORT = HEAD + ('Date of service: 2026-10-14\nProcedure: Colonoscopy\nFindings: The colonoscope was advanced to '
+    REPORT = HEAD + ('Date of service: 2026-10-14\n\nProcedure: Colonoscopy\nFindings: The colonoscope was advanced to '
                      'the cecum. No polyps were seen.\n{rows}\n')
     CECUM = 'The colonoscope was advanced to the cecum.'
 
@@ -710,7 +710,7 @@ class BoxAndFieldRowTests(SimpleTestCase):
         """"Colonoscopy in the last 10 years:" printed on an office form read as a bare colonoscopy heading, so the
         visit documented a colonoscopy performed today: listed unresolved, and sent for a second review, where the note
         documents none."""
-        note = HEAD + ('Date of service: 2026-10-14\nPlace of service: Office\nEstablished patient office visit for '
+        note = HEAD + ('Date of service: 2026-10-14\n\nPlace of service: Office\nEstablished patient office visit for '
                        'dyspepsia.\nChief complaint: Dyspepsia.\nMedical decision making: low.\n{line}\n')
         # and the questions' other wordings (triage round 2 skeptic): a label line names a service and heading words only
         for line in ('Colonoscopy in the last 10 years:', 'Upper endoscopy within the last 3 years:',
@@ -730,7 +730,7 @@ class FormOptionLineTests(SimpleTestCase):
     checked"): the checked option decides the item, never the participle in the label; an unmarked option says
     nothing. Outside an extraction block the rule does not apply."""
 
-    REPORT = (HEAD + 'Date of service: 2026-10-14\nColonoscopy report\nThe colonoscope was advanced to the cecum.\n'
+    REPORT = (HEAD + 'Date of service: 2026-10-14\n\nColonoscopy report\nThe colonoscope was advanced to the cecum.\n'
               'Cold snare polypectomy of a 6 mm sigmoid polyp was performed.\n\n[PDF form fields on page 1]\n'
               'Biopsy taken: yes: {yes}\nBiopsy taken: no: {no}\n')
 
@@ -748,7 +748,7 @@ class ConsentObjectTests(SimpleTestCase):
     ready on the cecum sentence and a paid second review was queued for acts the report never states). Held, never
     excluded; an act with a predicate of its own is still done."""
 
-    REPORT = HEAD + ('Date of service: 2026-10-14\nProcedure: Colonoscopy\nFindings: The colonoscope was advanced to '
+    REPORT = HEAD + ('Date of service: 2026-10-14\n\nProcedure: Colonoscopy\nFindings: The colonoscope was advanced to '
                      'the cecum. A 6 mm sigmoid polyp was seen.\n{line}\n')
 
     def test_what_a_consent_is_for_is_not_done(self):
@@ -775,7 +775,7 @@ class ConsentObjectTests(SimpleTestCase):
                 self.assertEqual(kinds(colon), ['biopsy'])
 
     def test_an_authorization_in_an_office_note_documents_no_service(self):
-        note = HEAD + ('Date of service: 2026-10-14\nPlace of service: Office\nEstablished patient office visit for '
+        note = HEAD + ('Date of service: 2026-10-14\n\nPlace of service: Office\nEstablished patient office visit for '
                        'rectal bleeding.\nChief complaint: Rectal bleeding.\nMedical decision making: moderate.\n{line}\n')
         for line in ('Prior authorization was obtained for colonoscopy.', 'Consent was obtained for colonoscopy.',
                      'Insurance approval was received for capsule endoscopy.'):
@@ -789,7 +789,7 @@ class SnareSiteTests(SimpleTestCase):
     field on the next line still documents the snare (boxes_pdf skeptic: the place rule read across the line break and
     dropped the act, which hid a missed service)."""
 
-    REPORT = HEAD + ('Date of service: 2026-10-14\nProcedure: Colonoscopy\nFindings: The colonoscope was advanced to '
+    REPORT = HEAD + ('Date of service: 2026-10-14\n\nProcedure: Colonoscopy\nFindings: The colonoscope was advanced to '
                      'the cecum. A 6 mm sigmoid polyp was seen.\nInterventions:\n{rows}\n')
 
     def test_a_site_field_on_the_next_line_keeps_the_snare(self):
@@ -808,11 +808,11 @@ class ModalPredicateScopeTests(SimpleTestCase):
     turns a denial elsewhere into an exclusion; and the hypothetical wordings include contractions, any adverb and the
     "get" passive."""
 
-    COLON = HEAD + ('Date of service: 2026-10-21\nProcedure: Colonoscopy\nFindings: The colonoscope was advanced to the '
+    COLON = HEAD + ('Date of service: 2026-10-21\n\nProcedure: Colonoscopy\nFindings: The colonoscope was advanced to the '
                     'cecum. {x}\nImpression: as above.\n')
-    EGD = HEAD + ('Date of service: 2026-10-21\nProcedure: EGD\nFindings: The gastroscope was advanced to the second part '
+    EGD = HEAD + ('Date of service: 2026-10-21\n\nProcedure: EGD\nFindings: The gastroscope was advanced to the second part '
                   'of the duodenum. The mucosa was normal.\nImpression: Normal EGD. {x}\n')
-    ERCP = HEAD + ('Date of service: 2026-10-21\nERCP report\nThe duodenoscope was advanced to the major papilla and the '
+    ERCP = HEAD + ('Date of service: 2026-10-21\n\nERCP report\nThe duodenoscope was advanced to the major papilla and the '
                    'bile duct was cannulated. {x}\n')
 
     def test_a_modal_on_another_subject_leaves_the_act_done(self):
@@ -837,12 +837,12 @@ class ModalPredicateScopeTests(SimpleTestCase):
         svc = one(read(self.EGD.format(x='Biopsies from the gastric antrum could be obtained without difficulty.'))[1],
                   'gi.egd')
         self.assertIn('biopsy', kinds(svc))
-        text = HEAD + ('Date of service: 2026-10-21\nProcedure: Colonoscopy could be performed only to the splenic flexure '
+        text = HEAD + ('Date of service: 2026-10-21\n\nProcedure: Colonoscopy could be performed only to the splenic flexure '
                        'and was then terminated because of poor preparation.\n')
         self.assertEqual(one(read(text)[1], 'gi.colonoscopy').status, 'incomplete')
 
     def test_a_hypothetical_statement_never_turns_a_denial_into_an_exclusion(self):
-        text = HEAD + ('Date of service: 2026-10-21\nIndication: Anemia. No colonoscopy was performed at the outside '
+        text = HEAD + ('Date of service: 2026-10-21\n\nIndication: Anemia. No colonoscopy was performed at the outside '
                        'hospital.\nPlan: Colonoscopy would have been performed today had the preparation been '
                        'adequate.\n')
         self.assertNotIn(one(read(text)[1], 'gi.colonoscopy').status, ('negated', 'cancelled'))
@@ -856,7 +856,7 @@ class ModalPredicateScopeTests(SimpleTestCase):
             with self.subTest(x=x):
                 egd = one(read(self.EGD.format(x=x))[1], 'gi.egd')
                 self.assertEqual([k for k in kinds(egd) if k in ('dilation', 'biopsy')], [])
-        office = HEAD + ('Date of service: 2026-10-21\nPlace of service: Office\nEstablished patient office visit for '
+        office = HEAD + ('Date of service: 2026-10-21\n\nPlace of service: Office\nEstablished patient office visit for '
                          'dysphagia.\nChief complaint: Dysphagia.\nMedical decision making: moderate.\nEGD would\'ve been '
                          'done today had the patient fasted.\n')
         _, inv = read(office)
@@ -868,7 +868,7 @@ class UnreadableFieldAnswerTests(SimpleTestCase):
     it done (triage round 2 skeptic: "Biopsy taken: None obtained" and printed option pairs read as a done biopsy and
     queued a paid second review). Details stay a statement of the act; a negated predicate still denies it."""
 
-    REPORT = HEAD + ('Date of service: 2026-10-14\nProcedure: Colonoscopy\nFindings: The colonoscope was advanced to '
+    REPORT = HEAD + ('Date of service: 2026-10-14\n\nProcedure: Colonoscopy\nFindings: The colonoscope was advanced to '
                      'the cecum. No polyps were seen.\n{line}\n')
 
     def test_an_unreadable_answer_holds(self):
@@ -911,7 +911,7 @@ class ReferralTests(SimpleTestCase):
     """Refutation r1 (report lens): "for EMR referral" names what the patient is referred for, never an EMR done today."""
 
     def test_an_act_named_for_a_referral_is_planned(self):
-        text = HEAD + ('Date of service: 2026-10-14\nProcedure: Colonoscopy\nFindings: The colonoscope was advanced to the '
+        text = HEAD + ('Date of service: 2026-10-14\n\nProcedure: Colonoscopy\nFindings: The colonoscope was advanced to the '
                        'cecum. A 25 mm laterally spreading lesion in the ascending colon was biopsied with cold forceps '
                        'and tattooed for EMR referral.\n')
         colon = one(read(text)[1], 'gi.colonoscopy')
@@ -923,7 +923,7 @@ class NegationScopeTests(SimpleTestCase):
     """Refutation r1 (release lens; regressions against the installed revision, which held these): a negation reaches
     the act through its list and the act's own auxiliary, never through another predicate."""
 
-    REPORT = HEAD + ('COLONOSCOPY PROCEDURE REPORT\nDate of service: 10/14/2026\nThe colonoscope was advanced to the '
+    REPORT = HEAD + ('COLONOSCOPY PROCEDURE REPORT\nDate of service: 10/14/2026\n\nThe colonoscope was advanced to the '
                      'cecum. A 6 mm sessile polyp was seen in the sigmoid colon. {x}\n')
 
     def test_a_denied_act_is_negated(self):
@@ -955,7 +955,7 @@ class UnestablishedServiceCompletenessTests(SimpleTestCase):
 
     def test_an_uncertain_service_without_a_proposal_keeps_coding_incomplete(self):
         from studio.types import EvidenceSpan, ProviderCode
-        text = HEAD + ('Date of service: 2026-10-14\nEUS: Normal pancreas and common bile duct; no mass.\nColonoscopy: The '
+        text = HEAD + ('Date of service: 2026-10-14\n\nEUS: Normal pancreas and common bile duct; no mass.\nColonoscopy: The '
                        'colonoscope was advanced to the cecum. A 7 mm sessile polyp in the sigmoid colon was removed with '
                        'a cold snare.\n')
         quote = 'was removed with a cold snare'

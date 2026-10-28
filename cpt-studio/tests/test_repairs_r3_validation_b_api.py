@@ -10,7 +10,7 @@ from tests.test_reports import section
 from tests.test_repairs_pipeline import LIVE
 from tests.test_repairs_status_r2_validation_api import MultiEvidenceApiCase
 
-HEAD = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nDate of service: 2026-10-21\n'
+HEAD = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nDate of service: 2026-10-21\n\n'
 OFFICE = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nChief complaint: {cc}\n{body}\n'
           'Medical decision making: moderate.\nTotal time: 32 minutes.\n')
 VISIT, TIME = 'Established patient office visit.', 'Total time: 32 minutes.'
