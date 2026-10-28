@@ -7,6 +7,17 @@
  *   node ops/verify_browser.cjs --base-url https://cpt.quillmd.com --credentials agent.json \
  *     --docs OUT_FROM_GENERATE --manifest ops/verification/manifest.json --out EVIDENCE_DIR \
  *     [--only gi-01,gi-03] [--deadline-seconds 300] [--stop-on-failure] [--allow-live-provider]
+ *     [--encounter ENCOUNTER_ID]
+ *
+ * --encounter attaches to an EXISTING encounter instead of uploading (with exactly one --only id): nothing is uploaded,
+ * and nothing is done to it until its revision text and stored original are shown to be that manifest document's.
+ *
+ * A document whose manifest review_plan carries "second_review": {"ask": true, "approve_codes": [...]} has the bounded
+ * second review asked for once, through the screen's own button, when the encounter offers it (ARCHITECTURE 5.11):
+ * its request is recorded, processing is awaited (read-only polling; never a Stop, never a second ask), and the
+ * encounter before and after is compared: one new run, purpose second_review, about the offered items; at most that one
+ * request sent; every earlier run unchanged; a code it added only for an offered service; no alternative promoted.
+ * A code the second review added is approved only when approve_codes names it; any other is left undecided.
  *
  * --credentials names a JSON file {"username": ..., "password": ...} for an AGENT account
  * (actor_kind "agent"), so every decision is recorded and labelled as agent review. The
@@ -48,7 +59,8 @@ const MAX_POLL_ERRORS = 3;
 const INCOMPLETE_SIGNAL = /incomplete|discontinu|reduced|\b5[23]\b/i;
 const AGENT_LABEL = 'agent-executed synthetic review';
 const USAGE = 'usage: verify_browser.cjs --base-url URL --credentials FILE --docs DIR --manifest FILE --out DIR '
-  + '[--only IDS] [--deadline-seconds N] [--stop-on-failure] [--allow-live-provider]';
+  + '[--only IDS] [--deadline-seconds N] [--stop-on-failure] [--allow-live-provider] [--encounter ID]';
+const ENCOUNTER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 // --- small pure helpers ----------------------------------------------------------------
 
@@ -56,7 +68,7 @@ class UsageError extends Error {}
 
 function parseArgs(argv) {
   const flags = new Set(['stop-on-failure', 'allow-live-provider']);
-  const values = new Set(['base-url', 'credentials', 'docs', 'manifest', 'out', 'only', 'deadline-seconds']);
+  const values = new Set(['base-url', 'credentials', 'docs', 'manifest', 'out', 'only', 'deadline-seconds', 'encounter']);
   const opts = { only: null, deadlineSeconds: 300, stopOnFailure: false, allowLiveProvider: false };
   for (let i = 0; i < argv.length; i += 1) {
     const [name, inline] = argv[i].replace(/^--/, '').split(/=(.*)/s);
@@ -87,6 +99,10 @@ function parseArgs(argv) {
     throw new UsageError('--deadline-seconds must be an integer of at least 10');
   }
   opts.only = opts.only ? opts.only.split(',').map(s => s.trim()).filter(Boolean) : null;
+  if (opts.encounter !== undefined) {
+    if (!ENCOUNTER_ID.test(opts.encounter)) throw new UsageError('--encounter must be an encounter id (a lowercase UUID)');
+    if (!opts.only || opts.only.length !== 1) throw new UsageError('--encounter needs --only naming exactly one document');
+  }
   return opts;
 }
 
@@ -350,9 +366,16 @@ function planConfirmations(enc, mustNotCode, notes) {
                  note: notes.confirm || 'Agent-executed synthetic verification review - confirms an exclusion the document author marked as not coded; not a clinical judgement' }));
 }
 
+function fromSecondReview(p) {
+  return p?.support?.origin === 'second_review';
+}
+
+// A code the bounded second review added is decided only when review_plan.second_review.approve_codes names it; any
+// other is left undecided (second_review_held), so the reviewed report stays withheld and the run records it.
 function planDecisions(enc, reviewPlan, notes) {
+  const approveSecond = new Set((reviewPlan?.second_review?.approve_codes || []).map(String));
   const ready = proposalsOf(enc).filter(p => p.bucket === 'selected' && p.status === 'ready' && p.decision_state === 'undecided'
-    && (p.allowed_actions || []).includes('approve'));
+    && (p.allowed_actions || []).includes('approve') && (!fromSecondReview(p) || approveSecond.has(p.code)));
   const rule = reviewPlan?.reject;
   let designated = null;
   if (rule) {
@@ -361,9 +384,82 @@ function planDecisions(enc, reviewPlan, notes) {
   }
   const decisions = ready.map(p => ({
     proposal_id: p.id, code: p.code, family: p.family, action: p === designated ? 'reject' : 'approve',
-    designated: p === designated, note: p === designated ? notes.reject : notes.approve,
+    designated: p === designated,
+    note: p === designated ? notes.reject : fromSecondReview(p) ? (notes.second_review_approve || notes.approve) : notes.approve,
   }));
-  return { decisions, designated_missing: Boolean(rule) && !designated };
+  const held = proposalsOf(enc).filter(p => fromSecondReview(p) && p.bucket === 'selected' && p.decision_state === 'undecided'
+    && !approveSecond.has(p.code)).map(p => p.code);
+  return { decisions, designated_missing: Boolean(rule) && !designated, second_review_held: held };
+}
+
+// --- the reviewer-requested second review (ARCHITECTURE 5.11) ---------------------------------------------------------
+
+function secondReviewPlan(doc) {
+  const plan = doc?.review_plan?.second_review;
+  return plan && plan.ask === true ? { ask: true, approve_codes: (plan.approve_codes || []).map(String) } : null;
+}
+
+// The API serves no 'sent' flag: a run was sent unless it reused a retained result, or was not sent or cancelled.
+function sentRun(run) {
+  return !run.reused_from && ['succeeded', 'failed', 'unknown'].includes(run.state);
+}
+
+function runFacts(run) {
+  return JSON.stringify([run.purpose, run.state, run.request_sha256, run.response_sha256, run.usage, run.reused_from, run.reconciled]);
+}
+
+// before: the encounter when the second review was offered; after: once its processing settled (null if never asked).
+function checkSecondReview(before, after, ask) {
+  const offered = before?.second_review || {};
+  const out = [check('second_review.offered', 'hard', offered.available === true && offered.can_request === true,
+    `available ${offered.available}, can_request ${offered.can_request}${offered.reason ? `, reason: ${offered.reason}` : ''}; items ${JSON.stringify(offered.items || [])}`)];
+  if (!ask || ask.http_status === null || ask.http_status === undefined) return out;
+  out.push(check('second_review.request', 'hard', ask.http_status === 201, `POST second-review answered HTTP ${ask.http_status}${ask.error ? `: ${ask.error}` : ''}`));
+  if (ask.http_status !== 201 || !after) return out;
+  const earlier = new Map((before.provider_runs || []).map(run => [run.id, run]));
+  const fresh = (after.provider_runs || []).filter(run => !earlier.has(run.id));
+  const second = fresh.filter(run => run.purpose === 'second_review');
+  const asked = second.length === 1 && JSON.stringify(second[0].scope_items || []) === JSON.stringify(offered.items || []);
+  out.push(check('second_review.one_run', 'hard', fresh.length === 1 && asked,
+    `${fresh.length} new run(s): ${fresh.map(run => `${run.purpose}/${run.state}${run.reused_from ? '/reused' : ''}`).join(', ') || 'none'}; asked about ${JSON.stringify(second[0]?.scope_items || [])}`));
+  const sent = fresh.filter(sentRun);
+  out.push(check('second_review.sent_at_most_once', 'hard', sent.length <= 1 && sent.every(run => run.purpose === 'second_review'),
+    `${sent.length} new request(s) sent${sent.length ? `: ${sent.map(run => `${run.purpose}/${run.state}`).join(', ')}` : ''}`));
+  const kept = new Map((after.provider_runs || []).map(run => [run.id, run]));
+  const changed = [...earlier.values()].filter(run => !kept.has(run.id) || runFacts(kept.get(run.id)) !== runFacts(run));
+  out.push(check('second_review.earlier_runs_kept', 'hard', changed.length === 0,
+    changed.length ? `changed or missing: ${changed.map(run => run.id).join(', ')}` : `${earlier.size} earlier run(s) unchanged (state, hashes, usage, reuse, reconciliation)`));
+  const services = new Set((before.assessment?.completeness?.unresolved_items || []).filter(item => item.second_review === true).map(item => item.service));
+  const added = proposalsOf(after).filter(p => fromSecondReview(p) && p.bucket === 'selected');
+  const stray = added.filter(p => !services.has(p.support?.service));
+  out.push(check('second_review.fills_only_offered', 'hard', stray.length === 0,
+    stray.length ? `added outside the offered services: ${stray.map(p => `${p.code} (${p.support?.service || 'no service'})`).join(', ')}` : `${added.length} code(s) added (${added.map(p => `${p.code} for ${p.support?.service}`).join(', ') || 'none'}), each for an offered service`));
+  const primary = enc => proposalsOf(enc).filter(p => !fromSecondReview(p)).map(p => `${p.code}:${p.bucket}`).sort();
+  const actionable = proposalsOf(after).filter(p => fromSecondReview(p) && p.bucket === 'alternative' && (p.allowed_actions || []).length);
+  const same = JSON.stringify(primary(before)) === JSON.stringify(primary(after));
+  out.push(check('second_review.no_promotion', 'hard', same && actionable.length === 0,
+    `${same ? 'primary proposals unchanged' : `primary proposals ${JSON.stringify(primary(before))} -> ${JSON.stringify(primary(after))}`}; second-review alternatives with an action: ${actionable.map(p => p.code).join(', ') || 'none'}`));
+  const run = second[0];
+  const merged = (after.assessment?.encounter_checks || []).find(item => item.id === 'provider.second_review');
+  // soft: an unknown, failed or refused answer is a recorded outcome for the operator, not a defect of the walk
+  out.push(check('second_review.outcome', 'soft', run?.state === 'succeeded' && after.assessment?.second_run === run?.id
+    && merged?.status !== 'fail',
+    `run ${run?.state}${run?.reused_from ? ' (reused, nothing sent)' : ''}; usage ${JSON.stringify(run?.usage || {})}; read by the assessment ${after.assessment?.second_run === run?.id}; check ${merged ? `${merged.status}: ${merged.detail}` : 'absent'}; state ${after.state}`));
+  return out;
+}
+
+// Before anything is done to an attached encounter: it must be this manifest document's (stored original and text).
+function attachedProblems(enc, item) {
+  const problems = [];
+  const rev = enc?.revision || {};
+  if (item.delivery.format !== 'paste') {
+    const file = rev.source_file || {};
+    if (file.sha256 !== item.delivery.sha256 || file.size !== item.delivery.size) {
+      problems.push(`its stored original ${file.sha256} (${file.size} bytes) is not ${item.doc.delivery.file} (${item.delivery.sha256}, ${item.delivery.size} bytes)`);
+    }
+  }
+  if (collapse(rev.text || '') !== collapse(item.sourceText)) problems.push(`its revision ${rev.number} text is not the text of ${item.doc.source}`);
+  return problems;
 }
 
 function checkReadiness(enc) {
@@ -492,7 +588,7 @@ function summarize(enc) {
     families: (enc.routing?.families || []).map(f => ({ family: f.family, status: f.status, supported: f.supported, missing: f.missing, facts: (f.facts || []).map(x => ({ name: x.name, value: x.value, origin: x.origin })), mention_statuses: (f.mentions || []).map(m => m.status) })),
     proposals: proposalsOf(enc).map(p => ({ id: p.id, code: p.code, bucket: p.bucket, family: p.family, status: p.status, decision_state: p.decision_state, evidence: (p.evidence || []).length, exact_evidence: exactSpans(p, points).length, allowed_actions: p.allowed_actions })),
     clarifications: (enc.clarifications || []).map(c => ({ fact: c.fact, scope: c.scope, family: c.family, state: c.state })),
-    provider_runs: (enc.provider_runs || []).map(r => ({ provider: r.provider, mode: r.mode, state: r.state, http_status: r.http_status, usage: r.usage, usage_basis: r.usage_basis, reused_from: r.reused_from, latency_ms: r.latency_ms })),
+    provider_runs: (enc.provider_runs || []).map(r => ({ provider: r.provider, mode: r.mode, state: r.state, http_status: r.http_status, usage: r.usage, usage_basis: r.usage_basis, reused_from: r.reused_from, latency_ms: r.latency_ms, purpose: r.purpose, scope_items: r.scope_items })),
     readiness: enc.readiness,
   };
 }
@@ -674,6 +770,26 @@ async function decide(page, encounterId, decision) {
   return { ...record, ui_updated: shown };
 }
 
+// One ask, through the screen's own button: never repeated, never stopped, never reconciled here. Processing is then
+// awaited by read-only polling; an unknown outcome is recorded for the operator to reconcile.
+async function askSecondReview(page, base, id, enc, deadlineAt, history) {
+  const offered = enc.second_review || null;
+  const out = { offered, asked_at: null, http_status: null, error: null, timed_out: false, after: null };
+  if (!(offered?.available === true && offered?.can_request === true)) return { ...out, error: `not offered: ${offered?.reason || 'no unresolved item to ask about'}` };
+  const button = page.locator('button[data-action="second-review"]');
+  const count = await button.count();
+  if (count !== 1) return { ...out, error: `expected one "Ask the provider once more" button, found ${count}` };
+  const posted = settle(page.waitForResponse(r => r.request().method() === 'POST' && pathnameOf(r.url()) === `/api/encounters/${id}/second-review`, { timeout: UI_TIMEOUT_MS }));
+  out.asked_at = isoNow();
+  await button.click({ timeout: UI_TIMEOUT_MS });
+  const response = await posted;
+  const body = await response.json().catch(() => ({}));
+  out.http_status = response.status();
+  if (out.http_status !== 201) return { ...out, error: body.error || `HTTP ${out.http_status}` };
+  const { enc: after, timedOut } = await waitForProcessing(page, base, id, deadlineAt, history);
+  return { ...out, after, timed_out: timedOut };
+}
+
 async function openExport(page) {
   if (await page.locator('#exportDialog[open]').count()) return;
   await page.locator('.review-heading [data-action="export"]').first().click({ timeout: UI_TIMEOUT_MS });
@@ -741,7 +857,15 @@ async function verifyDocument(page, opts, manifest, item, sink) {
   const add = items => record.assertions.push(...items);
   try {
     await page.goto(`${opts.baseUrl}/`, { waitUntil: 'domcontentloaded' });
-    const id = await uploadDocument(page, opts.baseUrl, item, record.timings);
+    let id;
+    if (opts.encounter) {  // attached: nothing is uploaded
+      id = opts.encounter;
+      record.attached = true;
+      record.timings.encounter_created_at = record.timings.attached_at = isoNow();
+      await page.goto(`${opts.baseUrl}/#doc/${id}`, { waitUntil: 'domcontentloaded' });
+    } else {
+      id = await uploadDocument(page, opts.baseUrl, item, record.timings);
+    }
     record.encounter_id = id;
     await page.waitForURL(url => new URL(url).hash === `#doc/${id}`, { timeout: UI_TIMEOUT_MS });
     record.review_url = page.url();
@@ -750,6 +874,8 @@ async function verifyDocument(page, opts, manifest, item, sink) {
     record.timings.processing_seconds = (Date.parse(record.timings.processing_done_at) - Date.parse(record.timings.encounter_created_at)) / 1000;
     saveSnapshot(record, docDir, opts.out, 'after_processing', enc);
     if (timedOut) throw new Error(`processing did not finish within ${opts.deadlineSeconds}s (state ${enc.state}); no Stop was issued and nothing is retried`);
+    const foreign = record.attached ? attachedProblems(enc, item) : [];
+    if (foreign.length) throw new Error(`refusing to act on encounter ${id}: ${foreign.join('; ')}`);
     add(checkPipeline(enc));
     add(checkExtraction(doc.expected_extraction || {}, enc, item.delivery, item.sourceText));
     add(checkContext(doc.expected_context, enc));
@@ -767,10 +893,31 @@ async function verifyDocument(page, opts, manifest, item, sink) {
     const before = await readDom(page);
     add(checkEvidenceMarks(enc, before.marks, before.cards));
 
-    const plan = planDecisions(enc, doc.review_plan, manifest.review_notes);
+    let current = enc;
+    const secondPlan = secondReviewPlan(doc);
+    if (secondPlan) {
+      if (stopRequested(opts.out)) throw new Error('stopped: a STOP file is present; the second review was not asked for');
+      const ask = await askSecondReview(page, opts.baseUrl, id, enc, started + opts.deadlineSeconds * 1000, record.state_history);
+      record.second_review = { offered: ask.offered, asked_at: ask.asked_at, http_status: ask.http_status, error: ask.error, timed_out: ask.timed_out };
+      if (ask.after) saveSnapshot(record, docDir, opts.out, 'after_second_review', ask.after);
+      add(checkSecondReview(enc, ask.after, ask));
+      if (ask.timed_out) throw new Error(`the second review did not finish within ${opts.deadlineSeconds}s (state ${ask.after?.state}); no Stop was issued, nothing is retried and no decision was recorded`);
+      if (ask.after) {
+        current = ask.after;
+        await waitForReviewScreen(page).catch(async () => {
+          await page.reload({ waitUntil: 'domcontentloaded' });
+          await waitForReviewScreen(page);
+        });
+        const dom = await readDom(page);
+        add([...checkEvidenceExact(current), ...checkEvidenceMarks(current, dom.marks, dom.cards)]
+          .map(a => ({ ...a, id: `after_second_review.${a.id}` })));
+      }
+    }
+    const plan = planDecisions(current, doc.review_plan, manifest.review_notes);
+    if (plan.second_review_held.length) add([check('decisions.second_review_held', 'soft', false, `left undecided (not in review_plan.second_review.approve_codes): ${plan.second_review_held.join(', ')}`)]);
     record.designated_rejection = plan.decisions.find(d => d.designated)?.code || null;
     if (plan.designated_missing) add([check('decisions.designated_rejection', 'soft', false, `no ready selected proposal in ${doc.review_plan.reject.family} to reject`)]);
-    const confirmations = planConfirmations(enc, doc.must_not_code, manifest.review_notes);
+    const confirmations = planConfirmations(current, doc.must_not_code, manifest.review_notes);
     for (const decision of [...plan.decisions, ...confirmations]) record.decisions.push(await decide(page, id, decision));
     record.timings.decisions_done_at = isoNow();
     add(record.decisions.map(d => check(`decision.${d.action}.${d.code}`, 'hard', d.http_status === 201 && !d.error, d.error || `HTTP ${d.http_status}${d.ui_updated === false ? '; the card did not update within 30 s' : ''}`)));
@@ -783,7 +930,7 @@ async function verifyDocument(page, opts, manifest, item, sink) {
     const reloaded = await fetchEncounter(page, opts.baseUrl, id);
     saveSnapshot(record, docDir, opts.out, 'after_reload', reloaded);
     const after = await readDom(page);
-    add(checkPersistence(record.decisions, enc, afterDecisions, reloaded));
+    add(checkPersistence(record.decisions, current, afterDecisions, reloaded));
     add(checkDecisionDom(record.decisions, reloaded, after.cards, after.candidates));
     add(checkReadiness(reloaded));
 
@@ -914,7 +1061,7 @@ module.exports = {
   stopRequested, parseArgs, UsageError, cpSlice, safeName, sessionProblems, checkPipeline, checkExtraction, checkContext, checkRouting,
   checkEvidenceExact, checkMustNotCode, checkClarifications, checkIncomplete, planDecisions, planConfirmations, checkReadiness,
   checkPersistence, checkEvidenceMarks, checkDecisionDom, expectedDownloads, checkDownloads, checkListing, summarize,
-  documentResult, readDom,
+  documentResult, readDom, secondReviewPlan, checkSecondReview, attachedProblems, sentRun,
 };
 
 if (require.main === module) {
