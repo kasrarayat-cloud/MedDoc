@@ -285,6 +285,7 @@ The code lists are internal reconciliation profiles (which documented act a code
 
 **Notes:**
 - Recognised and listed for review; no service profile reconciles them in this release.
+- A hemorrhoid band ligation code (46221) is never reconciled either. Where no service of its family is documented and the document places a band ligation in another documented service, its passages are checked against that act and that service is named; nothing is added or promoted.
 
 ## Named unsupported services — unsupported
 

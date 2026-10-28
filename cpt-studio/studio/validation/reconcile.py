@@ -19,8 +19,9 @@ from typing import Optional, Sequence
 
 from studio.gi import catalogue
 from studio.gi.context import is_member_conflict
-from studio.gi.services import (LUMEN, ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE, SERVICES, Act, Conflict,
-                                 DocumentedService, ServiceInventory, act_regions, examined_regions)
+from studio.gi.services import (INSTRUMENT_FAMILY, INSTRUMENTS, LUMEN, ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE,
+                                 SERVICES, Act, Conflict, DocumentedService, ServiceInventory, act_regions,
+                                 examined_regions)
 from studio.types import Check, ClarificationSpec, EvidenceSpan, Span
 from studio.validation import checks
 
@@ -202,19 +203,22 @@ def _targets(m: Match) -> tuple[Span, ...]:
         ev for a in s.acts if a.status == 'performed' for ev in a.evidence)
 
 
-def _study_named(m: Match, span: EvidenceSpan, today) -> bool:
-    """A physiology study whose coded act is the study itself (STUDY_ACTS): a passage that names this service and
-    states something of this encounter (``today``: not in a plan, history or indication section, not about another
-    time, planned, denied or cancelled - "Esophageal manometry showed normal peristalsis.") shows the study, as a
-    statement of this visit shows an office visit."""
+def _study_named(m: Match, span: EvidenceSpan, today, report_family=None) -> bool:
+    """A physiology study whose coded act is the study itself (STUDY_ACTS): a passage that names this service, or
+    that lies in the study's own report (``report_family``: the family whose report part holds it - its results and its
+    interpretation are the study's; refutation gi2 RC4, ho-08: 91010's results rows and interpretation read as citing
+    other text), and states something of this encounter (``today``: not in a plan, history or indication section, not
+    about another time, planned, denied or cancelled - "Esophageal manometry showed normal peristalsis.") shows the
+    study, as a statement of this visit shows an office visit."""
     study = STUDY_ACTS.get(m.service.family)
     if today is None or study is None or not m.acts or any(a.kind != study for a in m.acts):
         return False
-    named = any(family == m.service.family and pattern.search(span.text) for family, _, pattern in SERVICES)
+    named = any(family == m.service.family and pattern.search(span.text) for family, _, pattern in SERVICES) or (
+        report_family is not None and report_family(span) == m.service.family)
     return named and today(span)
 
 
-def support(m: Match, evidence: Sequence[EvidenceSpan], current=None, today=None) -> Support:
+def support(m: Match, evidence: Sequence[EvidenceSpan], current=None, today=None, report_family=None) -> Support:
     """How ``evidence`` (the provider's exact passages) relates to the documented act. For an office visit the act is
     the visit itself: a passage supports it when it is a statement of this visit - not one ``current`` reads as about
     another time ("Last seen by Dr. Ramos on 2026-03-02", a planned procedure). So for a study that is its own act: a
@@ -224,7 +228,8 @@ def support(m: Match, evidence: Sequence[EvidenceSpan], current=None, today=None
     for index, span in enumerate(evidence):
         if m.service.family == 'gi.office_em' and current is not None:
             (supporting if current(span) else unrelated).append(index)
-        elif any(_overlaps(span.start, span.end, t.start, t.end) for t in targets) or _study_named(m, span, today):
+        elif any(_overlaps(span.start, span.end, t.start, t.end) for t in targets) \
+                or _study_named(m, span, today, report_family):
             supporting.append(index)
         else:
             unrelated.append(index)
@@ -266,6 +271,51 @@ def match_check(m: Match) -> Check:
 
 def support_check(s: Support) -> Check:
     return Check('evidence.support', 'Passages show the coded act', s.status, s.detail, INVENTORY_SOURCE)
+
+
+def elsewhere(code: str, inventory: ServiceInventory) -> Optional[Match]:
+    """For a code whose family the inventory documents no service of (match is None): the acts the code accounts for
+    (catalogue.code_acts) that the inventory documents as done in another family's service, as a Match its passages are
+    verified against (support) - never the code's status, which its own passages still decide (engine._select), and
+    never the service it is matched to. None when no such act is established or documented done (refutation gi2 RC5,
+    ho-09: 46221 was ready on "Sedation: None." and the sigmoidoscope's advance, unchecked, beside "band ligation of two
+    columns through the flexible sigmoidoscope")."""
+    kinds = catalogue.code_acts(code)
+    acts = tuple(a for s in inventory.services for a in s.acts if a.kind in kinds and a.status == 'performed')
+    if not acts:
+        return None
+    return Match('performed', inventory.service(acts[0].service), acts, 'elsewhere', '')
+
+
+def _names_service(service: DocumentedService, passage: str) -> bool:
+    """Whether a passage names ``service``: its family's name, or an instrument of its family ("through the flexible
+    sigmoidoscope")."""
+    if any(family == service.family and pattern.search(passage) for family, _, pattern in SERVICES):
+        return True
+    return any(next((family for name, family in INSTRUMENT_FAMILY if name in m.group(0).lower()), '') == service.family
+               for m in INSTRUMENTS.finditer(passage))
+
+
+def placed_check(m: Match, inventory: ServiceInventory, family_label: str) -> Optional[Check]:
+    """Where the document places the act a code accounts for when no service of the code's family is documented
+    (elsewhere): in another documented service, said only where the act's own passage names that service or its
+    instrument ("band ligation of two columns through the flexible sigmoidoscope") - an act the reader merely gave to
+    the one service a document names is not said to be in it. A warning for the reviewer, who decides which code accounts
+    for the act: nothing is added and no alternative is promoted. None when no passage names the service."""
+    places, seen = [], set()
+    for act in m.acts:
+        service = inventory.service(act.service)
+        span = next((ev for ev in act.evidence if _names_service(service, ev.text)), None) if service else None
+        if span is not None and service.id not in seen:
+            seen.add(service.id)
+            places.append(f'the {act_label(act.kind)} in the documented {service_label(service)} ({service.status}): '
+                          f'{quote(span, 140)}')
+    if not places:
+        return None
+    return Check('service.act_elsewhere', 'Coded act documented in another service', 'warn',
+                 f'No service of this code\'s family ({family_label}) is documented, and the document places the act it '
+                 f'accounts for in another service: {"; ".join(places[:2])}. Which code accounts for that act is the '
+                 'reviewer\'s decision; no code is added and no alternative is promoted.', INVENTORY_SOURCE)
 
 
 # --- the encounter -------------------------------------------------------------------------------------------------

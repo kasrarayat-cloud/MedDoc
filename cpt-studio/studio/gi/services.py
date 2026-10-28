@@ -139,7 +139,8 @@ SERVICES: tuple[tuple[str, str, re.Pattern], ...] = tuple((family, kind, _rx(pat
     ('gi.anorectal', 'anorectal_testing', r'\banorectal\s+manometry\b|\bARM\b|\bballoon\s+expulsion\s+test\b'
                                           r'|\brectal\s+(?:sensation|compliance)\s+(?:test|testing|study)\b'
                                           r'|\banorectal\s+(?:physiology|function)\s+(?:test|testing|study)\b'),
-    ('gi.motility', 'manometry', r'\b(?:high[- ]resolution\s+)?esophageal\s+(?:manometry|motility\s+(?:study|testing))\b'
+    ('gi.motility', 'manometry', r'\b(?:high[- ]resolution\s+)?esophageal\s+(?:high[- ]resolution\s+)?'
+                                 r'(?:manometry|motility\s+(?:study|testing))\b'
                                  r'|\bHRM\b|\bantroduodenal\s+manometry\b|\b(?:gastric|duodenal|colonic|colon)\s+'
                                  r'(?:manometry|motility\s+(?:study|testing))\b'),
     # A feeding-tube service of its own: a tube changed, replaced or repositioned, or placed with imaging. A PEG placed
@@ -2497,6 +2498,16 @@ def passage_readings(text: str, start: int, end: int, service_date: Optional[dat
     return out
 
 
+def report_family_at(text: str, start: int, end: int, service_date: Optional[date], pages: Sequence = ()) -> str:
+    """The family whose report part holds the passage [start, end) as build() cuts the document - a part about one
+    service, from its title to the next title, less the history sections in it (parts, _time_parts) - or '' outside a
+    report part or across its end. Read on the frame build() reads (_act_frame, computed once per document, date and
+    pages): one bisection per passage."""
+    _flow, _dates, plist, starts, _cut = _act_frame(text, service_date, tuple(pages or ()))
+    part = _part_at(plist, starts, start)
+    return part.family if part.kind == 'report' and part.start <= start and end <= part.end else ''
+
+
 def states_an_act_done(text: str, start: int, end: int, service_date: Optional[date],
                        pages: Sequence = ()) -> Optional[Span]:
     """The clause of the first thing passage_readings reads as done today in the passage [start, end), or None."""
@@ -2579,6 +2590,14 @@ def _family_for_act(kind: str, region: str, part_family: str, present: Sequence[
 # Acts that only one family performs, whatever part of the document names them.
 KIND_FAMILIES = {'ph_monitoring': ('gi.reflux',), 'capsule_study': ('gi.capsule',), 'rectal_sensation': ('gi.anorectal',),
                  'manometry': ('gi.anorectal', 'gi.motility'), 'tube_replacement': ('gi.feeding_tube',)}
+# The physiology studies no endoscope performs, and the acts only they perform (manometry, pH or impedance monitoring,
+# rectal sensation testing): such an act belongs to a service of its own study family or to none - never to the report
+# part's service or to the one procedure a document names (refutation gi2 RC4, ho-08: a manometry report whose only
+# endoscopy was "An EGD on 2026-09-08 showed ..." in its indication read "Upper GI endoscopy - performed (manometry)",
+# asked how far that EGD's instrument was advanced, and listed it as a performed service without a proposal). A capsule
+# and a tube change are no such study: an endoscope can place a capsule or change a tube.
+STUDY_FAMILIES = frozenset(('gi.motility', 'gi.reflux', 'gi.anorectal'))
+STUDY_KINDS = frozenset(kind for kind, families in KIND_FAMILIES.items() if set(families) <= STUDY_FAMILIES)
 
 
 def _family_for_act_in(kind: str, region: str, part_family: str, present: Sequence[str]) -> str:
@@ -2588,6 +2607,8 @@ def _family_for_act_in(kind: str, region: str, part_family: str, present: Sequen
             options = ['gi.anorectal'] if region in ('rectum', 'anus') else ['gi.motility']
         if len(options) == 1:
             return options[0]
+        if kind in STUDY_KINDS:
+            return ''  # its own study is not documented: no other service performs it
     if part_family:
         lower = part_family in ('gi.colonoscopy', 'gi.flex_sig')
         upper = part_family in ('gi.egd',)
