@@ -43,6 +43,11 @@ Format @4 adds, and these are checked only in a file that names that format:
            unresolved_service row per persisted unresolved item and one
            conflict row per persisted conflict; every source passage of a
            proposal row is the API's and quotes the revision text exactly
+
+And only where the encounter JSON records it: a bounded second review (its
+Origin lines, alternatives and usage entry), and a member date conflict's hold
+(PROVIDER USAGE lists it as recorded with nothing sent, no usage and no hashes,
+beside every other persisted run with its state, usage and hashes).
 """
 from __future__ import annotations
 
@@ -376,6 +381,7 @@ def check_txt(doc: str, name: str, text: str, kind: str, api: dict | None) -> li
     if FORMAT_4 in head:
         out.extend(_txt_documented(doc, name, text, sections, api, revision_text))
         out.extend(_txt_second_review(doc, name, sections, api))
+        out.extend(_txt_member_date_hold(doc, name, sections, api))
     return out
 
 
@@ -462,6 +468,69 @@ def _txt_second_review(doc, name, sections, api) -> list[Result]:
                       if listed == persisted else
                       f'listed {sorted(listed.items())}; persisted {sorted(persisted.items())}'))
     return out
+
+
+# --- a member date conflict's hold (session interpretation 19) --------------------------------------------------------
+#
+# Checked only where the encounter JSON records one, so every other report is read exactly as before. The API serves no
+# run scope; the run's error names the hold, because only jobs._member_date_hold writes studio/jobs.py's
+# MEMBER_DATE_CONFLICT_MESSAGE (and always with scope {'held': 'member_date_conflict'}). reports._provider_section must
+# list it as recorded, not requested, with nothing sent, no usage and no hashes, beside every other persisted run.
+
+MEMBER_DATE_HOLD_MESSAGE = ('Nothing was sent: the service date entered as encounter metadata differs from the '
+                            'documented one. Correct or clear the metadata (or add an addendum), and the request is '
+                            'made for the agreed date.')
+HOLD_WORDING = ' · nothing was sent: the service date entered as encounter metadata conflicts with the document'
+
+
+def is_member_date_hold(run: dict) -> bool:
+    return ((run.get('purpose') or 'primary') == 'primary' and run.get('state') == 'not_sent'
+            and not run.get('request_sha256') and run.get('error') == MEMBER_DATE_HOLD_MESSAGE)
+
+
+def _provider_entries(lines) -> list[dict]:
+    """PROVIDER USAGE as reports._provider_section writes it: '  - provider · mode · state · ...' per run, then its
+    Usage and sha256 lines."""
+    entries, current = [], None
+    for line in lines:
+        if line.startswith('  - '):
+            fields = line[4:].split(' · ')
+            current = {'head': line, 'fields': fields, 'state': fields[2] if len(fields) > 2 else '',
+                       'usage': None, 'request': None, 'response': None}
+            entries.append(current)
+        elif current is not None:
+            usage, shas = USAGE_LINE.match(line), SHA_LINE.match(line)
+            if usage:
+                current['usage'] = usage.group('usage')
+            elif shas:
+                current['request'], current['response'] = shas.group('request'), shas.group('response')
+    return entries
+
+
+def _txt_member_date_hold(doc, name, sections, api) -> list[Result]:
+    runs = api.get('provider_runs') or []
+    holds = [run for run in runs if is_member_date_hold(run)]
+    if not holds:
+        return []
+    entries = _provider_entries(dict(sections).get('PROVIDER USAGE', []))
+    worded = [e for e in entries if e['head'].endswith(HOLD_WORDING)]
+    right = [e for e in worded if e['state'] == 'not_sent' and e['usage'] == 'none reported' and e['request'] == 'none'
+             and e['response'] == 'none' and any(f.startswith('recorded ') for f in e['fields'])
+             and not any(f.startswith(('requested ', 'HTTP ')) for f in e['fields'])]
+    listed = Counter((e['state'], e['usage'], e['request'], e['response']) for e in entries)
+    persisted = Counter((run.get('state'), json.dumps(run['usage'], sort_keys=True, ensure_ascii=False)
+                         if run.get('usage') else 'none reported', run.get('request_sha256') or 'none',
+                         run.get('response_sha256') or 'none') for run in runs)
+    ok = len(right) == len(worded) == len(holds)
+    return [
+        Result(doc, name, 'txt.member_date_hold.listed', 'pass' if ok else 'fail',
+               f'{len(holds)} hold(s) listed as recorded with nothing sent, no usage and no hashes' if ok else
+               f'{len(holds)} hold(s) persisted; {len(worded)} entry(ies) say nothing was sent for the member date, '
+               f'{len(right)} of them as recorded with no usage and no hashes'),
+        Result(doc, name, 'txt.member_date_hold.provider_usage', 'pass' if listed == persisted else 'fail',
+               f'{sum(listed.values())} provider run(s) listed with their recorded state, usage and hashes'
+               if listed == persisted else f'listed {sorted(listed.items())}; persisted {sorted(persisted.items())}'),
+    ]
 
 
 SOURCE_OPENER = '       + source passage selected by CPT Studio: '  # reports._item_block, at CONTINUATION depth
