@@ -139,10 +139,15 @@ class PlannedDateIsNeverTheServiceDateTests(DateAssertions, SimpleTestCase):
 
     def test_controls_a_field_about_something_else_is_passed_over(self):
         for line in ('Last name: Synthetic    First name: Alex    DOS: 10/14/2026',
-                     'Procedure date: 10/14/2026    Next colonoscopy: 10/2029',
                      'Procedure date: 10/14/2026    Previous surgeries: appendectomy'):
             with self.subTest(line=line):
                 self.assert_document(HEAD + line + '\n' + COLO_PLAIN, '2026-10-14')
+        # P2DN's fix round, issue 5: a qualifier field with a date of its own on the label's line is no longer passed
+        # over - the line states two occurrences' dates ("Rescheduled to: 10/14/2026" after "Date of service:
+        # 10/07/2026" sent the superseded date), so the date is asked, as at the installed revision; the labelled date
+        # is kept and answers the question (this pin had it documented)
+        self.assert_question(HEAD + 'Procedure date: 10/14/2026    Next colonoscopy: 10/2029\n' + COLO_PLAIN,
+                             '2026-10-14')
         # refutation phase 2 (P2DN, rule N5): a bracket after the date in the label's own field asks it; the labelled
         # date answers the question
         self.assert_question(HEAD + 'Date of service: 10/14/2026 (capsule placement) Recording started at 9:00 AM\n'

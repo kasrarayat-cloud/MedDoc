@@ -142,14 +142,15 @@ class QualifierOfAnotherFieldTests(DateAssertions, SimpleTestCase):
     date - which then left a letter or title date to be taken and sent."""
 
     def test_the_labelled_date_is_read(self):
-        cases = (
-            ('Procedure date: 10/14/2026    Next colonoscopy: 10/2029\nPROCEDURE NOTE: Colonoscopy\n', '2026-10-14'),
-            ('Last name: Synthetic    First name: Alex    DOS: 10/14/2026\n', '2026-10-14'),
-            ('Next colonoscopy 10/2029, procedure date: 10/14/2026\n', '2026-10-14'),
-        )
-        for body, value in cases:
+        self.assert_document(HEAD + 'Last name: Synthetic    First name: Alex    DOS: 10/14/2026\n', '2026-10-14')
+        # P2DN's fix round, issue 5: a qualifier with a date of its own on the label's line makes the line state two
+        # occurrences' dates (W1: "Rescheduled to: 10/14/2026" after the labelled 10/07 sent the superseded date): the
+        # date is asked, as at the installed revision - the labelled date never discarded, and it answers the question
+        # (this pin had it documented)
+        for body in ('Procedure date: 10/14/2026    Next colonoscopy: 10/2029\nPROCEDURE NOTE: Colonoscopy\n',
+                     'Next colonoscopy 10/2029, procedure date: 10/14/2026\n'):
             with self.subTest(body=body.splitlines()[0]):
-                self.assert_document(HEAD + body, value)
+                self.assert_question(HEAD + body, '2026-10-14')
         # refutation phase 2 (P2DN, rule N5): a bracket after the date in the label's own field asks it; the labelled
         # date is kept, never discarded, and answers the question (this pin had it documented)
         self.assert_question(HEAD + 'Date of service: 10/14/2026 (recall due 10/2029)\n', '2026-10-14')
@@ -170,6 +171,11 @@ class QualifierOfAnotherFieldTests(DateAssertions, SimpleTestCase):
                     # a report naming no service this release codes is never the note's heading (refutation round 2,
                     # c2:7): the labelled date stands
                     self.assert_document(HEAD + body, value)
+                elif 'Next colonoscopy' in body:
+                    # P2DN's fix round, issue 5: the label's line states two occurrences' dates, so the labelled date is
+                    # asked beside the evidence-only title; both answer the question (this pin had a conflict listing
+                    # both - asked either way, the title never the date)
+                    self.assert_question(HEAD + body, value, other)
                 else:
                     # Refutation round 2, rule B: the note's own labelled date and its own dated title (or "Date:"
                     # line) that differs are a conflict, never a silent choice: c2:1 had a planned procedure's

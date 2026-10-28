@@ -433,13 +433,14 @@ def _qualifier_field(text: str, q_start: int, q_end: int, limit: int, has_date) 
     "Previous surgeries") - and 'occurrence' when its label names one ("Planned procedure: EGD", "Next procedure:
     Colonoscopy"): it may date what the date label dates. None when it opens no field: the qualifier alone ("Scheduled:
     Yes") or a clock ("scheduled for 8:00 AM"). Refutation round 2, c2:1: a qualifier heading any field was passed over,
-    so a planned procedure's date was read as the service date."""
+    so a planned procedure's date was read as the service date. A field with a date of its own is 'dated' (P2DN's fix
+    round, issue 5: on the label's own line it holds the date; elsewhere it is passed over as 'else' is)."""
     m = _FIELD_LABEL.match(text, q_end, limit)
     if m is None or '  ' in text[q_end:m.end()]:  # a field break ends the qualifier's words: no label of its own
         return None
     brk = _FIELD_BREAK.search(text, m.end(), min(limit, m.end() + VALUE_REACH))
     if has_date(m.end(), brk.start() if brk else min(limit, m.end() + VALUE_REACH)):
-        return 'else'
+        return 'dated'
     label = text[q_start:m.end() - 1]
     if _OCCURRENCE_NOUN.search(label) or any(p.search(label) for p in _THIS_SERVICE):
         return 'occurrence'
@@ -529,10 +530,25 @@ def _line_reading(text: str, label_start: int, label_end: int, date_start: int, 
     def has_date(a: int, b: int) -> bool:
         return bool(other_dates(a, b))
 
+    def dated(a: int, b: int) -> list:
+        """The other dates in [a, b) that are no date of birth (a date of birth dates no occurrence)."""
+        return [d for d in other_dates(a, b) if not _is_birth(text, d.start)]
+
+    # P2DN's fix round, issue 5 (and issue 8's E9): a qualifier on the label's own line with a date of its own - in its
+    # own field ("Rescheduled to: 10/14/2026", "Next visit: 11/24/2026") or right after it ("Follow-up visit
+    # 10/20/2026.", "Last colonoscopy 05/01/2019") - makes the line state two occurrences' dates, and the reader cannot
+    # tell which is this encounter's: the date is asked (unplaced), never passed over. Round 2 (c2:1) passed such a
+    # qualifier over as belonging elsewhere, so "Date of service: 10/07/2026 Rescheduled to: 10/14/2026" documented the
+    # superseded 10/07, which was sent and 45385 done on 10/14 excluded against it, where the installed revision's
+    # same-line window held it. A qualifier opening a field about something else ("Last name: Synthetic") is still
+    # passed over, and so is one on the line above (round 3's rule).
     reading = 'own'
     for q in _OTHER_OCCURRENCE.finditer(text, lo, label_start):
-        if other_dates(q.end(), label_start) or _qualifier_field(text, q.start(), q.end(), label_start,
-                                                                 has_date) == 'else':
+        field = _qualifier_field(text, q.start(), q.end(), label_start, has_date)
+        if field == 'dated' or (field != 'else' and dated(q.end(), label_start)):
+            reading = 'unplaced'
+            continue
+        if field == 'else' or other_dates(q.end(), label_start):
             continue
         if not opens and not _NOT_ATTACHED.search(_ROW_BAR.sub(' ', text[q.end():label_start])):
             return 'another'
@@ -545,7 +561,7 @@ def _line_reading(text: str, label_start: int, label_end: int, date_start: int, 
         names = [(n.start(), n.end()) for p in _THIS_SERVICE for n in p.finditer(text, above[0], min(above[1], window + 60))]
         for q in _OTHER_OCCURRENCE.finditer(text, above[0], window):
             if any(s <= q.start() and q.end() <= e for s, e in names) or other_dates(q.end(), above[1]) \
-                    or _qualifier_field(text, q.start(), q.end(), above[1], has_date) == 'else':
+                    or _qualifier_field(text, q.start(), q.end(), above[1], has_date) in ('else', 'dated'):
                 continue
             if heads:
                 return 'another'
@@ -556,12 +572,15 @@ def _line_reading(text: str, label_start: int, label_end: int, date_start: int, 
         if not other_dates(date_end, hi if close < 0 else close):
             return 'another'
     for q in _OTHER_OCCURRENCE.finditer(text, date_end, hi):
-        if other_dates(date_end, q.start()):
+        field = _qualifier_field(text, q.start(), q.end(), hi, has_date)
+        if field == 'else':
             continue
         own = other_dates(q.end(), hi)
-        if own and own[0].start - q.end() < q.start() - date_end:
-            continue
-        if _qualifier_field(text, q.start(), q.end(), hi, has_date) == 'else':
+        nearer = bool(own) and own[0].start - q.end() < q.start() - date_end
+        if field == 'dated' or nearer or other_dates(date_end, q.start()):
+            # issue 5: the qualifier dates another occurrence on the label's line - a date of birth dates none
+            if field == 'dated' or dated(date_end, q.start()) or (nearer and not _is_birth(text, own[0].start)):
+                reading = 'unplaced'
             continue
         if not _NOT_ATTACHED.search(_ROW_BAR.sub(' ', text[date_end:q.start()])):
             return 'another'

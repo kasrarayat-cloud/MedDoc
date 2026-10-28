@@ -381,3 +381,67 @@ class NextFieldSLabelIsALabelRequestTests(EndToEnd):
                 self.assertEqual(self.dates_sent(encounter_id), [[]])
                 self.assert_not_excluded(encounter_id, code)
 
+
+# --- 5 and 8: a qualifier with a date of its own on the label's line ------------------------------------------------
+
+RESCHEDULED = HEAD + 'Colonoscopy report\nDate of service: 10/07/2026 Rescheduled to: 10/14/2026\n' + COLO_BODY
+FOLLOW_UP_BEFORE = HEAD + 'Follow-up visit 10/20/2026. Procedure date: 11/04/2026\n' + OFFICE_BODY
+
+
+class QualifierWithItsOwnDateOnTheLineTests(DateAssertions, SimpleTestCase):
+    """Issue 5 and issue 8's E9 (pre-existing since round 2's c2:1, never at 057a7d398): a qualifier on the label's own
+    line that has a date of its own ("Rescheduled to: 10/14/2026" after "Date of service: 10/07/2026", "Follow-up visit
+    10/20/2026." before "Procedure date: 11/04/2026") was passed over as belonging elsewhere, so the superseded or
+    planned date was documented and sent - and 45385 done on 10/14 excluded as planned - where the installed revision's
+    same-line window held it. The label's line then states two occurrences' dates, and the reader cannot tell which is
+    this encounter's: the date is asked. A qualifier opening a field about something else ("Last name: Synthetic") is
+    still passed over, and a qualifier on the line above keeps the round-3 rule."""
+
+    def test_the_skeptic_s_family_w(self):
+        for label in ('Date of service', 'Procedure date', 'DOS', 'Visit date'):
+            for qualifier in ('Rescheduled to', 'Rescheduled for', 'Rescheduled date', 'Rescheduled procedure date'):
+                for sep in (' ', '    ', '\t'):
+                    text = HEAD + 'Colonoscopy report\n' + f'{label}: 10/07/2026{sep}{qualifier}: 10/14/2026\n' + COLO_BODY
+                    with self.subTest(line=text.splitlines()[2]):
+                        self.assert_never(text, '2026-10-07', '2026-10-14')
+                        self.assertIn(date_fact(text).origin, ('missing', 'conflict'))
+                        self.assert_member_conflict(text, ELENA_DATE)
+
+    def test_a_qualifier_with_its_own_date_before_the_label(self):
+        # the skeptic's case set 4 (E9 and its paraphrases), in m/d/y and day-first forms
+        for line in ('Follow-up visit 10/20/2026. Procedure date: 11/04/2026',
+                     'Follow-up visit 10/20/2026; procedure date: 11/04/2026',
+                     'Last colonoscopy 05/01/2019. Procedure date: 11/04/2026',
+                     'Rescheduled from 10/27/2026. Procedure date: 11/04/2026',
+                     'Next visit 12/01/2026. Procedure date: 11/04/2026',
+                     'Prior EGD 2024-02-02; procedure date: 11/04/2026'):
+            for form in ('11/04/2026', '4 Nov 2026'):
+                text = HEAD + line.replace('11/04/2026', form) + '\n' + OFFICE_BODY
+                with self.subTest(line=text.splitlines()[1]):
+                    self.assert_never(text, '2026-11-04')
+
+    def test_the_installed_revision_s_window_shapes_are_asked(self):
+        for line in ('Date of service: 10/14/2026    Next visit: 11/24/2026',
+                     'Date of service: 10/14/2026    Recall due: 10/2029',
+                     'Last colonoscopy 05/01/2019    Date of service: 10/14/2026'):
+            with self.subTest(line=line):
+                self.assert_question(HEAD + 'Colonoscopy report\n' + line + '\n' + COLO_BODY, '2026-10-14')
+
+    def test_controls(self):
+        for text in (HEAD + 'Colonoscopy report\nDate of service: 10/14/2026    Last name: Synthetic\n' + COLO_BODY,
+                     HEAD + 'Colonoscopy report\nLast colonoscopy: 05/01/2019\nDate of service: 10/14/2026\n' + COLO_BODY,
+                     HEAD + 'Colonoscopy report\nDate of service: 10/14/2026    DOB: 01/01/1998\n' + COLO_BODY,
+                     HEAD + 'Colonoscopy report\nDate of service: 10/14/2026    Previous name: Synthetic\n' + COLO_BODY):
+            with self.subTest(lines=text.splitlines()[2:4]):
+                self.assert_document(text, '2026-10-14')
+
+
+class QualifierWithItsOwnDateOnTheLineRequestTests(EndToEnd):
+    def test_w1_and_e9_send_no_date(self):
+        w1 = self.finished(RESCHEDULED)
+        self.assertEqual(self.dates_sent(w1), [[]])
+        self.assert_not_excluded(w1, '45385')
+        e9 = self.finished(FOLLOW_UP_BEFORE)
+        self.assertEqual(self.dates_sent(e9), [[]])
+        self.assert_not_excluded(e9, '99213')
+

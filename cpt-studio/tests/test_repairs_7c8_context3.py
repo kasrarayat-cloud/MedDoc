@@ -308,12 +308,16 @@ class QualifierInAnotherFieldHoldsTests(DateAssertions, SimpleTestCase):
     def test_controls_a_field_with_no_qualifier_or_about_something_else(self):
         for line, value in (('Indication: screening Date of service: 10/14/2026', '2026-10-14'),
                             ('Indication: abdominal pain Visit Date: 10/20/2026', '2026-10-20'),
-                            ('Last name: synthetic Date of Service: 10/14/2026', '2026-10-14'),
-                            ('Last colonoscopy: 05/01/2019 Procedure Date: 10/14/2026', '2026-10-14')):
+                            ('Last name: synthetic Date of Service: 10/14/2026', '2026-10-14')):
             with self.subTest(line=line):
                 text = HEAD + line + '\n' + COLO_PLAIN
                 self.assert_document(text, value)
                 self.assert_member_conflict(text, ELENA_DATE)
+        # P2DN's fix round, issue 5: a qualifier field with a date of its own on the label's line ("Last colonoscopy:
+        # 05/01/2019") makes the line state two occurrences' dates: asked, the labelled date answering the question
+        # (this pin had it documented)
+        text = HEAD + 'Last colonoscopy: 05/01/2019 Procedure Date: 10/14/2026\n' + COLO_PLAIN
+        self.assert_question(text, '2026-10-14')
 
 
 class QualifierInAnotherFieldRequestTests(EndToEnd):
