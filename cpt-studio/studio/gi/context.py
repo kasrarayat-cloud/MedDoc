@@ -140,13 +140,16 @@ _NEUTRAL_WORDS = frozenset(('the', 'this', 'a', 'an'))
 # birth a label's field or a dated line held, and was sent). The birth LABELS are a closed list: DOB, D.O.B., D-O-B,
 # date of birth, birth date, birthday, birth, born, b., and their joined forms - joined to another field's name by a
 # slash or an ampersand, or followed by a bracketed word ("DOB/Age", "Age/DOB", "DOB (age)"; the P2DATES skeptic's sk:4).
-# P2DN's fix round, issue 7: "b." is the birth label only as it is written - lower case, opening its field ("(b.
-# 01/01/1998)", ", b. 01/01/1998") - never a capital initial after a name ("Dr. Robin B. - 10/14/2026", "Synthetic, Alex
-# B. - 10/14/2026"), which made the line's own date a date of birth, so the dated line was dropped and a member's
-# 1998-01-01 taken and sent. A bracket after the label may hold its format ("DOB (mm/dd/yyyy):", "Date of Birth
+# P2DN's fix round, issue 7: "b." is the birth label only as it is written - lower case ("(b. 01/01/1998)", ", b.
+# 01/01/1998", "Alex Synthetic b. 01/01/1998") - never a capital initial after a name ("Dr. Robin B. - 10/14/2026",
+# "Synthetic, Alex B. - 10/14/2026"), which made the line's own date a date of birth, so the dated line was dropped and
+# a member's 1998-01-01 taken and sent. The final refutation, fr-dr:5: the case is the whole rule - a lower-case "b."
+# one space after a name ("Re: Colonoscopy for Alex Synthetic b. 01/01/1998") was refused as well, so the date of birth
+# was the subject line's own date, a document conflict beside the note's labelled 10/14 listed it, and a member's
+# 1998-01-01 was taken and sent. A bracket after the label may hold its format ("DOB (mm/dd/yyyy):", "Date of Birth
 # (MM/DD/YYYY):"; issue 1: the date after it was read as another field's value the member's 1998-01-01 agreed with).
 _BIRTH_LABEL = (r'(?:D[.\-]?+[ \t]?+O[.\-]?+[ \t]?+B\b\.?+|date[ \t]++of[ \t]++birth|birth(?:[ \t]*+(?:date|day))?+'
-                r'|born(?:[ \t]++on)?+|(?<![A-Za-z][ \t])(?-i:b)\.)')
+                r'|born(?:[ \t]++on)?+|(?-i:b)\.)')
 _BIRTH_FORM = (r'(?:[A-Za-z]{1,12}+[ \t]*+[/&][ \t]*+)?' + _BIRTH_LABEL
                + r'(?:[ \t]*+[/&][ \t]*+[A-Za-z]{1,12}+|[ \t]*+\([ \t]*+[A-Za-z][A-Za-z/.\- ]{0,14}+\))?+')
 # A date with a birth label right before it ("DOB: 01/01/1998", "(DOB 01/01/1998)", "Date of birth - 01/01/1998", "born
