@@ -249,7 +249,9 @@ def _second_review(second: NormalizedResponse, scope: dict, selections: list, te
                    day, inventory, procedure_day: bool = False) -> tuple[list, list, _SecondMerge]:
     """Merge the bounded second review (ARCHITECTURE 5.11). Only a code it SELECTED that accounts for a documented
     service or act left unresolved by the primary proposals becomes a proposal (marked as from the second review); every
-    other code it lists is informational. Nothing is promoted from an alternative and nothing is invented."""
+    other code it lists is informational. Nothing is promoted from an alternative and nothing is invented. A service
+    read as part of another is accounted for by a code of that other service that includes its examination, as the
+    reconciliation reads it (reconcile.includes_through)."""
     active = [(s.code, s.family) for s in selections if not s.excluded]
     unresolved, _, _ = reconcile.reconcile(inventory, active, procedure_day=procedure_day)
     open_items = [(u.service, u.family, u.act, u.label) for u in unresolved
@@ -276,10 +278,17 @@ def _second_review(second: NormalizedResponse, scope: dict, selections: list, te
         # base code, or an act it documents) - never by a code for an act nothing documents, which would hide the
         # missing service behind a held proposal (refutation r1, sends lens)
         supported = match is not None and match.state in ('performed', 'incomplete')
-        covered = [label for _, family, act, label in open_items if profile is not None
-                   and family == candidate.family and ((act == '' and supported) or act in profile.covers
-                                                       or (act in ('tattoo', 'injection') and {'tattoo', 'injection'}
-                                                           & set(profile.covers)))]
+        covered = [label for service, family, act, label in open_items if profile is not None and (
+            (family == candidate.family and ((act == '' and supported) or act in profile.covers
+                                             or (act in ('tattoo', 'injection') and {'tattoo', 'injection'}
+                                                 & set(profile.covers))))
+            # a whole service read as part of another (an EGD inside an EUS) is accounted for by a code of that other
+            # service that includes its examination - documented as done, which is why it is listed - as the
+            # reconciliation reads it once the code is selected, whatever that code's own acts leave to the reviewer
+            # (reconcile.includes_through; refutation P2RA, EUS lens 2: an EGD-with-EUS code the second review selected
+            # for the listed EGD was kept as an alternative that "accounts for no documented service or act the primary
+            # proposals left unresolved", the EGD stayed listed, and the one second review was used up)
+            or (act == '' and _includes_through(inventory, service, code, candidate.family)))]
         accounts = bool(covered)
         if accounts and candidate.evaluation is not None and not candidate.excluded:
             added.append(replace(candidate, origin='second_review'))
@@ -311,6 +320,13 @@ def _second_review(second: NormalizedResponse, scope: dict, selections: list, te
                          added=tuple(s.code for s in added), listed=tuple(item.code for item, _ in listed),
                          accounts_for=tuple(dict.fromkeys(accounted)))
     return list(selections) + added, alternatives, merge
+
+
+def _includes_through(inventory, service_id: str, code: str, family: str) -> bool:
+    """Whether ``code``, of ``family``, includes the examination of the documented service ``service_id`` through the
+    service it is read as part of (reconcile.includes_through)."""
+    service = inventory.service(service_id)
+    return service is not None and reconcile.includes_through(inventory, service, code, family)
 
 
 def _second_review_check(merge: _SecondMerge, unresolved: Sequence[reconcile.Unresolved]) -> Check:

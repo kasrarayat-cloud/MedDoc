@@ -1951,7 +1951,14 @@ The assessment that follows reads both runs (`Assessment.second_run`): the
 second review's passages are moved from the excerpt to the revision text and
 re-checked exactly; only a code it SELECTED that accounts for an unresolved
 item becomes a proposal (`support.origin = second_review`, labelled on the
-card and in both reports); every other code it lists is an alternative. The
+card and in both reports); every other code it lists is an alternative. A
+service read as part of another (an EGD inside an EUS) is accounted for by a
+code of that other service that includes its examination, as the
+reconciliation reads it once the code is selected (`reconcile.includes_through`),
+whatever that code's own acts leave to the reviewer (refutation P2RA, EUS lens
+2: an EGD-with-EUS code selected for the listed EGD was kept as an alternative
+that "accounts for no documented service or act the primary proposals left
+unresolved"). The
 primary run stays the run in use for context changes and reuse. The encounter
 view's `second_review.run` names the newest second review made for the answer
 the current assessment reads, whatever its outcome; while its response was not

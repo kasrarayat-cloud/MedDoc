@@ -11,6 +11,9 @@ provider is an in-process fake (no network).
   selected code includes no upper endoscopy read "included in S2: that service's code includes this examination" (and
   "... so no code of its own is asked"): the line tested whether the reconciliation listed the EGD, not the inclusion
   rule.
+- EUS lens 2 (engine._second_review): an EGD-with-EUS code the bounded second review selected for the EGD the primary
+  proposals left listed was kept as an alternative that "accounts for no documented service or act the primary
+  proposals left unresolved": the merge accepted a code for an open item only inside the item's own family.
 """
 import dataclasses
 from unittest import mock
@@ -19,12 +22,15 @@ from django.test import SimpleTestCase
 
 from studio import jobs
 from studio.gi.profiles import PROFILES
+from studio.types import NormalizedResponse
 from studio.validation import checks
 from tests.test_pipeline_api import FakeProvider, drain
 from tests.test_repairs_7c8_p1reports import Harness
-from tests.test_repairs_7c8_p2reports import (EGD_LABEL, EGD_WITH_EUS_CODES, EUS_WITH_EGD, EVERY_DETECTED, FNA,
-                                              screen, unproposed, unresolved_items)
+from tests.test_repairs_7c8_p2reports import (EGD_LABEL, EGD_WITH_EUS_CODES, EGD_WITH_LIMITED_EUS, EUS_WITH_EGD,
+                                              EVERY_DETECTED, FNA, LIMITED_EUS, NO_EGD_PROPOSAL, screen, unproposed,
+                                              unresolved_items)
 from tests.test_services_reconcile import run, sel, span
+from tests.test_services_second_review import TwoPassProvider
 
 SYNTHETIC = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
 
@@ -238,3 +244,94 @@ class TheInclusionLineFollowsTheInclusionRuleTests(Harness):
                                                'Lower EUS: The echoendoscope was introduced into the rectum.'),
                      [sel('45342', span(EGD_AND_LOWER_EUS, NODE_FNA))])
         self.assertEqual(result.completeness['included_by'], {})  # a rectal EUS includes no upper endoscopy
+
+
+# --- EUS lens 2: a code the second review selects that includes the unresolved service's examination accounts for it -
+
+LIMITED_TITLE = 'Upper endoscopy with limited endoscopic ultrasound'
+NOT_ADDED = 'it accounts for no documented service or act the primary proposals left unresolved'
+EGD_AND_EUS_DONE = SYNTHETIC + 'Date of service: 2026-10-14\nEGD and EUS were performed.\n'  # the verifier's smallest
+DONE_LINE = 'EGD and EUS were performed'
+
+
+def second_review(text, code, quote):
+    return NormalizedResponse('replay', 'test@1', (sel(code, span(text, quote)),))
+
+
+class ASecondReviewCodeThatIncludesTheExaminationAccountsForItTests(SimpleTestCase):
+    """EUS lens 2 (verified must-fix, class 3; not pre-existing at 057a7d398, which had no second review): the primary
+    answer selects an esophagoscopy EUS code (43231), which includes no upper endoscopy, so the EGD read as the EUS's
+    endoscopic portion is listed without a proposal and offered for the bounded second review. That review selects an
+    EGD-with-EUS code (43237, 43259), which includes the EGD - yet the merge accepted a code for an open item only inside
+    the item's own family, so it stored the code as a never-selectable alternative "not added as a proposal: it accounts
+    for no documented service or act the primary proposals left unresolved", left the EGD listed, and used up the one
+    second review. A whole service read as part of another is accounted for by a code of that service that includes its
+    examination (reconcile.includes_through), as the reconciliation reads it once the code is selected."""
+
+    def test_a_code_that_includes_the_listed_egd_is_added_for_it(self):
+        for text, primary, quote in ((EGD_WITH_LIMITED_EUS, LIMITED_EUS, LIMITED_TITLE),
+                                     (EGD_AND_EUS_DONE, DONE_LINE, DONE_LINE)):
+            first = run(text, [sel('43231', span(text, primary))])
+            self.assertEqual([(u[0], u[2]) for u in unresolved_items(first)], [('S1', 'no_proposal')])
+            for code in ('43237', '43259'):
+                with self.subTest(code=code, text=text[67:110]):
+                    result = run(text, [sel('43231', span(text, primary))], second=second_review(text, code, quote),
+                                 second_scope={'items': [NO_EGD_PROPOSAL]})
+                    (added,) = [p for p in result.proposals if p.code == code and p.bucket != 'alternative']
+                    self.assertEqual((added.bucket, added.support['origin']), ('selected', 'second_review'))
+                    self.assertFalse([p for p in result.proposals if p.bucket == 'alternative'])
+                    self.assertFalse(any(NOT_ADDED in (p.rationale or '') for p in result.proposals))
+                    self.assertEqual(unresolved_items(result), [])
+                    self.assertEqual((unproposed(result).status, unproposed(result).detail),
+                                     ('pass', checks.UNPROPOSED_PASS))
+                    review = next(c for c in result.encounter_checks if c.id == 'provider.second_review')
+                    self.assertEqual(review.status, 'info')
+                    self.assertIn(f'selected {code}, which accounts for {NO_EGD_PROPOSAL} and is added as a proposal',
+                                  review.detail)
+
+    def test_controls_the_egds_own_code_is_added_and_a_code_that_includes_none_stays_an_alternative(self):
+        text = EGD_WITH_LIMITED_EUS
+        result = run(text, [sel('43231', span(text, LIMITED_EUS))], second=second_review(text, '43235', LIMITED_TITLE),
+                     second_scope={'items': [NO_EGD_PROPOSAL]})
+        self.assertEqual([(p.code, p.bucket) for p in result.proposals if p.code == '43235'], [('43235', 'selected')])
+        self.assertEqual(unresolved_items(result), [])
+        for code in ('45342', '43232'):  # an EUS code that includes no upper endoscopy accounts for none
+            with self.subTest(code=code):
+                result = run(text, [sel('43231', span(text, LIMITED_EUS))],
+                             second=second_review(text, code, LIMITED_TITLE), second_scope={'items': [NO_EGD_PROPOSAL]})
+                (listed,) = [p for p in result.proposals if p.code == code]
+                self.assertEqual(listed.bucket, 'alternative')
+                self.assertIn(NOT_ADDED, listed.rationale)
+                self.assertEqual([(u[0], u[2]) for u in unresolved_items(result)], [('S1', 'no_proposal')])
+
+
+class TheSecondReviewsIncludingCodeThroughTheApiTests(Harness):
+    """EUS lens 2 through the API, as its verifier ran it: the reviewer asks for the second review the encounter offers
+    for the listed EGD (201), the job is drained, and the code it selects that includes the EGD is a proposal marked as
+    from the second review - in the stored rows, the draft TXT and the Codes tab - never an alternative said to account
+    for nothing."""
+
+    def test_the_code_is_a_proposal_on_every_surface(self):
+        self.use(TwoPassProvider(first=[('43231', LIMITED_EUS)], later=[('43237', LIMITED_TITLE)]))
+        encounter_id = self.create(EGD_WITH_LIMITED_EUS)
+        drain()
+        offered = self.detail(encounter_id)['second_review']
+        self.assertTrue(offered['available'], offered)
+        self.assertEqual(offered['items'], [NO_EGD_PROPOSAL])
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/second-review').status_code, 201)
+        drain()
+        self.assertEqual(len(self.provider.requests), 2)
+        assessment = self.assessment(encounter_id)
+        proposals = {(p.code, p.bucket): p for p in assessment.proposals.all()}
+        self.assertIn(('43237', 'selected'), proposals)
+        self.assertEqual(proposals[('43237', 'selected')].support.get('origin'), 'second_review')
+        self.assertNotIn(('43237', 'alternative'), proposals)
+        self.assertEqual([u['service'] for u in assessment.completeness['unresolved_items']], [])
+        check = self.encounter_check(encounter_id, 'services.unproposed')
+        self.assertEqual((check['status'], check['detail']), ('pass', checks.UNPROPOSED_PASS))
+        draft = self.txt(encounter_id)
+        self.assertNotIn(NOT_ADDED, draft)
+        self.assertIn('43237', draft)
+        shown = screen(self.detail(encounter_id))
+        self.assertNotIn(NOT_ADDED, shown['codes'])
+        self.assertIn('43237', shown['codes'])
