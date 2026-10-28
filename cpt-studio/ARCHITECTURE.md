@@ -404,10 +404,11 @@ occurrence's date, be sent):
   the counts the header asked for and shifted the date of birth into the
   date-of-service label's place - a member's 1998-01-01 was taken and sent):
   each value cell must lie under its own head (it overlaps the columns from
-  its head's start to the next head's start), and a stack's value line must be
-  of its label's kind (a date or birth label's place holds a date alone - a
-  clock or a full stop at most - and any other label's place holds no date
-  alone). Where the positions do not match (another cell count, a cell under
+  its head's start to the next head's start) and every date or birth label's
+  column must hold a date alone (narrow heads over wide cells pass the first
+  test shifted), and a stack's value line must be of its label's kind (a date
+  or birth label's place holds a date alone - a clock or a full stop at most -
+  and any other label's place holds no date alone). Where the positions do not match (another cell count, a cell under
   another head, a place of the other kind, a value missing, one value for two
   names) no value is the label's: it states no date where none stands there,
   and a date it cannot place - asked, the label alone - where one does
