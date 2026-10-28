@@ -157,25 +157,30 @@ _BIRTH_FORM = (r'(?:[A-Za-z]{1,12}+[ \t]*+[/&][ \t]*+)?' + _BIRTH_LABEL
 _BIRTH_BEFORE = cues.rx(r'(?<![\w/.-])' + _BIRTH_FORM + r'[ \t]*+(?:[:#=\u2013-][ \t]*+)?+(?:\([ \t]*+)?+$')
 _BIRTH_REACH = 32
 _BIRTH_HEAD = cues.rx(r'(?<![\w/.-])' + _BIRTH_FORM + r'(?![\w/-])')
-# The header fields rule 1 allows beside a date of service: a closed allow-list of LABELS (the patient, a name, the
-# record, chart or account number, the date of birth, age, sex, the physician, the location or facility, the referring
-# physician; a patient's status or type, a place of service or care setting, the operator, assistant or anesthesia
-# provider are those fields too). Their
-# values are read for the words of another occurrence and for any date but a date of birth; no other field is a
-# header field.
-_HEADER_LABEL = (r'(?:patient(?:[ \t]++(?:name|id|number|no\.?+|status|type))?+'
+# The header fields rule 1 allows beside a date of service: P2FIX's closed allow-list of LABELS - the patient, a name,
+# the record, chart or account number (the MRN's), the date of birth, age, sex, the physician, provider or endoscopist
+# (the person rendering the service: a clinician, a gastroenterologist, an endosonographer), the location or facility,
+# the referring physician. The P2DATES skeptic (sk:6): a patient's status or type, a place of service or a care
+# setting, which the repair had added beyond that list, are no header fields - their values are statuses and settings
+# ("pending authorization", "cancelled"), never names - and nor are the roles the list does not name (an operator, an
+# assistant, a surgeon, the anesthesia provider). Their values are read for the words of another occurrence and for any
+# date but a date of birth; no other field is a header field.
+_HEADER_LABEL = (r'(?:patient(?:[ \t]++(?:name|id|number|no\.?+))?+'
                  r'|(?:full|first|last|given|family|middle)[ \t]++name|name|MRN'
                  r'|(?:(?:medical|patient|synthetic)[ \t]++)?+record(?:[ \t]++(?:number|no\.?+|id))?+'
                  r'|chart(?:[ \t]++(?:number|no\.?+))?+|account(?:[ \t]++(?:number|no\.?+))?+|acct\.?+|age|sex|gender'
                  r'|(?:(?:performing|attending|rendering|treating|primary|assisting)[ \t]++)?+(?:physician|provider'
-                 r'|endoscopist|endosonographer|clinician|surgeon|gastroenterologist|operator|proceduralist|assistant'
-                 r'|anesthesiologist|anesthetist|anesthesia(?:[ \t]++provider)?+|CRNA)|(?:service[ \t]++)?+location'
-                 r'|facility(?:[ \t]++name)?+|site|place[ \t]++of[ \t]++service|POS|(?:care[ \t]++|service[ \t]++)?+setting'
+                 r'|endoscopist|endosonographer|clinician|gastroenterologist)|location|facility(?:[ \t]++name)?+'
                  r'|referring(?:[ \t]++(?:physician|provider|clinician|doctor))?+|referred[ \t]++by)')
 # A field's head on a header line: a date-of-service label, a birth label or a header label, each a whole label.
 _FIELD_HEAD = cues.rx(r'(?<![\w/.-])(?:(?P<svc>' + _DATE_LABEL + r')|(?P<birth>' + _BIRTH_FORM + r')|(?P<hdr>'
                       + _HEADER_LABEL + r'))(?![\w/-])')
 _HDR_TAIL = re.compile(r'[ \t]*+(?:(?P<hash>#)[ \t]*+)?+(?P<sep>[:=])?+[ \t]*+')
+# The P2DATES skeptic (sk:6): a header value is a name, a number or a code. A bracket, a sentence's stop or a word
+# written in lower case is a phrase this service cannot place ("pending authorization", "(procedure postponed)"): the
+# line may stand in the header, never in a label's block (_Blocks). Case-sensitive on purpose (never cues.rx).
+_PHRASE_IN_VALUE = re.compile(r"[()\[\]{};!?]|(?<![A-Za-z'’])[a-z][a-z'’]++")
+_BAR_BLANKS = re.compile(r'[ \t\r|]*+')
 _BIRTH_TAIL = re.compile(r'[ \t]*+(?P<sep>[:#=\u2013-])?+[ \t]*+')
 # A lone date in a date label's field: the date, a clock at most, then nothing but the field's end.
 _LONE_DATE = cues.rx(r'(?:' + _FULL_DATE + r')(?![\w/-])(?:[ \t]++(?:at[ \t]++)?+\d{1,2}:\d{2}(?::\d{2})?+'
@@ -754,13 +759,29 @@ def _title_line(text: str, ls: int, le: int) -> bool:
                    for q in _OTHER_OCCURRENCE.finditer(text, start, end))
 
 
+def _lone_value(text: str, start: int, end: int) -> bool:
+    """Whether [start, end) holds one date-shaped value (_first_value) and nothing else but blanks and a row's bars."""
+    start = _BLANKS.match(text, start, end).end()
+    found = _first_value(text, start, end, births=False)
+    return found is not None and found[0] == start and _BAR_BLANKS.match(text, found[1], end).end() >= end
+
+
 def _header_line(text: str, ls: int, le: int) -> Optional[tuple]:
     """A header line (rule 1): fields only, each headed by a date-of-service label, a birth label or a header label of
     the closed list (_HEADER_LABEL), the first opening the line - "Patient: Synthetic, Alex    DOB: 01/01/1998    MRN:
-    0000", "Date of service: 10/14/2026". Returns the values its date-of-service labels state (an ISO date, or None
-    when a label's value is not a lone date: rule 1's "nothing else follows it"), or None when the line is anything
-    else: another field, a heading, a sentence, a list item, a header value naming another occurrence, holding another
-    field's label or a date that is no date of birth. One scan of the line's heads."""
+    0000", "Date of service: 10/14/2026". Returns (the values its date-of-service labels state - an ISO date, or None
+    when a label's value is not a lone date: rule 1's "nothing else follows it" -, whether its header values are names,
+    numbers or codes alone), or None when the line is anything else: another field, a heading, a sentence, a list item,
+    a header value naming another occurrence, holding another field's label or a date that is no date of birth. One
+    scan of the line's heads.
+
+    The P2DATES skeptic: a birth field's value was never read (sk:2: "DOB: 01/01/1998, outside records reviewed" or "DOB:
+    01/01/1998    Status: Scheduled" left the line a header line), so a birth field holds its date alone or the line is
+    no header line; and a header value held the date only through the vocabulary of another occurrence (sk:6). A header
+    value naming an occurrence - a service's name or an occurrence's noun ("Provider: Dr. A. Synthetic (procedure
+    postponed)") - ends the header wherever it stands, as a heading does; one holding a phrase this service cannot place
+    (_PHRASE_IN_VALUE: a bracket, a sentence's stop, a word in lower case) may stand in the header, never in a label's
+    block (_Blocks)."""
     start, end = _strip_span(text, ls, le)
     heads = []
     for h in _FIELD_HEAD.finditer(text, start, end):
@@ -775,20 +796,33 @@ def _header_line(text: str, ls: int, le: int) -> Optional[tuple]:
                 continue
         else:
             tail = _LABEL_TAIL.match(text, h.end(), end)
-        heads.append((kind, h.start(), tail.end()))
+        heads.append((kind, h.start(), h.end(), tail.end()))
     if not heads or heads[0][1] != start:
         return None
-    values = []
-    for i, (kind, _, value_start) in enumerate(heads):
+    values, names = [], True
+    for i, (kind, _, _, value_start) in enumerate(heads):
         value_end = heads[i + 1][1] if i + 1 < len(heads) else end
+        if i + 1 < len(heads) and heads[i + 1][0] == 'svc':
+            # the words a date label reads as its own ("Patient: Synthetic, Alex    Colonoscopy procedure date: ...",
+            # "... Cancelled procedure date: ...") are read with the label (_labelled_kind), never as this value's
+            words, phrase = _label_words(text, heads[i + 1][1], heads[i + 1][2])
+            if words and value_start <= phrase:
+                value_end = phrase
         if kind == 'svc':
             lone = _LONE_DATE.match(text, value_start, value_end)
             values.append(date_from_match(lone).isoformat() if lone and date_from_match(lone) else None)
-        elif kind == 'hdr':
+        elif kind == 'birth':
+            if not _lone_value(text, value_start, value_end):
+                return None  # sk:2: a birth field holds its date alone
+        else:
             if (_OTHER_OCCURRENCE.search(text, value_start, value_end) or _VALUE_FIELD.search(text, value_start, value_end)
-                    or _VALUE_DATE.search(text, value_start, value_end)):
+                    or _VALUE_DATE.search(text, value_start, value_end)
+                    or _OCCURRENCE_NOUN.search(text, value_start, value_end)
+                    or any(p.search(text, value_start, value_end) for p in _THIS_SERVICE)):
                 return None
-    return tuple(values)
+            if names and _PHRASE_IN_VALUE.search(text, value_start, value_end):
+                names = False
+    return tuple(values), names
 
 
 class _Blocks:
@@ -801,7 +835,12 @@ class _Blocks:
     blank line, "Procedure date: ...") holds the date as one on the line above does. An addendum the app appends opens a
     header of its own: its "ADDENDUM (revision N, added ...)" line stands as its title, so an addendum that states the
     date alone ("Date of service: 2026-10-20") states it, as the member-conflict note invites. Linear: each line is read
-    once."""
+    once.
+
+    The P2DATES skeptic (sk:6): the label's block itself - its paragraph and the line above it, P2FIX's block - holds
+    nothing but the title, header fields whose values are names, numbers or codes, and date labels. A header value
+    holding a phrase ("Provider: Dr. A. Synthetic (procedure postponed)", "Patient: Alex Synthetic (fictional)") may
+    stand in the header above the block, never in it."""
 
     def __init__(self, text: str):
         lines, pos = [], 0
@@ -816,11 +855,21 @@ class _Blocks:
         self.last = [0] * count  # each line's paragraph's last line (one pass from the end)
         for i in range(count - 1, -1, -1):
             self.last[i] = self.last[i + 1] if i + 1 < count and not blank[i] and not blank[i + 1] else i
+        self.first = [0] * count  # each line's paragraph's first line, and the nearest non-blank line above each line
+        self.above = [-1] * count
+        previous = -1
+        for i in range(count):
+            self.first[i] = self.first[i - 1] if i and not blank[i] and not blank[i - 1] else i
+            self.above[i] = previous
+            previous = i if not blank[i] else previous
         tops = [0] + [i + 1 for i, (ls, le) in enumerate(lines)
                       if ADDENDUM_HEADER.fullmatch(text, *_strip_span(text, ls, le))]
-        self.regions = []  # (first line, end line, the value stated, the first line stating another) per header
+        # per header: (first line, end line, the value stated, the first line stating another, the lines that may
+        # stand in the header but never in a label's block)
+        self.regions = []
         for top in tops:
             end, bad, stated, value, titles, title = count, count, False, None, 0, top == 0
+            outside = []
             for i in range(top, count):
                 if blank[i]:
                     continue
@@ -833,20 +882,28 @@ class _Blocks:
                 if got is None:
                     end = i
                     break
-                for one in got:
+                values, names = got
+                if not names:
+                    outside.append(i)
+                for one in values:
                     if not stated:
                         stated, value = True, one
                     if (one is None or one != value) and bad == count:
                         bad = i
-            self.regions.append((top, end, value, bad))
+            self.regions.append((top, end, value, bad, outside))
         self.tops = tops
 
     def own(self, pos: int, value: Optional[str]) -> bool:
         """Whether the date-of-service label at ``pos`` stating ``value`` alone is the note's own (rule 1)."""
         line = bisect.bisect_right(self.starts, pos) - 1
-        top, end, stated, bad = self.regions[bisect.bisect_right(self.tops, line) - 1]
+        top, end, stated, bad, outside = self.regions[bisect.bisect_right(self.tops, line) - 1]
         last = self.last[line]
-        return value is not None and value == stated and top <= line and last < end and last < bad
+        if not (value is not None and value == stated and top <= line and last < end and last < bad):
+            return False
+        first = self.first[line]
+        lo = max(top, self.above[first]) if self.above[first] >= 0 else first  # the block: the paragraph, the line above
+        at = bisect.bisect_left(outside, lo)
+        return at == len(outside) or outside[at] > last
 
 
 # The value a date label states: the first date-shaped run of its value field - a weekday, then at most three date

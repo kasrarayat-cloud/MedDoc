@@ -307,7 +307,11 @@ class QualifierInAnotherFieldHoldsTests(DateAssertions, SimpleTestCase):
     def test_controls_a_field_with_no_qualifier_or_about_something_else(self):
         # refutation phase 2 (P2DATES, rule 1): a header field before the label in a header block holds nothing; a field
         # outside the header list asks the date whatever its words (an over-hold), and the labelled date answers it
-        self.assert_document(HEAD + 'Last name: synthetic Date of Service: 10/14/2026\n\n' + COLO_PLAIN, '2026-10-14')
+        self.assert_document(HEAD + 'Last name: Synthetic\nDate of Service: 10/14/2026\n\n' + COLO_PLAIN, '2026-10-14')
+        # the 7c8 fix round (P2DATES, sk:6): a header value is a name, a number or a code; one written in lower case is
+        # a phrase the label's block may not hold, so it is asked (an over-hold), and the labelled date answers it -
+        # the qualifier "Last" in a field about something else still never makes it another occurrence's
+        self.assert_question(HEAD + 'Last name: synthetic Date of Service: 10/14/2026\n\n' + COLO_PLAIN, '2026-10-14')
         for line, value in (('Indication: screening Date of service: 10/14/2026', '2026-10-14'),
                             ('Indication: abdominal pain Visit Date: 10/20/2026', '2026-10-20'),
                             ('Last name: synthetic Date of Service: 10/14/2026', '2026-10-14'),

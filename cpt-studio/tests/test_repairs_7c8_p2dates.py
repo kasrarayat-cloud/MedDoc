@@ -210,8 +210,8 @@ class HeaderBlockTests(DateAssertions, SimpleTestCase):
                        '(fictional)\n\nSynthetic record: SYN-0003\n\nDate of procedure: 2026-10-14\n\nPlace of service: '
                        'Hospital outpatient department\n\nBilling: professional services only.\n\n',
                        'Procedure report - colonoscopy\n\nPatient: Alex Synthetic\nSynthetic record: SYN-0004\nDate of '
-                       'procedure: 2026-10-14\nPlace of service: Ambulatory surgery center\nEndoscopist: Dr. A. '
-                       'Synthetic, MD\nReferring clinician: Dr. B. Synthetic\n\n',
+                       'procedure: 2026-10-14\nEndoscopist: Dr. A. Synthetic, MD\nReferring clinician: Dr. B. '
+                       'Synthetic\n\nPlace of service: Ambulatory surgery center\n\n',
                        'Name: Alex Synthetic | MRN: 0000 | DOS: 10/14/2026 09:15 | Age: 28 | Sex: F\n\n'):
             with self.subTest(header=header.replace('\n', ' / ')[:70]):
                 text = HEAD + header + COLO_BODY
@@ -225,7 +225,10 @@ class HeaderBlockTests(DateAssertions, SimpleTestCase):
                       'Colonoscopy procedure date: 10/14/2026\n\n', 'Date of service: 10/14/2026 at the clinic\n\n',
                       'Visit type: established patient\nDate of service: 10/14/2026\n\n',
                       'Field | Value\nProcedure date | 10/14/2026\n\n',
-                      'Location: Outside hospital\nDate of service: 10/14/2026\n\n'):
+                      'Location: Outside hospital\nDate of service: 10/14/2026\n\n',
+                      # the 7c8 fix round (sk:6): a place of service is no header field of P2FIX's closed list
+                      'Synthetic record: SYN-0004\nDate of procedure: 10/14/2026\nPlace of service: Ambulatory surgery '
+                      'center\n\n'):
             with self.subTest(block=block.replace('\n', ' / ')):
                 text = HEAD + block + COLO_BODY
                 self.assert_asked(text, 'ate')

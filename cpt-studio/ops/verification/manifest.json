@@ -410,11 +410,9 @@
       "expected_context": {
         "service_date": {
           "origin_in": [
-            "document"
+            "missing"
           ],
-          "value_in": [
-            "2026-10-16"
-          ]
+          "note": "Refutation phase 2 fix round (7c8 P2DATES, sk:6): the labelled date 2026-10-16 is asked - its header block holds \"Place of service: Ambulatory surgery center\", a field outside P2FIX's closed header list, and header values holding a bracket and words in lower case (\"Daniel Kim (fictional)\", \"Dr. Laura Mendes, MD, Gastroenterology (fictional)\") - so the first request is dateless and the member answers the date. Never another date."
         },
         "setting": {
           "origin_in": [

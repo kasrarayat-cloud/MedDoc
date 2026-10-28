@@ -479,9 +479,12 @@ class PopulationControlsTests(DateAssertions, SimpleTestCase):
         # bracket or a page's running header, or in a title, is asked (rules 1 and 2) and the member's answer with it
         # settles it - an over-hold, never another date
         self.assert_document(HEAD + 'Date of service: 2026-10-20\n\n' + VISIT_BODY, '2026-10-20')
-        self.assert_document(HEAD + 'MRN: SYN-100201 Date of service: 2026-10-06 Place of service: Office (POS 11)\n',
-                             '2026-10-06')
-        for text, value in ((HEAD + 'Date of service: 2026-10-20\n' + VISIT_BODY, '2026-10-20'),
+        self.assert_document(HEAD + 'MRN: SYN-100201 Date of service: 2026-10-06\n\n', '2026-10-06')
+        # the 7c8 fix round (P2DATES, sk:6): a place of service is no header field of P2FIX's closed list, so the same
+        # line with it is asked - an over-hold the labelled date answers
+        for text, value in ((HEAD + 'MRN: SYN-100201 Date of service: 2026-10-06 Place of service: Office (POS 11)\n',
+                             '2026-10-06'),
+                            (HEAD + 'Date of service: 2026-10-20\n' + VISIT_BODY, '2026-10-20'),
                             (HEAD + 'Date of service: 2026-10-05 (capsule placement)\n', '2026-10-05'),
                             (HEAD + 'Report | Patient Synthetic | Service date 20 October 2026 | Endoscopist Dr. A. '
                                     'Synthetic\n', '2026-10-20'),

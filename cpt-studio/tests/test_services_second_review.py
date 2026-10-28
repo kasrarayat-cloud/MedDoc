@@ -24,8 +24,8 @@ LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/202
 REPORT = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
 Colonoscopy report (fictional)
 Date of service: 2026-10-16
-Place of service: Hospital outpatient department
 
+Place of service: Hospital outpatient department
 The colonoscope was advanced to the cecum and the examination was completed.
 A 6 mm polyp in the rectum was removed with a cold snare.
 A separate 10 mm flat lesion in the transverse colon was sampled with cold biopsy forceps; it was not removed.
@@ -297,7 +297,7 @@ class SecondReviewTests(TestCase):
         document supports as done; a biopsy code where no biopsy is documented stays an alternative, and the missing
         EGD stays unresolved instead of hiding behind a held proposal."""
         text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\n'
-                'Date of service: 2026-10-16\nPlace of service: Hospital outpatient department\n\nThe gastroscope was '
+                'Date of service: 2026-10-16\n\nPlace of service: Hospital outpatient department\nThe gastroscope was '
                 'advanced to the second portion of the duodenum. The mucosa was normal throughout.\n')
         self.provider.first = []
         self.provider.later = [('43239', 'The mucosa was normal throughout.')]
@@ -344,8 +344,8 @@ class SecondReviewTests(TestCase):
         self.assertEqual(len(self.provider.requests), 3)
 
 
-OFFICE_LIST = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nDate of service: 2026-10-21\n'
-               'Place of service: Office\n\nEstablished patient office visit for rectal bleeding.\nChief complaint: Rectal '
+OFFICE_LIST = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nDate of service: 2026-10-21\n\n'
+               'Place of service: Office\nEstablished patient office visit for rectal bleeding.\nChief complaint: Rectal '
                'bleeding.\nMedical decision making: moderate.\n{block}\n')
 REPORT_LIST = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nDate of service: 2026-10-21\n\n'
                'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. No polyps were seen.\n'

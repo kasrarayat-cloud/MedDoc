@@ -12,9 +12,9 @@ from studio.types import ProviderRequest, RawExchange, sha256_json
 from tests.support import factories as f
 
 OFFICE_NOTE = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Date of service: 2026-10-20
 
 Riverbend Digestive Health (fictional)
-Date of service: 2026-10-20
 Place of service: Office, in-person outpatient visit
 
 Patient status: Established patient, last seen 2026-03-02.

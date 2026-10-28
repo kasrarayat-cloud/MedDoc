@@ -30,7 +30,8 @@ from django.test import SimpleTestCase
 from studio.gi import context
 from studio.types import Span
 from tests.test_repairs_7c8_context import DateAssertions
-from tests.test_repairs_7c8_context3 import BIRTH, COLO_BODY, ELENA_DATE, HEAD, EndToEnd, date_fact, evidence_text
+from tests.test_repairs_7c8_context3 import (BIRTH, COLO_BODY, EGD_BODY, ELENA_DATE, HEAD, EndToEnd, date_fact,
+                                             evidence_text)
 
 OFFICE = ('Established patient office visit for chronic constipation.\n'
           'Total time on the date of the encounter was 24 minutes.\n')
@@ -189,6 +190,107 @@ class BirthLabelFormTests(DateAssertions, SimpleTestCase):
         self.assert_document(text, '2026-10-14')
 
 
+class BirthFieldValueTests(DateAssertions, SimpleTestCase):
+    """sk:2: a "DOB" head's value - everything up to the next head - was never read, so a qualifier, a field or a
+    sentence after a date of birth on a header line left the labelled date documented: it was sent, and 45385 was
+    excluded as planned. A birth field holds its date alone."""
+
+    CASES = (
+        (HEAD + 'Colonoscopy report\nPatient: Synthetic, Alex    DOB: 01/01/1998, outside records reviewed\n'
+                'Procedure date: 09/03/2026\n\n' + COLO_BODY, '2026-09-03'),
+        (HEAD + 'Colonoscopy report\nPatient: Synthetic, Alex    DOB: 01/01/1998 outside    Procedure date: 09/03/2026'
+                '\n\n' + COLO_BODY, '2026-09-03'),
+        (HEAD + 'EGD report\nPatient: Synthetic, Alex    DOB: 01/01/1998    Status: Scheduled\nProcedure date: '
+                '11/04/2026\n\n' + EGD_BODY, '2026-11-04'),
+        (HEAD + 'EGD report\nProcedure date: 11/04/2026\nDOB: 01/01/1998    Status: Scheduled\n\n' + EGD_BODY,
+         '2026-11-04'),
+        (HEAD + 'EGD report\nProcedure date: 11/04/2026\nDOB: 01/01/1998 (procedure postponed)\n\n' + EGD_BODY,
+         '2026-11-04'),
+        # words outside the round-3 vocabulary: the label reads 'own', so only the birth value read holds the date
+        (HEAD + 'Colonoscopy report\nPatient: Synthetic, Alex    DOB: 01/01/1998, cancelled\nProcedure date: '
+                '09/03/2026\n\n' + COLO_BODY, '2026-09-03'),
+        (HEAD + 'Colonoscopy report\nPatient: Synthetic, Alex    DOB: 01/01/1998 (recall)\nProcedure date: 09/03/2026'
+                '\n\n' + COLO_BODY, '2026-09-03'),
+        (HEAD + 'EGD report\nPatient: Synthetic, Alex    DOB: 01/01/1998    Status: Pending\nProcedure date: '
+                '11/04/2026\n\n' + EGD_BODY, '2026-11-04'),
+        (HEAD + 'Colonoscopy report\nPatient: Synthetic, Alex    DOB: 01/01/1998 postponed    Procedure date: '
+                '09/03/2026\n\n' + COLO_BODY, '2026-09-03'),
+        (HEAD + 'EGD report\nProcedure date: 11/04/2026\nDOB: 01/01/1998    Status: Pending\n\n' + EGD_BODY,
+         '2026-11-04'),
+        # the same birth field two paragraphs above the label: it ends the header, as any line that is no header does
+        (HEAD + 'EGD report\nPatient: Synthetic, Alex    DOB: 01/01/1998    Status: Scheduled\n\nMRN: 0000\n\n'
+                'Procedure date: 11/04/2026\n\n' + EGD_BODY, '2026-11-04'),
+    )
+
+    def test_anything_after_a_date_of_birth_asks_the_date(self):
+        for text, other in self.CASES:
+            with self.subTest(lines=' / '.join(text.splitlines()[2:4])[:90]):
+                self.assert_never(text, other)
+                self.assert_asked(text, 'rocedure date')
+                self.assert_member_date(text, other)
+                self.assertFalse(any(BIRTH in quoted for quoted in evidence_text(text)), evidence_text(text))
+
+    def test_controls_a_date_of_birth_alone_in_its_field(self):
+        for line in ('Patient: Synthetic, Alex    DOB: 01/01/1998    MRN: 0000',
+                     'Name: Alex Synthetic | DOB: 01/01/1998 | Age: 28', 'Patient: Synthetic, Alex    DOB 1/1/1998',
+                     'Patient: Synthetic, Alex    Date of birth: Jan 1, 1998', 'DOB/Age: 01/01/1998    Sex: F'):
+            with self.subTest(line=line):
+                text = HEAD + 'Colonoscopy report\n' + line + '\nProcedure date: 09/03/2026\n\n' + COLO_BODY
+                self.assert_document(text, '2026-09-03')
+                self.assert_member_conflict(text, ELENA_DATE)
+
+
+class HeaderValueTests(DateAssertions, SimpleTestCase):
+    """sk:6: a header value held the date only through the round-3 vocabulary, reached through header labels beyond
+    P2FIX's list ("Patient status", "Setting") and through "Provider": 11/04 was sent and 43239 excluded as historical.
+    The header labels are P2FIX's closed list; a header value naming an occurrence ends the header; and in a label's
+    block a header value holds a name, a number or a code."""
+
+    CASES = ('Patient status: pending authorization', 'Setting: cancelled', 'Setting: Cancelled',
+             'Provider: Dr. A. Synthetic (procedure postponed)', 'Provider: Dr. A. Synthetic, procedure postponed',
+             'Place of service: Office - cancelled', 'Patient status: Pending', 'Facility: Synthetic Hospital; outside',
+             'Endoscopist: Dr. A. Synthetic - booked, not done', 'Provider: Dr. A. Synthetic - Procedure Postponed',
+             'Referring physician: Dr. B. Synthetic (pending)')
+
+    def test_a_qualifier_in_a_header_value_asks_the_date(self):
+        for line in self.CASES:
+            for where in ('below', 'above'):
+                block = (f'Procedure date: 11/04/2026\n{line}\n\n' if where == 'below'
+                         else f'{line}\nProcedure date: 11/04/2026\n\n')
+                text = HEAD + 'EGD report\n' + block + EGD_BODY
+                with self.subTest(line=line, where=where):
+                    self.assert_never(text, '2026-11-04')
+                    self.assert_asked(text, 'Procedure date')
+                    self.assert_member_date(text, '2026-11-04')
+
+    def test_a_header_value_naming_an_occurrence_holds_from_anywhere_in_the_header(self):
+        for line in ('Provider: Dr. A. Synthetic (procedure postponed)', 'Provider: Dr. A. Synthetic - Procedure Postponed',
+                     'Referring physician: Dr. B. Synthetic for colonoscopy', 'Location: Endoscopy suite, visit cancelled'):
+            text = HEAD + 'EGD report\n' + line + '\n\nPatient: Synthetic, Alex\n\nProcedure date: 11/04/2026\n\n' + EGD_BODY
+            with self.subTest(line=line):
+                self.assert_never(text, '2026-11-04')
+
+    def test_the_skeptic_s_patient_status_family_is_asked(self):
+        for word in QUALIFIERS:
+            for noun in ('colonoscopy', 'procedure'):
+                text = (HEAD + 'Procedure date: 09/03/2026\n' + f'Patient status: {word.lower()} {noun}\n\n'
+                        + COLO_BODY)
+                with self.subTest(word=word, noun=noun):
+                    self.assert_never(text, '2026-09-03')
+
+    def test_controls_a_name_a_number_or_a_code(self):
+        for lines in ('Provider: Dr. A. Synthetic', 'Endoscopist: Dr. A. Synthetic, MD    MRN: SYN-0003',
+                      'Patient: Synthetic, Alex    Age: 28    Sex: F', 'Referring physician: Dr. B. Synthetic',
+                      'Facility: Synthetic Endoscopy Center', 'Account number: 12345', 'Location: Suite 3'):
+            with self.subTest(lines=lines):
+                text = HEAD + 'EGD report\nProcedure date: 10/14/2026\n' + lines + '\n\n' + EGD_BODY
+                self.assert_document(text, '2026-10-14')
+        # a header value holding a phrase may stand in the header above the label's block: the live gi-03 shape
+        text = (HEAD + '\nRiverside Endoscopy Unit (fictional)\nColonoscopy procedure report\n\nPatient: Alex Synthetic '
+                '(fictional)\n\nSynthetic record: SYN-0003\n\nDate of procedure: 2026-10-14\n\n' + COLO_BODY)
+        self.assert_document(text, '2026-10-14')
+
+
 class RequestTests(EndToEnd):
     """Every issue end to end: the date each provider request carries, and the dated check that excluded an act."""
 
@@ -229,6 +331,18 @@ class RequestTests(EndToEnd):
         self.assert_never_sent(encounter_id, ELENA_DATE)
         self.assertEqual(self.dates_sent(encounter_id), [[]])
         self.assert_not_excluded(encounter_id, '45385')
+
+    def test_sk2_a_qualifier_after_a_date_of_birth(self):
+        for text, _ in BirthFieldValueTests.CASES:
+            with self.subTest(lines=' / '.join(text.splitlines()[2:4])[:90]):
+                self.assert_dateless(text, '43239' if EGD_BODY in text else '45385')
+
+    def test_sk6_a_qualifier_in_a_header_value(self):
+        for line in ('Patient status: pending authorization', 'Setting: cancelled',
+                     'Provider: Dr. A. Synthetic (procedure postponed)'):
+            with self.subTest(line=line):
+                self.assert_dateless(HEAD + 'EGD report\nProcedure date: 11/04/2026\n' + line + '\n\n' + EGD_BODY,
+                                     '43239')
 
     def test_control_a_header_block_s_date_is_sent(self):
         encounter_id = self.finished(HEAD + 'Colonoscopy report\nPatient: Synthetic, Alex    DOB: 01/01/1998    MRN: '

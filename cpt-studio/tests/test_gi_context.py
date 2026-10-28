@@ -49,15 +49,23 @@ class FixtureContextTests(EvidenceIsExact, unittest.TestCase):
         for other in ('2026-11-04', '2026-04-15'):
             self.assertEqual(merge_user_values(facts, {'service_date': other})['service_date'].origin, 'conflict')
 
+    def assert_asked_by_the_header_list(self, facts, value):
+        # the 7c8 fix round (P2DATES, sk:6): a place of service, a care setting or a POS code is no header field of
+        # P2FIX's closed list, so a label whose block holds one is asked (an over-hold) and its date answers it
+        self.assertEqual((facts['service_date'].origin, facts['service_date'].value), ('missing', None))
+        self.assertEqual(context._date_readings(facts['service_date'].evidence), {value})
+        self.assertEqual(merge_user_values(facts, {'service_date': value})['service_date'].origin, 'user')
+        self.assertEqual(merge_user_values(facts, {'service_date': '1998-01-01'})['service_date'].origin, 'conflict')
+
     def test_us_date_and_new_patient(self):
         facts = self.facts('02-office-new-patient.txt')
-        self.assertEqual(facts['service_date'].value, '2026-10-22')
+        self.assert_asked_by_the_header_list(facts, '2026-10-22')
         self.assertEqual(facts['service_date'].evidence[0].text, 'Visit date: 10/22/2026')
         self.assertEqual(facts['patient_status'].value, 'new')
 
     def test_month_name_date_and_hospital_outpatient(self):
         facts = self.facts('04-egd-balloon-dilation.txt')
-        self.assertEqual(facts['service_date'].value, '2026-10-19')
+        self.assert_asked_by_the_header_list(facts, '2026-10-19')
         self.assertEqual(facts['service_date'].evidence[0].text, 'Procedure date: October 19, 2026')
         self.assertEqual(facts['setting'].value, 'hospital_outpatient')
 
@@ -66,7 +74,7 @@ class FixtureContextTests(EvidenceIsExact, unittest.TestCase):
         six = self.facts('06-colonoscopy-diagnostic-ileum.txt')
         self.assertEqual(six['setting'].value, 'hospital_outpatient')
         self.assertIn('POS: 22', [e.text for e in six['setting'].evidence])
-        self.assertEqual(six['service_date'].value, '2026-10-21')
+        self.assert_asked_by_the_header_list(six, '2026-10-21')
 
     def test_procedure_reports_do_not_document_patient_status(self):
         facts = self.facts('03-egd-cold-forceps-biopsy.txt')

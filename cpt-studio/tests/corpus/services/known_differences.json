@@ -54,15 +54,19 @@
     "svc-14-esophagoscopy-stricture-not-traversed": {
       "differences": [
         {
-          "kind": "service.status",
-          "subject": "gi.egd"
+          "kind": "date",
+          "subject": "service_date"
         },
         {
           "kind": "service.completion",
           "subject": "gi.egd"
+        },
+        {
+          "kind": "service.status",
+          "subject": "gi.egd"
         }
       ],
-      "reason": "The document's own procedure line says 'PROCEDURE PERFORMED: Flexible transoral esophagoscopy with biopsy. The intended EGD could not be completed.' The reader records the performed service as an esophagoscopy, which has no endpoint, so it is performed rather than incomplete. The expectation models it as an incomplete EGD whose rendered service is an esophagoscopy. Both describe the same facts; which status a coder wants is for adjudication."
+      "reason": "The document's own procedure line says 'PROCEDURE PERFORMED: Flexible transoral esophagoscopy with biopsy. The intended EGD could not be completed.' The reader records the performed service as an esophagoscopy, which has no endpoint, so it is performed rather than incomplete. The expectation models it as an incomplete EGD whose rendered service is an esophagoscopy. Both describe the same facts; which status a coder wants is for adjudication. Refutation phase 2 fix round (7c8 fix, sk:6, P2DATES): the date of service is read only from a labelled date standing alone in a header block of the title, P2FIX's closed list of header fields whose values are names, numbers or codes, and agreeing date labels; its header holds \"Place of service: Hospital outpatient department\", a line outside P2FIX's closed list of header fields (a place of service, a care setting, a status or another field, or a header value naming an occurrence), so the header ends there and the label's block runs past it, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
     },
     "svc-18-colo-snare-plus-separate-biopsy-table": {
       "differences": [
@@ -143,11 +147,15 @@
           "subject": "gi.eus moderate_sedation"
         },
         {
+          "kind": "date",
+          "subject": "service_date"
+        },
+        {
           "kind": "service.extra",
           "subject": "gi.egd"
         }
       ],
-      "reason": "The reader keeps the upper endoscopy as a performed service marked included in the EUS (included_in: the EUS code includes the examination, so no code of its own is asked), where the expectation models one EUS service. The moderate sedation documented in the header is therefore an act of the included EGD rather than of the EUS."
+      "reason": "The reader keeps the upper endoscopy as a performed service marked included in the EUS (included_in: the EUS code includes the examination, so no code of its own is asked), where the expectation models one EUS service. The moderate sedation documented in the header is therefore an act of the included EGD rather than of the EUS. Refutation phase 2 fix round (7c8 fix, sk:6, P2DATES): the date of service is read only from a labelled date standing alone in a header block of the title, P2FIX's closed list of header fields whose values are names, numbers or codes, and agreeing date labels; its header holds \"Place of service: Ambulatory surgery center\", a line outside P2FIX's closed list of header fields (a place of service, a care setting, a status or another field, or a header value naming an occurrence), so the header ends there and the label's block runs past it, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
     },
     "svc-32-ercp-sphincterotomy-stone-extraction": {
       "differences": [
@@ -220,6 +228,177 @@
         }
       ],
       "reason": "Refutation phase 2 (P2DATES, rule 1): the date of service is read only from a labelled date standing alone in a header block that holds nothing but the title, header fields of a closed list and agreeing date labels; the line \"BEDSIDE PROCEDURE NOTE: GASTROSTOMY TUBE REPLACEMENT\" above the label is neither the title nor a header field, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-05-em25-and-variceal-banding": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 fix round (7c8 fix, sk:6, P2DATES): the date of service is read only from a labelled date standing alone in a header block of the title, P2FIX's closed list of header fields whose values are names, numbers or codes, and agreeing date labels; its header holds \"Place of service: On-campus hospital outpatient department (POS 22) - hepatology clinic, t\", a line outside P2FIX's closed list of header fields (a place of service, a care setting, a status or another field, or a header value naming an occurrence), so the header ends there and the label's block runs past it, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-06-hp-and-colonoscopy-random-biopsies": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 fix round (7c8 fix, sk:6, P2DATES): the date of service is read only from a labelled date standing alone in a header block of the title, P2FIX's closed list of header fields whose values are names, numbers or codes, and agreeing date labels; its header holds \"Place of service: Ambulatory surgery center\", a line outside P2FIX's closed list of header fields (a place of service, a care setting, a status or another field, or a header value naming an occurrence), so the header ends there and the label's block runs past it, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-07-em-established-partner-mdm-high": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 fix round (7c8 fix, sk:6, P2DATES): the date of service is read only from a labelled date standing alone in a header block of the title, P2FIX's closed list of header fields whose values are names, numbers or codes, and agreeing date labels; its header holds \"Place of service: Office, Cedar Hollow Gastroenterology main clinic (POS 11)\", a line outside P2FIX's closed list of header fields (a place of service, a care setting, a status or another field, or a header value naming an occurrence), so the header ends there and the label's block runs past it, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-08-egd-multisite-biopsy-list-negation": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 fix round (7c8 fix, sk:6, P2DATES): the date of service is read only from a labelled date standing alone in a header block of the title, P2FIX's closed list of header fields whose values are names, numbers or codes, and agreeing date labels; its header holds \"Place of service: Ambulatory surgery center\", a line outside P2FIX's closed list of header fields (a place of service, a care setting, a status or another field, or a header value naming an occurrence), so the header ends there and the label's block runs past it, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-09-egd-balloon-dilation-impression-only": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 fix round (7c8 fix, sk:6, P2DATES): the date of service is read only from a labelled date standing alone in a header block of the title, P2FIX's closed list of header fields whose values are names, numbers or codes, and agreeing date labels; its header holds \"Place of service: Ambulatory surgery center\", a line outside P2FIX's closed list of header fields (a place of service, a care setting, a status or another field, or a header value naming an occurrence), so the header ends there and the label's block runs past it, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-11-egd-ulcer-bleeding-control": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 fix round (7c8 fix, sk:6, P2DATES): the date of service is read only from a labelled date standing alone in a header block of the title, P2FIX's closed list of header fields whose values are names, numbers or codes, and agreeing date labels; its header holds \"Place of service: Inpatient hospital (endoscopy suite)\", a line outside P2FIX's closed list of header fields (a place of service, a care setting, a status or another field, or a header value naming an occurrence), so the header ends there and the label's block runs past it, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-12-egd-peg": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 fix round (7c8 fix, sk:6, P2DATES): the date of service is read only from a labelled date standing alone in a header block of the title, P2FIX's closed list of header fields whose values are names, numbers or codes, and agreeing date labels; its header holds \"Place of service: Inpatient hospital\", a line outside P2FIX's closed list of header fields (a place of service, a care setting, a status or another field, or a header value naming an occurrence), so the header ends there and the label's block runs past it, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-15-egd-rfa-barrett": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 fix round (7c8 fix, sk:6, P2DATES): the date of service is read only from a labelled date standing alone in a header block of the title, P2FIX's closed list of header fields whose values are names, numbers or codes, and agreeing date labels; its header holds \"Place of service: Hospital outpatient department\", a line outside P2FIX's closed list of header fields (a place of service, a care setting, a status or another field, or a header value naming an occurrence), so the header ends there and the label's block runs past it, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-16-egd-esophageal-stent": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 fix round (7c8 fix, sk:6, P2DATES): the date of service is read only from a labelled date standing alone in a header block of the title, P2FIX's closed list of header fields whose values are names, numbers or codes, and agreeing date labels; its header holds \"Place of service: Hospital outpatient department\", a line outside P2FIX's closed list of header fields (a place of service, a care setting, a status or another field, or a header value naming an occurrence), so the header ends there and the label's block runs past it, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-17-poem": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 fix round (7c8 fix, sk:6, P2DATES): the date of service is read only from a labelled date standing alone in a header block of the title, P2FIX's closed list of header fields whose values are names, numbers or codes, and agreeing date labels; its header holds \"Place of service: Hospital outpatient department, with overnight observation\", a line outside P2FIX's closed list of header fields (a place of service, a care setting, a status or another field, or a header value naming an occurrence), so the header ends there and the label's block runs past it, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-20-colo-cold-hot-snare-hot-biopsy": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 fix round (7c8 fix, sk:6, P2DATES): the date of service is read only from a labelled date standing alone in a header block of the title, P2FIX's closed list of header fields whose values are names, numbers or codes, and agreeing date labels; its header holds \"Place of service: Ambulatory surgery center\", a line outside P2FIX's closed list of header fields (a place of service, a care setting, a status or another field, or a header value naming an occurrence), so the header ends there and the label's block runs past it, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-22-colo-incomplete-poor-prep": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 fix round (7c8 fix, sk:6, P2DATES): the date of service is read only from a labelled date standing alone in a header block of the title, P2FIX's closed list of header fields whose values are names, numbers or codes, and agreeing date labels; its header holds \"Place of service: Ambulatory surgery center\", a line outside P2FIX's closed list of header fields (a place of service, a care setting, a status or another field, or a header value naming an occurrence), so the header ends there and the label's block runs past it, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-23-colo-incomplete-obstruction": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 fix round (7c8 fix, sk:6, P2DATES): the date of service is read only from a labelled date standing alone in a header block of the title, P2FIX's closed list of header fields whose values are names, numbers or codes, and agreeing date labels; its header holds \"Place of service: Hospital outpatient department\", a line outside P2FIX's closed list of header fields (a place of service, a care setting, a status or another field, or a header value naming an occurrence), so the header ends there and the label's block runs past it, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-24-colo-screening-complete-not-discontinued": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 fix round (7c8 fix, sk:6, P2DATES): the date of service is read only from a labelled date standing alone in a header block of the title, P2FIX's closed list of header fields whose values are names, numbers or codes, and agreeing date labels; its header holds \"Place of service: Ambulatory surgery center\", a line outside P2FIX's closed list of header fields (a place of service, a care setting, a status or another field, or a header value naming an occurrence), so the header ends there and the label's block runs past it, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-25-colo-screening-to-therapeutic-extent-missing": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 fix round (7c8 fix, sk:6, P2DATES): the date of service is read only from a labelled date standing alone in a header block of the title, P2FIX's closed list of header fields whose values are names, numbers or codes, and agreeing date labels; its header holds \"Place of service: Ambulatory surgery center\", a line outside P2FIX's closed list of header fields (a place of service, a care setting, a status or another field, or a header value naming an occurrence), so the header ends there and the label's block runs past it, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-34-ercp-failed-cannulation": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 fix round (7c8 fix, sk:6, P2DATES): the date of service is read only from a labelled date standing alone in a header block of the title, P2FIX's closed list of header fields whose values are names, numbers or codes, and agreeing date labels; its header holds \"Place of service: Inpatient hospital\", a line outside P2FIX's closed list of header fields (a place of service, a care setting, a status or another field, or a header value naming an occurrence), so the header ends there and the label's block runs past it, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-35-push-enteroscopy-apc": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 fix round (7c8 fix, sk:6, P2DATES): the date of service is read only from a labelled date standing alone in a header block of the title, P2FIX's closed list of header fields whose values are names, numbers or codes, and agreeing date labels; its header holds \"Place of service: Hospital outpatient department\", a line outside P2FIX's closed list of header fields (a place of service, a care setting, a status or another field, or a header value naming an occurrence), so the header ends there and the label's block runs past it, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-40-hrm-achalasia-poem-planned": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 fix round (7c8 fix, sk:6, P2DATES): the date of service is read only from a labelled date standing alone in a header block of the title, P2FIX's closed list of header fields whose values are names, numbers or codes, and agreeing date labels; its header holds \"Place of service: Hospital outpatient department\", a line outside P2FIX's closed list of header fields (a place of service, a care setting, a status or another field, or a header value naming an occurrence), so the header ends there and the label's block runs past it, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-43-egd-gastric-esd": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 fix round (7c8 fix, sk:6, P2DATES): the date of service is read only from a labelled date standing alone in a header block of the title, P2FIX's closed list of header fields whose values are names, numbers or codes, and agreeing date labels; its header holds \"Place of service: Hospital outpatient department, overnight observation\", a line outside P2FIX's closed list of header fields (a place of service, a care setting, a status or another field, or a header value naming an occurrence), so the header ends there and the label's block runs past it, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
     }
   }
 }
