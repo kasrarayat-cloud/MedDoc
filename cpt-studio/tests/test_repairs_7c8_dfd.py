@@ -20,6 +20,8 @@ df-d:2  (fr-dr:2) any bracket but a format after a subject line's "Date" or date
         another field's, so "Date (performed): 10/21/2026" was silenced and the labelled 10/14 it contradicts sent.
 df-d:4  (fr-di:0, fr-dr:4) a date of birth beside a qualifier no longer passed the qualifier over, so the labelled date
         was read as another occurrence's - silent - and another plain label's date was sent.
+df-d:5  (fr-dr:5) a lower-case "b." after any word is a birth label, so a subject line's own date after "part b." was
+        a date of birth, the line silent, and the labelled date it contradicts sent.
 
 Synthetic text only; no network (the suite's FakeProvider).
 """
@@ -467,3 +469,62 @@ class DateOfBirthBesideAQualifierRequestTests(EndToEnd):
             with self.subTest(line=line):
                 encounter_id = self.finished(HEAD + 'Colonoscopy report\n' + line + '\n' + COLO_PLAIN + ADDENDUM)
                 self.assertEqual(self.dates_sent(encounter_id), [[]])
+
+
+# --- df-d:5: a date after a "b." one space after a word is no value, but its subject line still asks -------------------
+
+WORD_B_LINES = ('Re: Colonoscopy part b. 10/21/2026', 'Re: EGD b. 10/21/2026', 'Re: Colonoscopy section b. 10/21/2026',
+                'Subject: Colonoscopy item\tb. 10/21/2026', 'Regarding: Colonoscopy, part b. October 21, 2026',
+                'Re: Colonoscopy part b. - 10/21/2026')
+
+
+class DateAfterAWordBTests(DateAssertions, SimpleTestCase):
+    """df-d:5 (a61e059fa, the final refutation's fr-dr:5): a lower-case "b." is a birth label wherever it stands, also one
+    space or tab after a word, where c3c034a08 read none ("Re: Colonoscopy part b. 10/21/2026"). The subject line's own
+    date was then a date of birth, the line evidence reading no date (form 'empty'), which never speaks - so "Date of
+    service: 10/14/2026" above, which the line contradicts, was documented and sent with 45385 ready, where c3c034a08
+    asked. "b." after a word may be a birth label or a list's letter, and only the date's meaning could tell: such a
+    date stays no candidate's value and agrees with no member date (rule N2, fr-dr:5's member's 1998-01-01 stays held),
+    but it is a date the line states - the line speaks against the labelled date (asked) and reads no date."""
+
+    def test_beside_the_labelled_date_the_date_is_asked(self):
+        for line in WORD_B_LINES:
+            text = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\n' + line + '\n' + COLO_PLAIN
+            with self.subTest(line=line):
+                self.assert_never(text, '2026-10-14', '2026-10-21')
+                self.assertIn(date_fact(text).origin, ('conflict', 'missing'))
+                self.assert_member_date(text, '2026-10-14')
+                self.assert_member_conflict(text, '2026-10-21')
+                self.assert_member_conflict(text, ELENA_DATE)
+
+    def test_the_verifier_s_smallest_form(self):
+        text = HEAD + 'DOS: 10/14/2026\nRe: EGD b. 10/21/2026\n'
+        self.assert_never(text, '2026-10-14')
+        self.assert_member_date(text, '2026-10-14')
+
+    def test_fr_dr_5_the_date_of_birth_is_still_never_taken(self):
+        for line in ('Re: Colonoscopy for Alex Synthetic b. 01/01/1998', 'Re: EGD b. 01/01/1998'):
+            for above in ('Colonoscopy report\nDate of service: 10/14/2026\n', 'Colonoscopy report\n'):
+                text = HEAD + above + line + '\n' + COLO_PLAIN
+                with self.subTest(line=line, labelled=above.count('\n')):
+                    self.assert_never(text, ELENA_DATE)
+                    self.assert_member_conflict(text, ELENA_DATE)
+                    self.assertFalse(any('1998' in quoted for quoted in evidence_text(text)), evidence_text(text))
+
+    def test_controls_a_birth_label_opening_its_field_states_no_date_of_the_service(self):
+        # "(b. ...)", ", b. ..." and "DOB" open their field: the date is a date of birth, the labelled date stands
+        for line in ('Re: Colonoscopy - Synthetic, Alex (b. 01/01/1998)', 'Re: Colonoscopy - Synthetic, Alex, b. 01/01/1998',
+                     'Re: Colonoscopy DOB 01/01/1998'):
+            text = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\n' + line + '\n' + COLO_PLAIN
+            with self.subTest(line=line):
+                self.assert_document(text, '2026-10-14')
+                self.assert_member_conflict(text, ELENA_DATE)
+
+
+class DateAfterAWordBRequestTests(EndToEnd):
+    def test_p1_no_date_is_sent_where_the_subject_line_differs(self):
+        text = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nRe: Colonoscopy part b. 10/21/2026\n' + COLO_PLAIN
+        encounter_id = self.finished(text)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.set_context(encounter_id, {'service_date': '2026-10-21'})
+        self.assert_never_sent(encounter_id, '2026-10-21')

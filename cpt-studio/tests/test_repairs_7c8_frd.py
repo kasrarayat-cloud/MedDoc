@@ -59,13 +59,17 @@ class LowerCaseBirthLabelAfterANameTests(DateAssertions, SimpleTestCase):
     conflict listing 1998-01-01 (a dateless request where 057a7d398 sent 10/14), and a member's 1998-01-01 - entered at
     upload or as the answer to the date question - was taken as a listed documented value and sent. The issue-7 false
     positive was only a CAPITAL initial ("Alex B."), which the lower-case "b" already refuses: "b." written so is a
-    birth label wherever it stands (rule N2)."""
+    birth label wherever it stands (rule N2). The differential round, df-d:5: one space after a word it may also be a
+    list's letter ("Re: Colonoscopy part b. 10/21/2026", silenced, let the labelled 10/14 it contradicts be sent where
+    c3c034a08 asked), so its date stays no value and no member's agreement, but the line states it: asked (re-decided
+    pins below: beside the labelled 10/14 such a line is asked, no longer documented; the 1998-01-01 is still held)."""
 
-    def test_the_note_s_own_date_stands_and_the_date_of_birth_is_never_taken(self):
+    def test_the_note_s_own_date_is_asked_and_the_date_of_birth_never_taken(self):
         for line in B_AFTER_A_NAME:
             text = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\n' + line + '\n' + COLO_BODY
             with self.subTest(line=line):
-                self.assert_document(text, '2026-10-14')
+                self.assert_never(text, '2026-10-14', ELENA_DATE)  # df-d:5: asked, never documented
+                self.assert_member_date(text, '2026-10-14')
                 self.assert_member_conflict(text, ELENA_DATE)
                 self.assertFalse(any('1998' in quoted for quoted in evidence_text(text)), evidence_text(text))
 
@@ -93,12 +97,12 @@ class LowerCaseBirthLabelAfterANameRequestTests(EndToEnd):
     TEXT = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nRe: Colonoscopy for Alex Synthetic b. 01/01/1998\n' \
         + COLO_BODY
 
-    def test_the_member_s_date_of_birth_is_held_and_the_note_s_date_sent(self):
+    def test_the_member_s_date_of_birth_is_held_and_the_note_s_date_asked(self):
         held = self.finished(self.TEXT, service_date=ELENA_DATE)
         self.assert_held(held)
         self.assert_never_sent(held, ELENA_DATE)
         own = self.finished(self.TEXT)
-        self.assertEqual(self.dates_sent(own), [['Date of service: 2026-10-14']])
+        self.assertEqual(self.dates_sent(own), [[]])  # df-d:5: asked, as c3c034a08 asked
         self.assertEqual(self.bucket(own, '45385'), 'selected')
 
     def test_the_answer_path_never_sends_the_date_of_birth(self):

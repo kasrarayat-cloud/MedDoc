@@ -160,6 +160,11 @@ _BIRTH_BEFORE = cues.rx(r'(?<![\w/.-])' + _BIRTH_FORM + r'[ \t]*+(?:[:#=\u2013-]
 _BIRTH_REACH = 40
 _BIRTH_HEAD = cues.rx(r'(?<![\w/.-])' + _BIRTH_FORM + r'(?![\w/-])')
 _BIRTH_TAIL = re.compile(r'[ \t]*+(?P<sep>[:#=\u2013-])?+[ \t]*+')
+# The differential round, df-d:5: "b." one space or tab after a letter ("Alex Synthetic b. 01/01/1998", "part b.
+# 10/21/2026") - the form c3c034a08 read as no birth label. It may be one, or a list's letter, and only the date's
+# meaning could tell: its date stays no candidate's value and no member date's agreement (rule N2, fr-dr:5), but a dated
+# line stating it is asked, never silent (_dated_service_line).
+_WORD_B = re.compile(r'(?<=[A-Za-z][ \t])b\.')
 
 # Refutation phase 2, ctxcost:0: every whitespace run in POS is possessive. 'POS', a long run of spaces and no code was
 # read in time quadratic in the run (two adjacent optional runs, every split tried): a 96,000-character paste overran
@@ -1463,9 +1468,12 @@ def _dated_service_line(text: str, ls: int, le: int) -> Optional[_Candidate]:
         if _is_birth(text, run[0]):
             label = _BIRTH_BEFORE.search(text, max(start, run[0] - _BIRTH_REACH), run[0])
             excluded.append((run, label.start() if label else run[0]))
-            if label is None and run[0] in _birth_places(text)[1]:
-                # df-d:1: a date of birth only by a count placement (_Counted) - no value, but the line states a date
-                # it cannot place: asked, never silent
+            certain, counted = _birth_places(text)
+            if run[0] not in certain and (run[0] in counted if label is None
+                                          else _WORD_B.match(text, label.start()) is not None):
+                # df-d:1 and df-d:5: a date of birth only by a count placement (_Counted) or by a "b." after a word
+                # (_WORD_B) - no value, but the line states a date it cannot place: asked, never silent ("Re: Colonoscopy
+                # part b. 10/21/2026" let the labelled 10/14 it contradicts be sent)
                 unplaced.append(run)
             continue
         other = _other_field(text, gap, run[0])
