@@ -1078,10 +1078,10 @@ def _value_extent(text: str, start: int, end: int) -> Optional[tuple[int, int]]:
     found = _first_value(text, start, stop)
     if found is not None and found[0] == start:
         return found
-    while found is not None:  # fr-dr:0: the first date-shaped run after other words
-        if _VALUE_DATE_START.match(text, found[0], found[1]):
-            return _UNPLACED
-        found = _first_value(text, found[1], stop)
+    # fr-dr:0: a date the field states after other words - wherever a date starts that is no date of birth, also where
+    # a number before it glues to it in one run ("approx 2 10/14/2026")
+    if any(not _is_birth(text, at.start()) for at in _GAP_DATE.finditer(text, start, stop)):
+        return _UNPLACED
     if _first_value(text, start, stop, births=False) is not None or not _DIGIT.search(text, start, stop):
         return None
     return _strip_span(text, start, stop)

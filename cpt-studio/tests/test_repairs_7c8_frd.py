@@ -322,6 +322,15 @@ class FieldStatingADateItCannotPlaceTests(DateAssertions, SimpleTestCase):
             with self.subTest(smallest=opener):
                 self.assert_never(text, '2026-10-07')
 
+    def test_a_number_glued_to_the_date_still_states_it(self):
+        # a number before the date reads with it as one date-shaped run ("2 10/14/2026", "2, 10/14/2026"): the field still
+        # states the date (the date starts there), so it is asked, never silent
+        for field in ('approx 2 10/14/2026', 'no. 2, 10/14/2026', 'room 12 - 10/14/2026', '#1 10/14/2026'):
+            text = HEAD + STATED_LAYOUTS['A'].format(F=field) + COLO_BODY
+            with self.subTest(field=field):
+                self.assert_never(text, '2026-10-07', '2026-10-14')
+                self.assertIn(date_fact(text).origin, ('conflict', 'missing'))
+
     def test_a_date_whose_place_cannot_be_told_asks_and_is_never_its_value(self):
         for name, shape in UNPLACED.items():
             text = HEAD + shape + COLO_BODY
