@@ -37,6 +37,15 @@
       ],
       "reason": "The document's own procedure line says 'PROCEDURE PERFORMED: Flexible transoral esophagoscopy with biopsy. The intended EGD could not be completed.' The reader records the performed service as an esophagoscopy, which has no endpoint, so it is performed rather than incomplete. The expectation models it as an incomplete EGD whose rendered service is an esophagoscopy. Both describe the same facts; which status a coder wants is for adjudication."
     },
+    "svc-18-colo-snare-plus-separate-biopsy-table": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2, P2DN fix round (rule N7): the document's date is written as a table row, \"Date of service | 2026-10-05\", a form the installed revision did not read (it sent no date for it); the reader reads the date and asks it - a dateless request - and the member's answer with that date settles it."
+    },
     "svc-31-eus-limited-esophageal-wall": {
       "differences": [
         {
@@ -49,6 +58,15 @@
         }
       ],
       "reason": "The reader keeps the upper endoscopy as a performed service marked included in the EUS (included_in: the EUS code includes the examination, so no code of its own is asked), where the expectation models one EUS service. The moderate sedation documented in the header is therefore an act of the included EGD rather than of the EUS."
+    },
+    "svc-36-balloon-enteroscopy-apc-biopsy-table": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2, P2DN fix round (rule N7): the document's date is written as a table row, \"Date of service | 2026-10-19\", a form the installed revision did not read (it sent no date for it); the reader reads the date and asks it - a dateless request - and the member's answer with that date settles it."
     },
     "svc-38-bravo-96h": {
       "differences": [

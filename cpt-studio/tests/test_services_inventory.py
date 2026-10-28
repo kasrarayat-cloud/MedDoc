@@ -200,7 +200,10 @@ class ContextConflictTests(SimpleTestCase):
 
     def test_a_day_month_year_date_is_read(self):
         facts = gi_context.extract_context('Patient X | Service date 9 November 2026 | Clinician Y')
-        self.assertEqual((facts['service_date'].origin, facts['service_date'].value), ('document', '2026-11-09'))
+        # P2DN's fix round, rule N7: read (the member's answer agrees with it) and asked, as the installed revision sent
+        # no day-first date; this pin had it documented
+        self.assertEqual((facts['service_date'].origin, facts['service_date'].value), ('missing', None))
+        self.assertEqual(gi_context._date_readings(facts['service_date'].evidence), {'2026-11-09'})
 
 
 class ValidationTests(SimpleTestCase):

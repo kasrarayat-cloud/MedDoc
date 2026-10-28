@@ -352,6 +352,13 @@ class _Candidate:
     # up to the field's end - the end of its line, a row's cell bar or the next field's label (_alone_in_field). A date
     # with a bracket or words after it in its field ("(pending authorization)", "(cancelled)") is never the note's own.
     alone: bool = True
+    # P2DN's fix round, rule N7 (issue 8): a read labelled date written as the installed revision 057a7d398 reads one - a
+    # plain date-of-service label (no time named), a separator that is no cell bar, a date written year-first,
+    # month-first with slashes or with the month's name first (_installed_form). Only such a date is ever the note's own:
+    # the known-limit qualifier shapes are a known limit only where the installed revision sends the same date, and in
+    # another form ("3 Sep 2026", "Date/Time of Service:", "| Date of service | 09/03/2026 |") they sent another
+    # occurrence's date where it sent none. Another form is evidence: asked, the member's answer agreeing with its date.
+    installed: bool = True
 
     @property
     def spans(self) -> tuple[Span, ...]:
@@ -1079,10 +1086,12 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
             continue
         value = date_from_match(m)
         kind, start = _labelled_kind(text, m.start('label'), m.end('label'), m.start('date'), m.end(), value)
-        # rule N5 (refutation phase 2, P2DN): the date is the note's own only when it stands alone in its own field
+        # rule N5 (refutation phase 2, P2DN): the date is the note's own only when it stands alone in its own field;
+        # rule N7 (P2DN's fix round, issue 8): and only when it is written as the installed revision reads one
         found.append(_Candidate(_span(text, start, m.end()), value.isoformat() if value else None, 'label',
                                 _READING[kind], 'read' if value else 'invalid',
-                                alone=_alone_in_field(text, m.end(), rows.line(m.start())[1])))
+                                alone=_alone_in_field(text, m.end(), rows.line(m.start())[1]),
+                                installed=_installed_form(text, m)))
     for m in DATE_LABEL.finditer(text):
         # refutation r1, context-3, and round 2, c2:8: a labelled date the reader does not read is documented date text
         if m.start() in read or lay.section_at(m.start()).kind in NOT_CURRENT_SECTIONS:
@@ -1120,6 +1129,17 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
             span, extra = _span(text, start, value_end), ()
         found.append(_Candidate(span, None, 'label', _READING[kind], 'unread', extra))
     return tuple(found) + _title_candidates(text, lay)
+
+
+_TIME_WORD = cues.rx(r'\btime\b')
+
+
+def _installed_form(text: str, m: re.Match) -> bool:
+    """Whether a SERVICE_DATE match is written as the installed revision 057a7d398 reads a labelled date (rule N7): its
+    label names no time, its separator is no cell bar, and its date is no day-first one ("14 Oct 2026",
+    "14-Oct-2026")."""
+    return (m.group('dd') is None and _TIME_WORD.search(text, m.start('label'), m.end('label')) is None
+            and '|' not in text[m.end('label'):m.start('date')])
 
 
 def _joined_candidate(text: str, label_start: int, label_end: int, joined) -> _Candidate:
@@ -1413,6 +1433,9 @@ EVIDENCE_DATE_NOTE = ('A dated title, a "Date:" line, a dated line naming the se
                       'as evidence; it is never taken as the date of service by itself.')
 FIELD_DATE_NOTE = ('A labelled date of service has other text in its field (a bracket or words after the date), so it is '
                    'not taken as the date of service by itself.')
+FORM_DATE_NOTE = ('A labelled date of service is written in a form this release reads but does not send by itself (a '
+                  'day-first date such as "14 Oct 2026", a label naming the time, or a table row), so it is asked; a '
+                  "member's answer with that date is taken.")
 EMPTY_DATE_NOTE = ('A date-of-service field states no date of its own (it is empty, or holds no date, or another '
                    "field's), so a member's date is held until the document states it.")
 
@@ -1446,30 +1469,40 @@ def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
       bracket or words there ("Procedure date: 11/04/2026 (pending authorization)", dates:8) is asked and speaks against
       an own date, its date kept as evidence a member's answer may agree with."""
     labels = [c for c in found if c.source == 'label']
-    own = [c for c in labels if c.reading == 'own' and c.form == 'read' and c.alone]
-    own_ids = {id(c) for c in own}
+    own = [c for c in labels if c.reading == 'own' and c.form == 'read' and c.alone and c.installed]
+    # rule N7 (P2DN's fix round, issue 8): with no own date written as the installed revision reads one, the labelled
+    # dates that would be the note's own but for their form lead the question as an own date leads the fact - never sent
+    # (asked), but every speaking candidate is measured against them and the member's answer must agree with them (asked
+    # by its table row, svc-18's "Date of service | 2026-10-05" had left a history line's 2021-08-17 - a prior colonoscopy
+    # - a date the member's answer agreed with)
+    withheld = [] if own else [c for c in labels if c.reading == 'own' and c.form == 'read' and c.alone]
+    lead = own or withheld
+    own_ids = {id(c) for c in lead}
     # rule N3 (P2DN's fix round, issue 6): a field that states no date never speaks against the note's own date (a
     # PDF form's blank "Date of service:" beside its filled "dos: 2026-10-21" asked the date it states); with no own date
     # it is the evidence of the date asked, holding every member date
     speaks = [c for c in labels if id(c) not in own_ids and c.reading in ('own', 'unplaced') and c.form != 'empty']
     support = list(speaks)  # what joins the date's evidence when it agrees: as before, labels only
     speaks += [c for c in found if c.source != 'label' and c.reading in ('own', 'unplaced')]
-    values = {c.value for c in own}
-    unusable = [c for c in (speaks if own else found) if c.form != 'read']
+    values = {c.value for c in lead}
+    unusable = [c for c in (speaks if lead else found) if c.form != 'read']
     note = ' '.join(text for present, text in (
         (any(c.form == 'invalid' for c in unusable), INVALID_DATE_NOTE),
         (any(c.form == 'unread' for c in unusable), UNREAD_DATE_NOTE),
         (any(c.form == 'empty' for c in unusable), EMPTY_DATE_NOTE),
         (not own and any(c.source == 'label' and c.form == 'read' and c.reading == 'own' and not c.alone for c in found),
          FIELD_DATE_NOTE),
+        (not own and any(c.source == 'label' and c.form == 'read' and c.reading == 'own' and c.alone and not c.installed
+                         for c in found), FORM_DATE_NOTE),
         (not own and any(c.source != 'label' and c.form == 'read' for c in found), EVIDENCE_DATE_NOTE),
         (not own and any(c.form == 'read' and c.reading in ('aside', 'other', 'unplaced') for c in found),
          UNPLACED_DATE_NOTE)) if present)
-    if own and len(values) == 1 and all(c.form == 'read' and c.value in values for c in speaks):
-        return _fact('service_date', [(c.value, s) for c in own + support for s in c.spans])
+    if lead and len(values) == 1 and all(c.form == 'read' and c.value in values for c in speaks):
+        fact = _fact('service_date', [(c.value, s) for c in lead + support for s in c.spans])
+        return fact if own else Fact('service_date', None, 'missing', fact.evidence, FORM_DATE_NOTE)
     unread = tuple(s for c in unusable for s in c.spans)
-    if own:
-        fact = _fact('service_date', [(c.value, s) for c in own + speaks if c.form == 'read' for s in c.spans])
+    if lead:
+        fact = _fact('service_date', [(c.value, s) for c in lead + speaks if c.form == 'read' for s in c.spans])
         if not unusable:
             return fact
         return Fact('service_date', None, 'conflict', _sorted_spans(fact.evidence + unread), note)

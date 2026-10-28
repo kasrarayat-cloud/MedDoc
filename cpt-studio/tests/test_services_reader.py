@@ -37,7 +37,11 @@ class ServiceDateTests(SimpleTestCase):
     def test_day_month_year_with_hyphens(self):
         facts, _ = read(HEAD + 'Endoscopy unit\nDate of service: 03-Nov-2026\nThe gastroscope was passed to the second '
                                'part of the duodenum.\n')
-        self.assertEqual((facts['service_date'].value, facts['service_date'].origin), ('2026-11-03', 'document'))
+        # P2DN's fix round, rule N7: the day-first date is read - the member's answer agrees with it - but a labelled date
+        # is sent only as the installed revision reads one, so it is asked; this pin had it documented
+        fact = facts['service_date']
+        self.assertEqual((fact.value, fact.origin), (None, 'missing'))
+        self.assertEqual(gi_context._date_readings(fact.evidence), {'2026-11-03'})
         # refutation phase 2 (P2DN, rule N1): a bare "Date:" line is evidence, never the date - the date is read (the
         # member's answer agrees with it) and asked; this pin had the "Date:" line documented
         facts, _ = read(HEAD + 'Endoscopy unit\nDate: 03-Nov-2026\nThe gastroscope was passed to the second part of '
@@ -48,7 +52,11 @@ class ServiceDateTests(SimpleTestCase):
 
     def test_a_labelled_date_in_a_table_row(self):
         facts, _ = read(HEAD + 'Field | Value\nProcedure date | 2026-09-30\nScope | adult colonoscope\n')
-        self.assertEqual(facts['service_date'].value, '2026-09-30')
+        # P2DN's fix round, rule N7: the table row's date is read (the member's answer agrees with it) and asked - a
+        # cell-bar separator is no form the installed revision read; this pin had it documented
+        fact = facts['service_date']
+        self.assertEqual((fact.value, fact.origin), (None, 'missing'))
+        self.assertEqual(gi_context._date_readings(fact.evidence), {'2026-09-30'})
 
     def test_a_dated_note_title(self):
         # refutation phase 2 (P2DN, rule N1): a dated title is evidence, never the date (the installed revision's

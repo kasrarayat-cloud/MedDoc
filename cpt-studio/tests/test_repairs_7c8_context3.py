@@ -530,7 +530,9 @@ class DateAndTimeLabelTests(DateAssertions, SimpleTestCase):
         for header in ('DOS/Time: 10/20/2026 09:15', 'DOS / time: 10/20/2026 9:15 AM'):
             with self.subTest(header=header):
                 text = HEAD + header + '\n' + VISIT_BODY
-                self.assert_document(text, '2026-10-20')
+                # P2DN's fix round, rule N7: read and kept (the member's 1998-01-01 held, its 10/20 answering) but asked -
+                # a label naming the time is no form the installed revision read; this pin had it documented
+                self.assert_question(text, '2026-10-20')
                 self.assert_member_conflict(text, ELENA_DATE)
         # refutation phase 2 (P2DN, rule N1; dates:1): a "Date & Time:" or "Date/Time:" line (a fax's or a letter's
         # timestamp) and a title are evidence, never the date - kept, so the member's 1998-01-01 is still held and the
@@ -560,7 +562,11 @@ class DateAndTimeLabelRequestTests(EndToEnd):
     def test_w3(self):
         self.assert_held(self.finished(HEAD + 'DOS/Time: 10/20/2026 09:15\n' + OFFICE_BODY, service_date=ELENA_DATE))
         encounter_id = self.finished(HEAD + 'DOS/Time: 10/20/2026 09:15\n' + OFFICE_BODY)
-        self.assertEqual(self.dates_sent(encounter_id), [['Date of service: 2026-10-20']])
+        # P2DN's fix round, rule N7: asked (no date sent), and the member's answer with the date it states is sent (this
+        # pin had the date documented and sent)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.set_context(encounter_id, {'service_date': '2026-10-20'})
+        self.assertEqual(self.dates_sent(encounter_id), [[], ['Date of service: 2026-10-20']])
 
 
 class ServiceLineStatesOnlyItsOwnDateTests(DateAssertions, SimpleTestCase):

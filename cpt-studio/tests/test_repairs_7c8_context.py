@@ -483,7 +483,9 @@ class PopulationControlsTests(DateAssertions, SimpleTestCase):
         self.assert_document(HEAD + 'MRN: SYN-100201 Date of service: 2026-10-06 Place of service: Office (POS 11)\n',
                              '2026-10-06')
         elena = HEAD + 'Report | Patient Synthetic | Service date 20 October 2026 | Endoscopist Dr. A. Synthetic\n'
-        self.assert_document(elena, '2026-10-20')
+        # P2DN's fix round, rule N7: the live Elena shape's day-first date is read and asked (the installed revision sent
+        # none); the member's 1998-01-01 stays a held member conflict and its 10/20 answers (this pin had it documented)
+        self.assert_question(elena, '2026-10-20')
         self.assert_member_conflict(elena, ELENA_DATE)
         # refutation phase 2 (P2DN): a bracket after the labelled date in its own field (rule N5, the corpus's svc-38)
         # and a dated title (rule N1, the installed revision's reading) ask the date - an over-hold, never another

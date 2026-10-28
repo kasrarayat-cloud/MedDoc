@@ -31,9 +31,11 @@ VISIT = ('99213', 'Total time on the date of the encounter was 24 minutes.')
 DOCUMENTED = date(2026, 10, 16)  # REPORT's own date
 MEMBER = '1998-01-01'
 EARLIER_VERSION = 'gi-context@1'
-# REPORT with its date written as a table row: the installed revision read no date in it, the current rules read
-# 2026-10-16 (gi/context.py; the corpus's svc-18 and svc-36 rows are written the same way).
-REPORT_TABLE_DATE = REPORT.replace('Date of service: 2026-10-16', 'Date of service | 2026-10-16')
+# REPORT with a field about something else before its date label on the same line: the installed revision's
+# 80-character qualifier window held the date ("Last"), the current rules pass the field over and read 2026-10-16
+# (gi/context.py). P2DN's fix round, rule N7: this fixture was a table row ("Date of service | 2026-10-16"), which the
+# current rules now read and ask - a cell bar is no separator the installed revision read - so it no longer differs.
+REPORT_NEWLY_DATED = REPORT.replace('Date of service: 2026-10-16', 'Last name: Synthetic    Date of service: 2026-10-16')
 
 
 class Provider(TwoPassProvider):
@@ -558,14 +560,14 @@ class NothingSentAtTheSwapTests(Base):
         self.assertNotEqual(encounter.state, 'stopped')
 
     def test_an_assess_queued_at_the_swap_for_a_date_the_installed_revision_could_not_read(self):
-        encounter_id, context = self.installed_upload(REPORT_TABLE_DATE, read_date=False)
+        encounter_id, context = self.installed_upload(REPORT_NEWLY_DATED, read_date=False)
         run = self.installed_run(encounter_id, None)  # the installed revision's request, sent without a date
         self.installed_job(encounter_id, models.Job.ASSESS, context, run=run)
         drain()
         self.assert_left_for_a_member(encounter_id, 1)
 
     def test_the_stale_sweep_of_a_predict_the_installed_worker_finished(self):
-        encounter_id, context = self.installed_upload(REPORT_TABLE_DATE, read_date=False)
+        encounter_id, context = self.installed_upload(REPORT_NEWLY_DATED, read_date=False)
         started = timezone.now() - timedelta(hours=2)
         self.installed_job(encounter_id, models.Job.PREDICT, context, state=models.Job.RUNNING, started=started)
         self.installed_run(encounter_id, None, created=started + timedelta(seconds=5))
@@ -574,7 +576,7 @@ class NothingSentAtTheSwapTests(Base):
         self.assert_left_for_a_member(encounter_id, 1)
 
     def test_a_resumed_assess_of_the_installed_revisions_answer(self):
-        encounter_id, context = self.installed_upload(REPORT_TABLE_DATE, read_date=False)
+        encounter_id, context = self.installed_upload(REPORT_NEWLY_DATED, read_date=False)
         run = self.installed_run(encounter_id, None)
         self.installed_job(encounter_id, models.Job.ASSESS, context, run=run, state=models.Job.CANCELLED)
         self.assertEqual(self.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
@@ -582,7 +584,7 @@ class NothingSentAtTheSwapTests(Base):
         self.assert_left_for_a_member(encounter_id, 1)
 
     def test_controls_a_predict_queued_at_the_swap_sends_its_one_request_for_the_remade_context(self):
-        encounter_id, context = self.installed_upload(REPORT_TABLE_DATE, read_date=False)
+        encounter_id, context = self.installed_upload(REPORT_NEWLY_DATED, read_date=False)
         self.installed_job(encounter_id, models.Job.PREDICT, context)  # the upload asked for this request
         drain()
         self.assertEqual(self.sent(), 1)
@@ -616,10 +618,10 @@ class NothingSentAtTheSwapTests(Base):
 
 # --- skeptic:1 on migrate-5's repair: the upgrade stops only where it would send, and says what is recorded ----------
 
-# The table-dated report with a long fictional handout written with a three-byte UTF-8 character: a legal paste (under
+# The newly dated report with a long fictional handout written with a three-byte UTF-8 character: a legal paste (under
 # MAX_PASTE_CHARS characters) whose request is over PROVIDER_MAX_REQUEST_BYTES (the body is encoded with
 # ensure_ascii=False, as corti.build_coding_request encodes it).
-OVERSIZE = REPORT_TABLE_DATE + '\nPatient handout (fictional):\n' + '\n'.join(['…' * 100] * 1800) + '\n'
+OVERSIZE = REPORT_NEWLY_DATED + '\nPatient handout (fictional):\n' + '\n'.join(['…' * 100] * 1800) + '\n'
 
 
 class SizedProvider(Provider):
@@ -694,7 +696,7 @@ class UpgradeStopsOnlyWhereItWouldSendTests(Base):
 
     def test_with_no_request_before_the_stop_never_says_one_was_sent(self):
         # the installed pair ran with the provider disabled: its assess carries no run at all
-        encounter_id, context = self.installed_upload(REPORT_TABLE_DATE, read_date=False)
+        encounter_id, context = self.installed_upload(REPORT_NEWLY_DATED, read_date=False)
         self.installed_job(encounter_id, models.Job.ASSESS, context, run=None)
         drain()
         self.assertEqual(self.sent(), 0)
@@ -713,7 +715,7 @@ class UpgradeStopsOnlyWhereItWouldSendTests(Base):
 
     def test_a_request_built_but_never_sent_before_is_never_said_to_be_sent(self):
         # the installed revision built its request and the exchange refused it before sending (outcome not_sent)
-        encounter_id, context = self.installed_upload(REPORT_TABLE_DATE, read_date=False)
+        encounter_id, context = self.installed_upload(REPORT_NEWLY_DATED, read_date=False)
         run = self.installed_run(encounter_id, None, state=models.ProviderRun.NOT_SENT)
         self.provider.requests.pop()  # nothing reached the provider
         models.ProviderRun.objects.filter(pk=run.pk).update(
@@ -739,7 +741,7 @@ class UpgradeStopsOnlyWhereItWouldSendTests(Base):
                          (models.Job.PREDICT, models.Job.CANCELLED, jobs.REMADE_REQUEST_MESSAGE))
 
     def test_with_the_provider_disabled_now_nothing_is_stopped(self):
-        encounter_id, context = self.installed_upload(REPORT_TABLE_DATE, read_date=False)
+        encounter_id, context = self.installed_upload(REPORT_NEWLY_DATED, read_date=False)
         self.installed_job(encounter_id, models.Job.ASSESS, context, run=None)
         with mock.patch('studio.jobs.get_provider', return_value=None):
             drain()
@@ -750,7 +752,7 @@ class UpgradeStopsOnlyWhereItWouldSendTests(Base):
         self.assertFalse(review.can_resume(encounter))
 
     def test_an_unknown_outcome_reads_as_unknown_and_no_resume_is_offered(self):
-        encounter_id, context = self.installed_upload(REPORT_TABLE_DATE, read_date=False)
+        encounter_id, context = self.installed_upload(REPORT_NEWLY_DATED, read_date=False)
         run = self.installed_run(encounter_id, None, state=models.ProviderRun.UNKNOWN)
         self.installed_job(encounter_id, models.Job.ASSESS, context, run=run)
         drain()
@@ -767,10 +769,10 @@ class UpgradeStopsOnlyWhereItWouldSendTests(Base):
         self.assertEqual(self.sent(), 2)
 
     def test_a_retained_answer_to_the_remade_request_is_reused_never_stopped(self):
-        answered = self.create(REPORT_TABLE_DATE)  # under the current rules the dated request is sent and answered
+        answered = self.create(REPORT_NEWLY_DATED)  # under the current rules the dated request is sent and answered
         drain()
         self.assertEqual(self.dates_sent(), ['Date of service: 2026-10-16'])
-        encounter_id, context = self.installed_upload(REPORT_TABLE_DATE, read_date=False)
+        encounter_id, context = self.installed_upload(REPORT_NEWLY_DATED, read_date=False)
         run = self.installed_run(encounter_id, None)
         self.installed_job(encounter_id, models.Job.ASSESS, context, run=run)
         drain()
@@ -786,7 +788,7 @@ class UpgradeStopsOnlyWhereItWouldSendTests(Base):
         # rollback safety: the installed revision's worker would run this predict as any other (it does not know the
         # upgrade's stop), so the installer's CLOSE_STAGES must close it, as it closes every stage the new pair opened
         from tests.test_repairs_r1_m import install, run_app_script
-        encounter_id, context = self.installed_upload(REPORT_TABLE_DATE, read_date=False)
+        encounter_id, context = self.installed_upload(REPORT_NEWLY_DATED, read_date=False)
         self.installed_job(encounter_id, models.Job.ASSESS, context, run=self.installed_run(encounter_id, None))
         swap = timezone.now()
         jobs.run_job(jobs.claim_next())  # the new worker runs the installed revision's assess, and no more

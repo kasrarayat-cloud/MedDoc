@@ -502,3 +502,104 @@ class EmptyDateFieldIsEvidenceRequestTests(EndToEnd):
                 encounter_id = self.finished(text, service_date=ELENA_DATE)
                 self.assert_held(encounter_id)
                 self.assert_never_sent(encounter_id, ELENA_DATE)
+
+
+# --- 8: only a labelled date written as the installed revision reads one is sent ------------------------------------
+
+KNOWN_LIMIT_SHAPES = {  # the known-limit qualifier shapes (P2DN.md), as the skeptic wrote them
+    'block': 'Outside colonoscopy:\nFacility: Synthetic Regional Hospital\nProcedure date: {D}\n',
+    'bullet': 'Outside colonoscopy:\n- Procedure date: {D}\n',
+    'next-line field': 'Procedure date: {D}\nStatus: outside colonoscopy\n',
+    'next-line scheduled': 'Procedure date: {D}\nStatus: Scheduled\n',
+    'long row': 'Planned procedure: colonoscopy with possible cold snare polypectomy under monitored anesthesia care '
+                'Procedure Date: {D}\n',
+    'short row': 'Cancelled colonoscopy: yes Procedure Date: {D}\n',
+    'title above': 'Cancelled colonoscopy\nProcedure date: {D}\n',
+    'same-line field': 'Procedure date: {D}    Status: pending authorization\n',
+    'other title': 'Cardiology consultation\nDate of service: {D}\n',
+    'recall above': 'Recall:\nProcedure date: {D}\n',
+}
+NOT_INSTALLED_FORMS = ('3 Sep 2026', '03-Sep-2026', '3rd September 2026')
+TIME_LABELS = ('Date/Time of Service', 'DOS/Time', 'Procedure Date & Time', 'Date and time of procedure')
+OUTSIDE_DMY = HEAD + 'Outside colonoscopy:\nFacility: Synthetic Regional Hospital\nProcedure date: 3 Sep 2026\n' + COLO_BODY
+
+
+class InstalledFormTests(DateAssertions, SimpleTestCase):
+    """Issue 8 (P2DN must-hold 4; inherited from the WIP's day-first dates and round 2's c2:8 labels, never from P2DN's
+    diff): the known-limit qualifier shapes - another occurrence's date the lines around the label name in words the
+    reader cannot place - are a known limit only where the installed revision 057a7d398 sends the same date. Written in a
+    form it does not read - a day-first "3 Sep 2026", a label naming the time, a table row's cell bar - they sent the
+    outside or planned date where 057a7d398 sent none (84 of the skeptic's 126 shapes; E1, E2). Rule N7, a rule of
+    SOURCE: only a labelled date written as the installed revision reads one - a plain date-of-service label, its
+    separator no cell bar, its date year-first, month-first with slashes or with the month's name first - is ever the
+    note's own date; one in another form is read as evidence, asked, and a member's answer with its date is taken."""
+
+    def test_the_known_limit_shapes_in_such_a_form_send_no_date(self):
+        for name, shape in KNOWN_LIMIT_SHAPES.items():
+            for form in NOT_INSTALLED_FORMS:
+                for body in (COLO_BODY, OFFICE_BODY):
+                    text = HEAD + shape.format(D=form) + body
+                    with self.subTest(shape=name, form=form, body=body[:15]):
+                        self.assert_never(text, '2026-09-03')
+                        self.assert_member_conflict(text, ELENA_DATE)
+        for heading in ('Outside colonoscopy:', 'Outside colonoscopy', 'Prior colonoscopy:', 'Planned colonoscopy:',
+                        'Next procedure:'):
+            for row in ('| Date of service | 09/03/2026 |', '| Procedure date | 2026-09-03 |', 'Procedure date | 09/03/2026'):
+                text = HEAD + heading + '\n' + row + '\n' + COLO_BODY
+                with self.subTest(heading=heading, row=row):
+                    self.assert_never(text, '2026-09-03')
+        for label in TIME_LABELS:
+            for name in ('block', 'title above', 'same-line field', 'next-line field'):
+                shape = KNOWN_LIMIT_SHAPES[name].replace('Procedure date', label).replace('Date of service', label)
+                text = HEAD + shape.format(D='09/03/2026 08:00') + COLO_BODY
+                with self.subTest(label=label, shape=name):
+                    self.assert_never(text, '2026-09-03')
+
+    def test_a_header_in_such_a_form_is_asked_and_the_member_s_answer_agrees(self):
+        for line in ('Date of service: 14 Oct 2026', 'Procedure date: 14-Oct-2026', 'Service date 14 October 2026',
+                     'Date of service | 2026-10-14', '| Procedure date | 10/14/2026 |',
+                     'Date/Time of Service: 10/14/2026 09:15', 'DOS/Time: 10/14/2026 08:30'):
+            text = HEAD + 'Colonoscopy report\n' + line + '\n' + COLO_BODY
+            with self.subTest(line=line):
+                fact = date_fact(text)
+                self.assertEqual((fact.origin, fact.value), ('missing', None), fact.evidence)
+                self.assertIn(context.FORM_DATE_NOTE, fact.note)
+                self.assert_member_date(text, '2026-10-14')
+                self.assert_member_conflict(text, ELENA_DATE)
+
+    def test_the_withheld_date_leads_the_member_s_answer(self):
+        # asked, the table row's date leads as an own date would: a history line's date is never the member's answer
+        # (svc-18's shape), and a subject line is measured against it
+        text = (HEAD + 'Colonoscopy report\nDate of service | 2026-10-05\nIndication | Surveillance - two tubular adenomas '
+                'removed at colonoscopy on 2021-08-17\n' + COLO_PLAIN)
+        self.assert_asked(text, 'Date of service | 2026-10-05')
+        self.assert_member_date(text, '2026-10-05')
+        self.assert_member_conflict(text, '2021-08-17')
+        text = HEAD + 'Date of service: 14 Oct 2026\nRe: Colonoscopy 10/14/2026\n' + COLO_PLAIN
+        self.assert_asked(text, 'Date of service: 14 Oct 2026')
+        self.assert_member_date(text, '2026-10-14')
+        self.assert_conflict(HEAD + 'Date of service: 14 Oct 2026\nRe: Colonoscopy 10/20/2026\n' + COLO_PLAIN,
+                             '2026-10-14', '2026-10-20')
+
+    def test_controls_the_installed_forms_are_documented_and_another_form_still_speaks(self):
+        for line in ('Date of service: 10/14/2026', 'DOS: 2026-10-14', 'Procedure date: October 14, 2026',
+                     'Date of service: 10/14/2026 09:15', 'Visit date - Oct 14, 2026', 'Date of service (DOS): 10/14/2026'):
+            with self.subTest(line=line):
+                self.assert_document(HEAD + 'Colonoscopy report\n' + line + '\n' + COLO_BODY, '2026-10-14')
+        # beside the note's own date, a labelled date in another form agrees with it or questions it
+        self.assert_document(HEAD + 'Date of service: 10/14/2026\nProcedure date: 14 Oct 2026\n' + COLO_BODY,
+                             '2026-10-14')
+        self.assert_conflict(HEAD + 'Date of service: 10/14/2026\nProcedure date: 3 Sep 2026\n' + COLO_BODY,
+                             '2026-10-14', '2026-09-03')
+
+
+class InstalledFormRequestTests(EndToEnd):
+    def test_e1_sends_no_date_and_the_member_s_answer_is_sent(self):
+        encounter_id = self.finished(OUTSIDE_DMY)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.assert_not_excluded(encounter_id, '45385')
+        clean = self.finished(HEAD + 'Colonoscopy report\nDate of service: 14 Oct 2026\n' + COLO_BODY)
+        self.assertEqual(self.dates_sent(clean), [[]])
+        self.set_context(clean, {'service_date': '2026-10-14'})
+        self.assertEqual(self.dates_sent(clean), [[], ['Date of service: 2026-10-14']])
+        self.assertEqual(self.bucket(clean, '45385'), 'selected')

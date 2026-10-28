@@ -396,8 +396,8 @@ NOT_ALONE = (  # dates:8 B3 and V1, and the brackets and words of its fuzz after
 )
 ALONE = (  # the date alone, a clock at most, up to the field's end: the line's end, a row's bar or the next label
     'Date of service: 10/14/2026', 'Date of service: 10/14/2026   ', 'Date of service: 10/14/2026.',
-    'Date of service: 10/14/2026 09:15', 'Date/Time of Service: 10/14/2026 at 9:15 AM',
-    'Date of service: 10/14/2026 | Provider: Dr. A. Synthetic', 'Service date 14 October 2026  |  Endoscopist A. Synthetic',
+    'Date of service: 10/14/2026 09:15',
+    'Date of service: 10/14/2026 | Provider: Dr. A. Synthetic',
     'DOS: 10/14/2026 MRN: 0000', 'Date of service: 10/14/2026    Place of service: Office',
     'Date of service: 10/14/2026\tReferring physician: Dr. B. Synthetic', 'Date of procedure: 2026-10-14\r',
 )
@@ -425,6 +425,14 @@ class LabelSOwnFieldTests(DateAssertions, SimpleTestCase):
             with self.subTest(line=line):
                 value = '2026-10-14'
                 self.assert_document(HEAD + 'Colonoscopy report\n' + line + '\n' + COLO_BODY, value)
+        # P2DN's fix round, rule N7: alone in its field too, but written in a form the installed revision does not read
+        # (a label naming the time, a day-first date) - asked, the date answering the question (this pin had them
+        # documented)
+        for line in ('Date/Time of Service: 10/14/2026 at 9:15 AM', 'Service date 14 October 2026  |  Endoscopist A. Synthetic'):
+            with self.subTest(line=line):
+                text = HEAD + 'Colonoscopy report\n' + line + '\n' + COLO_BODY
+                self.assert_question(text, '2026-10-14')
+                self.assertIn(context.FORM_DATE_NOTE, date_fact(text).note)
 
     def test_beside_the_own_labelled_date_it_speaks(self):
         # a labelled date with more in its field questions the own labelled date when it differs, agrees otherwise

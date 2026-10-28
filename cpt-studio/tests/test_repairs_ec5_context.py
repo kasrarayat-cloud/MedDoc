@@ -126,10 +126,12 @@ class LabelledDateOfAnotherOccurrenceTests(DateAssertions, SimpleTestCase):
         for text, value in ((HEAD + 'Colonoscopy procedure date: 10/14/2026\n', '2026-10-14'),
                             (HEAD + 'Office visit date: 10/20/2026\n' + VISIT_BODY, '2026-10-20'),
                             (HEAD + "Today's visit date: 10/20/2026\n" + VISIT_BODY, '2026-10-20'),
-                            (HEAD + 'Date of service: 2026-10-20\n' + VISIT_BODY, '2026-10-20'),
-                            (HEAD + 'Field | Value\nProcedure date | 2026-09-30\n', '2026-09-30')):
+                            (HEAD + 'Date of service: 2026-10-20\n' + VISIT_BODY, '2026-10-20')):
             with self.subTest(text=text.splitlines()[1]):
                 self.assert_document(text, value)
+        # P2DN's fix round, rule N7: a table row's date is read and asked (a cell bar is no separator the installed
+        # revision read), its date answering the question; this pin had it documented
+        self.assert_question(HEAD + 'Field | Value\nProcedure date | 2026-09-30\n', '2026-09-30')
         for line in ('Previous procedure date: 2019-05-01', 'Next visit date: 2026-12-01', 'Prior DOS: 2025-01-02',
                      'Outside procedure date: 2019-05-01'):
             with self.subTest(line=line):
