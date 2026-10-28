@@ -658,3 +658,24 @@ What it changes, so a later session does not re-derive it:
     owner's own list in the "Narrow, install-first" decision ("wrong date sent to Corti, re-sending an identical
     request, reports or the UI misstating saved state, rollback safety, time/memory") names no exclusion and says "the
     reviewer still decides every code". The owner may overrule this; the PR body and the install report say so.
+28. **The service date is read by its source, and nothing is sent that the installed revision would not send.**
+    Refutation phase 2 found the date sent to Corti taken from sources that are not this encounter's date of service:
+    a fax's clocked "Date/Time:", a letter's "Date:", another discipline's dated title, a date of birth, a label's
+    value with a bracket after it. Four rounds of qualifier words had each been refuted by the next paraphrase. The
+    first repair (branch `wip/7c8-p2dates`) required a clean header block around the label: it closed every finding
+    and asked the date of 8 of the 11 live encounters ("Date of procedure: 2026-10-14 ... not read as one"), of every
+    PDF or Word upload and of 8,416 of the reading gate's 8,446 texts - a capability loss this session may not take
+    (class b), so it was not merged. The rule this change carries instead (P2DN, then its skeptics' and the final
+    refutation's fix rounds; ARCHITECTURE 5.2):
+    - a document date is sent only from a date-of-service label's own value standing alone in its field (N1, N5);
+      a dated title, a bare "Date:" or "Date/Time:" line, a letter's line, a dated service line or prose is evidence
+      that can make the date a question, never the date - the installed revision's behaviour for those shapes. This
+      supersedes interpretation 22's last sentence: no dated title gives the date;
+    - a date of birth is never a candidate (N2); a member date is taken only when it equals a date some candidate
+      states as its own value, never one the reader reads as another occurrence's (N3, N4);
+    - only a labelled date written in a form the installed revision 057a7d398 reads is ever sent (N7): a day-first
+      date, a table row's date or a label naming a time is asked.
+    The family no structural rule closed without that capability loss - a labelled date the lines around it qualify
+    as another occurrence's (a heading, a title, a field above or beside it) - stays as the installed revision has
+    it, pinned as known limits, and is open for the owner: keep it, accept the structural rule's asks, or rule a
+    narrower trade. The owner may overrule any of this; the PR body says so.
