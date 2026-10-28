@@ -814,7 +814,13 @@ def _column(text: str, rows: '_Rows', ls: int, le: int, cell_start: int, label_e
             and all(_line_label(text, *head) not in ('dos', 'birth') or _date_alone(text, *value)
                     for head, value in zip(cells, values)):
         return values[k]  # fr-dr:1: and every date or birth label's column holds a date alone, as a stack's place does
-    return _UNPLACED if row is not None and rows.states_a_date(*row) else _NO_VALUE
+    # the differential round, df-d:3: also where the cell at the label's place holds a digit ("20261014", "10142026": a
+    # date written without separators is no date start, _GAP_DATE) - read as stating none, it was silent and "Date of
+    # service: 10/07/2026" beside it was sent, where c3c034a08 read the cell as the label's value and asked (fr-dr:0: a
+    # field stating what it cannot place speaks; only a cell with no digit - "TBD", "N/A" - states no date)
+    if row is not None and (rows.states_a_date(*row) or (len(values) == len(cells) and _DIGIT.search(text, *values[k]))):
+        return _UNPLACED
+    return _NO_VALUE
 
 
 class _Counted(tuple):

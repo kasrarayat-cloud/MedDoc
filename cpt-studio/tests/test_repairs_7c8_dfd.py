@@ -14,6 +14,8 @@ df-d:0  (fr-dr:1, the stack) an 'other' label's place could hold no date alone, 
         date and more ("10/14/2026 (done)") made it read a name there and fall silent.
 df-d:1  (fr-dr:1, the column) a row whose date-of-service cell is no date alone ("TBD") was unplaced for every label of
         its header, so the cell under "DOB" was no longer a date of birth and a dated service line read it as its date.
+df-d:3  (fr-dr:1 with fr-dr:0) a date-of-service column cell of digits that are no date with separators ("20261014")
+        made the unplaced row state no date: silent, where c3c034a08 asked.
 
 Synthetic text only; no network (the suite's FakeProvider).
 """
@@ -254,4 +256,61 @@ class BirthColumnBesideAnUndatedCellRequestTests(EndToEnd):
         encounter_id = self.finished(self.C1)  # dateless, then the answer path
         self.assertEqual(self.dates_sent(encounter_id), [[]])
         self.set_context(encounter_id, {'service_date': ELENA_DATE})
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+
+
+# --- df-d:3: a date-of-service cell of digits that is no date it can place is asked, never silent ---------------------
+
+COMPACT_CELLS = ('20261014', '10142026')
+
+
+def compact_column(layout, cell):
+    """A date-of-service column whose cell is ``cell``, beside the note's "Date of service: 10/07/2026"."""
+    if layout == 'tabs':
+        return 'Patient\tMRN\tDate of Service\nSynthetic, Alex\t0000\t' + cell + '\n'
+    if layout == 'short heads':
+        return 'DOS       MRN\n' + cell.ljust(10) + '0000\n'
+    return aligned('Patient', 'MRN', 'Date of Service') + '\n' + aligned('Synthetic, Alex', '0000', cell) + '\n'
+
+
+class DigitsInADateOfServiceColumnTests(DateAssertions, SimpleTestCase):
+    """df-d:3 (826fcff2d with 54bd8206b, the final refutation's fr-dr:1 and fr-dr:0): a row whose date-of-service cell
+    is no date alone is not placed, and an unplaced row was asked only where it states a date with separators
+    (_GAP_DATE). A cell of digits written without them ("20261014", "10142026") therefore stated no date (form 'empty',
+    which never speaks), and "Date of service: 10/07/2026" beside it was documented and sent with 45385 ready, where
+    c3c034a08 read the cell as the label's unread value and asked. fr-dr:0's own rule says a field that states something
+    it cannot place speaks: an unplaced row whose cell at the label's place holds a digit is asked, the label alone kept
+    (only a cell with no digit - "TBD", "N/A" - states no date)."""
+
+    def test_beside_the_labelled_date_the_date_is_asked(self):
+        for layout in ('spaces', 'tabs', 'short heads'):
+            for cell in COMPACT_CELLS:
+                for where in ('above', 'below'):
+                    table = compact_column(layout, cell)
+                    lines = ('Date of service: 10/07/2026\n' + table) if where == 'above' else \
+                        (table + 'Date of service: 10/07/2026\n')
+                    text = HEAD + 'Colonoscopy report\n' + lines + COLO_PLAIN
+                    with self.subTest(layout=layout, cell=cell, where=where):
+                        self.assert_never(text, '2026-10-07')
+                        self.assertIn(date_fact(text).origin, ('conflict', 'missing'))
+                        self.assert_member_date(text, '2026-10-07')
+                        self.assert_member_conflict(text, ELENA_DATE)
+
+    def test_the_verifier_s_smallest_form(self):
+        text = HEAD + 'DOS  MRN\n20261014  0000\nDOS: 10/07/2026\n'
+        self.assert_never(text, '2026-10-07')
+        self.assert_member_date(text, '2026-10-07')
+
+    def test_controls_a_cell_with_no_digit_states_no_date(self):
+        for cell in ('TBD', 'N/A'):
+            text = HEAD + 'Colonoscopy report\nDate of service: 10/07/2026\n' + compact_column('spaces', cell) + COLO_PLAIN
+            with self.subTest(cell=cell):
+                self.assert_document(text, '2026-10-07')
+
+
+class DigitsInADateOfServiceColumnRequestTests(EndToEnd):
+    def test_k1_no_date_is_sent(self):
+        text = HEAD + 'Colonoscopy report\n' + compact_column('spaces', '20261014') + 'Date of service: 10/07/2026\n' \
+            + COLO_PLAIN
+        encounter_id = self.finished(text)
         self.assertEqual(self.dates_sent(encounter_id), [[]])
