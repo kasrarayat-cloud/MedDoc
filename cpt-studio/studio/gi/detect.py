@@ -3557,6 +3557,9 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
     "Intended extent: cecum"), whatever its reading: the document's own statement of the extent (_insertion_only)."""
     text = an.text
     reached, blocked = [], []
+    # session 7c8d38da GI round 2 (extent): the hits read only by a reach to a depth, the mentions that may doubt one,
+    # and the hits blocked or denied (_depth_reach_doubted)
+    depth_only, deeper, refused = [], [], []
     for s, e in sentences:
         for cs, ce in _clauses_in(an, s, e):
             clause = None  # round 4d bounded:3: one Span of the clause, shared by every hit of it (memory linear in the text)
@@ -3575,11 +3578,15 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                     hit = (depth, label, clause)
                     if labelled is not None and cues.EXTENT_LABEL_BEFORE.search(text, ws, m.start()):
                         labelled.append(hit)
+                    if status in ('performed', 'incomplete', 'uncertain'):
+                        deeper.append((m.start(), depth, hit))  # a mention that may doubt a shallower reach to a depth
                     if status in ('performed', 'incomplete') and cues.REACHED_BEYOND.search(pre):
                         reached.append(hit)
                     elif base in ('performed', 'incomplete', 'negated') and (
-                            cues.NOT_REACHED_BEFORE.search(pre) or cues.NOT_REACHED_AFTER.search(post)):
+                            cues.NOT_REACHED_BEFORE.search(pre) or cues.NOT_REACHED_AFTER.search(post)
+                            or cues.REACHED_DEPTH_DENIED.search(pre)):  # session 7c8d38da GI round 2 (extent)
                         blocked.append(_P2_beyond_the_valve(an, m, hit))  # round 4c-2 plan:D2
+                        refused.append(hit)
                         if cut_denials is not None:  # round 4d regression:3
                             cut_denials.append((blocked[-1], m.start(), m.end(), ws, we,
                                                 status in ('negated', 'cancelled', 'incomplete')))
@@ -3593,6 +3600,11 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                                 and not (cues.REACHED_BEFORE.search(pre) or cues.REACHED_AFTER.search(post)
                                          or _straight_after_service(an, ws, m.start())):
                             cut.append(hit)  # read only by declared:11's cell cut (round 4d regression:3)
+                    elif status in ('performed', 'incomplete') and cues.REACHED_DEPTH.search(pre):
+                        # "The pediatric colonoscope was advanced to 28 cm from the anal verge in the sigmoid colon"
+                        # (session 7c8d38da GI round 2, extent: ho-03), unless a deeper landmark is named after it
+                        reached.append(hit)
+                        depth_only.append((m.start(), depth, hit))
                     elif (_answers_silently(an, reading, m.start(), m.end()) and _reached_label(an, ws, m.start())
                           and _plain_tail(an, m.end(), we) and not _P2_label_denied(an, m.end(), depth, table)):
                         reached.append(hit)  # "Furthest extent reached: cecum." answered in an addendum
@@ -3607,16 +3619,39 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                     elif doubted is not None and _P2_refused_label(an, reading, m.start(), m.end(), ws, we, depth, table) \
                             and not _P2_reach_denied(an, m.end(), depth, table):
                         doubted.append(hit + ((m.end(), _P2_label_rest(an, m.end(), depth, table)),))  # plan:D2
-                    elif denied is not None and (status in ('negated', 'cancelled', 'incomplete')
-                                                 or (reading.cues and reading.cues[0].startswith(DOUBT_PREFIX)
-                                                     and not _P2_doubt_is_a_finding(an, ws, we))
-                                                 or (_reached_label(an, ws, m.start())
-                                                     and _P2_label_denied(an, m.end(), depth, table))):
-                        denied.append(_P2_beyond_the_valve(an, m, hit))  # a landmark its reading denies or doubts (plan:B2)
-                        if cut_denials is not None:  # round 4d regression:3
-                            cut_denials.append((denied[-1], m.start(), m.end(), ws, we,
-                                                status in ('negated', 'cancelled', 'incomplete')))
+                    elif (status in ('negated', 'cancelled', 'incomplete')
+                          or (reading.cues and reading.cues[0].startswith(DOUBT_PREFIX)
+                              and not _P2_doubt_is_a_finding(an, ws, we))
+                          or (_reached_label(an, ws, m.start()) and _P2_label_denied(an, m.end(), depth, table))):
+                        refused.append(hit)  # whatever the caller collects (session 7c8d38da GI round 2, extent)
+                        if denied is not None:
+                            denied.append(_P2_beyond_the_valve(an, m, hit))  # a landmark its reading denies or doubts (plan:B2)
+                            if cut_denials is not None:  # round 4d regression:3
+                                cut_denials.append((denied[-1], m.start(), m.end(), ws, we,
+                                                    status in ('negated', 'cancelled', 'incomplete')))
+    if depth_only:
+        doubted_reaches = {id(hit) for hit in _depth_reach_doubted(depth_only, deeper, refused)}
+        reached = [hit for hit in reached if id(hit) not in doubted_reaches]
     return reached, blocked
+
+
+def _depth_reach_doubted(depth_only, deeper, refused) -> list:
+    """The hits read as reached only by a reach to a depth (cues.REACHED_DEPTH) after which the family's text still names
+    a deeper landmark that no denial explains (its reading performed, incomplete or uncertain, and neither blocked nor
+    denied): the depth may be a waypoint whose onward reach is worded in a way no reach cue reads ("The colonoscope was
+    passed to 20 cm in the sigmoid colon where a polyp was found, and then to the cecum": the 60-character window of
+    cues.REACHED_BEFORE misses "and then to the cecum" once a depth stands before it), so it is no extent, and, as before
+    the depth form was read, none is (session 7c8d38da GI round 2, extent). Only mentions after the reach count: a
+    deeper landmark named first ("A transverse colon mass on CT was the reason for the examination") is why the
+    examination was done, not where it went. The hits are tuples every list here keeps alive, so their ids are stable;
+    one sort and a suffix maximum over the mentions (linear after the sort)."""
+    refused_ids = {id(hit) for hit in refused}
+    kept = sorted((pos, depth) for pos, depth, hit in deeper if id(hit) not in refused_ids)
+    deepest_after = [0] * (len(kept) + 1)  # the deepest landmark named from each mention on
+    for i in range(len(kept) - 1, -1, -1):
+        deepest_after[i] = max(deepest_after[i + 1], kept[i][1])
+    positions = [pos for pos, _ in kept]
+    return [hit for pos, depth, hit in depth_only if deepest_after[bisect.bisect_right(positions, pos)] > depth]
 
 
 def _P2_doubted_by_a_next_field(an: Analysis, reading: Reading, end: int, ws: int, we: int) -> bool:
@@ -3679,8 +3714,19 @@ _P2_NEUTRAL_CELL = re.compile(r'(?:[ \t]*\|[ \t]*|\t[ \t]*|[ ]{2,})(?:scope|inst
 
 
 def _P2_plain_value(text: str, start: int, end: int) -> bool:
-    """Whether [start, end), an extent label's value after its landmark, holds only cues.EXTENT_TAIL words."""
-    return all(word.lower() in cues.EXTENT_TAIL for word in _EXTENT_TAIL_WORD.findall(text, start, end))
+    """Whether [start, end), an extent label's value after its landmark, holds only cues.EXTENT_TAIL words (after the
+    depth it may open with, _value_words)."""
+    return all(word.lower() in cues.EXTENT_TAIL for word in _value_words(text, start, end))
+
+
+def _value_words(text: str, start: int, end: int) -> list[str]:
+    """The words of [start, end), an extent label's value after its landmark, without the depth the value may open with
+    (cues.EXTENT_VALUE_DEPTH: "Extent reached: sigmoid colon at 28 cm"; session 7c8d38da GI round 2, extent): that depth
+    says where in the landmark the examination stopped and never denies, plans or aims, so it is part of the value.
+    Every other word is read as before, a depth after another word too. Read by every reader of an extent label's value
+    alike (_plain_tail, _S2_read_by_the_cut, _P2_plain_value)."""
+    depth = cues.EXTENT_VALUE_DEPTH.match(text, start, end)
+    return _EXTENT_TAIL_WORD.findall(text, depth.end() if depth else start, end)
 
 
 def _P2_neutral_region(text: str, start: int, stop: int, need_cell: bool) -> bool:
@@ -4068,18 +4114,16 @@ def _plain_tail(an: Analysis, end: int, we: int) -> bool:
     stop = _VALUE_END.search(an.text, end, we)
     stop_at = stop.start() if stop else we
     cell = _SEC_NEXT_CELL.search(an.text, end, stop_at)
-    tail = an.text[end:cell.start() if cell else stop_at]
-    return all(word.lower() in cues.EXTENT_TAIL for word in _EXTENT_TAIL_WORD.findall(tail))
+    return all(word.lower() in cues.EXTENT_TAIL for word in _value_words(an.text, end, cell.start() if cell else stop_at))
 
 
 def _S2_read_by_the_cut(an: Analysis, end: int, we: int) -> bool:
     """Whether the value after an extent label's landmark (which ends at ``end``; ``we``, its clause window's end), read
     to the value's sentence or line end without declared:11's next-cell cut, holds a word outside cues.EXTENT_TAIL: then
     _plain_tail reads the label only because that cut ends it ("Extent: cecum | Prep quality: Good"; round 4d
-    regression:3). Reads at most the clause window, stopping at the first such word."""
+    regression:3). Reads at most the clause window, a depth that opens the value aside (_value_words)."""
     stop = _VALUE_END.search(an.text, end, we)
-    return not all(word.group(0).lower() in cues.EXTENT_TAIL
-                   for word in _EXTENT_TAIL_WORD.finditer(an.text, end, stop.start() if stop else we))
+    return not all(word.lower() in cues.EXTENT_TAIL for word in _value_words(an.text, end, stop.start() if stop else we))
 
 
 # Round 4d regression:3, second round: a landmark written as a field's label ("Cecum - not reached", "The cecum | not

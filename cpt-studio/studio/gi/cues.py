@@ -726,6 +726,40 @@ NOT_REACHED_BEFORE = rx(r'\b(?:unable\s+to|could\s+not|cannot|failed\s+to|did\s+
 NOT_REACHED_AFTER = rx(r'^[\s,]*(?:was|were|could)\s+not\s+(?:be\s+)?(?:reached|intubated|entered|examined|visualized|'
                        r'seen|evaluated|inspected)\b')
 REACHED_BEYOND = rx(r'\b(?:beyond|past)\s+(?:the\s+)?(?:[\w-]+\s+){0,2}$')
+# A reach whose object is a depth, then the landmark that depth lies in (session 7c8d38da, GI round 2, extent: ho-03's
+# "The pediatric colonoscope was advanced to 28 cm from the anal verge in the sigmoid colon"): the landmark is where the
+# instrument got to, so it is reached, exactly as "advanced to the sigmoid colon" is. Only straight after the reach verb
+# ("advanced to 28 cm ...", "advanced only to 28 cm ..."), so a depth that locates a finding ("a polyp at 28 cm in the
+# sigmoid colon") never reads a reach; and only as the endoscope's own reach: an endoscope of any kind or "the
+# instrument" (the vocabulary STARTED and detect._P2_INSTRUMENT read a reach by) is the verb's subject, with only
+# auxiliaries, "then" and adverbs between them (a closed class: "was", "could only be", "was then carefully"), or its
+# object right after it ("advanced the pediatric colonoscope to 28 cm in the sigmoid colon"); so an accessory's depth
+# ("A balloon was advanced to 35 cm in the distal esophagus") or a catheter's never says where the endoscope went.
+# REACHED_DEPTH_DENIED is its denial ("could not be advanced to 28 cm in the sigmoid colon"), read first as
+# NOT_REACHED_BEFORE is, so a denied reach is blocked, never reached. detect._landmarks reads a reach to a depth only
+# where no other reach form reads the landmark, and drops it where a deeper landmark is named after it
+# (detect._depth_reach_doubted).
+_DEPTH_THEN_LANDMARK = (r'(?:to|up\s+to|as\s+far\s+as)\s+(?:approximately\s+|about\s+|~\s*)?\d{1,3}\s*cm\b'
+                        r'(?:\s+from\s+(?:the\s+)?(?:anal\s+verge|anus|incisors|teeth|dentate\s+line))?\s*,?\s+'
+                        r'(?:in|into|within|at)\s+(?:the\s+)?(?:level\s+of\s+(?:the\s+)?)?(?:[\w-]+\s+){0,2}$')
+_DEPTH_INSTRUMENT = r'(?:\w*scope|instrument)'
+_DEPTH_AUXILIARIES = r'(?:\s+(?:was|were|is|are|be|been|had|has|have|could|can|would|then|further|again|also|still|\w+ly))*'
+_DEPTH_VERB = r'(?:advanced|passed|inserted|introduced)'
+REACHED_DEPTH = rx(r'\b' + _DEPTH_INSTRUMENT + _DEPTH_AUXILIARIES + r'\s+' + _DEPTH_VERB + r'\s+(?:[\w-]+\s+){0,2}?'
+                   + _DEPTH_THEN_LANDMARK
+                   + r'|\b' + _DEPTH_VERB + r'\s+(?:(?:the|a|an)\s+)?(?:[\w-]+\s+)?' + _DEPTH_INSTRUMENT + r'\s+'
+                   + _DEPTH_THEN_LANDMARK)
+REACHED_DEPTH_DENIED = rx(r'\b(?:(?:unable\s+to|could\s+not|cannot|can\s*not|failed\s+to|did\s+not)\s+(?:be\s+)?'
+                          r'(?:advance|pass|insert|introduce)\w*|(?:was|were|is|are|been)\s+(?:not|never)\s+'
+                          r'(?:able\s+to\s+be\s+|successfully\s+|further\s+|safely\s+)?(?:advanced|passed|inserted|'
+                          r'introduced)|never\s+(?:advanced|passed))\s+(?:[\w-]+\s+){0,2}?' + _DEPTH_THEN_LANDMARK)
+# The depth an extent label's value may open with, right after its landmark ("Extent reached: sigmoid colon at 28 cm",
+# "Extent: descending colon (35 cm)", "Extent: sigmoid colon, 28 cm from the anal verge"; session 7c8d38da, GI round 2,
+# extent): it says where in that landmark the examination stopped, so it is part of the value (detect._value_words).
+# Only where it opens the value: a depth after any other word ("Extent: cecum and TI at 85 cm", "Extent: transverse colon
+# at 60 cm and cecum at 85 cm" past its first depth) is read as before, so it still leaves the label unread.
+EXTENT_VALUE_DEPTH = rx(r'[ \t]*[,(\[\u2013\u2014-]?[ \t]*(?:(?:at|to)\s+)?(?:approximately\s+|about\s+|~\s*)?\d{1,3}\s*cm\b'
+                        r'(?:\s+from\s+(?:the\s+)?(?:anal\s+verge|anus|incisors|teeth|dentate\s+line))?')
 CENTIMETERS = rx(r'\b(?:to|at|of)\s+(?:approximately\s+|about\s+|~\s*)?(?P<cm>\d{1,3})\s*cm\b')
 # Shorthand extents: an extent label line ("Extent: cecum", "Extent reached: terminal ileum", "The furthest
 # extent reached was the cecum", "Depth of insertion: 30 cm"), and "to (the) <landmark | N cm>" straight after

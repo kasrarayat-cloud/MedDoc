@@ -342,7 +342,8 @@ def _sec_phrase_heading(text: str, heading: tuple[str, str, Span]) -> bool:
     colon, no extraction block or addendum header."""
     kind, label, span = heading
     return kind == 'other' and label not in HEADINGS and not span.text.endswith(':') \
-        and not FORM_BLOCK.fullmatch(span.text) and not ADDENDUM_HEADER.fullmatch(span.text)
+        and not FORM_BLOCK.fullmatch(span.text) and not ADDENDUM_HEADER.fullmatch(span.text) \
+        and _service_name_only(span.text) is None  # a service line's part reads as its colon form's (layout)
 
 
 def _act_or_place_named(line: str) -> bool:
@@ -716,6 +717,126 @@ def split_sections(text: str) -> tuple[Section, ...]:
     return layout(text).sections
 
 
+# Session 7c8d38da, GI round 2, extent (held-out ho-01): a service's name standing alone on its line ("Upper
+# Endoscopy", "COLONOSCOPY", "Esophagogastroduodenoscopy (EGD)", "**Colonoscopy**"; no list marker, no colon, neither
+# run on into nor running on into the next line) is no heading, so an "Indications" section ran over the narratives
+# under "Upper Endoscopy" and "Colonoscopy", every statement there was held as an indication's, and no extent was read.
+# Such a line now ends the indication in force, and opens exactly the 'other' section, with no default, that its colon
+# form ("Colonoscopy:") opens there, when all of these hold (see layout):
+# - the report names that service as its own above it, in a procedure section that is no plan, history or cancellation
+#   ("Procedures: Esophagogastroduodenoscopy with biopsies; colonoscopy with cold snare polypectomy", "Colonoscopy
+#   Report"; _declared_services): a note that never does (an office visit's "Reason for visit" over a pasted earlier
+#   report) may tell another time under it;
+# - the indication has said something of its own first (_indication_said): one organised by service sub-headings
+#   ("Indications" / "Colonoscopy" / "Screening, average risk.") keeps what they head;
+# - the part it heads reports what was done, says no intent before it does, and marks no clause as today's
+#   (_reporting_heads): a part that says why first is the indication's, and one that marks its today's statements
+#   mixes times, which the indication's per-clause reading keeps apart;
+# - no procedure, findings or technique heading follows it: such a report's own narrative has its section further on.
+# Each such line ends the part the one before it opened; one that does not open a part of its own hands its part back
+# to the indication. Anywhere else it is content, as before (inside a plan or a history it names an item of that
+# section).
+_SVC_HEAD_ASIDE = re.compile(r'[ \t]*\(([^()\n]{1,20})\)[ \t]*$', re.A)
+_NOT_TODAYS = tuple(pattern for _, pattern in cues.PLANNED_CLAUSE + cues.HISTORICAL_CLAUSE + cues.CANCELLED_CLAUSE)
+
+
+def _service_name_only(body: str) -> Optional[str]:
+    """The family when ``body`` (a line without its markup) is that one family's name and nothing else, optionally with
+    a parenthesised abbreviation of the same family ("Esophagogastroduodenoscopy (EGD)"); else None. Never a status or
+    other aside ("Colonoscopy (not performed)", "ERCP (UNSUCCESSFUL)"), a longer line ("Colonoscopy with biopsy"), a
+    label ("Colonoscopy:", a heading already) or two services ("EGD and colonoscopy")."""
+    name = body.strip()
+    if not name or ':' in name or len(name) > 70:
+        return None
+    aside = _SVC_HEAD_ASIDE.search(name)
+    bare = name[:aside.start()].rstrip() if aside else name
+    families = [family for family, pattern in cues.SERVICE_PATTERNS if pattern.fullmatch(bare)]
+    if len(families) != 1 or (aside and not dict(cues.SERVICE_PATTERNS)[families[0]].fullmatch(aside.group(1).strip())):
+        return None
+    return families[0]
+
+
+def _service_head(text: str, ls: int, le: int) -> Optional[tuple[str, str, Span]]:
+    """(family, normalised label, the name's span) when the line [ls, le) is a service's name and nothing else (see
+    _service_name_only) under markdown emphasis or heading marks at most, with no list marker ("1. Colonoscopy",
+    "- EGD")."""
+    line = text[ls:le]
+    if len(line) > 80 or _LIST_ITEM.match(line) or _SEC_LIST_MARK.match(line):
+        return None
+    body = line.strip(' \t*#')
+    family = _service_name_only(body)
+    if family is None:
+        return None
+    start = ls + line.index(body)
+    return family, normalize_label(body), Span(start, start + len(body), body)
+
+
+def _indication_said(text: str, lines: list[tuple[int, int]], line_starts: list[int], section: tuple, i: int,
+                     firsts: dict) -> bool:
+    """Whether the indication in force (``section``: kind, label, heading span) says something of its own before line
+    ``i`` that is no service's name: an answer after its heading label ("Indication: Iron deficiency anemia."), or a first
+    content line that is not itself a service line. ``firsts`` keeps each indication's first content line (found once)."""
+    span = section[2]
+    if span is None:
+        return False
+    head = bisect.bisect_right(line_starts, span.start) - 1
+    if head < 0 or head >= i:
+        return False
+    if text[span.end:lines[head][1]].strip():
+        return True
+    if head not in firsts:
+        firsts[head] = next((j for j in range(head + 1, len(lines)) if text[lines[j][0]:lines[j][1]].strip()), None)
+    first = firsts[head]
+    return first is not None and first < i and _service_head(text, *lines[first]) is None
+
+
+def _declared_services(text: str, lines: list[tuple[int, int]], headings: dict, candidates: dict) -> dict[int, frozenset]:
+    """For each service line of ``candidates`` (line index -> _service_head), the services the report names as its own
+    above it: on a line of a procedure section (a procedure heading line, "Procedures: EGD with biopsies; colonoscopy
+    ...", "Colonoscopy Report", and the lines under it up to the next heading, a list of the procedures performed
+    included) that carries no planned, historical or cancelled cue (cues' own vocabularies: "Procedures: EGD planned").
+    One pass over the lines up to the last service line."""
+    declared, found, in_procedure = {}, set(), False
+    for i in range(max(candidates) + 1):
+        if i in candidates:
+            declared[i] = frozenset(found)
+        if headings[i]:
+            in_procedure = headings[i][0] == 'procedure'
+        if in_procedure:
+            ls, le = lines[i]
+            named = {family for family, pattern in cues.SERVICE_PATTERNS if pattern.search(text, ls, le)}
+            if named and not any(pattern.search(text, ls, le) for pattern in _NOT_TODAYS):
+                found |= named
+    return declared
+
+
+def _reporting_heads(text: str, lines: list[tuple[int, int]], headings: dict, candidates: dict) -> set[int]:
+    """The service lines among ``candidates`` under which that service's own report begins: the part a line heads (to
+    the next heading or service line) states what was done (cues.PERFORMED_CLAUSE, the statements an indication holds),
+    states no intent (cues.INTENT) on a line before the one where it first does ("Colonoscopy" / "Screening." / "The
+    colonoscope was advanced ..." says why first), and has no clause that says today (cues.TODAY). Each part is read
+    once, so the work is linear in the text."""
+    today = [m.start() for m in cues.TODAY.finditer(text)]
+    starts = sorted(candidates)
+    bounds = sorted(i for i, h in headings.items() if h)
+    line_starts = [ls for ls, _ in lines]
+    reporting = set()
+    for n, i in enumerate(starts):
+        at = bisect.bisect_right(bounds, i)
+        stop = min(bounds[at] if at < len(bounds) else len(lines), starts[n + 1] if n + 1 < len(starts) else len(lines))
+        lo, hi = lines[i][1], lines[stop][0] if stop < len(lines) else len(text)
+        done = [m.start() for m in (pattern.search(text, lo, hi) for _, pattern in cues.PERFORMED_CLAUSE) if m]
+        if not done:
+            continue  # it heads no account of what was done
+        if cues.INTENT.search(text, lo, line_starts[bisect.bisect_right(line_starts, min(done)) - 1]):
+            continue  # it says why first: the indication's own sub-heading
+        t = bisect.bisect_left(today, lo)
+        if t < len(today) and today[t] < hi:
+            continue  # it marks its today's statements apart from the rest
+        reporting.add(i)
+    return reporting
+
+
 POSITIVE_KINDS = ('procedure', 'findings', 'technique')
 # A form-field value that is a box's or an option's state: the field stays silent whatever its label.
 _STATE_VALUE = re.compile(r'(?:not[ \t]+)?checked|unchecked|no[ \t]+option[ \t]+selected|yes|no|none|done|performed|'
@@ -823,8 +944,27 @@ def layout(text: str) -> Layout:
     # force before a field-label line or a held line resumes (after a label that speaks for its own line only, or
     # the line after an unfinished clause), a held line opens its own 'other' section, a heading opens. So a heading
     # wins where a resume falls on its line (the next page opens with "Findings:", an addendum's header).
-    resume, field_end, line_end, held_open, heading = 0, 1, 2, 3, 4
+    # A service line (session 7c8d38da GI round 2, extent; see _service_name_only) comes last on its line.
+    resume, field_end, line_end, held_open, heading, service_line = 0, 1, 2, 3, 4, 5
+    # Its candidates: a service's name standing alone, never on a heading line, inside an extraction block, held by
+    # another rule, run on into or running on, nor before a procedure, findings or technique heading.
+    last_positive = max((i for i, h in headings.items() if h and h[0] in POSITIVE_KINDS), default=-1)
+    held_lines = set(held) | {first for first, _ in plan_runs}
+    candidates = {}
+    for i, (ls, le) in enumerate(lines):
+        if headings[i] or i in inside or i in held_lines or joins[i] or (i > 0 and joins[i - 1]) or i < last_positive:
+            continue
+        head = _service_head(text, ls, le)
+        if head is not None:
+            candidates[i] = head
+    service_lines, reporting = {}, set()  # line -> (whether the report names its service as its own, its part's section)
+    if candidates:
+        declared = _declared_services(text, lines, headings, candidates)
+        service_lines = {i: (head[0] in declared[i], ('other', head[1], head[2])) for i, head in candidates.items()}
+        reporting = _reporting_heads(text, lines, headings, candidates)
+    line_starts, firsts = [ls for ls, _ in lines], {}
     marks = sorted([(i, heading, h) for i, h in headings.items() if h]
+                   + [(i, service_line, i) for i in service_lines]
                    + [(i, held_open, ('other', _SEC_HELD_LABEL, None)) for i in held]
                    + [(i + 1, line_end, i) for i in held if i + 1 < len(lines)]
                    + [(first, held_open, ('other', _SEC_PLAN_HELD_LABEL, None)) for first, _ in plan_runs]
@@ -850,8 +990,21 @@ def layout(text: str) -> Layout:
         | {first for first, _ in plan_runs}
     opened, current, before_block, before_line, skipped = [], ('other', '', None), {}, {}, set()
     enclosed = False  # whether the 'other' section in force stands in for a procedure, findings or technique section
+    service_part, indication = None, None  # the part a service line opened, and the indication it ended
     for i, what, value in marks:
         positive = current[0] in POSITIVE_KINDS or enclosed
+        if what == service_line:
+            declared_here, section = service_lines[value]
+            opens = declared_here and value in reporting
+            if current is not service_part:
+                if not opens or current[0] != 'indication' or enclosed \
+                        or not _indication_said(text, lines, line_starts, current, i, firsts):
+                    continue  # content, as before: it ends only an indication that has said something of its own
+                indication = current
+            current, enclosed = (section if opens else indication), False  # its own part, or the indication's again
+            service_part = current if opens else None
+            opened.append((i, current))
+            continue
         if what in (heading, held_open) and i in gated and not positive \
                 and (i not in widened or current[0] in ('plan', 'history')):
             if what == held_open:
