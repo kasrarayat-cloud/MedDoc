@@ -39,10 +39,14 @@ http-vhost, cert and https-vhost. cpt-studio/deploy/ (Dockerfile, entrypoint, gu
 259b895dd1307e81b8fbcb5439874477daf71eba63c9b996b3bdfc572bf71a0c, byte-identical to the live
 /etc/nginx/sites-available/quillmd-cpt. ops/INSTALL.md describes every check.
 
-## Delta shipped (2734a6f3 to 2b82889fea5870921062cf31eefa0c0ad78a1c31; refresh at commit time)
+## Delta shipped (2734a6f3 to 2b82889fea5870921062cf31eefa0c0ad78a1c31)
 
-- Figures at the PR head 518ed7138 (2026-10-28), whose cpt-studio/ tree the merge commit must carry unchanged (checked
-  at the merge): 200 branch commits after 057a7d398; 156 files under cpt-studio/, 121 of them under tests/. Outside
+- Figures measured from the branch base 057a7d398 (whose cpt-studio/ tree is 2734a6f3's) to the PR head 518ed7138,
+  whose cpt-studio/ tree the merge commit carries unchanged (checked at the merge, 2026-10-28T18:08Z): 200 branch
+  commits after 057a7d398; 156 files under cpt-studio/, 121 of them under tests/. For the heading's own range,
+  2734a6f3 to the merge commit, `git rev-list --count` gives 205 (202 without merges), with the same 156 / 121
+  cpt-studio/ files; that range also carries docs/foundation/mutations/20261023-cpt-studio-install.md (the prior act's
+  declaration) and rebuild/requirements.txt (#1441). Outside
   cpt-studio/, only docs/foundation/ files change (the ruling file, RULINGS.md and the bc7df129 handoff). main also
   carries 97abb5959 (#1441: rebuild/requirements.txt msgpack 1.2.2 to 1.2.3, CVE-2026-114613), outside cpt-studio/
   and outside this act.
@@ -58,7 +62,7 @@ http-vhost, cert and https-vhost. cpt-studio/deploy/ (Dockerfile, entrypoint, gu
   and 'second_review_unread' (UNDO_HAZARDS, SHOWN_HAZARDS), the recompute before the parked pair's removal
   (retire_parked) and a post-swap failure receipt that says whether the states were recomputed (after_swap_failure).
   ops/verify_browser.cjs and ops/verify_downloads.py read report format @4.
-- Unchanged at 518ed7138 (re-checked 2026-10-28), to be re-checked at 2b82889fea5870921062cf31eefa0c0ad78a1c31: deploy/, requirements.txt,
+- Unchanged between 2734a6f3 and 2b82889fea5870921062cf31eefa0c0ad78a1c31 (re-checked at the merge commit, 2026-10-28): deploy/, requirements.txt,
   requirements.in and requirements-dev.in (requirements-dev.txt moves msgpack 1.2.2 to 1.2.3 for CVE-2026-114613: a
   dev and CI pin, never installed in the image, whose Dockerfile installs requirements.txt only),
   studio/providers/ (so the Corti request contract and credential loader are the installed ones),
@@ -77,9 +81,8 @@ http-vhost, cert and https-vhost. cpt-studio/deploy/ (Dockerfile, entrypoint, gu
   It then sets database-level defaults on the five non-null columns ('{}'::jsonb four times, 'primary' once), so
   any row the 2734a6f3 pair inserts between the migration and the swap stays valid. It is schema-only: there is no
   RunPython and no new model, so no row is added, removed or rewritten, and no contenttype or permission row
-  appears. Existing rows read the new columns' defaults. At commit time,
-  `git ls-tree --name-only 2b82889fea5870921062cf31eefa0c0ad78a1c31 cpt-studio/studio/migrations/` must list 0001-0006 and `__init__.py` only.
-  If it lists more, this section is wrong and must be rewritten before the commit.
+  appears. Existing rows read the new columns' defaults. `git ls-tree --name-only 2b82889fea5870921062cf31eefa0c0ad78a1c31
+  cpt-studio/studio/migrations/` lists 0001-0006 and `__init__.py` only (checked at the merge commit).
 
 ## Baseline (read-only, re-read 2026-10-28T18:08Z before the commit; this act's preflight receipt is binding)
 
@@ -96,7 +99,8 @@ http-vhost, cert and https-vhost. cpt-studio/deploy/ (Dockerfile, entrypoint, gu
   - encounters: reviewed 7, needs_clarification 3, ready_for_review 1, no_codes 1;
   - last job created 2026-10-27T23:51:21Z; last audit event 2026-10-27T23:51:21Z (idle 18 hours at the reading).
 - /etc/nginx (this revision's installer, nginx_file_state, read-only): sites-available sha256 identical to the
-  2026-10-27 draft and the 2026-10-26 preflight:
+  2026-10-27 draft; every co-tenant file equals the 2026-10-26 preflight receipt, and quillmd-cpt equals the
+  2026-10-26 https-vhost receipt (the preflight receipt has no quillmd-cpt entry):
   - dealhunter cbc089226d5f9f55f3543ee277f16e7e91f08f2ea6737141d7471e155b3c4ebd;
   - dealmason 6fd1916b6444caf394d30f49fe7d3e943b5cdf322e0bfe009bb5bd7724979c74;
   - default ce0901350a021608139b5639cf4ccd7717bef8c3a9e4f79031eb46386b67b03f;
@@ -146,8 +150,8 @@ http-vhost, cert and https-vhost. cpt-studio/deploy/ (Dockerfile, entrypoint, gu
   python:3.12-slim-bookworm@sha256:6a0e06f5….
   - Expected: Dockerfile steps 2/8-6/8 (OCR packages, user, workdir, requirements, pip) are CACHED, and the new
     image's RootFS layers 0-8 equal those of 36c5bf19. Only the COPY and collectstatic layers are new.
-  - If the build cache was pruned since 2026-10-26, apt and pip run again against the Debian mirror and PyPI
-    (versions pinned, no hashes; no provider), and layers 4-8 differ. The receipt's build log shows which case
+  - If the build cache was pruned since 2026-10-26, apt and pip run again against the Debian mirror and PyPI (pip
+    versions pinned with ==, no hashes; apt packages unpinned; no provider), and layers 4-8 differ. The receipt's build log shows which case
     happened, and the image's own checks decide.
 - Before app, outside the installer and read-only on the database:
   - one `pg_dump -Fc` of the cptstudio database through the database container's own pg_dump;
@@ -175,16 +179,23 @@ http-vhost, cert and https-vhost. cpt-studio/deploy/ (Dockerfile, entrypoint, gu
     with a member date of 1990-11-11, which the installed revision sent; needs_clarification; the last audit event
     23:51:21Z) in a scratch test database, with a positive control (a planted unknown outcome turned that encounter's
     state to provider_unknown). The prediction holds only while the re-read baseline shows no live activity after
-    23:51:21Z. The final refutation's rollback lens ran this revision's real phase_app (Docker stubbed) over the 11
-    encounters of the 2026-10-27 dump restored with 2734a6f3's models: {"encounters": 11, "changed": {}}, every state
-    and updated_at unchanged.
-  - if the phase stops after the swap (the parked pair's removal fails, an interrupt), the receipt is ok false and
-    its details.states_recomputed says whether the states were recomputed; the recovery is to rerun app
-    (ops/INSTALL.md, Recovery notes).
+    23:51:21Z. This revision's real phase_app (its install.py, sha256 887f88f8..., the differential round's live
+    check, Docker stubbed) over the 11 encounters of the 2026-10-27 dump restored with 2734a6f3's models gave
+    {"encounters": 11, "changed": {}}, every state and updated_at unchanged; the final refutation's rollback lens had
+    measured the same with the installer of c3c034a08.
+  - if the phase stops after the swap, the receipt is ok false, details.states_recomputed says whether the states
+    were recomputed, and its message says what is left to do (after_swap_failure):
+    - recomputed, and the parked pair's removal failed: the new pair runs and the states are recomputed; remove what
+      is left of the parked pair (*-previous) by hand. Nothing is rerun;
+    - not recomputed, with the parked pair still parked (an interrupt before the recompute): remove the parked pair
+      by hand, then rerun app, which recomputes them (app refuses while a *-previous container exists);
+    - not recomputed and nothing parked: rerun app.
+    Each is a stop under this declaration ("Do not rerun a phase" below): the operator judges first, and the rerun,
+    when there is one, is the documented recovery of ops/INSTALL.md, not a retry.
 
   Counts after app: studio_migrations 6. Every other count equals the pre-app reading. All 12 provider runs read
   purpose 'primary' and scope {}; all 12 assessments read services {}, completeness {} and second_run null; all
-  148 proposals read support {} (figures as of the 2026-10-28 ~17:55Z read; the step-6 baseline re-read is binding).
+  148 proposals read support {} (figures as of the 2026-10-28T18:08Z re-read; the pre-app snapshot is the reference).
 - verify: none.
 - Image 36c5bf19 (cpt-studio:2734a6f31ce0) is kept: it is the rollback image. Nothing removes it,
   cpt-studio:29e4d1f52939, cpt-studio-fixcheck:8a06fd08c9a2 or any other image.
@@ -239,7 +250,10 @@ http-vhost, cert and https-vhost. cpt-studio/deploy/ (Dockerfile, entrypoint, gu
   55 entries on 2026-10-26 and again on 2026-10-28.
 - app.quillmd.com /health/ (status and release) and the check-cotenants.sh results.
 - Every container outside CPT Studio running at preflight (same id, still running), and every existing volume.
-- Every Let's Encrypt lineage and renewal config (cpt.quillmd.com's included), and the ACME account set.
+- Every Let's Encrypt lineage and renewal config (cpt.quillmd.com's included), and the ACME account set. verify
+  compares the OTHER lineages and renewal configs with preflight; cpt.quillmd.com's lineage and the ACME account set
+  are read by preflight only and re-read by no later phase (this act does not touch them: deploy/ and the vhost are
+  unchanged). Checked after verify by hand where the session can read them; otherwise stated as not re-read.
 - The QuillMD rebuild, its database, users and files.
 - /etc/cpt-studio/ and its files.
 - cpt-studio-db: the same container, image, port and restart policy, running throughout.
@@ -247,7 +261,8 @@ http-vhost, cert and https-vhost. cpt-studio/deploy/ (Dockerfile, entrypoint, gu
 - The two ReferenceSource rows and 34,665 reference facts; the two accounts.
 - Every existing encounter, revision, source file, provider run, assessment, proposal, decision, clarification,
   audit event, report and job. They gain the new columns' defaults and nothing else.
-- No `nginx -t` warning may be added.
+- No `nginx -t` warning may be added. No phase after preflight runs `nginx -t`: the operator runs the installer's
+  read-only nginx_test probe after verify and compares it with the two known warnings.
 
 ## Validation per phase
 
@@ -267,9 +282,9 @@ In particular:
   - the migrate log applies studio.0006 and nothing else;
   - unrunnable_stages.stuck is 0 and its known kinds include review2;
   - replaced names the two 2734a6f3 container ids;
-  - health is {status ok, service cpt-studio, data_mode synthetic-only, database ok, release 2b82889fea5870921062cf31eefa0c0ad78a1c31}
-    through 127.0.0.1:9150;
-  - the new worker stayed up.
+  - ok true, which the installer gives only after its readiness checks of the new web and worker passed; then,
+    checked by the operator (not receipt fields): /health/ through 127.0.0.1:9150 is {status ok, service cpt-studio,
+    data_mode synthetic-only, database ok, release 2b82889fea5870921062cf31eefa0c0ad78a1c31}, and `docker ps` shows the new worker up.
 - verify:
   - no difference from the preflight baseline;
   - the deployed containers' hardening;
@@ -292,14 +307,19 @@ In particular:
   second review's response refused whole, or left a second review unread (second_review_refused,
   second_review_unread), has no state 2734a6f3 reads truthfully, so the old pair is not restored over it: the new
   pair is left stopped, the old pair parked, and the receipt names the encounters. If the stages cannot be closed,
-  the new pair is left stopped and the old pair parked: run rollback-app under this declaration, then rename the
-  parked pair back (ops/INSTALL.md, Recovery notes). Expected afterwards: health release 2734a6f3 and no *-previous
-  container. On the baseline shape (12 encounters, 12 succeeded and sent runs, no second review, nothing queued) no
-  such record exists, so the restored worker would start; measured on that shape (final refutation, rollback lens),
-  the failure path's close names no hazard and relabels one encounter, gi-09 (fcfbba8f-8dd0-426e-b298-63e692f56e39,
-  labelled 'No code selected for approval'), whose put-back changes nothing: {"encounters": 1, "changed": {}}. On
-  this route those values are written to the phase's app-<stamp>-04-undo.log, not to its receipt, whose details are
-  the original failure's.
+  or the put-back fails, the new pair is left stopped and the old pair parked: run rollback-app under this
+  declaration, then rename the parked pair back AND start it (park() stopped it before renaming it):
+  `docker rename cpt-studio-worker-previous cpt-studio-worker && docker start cpt-studio-worker`, then the same for
+  web, or the worker left stopped where the receipt names records 2734a6f3 would act on wrongly (ops/INSTALL.md,
+  Recovery notes). Expected afterwards: health release 2734a6f3 and no *-previous container. On today's shape (12
+  encounters, 12 succeeded and sent runs, no second review, nothing queued) no such record exists, so the restored
+  worker would start. Measured on the 11-encounter dump of 2026-10-27 with this revision's installer (the
+  differential round's live check; the final refutation's lens with c3c034a08's): the failure path's close names no
+  hazard and relabels one encounter, gi-09 (fcfbba8f-8dd0-426e-b298-63e692f56e39, labelled 'No code selected for
+  approval'), whose put-back changes nothing: {"encounters": 1, "changed": {}}; the twelfth encounter, 6906e06f, is a
+  review-queue state, never relabelled. On this route those values are written to the phase's undo log,
+  app-<stamp>-NN-undo.log (-04- when both new containers existed at the failure, -03- when only the web was
+  launched), not to its receipt, whose details are the original failure's.
 - After a successful app there is no parked pair. Going back to 2734a6f3 is three steps:
   1. reconcile every unknown provider outcome on the new web;
   2. run rollback-app under this declaration (cpt.quillmd.com answers 502 from here until step 3). It reads first,
@@ -307,8 +327,8 @@ In particular:
      refused whole or left unread), and refuses, naming the encounters and stopping nothing, while any exists; they
      are cleared on this revision's web as ops/INSTALL.md says (reconcile, Resume, answer the date question, or an
      addendum), or this revision stays installed. Otherwise it closes the stages, puts back the states this revision
-     labels from more than the state, and removes the pair. On the baseline shape, measured (final refutation,
-     rollback lens, nothing parked and with 2734a6f3's pair parked): ok true, details.stages_closed {"closed": 0,
+     labels from more than the state, and removes the pair. On the baseline shape, measured with this revision's
+     installer (the differential round's live check; nothing parked, and with 2734a6f3's worker parked): ok true, details.stages_closed {"closed": 0,
      "encounters": 0, "hazards": {}, "kinds": [], "relabel": ["fcfbba8f-8dd0-426e-b298-63e692f56e39"],
      "runs_not_sent": 0, "runs_unknown": 0}, details.states_put_back {"encounters": 1, "changed": {}}, every state
      and updated_at unchanged. That was measured on the 11 encounters of the 2026-10-27 dump; the twelfth, 6906e06f,
@@ -345,6 +365,10 @@ In particular:
   pre-app dump is not a backup scheme.
 - If the build cache was pruned, the image's OS packages are not those of 36c5bf19.
 - Co-tenants and app.quillmd.com are judged only by routing, health and check-cotenants equality.
+- verify skips every cpt-studio-* container when it checks that the containers running at preflight still run, so
+  cpt-studio-db's id and the disposable cpt-studio-test-pg are compared by nothing in this act, and a leftover
+  *-previous container appears only in details.containers_appeared_elsewhere without failing verify. The operator
+  checks these by hand after verify (`docker ps -a`).
 
 ## Stop conditions
 
