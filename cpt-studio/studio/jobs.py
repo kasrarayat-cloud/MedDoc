@@ -821,15 +821,20 @@ def _second_review_blocker(encounter, revision, context, assessment):
 def second_review_status(encounter):
     """What the encounter view shows about the bounded second review: whether one can be asked for now, why not, the
     unresolved items it would ask about, and ``run``: the second review made for the answer the current assessment
-    reads, whatever its outcome (None when none was), so the page states the outcome of one whose response was not read
+    (the one the view shows, on its own revision) reads, whatever its outcome (None when none was), so the page states
+    the outcome of one whose response was not read
     or not used, never that no code was proposed (skeptic of refutation 7c8 reports-5: an unknown, failed or refused
     second review left the panel saying "No CPT codes were proposed for this document")."""
     revision, context, assessment = (encounter.current_revision, encounter.current_context,
                                      encounter.current_assessment)
     items = _second_review_items(assessment)[0] if assessment is not None else []
     reason = _second_review_blocker(encounter, revision, context, assessment) if items else ''
-    made = (_second_run_for(revision, assessment.provider_run, any_outcome=True)
-            if assessment is not None and revision is not None and assessment.revision_id == revision.pk else None)
+    # Made for the answer the SHOWN assessment reads, on that assessment's own revision: while a newer revision is not
+    # assessed yet (an addendum, then Stop, or a predict an unknown outcome blocks) the page still shows this one, so it
+    # still states its second review's outcome (refutation p2, reports2:1: naming a run only for an assessment of the
+    # current revision left the panel saying "No CPT codes were proposed" beside the unknown-outcome reconcile card).
+    made = (_second_run_for(assessment.revision, assessment.provider_run, any_outcome=True)
+            if assessment is not None else None)
     return {'available': bool(items) and not reason, 'reason': reason,
             'items': [item.get('label', '') for item in items][:8], 'run': str(made.pk) if made is not None else None}
 

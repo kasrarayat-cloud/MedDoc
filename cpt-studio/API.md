@@ -210,7 +210,12 @@ documented service is left without a supported proposal. `run` is the id (in
 `provider_runs`) of the newest second review made for the answer the current
 assessment reads, whatever its outcome, and null when none was: while its
 response was not read (unknown, failed, not sent) or not used (refused whole),
-the page states that outcome and never says that no CPT codes were proposed. An
+the page states that outcome and never says that no CPT codes were proposed.
+The current assessment is the one `assessment` shows, and `run` is looked up on
+that assessment's own revision: after an addendum, while the new revision is not
+assessed yet (stopped, or its predict blocked by an unknown outcome), the page
+still shows the earlier assessment and still states its second review's
+outcome (refutation p2, reports2:1). An
 assessment never queues a second review (owner decision 2026-10-27).
 
 ## POST /api/encounters/{id}/stop · /resume · /reconcile

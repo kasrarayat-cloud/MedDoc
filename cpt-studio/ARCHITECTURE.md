@@ -1627,7 +1627,11 @@ view's `second_review.run` names the newest second review made for the answer
 the current assessment reads, whatever its outcome; while its response was not
 read (unknown, failed, not sent) or not used (refused whole), the suggestions
 panel states that outcome from its row or its own failed check, never "No CPT
-codes were proposed" (skeptic of refutation 7c8, reports-5).
+codes were proposed" (skeptic of refutation 7c8, reports-5). The run is looked
+up on the shown assessment's own revision, so after an addendum, while the new
+revision is not assessed yet (stopped, or its predict blocked by an unknown
+outcome) and the page still shows the earlier assessment, the panel still
+states that assessment's second review (refutation p2, reports2:1).
 
 ### 5.12 Repairs after the full-suite triage of WIP 3 (2026-10-27)
 

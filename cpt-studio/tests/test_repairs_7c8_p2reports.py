@@ -192,3 +192,95 @@ class UnproposedKeepsWhatTheReconciliationAccountsForTests(SimpleTestCase):
         result = run(plain, [sel(SCOPE[0], span(plain, SCOPE[1]))])
         check = unproposed(result)
         self.assertEqual((check.status, check.detail), ('info', checks.VISIT_NOT_MISSED))
+
+
+# --- reports2:1: the panel states the shown assessment's second review, whatever the current revision ----------------
+
+ADDENDUM = {'text': 'Signed by the fictional endoscopist.', 'synthetic_attestation': 'yes'}
+
+
+class PanelStatesTheShownAssessmentsSecondReviewTests(Harness):
+    """reports2:1: the primary response read with no code, a reviewer asks for the second review and it ends unknown (or
+    failed); an addendum (how a clarification is answered) then leaves revision 1's assessment on screen while revision
+    2 is not assessed - its predict blocked by the unknown outcome, or stopped. second_review.run was null (it named a
+    run only for an assessment of the current revision), so the suggestions panel said "No CPT codes were proposed for
+    this document." beside the reconcile card. It names the second review made for the answer the SHOWN assessment
+    reads, and the panel states that review's outcome."""
+
+    def asked(self, second):
+        self.use(SecondOutcome([], [('45378', SCOPE_SENTENCE)], second))
+        encounter_id = self.create(COLONOSCOPY)
+        drain()
+        self.assertEqual(ask(self.client, encounter_id).status_code, 201)
+        drain()
+        return encounter_id, models.ProviderRun.objects.get(encounter_id=encounter_id, purpose='second_review')
+
+    def addendum(self, encounter_id, stop=False):
+        reply = self.post(f'/api/encounters/{encounter_id}/addenda', ADDENDUM)
+        self.assertEqual(reply.status_code, 201, reply.content)
+        if stop:
+            self.assertIn(self.post(f'/api/encounters/{encounter_id}/stop').status_code, (200, 201, 202))
+        drain()
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        self.assertEqual((encounter.current_revision.number, encounter.current_assessment.revision.number), (2, 1))
+
+    def panel(self, encounter_id):
+        """The suggestions panel's paragraph when no code is selected (a stopped revision 2 has no text, so the source
+        page shows an empty-card paragraph of its own)."""
+        import re
+        detail = self.detail(encounter_id)
+        (copy,) = re.findall(r'<div class="check-list-card"><p class="card-empty">(.*?)</p></div>',
+                             screen(detail)['codes'])
+        return detail, copy
+
+    def test_an_unknown_second_review_is_stated_after_an_addendum(self):
+        encounter_id, run_ = self.asked('unknown')
+        self.addendum(encounter_id)
+        detail, copy = self.panel(encounter_id)
+        self.assertEqual(detail['state'], 'provider_unknown')
+        self.assertEqual(detail['second_review']['run'], str(run_.pk))
+        self.assertNotIn(NONE_PROPOSED, copy)
+        self.assertIn(f'{ASKED} It was sent, but its outcome is unknown: no response was recorded, so nothing from it '
+                      f'was read. {NOT_A_FINDING}', copy)
+        self.assertEqual(len(self.provider.requests), 2)  # nothing more was sent
+
+    def test_a_failed_or_unknown_second_review_is_stated_after_an_addendum_and_stop(self):
+        for second, said in (('failed', 'It failed: HTTP 500 from the provider. Nothing from it was used.'),
+                             ('unknown', 'It was sent, but its outcome is unknown: no response was recorded, so '
+                                         'nothing from it was read.')):
+            with self.subTest(second):
+                self.fresh(f'Synthetic workspace {second}')
+                encounter_id, run_ = self.asked(second)
+                self.addendum(encounter_id, stop=True)
+                detail, copy = self.panel(encounter_id)
+                self.assertEqual(detail['state'], 'stopped')
+                self.assertEqual(detail['second_review']['run'], str(run_.pk))
+                self.assertNotIn(NONE_PROPOSED, copy)
+                self.assertIn(f'{ASKED} {said} {NOT_A_FINDING}', copy)
+
+    def test_control_the_new_revisions_assessment_never_reads_the_older_ones_review(self):
+        # the primary read with no code, the second review unknown, every later request answered (with no code)
+        self.use(TwoPassProvider([], [], outcomes=['succeeded', 'unknown']))
+        encounter_id = self.create(COLONOSCOPY)
+        drain()
+        self.assertEqual(ask(self.client, encounter_id).status_code, 201)
+        drain()
+        run_ = models.ProviderRun.objects.get(encounter_id=encounter_id, purpose='second_review')
+        self.assertEqual(run_.state, 'unknown')
+        reply = self.post(f'/api/encounters/{encounter_id}/reconcile',
+                          {'provider_run_id': str(run_.pk), 'note': 'Checked the provider console: nothing recorded.'})
+        self.assertIn(reply.status_code, (200, 201), reply.content)
+        drain()
+        reply = self.post(f'/api/encounters/{encounter_id}/addenda', ADDENDUM)
+        self.assertEqual(reply.status_code, 201, reply.content)
+        drain()
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        self.assertEqual((encounter.current_revision.number, encounter.current_assessment.revision.number), (2, 2))
+        detail = self.detail(encounter_id)
+        self.assertIsNone(detail['second_review']['run'])  # none was made for revision 2's answer
+
+    def test_control_before_the_addendum_the_run_is_named_as_before(self):
+        encounter_id, run_ = self.asked('unknown')
+        detail, copy = self.panel(encounter_id)
+        self.assertEqual(detail['second_review']['run'], str(run_.pk))
+        self.assertNotIn(NONE_PROPOSED, copy)
