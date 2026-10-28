@@ -349,10 +349,12 @@ time readings and in the provider request). Dates read as ISO, US, "October 20,
 2026" and day-month-year ("20 October 2026", "20 Oct 2026", "20-Oct-2026").
 
 **The service date** (refutation r1 and its CONTEXT rounds 1-3, 2026-10-27;
-`_service_dates`, `_service_date_fact`). Every dated candidate outside a plan
-or history section is either the note's own date or kept as documented
-evidence, never dropped (a dropped candidate had let a member's 1998 date, or
-another occurrence's date, be sent):
+refutation phase 2's rules N1-N6, 2026-10-28, P2DN; `_service_dates`,
+`_service_date_fact`). A document date reaches the provider request only from
+a date-of-service label's own value (N1). Every dated candidate outside a plan
+or history section is either that date or kept as documented evidence, never
+dropped (a dropped candidate had let a member's 1998 date, or another
+occurrence's date, be sent):
 - labelled dates: a date-of-service label ("Date of service / procedure /
   visit / encounter", "DOS", "Procedure date", "Visit date"), which may name
   the time ("Date/Time of Service", "DOS/Time", "Visit Date & Time") and be
@@ -361,15 +363,34 @@ another occurrence's date, be sent):
   date, "20th of October") is found by a scan - the label's own field on its
   line, the same column of the next row under a label heading a table column,
   or the next non-blank line under a label ending its line - and kept as
-  unread evidence; a value that is no calendar date ("02/30/2026") likewise;
+  unread evidence; a value that is no calendar date ("02/30/2026") likewise.
+  A label's own value opens its field (N2): a field that another field's
+  label opens ("Date of Service: Referral date: 10/13/2026"), whose only date
+  is a date of birth, or that anything but its own value opens ("DOS: N/A
+  Referral date: 10/13/2026", "Visit Date: TBD DOB (age) 01/01/1998") states
+  no date of its own and is kept as evidence that reads no date - the label
+  alone, never its field (N3); a field with no digit at all ("Date of service:
+  N/A") keeps nothing;
 - dated titles in the first 12 non-empty lines: "<words> visit | encounter |
   consultation | consult | note | report" with its date (or with the date
-  alone on the next line), a bare "Date:" line, and a subject line ("Re:",
-  "Regarding:", "Subject:") naming the encounter;
+  alone on the next line), a bare "Date:" or "Date/Time:" line (clocked or
+  not), and a subject line ("Re:", "Regarding:", "Subject:") naming the
+  encounter;
 - dated service lines near the top: a line naming a service this release codes
-  that ends with a date ("Colonoscopy - 10/14/2026"); that date is the line's
-  own only when no other field or date stands between the service's name and
-  it, and a date before the name is never its value.
+  that ends with a date ("Colonoscopy - 10/14/2026"); the line's own date is its
+  only date after the service's first name that is no date of birth (a line
+  with two such dates reads none), a date before the name is never its value,
+  and its evidence leaves a date of birth out (N2).
+
+A date of birth is never a service date (N2; refutation phase 2, dates:0,
+dates:2 and interplay:0: a member's 1998-01-01 had agreed with a date of birth
+in an empty date-of-service field or on a dated service line, and was sent). A
+date with a birth label before it - DOB, D.O.B., D-O-B, date of birth, birth
+date, birthday, birth, born, b., and their joined forms ("DOB/Age", "Age/DOB",
+"DOB (age)") - in any position or bracket, under a birth label heading its table
+column, or on the line under a birth label that ends its line, is no
+candidate's value, never agrees with a member date and is never read from the
+evidence a member date is matched against.
 
 Each candidate reads as the note's own, unplaced (it may be the date), aside
 (another occurrence's) or another document's:
@@ -391,45 +412,123 @@ Each candidate reads as the note's own, unplaced (it may be the date), aside
   Yes", "OUTSIDE COLONOSCOPY") holds it, unless the qualifier is part of a
   coded service's name ("Follow-up visit"). A phrase after the date that wraps
   onto the next line in lower case or in a bracket is read there too;
-- only the first title naming this note can be its heading (own; unplaced
-  when qualified: "GI follow-up visit - 10/20/2026"). A title naming another
-  discipline's document - pathology, cytology, a biopsy, specimen or
-  laboratory report, radiology or imaging, anesthesia, nursing - is never the
-  heading, whatever its title word ("Surgical pathology consultation:
-  10/17/2026"); a coded service's name speaks only for the words it covers
-  ("Colonoscopy pathology report" is a pathology report). Neither is a report
-  title naming no coded service ("Procedure report - 10/14/2026"). A subject
-  line is unplaced; a later unqualified title is own beside an own heading;
-- a dated service line is evidence only, except beside a bare "Date:" line,
-  which names no encounter (a letter's date): there every dated line naming
-  the service, a sentence's included, is a candidate it must agree with.
+- only the first title naming this note reads as its own (unplaced when
+  qualified: "GI follow-up visit - 10/20/2026"), and so speaks for the note's
+  date. A title naming another discipline's document - pathology, cytology, a
+  biopsy, specimen or laboratory report, radiology or imaging, anesthesia,
+  nursing - is never the note's own, whatever its title word ("Surgical
+  pathology consultation: 10/17/2026"); a coded service's name speaks only for
+  the words it covers ("Colonoscopy pathology report" is a pathology report).
+  Neither is a report title naming no coded service ("Procedure report -
+  10/14/2026"). A subject line is unplaced; a later unqualified title is own
+  beside an own first title;
+- a dated service line is evidence only (aside); a subject line naming the
+  service is unplaced.
 
-The date is the note's own read labelled dates when they agree, or, with
-none, its own read title - only when every candidate that could speak for this
-note's date agrees: beside an own label, every unplaced or unread label, the
-own title, a qualified first title and a subject line; beside an own title,
-every labelled date (one set aside as another occurrence's too, which the
-reader may have misread), a subject line and another document's title. A
-difference is a conflict with every side kept (the values listed when all are
-read): a title and a label that differ are asked, never a silent choice of the
-stronger source. With no usable own date every candidate is kept as evidence
-and the date is asked (`origin=missing`, the note says why). The candidates are
-compared by identity, so the work is linear in the labelled dates.
+The date is the note's own read labelled dates when they agree, and only those
+(N1): a label read as the note's own - the closed list above, at most with the
+name of a service this release codes ("Colonoscopy procedure date"), never one
+carrying words this service cannot place ("Initial visit date", "Cancelled
+procedure date": unplaced, asked; N4) - whose date stands alone in the label's
+own field (N5, below). It is the date only when every candidate that could
+speak for this note's date agrees: every unplaced or unread label, a labelled
+date that does not stand alone in its field, the note's own title, a qualified
+first title and a subject line. A difference is a conflict with every side
+kept (the values listed when all are read): a title and a label that differ
+are asked, never a silent choice of the stronger source. With no usable own
+date every candidate is kept as evidence and the date is asked
+(`origin=missing`, the note says why). The candidates are compared by
+identity, so the work is linear in the labelled dates.
+
+No dated title, bare "Date:" or "Date/Time:" line, dated service line or
+subject line is ever the date (N1). Beside an own labelled date such a
+candidate questions it when it differs, as above; as the only dated text it is
+the evidence of a date asked - the request goes out without a date line, and
+the member's answer agrees with a date it states. This is the installed
+revision 057a7d398's behaviour for those shapes: it read no date from a title
+or a "Date:" line, and sent none. Rounds 2 and 3 had taken them as the note's
+own, and a fax's "Date/Time: 10/27/2026 14:30", a letter's "Date:" above the
+encounter line it names and "Cardiology consultation: 10/09/2026" above a
+colonoscopy were sent as the date of service, the snare polypectomy done on
+10/14 excluded against them (refutation phase 2, dates:1, dates:3, dates:5);
+four rounds of qualifier words had each been refuted by the next paraphrase,
+so the rule is one of source, never of vocabulary. A document whose only dated
+text is its title or "Date:" line therefore asks its date, as the installed
+revision did.
+
+The label's own field (N5; refutation phase 2, dates:8: "Procedure date:
+11/04/2026 (pending authorization)" in an office visit and "(cancelled)" in an
+EGD report were sent). A labelled date stands alone when nothing but a clock
+follows it up to the end of its field: the end of the line (a full stop may
+close it), a row's cell bar, or the next field's label - a few words and a
+colon that is not a clock's, after a field break (two or more spaces or a tab
+before "Place of service: Office" on the date's line) or, written with a
+capital, one space after the date ("DOS: 10/14/2026 DOB: 01/01/1998", a
+flattened header row). A bracket, words or another date there make it a
+question: asked, its date kept as evidence a member's answer may agree with,
+and speaking against an own labelled date. Only the label's own field is read
+this way; the lines around it are read by the qualifier reach above, as before:
+no header region, header-label list or title-word list is read.
 
 A member date settles the date only when it agrees with the document: against
 a documented date it must equal it (otherwise it is a member conflict, and
 nothing is built or sent for the request: session interpretation 19); against
 a conflict within the document it must be one of the listed dates; against
-kept evidence it must be a date some candidate states as its own value - each
-candidate's evidence holds only its label, title or line and its own value, so
-a date of birth written beside the date of service ("DOS: 10/14/26 DOB:
-01/01/1998", a table whose header names both) is never one, and evidence that
-reads no calendar date holds every member date until the document is amended
-or the value cleared. With no dated evidence any member date supplies the
-fact. An agreeing member value is stored as the member's (`origin=user`, no
-evidence). A date asked of the member is no date in the provider request: the
-predict sends the request without a date line, and the member's answer makes a
-second, dated request (5.4: only a member conflict holds the request).
+kept evidence it must be a date some candidate states as its own value (N3) -
+each candidate's evidence holds only its label, title or line and its own
+value, and never a date of birth (N2), so a date of birth written beside the
+date of service ("DOS: 10/14/26 DOB: 01/01/1998", a table whose header names
+both, "Re: Colonoscopy - Synthetic, Alex (DOB 01/01/1998) - 10/14/2026") is
+never one, and evidence that reads no calendar date - an unread value, or a
+date-of-service field that states none - holds every member date until the
+document is amended or the value cleared. With no dated evidence any member
+date supplies the fact. An agreeing member value is stored as the member's
+(`origin=user`, no evidence). A date asked of the member is no date in the
+provider request: the predict sends the request without a date line, and the
+member's answer makes a second, dated request (5.4: only a member conflict
+holds the request).
+
+The setting reader's cost (refutation phase 2, ctxcost:0 and ctxcost:1, both
+present at the installed revision; N6): the place-of-service pattern's
+whitespace runs are possessive ("POS", 96,000 spaces and no code had overrun
+the analyze stage's 60 s, and 48,000 a member's POST /context), and past
+`SETTING_STATEMENT_LIMIT` (200) setting phrases the setting is asked instead of
+every phrase being checked as a statement ("HOPD " 70,000 times had made a
+member's POST /context overrun its 15 s after the pipeline succeeded; a real
+note states its setting a few times, the corpus at most 8).
+
+**Known limits of the service date** (P2DN, recorded for the owner; each is
+pinned by a test named `..._known_limit_...` in
+`tests/test_repairs_7c8_p2dn.py`). Pre-existing qualifier gaps where the lines
+around a labelled date say it is another occurrence's date; each still
+documents, and sends, the qualified date wherever 2fc8cde3d and the installed
+057a7d398 do:
+- refutation phase 2, dates:4: a qualifier more than 80 characters before the
+  label on a long flattened row ("Planned procedure: colonoscopy with possible
+  cold snare polypectomy under monitored anesthesia care Procedure Date:
+  11/04/2026");
+- dates:6: a heading above a block or a list ("Outside colonoscopy:" over
+  "Facility: ..." and "Procedure date: 09/03/2026", or over "- Procedure date:
+  ...");
+- dates:7: another field beside the label ("Status: Scheduled" or "Facility:
+  Outside hospital" on the next line); its "; outside colonoscopy." after the
+  date, in the label's own field, is asked by N5;
+- dates:8: a qualifier outside the reader's vocabulary in a field above
+  ("Recall:", "Cancelled procedure:") or before the label on a short row
+  ("Cancelled colonoscopy: yes Procedure Date: 11/04/2026"); its brackets after
+  the date are asked by N5;
+- the P2DATES skeptic's sk:5: a title-shaped line above ("Cancelled
+  colonoscopy", "Recall procedure");
+- sk:6: a status, setting or provider beside the label ("Patient status: pending
+  authorization", "Setting: cancelled", "Provider: ... (procedure postponed)");
+- sk:7: another discipline's undated title over a date label ("Cardiology
+  consultation" over "Date of service: 10/09/2026").
+They stay because closing them by structure - a header block's lone labelled
+date only, the P2DATES variant on branch `wip/7c8-p2dates` - asked the date of
+nearly every real document (8 of the 11 live encounters, every PDF or Word
+upload, 8,416 of the reading gate's 8,446 texts), a capability loss the owner
+has not accepted; and closing them by vocabulary has leaked in every refutation
+round, each list of qualifier words refuted by the next paraphrase.
 
 ### 5.3 `studio/gi/profiles` + `studio/gi/detect` — routing
 
@@ -1571,9 +1670,10 @@ preprocedure work on a procedure day is not a separate E/M.
 Wider reading (2026-10-27, from an independently written 43-document
 synthetic corpus and fresh paraphrase tests; `gi-routing@4`, `gi-context@2`):
 - Service date: read by the context (5.2, "The service date"): the note's own
-  labelled dates, or with none its own dated title or bare "Date:" field in its
-  first 12 non-empty lines, and only when every other candidate that could
-  speak for the note's date agrees; otherwise the date is asked, with every
+  labelled dates whose date stands alone in the label's field, and only when
+  every other candidate that could speak for the note's date agrees; a dated
+  title or a bare "Date:" field is evidence, never the date (refutation phase 2,
+  as on the installed revision); otherwise the date is asked, with every
   candidate kept as evidence. A member's value that differs from the
   document's is a conflict with both kept.
 - Structure: a numbered part ("PART 2 - PROCEDURE NOTE: EGD …") is read by the
@@ -1854,10 +1954,11 @@ rule, never a sentence patch). The rules this added, by module:
   date that is no calendar date, a place-of-service code it does not recognise) is a member conflict with both sides
   kept - never a silent replacement that is sent or that makes a held visit ready. Dated text the reader does not read
   as the date, or cannot place, is kept as evidence a member date must agree with (5.2).
-- Context (`studio/gi/context.py`): the service date is the rule of 5.2 ("The service date", CONTEXT rounds 1-3): every
-  candidate is the note's own or kept as evidence; only the first title naming this note can be its heading; a title
-  and a label that differ are asked; a member value settles a document-internal conflict only by choosing one of its
-  values, and agrees with kept evidence only through a date some candidate states as its own value; a member conflict
+- Context (`studio/gi/context.py`): the service date is the rule of 5.2 ("The service date", CONTEXT rounds 1-3 and
+  refutation phase 2's N1-N6): every candidate is the note's own or kept as evidence; only a date-of-service label's
+  own value standing alone in its field is ever the date - no title or "Date:" line is; a title and a label that differ
+  are asked; a member value settles a document-internal conflict only by choosing one of its values, and agrees with
+  kept evidence only through a date some candidate states as its own value, never a date of birth; a member conflict
   is described as one (`is_member_conflict`, one predicate for every reader).
 - Second review gate (`engine._routing_agrees`, refutation r1): a second review is offered (and, when a reviewer asks,
   paid for) only about an unresolved item
