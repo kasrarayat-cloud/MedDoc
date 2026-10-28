@@ -346,7 +346,8 @@ class _Candidate:
     # 'read' | 'invalid' | 'unread' | 'empty' - a date-of-service field that states no date of its own (rule N3, P2DN's
     # fix round, issue 6): the label alone, never its field - or a dated line whose dates are all another field's or
     # dates of birth, its text before them; evidence that reads no date when the note states none, and never speaking
-    # against the note's own date, as it states none that could differ
+    # against the note's own date, as it states none that could differ. A field that STATES a date it cannot place is
+    # 'unread', never 'empty' (the final refutation, fr-dr:0): it speaks, and the date is asked
     form: str
     # A table column's value cell, kept beside the label heading it (span): never the cells between them. Every span a
     # candidate keeps holds no date but its own value (refutation round 3, sk:1), so the dates its evidence reads are the
@@ -742,6 +743,10 @@ def _blank_to(text: str, start: int, end: int) -> bool:
 # is the line's only text and the next line opens with the value: "To: Dr. Robin B." or "chronic hepatitis B." above
 # "Colonoscopy 10/14/2026", or "DOB" heading the LAST column, marked 10/14 as a date of birth (issue 7).
 _NO_VALUE = object()  # a field label whose value cannot be located: it states no date of its own
+# The final refutation, fr-dr:0: a field label whose value cannot be placed although a date stands where it would be (a
+# column or a stack whose positions do not match, one value under a joined header): it STATES a date the reader cannot
+# take, so it is asked (form 'unread', the label alone - the date may be a date of birth, rule N2), never silent.
+_UNPLACED = object()
 _CELL_GAP = re.compile(r'[ \t]{2,}+|\t')  # a field break between aligned cells (possessive: a long run is read once)
 _HEADER_CELL = re.compile(r"[A-Za-z][^\d:#|\n]{0,60}+[:#]?+")  # a whole cell that is a label: no digit, a colon at its end
 HEADER_CELLS = 24  # a row with more aligned cells than this is never read as a header row
@@ -761,10 +766,19 @@ def _header_row(text: str, rows: '_Rows', ls: int, le: int) -> Optional[list[tup
     return cells
 
 
+def _states_a_date(text: str, start: int, end: int) -> bool:
+    """Whether [start, end) holds a value that starts as a date does with no birth label right before it (fr-dr:0): a
+    date a field whose positions do not match may state as its own. Only _BIRTH_BEFORE is read here, never
+    _birth_cells, which reads the positions this answers for."""
+    return any(_BIRTH_BEFORE.search(text, max(0, at.start() - _BIRTH_REACH), at.start()) is None
+               for at in _GAP_DATE.finditer(text, start, end))
+
+
 def _column(text: str, rows: '_Rows', ls: int, le: int, cell_start: int, label_end: int, cell_tail: int):
-    """For a label that is a whole cell of an aligned header row: the cell at its position in the row below, or
-    _NO_VALUE when the row below has another number of cells; None when the label heads no aligned column (it is not
-    one cell's only text, or runs across two cells)."""
+    """For a label that is a whole cell of an aligned header row: the cell at its position in the row below, or - when
+    the row below has another number of cells - _UNPLACED where that row states a date and _NO_VALUE where it states
+    none (fr-dr:0); None when the label heads no aligned column (it is not one cell's only text, or runs across two
+    cells)."""
     cells = _header_row(text, rows, ls, le)
     if cells is None:
         return None
@@ -774,7 +788,9 @@ def _column(text: str, rows: '_Rows', ls: int, le: int, cell_start: int, label_e
         return None
     row = rows.below(le)
     values = rows.aligned(*row) if row is not None else []
-    return values[k] if len(values) == len(cells) else _NO_VALUE
+    if len(values) == len(cells):
+        return values[k]
+    return _UNPLACED if row is not None and _states_a_date(text, *row) else _NO_VALUE
 
 
 def _line_label(text: str, ls: int, le: int) -> Optional[str]:
@@ -793,7 +809,8 @@ def _opens_with_date(text: str, start: int, end: int) -> bool:
 def _stacked_value(text: str, rows: '_Rows', ls: int, le: int):
     """For a label alone on its line: (the line holding its value, whether read by position) - the value line at the
     label's place in the run of value lines under a stack of label-only lines, or the next line when it opens with a
-    date - else None, or _NO_VALUE when the stack's values cannot be placed."""
+    date - else None; when the stack's values cannot be placed, _UNPLACED where a date stands at a date or birth label's
+    place and _NO_VALUE where none does (fr-dr:0)."""
     up, cur = [], ls
     for _ in range(STACK_REACH + 1):
         line = rows.above(cur)
@@ -823,7 +840,9 @@ def _stacked_value(text: str, rows: '_Rows', ls: int, le: int):
             return values[here], True
         other = 'birth' if kinds[here] == 'dos' else 'dos'
         if here != len(lines) - 1 or other in kinds:
-            return _NO_VALUE
+            # fr-dr:0: "DOB:" / "Date of service:" over "10/14/2026" alone states a date whose place cannot be told
+            return _UNPLACED if any(kind != 'other' and _states_a_date(text, *values[i])
+                                    for i, kind in enumerate(kinds[:len(values)])) else _NO_VALUE
     row = rows.below(le)  # one label above its value, or the last of labels of another kind: the next line
     return (row, False) if row is not None and _opens_with_date(text, *row) else None
 
@@ -885,7 +904,7 @@ def _birth_cells(text: str) -> frozenset:
         if column is None and _blank_to(text, ls, m.start()) and _blank_to(text, tail, le):
             stacked = _stacked_value(text, rows, ls, le)  # the birth label alone on its line
             column = stacked[0] if isinstance(stacked, tuple) else None
-        if column is not None and column is not _NO_VALUE:
+        if isinstance(column, tuple):  # a value placed by position (never _NO_VALUE or _UNPLACED)
             value = _first_value(text, column[0], min(column[1], column[0] + VALUE_REACH), births=False)
             if value is not None:
                 found.add(value[0])
@@ -994,16 +1013,24 @@ def _value_extent(text: str, start: int, end: int) -> Optional[tuple[int, int]]:
     field's label, when it OPENS the field (after blanks); that part whole when it has a digit and no date-shaped run;
     None when the field states no date of its own (rule N2). Refutation phase 2, dates:0: "DOS: DOB: 01/01/1998 MRN:
     0000", "Date of Service: Date of Birth: 01/01/1998" made the date of birth the label's value, so a member's
-    1998-01-01 agreed with it and was sent. A field that opens with another field's label, whose only dates are dates of
-    birth, or that is opened by anything but its own value ("DOS: DOB/Age 01/01/1998", "Visit Date: TBD DOB (age)
-    01/01/1998", "DOS: N/A Referral date: 10/13/2026"; the P2DATES skeptic's sk:3 and sk:4) states no date - whatever
-    the words: a label's own value opens its field."""
+    1998-01-01 agreed with it and was sent. A field that opens with another field's label or whose only dates are dates
+    of birth ("DOS: DOB/Age 01/01/1998", "Visit Date: TBD DOB (age) 01/01/1998", "DOS: N/A Referral date: 10/13/2026";
+    the P2DATES skeptic's sk:3 and sk:4) states no date. A label's own value opens its field: a date after other words
+    is not certainly its value ("see 10/20/2026" - only a word list could tell "see" from "TBD"), so no member date
+    agrees with it. The final refutation, fr-dr:0: such a field still STATES a date - "rescheduled to 10/14/2026",
+    "approx. 10/14/2026", "~10/14/2026", a date-shaped run that is no date of birth after other words - and is
+    _UNPLACED: asked, the label alone kept (read as stating none, it never spoke, and "Procedure date: 10/07/2026"
+    beside it was documented and sent). A number that is no date ("MRN 0000") states none."""
     other = _NEXT_LABEL.search(text, start, end)
     stop = other.start() if other is not None else end
     start = _BLANKS.match(text, start, stop).end()
     found = _first_value(text, start, stop)
-    if found is not None:
-        return found if found[0] == start else None
+    if found is not None and found[0] == start:
+        return found
+    while found is not None:  # fr-dr:0: the first date-shaped run after other words
+        if _VALUE_DATE_START.match(text, found[0], found[1]):
+            return _UNPLACED
+        found = _first_value(text, found[1], stop)
     if _first_value(text, start, stop, births=False) is not None or not _DIGIT.search(text, start, stop):
         return None
     return _strip_span(text, start, stop)
@@ -1023,11 +1050,14 @@ def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int
     line_start, line_end = rows.line(m.start())
     # P2DN's fix round, issue 4: a label heading a column of a space- or tab-aligned header row reads the cell at its
     # position in the row below, never the row's first value; a label alone on its line in a stack of labels reads the
-    # value line at its place (_stacked_value). Where the positions do not match it states no date (_NO_VALUE).
+    # value line at its place (_stacked_value). Where the positions do not match no value is its own: it states no date
+    # (_NO_VALUE), or - where a date stands there - a date it cannot place (_UNPLACED, the final refutation's fr-dr:0).
     column = _column(text, rows, line_start, line_end, m.start(), m.end(),
                      tail.end('sep') if sep is not None else m.end())
     if column is not None:
-        if column is _NO_VALUE or column[1] - m.start() > GAP_REACH or not _DIGIT.search(text, *column):
+        if column is _NO_VALUE or column is _UNPLACED:
+            return column
+        if column[1] - m.start() > GAP_REACH or not _DIGIT.search(text, *column):
             return _NO_VALUE
         return column[0], column[1], True
     # Rule N3 (P2DN's fix round, issue 6): a date-of-service FIELD - a label with its separator, or alone on its line -
@@ -1063,6 +1093,8 @@ def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int
         return None
     if _blank_to(text, line_start, m.start()):
         stacked = _stacked_value(text, rows, line_start, line_end)
+        if stacked is _UNPLACED:
+            return _UNPLACED  # fr-dr:0: a stack whose values cannot be placed, a date at a date or birth label's place
         if stacked is None or stacked is _NO_VALUE:
             return _NO_VALUE  # N3: a label alone on its line whose value is on no line below
         (start, end), positional = stacked
@@ -1107,24 +1139,27 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
         where = _label_value(text, m, rows)
         if where is None:
             continue
-        if where is _NO_VALUE:  # P2DN's fix round, issue 4: a header's positions do not match - it states no date
+        if where is _NO_VALUE or where is _UNPLACED:  # P2DN's fix round, issue 4: a header's positions do not match
+            # it states no date ('empty'), or a date it cannot place ('unread': asked, the label alone - fr-dr:0)
             kind, start = _labelled_kind(text, m.start('label'), m.end('label'), m.end(), m.end(), None)
             tail = _LABEL_TAIL.match(text, m.end())
             label_end = tail.end('sep') if tail.group('sep') not in (None, '|') else m.end('label')
-            found.append(_Candidate(_span(text, start, label_end), None, 'label', _READING[kind], 'empty'))
+            found.append(_Candidate(_span(text, start, label_end), None, 'label', _READING[kind],
+                                    'empty' if where is _NO_VALUE else 'unread'))
             continue
         kind, start = _labelled_kind(text, m.start('label'), m.end('label'), where[0], where[1], None)
         # refutation round 3, sk:1: the evidence is the label and its own value, never the text beside it; and a field
-        # that states no date of its own (rule N2: another field opens it, its only dates are dates of birth, or
-        # anything but its own value opens it) is kept as evidence that reads no date - the label alone, never its
-        # field, whose dates are not its own - so a member date is held unless another candidate states it (rule N3;
-        # the P2DATES skeptic's sk:3: dropped with nothing left behind, "Date of Service: Referral date: 10/13/2026"
-        # let a member's 1998-01-01 be taken and sent). A field with no digit at all ("N/A") keeps nothing, as before.
+        # that states no date of its own (rule N2: another field opens it, or its only dates are dates of birth) is kept
+        # as evidence that reads no date - the label alone, never its field, whose dates are not its own - so a member
+        # date is held unless another candidate states it (rule N3; the P2DATES skeptic's sk:3: dropped with nothing
+        # left behind, "Date of Service: Referral date: 10/13/2026" let a member's 1998-01-01 be taken and sent). A
+        # field whose date comes after other words is unread evidence up to that date (fr-dr:0, _value_extent).
         extent = _value_extent(text, where[0], where[1])
-        if extent is None:
+        if extent is None or extent is _UNPLACED:  # it states no date ('empty'), or one it cannot place ('unread')
             tail = _LABEL_TAIL.match(text, m.end())
             label_end = tail.end('sep') if tail.group('sep') not in (None, '|') else m.end('label')
-            found.append(_Candidate(_span(text, start, label_end), None, 'label', _READING[kind], 'empty'))
+            found.append(_Candidate(_span(text, start, label_end), None, 'label', _READING[kind],
+                                    'empty' if extent is None else 'unread'))
             continue
         value_start, value_end = extent
         if where[2]:  # a table column: the label's cell and its value's cell, never the cells between
@@ -1150,11 +1185,15 @@ def _joined_candidate(text: str, label_start: int, label_end: int, joined) -> _C
     """A date-of-service label joined to a birth label in one header (P2DN's fix round, issue 3: "DOB / Date of Service:
     01/01/1998" documented the date of birth and sent it with no member at all): its own value is the one at its place
     in the header (_joined), kept beside the label - never the date of birth - and never the note's own date (two
-    fields share the label's field, rule N5); with no value of its own it is kept as evidence that reads no date."""
-    sep_end, own, _births = joined
+    fields share the label's field, rule N5); with no value of its own it is kept as evidence that reads no date. A
+    header stating values it cannot place (one value under two names: "DOB / Date of Service: 10/14/2026") states a
+    date: asked ('unread'), the label alone - the value may be the date of birth - never silent (the final refutation,
+    fr-dr:0: silent, it let "Procedure date: 10/07/2026" beside it be sent, where 057a7d398 sent no date)."""
+    sep_end, own, births = joined
     if not own:
         kind, start = _labelled_kind(text, label_start, label_end, label_end, label_end, None)
-        return _Candidate(_span(text, start, max(sep_end, label_end)), None, 'label', _READING[kind], 'empty')
+        return _Candidate(_span(text, start, max(sep_end, label_end)), None, 'label', _READING[kind],
+                          'unread' if births else 'empty')
     value_start, value_end = own[0]
     full = FULL_DATE.fullmatch(text, value_start, value_end)
     day = date_from_match(full) if full is not None else None

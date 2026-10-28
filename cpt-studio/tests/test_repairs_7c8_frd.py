@@ -15,6 +15,10 @@ fr-dr:2  a bracket after a bare "Date" or a date-of-service label on a dated lin
 fr-dr:3  a date after another field's label on a subject line was that field's even after its value had ended ("Re:
          Colonoscopy - Referral date: 10/13/2026; performed 10/21/2026"): the line's own dated statement was silenced,
          and the labelled 10/14 it contradicts was sent.
+fr-dr:0  a date-of-service field that STATES a date the reader cannot take as its value ("rescheduled to 10/14/2026",
+         one value under a joined "DOB / Date of Service:", a stack whose values cannot be placed) was kept as evidence
+         that reads no date (form 'empty'), which never speaks: another labelled date was sent though the document gives
+         a different one.
 
 Synthetic text only; no network (the suite's FakeProvider).
 """
@@ -252,3 +256,109 @@ class DateAfterAFieldSValueEndedRequestTests(EndToEnd):
         self.assert_not_excluded(encounter_id, '45385')
         self.set_context(encounter_id, {'service_date': '2026-10-21'})
         self.assert_never_sent(encounter_id, '2026-10-21')
+
+
+# --- fr-dr:0: a field that states a date it cannot place speaks; only a field that states none is silent --------------
+
+OPENERS = ('rescheduled to {D}', 'corrected to {D}', '(rescheduled) {D}', '[{D}]', 'approx. {D}', 'on {D}', '"{D}"',
+           'actual {D}', 'performed {D}', 'amended to {D}', '(corrected) {D}', '~{D}', '*{D}*')
+STATED_LAYOUTS = {  # A: another labelled date above; A2: below; B: an addendum's corrected field
+    'A': 'Colonoscopy report\nProcedure date: 10/07/2026\nDate of service: {F}\n',
+    'A2': 'Colonoscopy report\nDate of service: {F}\nProcedure date: 10/07/2026\n',
+    'B': 'Colonoscopy report\nDate of service: 10/07/2026\nIndication: screening\n\nAddendum\nDate of service: {F}\n',
+}
+UNPLACED = {  # the finding's J1 and ES1 and the verifier's smallest M4: a date the label's place cannot be told for
+    'J1 joined, one value': 'Colonoscopy report\nProcedure date: 10/07/2026\nDOB / Date of Service: 10/14/2026\n',
+    'M4 joined, one value': 'DOS: 10/07/2026\nDOB / DOS: 10/14/2026\n',
+    'ES1 stack, a value missing': 'Colonoscopy report\nProcedure date: 10/07/2026\nDOB:\nDate of service:\n10/14/2026\n',
+    'column, a cell missing': 'Colonoscopy report\nProcedure date: 10/07/2026\nDOB            Date of Service\n'
+                              '10/14/2026\n',
+}
+
+
+class FieldStatingADateItCannotPlaceTests(DateAssertions, SimpleTestCase):
+    """fr-dr:0 (b41f5c6ee, P2DN's fix round issue 6): every date-of-service field the reader could not take a value from
+    was kept as evidence that reads no date - form 'empty', which never speaks against the note's own date, "as it states
+    none that could differ". That holds for a field that states no date ("N/A", blank, only a date of birth), and it was
+    false for one that STATES a date: "Date of service: rescheduled to 10/14/2026" (the value not opening its field), a
+    joined "DOB / Date of Service: 10/14/2026" (one value for two names) or a stack whose value lines cannot be placed
+    ("DOB:" / "Date of service:" / "10/14/2026") beside "Procedure date: 10/07/2026" documented 10/07, which was sent and
+    45385 done on 10/14 excluded as planned (13 openers x 2 layouts: 26 of 26; a62a18c85 and 87fb157ca..3dcfe0ee9 asked).
+    Such a field speaks again (unread, asked), keeping the label alone - a date after other words is not certainly the
+    label's value (P2DN's pinned "see 10/20/2026": only a word list could tell it from "TBD"), and a value whose place
+    cannot be told may be a date of birth (rule N2) - so no member date agrees with it alone. Only a field stating no date
+    stays silent."""
+
+    def test_the_finding_s_four_shapes_ask_the_date(self):
+        for name, text in (('E1', HEAD + STATED_LAYOUTS['A'].format(F='rescheduled to 10/14/2026') + COLO_BODY),
+                           ('E2x', HEAD + STATED_LAYOUTS['B'].format(F='corrected to 10/14/2026') + COLO_BODY),
+                           ('J1', HEAD + UNPLACED['J1 joined, one value'] + COLO_BODY),
+                           ('ES1', HEAD + UNPLACED['ES1 stack, a value missing'] + COLO_BODY)):
+            with self.subTest(name=name):
+                self.assert_never(text, '2026-10-07')
+                self.assertIn(date_fact(text).origin, ('conflict', 'missing'))
+                self.assert_member_conflict(text, ELENA_DATE)
+
+    def test_the_openers_family_asks_the_date(self):
+        for layout, shape in STATED_LAYOUTS.items():
+            for opener in OPENERS:
+                text = HEAD + shape.format(F=opener.format(D='10/14/2026')) + COLO_BODY
+                with self.subTest(layout=layout, field=opener):
+                    self.assert_never(text, '2026-10-07', '2026-10-14')
+                    self.assertIn(date_fact(text).origin, ('conflict', 'missing'))
+                    self.assert_member_conflict(text, ELENA_DATE)
+                    self.assertFalse(any('10/14/2026' in quoted for quoted in evidence_text(text)), evidence_text(text))
+        for opener in OPENERS:  # the verifier's smallest M1: two DOS lines
+            text = HEAD + 'DOS: 10/07/2026\nDOS: ' + opener.format(D='10/14/2026') + '\n'
+            with self.subTest(smallest=opener):
+                self.assert_never(text, '2026-10-07')
+
+    def test_a_date_whose_place_cannot_be_told_asks_and_is_never_its_value(self):
+        for name, shape in UNPLACED.items():
+            text = HEAD + shape + COLO_BODY
+            with self.subTest(shape=name):
+                self.assert_never(text, '2026-10-07')
+                self.assertIn(date_fact(text).origin, ('conflict', 'missing'))
+                self.assert_member_conflict(text, ELENA_DATE)
+                self.assertFalse(any('10/14/2026' in quoted for quoted in evidence_text(text)
+                                     if quoted.startswith(('DOB', 'Date of Service', 'Date of service', 'DOS'))),
+                                 evidence_text(text))
+
+    def test_controls_a_field_stating_no_date_stays_silent(self):
+        # N3's intended silence: no digit, blank, only a date of birth, another field's label opening it
+        for line in ('Procedure date: N/A', 'Procedure date: TBD', 'Procedure date:', 'Procedure date: DOB: 01/01/1998',
+                     'Visit Date: TBD DOB (age) 01/01/1998', 'Procedure date: DOB/Age 01/01/1998',
+                     'Procedure date: N/A Referral date: 10/13/2026'):
+            text = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\n' + line + '\n' + COLO_BODY
+            with self.subTest(line=line):
+                self.assert_document(text, '2026-10-14')
+                self.assert_member_conflict(text, ELENA_DATE)
+        # the reading gate's PDF form: a blank "Date of service:" over other labels, its form field filled below
+        text = (HEAD + 'Endoscopy unit - procedure form\nDate of service:\nProcedure performed:\nExtent reached:\n\n'
+                '[PDF form fields on page 1]\ndos: 2026-10-14\nprocedure: Colonoscopy, screening, to the cecum\n'
+                + COLO_BODY)
+        self.assert_document(text, '2026-10-14')
+        # a stack and a joined header whose positions match still read their own values
+        self.assert_member_date(HEAD + 'DOB:\nDate of service:\n01/01/1998\n10/14/2026\n' + COLO_BODY, '2026-10-14')
+        self.assert_member_date(HEAD + 'DOB / Date of Service: 01/01/1998 / 10/14/2026\n' + COLO_BODY, '2026-10-14')
+
+
+class FieldStatingADateItCannotPlaceRequestTests(EndToEnd):
+    E1 = HEAD + STATED_LAYOUTS['A'].format(F='rescheduled to 10/14/2026') + COLO_BODY
+
+    def test_e1_e2x_j1_es1_send_no_date(self):
+        for name, text in (('E1', self.E1),
+                           ('E2x', HEAD + STATED_LAYOUTS['B'].format(F='corrected to 10/14/2026') + COLO_BODY),
+                           ('J1', HEAD + UNPLACED['J1 joined, one value'] + COLO_BODY),
+                           ('ES1', HEAD + UNPLACED['ES1 stack, a value missing'] + COLO_BODY)):
+            with self.subTest(name=name):
+                encounter_id = self.finished(text)
+                self.assertEqual(self.dates_sent(encounter_id), [[]])
+                self.assert_not_excluded(encounter_id, '45385')
+
+    def test_e1m_nothing_is_sent_for_a_date_the_field_states_after_other_words(self):
+        # the member's answer agrees only with a date some candidate states as its own value: the field's 10/14 is asked
+        # (a capability the installed revision had, which took any member date), never sent unasked
+        encounter_id = self.finished(self.E1, service_date='2026-10-14')
+        self.assert_held(encounter_id)
+        self.assert_never_sent(encounter_id, '2026-10-07', '2026-10-14')
