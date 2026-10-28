@@ -396,6 +396,7 @@ OTHER_EVENT = _rx(r'\b(?:after|before|when|whenever|once|until|because|since|whi
 OTHER_EVENT_PREDICATE = _rx(r'\b(?:was|were|is|are|been|has|have|had|did|does)\b|\b[a-z]{3,}ed\b')
 OTHER_TIME_CUE = 'uncertain: a time in its clause is something else\u2019s: '
 OTHER_EVENT_REACH = 80  # characters after a date read for the predicate of the clause another event opens before it
+CLAUSE_MARK = re.compile(r'[,;:()\n]')  # a mark that closes the clause or event an opener began
 HEDGE_WORDS = _rx(r'\?|\b(?:possibl[ey]|probabl[ey]|questionabl[ey]|likely|unlikely|uncertain|unclear|may\s+have|might\s+have'
                   r'|presumed|presumably|suspected|apparently'
                   r'|(?<!first\s)(?<!second\s)(?<!third\s)(?<!fourth\s)(?<!initial\s)(?<!final\s)attempt(?:ed)?)\b')
@@ -1621,28 +1622,58 @@ def _date_owner(text: str, d, cs: int, pos: int, ce: Optional[int] = None) -> st
         return 'other'
     # Every other clause or event before the date is asked, the last first: a later word that is no clause of its own
     # ("since") never hides an earlier event whose date it is ("apixaban held since 10/12/2026": 7c8 skeptic, sk:3).
+    starts, answer = _other_event_answer(text, cs, d.start, d.end, ce)
+    # The loop reads the openers before the date, the last first, and returns '' at the first whose clause or event
+    # holds the mention (opener.start() <= pos < d.start): an answer it gives at a later opener stands, any other is ''.
+    held = bisect.bisect_right(starts, pos) - 1 if pos < d.start else -1
+    if answer is not None and answer[0] > held:
+        return answer[1]
+    return ''  # no other clause or event owns it, or the mention is inside the one that would: the date is its own
+
+
+@functools.lru_cache(maxsize=4096)
+def _other_event_answer(text: str, cs: int, ds: int, de: int, ce: Optional[int]):
+    """For the date [ds, de) of the clause from ``cs`` (to ``ce``): the starts of the other-event openers before it,
+    and the first answer _date_owner's opener loop gives wherever the mention stands - (the opener's index, 'other' or
+    '') - or None when no opener gives one. Every other clause or event before the date is asked, the last first: a
+    later word that is no clause of its own ("since") never hides an earlier event whose date it is ("apixaban held
+    since 10/12/2026": 7c8 skeptic, sk:3).
+
+    An opener's phrase runs from it to the date, so the last mark, predicate and word before the date answer for every
+    opener's phrase at once, and the answer is read once per date and clause, however many mentions in the clause ask
+    (refutation p2, cost2:1: the phrase was sliced and searched again for every earlier opener, times every date and
+    every instrument mention read, and a 398,121-character paste took the assess stage past its limit after the request
+    was sent)."""
+    openers = [(m.start(), m.end(), m.group('event') is not None) for m in OTHER_EVENT.finditer(text, cs, ds)]
+    starts = tuple(start for start, _, _ in openers)
+    if not openers:
+        return starts, None
+    reach = openers[0][1]
+    last_mark = max((m.start() for m in CLAUSE_MARK.finditer(text, reach, ds)), default=-1)
+    last_predicate = max((m.start() for m in OTHER_EVENT_PREDICATE.finditer(text, reach, ds)), default=-1)
+    last_word = ds - 1
+    while last_word >= reach and text[last_word].isspace():
+        last_word -= 1
     after = None  # whether a predicate follows the date in its clause: read once, when an opener first needs it
-    for opener in reversed(list(OTHER_EVENT.finditer(text, cs, d.start))):
-        if opener.start() <= pos < d.start:
-            return ''  # the mention is inside that clause or event: the date is its own
-        phrase = text[opener.end():d.start]
-        if re.search(r'[,;:()\n]', phrase):
-            return ''  # that clause or event (and every earlier one) closed before the date
-        if opener.group('event') is not None or OTHER_EVENT_PREDICATE.search(phrase):
-            return 'other'
+    for index in range(len(openers) - 1, -1, -1):
+        _, end, event = openers[index]
+        if last_mark >= end:
+            return starts, (index, '')  # that clause or event (and every earlier one) closed before the date
+        if event or last_predicate >= end:
+            return starts, (index, 'other')
         # A clause the opener begins may set its subject before the date and its predicate after it ("because the
         # polypectomy in 2025 had been incomplete"): the date is then that clause's, never the act's (refutation 7c8,
         # sk:12: "Two polyps were removed with a cold snare today because the polypectomy in 2025 had been incomplete."
         # excluded 45385). Bounded: OTHER_EVENT_REACH after the date, to the clause's end or its next mark.
-        if phrase.strip():
+        if last_word >= end:  # a word of its own between the opener and the date: the clause's subject
             if after is None:
-                rest = text[d.end:min(len(text) if ce is None else ce, d.end + OTHER_EVENT_REACH)]
-                rest = rest[:next((m.start() for m in re.finditer(r'[,;:()\n]', rest)), len(rest))]
+                rest = text[de:min(len(text) if ce is None else ce, de + OTHER_EVENT_REACH)]
+                rest = rest[:next((m.start() for m in CLAUSE_MARK.finditer(rest)), len(rest))]
                 after = bool(OTHER_EVENT_PREDICATE.search(rest))
             if after:
-                return 'other'
+                return starts, (index, 'other')
         # "since 2019": a phrase, not a clause of its own - an earlier opener may still own the date
-    return ''  # no other clause or event before it: the date is its own
+    return starts, None
 
 
 def _in_an_aside(text: str, cs: int, d) -> bool:
@@ -2622,7 +2653,11 @@ def _soft_break(text: str, ls: int, le: int, ns: int, prev: str, nxt: str) -> bo
 # A check-box row's marked option cut after its negation ("[X] Not" / "Performed"), and the separator that sets a note
 # off after a row's option ("[X] No - referred to ...", "[X] Not taken: deferred").
 _ROW_OPTION_CUT = re.compile(r'[ \t]*(?:not|never)[ \t]*', re.I)
-_ROW_NOTE = re.compile(r'[ \t]+[-–—][ \t]*|[ \t]*[:;,(][ \t]*')
+# A note's separator after a row's option. A match starts where a run of spaces does (or at the mark itself): a start
+# inside a run is never the first one (the run's own first space matches whatever a later one does), and trying
+# every one re-read the run, quadratic in it - 'Biopsy [X]' and 120,000 spaces took the assess stage past its limit
+# after the request was sent (refutation p2, cost2:0).
+_ROW_NOTE = re.compile(r'(?<![ \t])(?:[ \t]+[-–—][ \t]*|[ \t]*[:;,(][ \t]*)')
 # A title an abbreviated name opens: its stop ends no note ("per Dr." / "Okafor"), as _sentences reads it.
 _TITLE_STOP = re.compile(r'\b(?:Dr|Mr|Mrs|Ms|Prof|St)\.[ \t]*$')
 
