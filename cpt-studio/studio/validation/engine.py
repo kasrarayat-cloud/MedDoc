@@ -162,10 +162,6 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
                      + tuple(_alternative(index, item, text, pages, response.provider)
                              for index, item in enumerate(alternatives))
                      + tuple(second_alternatives))
-        reconciled = {s.family for s in usable.services if s.status in checks.POSITIVE} if usable else set()
-        documented_em = any(checks.separate_em_statement(f) for f in routing.findings if f.family in checks.EM_FAMILIES)
-        coverage.append(checks.unproposed_check(*_missed(routing, selections, encounter.procedure_day,
-                                                         reconciled if usable else set()), separate_em=documented_em))
     else:
         procedure_day = _encounter('', context, routing, sources, date_state, selections).procedure_day
     active = [(s.code, s.family) for s in selections if not s.excluded]
@@ -180,6 +176,15 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     # documented services performed with no proposal that the reconciliation does not list (refutation 7c8, reports-1):
     # recorded in completeness and named by the services.unresolved check, which never passes beside one (its skeptic)
     not_listed = reconcile.uncounted(usable, unresolved, covered) if usable else []
+    if response is not None:
+        # Read once the reconciliation is known (refutation p2, reports2:0): a performed service routing detected with no
+        # selected proposal is named whatever services.unresolved also lists, never covered by "every performed service
+        # that routing detected has a selected proposal"; only a family the reconciliation accounts for with another
+        # service's selected code is not.
+        documented_em = any(checks.separate_em_statement(f) for f in routing.findings if f.family in checks.EM_FAMILIES)
+        coverage.append(checks.unproposed_check(*_missed(routing, selections, procedure_day,
+                                                         _accounted_elsewhere(usable, covered)),
+                                                separate_em=documented_em))
     service_questions = _service_questions(usable, proposals, context) if usable else []
     unsupported = _unsupported(routing, selections)
     encounter_checks = [*provider, checks.extraction_check(extraction_status, extraction_messages),
@@ -1600,8 +1605,20 @@ def _fingerprint(code, family, profile_version, evidence, found, context_values,
 
 # --- encounter level -------------------------------------------------------------------
 
+def _accounted_elsewhere(inventory: Optional[gi_services.ServiceInventory], covered: Mapping[str, Sequence[str]]
+                         ) -> set:
+    """The families the documented-service reconciliation accounts for with ANOTHER service's selected code: every
+    service of the family done today is included in another service (an EGD inside an EUS) that a selected,
+    non-excluded code covers - that code includes the examination (reconcile.reconcile)."""
+    if inventory is None:
+        return set()
+    done = [s for s in inventory.services if s.status in checks.POSITIVE]
+    return {family for family in {s.family for s in done}
+            if all(s.included_in and covered.get(s.included_in) for s in done if s.family == family)}
+
+
 def _missed(routing: RoutingResult, selections: Sequence[_Selection], procedure_day: bool,
-            reconciled: frozenset | set = frozenset()) -> tuple[list[str], bool]:
+            accounted: frozenset | set = frozenset()) -> tuple[list[str], bool]:
     """(labels of performed, profiled families - and other GI services routing detected - without a selected
     proposal, whether an E/M was not counted).
 
@@ -1613,17 +1630,20 @@ def _missed(routing: RoutingResult, selections: Sequence[_Selection], procedure_
     Routing still reads the families gi-profiles@3 carved out under the family they came from (a manometry or a capsule
     study is a gi.other mention, a push enteroscopy an upper GI one), so a selected code of a carved-out family counts
     for its routing-era family here as well (LEGACY_FAMILIES), as it does in _cited.
+
+    ``accounted``: the families the documented-service reconciliation accounts for with another service's selected
+    code (_accounted_elsewhere); they are not named. Every other family is named whatever the reconciliation also lists
+    (refutation p2, reports2:0: skipping every family the documented-service reading read as done let the check pass
+    with "Every performed service that routing detected in the document has a selected proposal" beside a detected EGD,
+    or a colonoscopy, that had none - which the installed revision named).
     """
     proposed = {family for s in selections if not s.excluded for family in (s.family, legacy_family(s.family))}
     unproposed, named = [], {}
     for f in routing.findings:
         if not (f.family in PROFILES and (PROFILES[f.family].supported or f.family == OTHER_GI) and _done_today(f)):
             continue
-        if f.family in reconciled and f.family != OTHER_GI:
-            if procedure_day and f.family in checks.EM_FAMILIES and f.family not in proposed:
-                # Not reported anywhere on a (possible) procedure day (reconcile skips the visit too): say why.
-                unproposed.append(f.family)
-            continue  # the documented-service reconciliation (services.unresolved) reports this family, act by act
+        if f.family in accounted and f.family != OTHER_GI:
+            continue  # another service's selected code includes it (an EGD inside an EUS)
         if f.family == OTHER_GI and f.mentions:
             cited = _cited(f.mentions, selections) | _VAL_named_again(f.mentions, selections)
             uncited = [m.span.text for index, m in enumerate(f.mentions)
