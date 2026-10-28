@@ -221,7 +221,9 @@ def _assessment_json(encounter, membership):
         'proposals': proposals, 'encounter_checks': assessment.encounter_checks,
         'unsupported': assessment.unsupported, 'reference_sources': assessment.reference_sources,
         'summary': assessment.summary, 'services': assessment.services or {},
-        'completeness': assessment.completeness or {},
+        # as the review leaves it: a code the reviewer reinstated counts as a selected one, as in the reports
+        # (review.reviewed_completeness; refutation P2FR, EUS-SECOND)
+        'completeness': review.reviewed_completeness(assessment, current) or {},
         'second_run': str(assessment.second_run_id) if assessment.second_run_id else None,
     }
     return data, clarifications

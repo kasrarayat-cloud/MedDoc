@@ -1625,6 +1625,50 @@ def _fingerprint(code, family, profile_version, evidence, found, context_values,
 
 # --- encounter level -------------------------------------------------------------------
 
+def reviewed_completeness(services: Optional[dict], completeness: Optional[dict], selected: Sequence[tuple[str, str]],
+                          reinstated: Sequence[tuple[str, str]], read: Sequence[str]) -> Optional[dict]:
+    """The documented-service reconciliation the assessment recorded (``completeness``) as the review leaves it: the
+    excluded codes a reviewer reinstated and has not rejected (``reinstated``: (code, family)) counted as selected ones
+    beside the assessment's own selected codes (``selected``), by the reconciliation's own rules over the documented
+    services it recorded (``services``) - what each covers, includes and leaves unresolved, and the coding completeness
+    that follows. ``read``: the documented services the proposals' own readings matched (their support), as the
+    assessment counted services not established as performed. A reinstated code is one a reviewer decides like a
+    selected one, so every statement of which code accounts for a documented service - the documented services, the
+    unresolved ones, coding completeness, the second review's items - counts it (refutation P2FR, EUS-SECOND: an EGD-with-
+    EUS code excluded on a misreading, reinstated and approved, read "no selected code of that service includes this
+    examination", and the EUS "has no supported proposal", with coding incomplete and a second review offered for it).
+    Rejections stay as the reports state them (refutation r1, report-6). ``completeness`` itself when nothing is
+    reinstated, or when the assessment recorded no reconciliation (none, or a reading that was inconsistent and decided
+    nothing). Pure: the second review's mark is carried from the item the assessment recorded, never added."""
+    if not reinstated or not completeness or not services or not isinstance(completeness.get('covered'), dict) \
+            or completeness.get('inventory_problems'):
+        return completeness
+    from studio.types import from_jsonable
+    inventory = from_jsonable(gi_services.ServiceInventory, services)
+    stored = [u for u in completeness.get('unresolved_items') or [] if isinstance(u, dict)]
+    # the assessment's own procedure-day reading: it listed an office visit only on a date with no procedure it saw; a
+    # reinstated procedural code makes the date a procedure day, as the engine reads a selected one (_Encounter)
+    procedure_day = (not any(u.get('family') == 'gi.office_em' and u.get('reason') == 'no_proposal' for u in stored)
+                     or any(PROFILES[family].procedure for _, family in reinstated if family in PROFILES))
+    unresolved, bundled, covered = reconcile.reconcile(inventory, [*selected, *reinstated], procedure_day=procedure_day)
+    marks = {(u.get('service'), u.get('act'), u.get('reason')): bool(u.get('second_review')) for u in stored}
+    not_listed = reconcile.uncounted(inventory, unresolved, covered)
+    reasons = [str(r) for r in completeness.get('reasons') or []]
+    asked = next((int(m.group()) for r in reasons if 'open question' in r for m in [re.match(r'\d+', r)] if m), 0)
+    fresh = reconcile.completeness(
+        inventory, unresolved, asked, 'the provider response was not available' not in reasons,
+        unestablished=sum(1 for s in inventory.services if s.status == 'uncertain' and s.id not in set(read)),
+        not_listed=not_listed)
+    return {**completeness, **fresh,
+            'unresolved_items': [_jsonable_unresolved(u, marks.get((u.service, u.act, u.reason), False))
+                                 for u in unresolved],
+            'bundled': [{'service': b.service, 'act': b.act, 'label': b.label, 'why': b.why} for b in bundled],
+            'not_listed': [{'service': s.id, 'family': s.family, 'label': reconcile.uncounted_label(s)}
+                           for s in not_listed],
+            'covered': covered, 'included_by': _included_by(inventory, covered),
+            'reinstated': list(dict.fromkeys(code for code, _ in reinstated))}
+
+
 def _included_by(inventory: Optional[gi_services.ServiceInventory], covered: Mapping[str, Sequence[str]]) -> dict:
     """{service id: the selected, non-excluded codes of the service it is read as part of that include its examination}
     for every service done today read as part of another (an EGD inside an EUS of the upper GI tract), by the

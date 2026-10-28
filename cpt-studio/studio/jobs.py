@@ -690,7 +690,9 @@ SECOND_REVIEW_MAX_CHARS = 20_000  # a longer excerpt is not sent (a second revie
 def _second_review_items(assessment):
     """(the unresolved documented services a second review may ask about, (start, end) of the text that documents
     them or None)."""
-    completeness = assessment.completeness or {}
+    # as the review leaves them: an item a code the reviewer reinstated accounts for is not asked about again
+    # (refutation P2FR, EUS-SECOND: the second review was offered for an EUS its reinstated, approved code accounts for)
+    completeness = review.reviewed_completeness(assessment) or {}
     # only items both readers read as done today (engine._routing_agrees); an assessment without the mark asks nothing
     items = [u for u in completeness.get('unresolved_items', []) if u.get('reason') in SECOND_REVIEW_REASONS
              and u.get('second_review') is True]

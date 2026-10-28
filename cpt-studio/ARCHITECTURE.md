@@ -1976,8 +1976,23 @@ service>, but no selected code of that service includes this examination" -
 whether or not the service is listed, and beside a code of its own too
 (refutation P2RA, EUS lens 1: 43235 beside 45342 read "that service's code
 includes this examination ... so no code of its own is asked"); an assessment
-that recorded no such list reads "read as part of <that service>" alone. No code
-is added for an unresolved item and no alternative is promoted. Conflicts → `services.conflicts` and a
+that recorded no such list reads "read as part of <that service>" alone. A code
+the reviewer rejected accounts for nothing and includes nothing: it is dropped
+from "accounted for by" and from the inclusion line alike. The documented
+services are read as the review leaves them (`review.reviewed_completeness`,
+`engine.reviewed_completeness`): an excluded code a reviewer reinstated and has
+not rejected is decided like a selected one, so the reconciliation is read
+again over the documented services the assessment recorded with it counted as
+selected - what it covers and includes, what stays unresolved, coding
+completeness and the second review's items - in the reports, the encounter
+view (`assessment.completeness`, which then names it in `reinstated`) and the
+second review alike, and the TXT and the page say so; the assessment's own
+record is never rewritten, and its encounter checks, made before the
+reinstatement, say that they do not count it (refutation P2FR, EUS-SECOND: an
+EGD-with-EUS code excluded on another act's cancel word, reinstated and
+approved, read "no selected code of that service includes this examination",
+with the EUS listed, coding incomplete and a second review offered for it).
+No code is added for an unresolved item and no alternative is promoted. Conflicts → `services.conflicts` and a
 service-scoped question with both sides; missing documentation → every
 materially necessary question for that service, asked together (a sparse visit
 note: setting, patient status and E/M basis), never twice for the same family

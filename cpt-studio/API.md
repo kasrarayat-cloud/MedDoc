@@ -162,7 +162,11 @@ outcome: it offers `confirm` (agree with the exclusion) and `reinstate`, and
 confirm the exclusion or reinstate it" until one of the two is recorded. A
 confirmed exclusion stays in the excluded list of every report, with the
 confirming reviewer named; `revoke` undoes it. An exclusion for scope or
-evidence (`reinstatable` false) offers nothing and needs no decision. A reinstated exclusion offers
+evidence (`reinstatable` false) offers nothing and needs no decision. A reinstated exclusion that is
+not rejected is decided like a selected code, so the encounter view's `assessment.completeness`, the
+reports' documented services, `coding` and `second_review` count it as one: the reconciliation is read
+again with it counted, `completeness.reinstated` names it, and the stored assessment is unchanged. A
+reinstated exclusion offers
 `approve` only while its `review.reinstatement` check passes (the gates a
 selected code meets: required facts, the separately identifiable E/M on a
 procedure day, a known service date); otherwise only `reject` and `revoke`.

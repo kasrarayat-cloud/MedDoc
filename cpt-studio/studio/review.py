@@ -746,6 +746,32 @@ def _sentence(text):
     return plain if not plain or plain.endswith(('.', '!', '?')) else f'{plain}.'
 
 
+def reinstated_codes(assessment, current=None):
+    """(code, family) of the excluded proposals a reviewer reinstated and has not rejected (their current decision is
+    the reinstatement, or an approval that rests on it): decided like selected codes, so counted as selected ones
+    wherever a documented service's code is stated (reviewed_completeness)."""
+    current = current_decisions(assessment) if current is None else current
+    return [(proposal.code, proposal.family) for proposal in assessment.proposals.filter(bucket=EXCLUDED)
+            if current.get(proposal.pk) is not None and current[proposal.pk].action in (REINSTATE, APPROVE)]
+
+
+def reviewed_completeness(assessment, current=None):
+    """The documented-service reconciliation the assessment recorded, as the review leaves it: with the codes a reviewer
+    reinstated counted as selected ones (engine.reviewed_completeness; refutation P2FR, EUS-SECOND). The assessment's
+    own record when none is reinstated. The reports, the encounter view, coding completeness and the bounded second
+    review's items all read this one view."""
+    completeness = assessment.completeness or {}
+    # an assessment not persisted (a reading the engine just made) carries no reviewer's decision
+    reinstated = reinstated_codes(assessment, current) if completeness and getattr(assessment, 'pk', None) else []
+    if not reinstated:
+        return completeness
+    from .validation import engine  # local import: the engine is only needed when a code was reinstated
+    proposals = list(assessment.proposals.exclude(bucket=ALTERNATIVE))
+    return engine.reviewed_completeness(
+        assessment.services, completeness, [(p.code, p.family) for p in proposals if p.bucket == SELECTED], reinstated,
+        [(p.support or {}).get('service') for p in proposals if (p.support or {}).get('service')])
+
+
 def coding_completeness(encounter):
     """Whether the ENCOUNTER's coding is complete - kept apart from whether one proposal is ready for review.
 
@@ -759,7 +785,7 @@ def coding_completeness(encounter):
     if assessment is None:
         return {'state': 'not_established', 'statement': 'The current revision has not been assessed yet.',
                 'reasons': []}
-    base = dict(assessment.completeness or {})
+    base = dict(reviewed_completeness(assessment) or {})  # a reinstated code counts (refutation P2FR, EUS-SECOND)
     if not base:
         return {'state': 'not_established', 'reasons': [],
                 'statement': 'This assessment was made before the documented-service reconciliation existed, so its '

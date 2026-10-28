@@ -234,13 +234,16 @@ def _conflict_side(side, text):
             'exact': bool(exact)}
 
 
-def _services(assessment, text, rejected=frozenset()):
+def _services(assessment, text, rejected=frozenset(), completeness=None):
     """The documented services as the assessment recorded them (format @4), for the report. Their passages are
     re-checked against the revision text: an inventory that failed validation is still stored (it decides nothing).
     ``rejected``: the codes the reviewer rejected, which account for nothing in the review - printed as rejected, never
-    as accounting for a service (refutation r1, report-6)."""
+    as accounting for a service (refutation r1, report-6), nor as including another service's examination (refutation
+    P2FR, EUS-SECOND: "included in S2: that service's code includes this examination" beside the rejected 43242, the
+    only code of S2 that includes it). ``completeness``: the reconciliation as the review leaves it
+    (review.reviewed_completeness: a code the reviewer reinstated counts as a selected one), else as recorded."""
     inventory = assessment.services or {}
-    completeness = assessment.completeness or {}
+    completeness = (assessment.completeness or {}) if completeness is None else completeness
     # the selected codes of the service each included service is read as part of that include its examination, as the
     # assessment recorded them (refutation P2RA, EUS lens 1); None where nothing was recorded (an assessment made
     # before the record existed, or a reading that decided nothing)
@@ -251,6 +254,7 @@ def _services(assessment, text, rejected=frozenset()):
                 and a.get('role') in ('physician', 'unknown')]
         codes = list((completeness.get('covered') or {}).get(service.get('id'), []))
         including = included_by.get(service.get('id'))
+        including = [code for code in including if code not in rejected] if isinstance(including, list) else None
         out.append({'id': service.get('id', ''), 'family': service.get('family', ''),
                     'family_label': _family_label(service.get('family', '')), 'status': service.get('status', ''),
                     'completion': service.get('completion', ''), 'extent': service.get('extent', ''),
@@ -261,8 +265,11 @@ def _services(assessment, text, rejected=frozenset()):
                     'covered_by': [code for code in codes if code not in rejected],
                     'rejected_by_reviewer': [code for code in codes if code in rejected],
                     'included_in': service.get('included_in', ''),
-                    'included_by': list(including) if isinstance(including, list) else None})
+                    'included_by': including})
+    # the codes a reviewer reinstated that the reconciliation below counts (named only when there are some)
+    reinstated = [code for code in completeness.get('reinstated') or [] if isinstance(code, str)]
     return {
+        **({'reinstated': reinstated} if reinstated else {}),
         'services': out,
         'unresolved': [_unresolved_item(u, text) for u in completeness.get('unresolved_items') or []],
         'not_listed': [n.get('label', '') for n in completeness.get('not_listed') or [] if n.get('label')],
@@ -398,7 +405,8 @@ def snapshot(encounter, kind):
         'readiness': ready,
         'coding': review.coding_completeness(encounter),
         'documented': _services(assessment, revision.text,
-                                {item['code'] for item in items if item['list'] == 'rejected'}),
+                                {item['code'] for item in items if item['list'] == 'rejected'},
+                                review.reviewed_completeness(assessment, current)),
         'second_review': str(assessment.second_run_id) if assessment.second_run_id else None,
         'proposals': items,
         'clarifications': [_clarification(q) for q in questions],
@@ -595,6 +603,14 @@ def _checks_section(snap):
     if encounter_checks:
         lines.append('  Encounter')
         lines += [_check_line(check) for check in encounter_checks]
+        reinstated = (snap.get('documented') or {}).get('reinstated')
+        if reinstated and any(str(check.get('id', '')).startswith('services.') for check in encounter_checks):
+            # the checks are the assessment's: they predate a reinstatement the sections above count (refutation P2FR,
+            # EUS-SECOND: "documented as performed with no selected proposal" beside the reinstated, approved 43242)
+            lines.append(f'    The documented-service checks were made when the assessment ran, before the reviewer '
+                         f'reinstated {", ".join(reinstated)}, and do not count '
+                         + ('it' if len(reinstated) == 1 else 'them')
+                         + '; DOCUMENTED SERVICES, UNRESOLVED and CODING COMPLETENESS do.')
     return lines or ['  No checks were recorded.']
 
 
@@ -752,6 +768,10 @@ def _documented_section(snap):
         reconciled = ('; not reconciled: the reading was inconsistent and decided nothing'
                       if documented.get('reconciliation') == 'inconsistent'
                       else f', reconciled by {documented.get("catalogue_version", "")}')
+        if documented.get('reinstated'):
+            # the reconciliation counts the codes a reviewer reinstated as selected ones (refutation P2FR, EUS-SECOND)
+            reconciled += (' with the code' + ('s' if len(documented['reinstated']) != 1 else '')
+                           + f' the reviewer reinstated ({", ".join(documented["reinstated"])}) counted as selected')
         lines.append(f'  Read by {documented["inventory_version"]}{reconciled}'
                      ' (internal profiles; advisory: wording the reader does not recognise is not covered).')
     return lines or ['  - none recorded (this assessment predates the documented-service reconciliation)']

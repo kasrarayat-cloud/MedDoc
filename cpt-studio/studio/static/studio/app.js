@@ -640,7 +640,8 @@ function documentedServices(doc) {
     // include this examination), never from whether the service is listed: an EGD with a code of its own beside an EUS
     // code that includes none was said to be included by it (refutation P2RA, EUS lens 1; refutation p2, reports2:0).
     // Nothing recorded (an earlier assessment, a reading that decided nothing): the reading alone is stated.
-    const includedBy = completeness.included_by && typeof completeness.included_by === 'object' && Array.isArray(completeness.included_by[service.id]) ? completeness.included_by[service.id] : null;
+    // A code the reviewer rejected includes nothing in the review either (refutation P2FR, EUS-SECOND).
+    const includedBy = completeness.included_by && typeof completeness.included_by === 'object' && Array.isArray(completeness.included_by[service.id]) ? completeness.included_by[service.id].filter(code => !rejected.has(code)) : null;
     if (done && service.included_in) lines.push(includedBy === null
       ? `Read as part of ${service.included_in}.`
       : includedBy.length
@@ -657,7 +658,17 @@ function documentedServices(doc) {
   });
   const attributions = (inventory.attributions || []).map(item => item.role);
   if (attributions.length) items.push(checkItem('muted', 'info', 'Another provider\'s services', `The document attributes ${attributions.join(', ')} services to their own providers; they are never coded for the performing physician.`));
+  // The API serves the reconciliation as the review leaves it: a code the reviewer reinstated counts as a selected one
+  // (refutation P2FR, EUS-SECOND), and that is said.
+  const reinstated = reinstatedCounted(doc);
+  if (reinstated.length) items.push(checkItem('muted', 'info', 'Counted with the reviewer\'s reinstatement', `The documented services are reconciled with ${reinstated.join(', ')}, which the reviewer reinstated, counted as selected.`));
   return `${sectionHeading('Documented services', services.length)}<div class="check-list-card">${items.join('')}${secondReviewItem(doc)}</div>`;
+}
+
+// The codes a reviewer reinstated that the served reconciliation counts (completeness.reinstated).
+function reinstatedCounted(doc) {
+  const reinstated = doc?.assessment?.completeness?.reinstated;
+  return Array.isArray(reinstated) ? reinstated.filter(code => typeof code === 'string') : [];
 }
 
 // The second review a reviewer asked for whose own outcome is not recorded yet: the current revision's latest review2
@@ -789,7 +800,12 @@ function referenceItems(sources) {
 function checksPanel(doc) {
   const assessment = doc.assessment;
   const perCode = proposalsIn(assessment, 'selected').map(proposal => `<div class="check-list-card">${groupLabel(`${proposal.code} · ${proposal.eyebrow || proposal.family_label || ''}`)}${checkItems(proposal.checks)}</div>`).join('');
-  return `<div class="card-stack"><div class="check-list-card">${groupLabel('Encounter')}${checkItems(assessment.encounter_checks)}</div>${perCode}<div class="check-list-card">${groupLabel('Reference sources')}${referenceItems(assessment.reference_sources)}</div></div><p class="checks-disclaimer">Checks come from the connected reference files and this service's own documentation rules. Anything they do not cover is shown as not verified, and agreement between sources is not treated as verification.</p>`;
+  // The encounter's checks are the assessment's: they predate a reinstatement the documented services count
+  // (refutation P2FR, EUS-SECOND).
+  const reinstated = reinstatedCounted(doc);
+  const documentedChecks = (Array.isArray(assessment.encounter_checks) ? assessment.encounter_checks : []).some(check => String(check?.id || '').startsWith('services.'));
+  const predates = reinstated.length && documentedChecks ? checkItem('muted', 'info', 'Made before the reviewer\'s reinstatement', `The documented-service checks were made when the assessment ran, before the reviewer reinstated ${reinstated.join(', ')}, and do not count ${reinstated.length === 1 ? 'it' : 'them'}; the documented services and coding completeness do.`) : '';
+  return `<div class="card-stack"><div class="check-list-card">${groupLabel('Encounter')}${checkItems(assessment.encounter_checks)}${predates}</div>${perCode}<div class="check-list-card">${groupLabel('Reference sources')}${referenceItems(assessment.reference_sources)}</div></div><p class="checks-disclaimer">Checks come from the connected reference files and this service's own documentation rules. Anything they do not cover is shown as not verified, and agreement between sources is not treated as verification.</p>`;
 }
 
 function timelineEntry(title, lines, struck = false) {
