@@ -97,8 +97,10 @@ class LabelledDateOfAnotherOccurrenceTests(DateAssertions, SimpleTestCase):
                 # Refutation round 2, rule B: the title gave the date only when every labelled date agreed with it -
                 # the reader's "another occurrence" may be a misreading (c2:2, c2:5) - and the two were a conflict the
                 # member settled by choosing the title's date. Refutation phase 2 (P2DN, rule N1): a title is evidence,
-                # never the date, so the date is asked and either date it states answers it.
-                self.assert_question(text, '2026-10-14', other)
+                # never the date, so the date is asked and the title's date answers it. The final refutation, fr-di:3:
+                # the other occurrence's date is quoted, never the member's answer (this pin had it answer too)
+                self.assert_question(text, '2026-10-14')
+                self.assert_member_conflict(text, other)
         widened = HEAD + ('PROCEDURE NOTE: Colonoscopy - 14-Oct-2026\nIndication: surveillance. Outside procedure date: '
                           '03-Sep-2026\n')
         self.assert_never(widened, '2026-09-03')
@@ -121,8 +123,12 @@ class LabelledDateOfAnotherOccurrenceTests(DateAssertions, SimpleTestCase):
     def test_controls_the_note_s_own_labels_are_read(self):
         # refutation round 2, rule B: beside the title these were a conflict the member settles (the title won
         # silently); refutation phase 2 (P2DN, rule N1): the title is evidence, so they are asked
-        self.assert_question(self.TITLED + 'Prior procedure date: 09/03/2026\n', '2026-10-14', '2026-09-03')
-        self.assert_question(self.TITLED + 'Last procedure date: 09/03/2026\n', '2026-10-14', '2026-09-03')
+        # the final refutation, fr-di:3: the prior procedure's date is quoted, never the member's answer (this pin had
+        # it answer the question too)
+        for line in ('Prior procedure date: 09/03/2026\n', 'Last procedure date: 09/03/2026\n'):
+            with self.subTest(line=line):
+                self.assert_question(self.TITLED + line, '2026-10-14')
+                self.assert_member_conflict(self.TITLED + line, '2026-09-03')
         for text, value in ((HEAD + 'Colonoscopy procedure date: 10/14/2026\n', '2026-10-14'),
                             (HEAD + 'Office visit date: 10/20/2026\n' + VISIT_BODY, '2026-10-20'),
                             (HEAD + "Today's visit date: 10/20/2026\n" + VISIT_BODY, '2026-10-20'),
@@ -242,10 +248,11 @@ class TitleOfAnotherDocumentTests(DateAssertions, SimpleTestCase):
                 # as documented evidence, never dropped with nothing left behind - a visit title misread as another
                 # discipline's let a member's 1998-01-01 be sent. A member date must agree with it: the date asked
                 # is answered by the date the evidence reads, and any other member date is a conflict (an over-hold
-                # for a member who knows the procedure's own date; this pin had no evidence kept).
+                # for a member who knows the procedure's own date; this pin had no evidence kept). The final refutation,
+                # fr-di:3: another document's date is quoted, never the member's answer (this pin had it answer): every
+                # member date is held until the document states the procedure's own date or the value is cleared.
                 self.assertEqual((fact.origin, fact.value, [e.text for e in fact.evidence]), ('missing', None, [title]))
-                self.assert_member_date(text, other)
-                for member in ('2026-10-14', '1998-01-01'):
+                for member in (other, '2026-10-14', '1998-01-01'):
                     self.assert_member_conflict(text, member)
 
     def test_a_letter_date_beside_the_encounter_it_names_is_asked(self):

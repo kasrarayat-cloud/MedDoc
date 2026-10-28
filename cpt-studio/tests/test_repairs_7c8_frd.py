@@ -25,6 +25,9 @@ fr-dr:1  the positional header readers matched values to labels by COUNT: an ext
 fr-dr:4, fr-di:0, fr-di:1  a date qualifier opening a field of its own on the label's line ("Scheduled by:",
          "Requested by:", "Planned sedation:"), or with only a date of birth between it and the date, was passed over:
          a planned procedure's or a recall's date was sent where 057a7d398 sent none, or another date than it sent (N7).
+fr-di:3  a member date agreeing only with a dated label or title the reader itself reads as another occurrence's or
+         another document's ("Next procedure date: 11/04/2026", "Surgical pathology report: 10/17/2026") was taken and
+         sent, while the member's correct date was held.
 
 Synthetic text only; no network (the suite's FakeProvider).
 """
@@ -534,3 +537,85 @@ class DateQualifierOnTheLabelSLineRequestTests(EndToEnd):
                 encounter_id = self.finished(HEAD + RECALL[name])
                 self.assert_never_sent(encounter_id, '2029-10-14')
                 self.assert_not_excluded(encounter_id, '45385')
+
+
+# --- fr-di:3: a member date never agrees with another occurrence's or another document's dated label or title ---------
+
+OFFICE_NOTE_TEXT = ('GI office visit\nPatient: Synthetic, Alex    MRN: 0000\nHistory of present illness: Synthetic patient '
+                    'seen in clinic for constipation. Colonoscopy discussed.\nAssessment: Chronic constipation.\n')
+ELSEWHERE = (  # (text, the date only another occurrence's or another document's dated text states)
+    (HEAD + OFFICE_NOTE_TEXT + 'Next procedure date: 11/04/2026\n', '2026-11-04'),
+    (HEAD + OFFICE_NOTE_TEXT + 'Procedure date: 11/04/2026 (scheduled)\n', '2026-11-04'),
+    (HEAD + 'Next procedure date: 11/04/2026\n', '2026-11-04'),
+    (HEAD + 'Surgical pathology report: 10/17/2026\n' + COLO_BODY, '2026-10-17'),
+    (HEAD + 'GI follow-up visit - 10/20/2026\nLast visit date: 04/15/2026\n' + OFFICE_NOTE_TEXT, '2026-04-15'),
+    (HEAD + 'Initial visit date: 10/20/2026\nPrior procedure date: 05/01/2019\n' + OFFICE_NOTE_TEXT, '2019-05-01'),
+    (HEAD + 'Outside colonoscopy:\nProcedure date: 09/03/2026\n' + OFFICE_NOTE_TEXT, '2026-09-03'),
+)
+
+
+class MemberDateNeverAgreesWithAnotherOccurrenceTests(DateAssertions, SimpleTestCase):
+    """fr-di:3 (4331b244b, round 2's rule A: every candidate kept as evidence; at a62a18c85 and the head, never a
+    regression - 057a7d398 took every member date): with no date of the note's own, every read candidate's spans were the
+    evidence a member date is matched against - the ones this reader itself reads as ANOTHER occurrence's ('aside': "Next
+    procedure date: 11/04/2026", "... (scheduled)", "Last visit date") or another document's ('other': "Surgical
+    pathology report: 10/17/2026") included. So an office visit's member answer 11/04 - the next procedure's date, which
+    the fact's own note says is not taken as the date of service - was taken and sent in a paid request, while the
+    member's correct 10/20 was held. Such a label or title is kept as evidence - quoted and shown as before - but a member
+    date never agrees with it: it agrees only with a date some candidate states as its OWN value (rule N3). A dated service
+    line ("Colonoscopy on 2026-10-21.") is evidence of the service's own date and still answers (rule N1)."""
+
+    def test_another_occurrence_s_date_is_never_the_member_s_answer(self):
+        for text, elsewhere in ELSEWHERE:
+            with self.subTest(text=text.splitlines()[1][:40], date=elsewhere):
+                self.assert_never(text, elsewhere)
+                self.assert_member_conflict(text, elsewhere)
+                fact = date_fact(text)
+                self.assertTrue(fact.evidence, 'kept as evidence')  # quoted, as before
+                self.assertTrue(any(elsewhere[5:7] in quoted for quoted in evidence_text(text)), evidence_text(text))
+
+    def test_controls_a_date_some_candidate_states_as_its_own_answers(self):
+        for text, own in ((HEAD + 'Findings\nColonoscopy on 2026-10-21.\n', '2026-10-21'),
+                          (HEAD + 'GI visit - 10/20/2026\n' + OFFICE_NOTE_TEXT, '2026-10-20'),
+                          (HEAD + 'GI follow-up visit - 10/20/2026\nLast visit date: 04/15/2026\n' + OFFICE_NOTE_TEXT,
+                           '2026-10-20'),
+                          (HEAD + 'Initial visit date: 10/20/2026\nPrior procedure date: 05/01/2019\n' + OFFICE_NOTE_TEXT,
+                           '2026-10-20'),
+                          (HEAD + 'Re: Colonoscopy on 10/14/2026\n' + COLO_BODY, '2026-10-14'),
+                          (HEAD + 'Date: 10/14/2026\n' + COLO_BODY, '2026-10-14'),
+                          (HEAD + 'Date of service: 14 Oct 2026\n' + COLO_BODY, '2026-10-14')):
+            with self.subTest(text=text.splitlines()[1][:40]):
+                self.assert_member_date(text, own)
+                self.assert_member_conflict(text, ELENA_DATE)
+
+    def test_the_evidence_is_stored_and_compared_as_any_span(self):
+        # the marker is invisible outside the member's agreement: the same fields, equal to a plain span, plain JSON
+        from studio.types import Span, to_jsonable
+        fact = date_fact(ELSEWHERE[0][0])
+        quoted = fact.evidence[0]
+        self.assertEqual(quoted, Span(quoted.start, quoted.end, quoted.text))
+        self.assertEqual(Span(quoted.start, quoted.end, quoted.text), quoted)
+        self.assertEqual(to_jsonable(fact)['evidence'], [{'start': quoted.start, 'end': quoted.end, 'text': quoted.text}])
+
+
+class MemberDateNeverAgreesWithAnotherOccurrenceRequestTests(EndToEnd):
+    VISIT = ('99213', 'seen in clinic for constipation')
+    TEXT = HEAD + OFFICE_NOTE_TEXT + 'Next procedure date: 11/04/2026\n'
+
+    def test_em1_the_next_procedure_s_date_is_never_sent(self):
+        encounter_id = self.finished(self.TEXT, service_date='2026-11-04')
+        self.assert_held(encounter_id)
+        self.assert_never_sent(encounter_id, '2026-11-04')
+
+    def test_em3_the_answer_path_never_sends_it(self):
+        encounter_id = self.finished(self.TEXT)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.set_context(encounter_id, {'service_date': '2026-11-04'})
+        self.assert_never_sent(encounter_id, '2026-11-04')
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+
+    def test_ep1_another_document_s_date_is_never_sent(self):
+        encounter_id = self.finished(HEAD + 'Surgical pathology report: 10/17/2026\n' + COLO_BODY,
+                                     service_date='2026-10-17')
+        self.assert_held(encounter_id)
+        self.assert_never_sent(encounter_id, '2026-10-17')

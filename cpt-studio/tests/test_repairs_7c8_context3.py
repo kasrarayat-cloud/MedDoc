@@ -366,12 +366,14 @@ class AnotherDisciplineTitleTests(DateAssertions, SimpleTestCase):
                 self.assert_asked(text, title)
 
     def test_a_visit_title_naming_a_role_or_a_finding_of_another_discipline_is_asked(self):
-        # an over-hold (a known limit; round 2 read these as the note's own): the member's date the title reads settles it
+        # an over-hold (a known limit; round 2 read these as the note's own). The final refutation, fr-di:3: the date a
+        # title read as another discipline's states is quoted, never the member's answer (this pin had it settle the
+        # question): asked until the document states the date or the value is cleared
         for title in ('Nurse practitioner visit - 10/20/2026', 'Anemia and abnormal CT consultation - 10/20/2026'):
             with self.subTest(title=title):
                 text = HEAD + title + '\n' + OFFICE_BODY
                 self.assert_asked(text, title)
-                self.assert_member_date(text, '2026-10-20')
+                self.assert_member_conflict(text, '2026-10-20')
 
     def test_controls_this_service_s_encounter_titles(self):
         for title, value in (('GI visit - 10/20/2026', '2026-10-20'), ('GI consultation - 10/20/2026', '2026-10-20'),
@@ -436,7 +438,14 @@ class FieldAboveOrPhraseAfterTests(DateAssertions, SimpleTestCase):
             with self.subTest(lines=lines[:50]):
                 text = HEAD + 'Colonoscopy report - 10/14/2026\n' + lines + '\n' + COLO_PLAIN
                 self.assert_never(text, other)
-                self.assert_question(text, '2026-10-14', other)  # the title is evidence (phase 2, P2DN rule N1)
+                self.assert_question(text, '2026-10-14')  # the title is evidence (phase 2, P2DN rule N1)
+                # the final refutation, fr-di:3: an outside procedure's date (a label read as another occurrence's) is
+                # quoted, never the member's answer; a date the reader cannot place (a field with a value above) still
+                # answers (this pin had every one answer)
+                if 'outside' in lines.lower():
+                    self.assert_member_conflict(text, other)
+                else:
+                    self.assert_member_date(text, other)
 
     def test_beside_the_note_s_own_labelled_date_another_occurrence_s_is_set_aside(self):
         for lines in ('Outside colonoscopy:\nProcedure date: 09/03/2026\nFindings: two adenomas.',

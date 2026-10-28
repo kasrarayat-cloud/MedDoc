@@ -1643,13 +1643,15 @@ def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
     if lead and len(values) == 1 and all(c.form == 'read' and c.value in values for c in speaks):
         fact = _fact('service_date', [(c.value, s) for c in lead + support for s in c.spans])
         return fact if own else Fact('service_date', None, 'missing', fact.evidence, FORM_DATE_NOTE)
-    unread = tuple(s for c in unusable for s in c.spans)
+    unread = tuple(s for c in unusable for s in _evidence_spans(c))
     if lead:
         fact = _fact('service_date', [(c.value, s) for c in lead + speaks if c.form == 'read' for s in c.spans])
         if not unusable:
             return fact
         return Fact('service_date', None, 'conflict', _sorted_spans(fact.evidence + unread), note)
-    fact = _fact('service_date', [(c.value, s) for c in found if c.form == 'read' for s in c.spans])
+    # with no date of the note's own every candidate is the evidence of the date asked; another occurrence's or another
+    # document's dated label or title is quoted, never a date a member's answer agrees with (fr-di:3, _ElsewhereSpan)
+    fact = _fact('service_date', [(c.value, s) for c in found if c.form == 'read' for s in _evidence_spans(c)])
     if not found:
         return fact
     return Fact('service_date', None, 'missing', _sorted_spans(fact.evidence + unread), note)
@@ -1657,6 +1659,29 @@ def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
 
 def _sorted_spans(spans) -> tuple[Span, ...]:
     return tuple(sorted(dict.fromkeys(spans), key=lambda s: (s.start, s.end)))
+
+
+class _ElsewhereSpan(Span):
+    """Evidence a member date never agrees with (the final refutation, fr-di:3): a dated label or title this reader
+    itself reads as ANOTHER occurrence's ('aside': "Next procedure date: 11/04/2026", "... (scheduled)", "Last visit
+    date") or another document's ('other': "Surgical pathology report: 10/17/2026"). Kept as evidence with no date of the
+    note's own, a member's answer equal to its date was taken and sent - an office visit's next procedure date - while
+    the correct date was held. It is quoted, stored and shown as any span is (the same fields, equal to the plain span it
+    copies, plain JSON through to_jsonable); only _date_readings reads the difference. A dated service line is no such
+    span: it is evidence of the service's own date (rule N1)."""
+
+    def __eq__(self, other):
+        return isinstance(other, Span) and (self.start, self.end, self.text) == (other.start, other.end, other.text)
+
+    __hash__ = Span.__hash__
+
+
+def _evidence_spans(c: _Candidate) -> tuple[Span, ...]:
+    """A candidate's spans as the date's evidence: _ElsewhereSpan for a label or title read as another occurrence's or
+    another document's (fr-di:3)."""
+    if c.source in ('label', 'title') and c.reading in ('aside', 'other'):
+        return tuple(_ElsewhereSpan(s.start, s.end, s.text) for s in c.spans)
+    return c.spans
 
 
 @functools.lru_cache(maxsize=16)
@@ -1728,9 +1753,13 @@ def _date_readings(spans) -> Optional[set]:
     does read are the ones a member can answer with, so the date asked is never stuck when the member answers with one.
     Refutation round 3, sk:1: these are only the dates the candidates state as their own values - each candidate's
     evidence holds no other date (_Candidate.extra, _value_extent, _dated_service_line), so a date of birth written
-    beside a date of service ("DOS: 10/14/26 DOB: 01/01/1998", "Patient | DOB | Date of Service") is never one."""
+    beside a date of service ("DOS: 10/14/26 DOB: 01/01/1998", "Patient | DOB | Date of Service") is never one. The final
+    refutation, fr-di:3: nor is a date only another occurrence's or another document's dated label or title states
+    (_ElsewhereSpan) - its date is not the note's, as the fact's own note says."""
     values = set()
     for span in spans:
+        if isinstance(span, _ElsewhereSpan):
+            continue
         quoted = str(span.text)
         # refutation phase 2, rule N2: a date of birth is never read, wherever an evidence span holds one
         values |= {day.isoformat() for day in (date_from_match(m) for m in FULL_DATE.finditer(quoted)

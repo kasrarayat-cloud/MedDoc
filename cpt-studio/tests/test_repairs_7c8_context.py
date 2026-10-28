@@ -123,8 +123,15 @@ class PlannedDateIsNeverTheServiceDateTests(DateAssertions, SimpleTestCase):
         for text, titled in cases:
             with self.subTest(text=text.splitlines()[2][:60]):
                 self.assert_never(text, '2026-11-04')
-                # refutation phase 2 (P2DN, rule N1): a title is evidence only, so this is asked; both dates answer it
-                self.assert_question(text, titled, '2026-11-04')
+                # refutation phase 2 (P2DN, rule N1): a title is evidence only, so this is asked and its date answers it
+                self.assert_question(text, titled)
+                # the final refutation, fr-di:3: a date "scheduled" attached to it states is another occurrence's -
+                # quoted, never the member's answer; one a "Planned procedure:" field beside it may date still answers
+                # (this pin had both answer)
+                if 'scheduled' in text.split('11/04/2026', 1)[1].split('\n', 1)[0]:
+                    self.assert_member_conflict(text, '2026-11-04')
+                else:
+                    self.assert_member_date(text, '2026-11-04')
 
     def test_alone_the_planned_date_is_asked(self):
         for line, planned in (('Scheduled: Yes    Procedure date: 11/04/2026', '2026-11-04'),
@@ -202,7 +209,11 @@ class PrecedingFieldValueIsNotTheLabelsTests(DateAssertions, SimpleTestCase):
     def test_a_sentence_s_history_words_never_let_a_member_date_replace_it(self):
         text = HEAD + 'Surveillance colonoscopy for history of adenomatous polyps, procedure date 10/14/2026.\n' + COLO_PLAIN
         self.assert_member_conflict(text, ELENA_DATE)
-        self.assert_member_date(text, '2026-10-14')
+        # the final refutation, fr-di:3: the sentence's history words set its date aside (another occurrence's, an
+        # over-hold the reader cannot tell from one), and such a date is quoted, never the member's answer (this pin had
+        # it answer): asked until the document states the date or the value is cleared
+        self.assert_member_conflict(text, '2026-10-14')
+        self.assert_asked(text, 'procedure date 10/14/2026')
 
     def test_controls_the_label_s_own_words_still_decide(self):
         for line in ('Prior DOS: 2025-01-02', 'prior DOS: 2025-01-02', 'Outside procedure date: 2019-05-01',
@@ -229,7 +240,9 @@ class VisitTitleIsTheNotesOwnTests(DateAssertions, SimpleTestCase):
                 text = HEAD + title + '\n' + OFFICE_BODY
                 self.assert_asked(text, title)
                 self.assert_member_conflict(text, ELENA_DATE)
-                self.assert_member_date(text, '2026-10-20')
+                # the final refutation, fr-di:3: another discipline's dated title is quoted, never the member's answer
+                # (this pin had 2026-10-20 settle it)
+                self.assert_member_conflict(text, '2026-10-20')
 
 
 class LinearCostTests(SimpleTestCase):
@@ -289,12 +302,17 @@ class QualifierOfAnotherItemTests(DateAssertions, SimpleTestCase):
         for text, other, labelled in cases:
             with self.subTest(text=text.splitlines()[2][:60]):
                 self.assert_never(text, other)
-                self.assert_question(text, other, labelled)  # titles and "Date:" lines are evidence (phase 2, rule N1)
+                self.assert_question(text, other)  # titles and "Date:" lines are evidence (phase 2, rule N1)
+                # the final refutation, fr-di:3: the set-aside labelled date is quoted, never the member's answer (this
+                # pin had it answer too; the reader cannot tell "recall due" about another item from one about the date)
+                self.assert_member_conflict(text, labelled)
 
     def test_alone_the_labelled_date_is_asked_and_answered(self):
         text = HEAD + 'Date of service: 10/14/2026 (recall due in 3 years)\n' + COLO_PLAIN
         self.assert_asked(text, 'Date of service: 10/14/2026')
-        self.assert_member_date(text, '2026-10-14')
+        # the final refutation, fr-di:3: a labelled date read as another occurrence's is quoted, never the member's
+        # answer (this pin had it answer): asked until the document is amended or the value cleared
+        self.assert_member_conflict(text, '2026-10-14')
 
 
 class OutsideOrIndexDateTests(DateAssertions, SimpleTestCase):
@@ -320,7 +338,13 @@ class OutsideOrIndexDateTests(DateAssertions, SimpleTestCase):
             with self.subTest(line=line[:60]):
                 text = self.TITLED + line + '\n' + COLO_PLAIN
                 self.assert_never(text, other)
-                self.assert_question(text, '2026-10-14', other)  # the title is evidence (phase 2, rule N1)
+                self.assert_question(text, '2026-10-14')  # the title is evidence (phase 2, rule N1)
+                # the final refutation, fr-di:3: the outside or index procedure's date is quoted, never the member's
+                # answer (this pin had it answer too); the last case's label is beyond the reach and only unplaced
+                if 'Regional Medical Center' in line:
+                    self.assert_member_date(text, other)
+                else:
+                    self.assert_member_conflict(text, other)
 
     def test_alone_a_bracketed_history_word_holds_the_date(self):
         for line in ('Procedure date: 09/03/2026 (outside facility; cold snare polypectomy of two adenomas).',
@@ -586,11 +610,12 @@ class RequestDateTests(TestCase):
         text = HEAD + 'Nurse practitioner visit - 10/20/2026\n' + OFFICE_BODY
         self.assert_held(self.finished(text, service_date=ELENA_DATE))
         # refutation round 3, sk:4: the title names a nurse, so its date is asked (this pin had it sent): a dateless
-        # request, then the member's choice of the title's date is sent
+        # request. The final refutation, fr-di:3: another discipline's dated title is quoted, never the member's answer
+        # (this pin had the member's choice of the title's date sent): held, nothing sent for it
         encounter_id = self.finished(text)
         self.assertEqual(self.dates_sent(encounter_id), [[]])
         self.set_context(encounter_id, {'service_date': '2026-10-20'})
-        self.assertEqual(self.dates_sent(encounter_id), [[], ['Date of service: 2026-10-20']])
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
 
     def test_c2_5_a_letter_or_title_date_is_never_sent_for_the_labelled_one(self):
         for text in (HEAD + 'Date: 10/16/2026\nDate of service: 10/14/2026 (recall due in 3 years)\n' + COLO_PLAIN,
