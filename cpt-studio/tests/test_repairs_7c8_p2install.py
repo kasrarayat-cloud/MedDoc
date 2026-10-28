@@ -42,7 +42,6 @@ from tests.test_services_second_review import LIVE, TwoPassProvider
 
 BANNER = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE'
 VISIT = ('99213', 'Total time on the date of the encounter was 24 minutes.')
-UNDATED_NOTE = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
 MEMBER_CONFLICT = '2026-09-01'  # differs from OFFICE_NOTE's documented 2026-10-20
 REPORT = f"""{BANNER}
 Colonoscopy report (fictional)
@@ -56,7 +55,7 @@ SNARE = ('45385', 'was removed with a cold snare')
 OLD_IMAGE, NEW_IMAGE = 'sha256:' + 'b' * 64, 'sha256:' + 'a' * 64
 SCRIPTS = ('UNDO_HAZARDS_READ', 'CLOSE_STAGES', 'UNRUNNABLE_STAGES', 'RECOMPUTE_STATES', 'INSTALLED_STATES')
 WEB, WORKER = install.SERVICES['web'], install.SERVICES['worker']
-assert OFFICE_NOTE.startswith(BANNER) and UNDATED_NOTE.startswith(BANNER) and REPORT.startswith(BANNER)
+assert OFFICE_NOTE.startswith(BANNER) and REPORT.startswith(BANNER)
 
 
 def installed_label(encounter):
@@ -155,11 +154,6 @@ class Base(TestCase):
     def post(self, path, data=None):
         with self.captureOnCommitCallbacks(execute=True):
             return self.client.post(path, data=json.dumps(data or {}), content_type='application/json')
-
-    def set_context(self, encounter_id, **values):
-        reply = self.post(f'/api/encounters/{encounter_id}/context', values)
-        self.assertEqual(reply.status_code, 201, reply.content)
-        drain()
 
     def encounter(self, encounter_id):
         return models.Encounter.objects.get(pk=encounter_id)
@@ -538,13 +532,17 @@ class InterruptedAppRecoveryTests(Base):
 
     def replaced(self):
         """Rows as the replaced revision 057a7d39 left them: I1 a response refused whole (it lists 'No CPT codes
-        proposed'); I2 the migrate-2 shape - a first request succeeded, a date change came back unknown, clearing it
-        reused the first answer - which it lists 'Ready for review' beside the unreconciled unknown outcome."""
+        proposed'); I2 the migrate-2 shape - an answer ready for review beside a request whose outcome is unknown and
+        unreconciled (there: a date change that came back unknown, the first answer reused; here the run is written as
+        that leaves it, so the shape does not depend on how a date is read) - which it lists 'Ready for review'."""
         i1 = self.refused('I1')
-        i2 = self.create('I2', text=UNDATED_NOTE, service_date='2026-10-20')
-        self.provider.outcomes = ['unknown']
-        self.set_context(i2, service_date='2026-10-21')
-        self.set_context(i2, service_date='2026-10-20')
+        i2 = self.create('I2')
+        encounter = self.encounter(i2)
+        models.ProviderRun.objects.create(
+            encounter=encounter, revision=encounter.current_revision, provider='corti', adapter_version='test',
+            request_sha256='e' * 64, request_body={}, contexts=[], state=models.ProviderRun.UNKNOWN,
+            requested_by=self.reviewer)
+        self.assertEqual(review._derive_state(self.encounter(i2)), 'provider_unknown')
         models.Encounter.objects.filter(pk=i1).update(state='no_codes')
         models.Encounter.objects.filter(pk=i2).update(state='ready_for_review')
         self.assertEqual((self.listed(i1), self.listed(i2)),
