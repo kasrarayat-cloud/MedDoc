@@ -519,8 +519,10 @@ documents, and sends, the qualified date wherever 2fc8cde3d and the installed
   the date are asked by N5;
 - the P2DATES skeptic's sk:5: a title-shaped line above ("Cancelled
   colonoscopy", "Recall procedure");
-- sk:6: a status, setting or provider beside the label ("Patient status: pending
-  authorization", "Setting: cancelled", "Provider: ... (procedure postponed)");
+- sk:6: a status, setting or provider beside the label, on the next line or as
+  the next field on its own line ("Patient status: pending authorization",
+  "Setting: cancelled", "Provider: ... (procedure postponed)"; N5 ends the
+  label's field at the next field's label);
 - sk:7: another discipline's undated title over a date label ("Cardiology
   consultation" over "Date of service: 10/09/2026").
 They stay because closing them by structure - a header block's lone labelled

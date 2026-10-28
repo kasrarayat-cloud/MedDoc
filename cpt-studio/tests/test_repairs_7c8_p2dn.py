@@ -537,6 +537,11 @@ class KnownLimitTests(DateAssertions, SimpleTestCase):
                      'Provider: Dr. A. Synthetic (procedure postponed)'):
             self.assert_document(HEAD + 'EGD report\nProcedure date: 11/04/2026\n' + line + '\n\n' + EGD_BODY,
                                  '2026-11-04')
+        # the same field on the label's own line, after its field's end (N5 reads the label's field only: the next
+        # field's label ends it - after a field break, or capitalised one space after the date)
+        for line in ('Procedure date: 11/04/2026    Status: pending authorization',
+                     'Procedure date: 11/04/2026 Status: pending authorization'):
+            self.assert_document(HEAD + 'EGD report\n' + line + '\n\n' + EGD_BODY, '2026-11-04')
 
     def test_sk7_known_limit_another_discipline_s_undated_title(self):
         self.assert_document(HEAD + 'Cardiology consultation\nDate of service: 10/09/2026\n\n' + COLO_BODY, '2026-10-09')
