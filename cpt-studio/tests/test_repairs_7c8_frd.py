@@ -19,6 +19,9 @@ fr-dr:0  a date-of-service field that STATES a date the reader cannot take as it
          one value under a joined "DOB / Date of Service:", a stack whose values cannot be placed) was kept as evidence
          that reads no date (form 'empty'), which never speaks: another labelled date was sent though the document gives
          a different one.
+fr-dr:1  the positional header readers matched values to labels by COUNT: an extra split in a cell, or a heading
+         and a findings line counted into a stack, shifted the date of birth into the date-of-service label's place, so
+         a member's 1998-01-01 was taken and sent.
 
 Synthetic text only; no network (the suite's FakeProvider).
 """
@@ -362,3 +365,73 @@ class FieldStatingADateItCannotPlaceRequestTests(EndToEnd):
         encounter_id = self.finished(self.E1, service_date='2026-10-14')
         self.assert_held(encounter_id)
         self.assert_never_sent(encounter_id, '2026-10-07', '2026-10-14')
+
+
+# --- fr-dr:1: a header's values are placed by POSITION - a column under its head, a stack's place by its kind ---------
+
+SHIFTED = {  # counts that match, positions that do not (the finding's C2, C7, C10, S3; the verifier's smallest forms)
+    'C2 a name split at a double space': 'Patient            DOB           Date of Service    Endoscopist\n'
+                                         'Synthetic,  Alex   01/01/1998    10/14/2026\n',
+    'C10 a title split at a double space': 'Physician               DOB           Date of Service    Room\n'
+                                           'Dr.  Robin Synthetic    01/01/1998    10/14/2026\n',
+    'smallest column': 'Patient    DOB    DOS\nDoe,  Jane    01/01/1998\n',
+    'C2 tab-separated': 'Patient\tDOB\tDate of Service\tEndoscopist\nSynthetic,  Alex\t01/01/1998\t10/14/2026\n',
+    'S3 a heading over the stack': 'PATIENT INFORMATION:\nDate of service:\nDOB:\n10/14/2026\n01/01/1998\n'
+                                   '1.5 cm sigmoid polyp removed with a cold snare.\n',
+    'smallest stack': 'INFO:\nDOS:\nDOB:\n10/14/2026\n01/01/1998\n1.5 cm polyp.\n',
+    'a stack, a sentence opening with a fraction': 'Date of service:\nDOB:\n01/01/1998\n3/4 of the colon was prepped.\n',
+}
+
+
+class HeaderValuesArePlacedByPositionTests(DateAssertions, SimpleTestCase):
+    """fr-dr:1 (10bdfeb2f, P2DN's fix round issue 4): _column took the cell at the label's place whenever the row below
+    had as many cells as the header, and _stacked_value the value line at the label's place whenever the stack had as
+    many value lines as label lines - counts, never positions. "Synthetic,  Alex" (two spaces) under "Patient" split into
+    two cells while "Endoscopist" was left empty, so the date-of-service column read the date of birth (4 = 4); in a
+    stack "PATIENT INFORMATION:" counted as a label and "1.5 cm ..." as a value opening with a date, so every place was
+    shifted by one. The date of birth became the label's value and a member's 1998-01-01 was taken and sent, where
+    a62a18c85 held it (and the member's correct 10/14 was then refused). ARCHITECTURE 5.2's own rule - where the
+    positions do not match no value is the label's - is now checked by POSITION: a value cell lies under its own head
+    (it overlaps the columns from its head's start to the next head's), and a stack's value line is of its label's kind
+    (a date or birth label's place holds a date alone, any other label's place holds no date alone)."""
+
+    def test_the_date_of_birth_is_never_the_label_s_value(self):
+        for name, rows in SHIFTED.items():
+            for top in ('Colonoscopy report - 10/14/2026\n', 'Date: 10/14/2026\nRe: Colonoscopy\n', ''):
+                text = HEAD + top + rows + COLO_BODY
+                with self.subTest(shape=name, top=top[:12]):
+                    self.assert_never(text, ELENA_DATE)
+                    self.assert_member_conflict(text, ELENA_DATE)
+                    self.assertFalse(any(BIRTH in quoted for quoted in evidence_text(text)), evidence_text(text))
+                    if top:  # the dated text above still answers the question
+                        self.assert_member_date(text, '2026-10-14')
+
+    def test_controls_aligned_columns_and_stacks_read_their_own_values(self):
+        for rows in ('Patient            DOB           Date of Service    Endoscopist\n'
+                     'Synthetic, Alex    01/01/1998    10/14/2026         Dr. Robin\n',
+                     'Physician              DOB           Date of Service    Room\n'
+                     'Dr. Robin Synthetic    01/01/1998    10/14/2026         2\n',
+                     'DOB            Date of Service\n01/01/1998     10/14/2026\n',
+                     'Date of Service    DOB\n10/14/2026         01/01/1998\n',
+                     'DOB\tDate of Service\n01/01/1998\t10/14/2026\n',
+                     'DOB:        Procedure Date:\n01/01/1998  10/14/2026\n',
+                     'Patient:\nDOB:\nDate of service:\nSynthetic, Alex\n01/01/1998\n10/14/2026\n',
+                     'DOB\nDate of Service\n01/01/1998\n10/14/2026 09:15\n',
+                     'Date of service:\nDOB:\n10/14/2026\n01/01/1998\n'):
+            text = HEAD + rows + COLO_BODY
+            with self.subTest(rows=rows.splitlines()[:2]):
+                self.assert_member_date(text, '2026-10-14')
+                self.assert_member_conflict(text, ELENA_DATE)
+                self.assertFalse(any(BIRTH in quoted for quoted in evidence_text(text)), evidence_text(text))
+
+
+class HeaderValuesArePlacedByPositionRequestTests(EndToEnd):
+    def test_c2_s3_c10b_the_member_s_1998_is_held(self):
+        for name, top in (('C2 a name split at a double space', 'Colonoscopy report - 10/14/2026\n'),
+                          ('S3 a heading over the stack', 'Colonoscopy report - 10/14/2026\n'),
+                          ('C10 a title split at a double space', '')):
+            text = HEAD + top + SHIFTED[name] + COLO_BODY
+            with self.subTest(shape=name):
+                encounter_id = self.finished(text, service_date=ELENA_DATE)
+                self.assert_held(encounter_id)
+                self.assert_never_sent(encounter_id, ELENA_DATE)

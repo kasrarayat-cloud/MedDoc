@@ -628,7 +628,7 @@ class _Rows:
 
     def __init__(self, text: str):
         self.text, self._bars, self._below, self._cells, self._breaks = text, {}, {}, {}, None
-        self._aligned, self._above = {}, {}
+        self._aligned, self._above, self._dated = {}, {}, {}
 
     def line(self, pos: int) -> tuple[int, int]:
         """The line holding ``pos``: one index of the text's line breaks, bisected (never a scan per label: many labels
@@ -699,6 +699,12 @@ class _Rows:
                     found = (ps, ls - 1)
             self._above[ls] = found
         return self._above[ls]
+
+    def states_a_date(self, start: int, end: int) -> bool:
+        """_states_a_date for a row or a value line, read once (the labels of one header share the row below)."""
+        if (start, end) not in self._dated:
+            self._dated[start, end] = _states_a_date(self.text, start, end)
+        return self._dated[start, end]
 
     def next_line(self, le: int) -> Optional[tuple[int, int]]:
         """The line right below the line ending at ``le`` when it is not blank (no blank line between), else None."""
@@ -788,9 +794,22 @@ def _column(text: str, rows: '_Rows', ls: int, le: int, cell_start: int, label_e
         return None
     row = rows.below(le)
     values = rows.aligned(*row) if row is not None else []
-    if len(values) == len(cells):
+    if len(values) == len(cells) and _under_their_heads(cells, ls, values, row[0]):
         return values[k]
-    return _UNPLACED if row is not None and _states_a_date(text, *row) else _NO_VALUE
+    return _UNPLACED if row is not None and rows.states_a_date(*row) else _NO_VALUE
+
+
+def _under_their_heads(cells: list[tuple[int, int]], ls: int, values: list[tuple[int, int]], rs: int) -> bool:
+    """Whether each value cell of a row lies under its own head (the final refutation, fr-dr:1): it overlaps the columns
+    from its head's start to the next head's start (the last head's run to the line's end). A cell split at a double
+    space ("Synthetic,  Alex" under "Patient") with a cell left empty matches the header's count while every value after
+    it stands under another head: counted, the date-of-service column read the date of birth."""
+    for j, (vs, ve) in enumerate(values):
+        head = cells[j][0] - ls
+        upto = cells[j + 1][0] - ls if j + 1 < len(cells) else None
+        if ve - rs <= head or (upto is not None and vs - rs >= upto):
+            return False
+    return True
 
 
 def _line_label(text: str, ls: int, le: int) -> Optional[str]:
@@ -804,6 +823,31 @@ def _line_label(text: str, ls: int, le: int) -> Optional[str]:
 
 def _opens_with_date(text: str, start: int, end: int) -> bool:
     return _VALUE_DATE_START.match(text, _strip_span(text, start, end)[0], end) is not None
+
+
+def _date_alone(text: str, start: int, end: int) -> bool:
+    """Whether the line [start, end) holds a date-shaped value and nothing else but a clock or a full stop (fr-dr:1): a
+    stacked date or birth label's place holds one, and no other label's place does."""
+    s, e = _strip_span(text, start, end)
+    if not _opens_with_date(text, s, e):
+        return False
+    run = _VALUE_TOKEN.match(text, s, e)
+    if run is None:
+        return False
+    pos = run.end()
+    if pos < e and _GLUED.match(text, pos):
+        pos = _NON_SPACE.match(text, pos, e).end()
+    pos = _CLOCK_AFTER.match(text, pos, e).end()
+    if pos < e and text[pos] == '.':
+        pos += 1
+    return _blank_to(text, pos, e)
+
+
+def _place_fits(text: str, kind: str, start: int, end: int) -> bool:
+    """Whether a stack's value line fits its label's kind (fr-dr:1): a date or birth label's place holds a date alone,
+    any other label's place holds no date alone - a heading counted as a label ("PATIENT INFORMATION:") or a findings
+    line counted as a value ("1.5 cm ...", "3/4 of the colon ...") shifts a date into a place of the other kind."""
+    return _date_alone(text, start, end) == (kind != 'other')
 
 
 def _stacked_value(text: str, rows: '_Rows', ls: int, le: int):
@@ -835,13 +879,12 @@ def _stacked_value(text: str, rows: '_Rows', ls: int, le: int):
         while line is not None and len(values) < len(lines) and _line_label(text, *line) is None:
             values.append(line)
             line = rows.next_line(line[1])
-        if len(values) == len(lines) and all(kind == 'other' or _opens_with_date(text, *values[i])
-                                              for i, kind in enumerate(kinds)):
+        if len(values) == len(lines) and all(_place_fits(text, kind, *values[i]) for i, kind in enumerate(kinds)):
             return values[here], True
         other = 'birth' if kinds[here] == 'dos' else 'dos'
         if here != len(lines) - 1 or other in kinds:
             # fr-dr:0: "DOB:" / "Date of service:" over "10/14/2026" alone states a date whose place cannot be told
-            return _UNPLACED if any(kind != 'other' and _states_a_date(text, *values[i])
+            return _UNPLACED if any(kind != 'other' and rows.states_a_date(*values[i])
                                     for i, kind in enumerate(kinds[:len(values)])) else _NO_VALUE
     row = rows.below(le)  # one label above its value, or the last of labels of another kind: the next line
     return (row, False) if row is not None and _opens_with_date(text, *row) else None
