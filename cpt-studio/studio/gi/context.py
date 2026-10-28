@@ -78,7 +78,8 @@ SERVICE_DATE = cues.rx(r'(?<![\w/-])(?P<label>' + _DATE_LABEL + r')' + _DATE_LAB
 # Date-shaped text this reader does not read as a date (refutation r1, context-3): a weekday before a date, a
 # two-digit year, dashes, dots or year-first slashes, "20th of October". As a title's date it is documented date text a
 # member value must agree with - never a gap a member value silently fills.
-_WEEKDAY = r'(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues?|wed|thu(?:rs?)?|fri|sat|sun)\.?'
+_WEEKDAY_NAME = r'(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues?|wed|thu(?:rs?)?|fri|sat|sun)'
+_WEEKDAY = _WEEKDAY_NAME + r'\.?'
 _FULL_DATE_SHAPE = re.sub(r'\(\?P<\w+>', '(?:', _FULL_DATE)
 DATE_SHAPE = (r'(?:' + _WEEKDAY + r',?[ \t]+(?:' + _FULL_DATE_SHAPE + r')'
               r'|\d{1,4}[-/.]\d{1,2}[-/.]\d{2,4}'
@@ -412,12 +413,13 @@ def _opens_field(text: str, label_start: int, label_end: int) -> bool:
     return word is not None and word.group(1)[:1].islower()
 
 
-def _label_words(text: str, label_start: int, label_end: int) -> tuple[str, int]:
+def _label_words(text: str, label_start: int, label_end: int, fields: bool = True) -> tuple[str, int]:
     """The label's own words before it ("Outside" in "Outside procedure date") and where they start: words joined by
     single spaces only, so a field break (two spaces, a tab), punctuation, a digit or the line start ends them - and a
     label that opens a field of its own has none (refutation round 2, c2:2). A label that opens its line in lower case
-    continues the line above, as a wrapped line does ("Outside" above "procedure date: ...", c2:6)."""
-    if _opens_field(text, label_start, label_end):
+    continues the line above, as a wrapped line does ("Outside" above "procedure date: ...", c2:6). ``fields`` False
+    reads the words before a label that opens a field of its own too (_measured_on: "Total Time on Date of Service")."""
+    if fields and _opens_field(text, label_start, label_end):
         return '', label_start
     newline = text.rfind('\n', max(0, label_start - 200), label_start)  # bounded: a long line costs each label 200
     if newline >= 0 and text[label_start].islower() and not text[newline + 1:label_start].strip():
@@ -1114,6 +1116,72 @@ def _first_value(text: str, start: int, end: int, births: bool = True) -> Option
 # clock's.
 _NEXT_LABEL = re.compile(r"(?<![\w/.-])[A-Za-z][A-Za-z .'’/()#&-]{0,40}?[ \t]*+[:=](?!\d)")
 
+# GI round 2 (session 7c8d38da; the one preserved failure of the 2b82889f acceptance walk, ho-04): elapsed time is no
+# date. "Total time on the date of service: 34 minutes, including record review, ..." was read as a date-of-service
+# FIELD whose value "34" is a date this service cannot read, so the note's own "Date of service: 2026-10-22" was asked
+# (its request went without the date and 99214 waited for a member's answer) and, where no label states the date, every
+# member date was held - 057a7d398 read 2026-10-22. A DURATION is the grammar of a quantity of time: a number, or a
+# range of two, and a unit of time. Units of time are this rule's only vocabulary (a closed class); days, weeks and
+# months are left out on purpose, because a date offset is written in them ("2 weeks after the index procedure"). A
+# field holds one only when nothing else in it may state a day: it does not open with another number, and outside its
+# durations no date starts (_GAP_DATE), no number runs to three digits ("20261022", "2026"), and no ordinal day or
+# weekday stands ("the 23rd", "Friday": the calendar's own names, _WEEKDAY_NAME) - a time stated on another day keeps
+# the installed reading (asked). Two places read it (_measured_on, the date-label loop of _service_dates; _value_extent).
+_TIME_UNIT = r'(?:minutes?+|mins?+|hours?+|hrs?+|seconds?+|secs?+)'
+_DURATION_NUMBER = r'\d{1,4}+(?:\.\d{1,2}+)?+'
+DURATION = cues.rx(r'(?<![\w/.:-])' + _DURATION_NUMBER + r'(?:[ \t]*+(?:-|–|\bto\b)[ \t]*+' + _DURATION_NUMBER
+                   + r')?+[ \t]*+' + _TIME_UNIT + r'(?![A-Za-z0-9])\.?+')
+_LONG_NUMBER = re.compile(r'\d{3,}')
+_DAY_WORD = cues.rx(r'\b' + _WEEKDAY_NAME + r'\b|(?<![\w/.-])\d{1,2}(?:st|nd|rd|th)\b')
+_WORD_OR_DIGIT = re.compile(r'[A-Za-z0-9]')
+
+
+def _holds_duration(text: str, start: int, end: int, alone: bool = False) -> bool:
+    """Whether a label's value field [start, end) holds a duration and nothing that may state a day (the elapsed-time
+    rule above). The field ends at another field's label, never at one whose words run back over a duration's unit
+    ("34 minutes. Date of service: ..." - the next label is "Date of service:", not "minutes. Date of service:").
+    ``alone``: the field holds nothing but durations (blanks and punctuation between them)."""
+    spans = [(d.start(), d.end()) for d in DURATION.finditer(text, start, end)]
+    if not spans:
+        return False
+    pos = start
+    while True:
+        other = _NEXT_LABEL.search(text, pos, end)
+        inside = None if other is None else next((e for s, e in spans if s <= other.start() < e), None)
+        if inside is None:
+            stop = end if other is None else other.start()
+            break
+        pos = inside
+    spans = [(s, e) for s, e in spans if e <= stop]
+    if not spans:
+        return False
+    opening = _BLANKS.match(text, start, stop).end()
+    if opening != spans[0][0] and _DIGIT.match(text, opening):
+        return False  # the field opens with another number: its value, as _value_extent reads it
+    pos = start
+    for s, e in spans + [(stop, stop)]:
+        if (_GAP_DATE.search(text, pos, s) is not None or _LONG_NUMBER.search(text, pos, s) is not None
+                or _DAY_WORD.search(text, pos, s) is not None
+                or (alone and _WORD_OR_DIGIT.search(text, pos, s) is not None)):
+            return False
+        pos = e
+    return True
+
+
+def _measured_on(text: str, label_start: int, label_end: int) -> bool:
+    """Whether the date-of-service phrase at [label_start, label_end) dates what the words before it name - it is the
+    object of their connecting word: those words (as _label_words reads them, also before a capitalised label, "Total
+    Time on Date of Service") end with a connecting word (_CONNECTOR, the grammar labels are written with), or with a
+    neutral word after one ("Total time on the date of service", "Time spent on DOS", "Total time spent on this date of
+    service"). A word of the label's own ("Initial date of service", "Previous DOS", "Colonoscopy date of service")
+    makes it no quantity's label: a date label, read as before."""
+    words = _label_words(text, label_start, label_end, fields=False)[0].split()
+    if not words:
+        return False
+    if _CONNECTOR.fullmatch(words[-1]):
+        return True
+    return len(words) > 1 and words[-1].lower() in _NEUTRAL_WORDS and _CONNECTOR.fullmatch(words[-2]) is not None
+
 
 def _value_extent(text: str, start: int, end: int) -> Optional[tuple[int, int]]:
     """The label's own value in its value field [start, end): the first date-shaped run (_first_value) before another
@@ -1127,7 +1195,12 @@ def _value_extent(text: str, start: int, end: int) -> Optional[tuple[int, int]]:
     agrees with it. The final refutation, fr-dr:0: such a field still STATES a date - "rescheduled to 10/14/2026",
     "approx. 10/14/2026", "~10/14/2026", a date-shaped run that is no date of birth after other words - and is
     _UNPLACED: asked, the label alone kept (read as stating none, it never spoke, and "Procedure date: 10/07/2026"
-    beside it was documented and sent). A number that is no date ("MRN 0000") states none."""
+    beside it was documented and sent). A number that is no date ("MRN 0000") states none, and nor does a field holding
+    nothing but durations ("Date of service: 34 minutes": GI round 2, the elapsed-time rule, _holds_duration): it is
+    kept as a field that states no date (rule N3) - never a date this service cannot read, which spoke against the
+    note's own date. A date stated relative to another event ("48 hours after the index procedure") is read as before."""
+    if _holds_duration(text, start, end, alone=True):
+        return None
     other = _NEXT_LABEL.search(text, start, end)
     stop = other.start() if other is not None else end
     start = _BLANKS.match(text, start, stop).end()
@@ -1253,6 +1326,14 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
             label_end = tail.end('sep') if tail.group('sep') not in (None, '|') else m.end('label')
             found.append(_Candidate(_span(text, start, label_end), None, 'label', _READING[kind],
                                     'empty' if where is _NO_VALUE else 'unread'))
+            continue
+        if _holds_duration(text, where[0], where[1]) and _measured_on(text, m.start('label'), m.end('label')):
+            # GI round 2, the elapsed-time rule (ho-04): a date-of-service phrase that is the object of the words before
+            # it ("Total time on the date of service: 34 minutes, including ...", "Time spent on DOS - 40 min") dates the
+            # quantity those words name, and its field - a duration, nothing that may state a day - is that quantity's:
+            # no date field at all, so no date candidate (rule A keeps every DATE a label states; this field states
+            # none). Kept as a date this service cannot read, it made the note's own date a conflict and held every
+            # member date where the note labels none; the note now reads as it does without the time statement.
             continue
         kind, start = _labelled_kind(text, m.start('label'), m.end('label'), where[0], where[1], None)
         # refutation round 3, sk:1: the evidence is the label and its own value, never the text beside it; and a field
@@ -1808,6 +1889,15 @@ USER_CONFLICT_NOTE = ('Encounter metadata entered by a workspace member gives {u
                       'Both are kept and neither is used until they agree: correct the metadata, clear it, or add an '
                       'addendum to the document.')
 _USER_CONFLICT_PREFIX = USER_CONFLICT_NOTE.split('{', 1)[0]
+# GI round 2 (the occurrence investigation's R4 (ii)): a member's date equal to a date the document states only where
+# this reader reads it as another occurrence's or another document's date, or as possibly one (_ElsewhereSpan: fr-di:3,
+# df-d:4), is held as before - but USER_CONFLICT_NOTE said 'the document gives “Date of service: 10/14/2026”. Both are
+# kept and neither is used until they agree', as if the two dates differed. This note says why they are held. It opens
+# with USER_CONFLICT_NOTE's prefix, by which every reader - and a rollback to 2b82889f - knows a member conflict.
+USER_ELSEWHERE_NOTE = (_USER_CONFLICT_PREFIX + '{user}; the document states that date only where this service reads it '
+                       "as another occurrence's or another document's date, or as possibly one ({document}), not as this "
+                       "encounter's date of service. Both are kept and neither is used: correct the metadata, clear it, "
+                       'or add an addendum to the document.')
 
 
 def is_member_conflict(fact) -> bool:
@@ -1835,12 +1925,17 @@ def _date_readings(spans) -> Optional[set]:
     for span in spans:
         if isinstance(span, _ElsewhereSpan):
             continue
-        quoted = str(span.text)
-        # refutation phase 2, rule N2: a date of birth is never read, wherever an evidence span holds one
-        values |= {day.isoformat() for day in (date_from_match(m) for m in FULL_DATE.finditer(quoted)
-                                                if _BIRTH_BEFORE.search(quoted, max(0, m.start() - _BIRTH_REACH),
-                                                                        m.start()) is None) if day}
+        values |= _span_dates(span)
     return values or None
+
+
+def _span_dates(span) -> set:
+    """The calendar dates one evidence span states (ISO strings) - never a date of birth (refutation phase 2, rule N2:
+    a date of birth is never read, wherever an evidence span holds one)."""
+    quoted = str(span.text)
+    return {day.isoformat() for day in (date_from_match(m) for m in FULL_DATE.finditer(quoted)
+                                        if _BIRTH_BEFORE.search(quoted, max(0, m.start() - _BIRTH_REACH),
+                                                                m.start()) is None) if day}
 
 
 def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> dict[str, Fact]:
@@ -1895,9 +1990,15 @@ def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> di
             if readings is not None and value in readings:
                 merged[name] = Fact(name, value, 'user', (), USER_NOTE)
                 continue
-            shown = ', '.join('\u201c' + ' '.join(ev.text.split())[:60] + '\u201d' for ev in documented.evidence[:3])
+            # GI round 2, R4 (ii): a date the document states only as another occurrence's or another document's (or
+            # possibly one) is said to be so, quoting the spans that state it - never as if the two dates differed
+            elsewhere = [ev for ev in documented.evidence if isinstance(ev, _ElsewhereSpan)
+                         and value in _span_dates(ev)] if name == 'service_date' else []
+            shown = ', '.join('\u201c' + ' '.join(ev.text.split())[:60] + '\u201d'
+                              for ev in (elsewhere or documented.evidence)[:3])
             merged[name] = Fact(name, None, 'conflict', documented.evidence,
-                                USER_CONFLICT_NOTE.format(user=value, document=shown))
+                                (USER_ELSEWHERE_NOTE if elsewhere else USER_CONFLICT_NOTE).format(user=value,
+                                                                                                  document=shown))
             continue
         merged[name] = Fact(name, value, 'user', (), USER_NOTE)
     return merged
