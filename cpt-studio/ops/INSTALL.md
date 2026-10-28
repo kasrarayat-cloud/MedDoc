@@ -64,7 +64,7 @@ directory. Exit 0 = done; 1 = refused or failed (the receipt says which and why)
 `rollback-app` removes the web and worker containers; it keeps the database,
 volumes, images and secrets, and needs the database to be running. First, with
 the pair's own image, it reads the records their revision made that an older
-revision would act on wrongly (listed under **Reinstalling an older
+revision would act on, or show, wrongly (listed under **Reinstalling an older
 revision**): while any exists it refuses, naming the encounters, and stops
 nothing. Otherwise it stops the pair, closes every stage it queued, ran or left
 resumable since it was created, and every stage of a kind the next worker cannot
@@ -136,21 +136,31 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   closed as failed, naming the revision (failed, not cancelled: no web offers a
   Resume for it), and the provider runs they left unsettled are settled as the
   stale-stage sweep settles them (the closed encounters' states are refreshed).
-  Nothing finished is touched and no row is removed. Each stored state this
-  revision labels from more than the state - a response refused whole is
-  `provider_failed`, which this revision labels 'Provider response not used'
-  and the parked revision would list as 'Provider request failed' - is then
-  given the state the parked image itself derives for it (see **Reinstalling
-  an older revision**). Then the new pair is removed and the parked pair renamed
-  back. Its web is started. Its worker is started too unless the close names
-  records it would act on wrongly (listed under **Reinstalling an older
-  revision**); then the worker is left stopped - it alone holds the Corti
-  credentials, so nothing can be sent - and the receipt names the encounters:
-  install this revision again once its failure is fixed (its worker reads those
-  records under its own rules). If the stages cannot be closed, or those states
-  cannot be put back, the new pair is left stopped and the parked pair parked
-  (the receipt says so): run `rollback-app`, then rename the parked pair back.
-  Migrations already applied are not reversed.
+  Nothing finished is touched and no row is removed. If the close then names
+  an encounter whose state the parked revision would show wrongly whatever it
+  is handed - a bounded second review's response refused whole
+  (**second_review_refused**, under **Reinstalling an older revision**) - and
+  the parked pair is not this revision, nothing is restored over it: the new
+  pair is left stopped and the parked pair parked, and the receipt names the
+  encounters. To keep this revision, remove the parked pair by hand and rerun
+  `app` once its failure is fixed; to go back, start this pair again, clear
+  them on its web, run `rollback-app`, then rename the parked pair back. (A
+  parked pair of this same revision - a same-revision re-run - shows them as
+  this revision does, and is restored as below.) Each stored state this
+  revision labels from more than the state - the primary answer's response
+  refused whole is `provider_failed`, which this revision labels 'Provider
+  response not used' and the parked revision would list as 'Provider request
+  failed' - is then given the state the parked image itself derives for it
+  (see **Reinstalling an older revision**). Then the new pair is removed and
+  the parked pair renamed back. Its web is started. Its worker is started too
+  unless the close names records it would act on wrongly (listed under
+  **Reinstalling an older revision**); then the worker is left stopped - it
+  alone holds the Corti credentials, so nothing can be sent - and the receipt
+  names the encounters: install this revision again once its failure is fixed
+  (its worker reads those records under its own rules). If the stages cannot be
+  closed, or those states cannot be put back, the new pair is left stopped and
+  the parked pair parked (the receipt says so): run `rollback-app`, then rename
+  the parked pair back. Migrations already applied are not reversed.
 - **Work in flight at the swap** is not frozen: a stage the previous pair
   queued or left running is finished by the new pair under the new rules, and
   nothing is sent that no member asked for. A predict the previous pair queued
@@ -233,20 +243,31 @@ failure path of `app` read them as it reads the rows):
   (after a metadata save, a Resume or a reconciliation) reads the primary
   answer alone, so the code leaves the decision set without a reviewer's
   decision.
+- **second_review_refused**: the current assessment read a bounded second
+  review whose response this revision refused whole (not used), beside a
+  primary answer that was used and leaves nothing to decide. 057a7d39
+  recognises a refusal of the primary answer only, so whatever state it is
+  handed it says that no code was proposed beside a response it never read:
+  as `no_codes` it lists 'No CPT codes proposed', as `provider_failed`
+  'Provider request failed' ("The provider request failed. The provider did not
+  return proposals."), and its blocker is "No CPT code was proposed" and its
+  page "No CPT codes were proposed for this document." either way. No list
+  state can be put back for it, so it is named, never handed over.
 - a stage of a kind it has no stage for (the second review), queued, running,
   or stopped as the latest: its worker ends on it.
 
 `rollback-app` closes the last as failed, and refuses, naming the encounters,
-while any of the first four exists. They are cleared on this revision's web:
+while any of the first five exists. They are cleared on this revision's web:
 reconcile each unknown outcome; Resume the stopped stage, or answer the date
 question (correct or clear the metadata date), after which this revision makes
 the request for the agreed date (re-assessing with, or re-using, a recorded
 answer to it where one exists). A request that failed or was not sent stays
 recorded on its revision, so only an addendum (a newer revision, whose own
 request then stands) clears an encounter a metadata save would send it again
-for, or this revision stays installed. A code only a second review selected is
-cleared likewise by an addendum (the newer revision's assessment reads no
-second review until one is asked for), or this revision stays installed. So,
+for, or this revision stays installed. A code only a second review selected,
+and a second review's response refused whole, are cleared likewise by an
+addendum (the newer revision's assessment reads no second review until one is
+asked for), or this revision stays installed. So,
 before reinstalling an older revision over this one:
 
 1. Clear those records on this revision's web.
@@ -278,27 +299,33 @@ return proposals.") although the request succeeded. So `rollback-app`, and the
 failure path of `app`, give each such encounter the state the next pair
 derives for it before handing the rows over: the parked image's own
 derivation when a pair is parked, else 057a7d39's (its derivation, run in this
-revision's image): for a response refused whole, `no_codes` - 'No CPT codes
-proposed', with its blocker "The provider response was not used" - what
-057a7d39 itself shows for that row. Every other state is labelled alike by both
-revisions and keeps this revision's derivation: 057a7d39's own reading of a
-hold (a request that failed) or of a second review the undo closed (a failed
-stage) would list a date question as 'Provider request failed' and drop both
-from its review queue - and a state on the review queue is never put back,
-whatever its label. Installing this revision again recomputes every state.
+revision's image). That is truthful for the primary answer's response refused
+whole only: `no_codes` - 'No CPT codes proposed', with its blocker "The
+provider response was not used" and its page saying the response was not used,
+so there are no CPT proposals - what 057a7d39 itself shows for that row. A
+bounded second review's response refused whole has no such state (057a7d39
+reads a refusal of the primary answer only: as `no_codes` it would say "No CPT
+code was proposed"), so it is never put back: it is **second_review_refused**,
+named above, and `rollback-app` refuses while one exists. Every other state is
+labelled alike by both revisions and keeps this revision's derivation:
+057a7d39's own reading of a hold (a request that failed) or of a second review
+the undo closed (a failed stage) would list a date question as 'Provider
+request failed' and drop both from its review queue - and a state on the review
+queue is never put back, whatever its label. Installing this revision again
+recomputes every state.
 
 ## Recovery notes
 
 - `*-previous` containers left by an interrupted `app`: to go back, run
   `rollback-app` first (it refuses while the new pair's records would be acted
-  on wrongly, as above; otherwise it closes what the new pair left open and
-  every stage of a kind the parked worker cannot run, puts back the list states
-  the parked revision labels otherwise, with the parked image's own derivation,
-  and removes the new pair), then rename the parked pair back by hand; to keep
-  the new pair, remove them by hand, then rerun `app` - which recomputes the
-  stored list states - unless its receipt says they were recomputed (an
-  installer killed outright writes no receipt: rerun `app`). `app` refuses while
-  one exists.
+  on, or shown, wrongly, as above; otherwise it closes what the new pair left
+  open and every stage of a kind the parked worker cannot run, puts back the
+  list states the parked revision labels otherwise, with the parked image's own
+  derivation, and removes the new pair), then rename the parked pair back by
+  hand; to keep the new pair, remove them by hand, then rerun `app` - which
+  recomputes the stored list states - unless its receipt says they were
+  recomputed (an installer killed outright writes no receipt: rerun `app`).
+  `app` refuses while one exists.
 - Staged `.initial-credentials.json.new` / `.agent-credentials.json.new` from an
   interrupted `provision`: delete them (no account uses their passwords unless
   the receipt says the accounts were created) and rerun.

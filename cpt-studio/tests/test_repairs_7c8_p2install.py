@@ -12,6 +12,10 @@ Every document opens with the synthetic banner.
   its label from the run ('Provider response not used'); the upgrade's RECOMPUTE_STATES rewrote 057a7d39's own
   no_codes to it; 057a7d39 labels a stored state by its name alone and never recomputes one. The failure path of `app`
   handed the same rows to the restored pair.
+- install2:1, the skeptic of that repair: when the response refused whole is a bounded SECOND REVIEW's, 057a7d39 says
+  that no code was proposed whatever state it is handed (it reads a refusal of the primary answer only), so the
+  put-back to its no_codes traded one false statement for another. Such an encounter is named instead
+  ('second_review_refused'): rollback-app refuses, and the failure path of `app` restores no older pair over it.
 - install2:2: when `app` stopped between the swap and RECOMPUTE_STATES (a failed `docker rm` of the parked pair, an
   interrupted installer), the receipt said only that the removal failed (nothing at all after a Ctrl-C), and the
   documented recovery - "to keep the new pair, remove them by hand" - kept the replaced revision's states: a response
@@ -202,9 +206,10 @@ class Base(TestCase):
         world = RmFails(fail_rm, previous=False) if fail_rm else DockerWorld(previous=False)
         world.live[WEB] = world.container('new-web', 'web', NEW_IMAGE, NEW_REVISION, '2026-10-27T12:30:00.7Z')
         world.live[WORKER] = world.container('new-worker', 'worker', NEW_IMAGE, NEW_REVISION, '2026-10-27T12:30:41.25Z')
-        if parked:
-            world.live[WORKER + '-previous'] = world.container('old-worker', 'worker', OLD_IMAGE, OLD_REVISION,
-                                                                '2026-10-01T00:00:00Z')
+        if parked:  # labelled with its revision: this one's when 'same'
+            world.live[WORKER + '-previous'] = world.container(
+                'old-worker', 'worker', OLD_IMAGE, NEW_REVISION if parked == 'same' else OLD_REVISION,
+                '2026-10-01T00:00:00Z')
         ctx = SimpleNamespace(revision=NEW_REVISION)
         with scripts(world, parked, fail), mock.patch.object(install, 'inspect', world.inspect), \
                 mock.patch.object(install, 'docker', world.docker), \
@@ -223,6 +228,8 @@ class Base(TestCase):
         world = DockerWorld()
         for container in world.live.values():
             container['Image'] = OLD_IMAGE
+            if older == 'same':  # a same-revision re-run: the parked pair carries this revision's label
+                container['Config']['Labels'][install.REVISION_LABEL] = NEW_REVISION
 
         def wait(role, revision, image_id):
             if role == 'worker':
@@ -397,6 +404,140 @@ class RefusedResponseHandedBackTests(Base):
         self.assertFalse([call for call in world.calls if call[0] == 'script'
                           and call[2] in ('RECOMPUTE_STATES', 'INSTALLED_STATES')])
         self.assertEqual({e.pk: (e.state, e.updated_at) for e in models.Encounter.objects.all()}, stored)
+
+
+# --- install2:1, the skeptic of its repair: a second review's response refused whole is named, never put back --------
+
+class SecondReviewRefusedTests(Base):
+    """install2:1, the skeptic of the put-back (must-fix class 3). The response refused whole was the bounded SECOND
+    REVIEW's, asked for by a reviewer over a primary answer that was used and proposes nothing the report supports: this
+    revision lists it 'Provider response not used' (provider_failed, the state reading the second review's run), and its
+    blocker is 'The provider response was not used'. 057a7d39 recognises a refusal of the primary answer only (its
+    review._assessment_blockers and app.js emptySelectionCopy read the provider.status check). Measured with its real
+    code: put back to its own derivation, no_codes, it listed 'No CPT codes proposed', 'No CPT code was proposed' and
+    'No CPT codes were proposed for this document.'; left provider_failed, 'Provider request failed' ("The provider
+    request failed. The provider did not return proposals."), still with 'No CPT code was proposed'. No state it labels
+    truthfully exists, so the undo names the encounter ('second_review_refused', UNDO_HAZARDS) instead of handing the
+    rows over: rollback-app refuses, and the failure path of `app` leaves the new pair stopped and the previous pair
+    parked - unless the previous pair is this same revision (a same-revision re-run), which shows it as this revision
+    does. The primary's refusal stays put back (RefusedResponseHandedBackTests)."""
+
+    def second_review_refused(self, tag, primary=(VISIT,)):
+        """A report whose primary answer (HTTP 200, used) names only the ``primary`` quotes the report holds - none for
+        VISIT alone - then the bounded second review a reviewer asks for, answered HTTP 200 with a body that is not a
+        JSON object: refused whole, and read by the current assessment."""
+        self.provider.first, self.provider.later = list(primary), list(primary)
+        encounter_id = self.create(tag, text=REPORT)
+        self.assertTrue(self.client.get(f'/api/encounters/{encounter_id}').json()['second_review']['available'])
+        self.provider.outcomes = ['refused']
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/second-review').status_code, 201)
+        drain()
+        runs = models.ProviderRun.objects.filter(encounter_id=encounter_id).order_by('created_at')
+        self.assertEqual([(run.purpose, run.state, run.http_status) for run in runs],
+                         [(models.ProviderRun.PRIMARY, models.ProviderRun.SUCCEEDED, 200),
+                          (models.ProviderRun.SECOND_REVIEW, models.ProviderRun.SUCCEEDED, 200)])
+        assessment = self.encounter(encounter_id).current_assessment
+        self.assertEqual(review._refused_run(assessment).pk, assessment.second_run_id)
+        return encounter_id
+
+    def hazards(self):
+        return run_app_script(install.UNDO_HAZARDS_READ, {})['hazards']
+
+    def close(self):
+        since = models.Job.objects.order_by('-created_at').first().created_at.isoformat()
+        return run_app_script(install.CLOSE_STAGES, {'since': since, 'note': 'Closed (synthetic).',
+                                                     'kinds': list(install.COMMON_STAGE_KINDS)})
+
+    def test_the_read_and_the_close_name_it_until_an_addendum(self):
+        refused = self.second_review_refused('RF')
+        self.assertEqual(self.listed(refused), ('provider_failed', review.REFUSED_LABEL))
+        self.assertIn('The provider response was not used', review.readiness(self.encounter(refused))['blockers'])
+        self.assertEqual(self.hazards(), {refused: ['second_review_refused']})
+        self.assertEqual(self.close()['hazards'], {refused: ['second_review_refused']})
+        # cleared as ops/INSTALL.md says: an addendum - a newer revision, whose own request is sent and whose
+        # assessment reads no second review until one is asked for
+        sent = self.sent()
+        reply = self.post(f'/api/encounters/{refused}/addenda', {'text': 'Addendum (synthetic): no change to the plan.',
+                                                                 'synthetic_attestation': 'yes'})
+        self.assertEqual(reply.status_code, 201, reply.content)
+        drain()
+        self.assertEqual(self.sent(), sent + 1)
+        self.assertIsNone(self.encounter(refused).current_assessment.second_run_id)
+        self.assertEqual(self.hazards(), {})
+
+    def test_named_beside_a_question_too_never_beside_a_code_to_decide_nor_for_a_primary_refused(self):
+        # an open question for the encounter beside it (the row an assessment writes for one): this revision lists
+        # 'Needs clarification' and says the response was not used; 057a7d39's blocker says 'No CPT code was proposed'
+        asked = self.second_review_refused('RQ')
+        encounter = self.encounter(asked)
+        models.Clarification.objects.create(encounter=encounter, assessment=encounter.current_assessment,
+                                            scope='encounter', fact='place_of_service',
+                                            question='Synthetic question for the test?', reason='Synthetic test row.')
+        review.refresh_state(encounter)
+        self.assertEqual(self.listed(asked), ('needs_clarification', 'Needs clarification'))
+        self.assertIn('The provider response was not used', review.readiness(self.encounter(asked))['blockers'])
+        # controls: a second review refused whole beside the primary's own code to decide - 057a7d39 shows that code and
+        # never says that none was proposed - and a primary response refused whole, which 057a7d39 reads (put back)
+        decided = self.second_review_refused('RC', primary=(VISIT, SNARE))
+        self.assertNotIn(self.encounter(decided).state, ('provider_failed', 'no_codes'))
+        primary = self.refused('G1')
+        self.assertEqual(self.hazards(), {asked: ['second_review_refused']})
+        closed = self.close()
+        self.assertEqual(closed['hazards'], {asked: ['second_review_refused']})
+        self.assertEqual(closed['relabel'], [primary])
+
+    def test_rollback_app_refuses_naming_it_before_anything_is_stopped(self):
+        refused = self.second_review_refused('RF')
+        sent = self.sent()
+        for parked in (None, 'installed', 'same'):  # also when this same revision is parked: an operator may install
+            with self.subTest(parked=parked):        # an older one instead of renaming it back
+                error, world = self.rollback(parked=parked)
+                self.assertIsInstance(error, install.InstallError)
+                self.assertIn('nothing was stopped or removed', str(error))
+                self.assertIn('1 encounter(s): second_review_refused 1', str(error))
+                self.assertEqual(error.details['hazards'], {refused: ['second_review_refused']})
+                self.assertFalse([call for call in world.calls if call[0] in ('stop', 'rm')])
+                self.assertEqual([call[2] for call in world.calls if call[0] == 'script'], ['UNDO_HAZARDS_READ'])
+                self.assertEqual(self.listed(refused), ('provider_failed', review.REFUSED_LABEL))
+        self.assertEqual(self.sent(), sent)
+
+    def test_the_failure_path_leaves_the_new_pair_stopped_and_the_previous_pair_parked(self):
+        refused = self.second_review_refused('RF')
+        sent = self.sent()
+        error, world = self.fail_install('installed')
+        message = str(error)
+        self.assertIn('cpt-studio-worker did not become ready', message)
+        self.assertIn('1 encounter(s): second_review_refused 1', message)
+        self.assertIn('the new pair was left stopped and the previous pair parked', message)
+        self.assertIn('--phase rollback-app', message)
+        self.assertEqual(error.details['hazards'], {refused: ['second_review_refused']})
+        self.assertEqual(world.ids(), {WEB + '-previous': 'old-web', WORKER + '-previous': 'old-worker',
+                                       WEB: 'new-web', WORKER: 'new-worker'})
+        self.assertFalse([call for call in world.calls if call[0] in ('start', 'rm')])
+        self.assertFalse([call for call in world.calls if call[0] == 'script'
+                          and call[2] in ('RECOMPUTE_STATES', 'INSTALLED_STATES')])  # nothing was put back
+        self.assertEqual(self.listed(refused), ('provider_failed', review.REFUSED_LABEL))
+        self.assertEqual(self.sent(), sent)
+
+    def test_controls_a_same_revision_re_runs_failure_path_restores_its_pair_as_before(self):
+        # a same-revision re-run (a provider-mode switch, say) whose new pair fails: the parked pair is this revision,
+        # which shows the refusal as this revision does - restored and both started, its state kept, nothing held
+        refused = self.second_review_refused('RF')
+        error, world = self.fail_install('same')
+        self.assertIn('cpt-studio-worker did not become ready', str(error))
+        self.assertNotIn('left stopped', str(error))
+        self.assertEqual(world.ids(), {WEB: 'old-web', WORKER: 'old-worker'})
+        self.assertEqual(sorted(call[1] for call in world.calls if call[0] == 'start'), sorted((WEB, WORKER)))
+        self.assertEqual(self.listed(refused), ('provider_failed', review.REFUSED_LABEL))
+        # with a record its worker would act on as well (an unreconciled unknown outcome), that worker alone is held, as
+        # before, and the receipt names only what it would act on
+        unknown = self.create('U', outcomes=['unknown'])
+        self.assertEqual(self.hazards(), {refused: ['second_review_refused'], unknown: ['unknown']})
+        error, world = self.fail_install('same')
+        self.assertIn('left stopped', str(error))
+        self.assertIn('1 encounter(s): unknown 1', str(error))
+        self.assertEqual(world.ids(), {WEB: 'old-web', WORKER: 'old-worker'})
+        self.assertEqual([call[1] for call in world.calls if call[0] == 'start'], [WEB])
 
 
 # --- install2:2: the app phase recomputes before it removes the parked pair, and says what it left -------------------
