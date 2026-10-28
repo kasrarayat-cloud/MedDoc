@@ -231,6 +231,25 @@ class HeaderBlockTests(DateAssertions, SimpleTestCase):
                 self.assert_asked(text, 'ate')
                 self.assert_member_date(text, '2026-10-14')
 
+    def test_an_addendum_opens_a_header_of_its_own(self):
+        # the app's "ADDENDUM (revision N, added ...)" line stands as the addendum's title: an addendum stating the date
+        # alone states it (the member-conflict note's remedy), one holding anything else asks it, as at the top
+        undated = HEAD + 'Colonoscopy report\n' + COLO_BODY
+        stamp = '\n\nADDENDUM (revision 2, added 2026-10-28 02:42 UTC)\n'
+        self.assert_document(undated + stamp + 'Date of service: 10/14/2026\n', '2026-10-14')
+        self.assert_asked(undated + stamp + 'Procedure date: 11/04/2026\nStatus: scheduled\n', 'Procedure date')
+        self.assert_asked(undated + stamp + 'The procedure was postponed.\nProcedure date: 11/04/2026\n', 'Procedure date')
+        self.assert_conflict(HEAD + HEADER + COLO_BODY + stamp + 'Date of service: 10/15/2026\n', '2026-10-14',
+                             '2026-10-15')
+
+    def test_a_title_may_carry_a_number_that_is_no_date(self):
+        for title in ('Colonoscopy report (fictional) M1', 'Endoscopy Suite 3', 'Page 1 of 2'):
+            with self.subTest(title=title):
+                self.assert_document(HEAD + title + '\nDate of service: 10/14/2026\n\n' + COLO_BODY, '2026-10-14')
+        for title in ('Colonoscopy report 09/03/2026 copy', 'Colonoscopy 2019', 'Report of Oct 2026'):
+            with self.subTest(title=title):
+                self.assert_asked(HEAD + title + '\nDate of service: 10/14/2026\n\n' + COLO_BODY, 'Date of service')
+
     def test_date_labels_in_the_header_must_agree(self):
         self.assert_document(HEAD + 'Date of service: 10/14/2026\nProcedure date: 10/14/2026\n\n' + COLO_BODY,
                              '2026-10-14')

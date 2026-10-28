@@ -358,9 +358,9 @@ sent to Corti with the act done that day excluded against it):
    service, DOS, service, procedure, visit or encounter date, date of
    procedure/visit/encounter, a label naming the time too) whose value is a date
    alone (a clock may follow it), standing in the document's **header**: from
-   the top, the title lines (no field, sentence, list item, table row, date but
-   a dated title's own, or word of another occurrence outside a service name;
-   at most 12 lines of at most 200 characters), then header lines whose fields
+   the top, the title lines (no field, sentence, list item, table row, date or
+   year but a dated title's own, or word of another occurrence outside a service
+   name; at most 12 lines of at most 200 characters), then header lines whose fields
    are all of a closed list - patient (name, id, status, type), name, record,
    chart or account number, date of birth, age, sex or gender, the physician,
    provider, endoscopist, operator, assistant or anesthesia provider, location,
@@ -371,10 +371,14 @@ sent to Corti with the act done that day excluded against it):
    occurrence or any date but a date of birth in a header value ends the header.
    Anything else in the block - another field, a heading, a sentence, a bullet,
    a bracket after the date, a body line without a blank line before it - makes
-   the date a question: a dateless request and a question for the member. This
-   is an over-hold for many real notes (a header followed directly by the
-   procedure, a "Sedation:" or "Patient status: ... last seen ..." field in the
-   header), a known limit: the member's answer with the labelled date settles it.
+   the date a question: a dateless request and a question for the member. An
+   addendum the app appends opens a header of its own (its "ADDENDUM (revision
+   N, added ...)" line is its title), so an addendum stating the date alone
+   documents it. This is an over-hold for many real notes - a header followed
+   directly by the procedure, a "Sedation:", "Billing:" or "Patient status: ...
+   last seen ..." field in the header, and every digital PDF or Word document,
+   whose extracted text keeps no blank line - a known limit: the member's answer
+   with the labelled date settles it (a second, dated request).
 2. *Everything else is evidence, never the sent date.* A dated title, a bare
    "Date:" or "Date/Time:" line, a dated line naming the service and a letter's
    subject line are kept as evidence. They can only make a labelled date a
