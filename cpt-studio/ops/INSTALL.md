@@ -282,7 +282,8 @@ proposed', with its blocker "The provider response was not used" - what
 revisions and keeps this revision's derivation: 057a7d39's own reading of a
 hold (a request that failed) or of a second review the undo closed (a failed
 stage) would list a date question as 'Provider request failed' and drop both
-from its review queue. Installing this revision again recomputes every state.
+from its review queue - and a state on the review queue is never put back,
+whatever its label. Installing this revision again recomputes every state.
 
 ## Recovery notes
 

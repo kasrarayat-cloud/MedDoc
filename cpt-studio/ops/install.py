@@ -1498,9 +1498,11 @@ for pk in encounters:
 # Refutation p2, install2:1: the encounters whose stored state this revision labels from more than the state (worded from
 # the run it reads: a response refused whole is provider_failed, 'Provider response not used'). An older revision labels
 # a state by its name alone ('Provider request failed', for a request that succeeded): put_back_states gives each the
-# state the older revision derives for its rows before the rows are handed over.
+# state the older revision derives for its rows before the rows are handed over. Never one on the review queue (the
+# states serializers.session_json counts, 057a7d39's alike): a put-back never takes an encounter off it.
+REVIEW_QUEUE = ('needs_clarification', 'ready_for_review', 'provider_unknown')
 relabel = []
-for encounter in models.Encounter.objects.order_by('created_at', 'pk').iterator():
+for encounter in models.Encounter.objects.exclude(state__in=REVIEW_QUEUE).order_by('created_at', 'pk').iterator():
     if review.encounter_state_label(encounter) != review.state_label(encounter.state):
         relabel.append(str(encounter.pk))
 print(ANSWER + json.dumps({'closed': closed, 'kinds': kinds, 'encounters': len(encounters),

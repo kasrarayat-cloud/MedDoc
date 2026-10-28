@@ -331,6 +331,19 @@ class RefusedResponseHandedBackTests(Base):
             encounter = self.encounter(pk)
             self.assertEqual(review.encounter_state_label(encounter), review.state_label(encounter.state))
 
+    def test_a_state_on_the_review_queue_is_never_put_back_whatever_its_label(self):
+        # A label worded from the run for a state on the review queue (none is today) never makes it a candidate:
+        # 057a7d39's own derivation of a hold is a request that failed, which would take it off its review queue.
+        held, refused = self.held('H'), self.refused('G1')
+        worded = review.encounter_state_label
+        since = models.Job.objects.order_by('-created_at').first().created_at.isoformat()
+        with mock.patch.object(review, 'encounter_state_label',
+                               side_effect=lambda encounter: f'{worded(encounter)} (worded from its run)'):
+            closed = run_app_script(install.CLOSE_STAGES, {'since': since, 'note': 'Closed (synthetic).',
+                                                           'kinds': list(install.COMMON_STAGE_KINDS)})
+        self.assertEqual(closed['relabel'], [refused])
+        self.assertEqual(self.encounter(held).state, 'needs_clarification')
+
     def test_installed_states_is_the_installed_revisions_derivation(self):
         # The values 057a7d398's own review._derive_state gives for these rows (the cross-revision probe's matrix): a
         # response refused whole is no_codes there, a hold a request that failed, a closed second review a failed stage.
