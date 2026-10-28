@@ -880,7 +880,30 @@ def _is_birth(text: str, start: int) -> bool:
 # pending Status: open") or another date - makes the date a question (dates:8: B3 and V1 sent the planned 11/04). The
 # structure only, never a word list; possessive runs, each date reads only what follows it up to the next label.
 _CLOCK_AFTER = cues.rx(_CLOCK)
-_NEXT_FIELD = cues.rx(r"[A-Za-z][A-Za-z0-9.'’/&#()-]*+(?: [A-Za-z0-9(][A-Za-z0-9.'’/&#()-]*+){0,5}[ \t]*+[:=](?!\d)")
+# P2DN's fix round, issue 2 (the label's field runs to the next field's LABEL): the words right before the next colon
+# are that label only when they are one label - one to four words, no full stop, comma or semicolon ending a word before
+# the last ("Pending authorization. Status:", "Not yet performed. Indication:"), no bracket but a format after the last
+# ("DOB (mm/dd/yyyy):"), and written as a label is: one word, or a capitalised first word with no capitalised word after
+# a word of its own ("Place of service", "Place of Service", "Referring physician"). Where the words may be the date's
+# field's own and a label's - "Cancelled Status:", "pending authorization Status:", "Patient Name:" - where the label
+# starts cannot be told, and the date is asked (the date's field held "Cancelled", and the planned or cancelled 11/04
+# was documented and sent). The structure of the label only, never a word list: connecting words ("of", "and") are the
+# grammar a label is written with.
+_NEXT_FIELD = re.compile(r"(?P<words>[A-Za-z][A-Za-z0-9.,;'’/&#-]*+(?: [A-Za-z0-9#][A-Za-z0-9.,;'’/&#-]*+){0,3}+)"
+                         r"(?:[ \t]*+\([^()\n]{1,20}+\))?+[ \t]*+[:=](?!\d)")
+_CONNECTOR = re.compile(r'(?:of|and|or|for|the|to|in|on|at|by|per|with)', re.I)
+
+
+def _one_label(words: list[str]) -> bool:
+    """Whether the words before the next field's colon are one label (rule N5, P2DN's fix round, issue 2)."""
+    if any(word[-1] in '.,;' for word in words[:-1]):
+        return False  # a sentence or a list runs on into the label
+    if len(words) == 1:
+        return True
+    if not words[0][0].isupper():
+        return False
+    return all(not word[0].isupper() or _CONNECTOR.fullmatch(word) or _CONNECTOR.fullmatch(before)
+               for before, word in zip(words, words[1:]))
 
 
 def _alone_in_field(text: str, date_end: int, line_end: int) -> bool:
@@ -892,7 +915,8 @@ def _alone_in_field(text: str, date_end: int, line_end: int) -> bool:
     gap = text[pos:rest]
     if not ('\t' in gap or len(gap) > 1 or (gap == ' ' and text[rest].isupper())):
         return False  # no field break, and no capitalised label one space after the date: the field runs on
-    return _NEXT_FIELD.match(text, rest, line_end) is not None
+    label = _NEXT_FIELD.match(text, rest, line_end)
+    return label is not None and _one_label(label.group('words').split(' '))
 
 
 # The value a date label states: the first date-shaped run of its value field - a weekday, then at most three date

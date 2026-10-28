@@ -299,3 +299,85 @@ class BirthDateInAnyRowRequestTests(EndToEnd):
                 own = self.finished(text, service_date='2026-10-14')
                 self.assertEqual(self.dates_sent(own), [['Date of service: 2026-10-14']])
                 self.assertEqual(self.bucket(own, '45385'), 'selected')
+
+
+# --- 2: the next field's label is a label - one word, or words a label is written in, with no sentence inside -------
+
+IN_THE_FIELD = (  # issue 2: the skeptic's Z1-Z5 - words in the label's own field, read as part of the next field's label
+    (HEAD + 'GI office visit\nProcedure date: 11/04/2026 Pending authorization. Status: open\n' + OFFICE_BODY, '99213'),
+    (HEAD + 'EGD report\nProcedure date: 11/04/2026 Cancelled. Reason: patient illness\n' + EGD_BODY, '43239'),
+    (HEAD + 'Colonoscopy report\nDate of service: 11/04/2026 Cancelled Status: closed\n' + COLO_BODY, '45385'),
+    (HEAD + 'EGD report\nProcedure date: 11/04/2026  pending authorization Status: open\n' + EGD_BODY, '43239'),
+    (HEAD + 'Colonoscopy report\nDate of service: 11/04/2026\tNot yet performed. Indication: screening\n' + COLO_BODY,
+     '45385'),
+)
+
+
+class NextFieldSLabelIsALabelTests(DateAssertions, SimpleTestCase):
+    """Issue 2 (N5, pre-existing at a62a18c85, 2fc8cde3d and 057a7d398 - but N5 states the label's field runs to the next
+    field's label): _NEXT_FIELD read up to six words with full stops and brackets before a colon as the next field's
+    label, so "Procedure date: 11/04/2026 Pending authorization. Status: open" read "Pending authorization." as part of
+    the label "Status" and documented the planned 11/04 (99213 ready, 43239 excluded). The next field's label is the
+    words right before its colon only when they are one label: no full stop, comma or semicolon inside, no bracket but
+    a format after it, one word - or a label of several words, written with a capital first and no capitalised word
+    after a word of its own ("Place of service", "Referring physician", "Place of Service"). Where the words could be
+    the date's field's own and a label's ("Cancelled Status:", "pending authorization Status:") the date is asked."""
+
+    def test_words_in_the_label_s_field_ask_the_date(self):
+        for text, _code in IN_THE_FIELD:
+            with self.subTest(line=text.splitlines()[2]):
+                self.assert_never(text, '2026-11-04')
+                fact = date_fact(text)
+                self.assertEqual((fact.origin, fact.value), ('missing', None), fact.evidence)
+                self.assertIn(context.FIELD_DATE_NOTE, fact.note)
+                self.assert_member_date(text, '2026-11-04')
+
+    def test_a_sentence_or_a_list_before_a_lower_case_label(self):
+        # what only the sentence-end rule asks: a full stop or a comma ends a word before a label written in lower case
+        for line in ('Procedure date: 11/04/2026  Cancelled. status: open',
+                     'Date of service: 11/04/2026\tPostponed, reason: patient illness',
+                     'Date of service: 11/04/2026    Pending; reason: authorization'):
+            text = HEAD + 'Colonoscopy report\n' + line + '\n' + COLO_BODY
+            with self.subTest(line=line):
+                self.assert_never(text, '2026-11-04')
+                self.assert_member_date(text, '2026-11-04')
+
+    def test_the_skeptic_s_family_a(self):
+        words = ('Cancelled.', 'Cancelled', 'Pending authorization.', 'Not yet performed.', 'Postponed (patient request)',
+                 'Awaiting insurance approval.', 'CANCELLED', 'Tentative only.', 'pending authorization')
+        for word in words:
+            for sep in (' ', '  ', '\t'):
+                if sep == ' ' and word[0].islower():
+                    continue
+                for nxt in ('Status: open', 'Reason: patient illness', 'Indication: screening', 'Comments: see note'):
+                    for label, body in (('Procedure date', EGD_BODY), ('Date of service', COLO_BODY)):
+                        text = HEAD + 'Procedure report\n' + f'{label}: 11/04/2026{sep}{word} {nxt}' + '\n' + body
+                        with self.subTest(line=text.splitlines()[2]):
+                            self.assert_never(text, '2026-11-04')
+
+    def test_controls_the_next_field_s_label(self):
+        for line in ('DOS: 10/14/2026 MRN: 0000', 'DOS: 10/14/2026 DOB: 01/01/1998',
+                     'Date of service: 10/14/2026    Place of service: Office',
+                     'Date of service: 10/14/2026    Place of Service: 22',
+                     'Date of service: 10/14/2026    PLACE OF SERVICE: 22',
+                     'Date of service: 2026-10-14 Place of service: Office',
+                     'Date of service: 10/14/2026\tReferring physician: Dr. B. Synthetic',
+                     'Date of service: 10/14/2026 08:30 Provider: Dr. A. Synthetic',
+                     'Date of service: 10/14/2026    DOB (mm/dd/yyyy): 01/01/1998',
+                     'Date of service: 10/14/2026    D.O.B.: 01/01/1998', 'Date of service: 10/14/2026    time: 08:30'):
+            with self.subTest(line=line):
+                self.assert_document(HEAD + 'Colonoscopy report\n' + line + '\n' + COLO_BODY, '2026-10-14')
+        for line in ('Date of service: 10/14/2026    Patient Name: Synthetic', 'DOS: 10/14/2026 mrn: 0000',
+                     'Date of service: 10/14/2026    Ref. physician: Dr. B. Synthetic'):
+            with self.subTest(line=line):  # where the label may start later: asked, never another date
+                self.assert_question(HEAD + 'Colonoscopy report\n' + line + '\n' + COLO_BODY, '2026-10-14')
+
+
+class NextFieldSLabelIsALabelRequestTests(EndToEnd):
+    def test_z1_z5_send_no_date(self):
+        for text, code in IN_THE_FIELD:
+            with self.subTest(line=text.splitlines()[2][:60]):
+                encounter_id = self.finished(text)
+                self.assertEqual(self.dates_sent(encounter_id), [[]])
+                self.assert_not_excluded(encounter_id, code)
+
