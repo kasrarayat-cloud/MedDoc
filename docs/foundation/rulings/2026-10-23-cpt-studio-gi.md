@@ -712,3 +712,28 @@ the work that depends on it. Verbatim:
 30. **One integration and deployment owner.** Session 7c8d38da is the single owner of this round's branch
     (`fix/cpt-studio-gi-interpretation-20261028`), its install and every live action (uploads, the second review,
     decisions, downloads). Its agents investigate and repair in their own worktrees and never act on the live service.
+
+## Owner decisions, 2026-10-28 (session 7c8d38da, second round) — the wrong-occurrence date family and a demo account
+
+Asked in session 7c8d38da at about 22:15Z on 28 October 2026, after the session explained interpretations 27 and 28
+with product examples (a wrong status exclusion reinstated before a reviewed report exists; a right one confirmed; a
+letter's "Date:" asked; an "Outside colonoscopy:" block whose "Procedure date: 09/03/2026" the installed revision sends
+as today's date). Verbatim questions and the owner's answers:
+
+> Which policy should this round adopt for service dates that the document itself marks as another occurrence's (e.g. an "Outside colonoscopy:" block whose "Procedure date: 09/03/2026" the installed revision sends as today's date)?
+> — Narrow source rule (Recommended): Ask the date (never send it) when a heading, title or row field naming another occurrence (outside/prior/previous/cancelled/scheduled...) governs the label; neutral headings like 'Patient information:' unchanged. Prototype: 0 changes on all live, held-out, corpus and gate texts; ~9.6k constructed wrong-date sends become questions. A member cannot answer with the other occurrence's date (addendum only).
+
+The owner's answer: **"Narrow source rule (Recommended)"**.
+
+> For the doctor-facing demo, which account should a doctor use? Only two accounts exist today: your owner account and the verification agent account.
+> — Separate demo reviewer (Recommended): I provision one new reviewer account in the GI workspace via manage.py provision, with a generated password stored 0600 on the server for you; decisions are attributed to it, not to you. A new credential (class d), so only with your yes.
+
+The owner's answer: **"Separate demo reviewer (Recommended)"**.
+
+What it changes, so a later session does not re-derive it:
+- Interpretation 28's open family is ruled: a labelled date governed by a heading, a title or a field on its row that
+  names another occurrence is asked, never sent, and a member's answer equal to that other occurrence's date is not
+  taken (an addendum settles it). A neutral heading the reader cannot place changes nothing. The status field beside
+  the label ("Status: Scheduled"), "Recall" and another discipline's undated title stay known limits.
+- One new reviewer account is provisioned for doctor demonstrations, in the one GI workspace, as a declared step of this
+  round's install; its password is generated on the server and kept there at mode 0600 for the owner.
