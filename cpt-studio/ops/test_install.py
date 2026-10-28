@@ -1479,7 +1479,8 @@ class ServiceReplacementTests(TemporaryDirectoryTest):
         ctx = install.Context(SimpleNamespace(phase='app', revision=REVISION), self.tmp)
         with mock.patch.object(install, 'inspect', fake_inspect), mock.patch.object(install, 'docker', fake_docker), \
                 mock.patch.object(install, 'wait_service', fake_wait), \
-                mock.patch.object(install, 'close_undone_stages', return_value={'closed': 0, 'hazards': {}}), \
+                mock.patch.object(install, 'close_undone_stages',
+                                  return_value={'closed': 0, 'hazards': {}, 'relabel': []}), \
                 self.assertRaises(install.InstallError):
             install.replace_services(ctx, 'new', b'', 'disabled', '')
         self.assertEqual({name: container['Id'] for name, container in live.items()},

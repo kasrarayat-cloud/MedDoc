@@ -1495,8 +1495,17 @@ with transaction.atomic():
     closed = stages.update(state=Job.FAILED, error=P['note'], finished_at=now)
 for pk in encounters:
     review.refresh_state(models.Encounter.objects.get(pk=pk))
+# Refutation p2, install2:1: the encounters whose stored state this revision labels from more than the state (worded from
+# the run it reads: a response refused whole is provider_failed, 'Provider response not used'). An older revision labels
+# a state by its name alone ('Provider request failed', for a request that succeeded): put_back_states gives each the
+# state the older revision derives for its rows before the rows are handed over.
+relabel = []
+for encounter in models.Encounter.objects.order_by('created_at', 'pk').iterator():
+    if review.encounter_state_label(encounter) != review.state_label(encounter.state):
+        relabel.append(str(encounter.pk))
 print(ANSWER + json.dumps({'closed': closed, 'kinds': kinds, 'encounters': len(encounters),
-                           'runs_unknown': unknown, 'runs_not_sent': not_sent, 'hazards': undo_hazards()}))
+                           'runs_unknown': unknown, 'runs_not_sent': not_sent, 'hazards': undo_hazards(),
+                           'relabel': relabel}))
 '''
 # The stages this image's worker cannot run (a kind its STAGES does not know) that are queued, running, or cancelled
 # as their encounter's latest stage (what a Resume runs again): a worker meeting one ends on a KeyError (migrate-3).
@@ -1514,19 +1523,85 @@ for pk, kind, state, revision_id, encounter_id in rows:
     stuck.append(kind)
 print(ANSWER + json.dumps({'known': known, 'stuck': len(stuck), 'kinds': sorted(set(stuck))}))
 '''
-# Every encounter's stored list state recomputed with this revision's derivation (refutation p1, migrate-2: no action
-# recomputes it until one touches the encounter, and the revision replaced may have derived it otherwise - an
-# unreconciled unknown outcome it listed as reviewed is on this revision's review queue). review.refresh_state writes
-# only a state that changed; nothing is sent. The answer names each encounter whose state changed (as read, as derived).
+# Every encounter's stored list state recomputed with the derivation of the image it runs in (refutation p1, migrate-2:
+# no action recomputes it until one touches the encounter, and the revision replaced may have derived it otherwise - an
+# unreconciled unknown outcome it listed as reviewed is on this revision's review queue) - or only P['encounters'] when
+# given: an undo runs it so in the image of the pair it hands the rows to (put_back_states, refutation p2, install2:1),
+# so it uses only what every revision has (057a7d39's review.refresh_state included). review.refresh_state writes only a
+# state that changed; nothing is sent. The answer names each encounter whose state changed (as read, as derived).
 RECOMPUTE_STATES = '''
 from studio import models, review
-changed = {}
-for encounter in models.Encounter.objects.order_by('created_at', 'pk'):
+changed, rows = {}, models.Encounter.objects.order_by('created_at', 'pk')
+if P.get('encounters') is not None:
+    rows = rows.filter(pk__in=P['encounters'])
+for encounter in rows:
     read = encounter.state
     derived = review.refresh_state(encounter)
     if derived != read:
         changed[str(encounter.pk)] = [read, derived]
-print(ANSWER + json.dumps({'encounters': models.Encounter.objects.count(), 'changed': changed}))
+print(ANSWER + json.dumps({'encounters': rows.count(), 'changed': changed}))
+'''
+# The list state the installed revision 057a7d39 derives for each encounter of P['encounters'], written where it differs
+# (refutation p2, install2:1), for an undo with no older image to ask: rollback-app with no pair parked, after which the
+# older revision is installed by its own installer - 057a7d39's never recomputes a stored state, so it shows what it is
+# handed. installed_state is 057a7d398's review._derive_state with its _failed_stage_state, as they are there; the helpers
+# it calls are this revision's and byte-identical to 057a7d39's (_active_jobs, live_assessment, _unreconciled_unknown,
+# _review_state - whose readiness differs from 057a7d39's in the wording of its blockers only, never in whether there is
+# one), so a change to any of them ports 057a7d39's here first. Run in this revision's image; nothing is sent.
+INSTALLED_STATES = '''
+from django.db import transaction
+from django.utils import timezone
+from studio import models, review
+
+
+def installed_state(encounter):
+    Job, Run, Revision = models.Job, models.ProviderRun, models.SourceRevision
+    revision = encounter.current_revision
+    if revision is None or review._active_jobs(encounter):
+        return 'processing'
+    if revision.extraction_status == Revision.FAILED:
+        return 'extraction_failed'
+    latest = encounter.jobs.filter(revision=revision).order_by('-created_at', '-pk').first()
+    if latest is not None and latest.state == Job.CANCELLED:
+        return 'stopped'
+    if revision.extraction_status == Revision.PENDING:
+        return 'processing' if latest is None else 'extraction_failed'
+    if latest is not None and latest.state in (Job.FAILED, Job.UNKNOWN):
+        if latest.kind == Job.EXTRACT:
+            return 'extraction_failed'
+        if latest.kind != Job.PREDICT:
+            return 'processing_failed'
+        if latest.state == Job.UNKNOWN:
+            return 'provider_unknown'
+        run = (encounter.provider_runs.filter(revision=revision, created_at__gte=latest.created_at)
+               .order_by('-created_at', '-pk').first())
+        if run is None:
+            return 'provider_not_run'
+        if run.state in review.UNSETTLED_RUN_STATES:
+            return 'provider_unknown'
+        return 'processing_failed' if run.state == Run.SUCCEEDED else 'provider_failed'
+    assessment = review.live_assessment(encounter)
+    if assessment is None or assessment.context_id != encounter.current_context_id:
+        return 'provider_unknown' if review._unreconciled_unknown(encounter) else 'processing'
+    run = assessment.provider_run
+    if run is None:
+        return 'provider_not_run'
+    if run.state in review.UNSETTLED_RUN_STATES:
+        return 'provider_unknown'
+    if run.state != Run.SUCCEEDED:
+        return 'provider_failed'
+    return review._review_state(encounter, assessment)
+
+
+changed = {}
+for pk in P['encounters']:
+    with transaction.atomic():
+        encounter = review._lock(models.Encounter.objects.get(pk=pk))
+        read, derived = encounter.state, installed_state(encounter)
+        if derived != read:
+            models.Encounter.objects.filter(pk=encounter.pk).update(state=derived, updated_at=timezone.now())
+            changed[str(encounter.pk)] = [read, derived]
+print(ANSWER + json.dumps({'encounters': len(P['encounters']), 'changed': changed}))
 '''
 
 
@@ -1709,12 +1784,35 @@ def hazard_summary(hazards) -> str:
     return f'{len(hazards)} encounter(s): ' + ', '.join(f'{reason} {count}' for reason, count in sorted(counts.items()))
 
 
+def put_back_states(closed, older_image, image_id, env_bytes) -> dict:
+    """Refutation p2, install2:1: before an undo hands the rows to an older revision, each encounter the close names in
+    'relabel' - a stored state this revision labels from more than the state, which the older revision labels by its
+    name alone (a response refused whole: provider_failed, which it shows as 'Provider request failed' although the
+    request succeeded) - is given the state the older revision derives for it: with ``older_image``'s own derivation
+    (RECOMPUTE_STATES for those encounters, run in that image) when there is an image to ask, else as the installed
+    revision 057a7d39 derives it (INSTALLED_STATES, in ``image_id``). Every other stored state is one both revisions
+    label alike, and stays: the older derivation of a hold or of a second review closed by the undo is a request that
+    failed or a failed stage, off its review queue. An answer that names nothing it read is not read as "none"."""
+    relabel = closed.get('relabel') if isinstance(closed, dict) else None
+    if not isinstance(relabel, list) or not all(isinstance(pk, str) for pk in relabel):
+        raise InstallError('The close did not say which list states an older revision labels otherwise.')
+    if not relabel:
+        return {'encounters': 0, 'changed': {}}
+    if isinstance(older_image, str) and re.fullmatch(r'sha256:[0-9a-f]{64}', older_image):
+        return app_script(older_image, env_bytes, RECOMPUTE_STATES, {'encounters': relabel},
+                          what='Putting back the list states the older revision derives (its own image)')
+    return app_script(image_id, env_bytes, INSTALLED_STATES, {'encounters': relabel},
+                      what='Putting back the list states the installed revision 057a7d39 derives')
+
+
 def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref) -> dict:
     """Park the old pair, start the new pair; on any failure stop what was started, close every stage it left open
-    and every open stage of a kind the old worker does not run (close_undone_stages), and only then restore exactly the
-    old pair - its worker left stopped while the close names records it would act on wrongly. A pair whose stages
-    cannot be closed is never restored over them: the new pair is left stopped and the old one parked, for
-    rollback-app."""
+    and every open stage of a kind the old worker does not run (close_undone_stages), put back the list states the old
+    revision labels otherwise (put_back_states, with the old pair's own image), and only then restore exactly the old
+    pair - its worker left stopped while the close names records it would act on wrongly. A pair whose stages cannot be
+    closed, or whose states cannot be put back, is never restored over them: the new pair is left stopped and the old
+    one parked, for rollback-app. On success the old pair is left parked: phase_app removes it (retire_parked) once the
+    stored list states are recomputed."""
     parked, launched, started = {}, [], {}
     swapped_at = None
     try:
@@ -1734,7 +1832,7 @@ def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref)
                 tail = docker('logs', '--tail', '40', name, check=False, timeout=30)
                 ctx.log(f'{role}-failed', tail.stdout[-8192:] + tail.stderr[-8192:])
             stop_service_container(name, role)
-        closed, hold_worker = None, False
+        closed, put_back, hold_worker = None, None, False
         if launched and any(parked.values()):
             previous = parked.get('worker') or parked.get('web')
             kinds = stage_kinds_of(previous['image'], env_bytes)  # what the restored worker runs (p1, security-0)
@@ -1745,7 +1843,16 @@ def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref)
                 raise InstallError(f'{failure}; the stages the new pair left open could not then be closed ({error}), '
                                    'so the new pair was left stopped and the previous pair parked (*-previous): run '
                                    '--phase rollback-app, then rename the parked pair back.') from error
-            ctx.log('undo', json.dumps(closed).encode())
+            # Refutation p2, install2:1: the restored pair shows a stored state by its own labels - a response this
+            # revision refused whole would read 'Provider request failed' - so it is handed its own derivation of those.
+            try:
+                put_back = put_back_states(closed, previous['image'], image_id, env_bytes)
+            except BaseException as error:
+                raise InstallError(f'{failure}; the list states the previous revision labels otherwise could not then '
+                                   f'be put back ({error}), so the new pair was left stopped and the previous pair '
+                                   'parked (*-previous): run --phase rollback-app, then rename the parked pair '
+                                   'back.') from error
+            ctx.log('undo', json.dumps({**closed, 'states_put_back': put_back}).encode())
             # Refutation p1, migrate-0/-1: this path cannot refuse, so while the close names records the restored
             # revision would act on under its own rules (a send without a date, an identical re-send of a request that
             # failed), its worker - the only holder of the provider credentials - is left stopped: nothing can be sent.
@@ -1765,12 +1872,18 @@ def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref)
                 f'{failure}; the previous web was restored and its worker ({SERVICES["worker"]}) left stopped, so '
                 f'nothing can be sent: {named} hold records it would act on under its own rules (ops/INSTALL.md, '
                 'Reinstalling an older revision). Install this revision again once its failure is fixed: its worker '
-                'reads them under its own rules.', details={'hazards': hazards, 'stages_closed': closed}) from failure
+                'reads them under its own rules.', details={'hazards': hazards, 'stages_closed': closed,
+                                                            'states_put_back': put_back}) from failure
         raise
-    for role, previous in parked.items():
+    return {'started': started, 'replaced': parked}
+
+
+def retire_parked(parked):
+    """Remove the parked old pair (replace_services' 'replaced') - once the new pair runs and the stored list states are
+    recomputed (phase_app)."""
+    for role, previous in (parked or {}).items():
         if previous:
             docker('rm', '--force', previous['id'], timeout=60)
-    return {'started': started, 'replaced': parked}
 
 
 # --- phases ------------------------------------------------------------------------
@@ -1948,6 +2061,21 @@ def phase_db(ctx) -> dict:
     return details
 
 
+def after_swap_failure(image_id, mode, states, error, parked) -> str:
+    """The receipt of an app phase stopped once its new pair runs (refutation p2, install2:2): whether the stored list
+    states were recomputed (``states``, RECOMPUTE_STATES' answer, or None), what stopped it, and what is left to do."""
+    cause = str(error) or type(error).__name__
+    running = f'web and worker running {image_id[:19]} (provider {mode}), but '
+    back = 'or, to go back, run --phase rollback-app, then rename the parked pair back.'
+    if states is None:
+        if any((parked or {}).values()):
+            return (running + f'the stored list states were not recomputed ({cause}) and the previous pair is still '
+                    'parked (*-previous): remove it by hand, then rerun --phase app, which recomputes them; ' + back)
+        return running + f'the stored list states were not recomputed ({cause}): rerun --phase app.'
+    return (running + f'the stored list states were recomputed ({len(states.get("changed") or {})} changed) and the '
+            f'previous pair (*-previous) could not be removed ({cause}): remove what is left of it by hand; ' + back)
+
+
 def phase_app(ctx) -> dict:
     mode, reference = ctx.args.provider_mode, ctx.args.authorization_ref or ''
     if reference and run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{ctx.revision}:{reference}'],
@@ -1988,11 +2116,17 @@ def phase_app(ctx) -> dict:
     # a same-revision re-run - a provider-mode switch during an incident - and the reinstall the failure path's receipt
     # asks for, until a member reconciled on the running web: a released, paid send, and on a restored older web one
     # its own rules make). Nothing is sent.
+    # Refutation p2, install2:2: and before the parked pair is removed (retire_parked), so the documented recovery for a
+    # parked pair left in place (a `docker rm` that fails, an installer interrupted) finds them recomputed; whatever
+    # stops this phase once the new pair runs - the recompute, the removal, a Ctrl-C - leaves a receipt that says
+    # whether they were, and what is left to do.
+    states, parked = None, services.get('replaced')
     try:
         states = app_script(image_id, env, RECOMPUTE_STATES, {}, what='Recomputing the stored list states')
-    except Exception as error:  # noqa: BLE001 — the pair is installed: the receipt says what is left to do
-        raise InstallError(f'web and worker running {image_id[:19]} (provider {mode}), but the stored list states were '
-                           f'not recomputed ({error}): rerun --phase app.', details=services) from error
+        retire_parked(parked)
+    except BaseException as error:  # noqa: BLE001 — the pair is installed: the receipt says what is left to do
+        raise InstallError(after_swap_failure(image_id, mode, states, error, parked),
+                           details={**services, 'states_recomputed': states}) from error
     return {'image_id': image_id, 'provider_mode': mode, 'authorization_ref': reference, 'migrate_log': migrate_log,
             'unrunnable_stages': unrunnable, 'states_recomputed': states, **services,
             'summary': f'web and worker running {image_id[:19]} (provider {mode})'}
@@ -2372,9 +2506,11 @@ def phase_rollback_app(ctx) -> dict:
     """Refuse, before stopping anything, while their revision recorded what an older revision would act on wrongly
     (undo_hazards); otherwise stop the web and worker, close every stage their revision left open since they were
     created and every open stage of a kind the next worker does not run (close_undone_stages, with their own image),
-    read again, then remove them - so a parked pair renamed back or an older revision installed afterwards never runs
-    that work under its own rules. When the stages cannot be closed, or the second read names a record (a send in
-    flight when the worker stopped is an unknown outcome), the pair is left stopped, not removed."""
+    read again, put back the list states the next pair labels otherwise (put_back_states), then remove them - so a
+    parked pair renamed back or an older revision installed afterwards never runs that work under its own rules, nor
+    shows a state it would misread. When the stages cannot be closed, the states cannot be put back, or the second read
+    names a record (a send in flight when the worker stopped is an unknown outcome), the pair is left stopped, not
+    removed."""
     pair = {}
     for role in ('worker', 'web'):
         container = inspect('container', SERVICES[role])
@@ -2382,7 +2518,7 @@ def phase_rollback_app(ctx) -> dict:
             if not owned(container, role):
                 raise InstallError(f'{SERVICES[role]} is not a CPT Studio {role} container; refusing to remove it.')
             pair[role] = container
-    closed = None
+    closed = put_back = None
     if pair:
         first = pair.get('web') or pair['worker']
         revision = labels_of(first).get(REVISION_LABEL) or 'unlabelled'
@@ -2424,13 +2560,32 @@ def phase_rollback_app(ctx) -> dict:
                                f'{SERVICES["worker"]} {SERVICES["web"]}), clear them on this revision\'s web '
                                '(ops/INSTALL.md, Reinstalling an older revision), then rerun --phase rollback-app.',
                                details={'hazards': hazards, 'stages_closed': closed})
+        # Refutation p2, install2:1: the next pair - the parked one renamed back, or an older revision installed by its
+        # own installer, which never recomputes a stored state - shows each state by its own labels, so a response
+        # refused whole would read 'Provider request failed'. Each state this revision labels otherwise is given the
+        # state that pair derives (the parked image's own derivation, else 057a7d39's), while this pair is stopped.
+        try:
+            put_back = put_back_states(closed, next_image, first['Image'], env)
+        except InstallError as error:
+            raise InstallError(f'Web and worker stopped, not removed: the list states an older revision labels '
+                               f'otherwise could not be put back ({error}). Rerun --phase rollback-app once that is '
+                               'resolved.', details={'stages_closed': closed}) from error
     removed = {}
-    for role in ('worker', 'web'):
-        name = SERVICES[role]
-        removed[name] = role in pair
-        remove_service_container(name, role)
+    try:
+        for role in ('worker', 'web'):
+            name = SERVICES[role]
+            removed[name] = role in pair
+            remove_service_container(name, role)
+    except BaseException as error:  # noqa: BLE001 — states were put back for the older revision: the receipt says so
+        if not (put_back or {}).get('changed'):
+            raise
+        raise InstallError(f'{str(error) or type(error).__name__}; before it, the list states of '
+                           f'{len(put_back["changed"])} encounter(s) were put back to what the older revision derives, '
+                           'which this revision labels otherwise: rerun --phase rollback-app; or, to keep this '
+                           'revision, rerun --phase app, which recomputes them.',
+                           details={'stages_closed': closed, 'states_put_back': put_back}) from error
     parked = [name + '-previous' for name in SERVICES.values() if inspect('container', name + '-previous')]
-    return {'removed': removed, 'stages_closed': closed, 'parked_left_in_place': parked,
+    return {'removed': removed, 'stages_closed': closed, 'states_put_back': put_back, 'parked_left_in_place': parked,
             'summary': 'web and worker removed after closing their open stages; database, volumes, images and '
                        'secrets kept'}
 

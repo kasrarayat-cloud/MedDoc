@@ -112,32 +112,43 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   current web/worker (`*-previous`), starts the new pair and waits for
   `/health/` = `{status ok, service cpt-studio, data_mode synthetic-only,
   database ok, release <revision>}` and a worker that stays up. Once the new
-  pair runs and the parked one is removed, every encounter's stored list state
-  is recomputed with this revision's derivation (only a changed one is written;
-  nothing is sent; the receipt names each that changed): the revision replaced
-  may have derived it otherwise (an unreconciled unknown outcome it listed as
-  reviewed is on this revision's review queue), and an action on the encounter
-  is otherwise the only thing that recomputes it. A provider outcome still
-  unknown is not refused: reconcile it on this revision's web. If the
-  recompute fails, the receipt says so and the pair keeps running: rerun `app`.
-  On any failure before that, nothing is recomputed: the new pair is stopped
-  and, before the parked pair is restored, every stage
+  pair runs - and before the parked pair is removed - every encounter's stored
+  list state is recomputed with this revision's derivation (only a changed one
+  is written; nothing is sent; the receipt names each that changed): the
+  revision replaced may have derived it otherwise (an unreconciled unknown
+  outcome it listed as reviewed is on this revision's review queue; a response
+  refused whole it listed as 'No CPT codes proposed'), and an action on the
+  encounter is otherwise the only thing that recomputes it. A provider outcome
+  still unknown is not refused: reconcile it on this revision's web. Whatever
+  stops the phase once the new pair runs - the recompute fails, the parked pair
+  cannot be removed, the installer is interrupted - the pair keeps running and
+  the receipt says whether the states were recomputed: if not, remove the
+  parked pair (`*-previous`) by hand if it is left, then rerun `app`, which
+  recomputes them; if they were, only the parked pair is left to remove.
+  On any failure before the new pair runs, the recompute does not run: the new
+  pair is stopped and, before the parked pair is restored, every stage
   it queued, ran or left resumable since the swap, and every stage of a kind the
   parked worker cannot run (read from the parked image; when it cannot be read,
   every kind but extract, analyze, predict and assess) that is queued, running,
   or cancelled as its encounter's latest stage, whichever pair created it, is
   closed as failed, naming the revision (failed, not cancelled: no web offers a
   Resume for it), and the provider runs they left unsettled are settled as the
-  stale-stage sweep settles them. Nothing finished is touched and no row is
-  removed. Then the new pair is removed and the parked pair renamed back. Its
-  web is started. Its worker is started too unless the close names records it
-  would act on wrongly (listed under **Reinstalling an older revision**); then
-  the worker is left stopped - it alone holds the Corti credentials, so nothing
-  can be sent - and the receipt names the encounters: install this revision
-  again once its failure is fixed (its worker reads those records under its own
-  rules). If the stages cannot be closed, the new pair is left stopped and the
-  parked pair parked (the receipt says so): run `rollback-app`, then rename the
-  parked pair back. Migrations already applied are not reversed.
+  stale-stage sweep settles them (the closed encounters' states are refreshed).
+  Nothing finished is touched and no row is removed. Each stored state this
+  revision labels from more than the state - a response refused whole is
+  `provider_failed`, which this revision labels 'Provider response not used'
+  and the parked revision would list as 'Provider request failed' - is then
+  given the state the parked image itself derives for it (see **Reinstalling
+  an older revision**). Then the new pair is removed and the parked pair renamed
+  back. Its web is started. Its worker is started too unless the close names
+  records it would act on wrongly (listed under **Reinstalling an older
+  revision**); then the worker is left stopped - it alone holds the Corti
+  credentials, so nothing can be sent - and the receipt names the encounters:
+  install this revision again once its failure is fixed (its worker reads those
+  records under its own rules). If the stages cannot be closed, or those states
+  cannot be put back, the new pair is left stopped and the parked pair parked
+  (the receipt says so): run `rollback-app`, then rename the parked pair back.
+  Migrations already applied are not reversed.
 - **Work in flight at the swap** is not frozen: a stage the previous pair
   queued or left running is finished by the new pair under the new rules, and
   nothing is sent that no member asked for. A predict the previous pair queued
@@ -240,7 +251,8 @@ before reinstalling an older revision over this one:
 2. Run this revision's `rollback-app`: it refuses while one remains;
    otherwise it closes every stage this revision queued, ran or left resumable
    since its pair was created, and every stage of a kind the next worker cannot
-   run, whichever pair created it, and removes the pair.
+   run, whichever pair created it, puts back the list states an older revision
+   labels otherwise (below), and removes the pair.
 3. Then install the older revision as usual. Its migrate is a no-op on this
    schema (migrations are not reversed). Revisions from this one on also
    refuse, in `app`, while a stage they cannot run is open.
@@ -255,16 +267,35 @@ rule, which this revision holds); and where it reads the document's date
 otherwise than this revision does, its next metadata save requests its own
 reading (a first request, sent; one that failed or was not sent before is named
 above). Encounter list states stay as this revision last derived them until an
-action on each encounter recomputes them.
+action on each encounter recomputes them - except a state this revision labels
+from more than the state. An older revision labels a stored state by its name
+alone, and never recomputes one: a response refused whole is `provider_failed`
+here, labelled 'Provider response not used', and 057a7d39 would list it as
+'Provider request failed' ("The provider request failed. The provider did not
+return proposals.") although the request succeeded. So `rollback-app`, and the
+failure path of `app`, give each such encounter the state the next pair
+derives for it before handing the rows over: the parked image's own
+derivation when a pair is parked, else 057a7d39's (its derivation, run in this
+revision's image): for a response refused whole, `no_codes` - 'No CPT codes
+proposed', with its blocker "The provider response was not used" - what
+057a7d39 itself shows for that row. Every other state is labelled alike by both
+revisions and keeps this revision's derivation: 057a7d39's own reading of a
+hold (a request that failed) or of a second review the undo closed (a failed
+stage) would list a date question as 'Provider request failed' and drop both
+from its review queue. Installing this revision again recomputes every state.
 
 ## Recovery notes
 
 - `*-previous` containers left by an interrupted `app`: to go back, run
   `rollback-app` first (it refuses while the new pair's records would be acted
   on wrongly, as above; otherwise it closes what the new pair left open and
-  every stage of a kind the parked worker cannot run, and removes the new pair),
-  then rename the parked pair back by hand; to keep the new pair, remove them
-  by hand. `app` refuses while one exists.
+  every stage of a kind the parked worker cannot run, puts back the list states
+  the parked revision labels otherwise, with the parked image's own derivation,
+  and removes the new pair), then rename the parked pair back by hand; to keep
+  the new pair, remove them by hand, then rerun `app` - which recomputes the
+  stored list states - unless its receipt says they were recomputed (an
+  installer killed outright writes no receipt: rerun `app`). `app` refuses while
+  one exists.
 - Staged `.initial-credentials.json.new` / `.agent-credentials.json.new` from an
   interrupted `provision`: delete them (no account uses their passwords unless
   the receipt says the accounts were created) and rerun.
