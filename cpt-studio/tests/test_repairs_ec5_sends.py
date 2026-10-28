@@ -31,11 +31,15 @@ VISIT = ('99213', 'Total time on the date of the encounter was 24 minutes.')
 DOCUMENTED = date(2026, 10, 16)  # REPORT's own date
 MEMBER = '1998-01-01'
 EARLIER_VERSION = 'gi-context@1'
-# REPORT with a field about something else before its date label on the same line: the installed revision's
-# 80-character qualifier window held the date ("Last"), the current rules pass the field over and read 2026-10-16
-# (gi/context.py). P2DN's fix round, rule N7: this fixture was a table row ("Date of service | 2026-10-16"), which the
-# current rules now read and ask - a cell bar is no separator the installed revision read - so it no longer differs.
-REPORT_NEWLY_DATED = REPORT.replace('Date of service: 2026-10-16', 'Last name: Synthetic    Date of service: 2026-10-16')
+# A report whose date the installed revision did not record: the tests write its installed context without the date
+# (installed_upload(read_date=False)) and the current rules read 2026-10-16. P2DN's fix round, rule N7: this fixture was a
+# table row ("Date of service | 2026-10-16"), which the current rules now read and ask - a cell bar is no separator the
+# installed revision read - so it no longer differed; it then put "Last name: Synthetic    " before the date label,
+# which the installed revision's 80-character qualifier window held ("Last") and the current rules passed over. The
+# final refutation, fr-dr:4 and fr-di:0: that pass-over sent dates the installed revision never sent, and the current
+# rules now hold the date there too - N7 leaves no document the current rules date that the installed revision left
+# undated, so the undated installed context stands for one (recorded without its date), as read_date=False writes it.
+REPORT_NEWLY_DATED = REPORT
 
 
 class Provider(TwoPassProvider):
