@@ -412,7 +412,19 @@ occurrence's date, be sent):
   another head, a place of the other kind, a value missing, one value for two
   names) no value is the label's: it states no date where none stands there,
   and a date it cannot place - asked, the label alone - where one does
-  (fr-dr:0); every value of a joined header may be the date of birth;
+  (fr-dr:0); every value of a joined header may be the date of birth. A stack
+  whose every label has its value line is then never read by the line below
+  its date label - that line is the first label's place (the differential
+  round, df-d:0: "Patient DOB:" or "Referral date:" over its own date, or a
+  date label's place holding "10/14/2026 (done)", made the date of birth or
+  the referral date the label's value, or a name its silent one) - and an
+  unplaced row is asked also where the label's own cell holds a digit
+  ("20261014"; df-d:3). These tests say where a date label's VALUE is: a birth
+  label's column cell is placed whatever the other columns hold, and by count
+  alone where the cells do not lie under their heads - then its date is no
+  value and no member's answer, but a dated line stating it is asked (df-d:1:
+  a date-of-service cell "TBD" had left the cell under "DOB" unmarked, and the
+  row's dated service line read the date of birth as its own);
 - dated titles in the first 12 non-empty lines: "<words> visit | encounter |
   consultation | consult | note | report" with its date (or with the date
   alone on the next line), a bare "Date:" or "Date/Time:" line (clocked or
@@ -428,7 +440,12 @@ occurrence's date, be sent):
   it holds the date's format ("Date (mm/dd/yyyy):", "(DOS)"; the final
   refutation, fr-dr:2: "Date (signed):" and "DOS (planned):" were read as the
   line's own date field, so a member's signing or planned date was taken and
-  sent). Another field's value ends - at a semicolon, a comma, a spaced dash, a
+  sent); any other bracket ("Date (performed):", "Date of service
+  (corrected):" - only a word list could tell it from another event's) leaves
+  the field's date one this service cannot place: the line is asked and reads
+  no date (the differential round, df-d:2: read as another field's, the line
+  was silent and the labelled 10/14 it contradicts was sent). Another field's
+  value ends - at a semicolon, a comma, a spaced dash, a
   field break, a bracket it does not open, or its own date - and a date after
   that end is not that field's; the line then states a date it cannot place
   (neither the field's nor certainly the line's own): it is asked, speaking
@@ -457,7 +474,11 @@ birth label is a LABEL (P2DN's fix round, issue 7): "b." in lower case wherever
 it stands, after a name too ("Re: Colonoscopy for Alex Synthetic b. 01/01/1998";
 the final refutation, fr-dr:5: refused there, the date of birth was the subject
 line's own and a member's 1998-01-01 was taken and sent), never a capital initial
-after a name ("Dr. Robin B. - 10/14/2026"); a birth word
+after a name ("Dr. Robin B. - 10/14/2026"). One space or tab after a word it may
+also be a list's letter ("Re: Colonoscopy part b. 10/21/2026"): its date stays
+no value and no member's answer, but a dated line stating it is asked, never
+silent (the differential round, df-d:5: silent, the line let the labelled 10/14
+it contradicts be sent); a birth word
 ending a line with other text ("To: Dr. Robin B.", "chronic hepatitis B.", an
 empty "DOB:" after a name) labels nothing; and the few characters before a date
 end at the date, never at the line break above it - each had made the line's
@@ -512,7 +533,14 @@ by:", "Planned sedation: MAC", "Last name:", "Previous surgeries:") - the line
 may state another occurrence's date beside the label's, and the installed
 revision's same-line window held every such date - and a date of birth between a
 qualifier and the date passes nothing over ("Repeat colonoscopy for ... (DOB
-01/01/1998) Procedure date:", "... DOB: 01/01/1998    Status: Scheduled"). Passed
+01/01/1998) Procedure date:", "... DOB: 01/01/1998    Status: Scheduled") and
+attaches nothing either: before the label, between the date and a qualifier after
+it, or after that qualifier nearer to it than the date, it leaves the qualifier
+beside the date - the date speaks against another labelled date (asked), and as it
+may be another occurrence's it is never a value a documented conflict lists nor a
+member's answer (the differential round, df-d:4: read as attached, the date was
+another occurrence's and silent, and an addendum's "Date of service: 10/21/2026"
+was sent). Passed
 over, a planned procedure's 11/04 was sent with an office visit's request, and a
 recall's 10/14/2029 instead of the encounter's 10/14/2026, where the installed
 revision sent no date or the encounter's. A history word opening a field about
@@ -710,6 +738,29 @@ date only another occurrence's or another document's dated label or title states
 colonoscopy for history of adenomatous polyps, procedure date 10/14/2026.") - is
 held until the document is amended or the value cleared, where the installed
 revision took any member date.
+
+The differential round (is the final refutation's fix round worse than
+c3c034a08 in a must-fix class?) found six date shapes it was, and its repairs
+return each to c3c034a08's outcome or to the safe direction - never another
+date: over the 8,510 existing texts (the reading gate's, the corpus, the
+verification documents and the live encounters) nothing changes, and over
+164,585 case texts (those and every lens, verifier and skeptic case of the last
+two rounds) no date is documented that 004bf808c does not document. Over-holds
+they accept (asked or held; none in the reading gate's texts, the corpus, the
+verification documents or the live encounters): a stack whose other label
+holds a date ("Patient DOB:", "Referral date:" over theirs) asks the date
+label's own value too, its member's answer held unless the note labels that
+date elsewhere (c3c034a08 read it: restoring that reopened a heading counted
+into the stack - fr-dr:1 - whose next line is a date); a date-of-service column
+cell of digits that agrees ("20261007") or states none ("2026") is asked as at
+c3c034a08; a subject line whose date field carries any bracket but a format, or
+whose date follows "b." after a word, is asked beside the labelled date it may
+agree with (fr-dr:2's "Date (signed):" and fr-dr:5's "... Alex Synthetic b.
+01/01/1998" lines too, as at c3c034a08); a recall line whose date of birth
+stands between its date and the qualifier ("Procedure date: 10/14/2029 for ...
+(DOB 01/01/1998) follow-up") asks the encounter's labelled date again, as at
+c3c034a08, and a member's answer equal to a date read beside such a qualifier is
+held where c3c034a08 took it.
 
 ### 5.3 `studio/gi/profiles` + `studio/gi/detect` — routing
 
