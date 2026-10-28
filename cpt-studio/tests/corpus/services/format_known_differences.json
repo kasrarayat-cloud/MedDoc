@@ -26,13 +26,6 @@
       ],
       "extra": [],
       "reason": "The pathology attribution wraps before a proper noun (\"sent ... to Fairhaven\" / \"Laboratory Pathology (fictional)\"): a break before a capitalised word after an ordinary word is kept (session interpretation 20), so the attribution is not read across it."
-    },
-    "svc-36-balloon-enteroscopy-apc-biopsy-table": {
-      "missing": [
-        "act|gi.enteroscopy|biopsy|planned|physician|jejunum|jejunum"
-      ],
-      "extra": [],
-      "reason": "A table row that wraps onto a second line is read as its own line: the planned jejunal biopsy row loses its anatomy, so the planned act is not read in the PDF (a planned act never accounts for a code)."
     }
   },
   "scan": {}

@@ -229,12 +229,14 @@ OBJECT_NOUN_KINDS = frozenset(('stone_extraction', 'stent', 'clip', 'capsule_stu
                                'specimen'))
 
 # --- vocabulary: reading words ---------------------------------------------------------------------------------
+# The participles an act predicate states done with (ACT_VERB; a field's note is read with them too, _note_denies).
+ACT_PARTICIPLES = (r'(?:performed|done|obtained|taken|removed|resected|retrieved|excised|placed|deployed|inserted|applied|'
+                   r'achieved|injected|tattooed|ablated|treated|dilated|banded|clipped|cleared|extracted|swept|sampled|'
+                   r'biopsied|snared|cannulated|completed|carried\s+out|accomplished|made|used|passed|advanced|'
+                   r'introduced|reached|intubated|replaced|exchanged|ingested|recorded|positioned|attached|delivered|'
+                   r'fragmented|crushed|cut|sent|submitted|marked|administered|given|provided|supervised|closed)')
 ACT_VERB = _rx(r'\b(?:was|were|been|is|are)\s+(?:then\s+|also\s+|successfully\s+|subsequently\s+|completely\s+|each\s+)?'
-               r'(?:performed|done|obtained|taken|removed|resected|retrieved|excised|placed|deployed|inserted|applied|'
-               r'achieved|injected|tattooed|ablated|treated|dilated|banded|clipped|cleared|extracted|swept|sampled|'
-               r'biopsied|snared|cannulated|completed|carried\s+out|accomplished|made|used|passed|advanced|'
-               r'introduced|reached|intubated|replaced|exchanged|ingested|recorded|positioned|attached|delivered|'
-               r'fragmented|crushed|cut|sent|submitted|marked|administered|given|provided|supervised|closed)\b'
+               + ACT_PARTICIPLES + r'\b'
                r'|\b(?:we|I)\s+(?:then\s+)?(?:performed|obtained|took|removed|resected|placed|deployed|injected|ablated|'
                r'dilated|banded|clipped|extracted|biopsied|snared|sampled|cannulated|passed|advanced|replaced|'
                r'administered|gave|provided|supervised)\b'
@@ -1162,10 +1164,42 @@ def _answered_line(text: str, ls: int, le: int, nxt: int) -> bool:
     return bool(_sections._SEC_SPOKEN_ANSWER.search(tail) and _sections._own_clause(after))
 
 
+# A row of a two-column table: the DOCX reader writes one line per table row, its cells joined by " | " (studio/ingest/
+# docx.py), and a typed table is written the same way ("Checklist item | Nursing entry" / "Tattoo injected | No"). The
+# line has exactly one cell bar with a letter or digit on either side of it (three or more cells are a page header or
+# another table's row, read as before), and at most TABLE_ROW_CHARS characters (a longer line is read as prose). Its
+# first cell is a label, its second the entry for it (gi2 conflicts, PR2).
+TABLE_ROW_CHARS = 400
+_CELL_WORD = re.compile(r'[A-Za-z0-9]')
+
+
+def _table_row_bar(text: str, ls: int, le: int) -> int:
+    """The offset of the cell bar of the line [ls, le) when that line is a row of a two-column table, else -1. Bounded:
+    at most TABLE_ROW_CHARS characters are read."""
+    if le <= ls or le - ls > TABLE_ROW_CHARS:
+        return -1
+    bar = text.find('|', ls, le)
+    if bar < 0 or text.find('|', bar + 1, le) >= 0:
+        return -1
+    if not _CELL_WORD.search(text, ls, bar) or not _CELL_WORD.search(text, bar + 1, le):
+        return -1
+    return bar
+
+
+def _next_line_is_a_table_row(text: str, i: int) -> bool:
+    """Whether the line after the newline at ``i`` is a two-column table row (bounded as _table_row_bar)."""
+    end = text.find('\n', i + 1, i + 2 + TABLE_ROW_CHARS)
+    if end < 0:
+        end = len(text) if len(text) - (i + 1) <= TABLE_ROW_CHARS else -1
+    return end >= 0 and _table_row_bar(text, i + 1, end) >= 0
+
+
 def _sentences(text: str) -> list[tuple[int, int]]:
     """Sentences: split at a full stop, question or exclamation mark followed by space and a capital or digit or a
     list label, at a line that starts a numbered or labelled item, after a line that ends in an answer of its own
-    (_answered_line), and at blank lines. Line wraps inside a sentence are kept (PDF text wraps mid-sentence)."""
+    (_answered_line), and at blank lines. Line wraps inside a sentence are kept (PDF text wraps mid-sentence). A
+    check-box row is a sentence of its own, and so is a two-column table row next to another: what one row's entry says
+    never reaches the next row."""
     out: list[tuple[int, int]] = []
     start = 0
     n = len(text)
@@ -1199,6 +1233,13 @@ def _sentences(text: str) -> list[tuple[int, int]]:
                     BOX_MARK.search(text[i + 1:text.find('\n', i + 1) if text.find('\n', i + 1, i + 400) >= 0
                                          else min(n, i + 400)]):
                 cut = i  # a check-box or option row never runs on into the next line, nor another into it
+            elif _table_row_bar(text, text.rfind('\n', 0, i) + 1, i) >= 0 and _next_line_is_a_table_row(text, i):
+                # one table row never runs on into the next (gi2 conflicts, PR2: in a nursing checklist "Tattoo
+                # injected | No" had run on into "Snare polypectomy | Yes", whose snare its "No" then negated - a false
+                # snare conflict - while the tattoo itself was read done from "injected"). Only between two rows: a row
+                # a PDF writer wrapped goes on in a line of no bar, or of one bar when the row has more cells ("1 |
+                # Transverse colon | 12 mm sessile | Resected en bloc with a hot" / "snare | Jar A"), read as before.
+                cut = i
             elif re.match(r'[ \t]*[A-Z][A-Za-z /&()\-]{1,40}:[ \t]+\S', nxt) \
                     or (re.match(r'[ \t]*[A-Z][A-Za-z /&()\-]{1,40}:[ \t]+\S', prev_line_text)
                         and not re.match(r'[ \t]*[a-z(]', nxt)):
@@ -2061,16 +2102,46 @@ def _in_form_block(text: str, ls: int) -> bool:
     return False
 
 
+ALTERNATIVE_WORDS = 3  # words an alternative named with "or" may have ("Tattoo or marking agent injected")
+_PLAIN_WORD = re.compile(r"[a-z][a-z'-]*")
+
+
 def _own_question(text: str, start: int, end: int) -> bool:
     """Whether the field label [start, end) is an item's own question: every word of it outside the acts and services
     it names is a word of that question (routing's _BOX_ITEM_WORDS: "Biopsy taken", "Was a biopsy performed"), as
     routing's _box_label_kind reads an 'item' label; a time, an attribute or a count ("Biopsy (Y/N)", "Flexible
-    sigmoidoscopy in the last 10 years") makes it another question."""
+    sigmoidoscopy in the last 10 years") makes it another question.
+
+    One more shape is the item's own question (gi2 conflicts, PR2): the item named with an alternative after "or", the
+    question's predicate after both - "Tattoo or marking agent injected", "Biopsy or brushing taken", "Dilation or stent
+    placed". A yes/no question about alternatives is answered for each of them, so its "No" denies the item. The
+    alternative is at most ALTERNATIVE_WORDS plain words (no digit, no negation) and a name or a word of the question
+    must follow it: "Tattoo or marking agent" (nothing after it) and "Tattoo or marking agent recommended" (another
+    predicate) stay other questions, as does an "or" after anything but the item's name ("Bleeding or perforation after
+    polypectomy")."""
     from studio.gi import detect  # local: detect imports context, which this module also imports
     names = [(a, b) for _, a, b in _acts_in(text, start, end)]
     names += [(m.start(), m.end()) for _, _, pattern in SERVICES for m in pattern.finditer(text, start, end)]
-    return all(w.group(0).lower() in detect._BOX_ITEM_WORDS for w in detect._BOX_LABEL_WORD.finditer(text, start, end)
-               if not any(a <= w.start() < b for a, b in names))
+    words = [(w.group(0).lower(), any(a <= w.start() < b for a, b in names))
+             for w in detect._BOX_LABEL_WORD.finditer(text, start, end)]
+    i = 0
+    while i < len(words):
+        word, named = words[i]
+        if named or word in detect._BOX_ITEM_WORDS:
+            i += 1
+            continue
+        if word == 'or' and i > 0 and words[i - 1][1]:
+            j = i + 1
+            while j < len(words) and not words[j][1] and words[j][0] not in detect._BOX_ITEM_WORDS:
+                if j - i > ALTERNATIVE_WORDS or not _PLAIN_WORD.fullmatch(words[j][0]) \
+                        or NEGATION_WORD.fullmatch(words[j][0]):
+                    return False
+                j += 1
+            if j < len(words):
+                i = j  # the alternative ends where a name or a word of the question follows it
+                continue
+        return False
+    return True
 
 
 # A typed field whose label and answer a spaced dash separates ("Biopsy taken - No", "Tattoo placed \u2013 none"): read as a
@@ -2079,16 +2150,84 @@ FIELD_DASH = re.compile(r'[ \t]+[-\u2013\u2014][ \t]+')
 DASH_FIELD_CUE = 'field: its label and answer are separated by a dash, so its denial holds, never excludes'
 
 
+# A denying answer with a note after it (gi2 conflicts, PR2): one of the field's own denying answers (routing's
+# _FIELD_DENIED: "No", "None", "Not done", "Not performed"), then a dash, a comma, a semicolon or a parenthesis, then
+# the note - "No - none used", "No (none used)", "None, see the physician's note". It denies the item as the answer
+# alone would, unless the note affirms ("yes"), doubts (a hedge, an unknown), or names an act or a service, or states
+# one done, with no negation of its own before it ("No - placed by the fellow", "No - Spot used instead", "No - India
+# ink"): such an answer holds its item (ANSWER_DOUBT), as before.
+FIELD_DENIAL_NOTE = re.compile(r'(?:no|none|not[ \t]+done|not[ \t]+performed)[ \t]*(?:[-\u2013\u2014,;][ \t]*|\()'
+                               r'(?P<note>[^\n]{1,160}?)[ \t)]*\.?', FLAGS)
+NOTE_AFFIRMS = _rx(r'\byes\b')
+NOTE_UNKNOWN = _rx(r'\b(?:unknown|unsure|unclear|pending|n/?a)\b')  # ANSWER_DOUBT's words that are no negation
+NOTE_DONE = _rx(r'\b' + ACT_PARTICIPLES + r'\b')
+
+
+def _note_denies(note: str) -> bool:
+    """Whether the note after a denying answer leaves the denial standing (FIELD_DENIAL_NOTE): it neither affirms nor
+    doubts, and every act, service or done participle it names has a negation of its own before it ("none used")."""
+    if NOTE_AFFIRMS.search(note) or HEDGE_WORDS.search(note) or NOTE_UNKNOWN.search(note):
+        return False
+    named = [m.start() for pattern in [p for _, p in ACTS] + [p for _, _, p in SERVICES] + [NOTE_DONE, BARE_PARTICIPLE]
+             for m in pattern.finditer(note)]
+    return all(NEGATION_WORD.search(note, 0, at) for at in named)
+
+
+def _field_or_box_line(text: str, pos: int, end: int) -> bool:
+    """Whether the line holding the mention at [pos, end) can carry its item's own answer: a field's colon, a two-column
+    table row's bar, a dash after the mention (FIELD_DASH) or a check box (read_clause's box readers). Bounded: the line
+    within ROW_REACH of the mention."""
+    ls = max(text.rfind('\n', max(0, pos - ROW_REACH), pos) + 1, pos - ROW_REACH, 0)
+    le = text.find('\n', end, end + ROW_REACH)
+    le = min(len(text), end + ROW_REACH) if le < 0 else le
+    return (text.find(':', ls, le) >= 0 or text.find('[', ls, le) >= 0 or text.find('|', ls, le) >= 0
+            or BOX_MARK.search(text, ls, le) is not None or FIELD_DASH.search(text, end, le) is not None)
+
+
+def _own_mark_denies(text: str, pos: int, end: int, reading: Reading, service_date: Optional[date]) -> bool:
+    """Whether ``reading`` of the item at [pos, end) is a denial its own mark gives it: its check box marks it off, or
+    its own field's answer denies it ("Tattoo placed | Not done" - the clause's "not" reads that answer first, the same
+    denial). A dash-separated field's denial only holds (_field_answer), so it is none."""
+    if reading.status not in ('negated', 'cancelled') or not reading.cues:
+        return False
+    if reading.cues[0].startswith(('field:', 'box:')):
+        return True
+    answered = _field_answer(text, pos, end, service_date)
+    return answered is not None and answered.status == 'negated'
+
+
+def _in_a_label_cell(text: str, ls: int, le: int, end: int) -> bool:
+    """Whether the line [ls, le) is a two-column table row whose label cell holds the mention ending at ``end``."""
+    bar = _table_row_bar(text, ls, le)
+    return bar >= 0 and bar >= end
+
+
 def _field_answer(text: str, pos: int, end: int, service_date: Optional[date]) -> Optional[Reading]:
-    """_field_answer_read, with a dash-separated field's denial held (FIELD_DASH)."""
+    """_field_answer_read, with a dash-separated field's denial held (FIELD_DASH). A table row's denial is not held for
+    that: its cell bar is the label's end, as a colon is (gi2 conflicts, PR2)."""
     reading = _field_answer_read(text, pos, end, service_date)
     if reading is not None and reading.status == 'negated':
         ls = text.rfind('\n', 0, pos) + 1
         le = text.find('\n', end)
         le = len(text) if le < 0 else le
-        if text.find(':', ls, le) < 0:
+        if text.find(':', ls, le) < 0 and not _in_a_label_cell(text, ls, le, end):
             return Reading('uncertain', reading.cues + (DASH_FIELD_CUE,))
     return reading
+
+
+def _denying_answer(text: str, ls: int, colon: int, pos: int, end: int, value: str) -> Reading:
+    """The reading a field's denying answer ``value`` gives the item at [pos, end) in its label [ls, colon)."""
+    label = text[ls:colon]
+    object_kinds = {kind for kind, _, _ in _acts_in(text, pos, end)} & OBJECT_NOUN_KINDS
+    if object_kinds and not ACT_VERB.search(label) and not BARE_PARTICIPLE.search(label):
+        # "Stones: None", "Stent: None", "Clips: None": a bare object noun answered with nothing is a finding
+        # (no stones were found), never a statement that the act was not done (triage round 2 skeptic: an
+        # ERCP's "Stones: None" had denied the stone extraction its sweep documented).
+        return Reading('uncertain', (SILENT_READINGS[0],))
+    if _own_question(text, ls, colon):
+        return Reading('negated', (f'field: the answer \u201c{value}\u201d denies it',))
+    return Reading('uncertain', (f'field: the answer \u201c{value}\u201d is to a question that names it among '
+                                 'other words',))
 
 
 def _field_answer_read(text: str, pos: int, end: int, service_date: Optional[date]) -> Optional[Reading]:
@@ -2105,15 +2244,23 @@ def _field_answer_read(text: str, pos: int, end: int, service_date: Optional[dat
             return None
         le = len(text)
     colon = text.find(':', ls, le)
-    dash = FIELD_DASH.search(text, end, le) if colon < 0 else None
-    if dash is not None:
-        colon = dash.start()
+    answer_at = None  # where the answer starts when a dash or a cell bar, not a colon, ends the label
+    if colon < 0:
+        bar = _table_row_bar(text, ls, le)
+        if bar >= end:
+            # a two-column table row with the mention in its label cell: the bar ends the label, as a colon does, and
+            # the row's entry is the answer ("Tattoo or marking agent injected | No - none used"; gi2 conflicts, PR2)
+            colon, answer_at = bar, bar + 1
+        else:
+            dash = FIELD_DASH.search(text, end, le)
+            if dash is not None:
+                colon, answer_at = dash.start(), dash.end()
     if colon < end or ls > pos:
         return None  # no label, or the mention is in the answer ("Findings: biopsies were taken")
     from studio.gi import detect  # local: detect imports context, which this module also imports
-    line = text[ls:le] if dash is None else text[ls:colon] + ':' + text[dash.end():le]
+    line = text[ls:le] if answer_at is None else text[ls:colon] + ':' + text[answer_at:le]
     label_end = colon - ls
-    value = (text[colon + 1:le] if dash is None else text[dash.end():le]).strip()
+    value = (text[colon + 1:le] if answer_at is None else text[answer_at:le]).strip()
     option = FORM_OPTION_STATE.fullmatch(value)
     if option is not None and _in_form_block(text, ls):
         # An extraction block writes each option of a printed question as its own field line ("Biopsy taken: no:
@@ -2134,18 +2281,11 @@ def _field_answer_read(text: str, pos: int, end: int, service_date: Optional[dat
         if denied.group('box'):
             return Reading('negated', (f'field: the answer \u201c{value}\u201d marks it off',))
         if denied.group('answer'):
-            label = text[ls:colon]
-            object_kinds = {kind for kind, _, _ in _acts_in(text, pos, end)} & OBJECT_NOUN_KINDS
-            if object_kinds and not ACT_VERB.search(label) and not BARE_PARTICIPLE.search(label):
-                # "Stones: None", "Stent: None", "Clips: None": a bare object noun answered with nothing is a finding
-                # (no stones were found), never a statement that the act was not done (triage round 2 skeptic: an
-                # ERCP's "Stones: None" had denied the stone extraction its sweep documented).
-                return Reading('uncertain', (SILENT_READINGS[0],))
-            if _own_question(text, ls, colon):
-                return Reading('negated', (f'field: the answer \u201c{value}\u201d denies it',))
-            return Reading('uncertain', (f'field: the answer \u201c{value}\u201d is to a question that names it among '
-                                         'other words',))
+            return _denying_answer(text, ls, colon, pos, end, value)
         return Reading('uncertain', (f'field: the answer \u201c{value}\u201d is not read as done or not done',))
+    noted = FIELD_DENIAL_NOTE.fullmatch(value)
+    if noted is not None and _note_denies(noted.group('note')):
+        return _denying_answer(text, ls, colon, pos, end, value)  # "No - none used" (gi2 conflicts, PR2)
     both = FIELD_BOTH_OPTIONS.fullmatch(value) is not None
     if value and not both and ANSWER_DOUBT.search(value) and not ANSWER_NEGATED_PREDICATE.fullmatch(value):
         # triage round 2 skeptic: "Biopsy taken: None obtained" and "Biopsy taken: Yes ___ No ___" read as a done biopsy
@@ -3200,6 +3340,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
         # Pass 3: lesions and acts.
         act_count = 0
         last_lesion: dict[str, Lesion] = {}
+        unplaced: list[Act] = []  # the encounter's denials: no service named for them (see below)
         for ss, se in sentences:
             part = _part_at(plist, starts, ss)
             read_end = min(se, ss + SENTENCE_READ_CHARS)
@@ -3282,7 +3423,18 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 region = anat[0][1] if anat else ''
                 fam = _family_for_act(kind, region, part_family, present_families, performed_families)
                 if not fam or fam not in drafts:
-                    continue
+                    # Neither its part, its sentence nor its site tells which of the documented services the statement
+                    # is about. A checklist item's own field or check box that denies it today is then the encounter's
+                    # denial of that act: it is set beside each service that documents the act done once every act is
+                    # read (``unplaced``; gi2 conflicts, PR2: a nursing checklist's "Tattoo or marking agent injected |
+                    # No - none used" under a report of an upper endoscopy and a colonoscopy had been dropped, and with
+                    # it the conflict with the physician's tattoo). Anything else - prose, whose denial may be scoped
+                    # to a site or a lesion the reader does not see - stays unattributed, as before, and so does a
+                    # history, plan or indication part (another occasion's).
+                    if part.kind in ('history', 'plan', 'indication') or not drafts \
+                            or not _field_or_box_line(text, ms, me):
+                        continue
+                    fam = ''
                 if kind == 'snare' and re.match(r'[ \t]*site\b', text[me:me + 8], FLAGS):
                     continue  # "the polypectomy site": a place; never the next line's "Site:" field (boxes_pdf skeptic)
                 if kind == 'dilation' and not DILATION_ACT.search(text, clause[0], clause[1]):
@@ -3332,9 +3484,14 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     # service was done (the owner's strict-box decision, 2026-10-25: any other row holds).
                     reading = Reading('performed', reading.cues + (OWN_BOX_CHECKED,))
                 reading = held_under_denial(text, ms, reading, service_date)
-                d = drafts[fam]
-                d.scopes.append((part.start, part.end) if part.kind == 'report' and part.family == fam else (ss, se))
-                lesion = _lesion_for(sentence_lesions, ms)
+                if not fam and (not _own_mark_denies(text, ms, me, reading, service_date) or _dates_in(dates, *bc)
+                                or HISTORY_WORDS.search(clause_text) or PLAN_WORDS.search(clause_text)):
+                    continue  # no service named, and no item's own denial today (a date or time word: another's?)
+                if fam:
+                    d = drafts[fam]
+                    d.scopes.append((part.start, part.end) if part.kind == 'report' and part.family == fam
+                                    else (ss, se))
+                lesion = _lesion_for(sentence_lesions, ms) if fam else None
                 role = part.role
                 labelled = next((r for r, pattern in ROLE_LABEL if pattern.match(text[ss:se])), None)
                 if labelled:
@@ -3354,16 +3511,34 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 act_count += 1
                 if act_count > MAX_ACTS:
                     raise _Capped(f'More than {MAX_ACTS:,} acts are documented; the rest were not inventoried.')
-                d.acts.append(Act(id=f'{d.id}-A{len(d.acts) + 1}', service=d.id, kind=kind, status=reading.status,
-                                  role=role, anatomy=tuple(dict.fromkeys(a[0] for a in anat)), region=region,
-                                  technique=_technique(text, *bc, near=ms), lesion=lesion.id if lesion else '',
-                                  evidence=(_span(text, *bc),), cues=reading.cues,
-                                  detail=_detail(text, *bc, kind)))
+                act = Act(id='', service='', kind=kind, status=reading.status, role=role,
+                          anatomy=tuple(dict.fromkeys(a[0] for a in anat)), region=region,
+                          technique=_technique(text, *bc, near=ms), lesion=lesion.id if lesion else '',
+                          evidence=(_span(text, *bc),), cues=reading.cues, detail=_detail(text, *bc, kind))
+                if not fam:
+                    unplaced.append(act)
+                    continue
+                d.acts.append(replace(act, id=f'{d.id}-A{len(d.acts) + 1}', service=d.id))
             if sentence_lesions:
                 lesion = sentence_lesions[-1]
                 for f, d in drafts.items():
                     if d.id == lesion.service:
                         last_lesion[f] = lesion
+        # The encounter's denials (above): each is set beside every service that documents done an act it denies - the
+        # two statements are about the same act, and _conflicts keeps them as a conflict there - and beside no other,
+        # so a denial of an act no service documents adds nothing, and no service's own scope grows by it.
+        from studio.gi import catalogue  # local: catalogue reads this module's vocabulary
+        done_kinds = {d.id: {a.kind for a in d.acts if a.status == 'performed'} for d in drafts.values()}
+        for denial in unplaced:
+            # an act never reported on its own (clips, cannulation) is no coding conflict (_conflicts)
+            contradicted = DENIED_BY.get(denial.kind, frozenset((denial.kind,))) - catalogue.NOT_REPORTED
+            for d in drafts.values():
+                if not done_kinds[d.id] & contradicted:
+                    continue
+                act_count += 1
+                if act_count > MAX_ACTS:
+                    raise _Capped(f'More than {MAX_ACTS:,} acts are documented; the rest were not inventoried.')
+                d.acts.append(replace(denial, id=f'{d.id}-A{len(d.acts) + 1}', service=d.id))
     except _Capped as exc:
         problems.append(str(exc))
     services = [_finish(d, text, routing, context_facts, encounter_intents) for d in drafts.values()]
@@ -3794,14 +3969,18 @@ def _dedupe_attributions(items: Sequence[Attribution]) -> tuple[Attribution, ...
 
 
 class _DoneIndex:
-    """The performed acts of one service, counted by kind for _same_subject: by lesion, and those with anatomy and no
-    lesion. Built once per service, so a pair of statements is compared in constant time (refutation r1, cost: the scan
-    of every act for every pair of statements was cubic and took the assess stage past its limit)."""
+    """The performed acts of one service, counted by kind for _same_subject: by lesion, those with anatomy and no
+    lesion, and the regions those at a lesion or a site are at. Built once per service, so a pair of statements is
+    compared in constant time (refutation r1, cost: the scan of every act for every pair of statements was cubic and
+    took the assess stage past its limit); only_outside is answered once per kind and set of regions."""
 
-    def __init__(self, acts: Sequence[Act]):
+    def __init__(self, acts: Sequence[Act], lesions: Sequence[Lesion] = ()):
         self.by_lesion: dict[str, dict[str, int]] = {}
         self.lesioned: dict[str, int] = {}
         self.sited: dict[str, int] = {}
+        self.lesion_region = {lesion.id: lesion.region or REGION_OF.get(lesion.anatomy, '') for lesion in lesions}
+        self.placed: dict[str, set[frozenset]] = {}  # per kind, the region sets of its acts at a lesion or a site
+        self._outside: dict[tuple[str, frozenset], bool] = {}
         for a in acts:
             if a.status != 'performed':
                 continue
@@ -3811,6 +3990,24 @@ class _DoneIndex:
                 self.lesioned[a.kind] = self.lesioned.get(a.kind, 0) + 1
             elif a.anatomy:
                 self.sited[a.kind] = self.sited.get(a.kind, 0) + 1
+            regions = self.regions(a)
+            if regions:
+                self.placed.setdefault(a.kind, set()).add(regions)
+
+    def regions(self, act: Act) -> frozenset:
+        """The regions a statement of an act is at: its own anatomy's, else - naming none - its lesion's."""
+        if act.anatomy:
+            return frozenset(region for region in (REGION_OF.get(name, '') for name in act.anatomy) if region)
+        site = self.lesion_region.get(act.lesion, '') if act.lesion else ''
+        return frozenset((site,)) if site else frozenset()
+
+    def only_outside(self, kind: str, regions: frozenset) -> bool:
+        """Whether acts of ``kind`` are documented done at lesions or sites, each of them outside all ``regions``."""
+        key = (kind, regions)
+        if key not in self._outside:
+            placed = self.placed.get(kind, ())
+            self._outside[key] = bool(placed) and not any(sites & regions for sites in placed)
+        return self._outside[key]
 
     def elsewhere(self, done: Act, denied: Act) -> bool:
         """Whether another act of done's kind is documented at another lesion, or at a site with no lesion."""
@@ -3827,17 +4024,37 @@ def _same_subject(done: Act, denied: Act, index: _DoneIndex) -> bool:
       anatomy and the sites differ ("biopsies from the antrum" beside "the duodenum was not biopsied");
     - the denial about one lesion, the statement of the act about none ("Colonoscopy with cold snare polypectomy"
       beside "This lesion was not removed by snare"): only when no act of that kind is documented at another lesion or
-      site, which would be what the summary speaks of."""
+      site, which would be what the summary speaks of;
+    - the denial about sites, the statement of the act naming none (gi2 conflicts, PR1). An act at a lesion is at that
+      lesion's site: it is another subject when the lesion lies in a region the denial does not name ("No pancreatic
+      stent was placed" beside the stent deployed across the bile duct stricture). A summary naming neither a site nor
+      a lesion ("EGD with ... cold forceps biopsies") is another subject only when the acts of that kind documented
+      done at a lesion or a site all lie outside the denied regions: it lists those ("No gastric or duodenal biopsies
+      were taken" beside the esophageal biopsies it lists). Read by region, never by site name: one such act inside a
+      denied region ("biopsies were also taken from the antrum" under "no gastric biopsies", which the site names alone
+      never pair) keeps the summary paired, so a statement that may be about the denied site still pairs and the doubt
+      is kept."""
     if done.lesion and denied.lesion:
         return done.lesion == denied.lesion
     if done.anatomy and denied.anatomy and not set(done.anatomy) & set(denied.anatomy):
         return False
     if denied.lesion and not done.lesion:
         return not index.elsewhere(done, denied)
+    if denied.anatomy and not done.anatomy:
+        denied_regions = index.regions(denied)
+        if denied_regions:
+            if done.lesion:
+                site = index.lesion_region.get(done.lesion, '')
+                return not site or site in denied_regions
+            return not index.only_outside(done.kind, denied_regions)
     return True
 
 
 RELATED_KINDS = {'tattoo': ('tattoo', 'injection'), 'injection': ('injection', 'tattoo'), 'specimen': ('biopsy',)}
+# The acts done that a denial of each kind is about (RELATED_KINDS read the other way): what an encounter's denial is
+# set beside (_build).
+DENIED_BY = {kind: frozenset(done for done in ACT_KINDS if kind in RELATED_KINDS.get(done, (done,)))
+             for kind in ACT_KINDS}
 # Acts that take tissue: a specimen recorded beside any of them is accounted for.
 TISSUE_KINDS = frozenset(('biopsy', 'hot_biopsy', 'snare', 'emr', 'esd', 'fna', 'foreign_body'))
 
@@ -3854,7 +4071,7 @@ def _conflicts(services: Sequence[DocumentedService]) -> tuple[Conflict, ...]:
         from studio.gi import catalogue  # local: catalogue reads this module's vocabulary
         done = [a for a in service.acts if a.status == 'performed' and a.kind not in catalogue.NOT_REPORTED]
         denied = [a for a in service.acts if a.status in ('negated', 'cancelled')]
-        index = _DoneIndex(service.acts)
+        index = _DoneIndex(service.acts, service.lesions)
         for d_act in done:
             kinds = RELATED_KINDS.get(d_act.kind, (d_act.kind,))
             if d_act.kind == 'specimen' and any(a.kind in TISSUE_KINDS for a in done):
