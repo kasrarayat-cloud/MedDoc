@@ -121,10 +121,12 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   encounter is otherwise the only thing that recomputes it. A provider outcome
   still unknown is not refused: reconcile it on this revision's web. Whatever
   stops the phase once the new pair runs - the recompute fails, the parked pair
-  cannot be removed, the installer is interrupted - the pair keeps running and
-  the receipt says whether the states were recomputed: if not, remove the
-  parked pair (`*-previous`) by hand if it is left, then rerun `app`, which
-  recomputes them; if they were, only the parked pair is left to remove.
+  cannot be removed, the installer is interrupted (Ctrl-C) - the pair keeps
+  running and the receipt says whether the states were recomputed: if not,
+  remove the parked pair (`*-previous`) by hand if it is left, then rerun `app`,
+  which recomputes them; if they were, only the parked pair is left to remove.
+  An installer killed outright writes no receipt: rerun `app` (see **Recovery
+  notes**).
   On any failure before the new pair runs, the recompute does not run: the new
   pair is stopped and, before the parked pair is restored, every stage
   it queued, ran or left resumable since the swap, and every stage of a kind the

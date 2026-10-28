@@ -78,6 +78,13 @@ class Provider(TwoPassProvider):
             return RawExchange(outcome='succeeded', sent=True, http_status=200, response_bytes=data,
                                response_sha256=hashlib.sha256(data).hexdigest(), latency_ms=11.0,
                                usage={'creditsConsumed': 0.02}, usage_basis='provider_reported_credits_not_usd')
+        if self.outcomes and self.outcomes[0] == 'failed':  # the provider answered HTTP 500
+            self.outcomes.pop(0)
+            self.requests.append(request)
+            data = b'{"error":"synthetic internal server error"}'
+            return RawExchange(outcome='failed', sent=True, http_status=500, response_bytes=data,
+                               response_sha256=hashlib.sha256(data).hexdigest(),
+                               error='HTTP 500 from the provider (synthetic).')
         first, later = self.first, self.later
         self.first = [q for q in first if q[1] in request.contexts[0]]
         self.later = [q for q in later if q[1] in request.contexts[0]]
@@ -194,10 +201,11 @@ class Base(TestCase):
 
     # --- the undo phases, for real, over a Docker stand-in -------------------------------------------------------
 
-    def rollback(self, parked=None, fail=None):
+    def rollback(self, parked=None, fail=None, fail_rm=None):
         """The REAL phase_rollback_app: this revision's pair runs (NEW_IMAGE); with ``parked`` an older pair's worker is
-        parked (OLD_IMAGE) - 'installed': 057a7d39's, 'same': one of this revision. Returns (answer or error, world)."""
-        world = DockerWorld(previous=False)
+        parked (OLD_IMAGE) - 'installed': 057a7d39's, 'same': one of this revision; ``fail_rm`` names a container whose
+        removal fails. Returns (answer or error, world)."""
+        world = RmFails(fail_rm, previous=False) if fail_rm else DockerWorld(previous=False)
         world.live[WEB] = world.container('new-web', 'web', NEW_IMAGE, NEW_REVISION, '2026-10-27T12:30:00.7Z')
         world.live[WORKER] = world.container('new-worker', 'worker', NEW_IMAGE, NEW_REVISION, '2026-10-27T12:30:41.25Z')
         if parked:
@@ -322,14 +330,34 @@ class RefusedResponseHandedBackTests(Base):
 
     def test_the_close_names_only_the_states_this_revision_labels_from_more_than_the_state(self):
         refused, held, plain = self.refused('G1'), self.held('H'), self.create('C')
+        failed = self.create('F', outcomes=['failed'])  # a request that failed: 'Provider request failed' in both
+        self.assertEqual(self.listed(failed), ('provider_failed', 'Provider request failed'))
         review2 = self.closed_second_review('R')
         closed = run_app_script(install.CLOSE_STAGES, {'since': models.Job.objects.order_by('-created_at').first()
                                                        .created_at.isoformat(), 'note': 'Closed (synthetic).',
                                                        'kinds': list(install.COMMON_STAGE_KINDS)})
         self.assertEqual(closed['relabel'], [refused])
-        for pk in (held, plain, review2):
+        for pk in (held, plain, failed, review2):
             encounter = self.encounter(pk)
             self.assertEqual(review.encounter_state_label(encounter), review.state_label(encounter.state))
+
+    def test_a_removal_that_fails_after_a_put_back_says_the_states_were_put_back(self):
+        refused = self.refused('G1')
+        error, world = self.rollback(fail_rm='new-worker')
+        self.assertIsInstance(error, install.InstallError)
+        self.assertEqual(self.encounter(refused).state, 'no_codes')
+        message = str(error)
+        self.assertIn('docker rm failed', message)
+        self.assertIn('the list states of 1 encounter(s) were put back', message)
+        self.assertIn('rerun --phase rollback-app', message)
+        self.assertIn('rerun --phase app', message)
+        self.assertEqual(error.details['states_put_back']['changed'], {refused: ['provider_failed', 'no_codes']})
+        # control: with nothing to put back (the state is already the older derivation, labelled alike by both) the
+        # removal's own failure is what is raised
+        error, world = self.rollback(fail_rm='new-worker')
+        self.assertFalse([call for call in world.calls if call[:3] == ('script', NEW_IMAGE, 'INSTALLED_STATES')])
+        self.assertIsInstance(error, install.InstallError)
+        self.assertEqual(str(error), 'docker rm failed (exit 1): the daemon did not answer')
 
     def test_a_state_on_the_review_queue_is_never_put_back_whatever_its_label(self):
         # A label worded from the run for a state on the review queue (none is today) never makes it a candidate:
