@@ -1378,7 +1378,14 @@ selected code: every service of it done today is included in another one of
 whose selected, non-excluded codes includes its examination (an EGD read as the
 endoscopic portion of an upper-tract EUS whose selected code is an EGD-with-EUS
 code, `catalogue.includes_examination`; a sigmoidoscopy, colonoscopy, stoma or
-esophagoscopy EUS code includes no upper endoscopy; refutation p2, reports2:0)). Each check: `{id, label, status ∈ pass | warn | fail | not_verified |
+esophagoscopy EUS code includes no upper endoscopy; refutation p2, reports2:0).
+A family's services are those routing reads under it (`engine.legacy_family`:
+a push enteroscopy is read under the upper GI family gi-profiles@3 carved it out
+of), and when only some of them are so accounted for, the rest are named by
+their own family - "Small-bowel enteroscopy", never the examination the code
+includes (refutation P2RA, EUS lens 0: an EGD inside an EUS whose EGD-with-EUS
+code was selected let the check pass beside a push enteroscopy with no
+proposal, which the installed revision named)). Each check: `{id, label, status ∈ pass | warn | fail | not_verified |
 not_applicable | info, detail, source}`. Engine `cpt-studio-validation@3`.
 A selected, non-excluded `gi.other` code also speaks for the routed procedure
 line its passage opens with (`_Evaluation.speaks_for`: a passage's own sentence

@@ -1606,24 +1606,40 @@ def _fingerprint(code, family, profile_version, evidence, found, context_values,
 # --- encounter level -------------------------------------------------------------------
 
 def _accounted_elsewhere(inventory: Optional[gi_services.ServiceInventory], covered: Mapping[str, Sequence[str]]
-                         ) -> set:
-    """The families the documented-service reconciliation accounts for with ANOTHER service's selected code: every
-    service of the family done today is included in another service (an EGD inside an EUS of the upper GI tract) one of
-    whose selected, non-excluded codes includes its examination (catalogue.includes_examination: an EGD-with-EUS code).
-    Any other selected code of that service - a sigmoidoscopy, colonoscopy, stoma or esophagoscopy EUS code - includes
-    no upper endoscopy, so the family is named (refutation p2, reports2:0: any selected code of the EUS had accounted
-    for the EGD)."""
+                         ) -> dict:
+    """{routing family: the labels services.unproposed names it by} for each family routing reads of which the
+    documented-service reconciliation accounts for a service done today with ANOTHER service's selected code: the
+    service is included in another one (an EGD inside an EUS of the upper GI tract) of whose selected, non-excluded
+    codes one includes its examination (catalogue.includes_examination: an EGD-with-EUS code). Any other selected code
+    of that service - a sigmoidoscopy, colonoscopy, stoma or esophagoscopy EUS code - includes no upper endoscopy, so the
+    family is named (refutation p2, reports2:0: any selected code of the EUS had accounted for the EGD).
+
+    Services are counted under the family routing reads them under (legacy_family): routing reads a push enteroscopy
+    under the upper GI family gi-profiles@3 carved it out of. () when every service done today that routing reads under
+    the family is so accounted for: it is not named. Otherwise the labels of the services that are not: what is missed,
+    never the examination the code includes (refutation P2RA, EUS lens 0: an EGD inside an EUS whose EGD-with-EUS code
+    was selected made the whole upper GI routing family read as accounted for, so a push enteroscopy beside it with no
+    proposal passed as "Every performed service that routing detected in the document has a selected proposal" - which
+    the installed revision named)."""
     if inventory is None:
-        return set()
+        return {}
     done = [s for s in inventory.services if s.status in checks.POSITIVE]
-    return {family for family in {s.family for s in done}
-            if all(s.included_in and any(reconcile.catalogue.includes_examination(code, s.kind)
-                                         for code in covered.get(s.included_in, ()))
-                   for s in done if s.family == family)}
+
+    def elsewhere(service):
+        return bool(service.included_in) and any(reconcile.catalogue.includes_examination(code, service.kind)
+                                                 for code in covered.get(service.included_in, ()))
+    accounted = {}
+    for family in dict.fromkeys(legacy_family(s.family) for s in done):
+        under = [s for s in done if legacy_family(s.family) == family]
+        left = [s for s in under if not elsewhere(s)]
+        if len(left) < len(under):
+            accounted[family] = tuple(dict.fromkeys(PROFILES[s.family].label if s.family in PROFILES else s.family
+                                                    for s in left))
+    return accounted
 
 
 def _missed(routing: RoutingResult, selections: Sequence[_Selection], procedure_day: bool,
-            accounted: frozenset | set = frozenset()) -> tuple[list[str], bool]:
+            accounted: Optional[Mapping[str, tuple[str, ...]]] = None) -> tuple[list[str], bool]:
     """(labels of performed, profiled families - and other GI services routing detected - without a selected
     proposal, whether an E/M was not counted).
 
@@ -1636,19 +1652,24 @@ def _missed(routing: RoutingResult, selections: Sequence[_Selection], procedure_
     study is a gi.other mention, a push enteroscopy an upper GI one), so a selected code of a carved-out family counts
     for its routing-era family here as well (LEGACY_FAMILIES), as it does in _cited.
 
-    ``accounted``: the families the documented-service reconciliation accounts for with another service's selected
-    code (_accounted_elsewhere); they are not named. Every other family is named whatever the reconciliation also lists
-    (refutation p2, reports2:0: skipping every family the documented-service reading read as done let the check pass
-    with "Every performed service that routing detected in the document has a selected proposal" beside a detected EGD,
-    or a colonoscopy, that had none - which the installed revision named).
+    ``accounted``: {family: labels} of the families the documented-service reconciliation accounts for with another
+    service's selected code (_accounted_elsewhere): one with no labels is not named, one with labels is named by them -
+    what of it is left. Every other family is named whatever the reconciliation also lists (refutation p2, reports2:0:
+    skipping every family the documented-service reading read as done let the check pass with "Every performed service
+    that routing detected in the document has a selected proposal" beside a detected EGD, or a colonoscopy, that had
+    none - which the installed revision named).
     """
+    accounted = accounted or {}
     proposed = {family for s in selections if not s.excluded for family in (s.family, legacy_family(s.family))}
     unproposed, named = [], {}
     for f in routing.findings:
         if not (f.family in PROFILES and (PROFILES[f.family].supported or f.family == OTHER_GI) and _done_today(f)):
             continue
         if f.family in accounted and f.family != OTHER_GI:
-            continue  # another service's selected code includes it (an EGD inside an EUS)
+            if not accounted[f.family]:
+                continue  # another service's selected code includes it (an EGD inside an EUS)
+            # only some of it is (refutation P2RA, EUS lens 0): what is left is named, never the included examination
+            named[f.family] = accounted[f.family]
         if f.family == OTHER_GI and f.mentions:
             cited = _cited(f.mentions, selections) | _VAL_named_again(f.mentions, selections)
             uncited = [m.span.text for index, m in enumerate(f.mentions)
@@ -1660,8 +1681,11 @@ def _missed(routing: RoutingResult, selections: Sequence[_Selection], procedure_
         elif f.family not in proposed:
             unproposed.append(f.family)
     visit_skipped = procedure_day and any(family in checks.EM_FAMILIES for family in unproposed)
-    labels = [named.get(family, PROFILES[family].label) for family in unproposed
-              if not (procedure_day and family in checks.EM_FAMILIES)]
+    labels = []
+    for family in unproposed:
+        if not (procedure_day and family in checks.EM_FAMILIES):
+            name = named.get(family, PROFILES[family].label)
+            labels += list(name) if isinstance(name, tuple) else [name]
     return list(dict.fromkeys(labels)), visit_skipped
 
 
