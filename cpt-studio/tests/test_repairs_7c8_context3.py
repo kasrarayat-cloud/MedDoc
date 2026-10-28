@@ -588,3 +588,55 @@ class ServiceLineStatesOnlyItsOwnDateRequestTests(EndToEnd):
         encounter_id = self.finished(text, service_date=ELENA_DATE)
         self.assert_held(encounter_id)
         self.assert_not_excluded(encounter_id, '45385')
+
+
+class HeadingOrSentenceAboveTests(DateAssertions, SimpleTestCase):
+    """sk:5's class, paraphrases of its inputs (a line above that is no field, a field without a colon, a bracket on the
+    next line): "OUTSIDE COLONOSCOPY", "Outside Colonoscopy", "Outside colonoscopy -", "Previous procedure", "Next
+    procedure - Colonoscopy" or "Scheduled = yes" above "Procedure date: ...", and "(outside facility)" on the line
+    after the date, still gave the documented date under an undated title. A heading, a title or a sentence above is
+    read as a field with a value is: a qualifier there holds the date - unless it is part of a name of a service this
+    release codes ("Follow-up visit"), has a date of its own after it, or opens a field about something else; and a line
+    opening with a bracket continues the date's phrase."""
+
+    CASES = (
+        ('OUTSIDE COLONOSCOPY\nProcedure date: 09/03/2026', '2026-09-03'),
+        ('Outside Colonoscopy\nProcedure date: 09/03/2026', '2026-09-03'),
+        ('Outside colonoscopy -\nProcedure date: 09/03/2026', '2026-09-03'),
+        ('Previous procedure -\nProcedure date: 05/01/2019', '2019-05-01'),
+        ('Next procedure - Colonoscopy\nProcedure date: 10/14/2029', '2029-10-14'),
+        ('Scheduled = yes\nProcedure date: 11/04/2026', '2026-11-04'),
+        ('The patient had an outside colonoscopy.\nProcedure date: 09/03/2026', '2026-09-03'),
+        ('Procedure date: 09/03/2026\n(outside facility)', '2026-09-03'),
+    )
+
+    def test_the_other_occurrence_s_date_is_asked_never_documented(self):
+        for lines, other in self.CASES:
+            for title in ('', 'Colonoscopy report\n'):
+                with self.subTest(lines=lines[:50], title=title.strip()):
+                    text = HEAD + title + lines + '\n' + COLO_BODY
+                    self.assert_never(text, other)
+                    self.assert_asked(text, 'Procedure date')
+
+    def test_controls(self):
+        for above in ('Follow-up visit', 'GI follow-up office visit', 'Colonoscopy Report', 'PROCEDURE NOTE',
+                      'Last colonoscopy 05/01/2019, normal.', 'Seen today in the endoscopy unit.'):
+            with self.subTest(above=above):
+                text = HEAD + above + '\nDate of service: 10/14/2026\n' + COLO_PLAIN
+                self.assert_document(text, '2026-10-14')
+                self.assert_member_conflict(text, ELENA_DATE)
+        self.assert_document(HEAD + 'Date of service: 10/14/2026\n(Recorded by Dr. A. Synthetic)\n' + COLO_PLAIN,
+                             '2026-10-14')
+        # a heading the layout reads as a history section holds its dates out of the reading altogether, as before
+        self.assert_never(HEAD + 'Previous procedure\nProcedure date: 05/01/2019\n' + COLO_BODY, '2019-05-01')
+
+
+class HeadingOrSentenceAboveRequestTests(EndToEnd):
+    """The paraphrases end to end: no outside or prior date is sent and 45385 is never excluded against one."""
+
+    def test_a_heading_above_the_date(self):
+        for lines in ('OUTSIDE COLONOSCOPY\nProcedure date: 09/03/2026', 'Next procedure - Colonoscopy\nProcedure date: 10/14/2029'):
+            with self.subTest(lines=lines[:30]):
+                encounter_id = self.finished(HEAD + 'Colonoscopy report\n' + lines + '\n' + COLO_BODY)
+                self.assertEqual(self.dates_sent(encounter_id), [[]])
+                self.assertNotEqual(self.bucket(encounter_id, '45385'), 'excluded')

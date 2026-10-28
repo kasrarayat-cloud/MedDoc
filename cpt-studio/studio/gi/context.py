@@ -461,16 +461,23 @@ def _line_reading(text: str, label_start: int, label_end: int, date_start: int, 
     when attached to it ("09/03/2026, outside facility", "(performed at an outside facility)"); one across a field break
     ("Indication: history of polyps") does not place the date. A phrase that wraps onto the next line - it opens in lower
     case - is read on that line too ("11/04/2026," above "scheduled for 8:00 AM."). The scans stop 80 characters either
-    side (200 on the line above), so a long line costs each date only its window."""
+    side (200 on the line above), so a long line costs each date only its window.
+
+    A heading, a title or a sentence above is read as a field with a value is (a paraphrase of sk:5: "OUTSIDE
+    COLONOSCOPY", "Previous procedure", "Next procedure - Colonoscopy" or "Scheduled = yes" above "Procedure date:
+    ..." gave the documented date): a qualifier there holds the date - unless it is part of a name of a service this
+    release codes ("Follow-up visit" names the visit itself), has a date of its own after it, or opens a field about
+    something else. A line wrapping onto the next one may open it with a bracket too ("09/03/2026" above "(outside
+    facility)")."""
     lo = max(text.rfind('\n', max(0, label_start - 80), label_start) + 1, label_start - 80, 0)
     opens = _opens_field(text, label_start, label_end)
     hi = text.find('\n', date_end, date_end + 80)
     hi = min(len(text), date_end + 80) if hi < 0 else hi
-    if hi < len(text) and text[hi] == '\n':  # a phrase wrapping onto the next line, which opens in lower case
+    if hi < len(text) and text[hi] == '\n':  # a phrase wrapping onto the next line: it opens in lower case or a bracket
         wrap = hi + 1
         while wrap < min(len(text), hi + 81) and text[wrap] in ' \t':
             wrap += 1
-        if wrap < len(text) and text[wrap].islower():
+        if wrap < len(text) and (text[wrap].islower() or text[wrap] in '(['):
             stop = text.find('\n', wrap, hi + 81)
             hi = min(len(text), hi + 81) if stop < 0 else stop
     dates, starts = find_dates(text), _date_starts(text)
@@ -493,12 +500,14 @@ def _line_reading(text: str, label_start: int, label_end: int, date_start: int, 
             return 'another'
         reading = 'unplaced'
     above = _line_above(text, label_start if phrase_start is None else phrase_start)
-    field = _LINE_FIELD.match(text, *above) if above is not None else None
-    if field is not None:  # refutation round 3, sk:5: the field on the line above
-        heads = not text[field.end():above[1]].strip()
-        for q in _OTHER_OCCURRENCE.finditer(text, above[0], min(above[1], above[0] + 200)):
-            if other_dates(q.end(), above[1]) or _qualifier_field(text, q.start(), q.end(), above[1],
-                                                                  has_date) == 'else':
+    if above is not None:  # refutation round 3, sk:5: the line above
+        field = _LINE_FIELD.match(text, *above)
+        heads = field is not None and not text[field.end():above[1]].strip()
+        window = min(above[1], above[0] + 200)
+        names = [(n.start(), n.end()) for p in _THIS_SERVICE for n in p.finditer(text, above[0], min(above[1], window + 60))]
+        for q in _OTHER_OCCURRENCE.finditer(text, above[0], window):
+            if any(s <= q.start() and q.end() <= e for s, e in names) or other_dates(q.end(), above[1]) \
+                    or _qualifier_field(text, q.start(), q.end(), above[1], has_date) == 'else':
                 continue
             if heads:
                 return 'another'
