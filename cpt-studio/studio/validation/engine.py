@@ -170,6 +170,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     # visit without a proposal is not pushed as unresolved, whatever families the inventory reads.
     unresolved, bundled, covered = (reconcile.reconcile(usable, active, procedure_day=procedure_day) if usable
                                     else ([], [], {}))
+    included_by = _included_by(usable, covered)
     if second_merge is not None:
         # worded once the reconciliation this assessment records is known (refutation 7c8, reports-2)
         provider.append(_second_review_check(second_merge, unresolved))
@@ -183,7 +184,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         # service's selected code is not.
         documented_em = any(checks.separate_em_statement(f) for f in routing.findings if f.family in checks.EM_FAMILIES)
         coverage.append(checks.unproposed_check(*_missed(routing, selections, procedure_day,
-                                                         _accounted_elsewhere(usable, covered)),
+                                                         _accounted_elsewhere(usable, included_by)),
                                                 separate_em=documented_em))
     service_questions = _service_questions(usable, proposals, context) if usable else []
     unsupported = _unsupported(routing, selections)
@@ -219,6 +220,9 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         # documented services performed with no proposal and not listed as unresolved (refutation 7c8, reports-1)
         'not_listed': [{'service': s.id, 'family': s.family, 'label': reconcile.uncounted_label(s)} for s in not_listed],
         'covered': covered, 'catalogue_version': reconcile.catalogue.CATALOGUE_VERSION,
+        # the selected codes of the service each included service is read as part of that include its examination: the
+        # documented services' inclusion line is worded from it (refutation P2RA, EUS lens 1)
+        'included_by': included_by,
         'inventory_problems': list(problems)})
     return AssessmentResult(
         profiles_version=PROFILES_VERSION, engine_version=ENGINE_VERSION, proposals=proposals,
@@ -1605,12 +1609,32 @@ def _fingerprint(code, family, profile_version, evidence, found, context_values,
 
 # --- encounter level -------------------------------------------------------------------
 
-def _accounted_elsewhere(inventory: Optional[gi_services.ServiceInventory], covered: Mapping[str, Sequence[str]]
+def _included_by(inventory: Optional[gi_services.ServiceInventory], covered: Mapping[str, Sequence[str]]) -> dict:
+    """{service id: the selected, non-excluded codes of the service it is read as part of that include its examination}
+    for every service done today read as part of another (an EGD inside an EUS of the upper GI tract), by the
+    reconciliation's own test (reconcile.includes_through over ``covered``, the codes it reconciled). Recorded with the
+    assessment (completeness.included_by), so the documented services are worded from the inclusion rule itself, never
+    from whether the reconciliation listed the service (refutation P2RA, EUS lens 1: an EGD with its own code beside an
+    EUS whose selected code includes no upper endoscopy read "included in S2: that service's code includes this
+    examination", and on the page "... so no code of its own is asked", beside the approved code of its own)."""
+    if inventory is None:
+        return {}
+    out = {}
+    for service in inventory.services:
+        if service.status in checks.POSITIVE and service.included_in:
+            including = inventory.service(service.included_in)
+            family = including.family if including is not None else ''
+            out[service.id] = [code for code in covered.get(service.included_in, ())
+                               if reconcile.includes_through(inventory, service, code, family)]
+    return out
+
+
+def _accounted_elsewhere(inventory: Optional[gi_services.ServiceInventory], included_by: Mapping[str, Sequence[str]]
                          ) -> dict:
     """{routing family: the labels services.unproposed names it by} for each family routing reads of which the
     documented-service reconciliation accounts for a service done today with ANOTHER service's selected code: the
     service is included in another one (an EGD inside an EUS of the upper GI tract) of whose selected, non-excluded
-    codes one includes its examination (catalogue.includes_examination: an EGD-with-EUS code). Any other selected code
+    codes one includes its examination (``included_by``, _included_by: an EGD-with-EUS code). Any other selected code
     of that service - a sigmoidoscopy, colonoscopy, stoma or esophagoscopy EUS code - includes no upper endoscopy, so the
     family is named (refutation p2, reports2:0: any selected code of the EUS had accounted for the EGD).
 
@@ -1624,14 +1648,10 @@ def _accounted_elsewhere(inventory: Optional[gi_services.ServiceInventory], cove
     if inventory is None:
         return {}
     done = [s for s in inventory.services if s.status in checks.POSITIVE]
-
-    def elsewhere(service):
-        return bool(service.included_in) and any(reconcile.catalogue.includes_examination(code, service.kind)
-                                                 for code in covered.get(service.included_in, ()))
     accounted = {}
     for family in dict.fromkeys(legacy_family(s.family) for s in done):
         under = [s for s in done if legacy_family(s.family) == family]
-        left = [s for s in under if not elsewhere(s)]
+        left = [s for s in under if not included_by.get(s.id)]
         if len(left) < len(under):
             accounted[family] = tuple(dict.fromkeys(PROFILES[s.family].label if s.family in PROFILES else s.family
                                                     for s in left))

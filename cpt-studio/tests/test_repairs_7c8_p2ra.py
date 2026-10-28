@@ -7,9 +7,17 @@ provider is an in-process fake (no network).
   in the document has a selected proposal" - beside a performed push enteroscopy with no proposal, because the EGD
   inside the EUS, which an EGD-with-EUS code includes, made the whole upper GI ROUTING family read as accounted for,
   and routing reads an enteroscopy under that family (gi-profiles@3 carved it out; engine.LEGACY_FAMILIES).
+- EUS lens 1 (reports._documented_section, app.js documentedServices): an EGD with its own code beside an EUS whose
+  selected code includes no upper endoscopy read "included in S2: that service's code includes this examination" (and
+  "... so no code of its own is asked"): the line tested whether the reconciliation listed the EGD, not the inclusion
+  rule.
 """
+import dataclasses
+from unittest import mock
+
 from django.test import SimpleTestCase
 
+from studio import jobs
 from studio.gi.profiles import PROFILES
 from studio.validation import checks
 from tests.test_pipeline_api import FakeProvider, drain
@@ -110,3 +118,123 @@ class TheReportsNameTheEnteroscopyTests(Harness):
         self.assertIn(f'[WARN] services.unproposed — Performed services without a proposal: {MISSED_ENTEROSCOPY}',
                       reviewed)
         self.assertNotIn(EVERY_DETECTED, reviewed)
+
+
+# --- EUS lens 1: the documented services' inclusion line follows the inclusion rule itself ----------------------------
+
+GASTROSCOPE = 'The gastroscope was advanced to the second portion of the duodenum'
+NODE_FNA = 'was sampled by fine-needle aspiration with two passes'
+EGD_AND_LOWER_EUS = (SYNTHETIC + 'Date of service: 2026-10-14\nIndication: dyspepsia; perirectal lymph node.\n'
+                     'Procedures: EGD and lower EUS.\n'
+                     'EGD: ' + GASTROSCOPE + ' and the examination was completed. The upper examination was normal.\n'
+                     'Lower EUS: The echoendoscope was introduced. A 9 mm perirectal lymph node ' + NODE_FNA + '.\n')
+EGD_AND_PANCREAS_EUS = (SYNTHETIC + 'Date of service: 2026-10-14\nIndication: dyspepsia; pancreatic head mass.\n'
+                        'Procedures: EGD and EUS.\n'
+                        'EGD: ' + GASTROSCOPE + ' and the examination was completed. The upper examination was normal.\n'
+                        'EUS: The echoendoscope was advanced to the second portion of the duodenum. A 2 cm pancreatic '
+                        'head mass ' + FNA + '.\n')
+SAMPLED_NODE = 'was sampled by fine-needle aspiration'
+EGD_AND_EUS_SMALLEST = (SYNTHETIC + 'Date of service: 2026-10-14\nEGD: ' + GASTROSCOPE + '.\n'
+                        'EUS: A lymph node ' + SAMPLED_NODE + '.\n')  # the verifier's smallest input
+INCLUDED_TXT = "included in S2: that service's code includes this examination"
+INCLUDED_PAGE = "Included in S2: that service's code includes this examination, so no code of its own is asked."
+NOT_INCLUDED_TXT = 'read as part of S2, but no selected code of that service includes this examination'
+NOT_INCLUDED_PAGE = 'Read as part of S2, but no selected code of that service includes this examination.'
+
+
+class TheInclusionLineFollowsTheInclusionRuleTests(Harness):
+    """EUS lens 1 (verified must-fix, class 3; not pre-existing at 057a7d398, which has no documented-services section):
+    an EGD with its own code beside an EUS whose selected code includes no upper endoscopy - 43235 with 45342 or 43232,
+    the correct pair - read "included in S2: that service's code includes this examination" in the stored TXT, and "...
+    so no code of its own is asked" on the page, beside the approved 43235: the line tested whether the reconciliation
+    listed the EGD, not whether a selected code of the EUS includes it. It is worded from the inclusion rule itself, the
+    test reconcile.inclusion_asks_no_code reads (catalogue.includes_examination over the including service's selected,
+    non-excluded codes), recorded with the assessment (completeness.included_by)."""
+
+    def stored(self, text, *selections):
+        self.use(FakeProvider(selections=list(selections)))
+        encounter_id = self.create(text)
+        drain()
+        return encounter_id
+
+    def test_a_code_of_the_eus_that_includes_no_upper_endoscopy_is_never_said_to_include_it(self):
+        for text, egd, eus, code in ((EGD_AND_LOWER_EUS, GASTROSCOPE, NODE_FNA, '45342'),
+                                     (EGD_AND_PANCREAS_EUS, GASTROSCOPE, FNA, '43232'),
+                                     (EGD_AND_PANCREAS_EUS, GASTROSCOPE, FNA, '45342'),
+                                     (EGD_AND_EUS_SMALLEST, GASTROSCOPE, SAMPLED_NODE, '45342'),
+                                     (EGD_AND_EUS_SMALLEST, GASTROSCOPE, SAMPLED_NODE, '43232')):
+            with self.subTest(code=code, text=text[67:120]):
+                self.fresh(f'Synthetic workspace {code} {len(text)}')
+                encounter_id = self.stored(text, ('43235', egd), (code, eus))
+                assessment = self.assessment(encounter_id)
+                self.assertEqual([(s['id'], s['family'], s['included_in']) for s in assessment.services['services']],
+                                 [('S1', 'gi.egd', 'S2'), ('S2', 'gi.eus', '')])
+                for selected in ('43235', code):
+                    self.decide(encounter_id, selected, 'approve')
+                reply = self.post(f'/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
+                self.assertEqual(reply.status_code, 201, reply.content)
+                reviewed = self.txt(encounter_id, 'reviewed')
+                self.assertIn(f'accounted for by: 43235\n      {NOT_INCLUDED_TXT}\n', reviewed)
+                self.assertNotIn("that service's code includes this examination", reviewed)
+                shown = screen(self.detail(encounter_id))
+                self.assertIn(f'Accounted for by: 43235. {NOT_INCLUDED_PAGE}', shown['codes'] + shown['checks'])
+                self.assertNotIn('no code of its own is asked', shown['codes'] + shown['checks'])
+
+    def test_controls_a_code_that_includes_the_egd_keeps_the_inclusion_line(self):
+        # 43242 alone, and 43242 beside the EGD's own 43235 (the r1 missed-14 shape): the EUS's code includes the EGD
+        for selections in ((('43242', FNA),), (('43235', GASTROSCOPE), ('43242', FNA))):
+            with self.subTest(codes=[code for code, _ in selections]):
+                self.fresh(f'Synthetic workspace {len(selections)}')
+                encounter_id = self.stored(EGD_AND_PANCREAS_EUS, *selections)
+                draft = self.txt(encounter_id)
+                self.assertIn(INCLUDED_TXT, draft)
+                self.assertNotIn('read as part of', draft)
+                shown = screen(self.detail(encounter_id))
+                self.assertIn(INCLUDED_PAGE, shown['codes'] + shown['checks'])
+
+    def test_an_eus_with_no_code_is_never_said_to_have_one_that_includes_the_egd(self):
+        # the EGD's own code alone: the EUS has no selected code (it is listed itself), so none of its codes includes
+        # the EGD - never "that service's code includes this examination" about a service with no code
+        encounter_id = self.stored(EGD_AND_PANCREAS_EUS, ('43235', GASTROSCOPE))
+        draft = self.txt(encounter_id)
+        self.assertIn(f'accounted for by: 43235\n      {NOT_INCLUDED_TXT}\n', draft)
+        self.assertNotIn("that service's code includes this examination", draft)
+        shown = screen(self.detail(encounter_id))
+        self.assertIn(NOT_INCLUDED_PAGE, shown['codes'] + shown['checks'])
+        self.assertNotIn("that service's code includes this examination", shown['codes'] + shown['checks'])
+
+    def test_an_assessment_that_recorded_no_inclusion_states_the_reading_alone(self):
+        # an assessment stored before completeness.included_by existed (assessments are immutable: one is made by the
+        # engine of that time, which recorded no such key): the line states what the rows hold - the inventory read the
+        # EGD as part of the EUS - and nothing about a code
+        real = jobs.run_assessment
+
+        def earlier(**kwargs):
+            result = real(**kwargs)
+            completeness = {k: v for k, v in result.completeness.items() if k != 'included_by'}
+            return dataclasses.replace(result, completeness=completeness)
+        with mock.patch('studio.jobs.run_assessment', earlier):
+            encounter_id = self.stored(EGD_AND_PANCREAS_EUS, ('43242', FNA))
+        self.assertNotIn('included_by', self.assessment(encounter_id).completeness)
+        draft = self.txt(encounter_id)
+        self.assertIn('      read as part of S2\n', draft)
+        self.assertNotIn('includes this examination', draft)
+        shown = screen(self.detail(encounter_id))
+        self.assertIn('Read as part of S2.', shown['codes'] + shown['checks'])
+        self.assertNotIn('includes this examination', shown['codes'] + shown['checks'])
+
+    def test_the_assessment_records_which_selected_codes_include_the_examination(self):
+        # completeness.included_by: the included service -> the selected, non-excluded codes of the service it is read
+        # as part of that include its examination, as the reconciliation read them
+        for selections, included_by in (((('43235', GASTROSCOPE), ('45342', FNA)), {'S1': []}),
+                                        ((('43235', GASTROSCOPE),), {'S1': []}),
+                                        ((('43235', GASTROSCOPE), ('43242', FNA)), {'S1': ['43242']}),
+                                        ((('43242', FNA), ('45342', FNA)), {'S1': ['43242']})):
+            with self.subTest(codes=[code for code, _ in selections]):
+                result = run(EGD_AND_PANCREAS_EUS, [sel(code, span(EGD_AND_PANCREAS_EUS, quote))
+                                                    for code, quote in selections])
+                self.assertEqual(result.completeness['included_by'], included_by)
+        result = run(EGD_AND_LOWER_EUS.replace('Lower EUS: The echoendoscope was introduced.',
+                                               'Lower EUS: The echoendoscope was introduced into the rectum.'),
+                     [sel('45342', span(EGD_AND_LOWER_EUS, NODE_FNA))])
+        self.assertEqual(result.completeness['included_by'], {})  # a rectal EUS includes no upper endoscopy

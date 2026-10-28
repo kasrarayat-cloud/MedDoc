@@ -1870,10 +1870,18 @@ office visit beside a same-day procedure and a service included in another
 while that other has no selected code or one that includes its examination
 (`inclusion_asks_no_code`; `CodeProfile.includes`: only the EGD-with-EUS codes
 include an upper endoscopy), and its unsupported acts are still named). The
-documented services then never say the including service's code includes it:
-the TXT and the page read "read as part of <that service>, but no selected code
-of that service includes this examination". No code is added for an unresolved
-item and no alternative is promoted. Conflicts → `services.conflicts` and a
+documented services word an included service's line from that rule itself, as
+the assessment records it (`completeness.included_by`: the selected,
+non-excluded codes of the including service that include the examination,
+`reconcile.includes_through`, the one test every reader of the rule uses):
+"included in <that service>: that service's code includes this examination"
+only while one does; otherwise the TXT and the page read "read as part of <that
+service>, but no selected code of that service includes this examination" -
+whether or not the service is listed, and beside a code of its own too
+(refutation P2RA, EUS lens 1: 43235 beside 45342 read "that service's code
+includes this examination ... so no code of its own is asked"); an assessment
+that recorded no such list reads "read as part of <that service>" alone. No code
+is added for an unresolved item and no alternative is promoted. Conflicts → `services.conflicts` and a
 service-scoped question with both sides; missing documentation → every
 materially necessary question for that service, asked together (a sparse visit
 note: setting, patient status and E/M basis), never twice for the same family

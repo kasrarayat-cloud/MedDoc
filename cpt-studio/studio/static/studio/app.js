@@ -636,11 +636,16 @@ function documentedServices(doc) {
     const dropped = codes.filter(code => rejected.has(code));
     if (kept.length) lines.push(`Accounted for by: ${kept.join(', ')}.`);
     if (dropped.length) lines.push(`Rejected by the reviewer: ${dropped.join(', ')}${kept.length ? '' : '; no other selected code accounts for this service'}.`);
-    // Listed without a proposal, it is never said to be accounted for by the service it is read as part of: no selected
-    // code of that service includes its examination (refutation p2, reports2:0).
-    if (done && service.included_in) lines.push(unresolved.some(entry => entry.service === service.id && entry.reason === 'no_proposal')
-      ? `Read as part of ${service.included_in}, but no selected code of that service includes this examination.`
-      : `Included in ${service.included_in}: that service's code includes this examination, so no code of its own is asked.`);
+    // Worded from the inclusion rule as the assessment recorded it (included_by: the selected codes of that service that
+    // include this examination), never from whether the service is listed: an EGD with a code of its own beside an EUS
+    // code that includes none was said to be included by it (refutation P2RA, EUS lens 1; refutation p2, reports2:0).
+    // Nothing recorded (an earlier assessment, a reading that decided nothing): the reading alone is stated.
+    const includedBy = completeness.included_by && typeof completeness.included_by === 'object' && Array.isArray(completeness.included_by[service.id]) ? completeness.included_by[service.id] : null;
+    if (done && service.included_in) lines.push(includedBy === null
+      ? `Read as part of ${service.included_in}.`
+      : includedBy.length
+        ? `Included in ${service.included_in}: that service's code includes this examination, so no code of its own is asked.`
+        : `Read as part of ${service.included_in}, but no selected code of that service includes this examination.`);
     for (const item of unresolved.filter(entry => entry.service === service.id)) lines.push(`Unresolved: ${item.label}. No code is added for it and no alternative is promoted.`);
     for (const item of bundled.filter(entry => entry.service === service.id)) lines.push(`Not separately reported: ${item.label} — ${item.why}`);
     for (const conflict of conflicts.filter(entry => entry.service === service.id)) {

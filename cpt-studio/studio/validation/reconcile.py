@@ -346,20 +346,31 @@ def _read_under(inventory: ServiceInventory, service: DocumentedService, act: Ac
     return '' if reads else f'no {label} documented at this encounter reads it'
 
 
+def includes_through(inventory: ServiceInventory, service: DocumentedService, code: str, family: str) -> bool:
+    """Whether ``code``, of ``family``, includes ``service``'s examination through the service it is read as part of
+    (``included_in``: an EGD as the endoscopic portion of an EUS): that service is of ``family`` and the code includes
+    the examination (catalogue.includes_examination: an EGD-with-EUS code). The one test of the inclusion rule - read by
+    this reconciliation (inclusion_asks_no_code), by services.unproposed and the documented services the assessment
+    records (engine._included_by), and by the bounded second review's merge (engine._second_review)."""
+    including = inventory.service(service.included_in) if service.included_in else None
+    return (including is not None and including.family == family
+            and catalogue.includes_examination(code, service.kind))
+
+
 def inclusion_asks_no_code(inventory: ServiceInventory, service: DocumentedService,
                            selected: Sequence[tuple[str, str]]) -> bool:
     """Whether ``service``, read as included in another service of this encounter (``included_in``: an EGD as the
     endoscopic portion of an EUS), asks for no code of its own beside ``selected`` = (code, family) of the selected,
     non-excluded proposals: while that other service has no selected code (it is listed itself, and the code it asks
-    for includes the examination), or when one of its selected codes includes the examination
-    (catalogue.includes_examination). A selected code of it that includes no such examination - a sigmoidoscopy,
-    colonoscopy or esophagoscopy EUS code never includes an upper endoscopy - accounts for nothing of this service,
-    which is then a service without a proposal like any other (refutation p2, reports2:0)."""
+    for includes the examination), or when one of its selected codes includes the examination (includes_through). A
+    selected code of it that includes no such examination - a sigmoidoscopy, colonoscopy or esophagoscopy EUS code
+    never includes an upper endoscopy - accounts for nothing of this service, which is then a service without a proposal
+    like any other (refutation p2, reports2:0)."""
     including = inventory.service(service.included_in) if service.included_in else None
     if including is None:
         return False
     codes = [code for code, family in selected if family == including.family]
-    return not codes or any(catalogue.includes_examination(code, service.kind) for code in codes)
+    return not codes or any(includes_through(inventory, service, code, including.family) for code in codes)
 
 
 def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]], procedure_day: bool = False

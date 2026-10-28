@@ -241,11 +241,16 @@ def _services(assessment, text, rejected=frozenset()):
     as accounting for a service (refutation r1, report-6)."""
     inventory = assessment.services or {}
     completeness = assessment.completeness or {}
+    # the selected codes of the service each included service is read as part of that include its examination, as the
+    # assessment recorded them (refutation P2RA, EUS lens 1); None where nothing was recorded (an assessment made
+    # before the record existed, or a reading that decided nothing)
+    included_by = completeness.get('included_by') if isinstance(completeness.get('included_by'), dict) else {}
     out = []
     for service in inventory.get('services') or []:
         acts = [a for a in service.get('acts') or [] if a.get('status') == 'performed'
                 and a.get('role') in ('physician', 'unknown')]
         codes = list((completeness.get('covered') or {}).get(service.get('id'), []))
+        including = included_by.get(service.get('id'))
         out.append({'id': service.get('id', ''), 'family': service.get('family', ''),
                     'family_label': _family_label(service.get('family', '')), 'status': service.get('status', ''),
                     'completion': service.get('completion', ''), 'extent': service.get('extent', ''),
@@ -255,7 +260,8 @@ def _services(assessment, text, rejected=frozenset()):
                                     for a in acts}),
                     'covered_by': [code for code in codes if code not in rejected],
                     'rejected_by_reviewer': [code for code in codes if code in rejected],
-                    'included_in': service.get('included_in', '')})
+                    'included_in': service.get('included_in', ''),
+                    'included_by': list(including) if isinstance(including, list) else None})
     return {
         'services': out,
         'unresolved': [_unresolved_item(u, text) for u in completeness.get('unresolved_items') or []],
@@ -725,14 +731,17 @@ def _documented_section(snap):
             lines.append(f'      rejected by the reviewer: {", ".join(service["rejected_by_reviewer"])}'
                          + ('' if service.get('covered_by') else ' — no other selected code accounts for this service'))
         if service.get('included_in'):
-            # listed without a proposal, it is never said to be accounted for by the service it is read as part of: no
-            # selected code of that service includes its examination (refutation p2, reports2:0)
-            if any(item.get('service') == service.get('id') and item.get('reason') == 'no_proposal'
-                   for item in documented.get('unresolved') or []):
+            # worded from the inclusion rule as the assessment recorded it (included_by: the selected codes of that
+            # service that include this examination), never from whether the service is listed: an EGD with a code of
+            # its own beside an EUS code that includes none was said to be included by it (refutation P2RA, EUS lens 1;
+            # refutation p2, reports2:0)
+            if service.get('included_by'):
+                lines.append(f'      included in {service["included_in"]}: that service\'s code includes this examination')
+            elif service.get('included_by') is not None:
                 lines.append(f'      read as part of {service["included_in"]}, but no selected code of that service '
                              'includes this examination')
             else:
-                lines.append(f'      included in {service["included_in"]}: that service\'s code includes this examination')
+                lines.append(f'      read as part of {service["included_in"]}')
     for item in documented.get('bundled') or []:
         lines.append(f'  - not separately reported: {item["label"]} — {item["why"]}')
     if documented.get('attributions'):
