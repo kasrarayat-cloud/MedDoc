@@ -1766,7 +1766,7 @@ def _V2_patterns() -> dict:
             'box': re.compile('|'.join(f'(?:{pattern})' for pattern in marks)),
             'rescheduled': detect._RESCHEDULED,
             'named_no': re.compile(detect._BOX_Q_LEAD + r'(?P<name>[A-Za-z][\w/()&-]*(?:[ \t]+[A-Za-z][\w/()&-]*){0,5}?)'
-                                   r'[ \t]+' + detect._BOX_Q_DONE + detect._BOX_Q_TODAY + detect._BOX_Q_SEP
+                                   r'[ \t]+' + detect._BOX_Q_DONE + detect._BOX_Q_TODAY + detect._BOX_Q_SEP_ONCE
                                    + detect._BOX_Q_DENIAL + r'(?![0-9A-Za-z_])', re.I)}
 
 

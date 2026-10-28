@@ -1263,6 +1263,12 @@ _BOX_Q_TODAY = r'(?:[ \t]+today)?'
 # The separator: ':', '?', '=', '|', a dash, a tab or two spaces, after the label's own '?' or ':' (a form block's
 # "<label>: <value>" for a label that asks: "Procedure performed?: No").
 _BOX_Q_SEP = r'[ \t]*(?:[?:][ \t]*)?(?:[:?=|\u2013\u2014-]|\t| {2,})[ \t]*'
+# The same separator before a denial, read once (an atomic group). A denial opens with a letter, so only the
+# separator's longest reading can be followed by one, and the group's first reading is its longest: the matches are
+# the same. Without the group a run of spaces before an answer that is no denial was split every way among the
+# separator's three runs of spaces - cubic in the run: 'Colonoscopy performed' and 4,000 spaces took the analyze
+# stage past its limit (refutation p2, cost2:2).
+_BOX_Q_SEP_ONCE = r'(?>' + _BOX_Q_SEP + r')'
 # The answers that say no, or that this reader cannot read as done: "No", "None", "N", "Not done", "Not performed",
 # "Not completed", "N/A", "NA", "Not applicable".
 _BOX_Q_DENIAL = r'(?:no|none|n|not\s+(?:done|performed|completed)|n/a|na|not\s+applicable)'
@@ -1278,7 +1284,7 @@ _B3_STATUS_KEY = re.compile(_BOX_Q_LEAD + r'(?:(?:procedure|case|exam|examinatio
 # completed? no" (round 4 release:8), "- Procedure performed: No", "Was the procedure performed? No", "Procedure
 # performed<tab>No". The grammar's lead and the procedure's word, a done verb, a separator, then a denial that opens the
 # value, whatever follows it.
-_PERFORMED_ANSWERED_NO = re.compile(_BOX_Q_LEAD + _BOX_Q_NOUN + r'[ \t]+' + _BOX_Q_DONE + _BOX_Q_TODAY + _BOX_Q_SEP
+_PERFORMED_ANSWERED_NO = re.compile(_BOX_Q_LEAD + _BOX_Q_NOUN + r'[ \t]+' + _BOX_Q_DONE + _BOX_Q_TODAY + _BOX_Q_SEP_ONCE
                                     + _BOX_Q_DENIAL + r'(?![0-9A-Za-z_])', re.I)
 
 
@@ -1312,7 +1318,7 @@ def _performed_answer_denies(an: Analysis, ls: int, le: int) -> bool:
 # performed - no complications": _B3_ASKED_END).
 _B3_ASKED_END = r'(?=[ \t]*(?:[.,;:!(\u2013\u2014-]|\Z))'
 _B3_SERVICE_ANSWERED_NO = re.compile(_BOX_Q_LEAD + r'(?P<noun>[A-Za-z](?:[^\n?:=|\t.;]|\.(?=\S)){0,59}?)[ \t]+' + _BOX_Q_DONE + _BOX_Q_TODAY
-                                     + _BOX_Q_SEP + _BOX_Q_DENIAL + r'(?![0-9A-Za-z_])' + _B3_ASKED_END, re.I)
+                                     + _BOX_Q_SEP_ONCE + _BOX_Q_DENIAL + r'(?![0-9A-Za-z_])' + _B3_ASKED_END, re.I)
 _B3_ASKED_NO = 'uncertain: the line \'{}\' asks whether the service it names was done and answers no'
 # A noun qualified as earlier asks about another time, not today's service (round 4d integration, BOXES3 verifier's new
 # problem 3: "Prior colonoscopy performed? No" under Indication held today's colonoscopy). The noun also ends at a
@@ -3256,7 +3262,7 @@ def _box_checked_option(an: Analysis, start: int, end: int) -> Optional[Reading]
 # "Procedure cancelled | No"; never "Procedure cancelled, no sedation given.", "Procedure cancelled: no driver
 # available." or "Procedure cancelled: No-show", where "no" opens the reason).
 _BOX_ANSWER_LEAD = re.compile(_BOX_Q_LEAD + r'(?:' + _BOX_Q_NOUN + r'[ \t]+)?', re.I)
-_BOX_ANSWER_TAIL = re.compile(_BOX_Q_TODAY + _BOX_Q_SEP + _BOX_Q_DENIAL
+_BOX_ANSWER_TAIL = re.compile(_BOX_Q_TODAY + _BOX_Q_SEP_ONCE + _BOX_Q_DENIAL
                               + r'(?:[ \t]*[,;(]|[ \t]+[–—-]|\.[ \t]+|[ \t.]*$)', re.I)
 BOX_ANSWER_REACH = 80  # how far a status question's lead or answer is read from its reference (bounds the work)
 
