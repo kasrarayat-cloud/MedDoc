@@ -106,7 +106,9 @@ def encounter_state_label(encounter):
     if encounter.state == 'no_codes':
         assessment = live_assessment(encounter)
         if assessment is not None:
-            second = _unread_second_review(assessment)
+            # one query for the many rows with no second review (the documents list labels every row)
+            second = (_unread_second_review(assessment) if encounter.provider_runs.filter(
+                purpose=ProviderRun.SECOND_REVIEW).exists() else None)
             if second is not None:
                 return SECOND_REVIEW_LABELS.get(second.state, 'Second review not finished')
             if assessment.proposals.exists():  # nothing is reviewable in a no_codes state (_review_state)
