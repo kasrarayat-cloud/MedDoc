@@ -870,6 +870,12 @@ def _failed_stage_state(encounter, revision, job):
         return (None if job.kind == Job.REVIEW2 else 'provider_not_run'), None
     if run.state in UNSETTLED_RUN_STATES:
         return 'provider_unknown', None
+    if job.kind == Job.REVIEW2 and run.state in (ProviderRun.NOT_SENT, ProviderRun.CANCELLED):
+        # Nor did one whose request was never sent - stopped before sending, or settled as not sent when the stage was
+        # closed: no request failed, so never provider_failed ("The provider request failed" beside a primary answer
+        # that succeeded, refutation P2FR, ROLLBACK 1: an undo then left that state to 057a7d39, which labels it by its
+        # name). None: the assessment's own state, worded from that run ('Second review not sent').
+        return None, None
     if run.state == ProviderRun.SUCCEEDED:
         return 'processing_failed', None
     return 'provider_failed', run

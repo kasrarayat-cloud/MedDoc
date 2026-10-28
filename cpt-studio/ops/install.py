@@ -1865,7 +1865,12 @@ def put_back_states(closed, older_image, image_id, env_bytes) -> dict:
     (RECOMPUTE_STATES for those encounters, run in that image) when there is an image to ask, else as the installed
     revision 057a7d39 derives it (INSTALLED_STATES, in ``image_id``). Every other stored state is one both revisions
     label alike, and stays: the older derivation of a hold or of a second review closed by the undo is a request that
-    failed or a failed stage, off its review queue. An answer that names nothing it read is not read as "none".
+    failed or a failed stage, off its review queue. A second review closed by the undo that had sent nothing (stopped
+    before sending, or not sent) leaves the assessment's own state (review._failed_stage_state), never provider_failed:
+    labelled from its run where nothing is left to decide ('Second review not sent'), it is put back here to the older
+    derivation (057a7d39: processing_failed, 'Processing failed'), and on the review queue it stays (refutation P2FR,
+    ROLLBACK 1: left provider_failed, 057a7d39 listed 'Provider request failed' beside a request that succeeded).
+    An answer that names nothing it read is not read as "none".
     The state put back is truthful for the PRIMARY answer's refusal only: 057a7d39 reads that one (no_codes, with its
     blocker 'The provider response was not used'). Beside a second review's response refused whole, or a second review
     the shown assessment did not read whose outcome is unknown or that was answered, it says that no code was proposed

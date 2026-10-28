@@ -340,8 +340,15 @@ also `no_codes`, each reads 'No CPT codes proposed' with the blocker "No CPT
 code was proposed": true of the first two (neither request proposed anything;
 the review is not named, as 057a7d39 reads none), and for the last what
 057a7d39 says of such rows it writes itself (refutation p2, reports2:3,
-pre-existing there). Every other state is labelled alike by both revisions and
-keeps this revision's derivation:
+pre-existing there). A bounded second review the undo closes that had sent
+nothing - stopped while it ran, before sending, or settled as not sent - left
+the assessment as it was: this revision derives the assessment's own state,
+never `provider_failed` (no request failed). Where nothing is left to decide it
+words that state from the run ('Second review not sent'), so it is put back to
+057a7d39's own derivation, `processing_failed` ('Processing failed'), never
+handed over as 'Provider request failed' beside a request that succeeded; on the
+review queue it stays as it is (refutation P2FR, ROLLBACK 1). Every other state
+is labelled alike by both revisions and keeps this revision's derivation:
 057a7d39's own reading of a hold (a request that failed) or of a second review
 the undo closed (a failed stage) would list a date question as 'Provider
 request failed' and drop both from its review queue - and a state on the review

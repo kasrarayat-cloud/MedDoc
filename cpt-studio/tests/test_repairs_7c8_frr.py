@@ -13,6 +13,10 @@ data only; the provider is an in-process fake (no network).
   completeness and the second review's offer were worded from the non-excluded codes the assessment counted.
 - EUS-SECOND 3 (reports._services, app.js documentedServices): a code the reviewer rejected still made the included EGD
   read "included in S2: that service's code includes this examination".
+- ROLLBACK 0 (ops/install.py UNDO_HAZARDS): 'second_review_unread' read only the newest second review made for the
+  answer, so a retry that failed or was not sent hid an older one whose outcome is unknown, and an undo handed it over.
+- ROLLBACK 1 (review._failed_stage_state): a second review stopped before sending, closed by an undo, read
+  provider_failed - 'Provider request failed', which the undo left to 057a7d39 beside a request that succeeded.
 """
 from django.test import SimpleTestCase
 
@@ -393,3 +397,104 @@ class AnOlderUnreadSecondReviewIsNamedBehindARetryTests(SecondReviewRollbackBase
         answer, world = self.rollback()
         self.assertNotIsInstance(answer, install.InstallError, answer)
         self.assertEqual(self.encounter(failed).state, 'no_codes')
+
+
+class AStoppedSecondReviewIsNeverAFailedRequestTests(SecondReviewRollbackBase):
+    """ROLLBACK 1 (verified must-fix, class 3 and class 5; pre-existing at a62a18c85, not at 057a7d398): a member
+    stops the second review while its stage runs, before anything is sent - its run is cancelled ("Stopped before
+    sending; nothing was sent."). The undo's close fails that stage, and this revision derived provider_failed for a
+    failed second-review stage whose request was never sent - 'Provider request failed', labelled by its name, so never
+    put back - and 057a7d39 then listed 'Provider request failed' ("The provider request failed. The provider did not
+    return proposals.") beside a primary request that succeeded (HTTP 200). A second-review stage that sent nothing
+    leaves the assessment as it was (review._failed_stage_state, as for one that recorded no run): the assessment's own
+    state, worded from that run ('Second review not sent'), which an older revision labels otherwise - so the undo puts
+    back the older revision's own derivation (057a7d39: processing_failed, 'Processing failed'), unless the encounter
+    is on the review queue, where it stays."""
+
+    def stopped(self, tag, primary=(VISIT,)):
+        """The primary answer names ``primary``; a reviewer asks for the second review, and a member presses Stop while
+        its stage runs, before its request is sent."""
+        self.provider.first, self.provider.later = list(primary), list(primary)
+        encounter_id = self.create(tag, text=P2_REPORT)
+        self.assertTrue(self.client.get(f'/api/encounters/{encounter_id}').json()['second_review']['available'])
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/second-review').status_code, 201)
+        job = jobs.claim_next()
+        self.assertEqual(job.kind, models.Job.REVIEW2)
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/stop').status_code, 200)
+        jobs.run_job(job)
+        (second,) = models.ProviderRun.objects.filter(encounter_id=encounter_id,
+                                                      purpose=models.ProviderRun.SECOND_REVIEW)
+        self.assertEqual((second.state, second.sent), (models.ProviderRun.CANCELLED, False))
+        self.assertEqual(self.listed(encounter_id), ('stopped', 'Stopped'))
+        self.assertEqual(self.hazards(), {})
+        return encounter_id
+
+    def test_rollback_app_hands_057a7d39_its_own_derivation(self):
+        encounter_id = self.stopped('SR')
+        sent = self.sent()
+        for parked in (None, 'installed'):
+            with self.subTest(parked=parked):
+                if parked:  # the stage is closed already; the state is this revision's derivation again
+                    run_app_script(install.RECOMPUTE_STATES, {})
+                self.assertNotEqual(self.encounter(encounter_id).state, 'provider_failed')
+                answer, world = self.rollback(parked=parked)
+                self.assertNotIsInstance(answer, install.InstallError, answer)
+                self.assertIn(encounter_id, answer['stages_closed']['relabel'])
+                self.assertEqual(self.encounter(encounter_id).state, 'processing_failed')
+                self.assertEqual(installed_label(self.encounter(encounter_id)), 'Processing failed')
+                self.assertEqual(answer['states_put_back']['changed'], {encounter_id: ['no_codes', 'processing_failed']})
+        self.assertEqual(self.sent(), sent)
+
+    def test_this_revision_states_the_closed_rows_truthfully(self):
+        # what this revision's own web shows over them (a same-revision re-run's failure path): never a failed request
+        encounter_id = self.stopped('SS')
+        answer, world = self.rollback(parked='same')
+        self.assertNotIsInstance(answer, install.InstallError, answer)
+        self.assertEqual(review.latest_job(self.encounter(encounter_id)).state, models.Job.FAILED)
+        self.assertEqual(self.listed(encounter_id), ('no_codes', 'Second review not sent'))
+        self.assertIn('No CPT code was proposed in the response that was read; the second review was not sent',
+                      review.readiness(self.encounter(encounter_id))['blockers'])
+
+    def test_the_failure_path_puts_the_older_derivation_back_before_restoring_its_pair(self):
+        encounter_id = self.stopped('SF')
+        error, world = self.fail_install('installed')
+        self.assertIn('cpt-studio-worker did not become ready', str(error))
+        self.assertEqual(self.encounter(encounter_id).state, 'processing_failed')
+        put_back = world.index('script', OLD_IMAGE, 'RECOMPUTE_STATES')
+        self.assertEqual(world.calls[put_back][3], (encounter_id,))  # put back with the older pair's own derivation
+        self.assertLess(put_back, world.index('start', WORKER))  # before the older pair is started again
+
+    def test_a_second_review_the_close_settles_as_not_sent_is_never_a_failed_request(self):
+        # the variant the verifier named and did not run: the worker stopped with the second review's request reserved,
+        # never sent; the failure path's close settles it as not sent and fails the stage
+        self.provider.first, self.provider.later = [VISIT], [VISIT]
+        encounter_id = self.create('SN', text=P2_REPORT)
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/second-review').status_code, 201)
+        job = jobs.claim_next()
+        self.assertEqual((job.kind, job.state), (models.Job.REVIEW2, models.Job.RUNNING))
+        primary = self.encounter(encounter_id).current_assessment.provider_run
+        reserved = models.ProviderRun.objects.create(  # what jobs._send writes before any I/O; the worker stopped there
+            encounter_id=encounter_id, revision=job.revision, provider=primary.provider,
+            adapter_version=primary.adapter_version, request_sha256='f' * 64, request_body={}, contexts=[],
+            state=models.ProviderRun.RESERVED, service_date=primary.service_date,
+            purpose=models.ProviderRun.SECOND_REVIEW, scope={'primary_run': str(primary.pk)})
+        sent = self.sent()
+        error, world = self.fail_install('installed')
+        self.assertIn('cpt-studio-worker did not become ready', str(error))
+        reserved.refresh_from_db()
+        self.assertEqual((reserved.state, reserved.sent), (models.ProviderRun.NOT_SENT, False))
+        self.assertEqual(review.latest_job(self.encounter(encounter_id)).state, models.Job.FAILED)
+        self.assertEqual(self.encounter(encounter_id).state, 'processing_failed')
+        self.assertEqual(installed_label(self.encounter(encounter_id)), 'Processing failed')
+        self.assertEqual(self.sent(), sent)
+
+    def test_beside_a_code_to_decide_it_stays_on_the_review_queue(self):
+        # the verifier's V4 shape: the primary answer's 45385 is still to decide - 057a7d39 shows it on its queue,
+        # never "The provider did not return proposals." beside its own suggestion
+        encounter_id = self.stopped('SQ', primary=(VISIT, SNARE))
+        answer, world = self.rollback()
+        self.assertNotIsInstance(answer, install.InstallError, answer)
+        state = self.encounter(encounter_id).state
+        self.assertIn(state, ('needs_clarification', 'ready_for_review'))
+        self.assertNotIn(encounter_id, answer['states_put_back']['changed'])
+        self.assertTrue(self.encounter(encounter_id).current_assessment.proposals.filter(code=SNARE[0]).exists())

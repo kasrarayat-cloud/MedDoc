@@ -2070,7 +2070,12 @@ whatever that code's own acts leave to the reviewer (refutation P2RA, EUS lens
 2: an EGD-with-EUS code selected for the listed EGD was kept as an alternative
 that "accounts for no documented service or act the primary proposals left
 unresolved"). The
-primary run stays the run in use for context changes and reuse. The encounter
+primary run stays the run in use for context changes and reuse. A second-review
+stage that ends failed having sent nothing - no run recorded, or its run stopped
+before sending or not sent - leaves the assessment as it was: the encounter's
+state is the assessment's own, worded from that run, never `provider_failed`
+(refutation P2FR, ROLLBACK 1: an undo's close of a second review stopped before
+sending had read "Provider request failed" beside a request that succeeded). The encounter
 view's `second_review.run` names the newest second review made for the answer
 the current assessment reads, whatever its outcome; while its response was not
 read (unknown, failed, not sent) or not used (refused whole), the suggestions
