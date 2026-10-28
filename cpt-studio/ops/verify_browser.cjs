@@ -158,6 +158,15 @@ function markableSpans(p, points) {
   return exactSpans(p, points).filter(({ span }) => span.exact !== false);
 }
 
+// The source passages CPT Studio selected for a proposal (support.source), exact at their offsets: app.js marks each as
+// '<id>:s<n>' (documentLayout), whether its support was checked or not (refutation p2, reports2:4: the walk failed
+// hard on them as "unknown or inexact spans").
+function markableSourceSpans(p, points) {
+  return (p.support?.source || []).map((span, index) => ({ span, index }))
+    .filter(({ span }) => span && (span.context_index ?? 0) === 0 && span.exact !== false
+      && cpSlice(points, span.start, span.end) === span.text);
+}
+
 function settle(promise) {
   promise.catch(() => {});
   return promise;
@@ -397,6 +406,7 @@ function checkEvidenceMarks(enc, marks, cards) {
   for (const p of proposalsOf(enc).filter(item => item.bucket === 'selected')) {
     const exact = markableSpans(p, points);
     exact.forEach(({ index }) => known.add(`${p.id}:${index}`));
+    markableSourceSpans(p, points).forEach(({ index }) => known.add(`${p.id}:s${index}`));
     const card = cards.find(c => c.id === `card-${p.id}`);
     out.push(check(`dom.card.${p.code}`, 'hard', Boolean(card), card ? 'code card shown' : 'no code card'));
     if (card) {

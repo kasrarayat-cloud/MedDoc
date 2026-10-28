@@ -472,3 +472,95 @@ class NothingProposedIsSaidOnlyOfAResponseThatProposedNothingTests(Harness):
                 self.assertEqual(detail['readiness']['blockers'], ['No CPT code was proposed'])
                 self.assertEqual((detail['state'], detail['state_label']), ('no_codes', NO_CODES_LABEL))
                 self.assertIn('Review status: not complete\n  - No CPT code was proposed', self.txt(encounter_id))
+
+
+# --- reports2:4: the walk's verifier reads the support.source marks app.js renders as known exact spans --------------
+
+VB = Path(settings.BASE_DIR) / 'ops' / 'verify_browser.cjs'
+MARKS_NODE = r"""
+const app = require(process.argv[1]);
+const vb = require(process.argv[2]);
+let input = '';
+process.stdin.on('data', chunk => { input += chunk; });
+process.stdin.on('end', () => {
+  const doc = JSON.parse(input);
+  const html = app.reviewView(doc, app.documentLayout(doc), 'codes', false);
+  // read as ops/verify_browser.cjs readDom reads the page: every .evidence-mark's data-keys, every code card
+  const UNESCAPE = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#x27;': "'", '&#x60;': '`' };
+  const unescape = text => text.replace(/&(amp|lt|gt|quot|#x27|#x60);/g, m => UNESCAPE[m]);
+  const attr = (attrs, name) => unescape((new RegExp(`\\b${name}="([^"]*)"`).exec(attrs) || [])[1] || '');
+  const marks = [...html.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)]
+    .filter(m => (attr(m[1], 'class') || '').split(' ').includes('evidence-mark'))
+    .map(m => ({ keys: (attr(m[1], 'data-keys') || attr(m[1], 'data-evidence')).split(' ').filter(Boolean),
+                 text: unescape(m[2].replace(/<[^>]*>/g, '')) }));
+  const cards = [...html.matchAll(/<article\b([^>]*)>([\s\S]*?)<\/article>/g)]
+    .filter(m => (attr(m[1], 'class') || '').split(' ').includes('code-card'))
+    .map(m => ({ id: attr(m[1], 'id'), unlocated: (m[2].match(/class="evidence-chip unlocated"/g) || []).length }));
+  process.stdout.write(JSON.stringify({ keys: marks.map(m => m.keys), results: vb.checkEvidenceMarks(doc, marks, cards) }));
+});
+"""
+MARKS_NOTE = SYNTHETIC + """Colonoscopy report (fictional)
+Date of service: 2026-10-14
+Procedure: Colonoscopy with cold snare polypectomy.
+The colonoscope was advanced to the cecum.
+Sigmoid colon: a 6 mm sessile polyp was removed completely with a cold snare and retrieved.
+Transverse colon: a separate 10 mm flat lesion was sampled with cold biopsy forceps for histology.
+"""
+# The colonoscopy named only in the title: its performance is not established, so a support is not checked
+# (not_applicable) and its source passages are the documented service's, marked as not checked (refutation 7c8,
+# reports-4) - the verifier's second trigger.
+HELD_NOTE = MARKS_NOTE.replace('Date of service: 2026-10-14\nProcedure: Colonoscopy with cold snare polypectomy.',
+                               'Date of procedure: 2026-10-14\nColonoscopy with cold snare polypectomy.')
+SNARE_SENTENCE = 'Sigmoid colon: a 6 mm sessile polyp was removed completely with a cold snare and retrieved.'
+CECUM_CLAUSE = 'The colonoscope was advanced to the cecum.'
+FLAT_BIOPSY = 'Transverse colon: a separate 10 mm flat lesion was sampled with cold biopsy forceps for histology.'
+
+
+def judged_marks(detail):
+    """(the marks' keys as the page renders them, the verifier's evidence-mark results) for an encounter view."""
+    done = subprocess.run([shutil.which('node'), '-e', MARKS_NODE, str(APP), str(VB)], input=json.dumps(detail),
+                          capture_output=True, text=True, timeout=60, check=False)
+    if done.returncode:
+        raise AssertionError(done.stderr[-3000:])
+    out = json.loads(done.stdout)
+    return out['keys'], out['results']
+
+
+class WalkReadsSupportSourceMarksTests(Harness):
+    """reports2:4 (verified real; the post-install walk depends on it): app.js marks a selected proposal's exact
+    support.source passages as '<id>:s<n>' (since c0f0708f4), and ops/verify_browser.cjs checkEvidenceMarks failed hard
+    on them - "dom.marks.known: marks for unknown or inexact spans" - although they are exact spans of a selected
+    proposal. Through the API: 45380 citing the cecum clause is held with support 'warn' and CPT Studio's exact source
+    passage (the biopsy sentence); the page app.js renders is judged by the shipped verifier."""
+
+    def view(self, text, *selections):
+        self.use(FakeProvider(selections=list(selections)))
+        encounter_id = self.create(text)
+        drain()
+        return self.detail(encounter_id)
+
+    def test_a_support_source_mark_is_a_known_exact_span(self):
+        for note, status in ((MARKS_NOTE, 'warn'), (HELD_NOTE, 'not_applicable')):
+            with self.subTest(status):
+                self.fresh(f'Synthetic workspace {status}')
+                detail = self.view(note, ('45385', SNARE_SENTENCE), ('45380', CECUM_CLAUSE))
+                (biopsy,) = [p for p in detail['assessment']['proposals']
+                             if p['code'] == '45380' and p['bucket'] == 'selected']
+                self.assertEqual(biopsy['support']['status'], status)
+                text = detail['revision']['text']
+                source = biopsy['support']['source']
+                self.assertTrue(source)
+                self.assertTrue(all(text[s['start']:s['end']] == s['text'] for s in source), source)
+                keys, results = judged_marks(detail)
+                self.assertIn(f'{biopsy["id"]}:s0', [key for group in keys for key in group])
+                known = next(r for r in results if r['id'] == 'dom.marks.known')
+                self.assertEqual(known['status'], 'pass', known)
+                self.assertEqual([r['id'] for r in results if r['status'] == 'fail'], [])
+
+    def test_control_without_source_passages_the_marks_read_as_before(self):
+        detail = self.view(MARKS_NOTE, ('45385', SNARE_SENTENCE), ('45380', FLAT_BIOPSY))
+        (biopsy,) = [p for p in detail['assessment']['proposals'] if p['code'] == '45380' and p['bucket'] == 'selected']
+        self.assertEqual(biopsy['support'].get('source') or [], [])
+        keys, results = judged_marks(detail)
+        self.assertFalse(any(':s' in key for group in keys for key in group), keys)
+        self.assertEqual([r['id'] for r in results if r['status'] == 'fail'], [])
