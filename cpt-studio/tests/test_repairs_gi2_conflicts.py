@@ -298,3 +298,33 @@ class ScopedDenialTests(SimpleTestCase):
         # "No stent was placed" names no site: it is about every stent, the one across the stricture included
         inv = inventory(ercp('No stent was placed.'))
         self.assertTrue(conflicts(inv, 'gi.ercp', 'stent'), inv.conflicts)
+
+
+# --- the same answer, written as a table row or as a typed field ------------------------------------------------
+
+def nurse_only(row, two_services):
+    """A record whose only statement of the act is the nurse's ``row``: no physician statement of it anywhere."""
+    body = ('Combined Endoscopy Record\nDate of procedure: 2026-10-14\n\nUpper Endoscopy\nThe gastroscope was advanced to '
+            'the duodenum. Cold forceps biopsies were taken from the antrum.\n\nColonoscopy\n') if two_services else \
+        'Colonoscopy Report\nDate of procedure: 2026-10-14\n\nFindings\n'
+    return (HEAD + body + 'The colonoscope was advanced to the cecum. A 6 mm polyp in the sigmoid colon was removed with a '
+            'cold snare.\n\nNursing Intraprocedure Checklist\nChecklist item | Nursing entry\nTime-out completed | Yes\n'
+            + row + '\n')
+
+
+class FieldFormParityTests(SimpleTestCase):
+    def test_a_table_row_and_a_typed_field_give_the_code_the_same_outcome(self):
+        # A code citing only the nurse's entry: the row "Tattoo | None" and the field "Tattoo: None" are one answer and
+        # give the code one outcome. (The installed reader excluded the field form and held the row form, and read the
+        # nurse's "Tattoo placed | No" as a done tattoo, so 45381 was ready with no tattoo documented anywhere.)
+        for two in (False, True):
+            for label, answer, code in (('Tattoo', 'None', '45381'), ('Tattoo placed', 'No', '45381'),
+                                        ('Biopsy', 'None', '45380')):
+                outcomes = []
+                for row in (f'{label} | {answer}', f'{label}: {answer}'):
+                    text = nurse_only(row, two)
+                    item = proposal(run(text, [sel(code, span(text, row))]), code)
+                    outcomes.append((item.bucket, item.status))
+                with self.subTest(two_services=two, label=label, answer=answer):
+                    self.assertEqual(outcomes[0], outcomes[1])
+                    self.assertNotEqual(outcomes[0], ('selected', 'ready'))
