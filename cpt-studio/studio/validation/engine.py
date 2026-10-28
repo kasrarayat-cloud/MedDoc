@@ -239,13 +239,27 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
 class _SecondMerge:
     """What merging the bounded second review did, worded into its check (_second_review_check) once the reconciliation
     the assessment records is known, so the check never says more than the stored completeness."""
-    what: str  # the asked items, as its request named them
+    what: str  # the asked items, as its request named them, quoted as items (_asked_items)
     asked: tuple[str, ...]  # their labels
     refused: bool
     problems: tuple[str, ...]
     added: tuple[str, ...]  # the codes added as proposals
     listed: tuple[str, ...]  # the codes it selected that are not added (alternatives, each with why)
     accounts_for: tuple[str, ...]  # the labels of the unresolved items the added codes account for
+    unlisted: int = 0  # codes it returned that cannot be listed (empty, or longer than MAX_LISTED_CODE)
+
+
+SECOND_REVIEW_NAMED = 4  # asked items the second review's check names; the rest are counted, never dropped unseen
+
+
+def _asked_items(labels: Sequence[str]) -> str:
+    """The asked items quoted as items: each label as the reconciliation worded it, separated by semicolons, for a list
+    that follows a colon and ends its sentence. A label is a clause ("endoscopic ultrasound (documented as performed)
+    has no supported proposal") or a phrase, so it is never worded into a sentence as a noun phrase (seen live on
+    2026-10-28: "A second review limited to the passages of endoscopic ultrasound (documented as performed) has no
+    supported proposal added no proposal for them."). Past SECOND_REVIEW_NAMED the rest are counted."""
+    more = len(labels) - SECOND_REVIEW_NAMED
+    return '; '.join(labels[:SECOND_REVIEW_NAMED]) + (f' and {more} more' if more > 0 else '')
 
 
 def _second_review(second: NormalizedResponse, scope: dict, selections: list, text: str, pages, routing, reference,
@@ -300,8 +314,15 @@ def _second_review(second: NormalizedResponse, scope: dict, selections: list, te
         elif profile is None:
             listed.append((group[0], 'the coverage catalogue does not establish which documented act it accounts for'))
         elif not accounts and any(family == candidate.family and act == '' for _, family, act, _ in open_items):
-            listed.append((group[0], 'the act it accounts for is not documented as done in the service left '
-                                     'unresolved'))
+            # Why a whole service's own family's code accounts for nothing is said from what was read: only its exact
+            # passages are read, so with none (or out of scope) nothing was, and that is the reason - never a statement
+            # about the document (eus2 F1: an EUS documented as performed with its sampling, a 43242 whose one passage
+            # was three characters off, had read "not documented as done"); an act the document states both ways is the
+            # conflict the assessment records, never one it does not document as done.
+            listed.append((group[0], (candidate.scope_reason or NO_EVIDENCE).rstrip('.') if candidate.evaluation is None
+                           else 'the document states the act it accounts for both as done and as not done (both are '
+                                'kept; neither is chosen)' if match is not None and match.reason == 'conflict'
+                           else 'the act it accounts for is not documented as done in the service left unresolved'))
         elif not accounts:
             listed.append((group[0], 'it accounts for no documented service or act the primary proposals left '
                                      'unresolved'))
@@ -317,11 +338,11 @@ def _second_review(second: NormalizedResponse, scope: dict, selections: list, te
                     for index, (item, why) in enumerate(listed + [(c, '') for c in listable if c.role != 'selected'])]
     alternatives = [replace(a, key=f'alt2:{index}', support={'origin': 'second_review'})
                     for index, a in enumerate(alternatives)]
-    asked = [item for item in scope.get('items', []) if isinstance(item, str)]
-    merge = _SecondMerge(what='; '.join(asked[:4]) or 'the unresolved documented services', asked=tuple(asked),
+    asked = [item for item in scope.get('items', []) if isinstance(item, str) and item]
+    merge = _SecondMerge(what=_asked_items(asked) or 'the unresolved documented services', asked=tuple(asked),
                          refused=bool(second.refused), problems=tuple(second.problems),
                          added=tuple(s.code for s in added), listed=tuple(item.code for item, _ in listed),
-                         accounts_for=tuple(dict.fromkeys(accounted)))
+                         accounts_for=tuple(dict.fromkeys(accounted)), unlisted=len(second.codes) - len(listable))
     return list(selections) + added, alternatives, merge
 
 
@@ -336,24 +357,32 @@ def _second_review_check(merge: _SecondMerge, unresolved: Sequence[reconcile.Unr
     """The second review's check, worded from what the merge did and from ``unresolved``, the reconciliation the
     assessment records: it names the items the added codes account for and the asked items that stay unresolved (a
     warning while any does), never an asked item no added code accounts for (refutation 7c8, reports-2: "selected 45380,
-    which account for them" of a biopsy and a dilation, while the dilation stayed unresolved)."""
-    what, codes = merge.what, ', '.join(merge.listed)
+    which account for them" of a biopsy and a dilation, while the dilation stayed unresolved).
+
+    Each sentence states one persisted fact, and every list of items is quoted as items - after a colon, ending its
+    sentence (_asked_items): the items the run's scope records as asked; the codes added, and the items this
+    reconciliation reads them as accounting for; the codes it selected that are listed as alternatives; the asked items
+    this reconciliation still lists. Its response's own problems and the codes it returned that cannot be listed are
+    said as the primary's are (provider.problems, provider.unlisted), and make it a warning (eus2 F2: they had been
+    said nowhere unless the response was refused whole)."""
+    asked, codes = f'A second review was requested for: {merge.what}.', ', '.join(merge.listed)
     if merge.refused:
         # Refused whole, unread: a failed provider check, as provider.status records a refused primary response (round
         # 7 bypass:1), so nothing reports this run's response as used.
         return Check('provider.second_review', 'Second review', 'fail',
-                     f'A second review was requested for: {what}. Its response was not used '
-                     f'({"; ".join(merge.problems)}).', 'cpt-studio:provider@1')
+                     f'{asked} Its response was not used ({"; ".join(merge.problems)}).', 'cpt-studio:provider@1')
     left = {u.label for u in unresolved}
     still = [label for label in dict.fromkeys(merge.asked) if label in left]
     alternatives = 'an alternative' if len(merge.listed) == 1 else 'alternatives'
+    limited = ('It was limited to the text that documents '
+               + ('this item' if len(merge.asked) == 1 else 'these items' if merge.asked else 'them'))
     if merge.added:
-        one = len(merge.added) == 1
+        one, added = len(merge.added) == 1, ', '.join(merge.added)
         accounted = [label for label in merge.accounts_for if label not in left]
-        detail = (f'A second review limited to the passages of {what} selected {", ".join(merge.added)}, which '
-                  + (f'{"accounts" if one else "account"} for {"; ".join(accounted)} and ' if accounted else '')
-                  + f'{"is added as a proposal" if one else "are added as proposals"} for review (marked as from the '
-                  'second review).')
+        detail = (f'{asked} {limited} and selected {added}, added as {"a proposal" if one else "proposals"} for review '
+                  '(marked as from the second review).')
+        if accounted:
+            detail += f' {added} {"accounts" if one else "account"} for: {"; ".join(accounted)}.'
         if merge.listed:
             detail += f' It also listed {codes}, shown as {alternatives} only.'
         if still:
@@ -362,10 +391,19 @@ def _second_review_check(merge: _SecondMerge, unresolved: Sequence[reconcile.Unr
     else:
         # "selected no code that accounts for them" was false of a code it selected that accounts for an item but is
         # not added (refutation 7c8, reports-0): what is true is that nothing was added; each alternative says why.
-        detail = (f'A second review limited to the passages of {what} added no proposal for them'
-                  + (f' (it listed {codes}, shown as {alternatives} only, with why it is not added)' if merge.listed
-                     else '')
-                  + ('. They stay unresolved; nothing is added.' if still else '. Nothing is added.'))
+        detail = (f'{asked} {limited} and added no proposal'
+                  + (f' (it listed {codes}, shown as {alternatives} only, with why '
+                     f'{"it is" if len(merge.listed) == 1 else "each is"} not added)' if merge.listed else '') + '.')
+        if still and set(still) == set(merge.asked):
+            detail += ' The item stays unresolved.' if len(merge.asked) == 1 else ' The items stay unresolved.'
+        elif still:
+            detail += f' Still unresolved: {"; ".join(still)}.'
+        status = 'warn'
+    if merge.problems:
+        detail += ' ' + checks.response_problems(merge.problems, "the second review's response")
+    if merge.unlisted:
+        detail += ' ' + checks.unlisted_codes(merge.unlisted, MAX_LISTED_CODE, 'The second review')
+    if merge.problems or merge.unlisted:
         status = 'warn'
     return Check('provider.second_review', 'Second review', status, detail, 'cpt-studio:provider@1')
 

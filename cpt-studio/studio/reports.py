@@ -76,6 +76,9 @@ MEMBER_CONFLICT_WORDING = 'member-entered encounter metadata differs from the do
 # Informational codes: provider candidates and alternatives, and codes the bounded second review selected that account
 # for no unresolved service - none of them selectable, not all of them "never selected" (refutation r1, report lens).
 ALTERNATIVES_TITLE = 'ALTERNATIVES — INFORMATIONAL, NEVER SELECTABLE'
+# A proposal the bounded second review added (support.origin = second_review) says so in whichever list its decision
+# puts it: approved, undecided or rejected (eus2 F5: a rejected one had lost it).
+ORIGIN_LINE = 'Origin: selected by the provider in the bounded second review of an unresolved service'
 
 
 class ReportNotReady(ValueError):
@@ -487,7 +490,7 @@ def _item_block(number, item, kind):
                      'exactly and are not shown)')
     support = item.get('support') or {}
     if support.get('origin') == 'second_review':
-        lines.append(f'{pad}Origin: selected by the provider in the bounded second review of an unresolved service')
+        lines.append(f'{pad}{ORIGIN_LINE}')
     if support.get('status'):
         lines.append(f'{pad}Evidence support: {support["status"]} — {_indent(support.get("detail", ""), pad + "  ")}')
         for span in support.get('source') or []:
@@ -552,6 +555,8 @@ def _rejected_section(snap):
     for item in snap['proposals']:
         if item['list'] == 'rejected':
             lines.append(f'{_short_line(item)} — {_decision_words(item["decision"])}')
+            if (item.get('support') or {}).get('origin') == 'second_review':
+                lines.append(f'     {ORIGIN_LINE}')  # as the numbered lists say it (_item_block)
             if item['decision']['note']:
                 lines.append(f'     Note: {_indent(item["decision"]["note"], "       ")}')
     return lines or ['  None.']

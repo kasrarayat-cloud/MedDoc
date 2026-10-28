@@ -1087,17 +1087,28 @@ def provider_checks(provider_status: str, normalized: Optional[NormalizedRespons
     if not normalized.problems:
         return (check,)
     problems = Check('provider.problems', 'Provider response problems', 'warn',
-                     f'{plural(len(normalized.problems), "problem")} reading the provider response: '
-                     + '; '.join(normalized.problems), PROVIDER_SOURCE)
+                     response_problems(normalized.problems), PROVIDER_SOURCE)
     return check, problems
+
+
+def response_problems(problems: Sequence[str], response: str = 'the provider response') -> str:
+    """The normaliser's problems reading ``response``: the primary's provider.problems check, and the bounded second
+    review's own (engine._second_review_check), in one wording."""
+    return f'{plural(len(problems), "problem")} reading {response}: ' + '; '.join(problems)
+
+
+def unlisted_codes(count: int, limit: int, returned_by: str = 'The provider') -> str:
+    """Codes ``returned_by`` returned that are too malformed to list: the primary's provider.unlisted check, and the
+    bounded second review's own (engine._second_review_check), in one wording. Never quoted: an over-long 'code' may
+    carry provider wording."""
+    pronoun = 'it is' if count == 1 else 'they are'
+    return (f'{returned_by} returned {plural(count, "code")} that cannot be listed: empty, or longer than {limit} '
+            f'characters (a CPT code has five). {pronoun[0].upper()}{pronoun[1:]} not shown and never truncated.')
 
 
 def unlisted_codes_check(count: int, limit: int) -> Check:
     """Provider codes too malformed to list. Never quoted: an over-long 'code' may carry provider wording."""
-    pronoun = 'it is' if count == 1 else 'they are'
-    return Check('provider.unlisted', 'Provider codes not listed', 'warn',
-                 f'The provider returned {plural(count, "code")} that cannot be listed: empty, or longer than {limit} '
-                 f'characters (a CPT code has five). {pronoun[0].upper()}{pronoun[1:]} not shown and never truncated.',
+    return Check('provider.unlisted', 'Provider codes not listed', 'warn', unlisted_codes(count, limit),
                  PROVIDER_SOURCE)
 
 

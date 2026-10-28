@@ -196,7 +196,9 @@ class SecondReviewSelectionIsNeverDroppedTests(Harness):
                 check = self.encounter_check(encounter_id, 'provider.second_review')
                 self.assertEqual(check['status'], 'info')
                 self.assertNotIn('selected no code', check['detail'])
-                self.assertIn('selected 45380, which accounts for forceps biopsy', check['detail'])
+                # (wording since gi2 "reports": each list of items is quoted as items, after a colon)
+                self.assertIn('selected 45380, added as a proposal for review (marked as from the second review). '
+                              '45380 accounts for: forceps biopsy', check['detail'])
                 self.assertIn(check['detail'], self.txt(encounter_id))
                 # the reviewer decides it like any proposal; the reviewed report follows
                 self.decide(encounter_id, '45385', 'approve')
@@ -250,7 +252,7 @@ class SecondReviewCheckNamesWhatItAccountsForTests(Harness):
         self.assertEqual(check['status'], 'warn')
         detail = check['detail']
         self.assertNotIn('which account for them', detail)
-        accounted = detail.split('which accounts for ', 1)[1].split(' and is added', 1)[0]
+        accounted = detail.split('45380 accounts for: ', 1)[1].split('. ', 1)[0]  # the list ends its sentence
         self.assertTrue(accounted.startswith('forceps biopsy'), detail)
         self.assertNotIn('dilation', accounted)
         self.assertIn(f'Still unresolved: {still[0]}.', detail)
@@ -262,7 +264,8 @@ class SecondReviewCheckNamesWhatItAccountsForTests(Harness):
         self.assertEqual(self.assessment(encounter_id).completeness['unresolved_items'], [])
         check = self.encounter_check(encounter_id, 'provider.second_review')
         self.assertEqual(check['status'], 'info')
-        self.assertIn('selected 45380, 45386, which account for forceps biopsy', check['detail'])
+        self.assertIn('selected 45380, 45386, added as proposals for review (marked as from the second review). '
+                      '45380, 45386 account for: forceps biopsy', check['detail'])
         self.assertIn('dilation (balloon)', check['detail'])
         self.assertNotIn('Still unresolved', check['detail'])
 

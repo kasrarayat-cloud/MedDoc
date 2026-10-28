@@ -589,7 +589,10 @@ function candidateSection(title, proposals, fallback, doc) {
     const withheld = proposal.decision_state === 'reinstated' && typeof proposal.approve_withheld_by === 'string' && proposal.approve_withheld_by;
     const addendum = withheld && doc && canEdit(doc) ? ['<button type="button" class="button secondary" data-action="addendum">Add the missing documentation (addendum)</button>'] : [];
     const actions = decisions.concat(addendum).join(' ');
-    return checkItem('muted', 'info', `${proposal.code} · ${proposal.family_label || proposal.family || ''}`, [proposal.exclusion_reason || fallback, candidateDecision(proposal)].filter(Boolean).join(' '), actions);
+    // A code the bounded second review listed says so here, as the code card's badge, the TXT ("second-review
+    // alternative") and the CSV (proposal_origin) do (eus2 F4: its alternatives were drawn like the primary's).
+    const origin = proposal.support?.origin === 'second_review' ? ' · from the second review' : '';
+    return checkItem('muted', 'info', `${proposal.code} · ${proposal.family_label || proposal.family || ''}${origin}`, [proposal.exclusion_reason || fallback, candidateDecision(proposal)].filter(Boolean).join(' '), actions);
   });
   return `${sectionHeading(title, proposals.length)}<div class="check-list-card">${items.join('')}</div>`;
 }
