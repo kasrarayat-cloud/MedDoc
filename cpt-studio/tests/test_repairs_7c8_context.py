@@ -395,12 +395,18 @@ class UnreadDateFormsAreKeptTests(DateAssertions, SimpleTestCase):
                 self.assert_member_date(HEAD + header + '\n' + OFFICE_BODY, '2026-10-20')
 
     def test_controls_no_value_no_evidence(self):
-        for header in ('Date of service: pending', 'The procedure date was moved twice by the patient.',
-                       'Date of service:    Provider: Dr. A. Synthetic'):
+        text = HEAD + 'The procedure date was moved twice by the patient.\n' + VISIT_BODY
+        self.assertEqual((date_fact(text).origin, date_fact(text).evidence), ('missing', ()))
+        self.assert_member_date(text, ELENA_DATE)
+        # P2DN's fix round, issue 6 (rule N3 as written): a date-of-service FIELD that states no date is kept as evidence
+        # that reads no date - the label alone - so every member date is held (this pin had it keep nothing and a
+        # member's 1998-01-01 taken, as beside "DOB: 01/01/1998" it was taken and sent)
+        for header in ('Date of service: pending', 'Date of service:    Provider: Dr. A. Synthetic'):
             with self.subTest(header=header):
                 text = HEAD + header + '\n' + VISIT_BODY
-                self.assertEqual((date_fact(text).origin, date_fact(text).evidence), ('missing', ()))
-                self.assert_member_date(text, ELENA_DATE)
+                fact = date_fact(text)
+                self.assertEqual((fact.origin, [e.text for e in fact.evidence]), ('missing', ['Date of service:']))
+                self.assert_member_conflict(text, ELENA_DATE)
 
 
 class DatedServiceLineTests(DateAssertions, SimpleTestCase):

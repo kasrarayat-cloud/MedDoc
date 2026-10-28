@@ -289,10 +289,15 @@ class MemberDateAgainstDocumentedTextTests(DateAssertions, SimpleTestCase):
                 self.assert_member_date(HEAD + header + '\n' + VISIT_BODY, '2026-10-20')
 
     def test_controls(self):
-        for text in (HEAD + VISIT_BODY, HEAD + 'Date of service: pending\n' + VISIT_BODY):
-            with self.subTest(text=text.splitlines()[1]):
-                self.assertEqual((date_fact(text).origin, date_fact(text).evidence), ('missing', ()))
-                self.assert_member_date(text, '1998-01-01')
+        text = HEAD + VISIT_BODY
+        self.assertEqual((date_fact(text).origin, date_fact(text).evidence), ('missing', ()))
+        self.assert_member_date(text, '1998-01-01')
+        # P2DN's fix round, issue 6 (rule N3 as written): a date-of-service field that states no date is kept as the
+        # label, evidence that reads no date, so a member date is held (this pin had it keep nothing)
+        text = HEAD + 'Date of service: pending\n' + VISIT_BODY
+        fact = date_fact(text)
+        self.assertEqual((fact.origin, [e.text for e in fact.evidence]), ('missing', ['Date of service:']))
+        self.assert_member_conflict(text, '1998-01-01')
         iso = HEAD + 'Date of service: 2026-10-20\n' + VISIT_BODY
         self.assert_member_conflict(iso, '1998-01-01')
         self.assert_member_date(iso, '2026-10-20')

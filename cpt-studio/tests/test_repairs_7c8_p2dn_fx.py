@@ -445,3 +445,60 @@ class QualifierWithItsOwnDateOnTheLineRequestTests(EndToEnd):
         self.assertEqual(self.dates_sent(e9), [[]])
         self.assert_not_excluded(e9, '99213')
 
+
+# --- 6: an empty or non-date date-of-service field is kept as evidence that reads no date ---------------------------
+
+EMPTY_BESIDE_BIRTH = (  # the skeptic's V1, V2 and C3
+    HEAD + 'Colonoscopy report\nDate of service:\nDOB: 01/01/1998\n' + COLO_BODY,
+    HEAD + 'Colonoscopy report\nPatient: Synthetic, Alex    DOS:    DOB: 01/01/1998\n' + COLO_BODY,
+    HEAD + 'Colonoscopy report\nDate of service: N/A\nDOB: 01/01/1998\n' + COLO_BODY,
+    HEAD + 'Colonoscopy report\nProcedure date: TBD\nDate of birth: 01/01/1998\n' + COLO_BODY,
+    HEAD + 'Colonoscopy report\nDate of Service\n\nDOB: 01/01/1998\n' + COLO_BODY,
+    HEAD + 'Colonoscopy report\nPatient: Synthetic, Alex Date of service:\nDOB: 01/01/1998\n' + COLO_BODY,
+)
+
+
+class EmptyDateFieldIsEvidenceTests(DateAssertions, SimpleTestCase):
+    """Issue 6 (N3 as written; pre-existing at a62a18c85, 2fc8cde3d and 057a7d398): a date-of-service label whose field
+    is empty or holds no date kept nothing when its value was on no line ("Date of service:" over "DOB: 01/01/1998"), past
+    a field break ("DOS:    DOB: 01/01/1998") or held no digit ("Date of service: N/A") - so a member's 1998-01-01 was
+    taken and sent and 45385 excluded against it. A date-of-service FIELD - a label with a separator, or alone on its
+    line - that states no date is kept as evidence that reads no date: every member date is held until the document
+    states the date (an addendum) or the member clears it. A label in prose has no field and keeps nothing."""
+
+    def test_every_member_date_is_held(self):
+        for text in EMPTY_BESIDE_BIRTH:
+            with self.subTest(lines=text.splitlines()[2:4]):
+                fact = date_fact(text)
+                self.assertEqual((fact.origin, fact.value), ('missing', None))
+                self.assertTrue(fact.evidence, 'the label is kept')
+                self.assertFalse(any(BIRTH in quoted for quoted in evidence_text(text)), evidence_text(text))
+                for member in (ELENA_DATE, '2026-10-14'):
+                    self.assert_member_conflict(text, member)
+
+    def test_a_field_that_states_no_date_never_questions_the_own_date(self):
+        # it states no date that could differ: the note's own labelled date stands (the reading gate's PDF form - a blank
+        # "Date of service:" over its filled form field - was asked when such a label spoke)
+        for text in (HEAD + 'Endoscopy unit - procedure form\nDate of service:\nProcedure performed:\nExtent reached:\n\n'
+                     '[PDF form fields on page 1]\ndos: 2026-10-14\nprocedure: Colonoscopy, screening, to the cecum\n'
+                     + COLO_BODY,
+                     HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nProcedure date: N/A\n' + COLO_BODY,
+                     HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nVisit Date: TBD DOB (age) 01/01/1998\n'
+                     + COLO_BODY):
+            with self.subTest(lines=text.splitlines()[2:4]):
+                self.assert_document(text, '2026-10-14')
+                self.assert_member_conflict(text, ELENA_DATE)
+
+    def test_controls_a_label_in_prose_keeps_nothing(self):
+        text = HEAD + 'The procedure date was moved twice.\n' + COLO_BODY
+        self.assertEqual((date_fact(text).origin, date_fact(text).evidence), ('missing', ()))
+        self.assert_member_date(text, '2026-10-14')
+
+
+class EmptyDateFieldIsEvidenceRequestTests(EndToEnd):
+    def test_v1_v2_the_member_s_1998_is_held(self):
+        for text in EMPTY_BESIDE_BIRTH[:2]:
+            with self.subTest(lines=text.splitlines()[2:4]):
+                encounter_id = self.finished(text, service_date=ELENA_DATE)
+                self.assert_held(encounter_id)
+                self.assert_never_sent(encounter_id, ELENA_DATE)

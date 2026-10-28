@@ -266,9 +266,12 @@ class EmptyDateFieldIsKeptTests(DateAssertions, SimpleTestCase):
         self.assert_member_conflict(text, ELENA_DATE)
 
     def test_controls(self):
-        # a field with no digit at all keeps nothing, as before; an unread value of its own is kept as before
+        # P2DN's fix round, issue 6 (N3 as written): a field with no digit at all is kept as evidence that reads no date
+        # too, so every member date is held (this pin had it keep nothing: a member's 1998-01-01 beside "DOB:
+        # 01/01/1998" was taken and sent); an unread value of its own is kept as before
         text = HEAD + 'Colonoscopy report\nDate of service: N/A\n' + COLO_BODY
-        self.assertEqual((date_fact(text).origin, date_fact(text).evidence), ('missing', ()))
+        self.assertEqual((date_fact(text).origin, evidence_text(text)), ('missing', ['Date of service:']))
+        self.assert_member_conflict(text, '2026-10-14')
         text = HEAD + 'Colonoscopy report\nDate of service: 20-Oct-26\n' + COLO_BODY
         self.assert_asked(text, 'Date of service: 20-Oct-26')
         self.assert_member_conflict(text, '2026-10-20')
@@ -323,9 +326,13 @@ class BirthDateRequestTests(EndToEnd):
                 self.assert_held(encounter_id)
         encounter_id = self.finished(HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nVisit Date: TBD DOB (age) '
                                      '01/01/1998\n' + COLO_BODY)
+        # P2DN's fix round, issue 6: a field that states no date never speaks against the note's own date, so the note's
+        # 10/14 is documented and sent (this pin had it asked); the member's 1998-01-01 is a held member conflict
+        self.assertEqual(self.dates_sent(encounter_id), [['Date of service: 2026-10-14']])
         self.set_context(encounter_id, {'service_date': ELENA_DATE})
         self.assert_never_sent(encounter_id, ELENA_DATE)
-        self.assertNotEqual(self.bucket(encounter_id, '45385'), 'excluded')
+        self.assert_held(encounter_id, runs=2)
+        self.assert_not_excluded(encounter_id, '45385')
 
 
 # --- N4: the label ----------------------------------------------------------------------------------------------------

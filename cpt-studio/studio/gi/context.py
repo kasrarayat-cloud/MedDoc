@@ -340,7 +340,10 @@ class _Candidate:
     value: Optional[str]  # ISO date; None when the text is no calendar date or not read as one
     source: str  # 'label' (a date-of-service label) | 'title' (a dated title or "Date:" line) | 'field' ("Re: ...")
     reading: str  # 'own' | 'unplaced' (it may be the date) | 'aside' (another occurrence's) | 'other' (another document)
-    form: str  # 'read' | 'invalid' | 'unread'
+    # 'read' | 'invalid' | 'unread' | 'empty' - a date-of-service field that states no date of its own (rule N3, P2DN's
+    # fix round, issue 6): the label alone, never its field; evidence that reads no date when the note states none, and
+    # never speaking against the note's own date, as it states none that could differ
+    form: str
     # A table column's value cell, kept beside the label heading it (span): never the cells between them. Every span a
     # candidate keeps holds no date but its own value (refutation round 3, sk:1), so the dates its evidence reads are the
     # dates it states.
@@ -1016,14 +1019,19 @@ def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int
         if column is _NO_VALUE or column[1] - m.start() > GAP_REACH or not _DIGIT.search(text, *column):
             return _NO_VALUE
         return column[0], column[1], True
-    if pos < line_end and '\t' not in gap and '  ' not in gap:
+    # Rule N3 (P2DN's fix round, issue 6): a date-of-service FIELD - a label with its separator, or alone on its line -
+    # that states no date is kept as evidence that reads no date (_NO_VALUE): its value after an alignment gap ("DOS:
+    # DOB: 01/01/1998" written with a field break), a value with no digit ("Date of service: N/A"), a label alone on its
+    # line over another field ("Date of service:" over "DOB: 01/01/1998") or over nothing. Each kept nothing, so a
+    # member's 1998-01-01 was taken and sent, and 45385 excluded against it. A label in prose has no field (None).
+    if pos < line_end and (sep not in (None, '|') or ('\t' not in gap and '  ' not in gap)):
         end = _field_end(text, pos, line_end)
         if sep is None and not _VALUE_DATE_START.match(text, pos, max(end, pos)):
             return None
         if _DIGIT.search(text, pos, end):
             return pos, end, False
         if sep != '|':
-            return None
+            return None if sep is None else _NO_VALUE
     bars = rows.bars(line_start, line_end)
     if bars:
         col = bisect.bisect_left(bars, m.start())
@@ -1035,25 +1043,23 @@ def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int
         row = rows.below(line_end)
         cells = rows.cells(*row) if row else []
         if col >= len(cells):
-            return None
+            return _NO_VALUE  # N3: a column heading with no cell below
         start, end = _strip_span(text, *cells[col])
         if end - m.start() > GAP_REACH or not _DIGIT.search(text, start, end):
-            return None
+            return _NO_VALUE  # N3: its cell states no date
         return start, end, True
     if pos < line_end:
         return None
     if _blank_to(text, line_start, m.start()):
         stacked = _stacked_value(text, rows, line_start, line_end)
         if stacked is None or stacked is _NO_VALUE:
-            return stacked
+            return _NO_VALUE  # N3: a label alone on its line whose value is on no line below
         (start, end), positional = stacked
         return start, _field_end(text, start, end), positional
     row = rows.below(line_end)
-    if row is None:
-        return None
-    start = _strip_span(text, *row)[0]
-    if not _VALUE_DATE_START.match(text, start, row[1]):
-        return None
+    start = _strip_span(text, *row)[0] if row is not None else None
+    if start is None or not _VALUE_DATE_START.match(text, start, row[1]):
+        return None if sep is None else _NO_VALUE  # N3: a field ending its line, its value on no line below
     return start, _field_end(text, start, row[1]), False
 
 
@@ -1092,7 +1098,7 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
             kind, start = _labelled_kind(text, m.start('label'), m.end('label'), m.end(), m.end(), None)
             tail = _LABEL_TAIL.match(text, m.end())
             label_end = tail.end('sep') if tail.group('sep') not in (None, '|') else m.end('label')
-            found.append(_Candidate(_span(text, start, label_end), None, 'label', _READING[kind], 'unread'))
+            found.append(_Candidate(_span(text, start, label_end), None, 'label', _READING[kind], 'empty'))
             continue
         kind, start = _labelled_kind(text, m.start('label'), m.end('label'), where[0], where[1], None)
         # refutation round 3, sk:1: the evidence is the label and its own value, never the text beside it; and a field
@@ -1105,7 +1111,7 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
         if extent is None:
             tail = _LABEL_TAIL.match(text, m.end())
             label_end = tail.end('sep') if tail.group('sep') not in (None, '|') else m.end('label')
-            found.append(_Candidate(_span(text, start, label_end), None, 'label', _READING[kind], 'unread'))
+            found.append(_Candidate(_span(text, start, label_end), None, 'label', _READING[kind], 'empty'))
             continue
         value_start, value_end = extent
         if where[2]:  # a table column: the label's cell and its value's cell, never the cells between
@@ -1124,7 +1130,7 @@ def _joined_candidate(text: str, label_start: int, label_end: int, joined) -> _C
     sep_end, own, _births = joined
     if not own:
         kind, start = _labelled_kind(text, label_start, label_end, label_end, label_end, None)
-        return _Candidate(_span(text, start, max(sep_end, label_end)), None, 'label', _READING[kind], 'unread')
+        return _Candidate(_span(text, start, max(sep_end, label_end)), None, 'label', _READING[kind], 'empty')
     value_start, value_end = own[0]
     full = FULL_DATE.fullmatch(text, value_start, value_end)
     day = date_from_match(full) if full is not None else None
@@ -1407,6 +1413,8 @@ EVIDENCE_DATE_NOTE = ('A dated title, a "Date:" line, a dated line naming the se
                       'as evidence; it is never taken as the date of service by itself.')
 FIELD_DATE_NOTE = ('A labelled date of service has other text in its field (a bracket or words after the date), so it is '
                    'not taken as the date of service by itself.')
+EMPTY_DATE_NOTE = ('A date-of-service field states no date of its own (it is empty, or holds no date, or another '
+                   "field's), so a member's date is held until the document states it.")
 
 
 def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
@@ -1440,7 +1448,10 @@ def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
     labels = [c for c in found if c.source == 'label']
     own = [c for c in labels if c.reading == 'own' and c.form == 'read' and c.alone]
     own_ids = {id(c) for c in own}
-    speaks = [c for c in labels if id(c) not in own_ids and c.reading in ('own', 'unplaced')]
+    # rule N3 (P2DN's fix round, issue 6): a field that states no date never speaks against the note's own date (a
+    # PDF form's blank "Date of service:" beside its filled "dos: 2026-10-21" asked the date it states); with no own date
+    # it is the evidence of the date asked, holding every member date
+    speaks = [c for c in labels if id(c) not in own_ids and c.reading in ('own', 'unplaced') and c.form != 'empty']
     support = list(speaks)  # what joins the date's evidence when it agrees: as before, labels only
     speaks += [c for c in found if c.source != 'label' and c.reading in ('own', 'unplaced')]
     values = {c.value for c in own}
@@ -1448,6 +1459,7 @@ def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
     note = ' '.join(text for present, text in (
         (any(c.form == 'invalid' for c in unusable), INVALID_DATE_NOTE),
         (any(c.form == 'unread' for c in unusable), UNREAD_DATE_NOTE),
+        (any(c.form == 'empty' for c in unusable), EMPTY_DATE_NOTE),
         (not own and any(c.source == 'label' and c.form == 'read' and c.reading == 'own' and not c.alone for c in found),
          FIELD_DATE_NOTE),
         (not own and any(c.source != 'label' and c.form == 'read' for c in found), EVIDENCE_DATE_NOTE),
