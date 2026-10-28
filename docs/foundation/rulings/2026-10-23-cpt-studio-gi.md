@@ -679,3 +679,36 @@ What it changes, so a later session does not re-derive it:
     as another occurrence's (a heading, a title, a field above or beside it) - stays as the installed revision has
     it, pinned as known limits, and is open for the owner: keep it, accept the structural rule's asks, or rule a
     narrower trade. The owner may overrule any of this; the PR body says so.
+
+## Owner directive, 2026-10-28 — reliable GI interpretation and a usable synthetic demonstration
+
+Received directly from the owner in session 7c8d38da on 28 October 2026, as pasted instruction text, after the install
+of revision 2b82889f (PR #1440) and its report (PR #1444). Recorded by the receiving session in its first commit, before
+the work that depends on it. Verbatim:
+
+> Continue CPT Studio from installed revision 2b82889f and reports #1440/#1444. The next objective is reliable GI interpretation and a usable synthetic demonstration, beyond the completed narrow installation milestone.
+>
+> Inspect the original sources and retained responses for ho-01 through ho-04. Repair the shared extent, negation and date-field interpretation defects. Establish expected behavior from the source before editing; provisional author expectations are not automatically correct.
+>
+> For ho-04, distinguish elapsed physician time from a calendar service-date field. Preserve the explicit applicable date without ignoring genuine date conflicts. Do not introduce patient-specific patches or automatically merge the overly restrictive date branch.
+>
+> Inspect the documented wrong-occurrence date cases and recommend a source-based policy that preserves genuine uncertainty. Explain interpretations 27 and 28 through concrete product examples before changing their policy.
+>
+> Verify controlled recovery for conclusively not-sent requests after clarification. Preserve protections against duplicate submissions, unknown outcomes and automatic retries.
+>
+> Exercise the reviewer-requested EUS second-review path using an explicitly labelled synthetic review. Preserve raw results, decisions and usage; do not promote unsupported alternatives.
+>
+> Use parallel agents for independent investigation and verification, with one integration/deployment owner. Reuse retained evidence first, then run targeted fresh synthetic checks and actual reviewed downloads.
+>
+> Keep rollback protections intact. Finish with verified fixes, installed revision, remaining limitations and whether a complete doctor-facing synthetic demo is ready. Do not equate installation checks or test volume with clinical coding accuracy.
+
+### Session interpretation, 2026-10-28 (7c8d38da, second round) — recorded, not owner-ruled
+
+29. **The ten held-out documents are development documents from this round.** The owner directs this round to read
+    ho-01..ho-04 and their retained responses, and ho-06 is the second-review case, so none of the ten can be
+    acceptance evidence for this round's repairs. A fresh synthetic set, written by an author who reads neither the
+    application code nor the repairs, is the acceptance set of the walk that follows; ho-01..ho-04 are re-run there as
+    regressions only.
+30. **One integration and deployment owner.** Session 7c8d38da is the single owner of this round's branch
+    (`fix/cpt-studio-gi-interpretation-20261028`), its install and every live action (uploads, the second review,
+    decisions, downloads). Its agents investigate and repair in their own worktrees and never act on the live service.
