@@ -18,7 +18,7 @@ from datetime import date
 from typing import Optional
 
 from studio.gi import cues
-from studio.gi.sections import Layout, layout
+from studio.gi.sections import ADDENDUM_HEADER, Layout, layout
 from studio.types import CONTEXT_FACTS, Fact, Span
 
 SETTINGS = ('office', 'hospital_outpatient', 'asc', 'inpatient', 'emergency', 'telehealth')
@@ -176,6 +176,9 @@ _LONE_DATE = cues.rx(r'(?:' + _FULL_DATE + r')(?![\w/-])(?:[ \t]++(?:at[ \t]++)?
 _VALUE_FIELD = re.compile(r'(?<!\d)[:=]|[:=](?!\d)')  # another field's label inside a value (a clock's colon is none)
 _VALUE_DATE = cues.rx(r'(?<![\w/])(?:' + r'\d{1,4}[-/.]\d{1,2}[-/.]\d{2,4}|' + _MONTH + r'\.?[ \t]+\d{1,2}(?:st|nd|rd|th)?,?'
                       r'[ \t]+\d{2,4}|\d{1,2}(?:st|nd|rd|th)?[ \t]+(?:of[ \t]+)?' + _MONTH + r'\b)')
+# Date-shaped text or a year in a line near the top (a number that is no date - "M1", "Suite 3" - is no date).
+_TITLE_DATED = cues.rx(r'(?<![\w/])(?:\d{1,4}[ \t]*+[-/.][ \t]*+\d|(?:19|20)\d{2}(?!\d)|' + _MONTH + r'\.?[ \t]*+\d|\d{1,2}'
+                       r'(?:st|nd|rd|th)?[ \t]++(?:of[ \t]++)?' + _MONTH + r'\b)')
 _LIST_MARKER = re.compile(r'[ \t]*+(?:[-*>\u2022\u25cf\u25aa\u2013\u2014]|\d{1,3}[.)]|[A-Za-z][.)])[ \t]')
 
 POS = cues.rx(r'(?<![\w/-])(?:place[ \t]++of[ \t]++service|POS)\b[ \t]*+(?:\([ \t]*+POS[ \t]*+\)[ \t]*+)?+'
@@ -725,8 +728,8 @@ def _is_birth(text: str, start: int) -> bool:
 
 def _title_line(text: str, ls: int, le: int) -> bool:
     """Whether a line near the top can be part of the document's title (rule 1): no field (a colon, unless it is a
-    dated title's own, "Colonoscopy report: 10/14/2026"), no "Date:" or "Re:" line, no sentence or list item, no date
-    but a dated title's own, and no word of another occurrence that is not part of the name of a service this release
+    dated title's own, "Colonoscopy report: 10/14/2026"), no "Date:" or "Re:" line, no sentence or list item, no date or
+    year but a dated title's own (a number that is no date is a title's: "M1", "Suite 3"), and no word of another occurrence that is not part of the name of a service this release
     codes ("Office follow-up visit" names the visit itself; "Outside colonoscopy" is no title), no table row's bar. Fail
     closed: a line this cannot place is not the title, so a block holding it is asked."""
     start, end = _strip_span(text, ls, le)
@@ -737,8 +740,8 @@ def _title_line(text: str, ls: int, le: int) -> bool:
     if m is not None:
         if m.group('field') is not None or not m.group('keyword'):
             return False
-    elif text.find(':', start, end) >= 0 or _DIGIT.search(text, start, end):
-        return False
+    elif text.find(':', start, end) >= 0 or _TITLE_DATED.search(text, start, end):
+        return False  # a field, or a date or year a title states but its grammar does not read (never one that hides)
     names = [(n.start(), n.end()) for p in _THIS_SERVICE for n in p.finditer(text, start, end)]
     return not any(not any(a <= q.start() and q.end() <= b for a, b in names)
                    for q in _OTHER_OCCURRENCE.finditer(text, start, end))
@@ -788,7 +791,10 @@ class _Blocks:
     whole paragraph (its contiguous non-blank lines) lies in that header and every date label from the top to the
     paragraph's end states that one date alone. This is the block of rule 1 - the label's paragraph and the line above
     it - read up to the title: a heading two paragraphs above ("Outside colonoscopy:", a blank line, "Patient: ...", a
-    blank line, "Procedure date: ...") holds the date as one on the line above does. Linear: each line is read once."""
+    blank line, "Procedure date: ...") holds the date as one on the line above does. An addendum the app appends opens a
+    header of its own: its "ADDENDUM (revision N, added ...)" line stands as its title, so an addendum that states the
+    date alone ("Date of service: 2026-10-20") states it, as the member-conflict note invites. Linear: each line is read
+    once."""
 
     def __init__(self, text: str):
         lines, pos = [], 0
@@ -803,29 +809,37 @@ class _Blocks:
         self.last = [0] * count  # each line's paragraph's last line (one pass from the end)
         for i in range(count - 1, -1, -1):
             self.last[i] = self.last[i + 1] if i + 1 < count and not blank[i] and not blank[i + 1] else i
-        self.end, self.bad, self.value, titles, title = count, count, None, 0, True
-        stated = False
-        for i, (ls, le) in enumerate(lines):
-            if blank[i]:
-                continue
-            if title and titles < TITLE_LINES and _title_line(text, ls, le):
-                titles += 1
-                continue
-            title = False
-            got = _header_line(text, ls, le)
-            if got is None:
-                self.end = i
-                break
-            for value in got:
-                if not stated:
-                    stated, self.value = True, value
-                if (value is None or value != self.value) and self.bad == count:
-                    self.bad = i
+        tops = [0] + [i + 1 for i, (ls, le) in enumerate(lines)
+                      if ADDENDUM_HEADER.fullmatch(text, *_strip_span(text, ls, le))]
+        self.regions = []  # (first line, end line, the value stated, the first line stating another) per header
+        for top in tops:
+            end, bad, stated, value, titles, title = count, count, False, None, 0, top == 0
+            for i in range(top, count):
+                if blank[i]:
+                    continue
+                ls, le = lines[i]
+                if title and titles < TITLE_LINES and _title_line(text, ls, le):
+                    titles += 1
+                    continue
+                title = False
+                got = _header_line(text, ls, le)
+                if got is None:
+                    end = i
+                    break
+                for one in got:
+                    if not stated:
+                        stated, value = True, one
+                    if (one is None or one != value) and bad == count:
+                        bad = i
+            self.regions.append((top, end, value, bad))
+        self.tops = tops
 
     def own(self, pos: int, value: Optional[str]) -> bool:
         """Whether the date-of-service label at ``pos`` stating ``value`` alone is the note's own (rule 1)."""
-        last = self.last[bisect.bisect_right(self.starts, pos) - 1]
-        return value is not None and value == self.value and last < self.end and last < self.bad
+        line = bisect.bisect_right(self.starts, pos) - 1
+        top, end, stated, bad = self.regions[bisect.bisect_right(self.tops, line) - 1]
+        last = self.last[line]
+        return value is not None and value == stated and top <= line and last < end and last < bad
 
 
 # The value a date label states: the first date-shaped run of its value field - a weekday, then at most three date
@@ -1056,7 +1070,6 @@ _GAP_DATE = cues.rx(r'(?<![\w/.-])(?:' + _VALUE_DATE_START.pattern + r')')
 # A letter's subject line opening a line ("Re: ", "Regarding: ", "Subject: "): the structure is the subject line naming
 # the encounter the letter is about; these labels are its vocabulary.
 _SUBJECT_FIELD = cues.rx(r'[ \t]*+(?:re|regarding|subject|subj)\.?[ \t]*+:[ \t]*+')
-SERVICE_LINE_READ = 160  # a line near the top this long or shorter is read for a service's date anywhere on it
 
 
 def _dated_service_line(text: str, ls: int, le: int) -> Optional[_Candidate]:
@@ -1075,15 +1088,12 @@ def _dated_service_line(text: str, ls: int, le: int) -> Optional[_Candidate]:
     colonoscopy of 10/14/2026" or a sentence ending "... colonoscopy on 10/14/2026.", so a letter's date was sent and a
     snare polypectomy done on 10/14 excluded as historical; only a "Re:", "Regarding:" or "Subject:" line questioned it)."""
     m = _LINE_END_DATE.search(text, ls, le)
-    if m is not None and m.start() - ls <= 80:
-        hi = m.start()
-    elif le - ls <= SERVICE_LINE_READ and _GAP_DATE.search(text, ls, le):
-        # refutation phase 2, rule 2: a short line naming the service with its date anywhere ("Procedure: Colonoscopy
-        # on 10/14/2026 at Synthetic Endoscopy Center", "Your patient underwent colonoscopy on 10/14/2026 at our unit.")
-        # is kept as evidence too, so a member's answer with its date agrees with it
-        hi = le
-    else:
+    if m is None or m.start() - ls > 80:
+        # Only a line that ENDS with a date is one (a date in the middle of a line naming a service is prose: "At
+        # colonoscopy on 2020-04-14 a single adenoma was" - kept as evidence it would let a member's mistaken entry of
+        # a prior procedure's date agree with it, and be sent)
         return None
+    hi = m.start()
     names = [name for p in _THIS_SERVICE for name in p.finditer(text, ls, hi)]
     if not names:
         return None

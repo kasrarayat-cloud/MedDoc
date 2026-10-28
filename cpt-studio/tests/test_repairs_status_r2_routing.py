@@ -19,6 +19,7 @@ from pathlib import Path
 
 from studio.gi import detect
 from studio.gi.context import extract_context
+from tests.support.dates import answered_context
 from studio.gi.detect import route, status_for_span
 from studio.gi.profiles import DETECTED_FAMILIES
 from studio.gi.sections import layout
@@ -47,8 +48,10 @@ def span(text, phrase, occurrence=0):
 
 
 def service_date(text):
-    fact = extract_context(text)['service_date']
-    return date.fromisoformat(fact.value) if fact.origin == 'document' and fact.value else None
+    # refutation phase 2 (P2DATES, rule 1): a PDF or Word text keeps no blank line, so its header block runs into the
+    # body and its labelled date is asked; these tests read it with the member's answer (tests/support/dates.py)
+    fact = answered_context(text)['service_date']
+    return date.fromisoformat(fact.value) if fact.origin in ('document', 'user') and fact.value else None
 
 
 def routed(text):
@@ -78,7 +81,7 @@ def run_engine(text, picks):
         start, end = span(text, pick[1], pick[2] if len(pick) > 2 else 0)
         codes.append(ProviderCode(role='selected', system='cpt', code=pick[0], display='UNVERIFIED',
                                   evidence=(EvidenceSpan(0, start, end, text[start:end], True),), index=index))
-    result = assess(text=text, pages=(PageSpan(1, 0, len(text)),), context=extract_context(text), routing=routed(text),
+    result = assess(text=text, pages=(PageSpan(1, 0, len(text)),), context=answered_context(text), routing=routed(text),
                     normalized=NormalizedResponse('replay', 'test', codes=tuple(codes)),
                     reference=InMemoryReferenceLookup((), {}), service_date=service_date(text),
                     provider_status='succeeded', extraction_status='ok')

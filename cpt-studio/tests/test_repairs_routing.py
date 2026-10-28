@@ -68,8 +68,8 @@ class Status0InSpanNegationTests(unittest.TestCase):
             'taken. No polypectomy was performed.\n')
 
     def test_the_claimed_spans_read_negated(self):
-        self.assertEqual(span(self.TEXT, 'No biopsies were taken.'), (179, 202))
-        self.assertEqual(span(self.TEXT, 'No polypectomy was performed.'), (203, 232))
+        self.assertEqual(span(self.TEXT, 'No biopsies were taken.'), (180, 203))
+        self.assertEqual(span(self.TEXT, 'No polypectomy was performed.'), (204, 233))
         for phrase in ('No biopsies were taken.', 'No polypectomy was performed.'):
             self.assertEqual(read(self.TEXT, phrase)[0], 'negated', phrase)
 
@@ -113,7 +113,7 @@ class Status1CoordinatedNegationTests(unittest.TestCase):
                 'Findings: The scope was advanced to the second part of the duodenum. Normal mucosa.\n')
 
     def test_neither_nor_negates_both_services(self):
-        self.assertEqual(span(self.NEITHER, 'Neither EUS nor ERCP was performed today'), (125, 165))
+        self.assertEqual(span(self.NEITHER, 'Neither EUS nor ERCP was performed today'), (126, 166))
         result = route(self.NEITHER)
         self.assertEqual(result.finding('gi.eus').status, 'negated')
         self.assertEqual(result.finding('gi.ercp').status, 'negated')
@@ -182,7 +182,7 @@ class Status2CuelessNegationTests(unittest.TestCase):
     def test_case_a_declined_eus(self):
         text = (HEADER + 'Indication: EUS for evaluation of a pancreatic cyst.\nProcedures performed:\n'
                 'EUS: not performed (patient declined).\n')
-        self.assertEqual(span(text, 'EUS: not performed (patient declined).'), (147, 185))
+        self.assertEqual(span(text, 'EUS: not performed (patient declined).'), (148, 186))
         self.assertEqual(family(text, 'gi.eus'), 'negated')
         proposals, result = run_engine(text, [('43259', 'EUS: not performed (patient declined).')])
         self.assertEqual(proposals['43259'].bucket, 'excluded')
@@ -488,7 +488,7 @@ class Status12ComplicationNegationTests(unittest.TestCase):
             'Total time: 30 minutes.\n')
 
     def test_the_claimed_input(self):
-        self.assertEqual(span(self.TEXT, 'Established patient office visit.'), (106, 139))
+        self.assertEqual(span(self.TEXT, 'Established patient office visit.'), (107, 140))
         self.assertEqual(family(self.TEXT, 'gi.flex_sig'), 'performed')
         proposals, _ = run_engine(self.TEXT, [('99214', 'Established patient office visit.'),
                                               ('45331', 'A biopsy was taken from the rectum.')])

@@ -34,18 +34,25 @@ def kinds(svc, status='performed'):
 
 
 class ServiceDateTests(SimpleTestCase):
+    # Refutation phase 2 (P2DATES): a "Date:" line and a title are evidence (rule 2), and a table row is no header block
+    # (rule 1): each date is asked, and read - the member's answer with it agrees; in a header block a label states it.
     def test_day_month_year_with_hyphens(self):
         facts, _ = read(HEAD + 'Endoscopy unit\nDate: 03-Nov-2026\nThe gastroscope was passed to the second part of '
                                'the duodenum.\n')
+        self.assertEqual((facts['service_date'].value, facts['service_date'].origin), (None, 'missing'))
+        self.assertEqual(gi_context._date_readings(facts['service_date'].evidence), {'2026-11-03'})
+        facts, _ = read(HEAD + 'Endoscopy unit\nProcedure date: 03-Nov-2026\n\nThe gastroscope was passed.\n')
         self.assertEqual((facts['service_date'].value, facts['service_date'].origin), ('2026-11-03', 'document'))
 
     def test_a_labelled_date_in_a_table_row(self):
         facts, _ = read(HEAD + 'Field | Value\nProcedure date | 2026-09-30\nScope | adult colonoscope\n')
-        self.assertEqual(facts['service_date'].value, '2026-09-30')
+        self.assertEqual(gi_context._date_readings(facts['service_date'].evidence), {'2026-09-30'})
+        self.assertEqual(facts['service_date'].origin, 'missing')
 
     def test_a_dated_note_title(self):
         facts, _ = read(HEAD + '\nHepatology clinic note - 9/28/2026\n\nSeen for ascites follow-up.\n')
-        self.assertEqual(facts['service_date'].value, '2026-09-28')
+        self.assertEqual(gi_context._date_readings(facts['service_date'].evidence), {'2026-09-28'})
+        self.assertEqual(facts['service_date'].origin, 'missing')
 
     def test_a_dated_title_never_beats_a_labelled_date_and_a_qualified_one_is_no_date(self):
         facts, _ = read(HEAD + 'Office visit - 2026-09-01\nDate of service: 2026-09-02\n\nSeen today.\n')
@@ -345,6 +352,7 @@ class EngineReleaseTests(SimpleTestCase):
     def test_an_unresolved_negation_the_inventory_reads_as_completion_never_holds(self):
         from studio.types import EvidenceSpan, ProviderCode
         text = HEAD + """Date of service: 2026-10-14
+
 Colonoscopy Report
 The colonoscope was advanced to the cecum. The examination was complete and was not discontinued.
 A 7 mm polyp in the descending colon was removed with a cold snare.

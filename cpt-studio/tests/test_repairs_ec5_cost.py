@@ -282,7 +282,7 @@ def lesion_lines(lines, unit='AVM', per_line=300):
             + '\n'.join([line] * lines) + '\n')
 
 
-LESION_NOTE = (HEAD + 'Date of service: 2026-10-14\n\nColonoscopy report\nThe colonoscope was advanced to the cecum.\n'
+LESION_NOTE = (HEAD + 'Date of service: 2026-10-14\nColonoscopy report\nThe colonoscope was advanced to the cecum.\n'
                'A 6 mm sessile polyp in the sigmoid colon was removed with a cold snare (jar A).\n'
                'The 6 mm polyp was retrieved.\n'
                'A 4 mm polyp in the rectum was not removed.\n'

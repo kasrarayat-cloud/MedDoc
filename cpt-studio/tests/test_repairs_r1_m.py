@@ -19,9 +19,9 @@ from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
 
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
 DOCUMENTED = date(2026, 10, 20)  # OFFICE_NOTE's own date
-TWO_DATES = OFFICE_NOTE.replace('Date of service: 2026-10-20\n\n',
-                                'Date of service: 2026-10-20\n\nDate of service: 2026-10-23\n\n')
-UNDATED = OFFICE_NOTE.replace('Date of service: 2026-10-20\n\n', '')
+TWO_DATES = OFFICE_NOTE.replace('Date of service: 2026-10-20\n',  # each label in a header block of its own
+                                'Date of service: 2026-10-20\n\nDate of service: 2026-10-23\n')
+UNDATED = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
 REPORT = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
 Colonoscopy report (fictional) M1
 Date of service: 2026-10-16

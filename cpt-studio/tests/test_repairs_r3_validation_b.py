@@ -17,6 +17,7 @@ from studio.types import (EvidenceSpan, NormalizedResponse, PageSpan, ProviderCo
                           to_jsonable)
 from studio.validation import checks
 from studio.validation.engine import assess
+from tests.support.dates import answered
 from tests.test_validation import MUE_INFO, PFS_INFO, pfs
 
 HEAD = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n\n'
@@ -30,9 +31,11 @@ REFERENCE = InMemoryReferenceLookup([PFS_INFO, MUE_INFO], {PFS_INFO.key: ROWS, M
 def real(text, *picks, reference=REFERENCE):
     """picks: (code, evidence phrase, ...). Real routing on the documented date, the real span reader and the engine.
     Returns (proposals by code, result)."""
-    context = extract_context(text)
+    # refutation phase 2 (P2DATES, rule 1): a labelled date beside body text in its block is asked; these tests read it
+    # with the member's answer (tests/support/dates.py), as the pipeline does once the member gives it
+    context = answered(extract_context(text))
     fact = context['service_date']
-    day = date.fromisoformat(fact.value) if fact.origin == 'document' and fact.value else None
+    day = date.fromisoformat(fact.value) if fact.origin in ('document', 'user') and fact.value else None
     routing = from_jsonable(RoutingResult, json.loads(json.dumps(to_jsonable(route(text, day)))))
     codes = []
     for index, (code, *phrases) in enumerate(picks):

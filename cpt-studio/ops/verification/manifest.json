@@ -46,11 +46,9 @@
       "expected_context": {
         "service_date": {
           "origin_in": [
-            "document"
+            "missing"
           ],
-          "value_in": [
-            "2026-10-21"
-          ]
+          "note": "Refutation phase 2 (P2DATES, rule 1): the labelled date 2026-10-21 is asked - its header block holds \"Patient status: Established patient. Last seen by Dr. Ramos in this practice on 2026-04-15 ...\" (a header value naming another occurrence with its date) - so the first request is dateless and the member answers the date."
         },
         "setting": {
           "origin_in": [
@@ -170,11 +168,14 @@
       "expected_context": {
         "service_date": {
           "origin_in": [
-            "document"
+            "document",
+            "missing"
           ],
           "value_in": [
-            "2026-10-14"
-          ]
+            "2026-10-14",
+            ""
+          ],
+          "note": "Refutation phase 2 (P2DATES, rule 1): the source text's header block states 2026-10-14; the delivered PDF keeps no blank line after its header, so the header runs into \"Procedure\" and the date is asked (the first request is dateless and the member answers the date). Never another date."
         },
         "setting": {
           "origin_in": [
@@ -279,11 +280,9 @@
       "expected_context": {
         "service_date": {
           "origin_in": [
-            "document"
+            "missing"
           ],
-          "value_in": [
-            "2026-10-09"
-          ]
+          "note": "Refutation phase 2 (P2DATES, rule 1): the labelled date 2026-10-09 is asked - its header block holds \"Billing: Professional services of the endoscopist; ...\", a field outside the closed header list - so the first request is dateless and the member answers the date."
         },
         "setting": {
           "origin_in": [
@@ -557,11 +556,9 @@
       "expected_context": {
         "service_date": {
           "origin_in": [
-            "document"
+            "missing"
           ],
-          "value_in": [
-            "2026-10-20"
-          ]
+          "note": "Refutation phase 2 (P2DATES, rule 1): the labelled date 2026-10-20 is asked - its header block holds \"Patient status: Established patient. Last seen by Dr. Ramos in this practice on 2026-03-02.\" (a header value naming another occurrence with its date) - so the first request is dateless and the member answers the date."
         },
         "setting": {
           "origin_in": [
@@ -689,11 +686,14 @@
       "expected_context": {
         "service_date": {
           "origin_in": [
-            "document"
+            "document",
+            "missing"
           ],
           "value_in": [
-            "2026-10-13"
-          ]
+            "2026-10-13",
+            ""
+          ],
+          "note": "Refutation phase 2 (P2DATES, rule 1): the source text's header block states 2026-10-13; the delivered PDF keeps no blank line after its header, so the header runs into \"Procedure\" and the date is asked (the first request is dateless and the member answers the date). Never another date."
         },
         "setting": {
           "origin_in": [
@@ -921,11 +921,14 @@
       "expected_context": {
         "service_date": {
           "origin_in": [
-            "document"
+            "document",
+            "missing"
           ],
           "value_in": [
-            "2026-10-07"
-          ]
+            "2026-10-07",
+            ""
+          ],
+          "note": "Refutation phase 2 (P2DATES, rule 1): the source text's header block states 2026-10-07; the delivered DOCX keeps no blank line after its header, so the header runs into \"Procedure\" and the date is asked (the first request is dateless and the member answers the date). Never another date."
         },
         "setting": {
           "origin_in": [
@@ -1046,11 +1049,14 @@
       "expected_context": {
         "service_date": {
           "origin_in": [
-            "document"
+            "document",
+            "missing"
           ],
           "value_in": [
-            "2026-10-19"
-          ]
+            "2026-10-19",
+            ""
+          ],
+          "note": "Refutation phase 2 (P2DATES, rule 1): the source text's header block states 2026-10-19; the delivered PDF keeps no blank line after its header, so the header runs into \"Procedure\" and the date is asked (the first request is dateless and the member answers the date). Never another date."
         },
         "setting": {
           "origin_in": [
@@ -1171,11 +1177,9 @@
       "expected_context": {
         "service_date": {
           "origin_in": [
-            "document"
+            "missing"
           ],
-          "value_in": [
-            "2026-10-22"
-          ]
+          "note": "Refutation phase 2 (P2DATES, rule 1): the labelled date 2026-10-22 is asked - its header block holds \"Billing: Professional services of the endoscopist only; ...\", a field outside the closed header list - so the first request is dateless and the member answers the date."
         },
         "setting": {
           "origin_in": [

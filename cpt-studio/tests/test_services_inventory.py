@@ -202,8 +202,12 @@ class ContextConflictTests(SimpleTestCase):
         self.assertEqual(merged['service_date'].value, '2026-10-14')
 
     def test_a_day_month_year_date_is_read(self):
-        facts = gi_context.extract_context('Patient X | Service date 9 November 2026 | Clinician Y')
+        # a header line states it (refutation phase 2, P2DATES rule 1: its fields are all header fields)
+        facts = gi_context.extract_context('Patient: X | Service date 9 November 2026 | Clinician: Y')
         self.assertEqual((facts['service_date'].origin, facts['service_date'].value), ('document', '2026-11-09'))
+        # a row whose cells are no header fields keeps it as evidence: asked, and the member's answer with it agrees
+        facts = gi_context.extract_context('Patient X | Service date 9 November 2026 | Clinician Y')
+        self.assertEqual(gi_context._date_readings(facts['service_date'].evidence), {'2026-11-09'})
 
 
 class ValidationTests(SimpleTestCase):

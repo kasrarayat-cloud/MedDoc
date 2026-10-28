@@ -11,6 +11,7 @@ real validation engine assesses provider-shaped selections against an empty in-m
 import unittest
 
 from studio.gi.context import extract_context
+from tests.support.dates import answered_context
 from studio.gi.sections import layout
 from studio.reference.store import InMemoryReferenceLookup
 from studio.types import EvidenceSpan, NormalizedResponse, PageSpan, ProviderCode
@@ -31,7 +32,7 @@ def encounter_warnings(text, picks):
         start, end = span(text, phrase)
         codes.append(ProviderCode(role='selected', system='cpt', code=code, display='UNVERIFIED',
                                   evidence=(EvidenceSpan(0, start, end, text[start:end], True),), index=index))
-    result = assess(text=text, pages=(PageSpan(1, 0, len(text)),), context=extract_context(text), routing=routed(text),
+    result = assess(text=text, pages=(PageSpan(1, 0, len(text)),), context=answered_context(text), routing=routed(text),
                     normalized=NormalizedResponse('replay', 'test', codes=tuple(codes)),
                     reference=InMemoryReferenceLookup((), {}), service_date=service_date(text),
                     provider_status='succeeded', extraction_status='ok')

@@ -17,10 +17,13 @@ DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 @override_settings(**LIVE)
 class UploadsHoldWhatTheyCannotReadTests(MultiEvidenceApiCase, TestCase):
     def upload(self, name, data, content_type, *selections):
+        # refutation phase 2 (P2DATES, rule 1): a PDF's text keeps no blank line after its header, so the labelled
+        # 2026-10-21 is asked; the member gives it at upload, as these tests of the box readings assume
         self.provider.selections = list(selections)
         with self.captureOnCommitCallbacks(execute=True):
             response = self.client.post('/api/encounters', {'file': SimpleUploadedFile(name, data, content_type),
-                                                            'synthetic_attestation': 'yes'})
+                                                            'synthetic_attestation': 'yes',
+                                                            'service_date': '2026-10-21'})
         self.assertEqual(response.status_code, 201, response.content)
         drain()
         return response.json()['id']

@@ -149,7 +149,7 @@ _ROUTE = detect.route
 NEW_DATE = date(2026, 10, 22)  # OFFICE_NOTE documents 2026-10-20
 # A note with no date of its own: a member's date supplies it, and a later member date is a date change. A member's
 # date beside a documented one is a conflict instead (session interpretation 11), and nothing is routed for it.
-UNDATED_NOTE = OFFICE_NOTE.replace('Date of service: 2026-10-20\n\n', '')
+UNDATED_NOTE = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
 
 
 class LiveEncounter:

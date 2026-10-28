@@ -17,6 +17,7 @@ from studio.reference.store import InMemoryReferenceLookup
 from studio.types import EvidenceSpan, NormalizedResponse, ProviderCode
 from studio.validation.engine import assess
 from tests.support import docgen
+from tests.support.dates import answered_context
 
 BANNER = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE'
 
@@ -30,7 +31,9 @@ def pdf(*pages: str):
 
 def run(text: str, codes=(), pages=()):
     """The assessment the engine makes for ``text`` with the provider selecting ``codes`` [(code, quoted passage)]."""
-    facts = gi_context.extract_context(text)
+    # refutation phase 2 (P2DATES, rule 1): a PDF or Word text keeps no blank line, so its header block runs into the
+    # body and its labelled date is asked; these tests read it with the member's answer (tests/support/dates.py)
+    facts = answered_context(text)
     fact = facts['service_date']
     day = date.fromisoformat(fact.value) if fact.origin in ('document', 'user') and fact.value else None
     selected = []

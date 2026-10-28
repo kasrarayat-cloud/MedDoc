@@ -246,7 +246,8 @@ class RejectedCodeAccountsForNothingTests(ApiCase, TestCase):
         self.assertNotIn('Rejected by the reviewer', self.screen(encounter_id))
 
 
-TWO_DATES = OFFICE_NOTE.replace('Date of service: 2026-10-20\n\n', 'Date of service: 2026-10-20\n\nDate of service: 2026-10-23\n\n')
+# each label in a header block of its own, so the two are a documented conflict (refutation phase 2, P2DATES rule 1)
+TWO_DATES = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', 'Date of service: 2026-10-20\n\nDate of service: 2026-10-23\n')
 MEMBER_SIDE = 'member-entered encounter metadata differs from the document'
 SCREEN = ('[app.factValue(data.facts.service_date, null, true), app.metaFact(data.facts.service_date, null, '
           '"Service date", true), app.factValue(data.facts.setting, {office: "Office", telehealth: "Telehealth"}), '

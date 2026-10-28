@@ -51,7 +51,8 @@ class UnusableLabelledDateWordingTests(SimpleTestCase):
         self.assertIn('No date of service is documented', detail)
 
     def test_control_a_readable_date_is_documented(self):
-        _, status, detail = date_wording(NOTE.format(line='Date of service: 2026-10-20'))
+        # (refutation phase 2, P2DATES rule 1: a header block - the date line, then a blank line - states it)
+        _, status, detail = date_wording(NOTE.format(line='Date of service: 2026-10-20\n'))
         self.assertEqual(status, 'pass')
         self.assertIn('2026-10-20 is documented', detail)
 

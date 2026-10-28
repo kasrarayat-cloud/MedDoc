@@ -530,7 +530,7 @@ class LatestStageExplainsTests(Pipeline):
 
     def test_the_card_gives_the_failed_predicts_own_reason(self):
         self.use(FakeProvider(selections=[VISIT]))
-        undated = OFFICE_NOTE.replace('Date of service: 2026-10-20\n\n', '')
+        undated = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
         encounter_id = self.create(undated, service_date='2026-10-20')
         drain()
         reply = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': '2026-10-22'})
@@ -555,7 +555,7 @@ class FailedCardNamesTheRunInUseTests(Pipeline):
 
     def test_the_card_gives_the_reason_of_the_run_in_use(self):
         self.use(FailsThenRefusesToSend(selections=[VISIT]))
-        undated = OFFICE_NOTE.replace('Date of service: 2026-10-20\n\n', '')
+        undated = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
         encounter_id = self.create(undated, service_date='2026-10-20')
         drain()
         reply = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': '2026-10-22'})
@@ -590,7 +590,7 @@ class FailedCardNamesTheRunTheStateReadsTests(Pipeline):
     went back to the failed request's date re-assessed with it (nothing was resent) and the card gave the newer run's
     "nothing was sent" instead of the HTTP 500 the state reports."""
 
-    UNDATED = OFFICE_NOTE.replace('Date of service: 2026-10-20\n\n', '')
+    UNDATED = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
     CARD = 'The provider request | failed. | Error: HTTP 500 from the provider (synthetic).'
 
     def failed_then_redated(self):

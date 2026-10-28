@@ -20,7 +20,7 @@ from tests.test_frontend import PLAIN_STATIC
 from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
 
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
-NO_DATE_NOTE = OFFICE_NOTE.replace('Date of service: 2026-10-20\n\n', '')
+NO_DATE_NOTE = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
 # A member's date for a note that documents none: a later member date is a date change. A note's own documented date
 # is never changed by a member's value, which is a conflict instead (session interpretation 11).
 FIRST_DATE = '2026-10-20'

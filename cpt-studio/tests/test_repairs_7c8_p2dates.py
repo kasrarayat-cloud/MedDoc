@@ -139,9 +139,14 @@ class EvidenceDatesAreNeverSentTests(DateAssertions, SimpleTestCase):
                 self.assert_member_conflict(text, ELENA_DATE)
 
     def test_the_encounter_line_s_date_answers_the_question(self):
+        # a line naming the encounter and ending with its date is evidence the member's answer agrees with
+        text = HEAD + 'Date: 10/27/2026\nProcedure: Colonoscopy on 10/14/2026\nDear Dr. Synthetic,\n' + COLO_BODY
+        self.assert_member_date(text, '2026-10-14')
+        # a date in the middle of a line is prose, never evidence: the member's answer with it is held (an over-hold,
+        # a known limit - the member amends the document or clears the value), never agreed and sent
         for text in self.LETTERS[:1] + self.CLOCKED[:1]:
             with self.subTest(line=text.splitlines()[2][:50]):
-                self.assert_member_date(text, '2026-10-14')
+                self.assert_member_conflict(text, '2026-10-14')
 
     def test_a_dated_title_is_evidence_never_the_date(self):
         for text in self.TITLES:
@@ -275,7 +280,12 @@ class RequestTests(EndToEnd):
                 self.assert_dateless(text, '45385')
 
     def test_dates_3_a_letter_s_date_over_the_encounter_line(self):
-        encounter_id = self.assert_dateless(EvidenceDatesAreNeverSentTests.LETTERS[0], '45385')
+        for text in EvidenceDatesAreNeverSentTests.LETTERS:
+            with self.subTest(line=text.splitlines()[2][:50]):
+                self.assert_dateless(text, '45385')
+        # the member's answer agrees with a line naming the encounter that ends with its date, and is sent
+        encounter_id = self.assert_dateless(HEAD + 'Date: 10/27/2026\nProcedure: Colonoscopy on 10/14/2026\n'
+                                            'Dear Dr. Synthetic,\n' + COLO_BODY, '45385')
         self.set_context(encounter_id, {'service_date': '2026-10-14'})
         self.assertEqual(self.dates_sent(encounter_id), [[], ['Date of service: 2026-10-14']])
         self.assertNotEqual(self.bucket(encounter_id, '45385'), 'excluded')
