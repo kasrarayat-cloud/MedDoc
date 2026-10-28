@@ -82,15 +82,35 @@ def state_label(state):
 # provider_failed when the run it reads is a response refused whole (_refused_run): read and not used, so it is neither a
 # failed request nor one that proposed nothing (skeptic of refutation 7c8 reports-5).
 REFUSED_LABEL = 'Provider response not used'
+# no_codes (nothing left to decide) beside a second review made for the answer the assessment reads that the assessment
+# did not read: that review's outcome, from its row, never "No CPT codes proposed" of a response nobody read (refutation
+# p2, reports2:2) - as the panel and the readiness blocker state it.
+SECOND_REVIEW_LABELS = {ProviderRun.UNKNOWN: 'Second review outcome unknown', ProviderRun.FAILED: 'Second review failed',
+                        ProviderRun.NOT_SENT: 'Second review not sent', ProviderRun.CANCELLED: 'Second review not sent',
+                        ProviderRun.SUCCEEDED: 'Second review not read yet'}
+# no_codes where the provider's codes are all listed and none can be decided - excluded with no reinstatement (outside
+# CPT-only results, no exact source evidence) or offered only as alternatives: codes were proposed, so never "No CPT
+# codes proposed" (refutation p2, reports2:3), worded as the panel words it.
+NOT_REVIEWABLE_LABEL = 'No code selected for approval'
 
 
 def encounter_state_label(encounter):
-    """The label of the encounter's stored state, worded from the run a provider_failed state reads: a response
-    refused whole says that the response was not used."""
+    """The label of the encounter's stored state, worded from the rows: a provider_failed state reading a response refused
+    whole says that the response was not used; a no_codes state says how the second review made for the answer the
+    assessment reads ended when the assessment did not read it, else that no code is selected for approval when the
+    provider's codes are listed and none can be decided."""
     if encounter.state == 'provider_failed':
         run = state_run(encounter)
         if run is not None and run.state == ProviderRun.SUCCEEDED:
             return REFUSED_LABEL
+    if encounter.state == 'no_codes':
+        assessment = live_assessment(encounter)
+        if assessment is not None:
+            second = _unread_second_review(assessment)
+            if second is not None:
+                return SECOND_REVIEW_LABELS.get(second.state, 'Second review not finished')
+            if assessment.proposals.exists():  # nothing is reviewable in a no_codes state (_review_state)
+                return NOT_REVIEWABLE_LABEL
     return state_label(encounter.state)
 
 
@@ -656,9 +676,17 @@ def _assessment_blockers(encounter, assessment):
         # Nor while the second review made for this answer was not read: none was proposed in what was read only
         # (found while refuting the reports-5 repairs: "No CPT code was proposed" beside an unknown or failed one).
         unread = '' if refused else _second_review_unread(assessment)
-        blockers.append('The provider response was not used' if refused else
-                        f'No CPT code was proposed in the response that was read; the second review {unread}' if unread
-                        else 'No CPT code was proposed')
+        if refused:
+            blockers.append('The provider response was not used')
+        else:
+            # Codes the provider proposed that nobody can decide - excluded with no reinstatement, or offered only as
+            # alternatives (nothing here is reviewable) - were proposed: said as the panel says it, never "No CPT code
+            # was proposed" beside the stored response and its own provider check (refutation p2, reports2:3).
+            what = (f'No code is selected for approval: the {"response that was read" if unread else "provider"} '
+                    'proposed only codes that were excluded or offered as alternatives'
+                    if assessment.proposals.exists() else
+                    f'No CPT code was proposed{" in the response that was read" if unread else ""}')
+            blockers.append(f'{what}; the second review {unread}' if unread else what)
     return blockers
 
 
@@ -667,14 +695,21 @@ SECOND_REVIEW_ENDED = {ProviderRun.UNKNOWN: 'has an unknown outcome', ProviderRu
                        ProviderRun.SUCCEEDED: 'has not been read yet'}
 
 
-def _second_review_unread(assessment):
-    """How the second review made for the answer the assessment reads ended (jobs._second_run_for, whatever its outcome)
-    when the assessment did not read it; '' when none was made or the assessment read it."""
+def _unread_second_review(assessment):
+    """The second review made for the answer the assessment reads (jobs._second_run_for, whatever its outcome) when the
+    assessment did not read it; None when none was made or the assessment read it."""
     from .jobs import _second_run_for  # local import: jobs imports this module
     second = _second_run_for(assessment.revision, assessment.provider_run, any_outcome=True)
     if second is None or second.pk == assessment.second_run_id:
-        return ''
-    return SECOND_REVIEW_ENDED.get(second.state, 'has not finished')
+        return None
+    return second
+
+
+def _second_review_unread(assessment):
+    """How the second review made for the answer the assessment reads ended when the assessment did not read it; '' when
+    none was made or the assessment read it."""
+    second = _unread_second_review(assessment)
+    return '' if second is None else SECOND_REVIEW_ENDED.get(second.state, 'has not finished')
 
 
 def _refused_run(assessment):

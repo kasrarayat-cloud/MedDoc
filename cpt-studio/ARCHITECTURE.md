@@ -993,7 +993,18 @@ failed check's wording (round 7 bypass:1). Where nothing is left to decide, the
 encounter's state is `provider_failed` reading that run (`state_run`), labelled
 "Provider response not used", never `no_codes` ("No CPT codes proposed"), and its
 card shows the same wording; a bounded second review refused whole reads as the
-primary does (skeptic of refutation 7c8, reports-5). Usage = `usageInfo.creditsConsumed`, basis
+primary does (skeptic of refutation 7c8, reports-5). A response read with nothing
+left to decide (`no_codes`) is labelled from its rows: beside a second review made
+for the answer the assessment reads that it did not read, that review's outcome
+("Second review outcome unknown", "... failed", "... not sent", "... not read
+yet"), as the panel and the readiness blocker state it (refutation p2,
+reports2:2); when the provider's codes are listed and none can be decided
+(excluded with no reinstatement - outside CPT-only results, no exact source
+evidence - or offered only as alternatives), "No code selected for approval",
+and the readiness blocker says "No code is selected for approval: the provider
+proposed only codes that were excluded or offered as alternatives", as the panel
+does; only an assessment that lists no code says that no CPT code was proposed
+(refutation p2, reports2:3). The state itself is unchanged. Usage = `usageInfo.creditsConsumed`, basis
 `provider_reported_credits_not_usd`.
 
 `ReplayProvider` (tests/dev only): returns recorded bytes for a known request

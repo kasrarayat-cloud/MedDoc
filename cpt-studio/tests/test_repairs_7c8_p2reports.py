@@ -284,3 +284,191 @@ class PanelStatesTheShownAssessmentsSecondReviewTests(Harness):
         detail, copy = self.panel(encounter_id)
         self.assertEqual(detail['second_review']['run'], str(run_.pk))
         self.assertNotIn(NONE_PROPOSED, copy)
+
+
+# --- reports2:2: the list label states the second review's outcome, never "No CPT codes proposed" -----------------
+
+NO_CODES_LABEL = 'No CPT codes proposed'
+
+
+def list_row(client, encounter_id):
+    (row,) = [r for r in client.get('/api/encounters').json()['encounters'] if r['id'] == encounter_id]
+    return row
+
+
+class StateLabelStatesTheSecondReviewOutcomeTests(Harness):
+    """reports2:2: the primary response read with no code; the second review a reviewer asked for was sent and its
+    outcome is unknown, and a member reconciled it (or it failed: HTTP 500). The state is 'no_codes' - nothing is left
+    to decide - and its label "No CPT codes proposed" was the documents-list badge and the "Most recent" line, while the
+    same encounter's panel and blocker say the second review's outcome is unknown, or that it failed. The label states
+    that outcome from the run's row; the state is unchanged."""
+
+    def ended(self, second, reconcile=False):
+        self.use(SecondOutcome([], [('45378', SCOPE_SENTENCE)], second))
+        encounter_id = self.create(COLONOSCOPY)
+        drain()
+        self.assertEqual(ask(self.client, encounter_id).status_code, 201)
+        drain()
+        run_ = models.ProviderRun.objects.get(encounter_id=encounter_id, purpose='second_review')
+        if reconcile:
+            reply = self.post(f'/api/encounters/{encounter_id}/reconcile',
+                              {'provider_run_id': str(run_.pk), 'note': 'Checked the provider console.'})
+            self.assertIn(reply.status_code, (200, 201), reply.content)
+            drain()
+        return encounter_id, run_
+
+    def test_a_reconciled_unknown_or_failed_second_review_is_the_label(self):
+        for second, reconcile, label in (('unknown', True, 'Second review outcome unknown'),
+                                         ('failed', False, 'Second review failed')):
+            with self.subTest(second):
+                self.fresh(f'Synthetic workspace {second}')
+                encounter_id, run_ = self.ended(second, reconcile)
+                self.assertEqual(run_.state, second)
+                row = list_row(self.client, encounter_id)
+                self.assertEqual((row['state'], row['state_label']), ('no_codes', label))
+                detail = self.detail(encounter_id)
+                self.assertEqual((detail['state'], detail['state_label']), ('no_codes', label))
+                shown = screen(row=row)
+                self.assertIn(label, shown['row'])
+                self.assertNotIn(NO_CODES_LABEL, shown['row'])
+                self.assertIn(f'Most recent · {label} · 16 Oct 2026', shown['invite'])
+
+    def test_control_nothing_asked_and_a_second_review_read_keep_the_label(self):
+        self.use(FakeProvider(selections=[]))
+        encounter_id = self.create(COLONOSCOPY)
+        drain()
+        self.assertEqual(list_row(self.client, encounter_id)['state_label'], NO_CODES_LABEL)
+        self.fresh('Synthetic workspace read')
+        self.use(SecondOutcome([], [], 'read'))
+        encounter_id = self.create(COLONOSCOPY)
+        drain()
+        self.assertEqual(ask(self.client, encounter_id).status_code, 201)
+        drain()
+        row = list_row(self.client, encounter_id)
+        self.assertEqual((row['state'], row['state_label']), ('no_codes', NO_CODES_LABEL))
+
+
+# --- reports2:3: a response whose codes were excluded or are only alternatives is never "no code proposed" -----------
+
+NOTE_45378 = SYNTHETIC + """Lakeside Endoscopy Unit (fictional)
+Procedure report
+Date of service: 2026-10-16
+Procedure: Colonoscopy
+Indication: Screening, average risk.
+The colonoscope was advanced to the cecum and the examination was completed.
+No polyps were seen. No biopsies were taken.
+Impression: Normal colonoscopy to the cecum.
+"""
+QUOTE = 'The colonoscope was advanced to the cecum and the examination was completed.'
+NOT_REVIEWABLE = ('No code is selected for approval: the provider proposed only codes that were excluded or offered as '
+                  'alternatives')
+NOT_REVIEWABLE_LABEL = 'No code selected for approval'
+
+
+class Scripted:
+    """The live adapter's name and version (the real normaliser reads the stored run); send() never leaves the process
+    and answers with ``codes`` and ``candidates`` in Corti's shape, an evidence quote placed at its exact offsets."""
+    name, adapter_version, mode = 'corti', ADAPTER_VERSION, 'live'
+
+    def __init__(self, codes=(), candidates=()):
+        self.codes, self.candidates, self.requests = list(codes), list(candidates), []
+
+    def build_request(self, text, service_date):
+        contexts = [text] + ([f'Date of service: {service_date.isoformat()}'] if service_date else [])
+        body = {'system': ['icd10cm-outpatient', 'cpt'], 'context': [{'type': 'text', 'text': c} for c in contexts]}
+        digest = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(',', ':'),
+                                           ensure_ascii=False).encode()).hexdigest()
+        return ProviderRequest(provider=self.name, adapter_version=self.adapter_version, body=body,
+                               canonical_sha256=digest, contexts=tuple(contexts))
+
+    @staticmethod
+    def _item(system, code, context, quote):
+        item = {'system': system, 'code': code, 'display': 'UNVERIFIED PROVIDER WORDING', 'alternatives': []}
+        if quote:
+            start = context.index(quote)
+            item['evidences'] = [{'contextIndex': 0, 'start': start, 'end': start + len(quote), 'text': quote}]
+        return item
+
+    def send(self, request, *, deadline_s):
+        self.requests.append(request)
+        context = request.contexts[0]
+        data = json.dumps({'codes': [self._item(*c, context=context, quote=q) for *c, q in self.codes],
+                           'candidates': [self._item(*c, context=context, quote=q) for *c, q in self.candidates],
+                           'usageInfo': {'creditsConsumed': 0.02}}).encode()
+        return RawExchange(outcome='succeeded', sent=True, http_status=200, response_bytes=data,
+                           response_sha256=hashlib.sha256(data).hexdigest(), latency_ms=7.0,
+                           usage={'creditsConsumed': 0.02}, usage_basis='provider_reported_credits_not_usd')
+
+
+class CandidateThenFailed(Scripted):
+    """The primary request is answered as scripted; every later request (the second review) fails with HTTP 500."""
+
+    def send(self, request, *, deadline_s):
+        if not self.requests:
+            return super().send(request, deadline_s=deadline_s)
+        self.requests.append(request)
+        return RawExchange(outcome='failed', sent=True, http_status=500, error='HTTP 500 from the provider.')
+
+
+class NothingProposedIsSaidOnlyOfAResponseThatProposedNothingTests(Harness):
+    """reports2:3 (pre-existing at 057a7d398): the provider SELECTED 45378 citing no passage (stored as excluded, "No
+    exact source evidence", not reinstatable), or listed it only as a candidate (an alternative). The readiness blocker
+    "No CPT code was proposed" (API, the draft TXT's review status, the export dialog) and the label "No CPT codes
+    proposed" contradicted the stored response, the stored Proposal row and the report's own provider.status line. They
+    say that no proposed code can be reviewed, as the panel does; a response that proposed no CPT code keeps them."""
+
+    def stored(self, provider):
+        self.use(provider)
+        encounter_id = self.create(NOTE_45378)
+        drain()
+        return encounter_id
+
+    def test_a_selected_code_excluded_for_no_exact_evidence_or_a_candidate_only(self):
+        for name, provider, row in (
+                ('selected without a passage', Scripted(codes=[('cpt', '45378', None)]),
+                 ('excluded', '45378', False)),
+                ('candidate only', Scripted(candidates=[('cpt', '45378', QUOTE)]), ('alternative', '45378', False))):
+            with self.subTest(name):
+                self.fresh(f'Synthetic workspace {name}')
+                encounter_id = self.stored(provider)
+                assessment = self.assessment(encounter_id)
+                self.assertEqual([(p.bucket, p.code, p.reinstatable) for p in assessment.proposals.all()], [row])
+                detail = self.detail(encounter_id)
+                self.assertEqual(detail['state'], 'no_codes')
+                self.assertEqual(detail['readiness']['blockers'], [NOT_REVIEWABLE])
+                self.assertEqual(detail['state_label'], NOT_REVIEWABLE_LABEL)
+                self.assertEqual(list_row(self.client, encounter_id)['state_label'], NOT_REVIEWABLE_LABEL)
+                draft = self.txt(encounter_id)
+                self.assertIn(f'Review status: not complete\n  - {NOT_REVIEWABLE}', draft)
+                self.assertNotIn('No CPT code was proposed', draft)
+                shown = screen(detail)
+                self.assertEqual(shown['export'], f'Draft — not reviewed. Still needed: {NOT_REVIEWABLE}.')
+                self.assertIn(NOT_REVIEWABLE_LABEL, screen(row=list_row(self.client, encounter_id))['row'])
+                self.assertNotIn(NO_CODES_LABEL, screen(row=list_row(self.client, encounter_id))['row'])
+
+    def test_beside_a_second_review_never_read_the_blocker_says_both(self):
+        self.use(CandidateThenFailed(candidates=[('cpt', '45378', SCOPE_SENTENCE)]))
+        encounter_id = self.create(COLONOSCOPY)
+        drain()
+        self.assertEqual(ask(self.client, encounter_id).status_code, 201)
+        drain()
+        self.assertEqual(models.ProviderRun.objects.get(encounter_id=encounter_id, purpose='second_review').state,
+                         'failed')
+        self.assertEqual([(p.bucket, p.code) for p in self.assessment(encounter_id).proposals.all()],
+                         [('alternative', '45378')])
+        blockers = self.detail(encounter_id)['readiness']['blockers']
+        self.assertEqual(blockers, ['No code is selected for approval: the response that was read proposed only codes '
+                                    'that were excluded or offered as alternatives; the second review failed'])
+        self.assertEqual(list_row(self.client, encounter_id)['state_label'], 'Second review failed')
+
+    def test_control_a_response_with_no_cpt_code_keeps_the_blocker_and_the_label(self):
+        for name, provider in (('none', Scripted()), ('icd only', Scripted(codes=[('icd10cm-outpatient', 'Z12.11',
+                                                                                     QUOTE)]))):
+            with self.subTest(name):
+                self.fresh(f'Synthetic workspace {name}')
+                encounter_id = self.stored(provider)
+                self.assertEqual(list(self.assessment(encounter_id).proposals.all()), [])
+                detail = self.detail(encounter_id)
+                self.assertEqual(detail['readiness']['blockers'], ['No CPT code was proposed'])
+                self.assertEqual((detail['state'], detail['state_label']), ('no_codes', NO_CODES_LABEL))
+                self.assertIn('Review status: not complete\n  - No CPT code was proposed', self.txt(encounter_id))

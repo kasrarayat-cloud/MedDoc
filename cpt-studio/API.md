@@ -48,7 +48,16 @@ and `provider_unknown`.
 `state_label` is the human label (design vocabulary). A response refused whole
 (the primary's, or the bounded second review's) is never `no_codes`: with nothing
 left to decide the state is `provider_failed`, its `state_run` the refused run,
-labelled "Provider response not used".
+labelled "Provider response not used". A `no_codes` state is labelled from its
+rows: beside a second review made for the answer the assessment reads that the
+assessment did not read, that review's outcome ("Second review outcome unknown",
+"Second review failed", "Second review not sent", "Second review not read yet");
+otherwise, when the provider's codes are listed and none can be decided (excluded
+with no reinstatement, or offered only as alternatives), "No code selected for
+approval"; only an assessment that lists no code is "No CPT codes proposed"
+(refutation p2, reports2:2 and reports2:3). The readiness blocker reads the same
+rows: "No code is selected for approval: the provider proposed only codes that
+were excluded or offered as alternatives", or "No CPT code was proposed".
 
 ## POST /api/encounters (multipart/form-data)
 
