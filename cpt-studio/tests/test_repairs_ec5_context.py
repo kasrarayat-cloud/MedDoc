@@ -54,12 +54,20 @@ class DateAssertions:
         self.assertEqual((fact.origin, fact.value), ('user', value), fact.note)
 
     def assert_title_conflict(self, text, own, other):
-        """Refutation round 2, rule B: a dated title and a labelled date that differs from it are a conflict - asked,
-        both listed - never a silent choice of either; the member settles it by choosing the note's own date."""
+        """Refutation round 2, rule B: a dated title and a labelled date that differs from it are never a silent choice
+        of either; the member settles it by choosing the note's own date. Refutation phase 2 (P2DATES, rule 2): the
+        title is evidence only, so the date is asked - a conflict, or missing with both dates kept as evidence."""
+        self.assert_question(text, own)
+        self.assertNotEqual(date_fact(text).origin, 'document')
+
+    def assert_question(self, text, *values):
+        """Asked (refutation phase 2, P2DATES): no date is documented; each value the document states answers the
+        question, and a date it does not state is a member conflict."""
         fact = date_fact(text)
-        self.assertEqual((fact.origin, set(context.documented_values(fact))), ('conflict', {own, other}),
-                         [e.text for e in fact.evidence])
-        self.assert_member_date(text, own)
+        self.assertIn((fact.origin, fact.value), (('conflict', None), ('missing', None)),
+                      [e.text for e in fact.evidence])
+        for value in values:
+            self.assert_member_date(text, value)
         self.assert_member_conflict(text, '1998-01-01')
 
 
@@ -97,11 +105,9 @@ class LabelledDateOfAnotherOccurrenceTests(DateAssertions, SimpleTestCase):
                              ('Referring visit date: 09/30/2026.', '2026-09-30')):
             with self.subTest(label=label):
                 text = office + label + '\n' + VISIT_BODY
-                fact = date_fact(text)
-                self.assertEqual((fact.origin, fact.value), ('conflict', None))
-                self.assertEqual(set(context.documented_values(fact)), {'2026-10-20', other})
-                self.assert_member_date(text, '2026-10-20')  # the member settles it by choosing a documented value
-                self.assert_member_conflict(text, '1998-01-01')
+                # the member settles it by choosing a documented value (refutation phase 2, rule 2: the title is
+                # evidence, so the date is asked whatever the label's words)
+                self.assert_question(text, '2026-10-20', other)
                 alone = HEAD + label + '\n' + VISIT_BODY
                 fact = date_fact(alone)
                 self.assertEqual((fact.origin, fact.value), ('missing', None))
@@ -112,13 +118,16 @@ class LabelledDateOfAnotherOccurrenceTests(DateAssertions, SimpleTestCase):
         # refutation round 2, rule B: beside the title these are a conflict the member settles (the title won silently)
         self.assert_title_conflict(self.TITLED + 'Prior procedure date: 09/03/2026\n', '2026-10-14', '2026-09-03')
         self.assert_title_conflict(self.TITLED + 'Last procedure date: 09/03/2026\n', '2026-10-14', '2026-09-03')
+        # refutation phase 2 (P2DATES, rule 1): a label carrying words, a label beside body text or a table row is no
+        # header block's own date: asked (an over-hold), and the labelled date answers it; in a header block it is read
+        self.assert_document(HEAD + 'Date of service: 2026-10-20\n\n' + VISIT_BODY, '2026-10-20')
         for text, value in ((HEAD + 'Colonoscopy procedure date: 10/14/2026\n', '2026-10-14'),
                             (HEAD + 'Office visit date: 10/20/2026\n' + VISIT_BODY, '2026-10-20'),
                             (HEAD + "Today's visit date: 10/20/2026\n" + VISIT_BODY, '2026-10-20'),
                             (HEAD + 'Date of service: 2026-10-20\n' + VISIT_BODY, '2026-10-20'),
                             (HEAD + 'Field | Value\nProcedure date | 2026-09-30\n', '2026-09-30')):
             with self.subTest(text=text.splitlines()[1]):
-                self.assert_document(text, value)
+                self.assert_question(text, value)
         for line in ('Previous procedure date: 2019-05-01', 'Next visit date: 2026-12-01', 'Prior DOS: 2025-01-02',
                      'Outside procedure date: 2019-05-01'):
             with self.subTest(line=line):
@@ -139,7 +148,10 @@ class QualifierOfAnotherFieldTests(DateAssertions, SimpleTestCase):
         )
         for body, value in cases:
             with self.subTest(body=body.splitlines()[0]):
-                self.assert_document(HEAD + body, value)
+                if body.startswith('Last name'):  # a header block: its header fields hold nothing
+                    self.assert_document(HEAD + body, value)
+                else:  # refutation phase 2 (P2DATES, rule 1): another field or a bracket beside the date asks it
+                    self.assert_question(HEAD + body, value)
 
     def test_a_title_or_letter_date_never_replaces_it(self):
         cases = (
@@ -169,9 +181,7 @@ class QualifierOfAnotherFieldTests(DateAssertions, SimpleTestCase):
         # letter's "Date:" is taken, never taken itself; the member settles it by choosing the labelled date.
         letter = HEAD + 'Date: 10/27/2026\nRe: GI office visit\nDate of visit: 10/20/2026    Visit type: Follow-up\n'
         self.assert_never(letter, '2026-10-27')
-        fact = date_fact(letter)
-        self.assertEqual((fact.origin, set(context.documented_values(fact))), ('conflict', {'2026-10-27', '2026-10-20'}))
-        self.assert_member_date(letter, '2026-10-20')
+        self.assert_question(letter, '2026-10-27', '2026-10-20')  # (phase 2, rule 2: the letter's date is evidence)
         alone = HEAD + 'Date of visit: 10/20/2026    Visit type: Follow-up\n' + VISIT_BODY
         self.assertEqual((date_fact(alone).origin, [e.text for e in date_fact(alone).evidence]),
                          ('missing', ['Date of visit: 10/20/2026']))
@@ -193,7 +203,8 @@ class QualifierOfAnotherFieldTests(DateAssertions, SimpleTestCase):
         self.assert_never(titled + 'Outside colonoscopy    Procedure date    2021-05-03\n', '2021-05-03', '2026-10-14')
         # a plan field's date is a planned date (sections): never the service date, and the report's own title is
         self.assert_never(HEAD + 'Follow-up: Procedure date: 11/04/2026\n', '2026-11-04')
-        self.assert_document(titled + 'Follow-up: Procedure date: 11/04/2026\n', '2026-10-14')
+        self.assert_never(titled + 'Follow-up: Procedure date: 11/04/2026\n', '2026-11-04')
+        self.assert_question(titled + 'Follow-up: Procedure date: 11/04/2026\n', '2026-10-14')  # the title: evidence
         self.assert_document(HEAD + 'Procedure date: 10/14/2026    Endoscopist: Dr. A. Synthetic\n', '2026-10-14')
 
 
@@ -227,23 +238,24 @@ class TitleOfAnotherDocumentTests(DateAssertions, SimpleTestCase):
     def test_a_letter_date_beside_the_encounter_it_names_is_asked(self):
         letter = HEAD + ('Date: 10/27/2026\nRe: GI consultation of 10/20/2026\nDear Dr. Synthetic,\nThank you for '
                          'referring this patient.\n')
-        fact = date_fact(letter)
-        self.assertEqual((fact.origin, fact.value), ('conflict', None))
-        self.assertEqual(set(context.documented_values(fact)), {'2026-10-27', '2026-10-20'})
-        self.assert_member_date(letter, '2026-10-20')
-        self.assert_member_conflict(letter, '1998-01-01')
+        self.assert_question(letter, '2026-10-27', '2026-10-20')  # both are evidence (refutation phase 2, rule 2)
 
     def test_controls_the_note_s_own_titles(self):
-        self.assert_document(HEAD + 'EGD report - 10/14/2026\nTechnique: advanced to the duodenum.\n', '2026-10-14')
-        self.assert_document(HEAD + 'Endoscopic ultrasound report: 10/14/2026\nThe echoendoscope was passed.\n',
-                             '2026-10-14')
-        self.assert_document(HEAD + '\nHepatology clinic note - 9/28/2026\n\nSeen for ascites follow-up.\n',
-                             '2026-09-28')
+        # refutation phase 2 (P2DATES, rule 2): the note's own dated titles are evidence too, never the date: asked,
+        # and answered by the title's date
+        for text, value in ((HEAD + 'EGD report - 10/14/2026\nTechnique: advanced to the duodenum.\n', '2026-10-14'),
+                            (HEAD + 'Endoscopic ultrasound report: 10/14/2026\nThe echoendoscope was passed.\n',
+                             '2026-10-14'),
+                            (HEAD + '\nHepatology clinic note - 9/28/2026\n\nSeen for ascites follow-up.\n',
+                             '2026-09-28')):
+            with self.subTest(text=text.strip().splitlines()[1]):
+                self.assert_question(text, value)
         for text in (HEAD + 'GI consultation note: 2026-10-20\nPathology report: 2026-10-14\n',
                      HEAD + 'Surgical pathology report: 10/17/2026\nEGD report - 10/14/2026\n',
                      HEAD + 'Date: 10/27/2026\nGI consultation of 10/20/2026\nDear Dr. Synthetic,\n'):
             with self.subTest(text=text.splitlines()[1]):
-                self.assertEqual(date_fact(text).origin, 'conflict')
+                self.assertIn(date_fact(text).origin, ('conflict', 'missing'))
+                self.assertIsNone(date_fact(text).value)
 
 
 class MemberDateAgainstDocumentedTextTests(DateAssertions, SimpleTestCase):

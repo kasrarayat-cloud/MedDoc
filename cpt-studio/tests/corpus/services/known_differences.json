@@ -2,14 +2,54 @@
   "schema": "cpt-studio-services-corpus-known-differences@1",
   "note": "Readings that differ from the author's provisional expectations, kept on purpose with the reason. A GI coder's adjudication may settle either side.",
   "documents": {
+    "svc-01-em-new-office-mdm": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date of service is read only from a labelled date standing alone in a header block that holds nothing but the title, header fields of a closed list and agreeing date labels; its block holds \"Visit type: New patient - she has not previously been seen by any clinician in our gastroe\", a field outside that list, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-02-em-established-time": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date of service is read only from a labelled date standing alone in a header block that holds nothing but the title, header fields of a closed list and agreeing date labels; its block holds \"Status: Established patient. I last saw him on 2026-04-21.\", a field outside that list, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-03-em-sparse": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 2): the document's only dated text is its title \"GI visit - 10/20/2026\", which is evidence and never the date of service by itself (the installed revision sent no date for it either), so the date is asked and the member's answer with that date settles it."
+    },
     "svc-10-egd-savary-dilation": {
       "differences": [
         {
           "kind": "act.missing",
           "subject": "gi.egd dilation"
+        },
+        {
+          "kind": "date",
+          "subject": "service_date"
         }
       ],
-      "reason": "The dilation is read as performed, but its sentence names no site: the stricture is located only as '36 cm', and the reader does not turn a distance from the incisors into anatomy. The expectation names the esophagus."
+      "reason": "The dilation is read as performed, but its sentence names no site: the stricture is located only as '36 cm', and the reader does not turn a distance from the incisors into anatomy. The expectation names the esophagus. Refutation phase 2 (P2DATES, rule 2): the document's only dated text is a bare \"Date: 14-Oct-2026\" line, which is evidence and never the date of service by itself (the installed revision sent no date for it either), so the date is asked and the member's answer with that date settles it."
+    },
+    "svc-13-tne-barrett-biopsy": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date of service is read only from a labelled date standing alone in a header block that holds nothing but the title, header fields of a closed list and agreeing date labels; the line \"OFFICE PROCEDURE: TRANSNASAL ESOPHAGOSCOPY WITH BIOPSY\" above the label is neither the title nor a header field, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
     },
     "svc-14-esophagoscopy-stricture-not-traversed": {
       "differences": [
@@ -24,6 +64,78 @@
       ],
       "reason": "The document's own procedure line says 'PROCEDURE PERFORMED: Flexible transoral esophagoscopy with biopsy. The intended EGD could not be completed.' The reader records the performed service as an esophagoscopy, which has no endpoint, so it is performed rather than incomplete. The expectation models it as an incomplete EGD whose rendered service is an esophagoscopy. Both describe the same facts; which status a coder wants is for adjudication."
     },
+    "svc-18-colo-snare-plus-separate-biopsy-table": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date of service is read only from a labelled date standing alone in a header block that holds nothing but the title, header fields of a closed list and agreeing date labels; the line \"Field | Value\" above the label is neither the title nor a header field, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-19-colo-biopsy-then-snare-same-lesion": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date of service is read only from a labelled date standing alone in a header block that holds nothing but the title, header fields of a closed list and agreeing date labels; its block holds \"Sedation: Propofol administered by Leontine Barros, MD (fictional), anesthesiologist; docu\", a field outside that list, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-21-colo-emr-tattoo-clips-nursing-conflict": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date of service is read only from a labelled date standing alone in a header block that holds nothing but the title, header fields of a closed list and agreeing date labels; the line \"PHYSICIAN PROCEDURE REPORT: COLONOSCOPY WITH ENDOSCOPIC MUCOSAL RESECTION\" above the label is neither the title nor a header field, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-26-colo-lst-referred-for-emr": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date of service is read only from a labelled date standing alone in a header block that holds nothing but the title, header fields of a closed list and agreeing date labels; its block holds \"Indication: Diagnostic - hematochezia and a positive stool DNA test\", a field outside that list, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-27-flexsig-biopsy-impression-only": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date of service is read only from a labelled date standing alone in a header block that holds nothing but the title, header fields of a closed list and agreeing date labels; its block holds \"Sedation: None; the patient declined sedation.\", a field outside that list, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-28-flexsig-hemorrhoid-banding-nursing-conflict": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date of service is read only from a labelled date standing alone in a header block that holds nothing but the title, header fields of a closed list and agreeing date labels; its block holds \"Sedation: None.\", a field outside that list, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-29-flexsig-volvulus-decompression": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date of service is read only from a labelled date standing alone in a header block that holds nothing but the title, header fields of a closed list and agreeing date labels; its block holds \"Sedation: None; the patient was awake and cooperative.\", a field outside that list, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-30-eus-pancreas-fnb-node-not-sampled": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date of service is read only from a labelled date standing alone in a header block that holds nothing but the title, header fields of a closed list and agreeing date labels; its block holds \"Cytopathology: Rapid on-site evaluation by Philippa Quaye, MD (fictional), of the Tallowme\", a field outside that list, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
     "svc-31-eus-limited-esophageal-wall": {
       "differences": [
         {
@@ -36,6 +148,78 @@
         }
       ],
       "reason": "The reader keeps the upper endoscopy as a performed service marked included in the EUS (included_in: the EUS code includes the examination, so no code of its own is asked), where the expectation models one EUS service. The moderate sedation documented in the header is therefore an act of the included EGD rather than of the EUS."
+    },
+    "svc-32-ercp-sphincterotomy-stone-extraction": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date of service is read only from a labelled date standing alone in a header block that holds nothing but the title, header fields of a closed list and agreeing date labels; its block holds \"Fluoroscopy: Images were obtained by the radiology technologist and interpreted by Torvald\", a field outside that list, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-33-ercp-biliary-stent-brushing": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date of service is read only from a labelled date standing alone in a header block that holds nothing but the title, header fields of a closed list and agreeing date labels; the line \"Procedure: Endoscopic retrograde cholangiopancreatography\" above the label is neither the title nor a header field, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-36-balloon-enteroscopy-apc-biopsy-table": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date of service is read only from a labelled date standing alone in a header block that holds nothing but the title, header fields of a closed list and agreeing date labels; the line \"Item | Detail\" above the label is neither the title nor a header field, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-37-capsule-small-bowel": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date of service is read only from a labelled date standing alone in a header block that holds nothing but the title, header fields of a closed list and agreeing date labels; the line \"SMALL BOWEL CAPSULE ENDOSCOPY: INTERPRETATION AND REPORT\" above the label is neither the title nor a header field, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-38-bravo-96h": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date of service is read only from a labelled date standing alone in a header block that holds nothing but the title, header fields of a closed list and agreeing date labels; the line \"WIRELESS ESOPHAGEAL pH MONITORING (96-HOUR) - REPORT\" above the label is neither the title nor a header field, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-39-hrm-and-ph-impedance": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date of service is read only from a labelled date standing alone in a header block that holds nothing but the title, header fields of a closed list and agreeing date labels; the line \"High-Resolution Esophageal Manometry and 24-Hour pH-Impedance Study\" above the label is neither the title nor a header field, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-41-anorectal-manometry-bet": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date of service is read only from a labelled date standing alone in a header block that holds nothing but the title, header fields of a closed list and agreeing date labels; the line \"Study: High-resolution anorectal manometry with rectal sensory and compliance testing and \" above the label is neither the title nor a header field, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
+    },
+    "svc-42-gtube-bedside-replacement": {
+      "differences": [
+        {
+          "kind": "date",
+          "subject": "service_date"
+        }
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date of service is read only from a labelled date standing alone in a header block that holds nothing but the title, header fields of a closed list and agreeing date labels; the line \"BEDSIDE PROCEDURE NOTE: GASTROSTOMY TUBE REPLACEMENT\" above the label is neither the title nor a header field, so the date is asked - a dateless request and a question the member answers with the labelled date. An over-hold, a known limit of reading the date by its source rather than by the words around it."
     }
   }
 }

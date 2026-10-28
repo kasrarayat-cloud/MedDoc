@@ -348,6 +348,58 @@ years before the documented one had been used for every dated check, for the
 time readings and in the provider request). Dates read as ISO, US, "October 20,
 2026" and day-month-year ("20 October 2026", "20 Oct 2026").
 
+**The service date is read by its source, never by vocabulary** (refutation
+phase 2, 2026-10-28, P2DATES; four rounds of qualifier words and reaches had
+each been refuted by the next paraphrase, and each refutation was a wrong date
+sent to Corti with the act done that day excluded against it):
+
+1. *What may be sent.* A document date is the note's own - documented, used for
+   the dated checks and sent - only from a date-of-service label (date of
+   service, DOS, service, procedure, visit or encounter date, date of
+   procedure/visit/encounter, a label naming the time too) whose value is a date
+   alone (a clock may follow it), standing in the document's **header**: from
+   the top, the title lines (no field, sentence, list item, table row, date but
+   a dated title's own, or word of another occurrence outside a service name;
+   at most 12 lines of at most 200 characters), then header lines whose fields
+   are all of a closed list - patient (name, id, status, type), name, record,
+   chart or account number, date of birth, age, sex or gender, the physician,
+   provider, endoscopist, operator, assistant or anesthesia provider, location,
+   facility, site, place of service or care setting, referring physician - and
+   date-of-service labels. The label's whole paragraph (its contiguous non-blank
+   lines) must lie in that header, every date label up to its end must state the
+   same date alone, and the header values are read too: a word of another
+   occurrence or any date but a date of birth in a header value ends the header.
+   Anything else in the block - another field, a heading, a sentence, a bullet,
+   a bracket after the date, a body line without a blank line before it - makes
+   the date a question: a dateless request and a question for the member. This
+   is an over-hold for many real notes (a header followed directly by the
+   procedure, a "Sedation:" or "Patient status: ... last seen ..." field in the
+   header), a known limit: the member's answer with the labelled date settles it.
+2. *Everything else is evidence, never the sent date.* A dated title, a bare
+   "Date:" or "Date/Time:" line, a dated line naming the service and a letter's
+   subject line are kept as evidence. They can only make a labelled date a
+   question when they differ, or stand as the only dated text - the date is then
+   asked. **This is the installed revision's (057a7d398) behaviour for those
+   shapes**: it read a date only from a date-of-service label and sent no date
+   for a title, a "Date:" line or a letter. The rewritten reader's titles had
+   been read as the note's own, and a fax's "Date/Time: 10/27/2026 14:30", a
+   letter's "Date:" above the encounter it names, or "Cardiology consultation:
+   10/09/2026" above a colonoscopy was sent, with the snare polypectomy done on
+   10/14 excluded against it.
+3. *A date of birth is never a service date.* A date with a birth label (DOB,
+   D.O.B., date of birth, birth date, born, b.) right before it, in any bracket,
+   or heading its table column or the line above it, is no candidate's value and
+   is never read from the evidence. An empty date-of-service field ("DOS: DOB:
+   01/01/1998") states no date, and a dated line's own date is its only date
+   after the service's name that is no date of birth (a line with two is kept as
+   evidence that reads no date).
+4. *A member date* is taken only when it is a date some candidate states as its
+   own value; otherwise it is a member conflict (held, nothing sent).
+
+A document stating setting phrases more than 200 times is not read for them
+(each is checked as a statement): the setting is asked, so a member's context
+change is read within POST /context's 15 s bound.
+
 ### 5.3 `studio/gi/profiles` + `studio/gi/detect` — routing
 
 `PROFILES` (`gi-profiles@2`): versioned internal profiles. Supported:

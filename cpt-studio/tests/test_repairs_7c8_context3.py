@@ -281,14 +281,14 @@ class QualifierInAnotherFieldHoldsTests(DateAssertions, SimpleTestCase):
             with self.subTest(line=line):
                 text = HEAD + 'GI office visit - 10/20/2026\n' + line + '\n' + VISIT_BODY
                 self.assert_never(text, other)
-                self.assert_conflict(text, '2026-10-20', other)
+                self.assert_question(text, '2026-10-20', other)  # the title is evidence (refutation phase 2, rule 2)
 
     def test_beside_another_labelled_date_it_is_a_conflict_never_set_aside(self):
         # the words before the label are another field's, never the label's own: the date is held as one this service
         # cannot place (a question beside the note's other labelled date), never set aside as another occurrence's
         text = (HEAD + 'Visit date: 10/27/2026\nIndication: Personal history of colon polyps Date of service: 10/14/2026\n'
                 + COLO_PLAIN)
-        self.assert_conflict(text, '2026-10-27', '2026-10-14')
+        self.assert_question(text, '2026-10-27', '2026-10-14')  # (phase 2, rule 1: neither stands in a header block)
 
     def test_a_history_word_in_the_field_before_holds_the_note_s_own_label_too(self):
         # an over-hold (a known limit): the indication's history words may not date anything, but the reader cannot tell
@@ -300,14 +300,15 @@ class QualifierInAnotherFieldHoldsTests(DateAssertions, SimpleTestCase):
                 self.assert_member_date(text, '2026-10-14')
 
     def test_controls_a_field_with_no_qualifier_or_about_something_else(self):
+        # refutation phase 2 (P2DATES, rule 1): a header field before the label in a header block holds nothing; a field
+        # outside the header list asks the date whatever its words (an over-hold), and the labelled date answers it
+        self.assert_document(HEAD + 'Last name: synthetic Date of Service: 10/14/2026\n\n' + COLO_PLAIN, '2026-10-14')
         for line, value in (('Indication: screening Date of service: 10/14/2026', '2026-10-14'),
                             ('Indication: abdominal pain Visit Date: 10/20/2026', '2026-10-20'),
                             ('Last name: synthetic Date of Service: 10/14/2026', '2026-10-14'),
                             ('Last colonoscopy: 05/01/2019 Procedure Date: 10/14/2026', '2026-10-14')):
             with self.subTest(line=line):
-                text = HEAD + line + '\n' + COLO_PLAIN
-                self.assert_document(text, value)
-                self.assert_member_conflict(text, ELENA_DATE)
+                self.assert_question(HEAD + line + '\n' + COLO_PLAIN, value)
 
 
 class QualifierInAnotherFieldRequestTests(EndToEnd):
@@ -361,6 +362,7 @@ class AnotherDisciplineTitleTests(DateAssertions, SimpleTestCase):
                 self.assert_member_date(text, '2026-10-20')
 
     def test_controls_this_service_s_encounter_titles(self):
+        # refutation phase 2 (P2DATES, rule 2): this service's own titles are evidence too - asked, answered by their date
         for title, value in (('GI visit - 10/20/2026', '2026-10-20'), ('GI consultation - 10/20/2026', '2026-10-20'),
                              ('Office visit - 10/20/2026', '2026-10-20'),
                              ('Hepatology consult: 10/20/2026', '2026-10-20'),
@@ -368,8 +370,8 @@ class AnotherDisciplineTitleTests(DateAssertions, SimpleTestCase):
                              ('Colonoscopy encounter - 10/14/2026', '2026-10-14')):
             with self.subTest(title=title):
                 text = HEAD + title + '\n' + VISIT_BODY
-                self.assert_document(text, value)
-                self.assert_member_conflict(text, ELENA_DATE)
+                self.assert_asked(text, title)
+                self.assert_member_date(text, value)
 
 
 class AnotherDisciplineTitleRequestTests(EndToEnd):
@@ -420,28 +422,35 @@ class FieldAboveOrPhraseAfterTests(DateAssertions, SimpleTestCase):
             with self.subTest(lines=lines[:50]):
                 text = HEAD + 'Colonoscopy report - 10/14/2026\n' + lines + '\n' + COLO_PLAIN
                 self.assert_never(text, other)
-                self.assert_conflict(text, '2026-10-14', other)
+                self.assert_question(text, '2026-10-14', other)  # the title is evidence (phase 2, rule 2)
 
     def test_beside_the_note_s_own_labelled_date_another_occurrence_s_is_set_aside(self):
         for lines in ('Outside colonoscopy:\nProcedure date: 09/03/2026\nFindings: two adenomas.',
                       'Procedure date: 09/03/2026, outside facility; cold snare polypectomy.'):
             with self.subTest(lines=lines[:40]):
-                self.assert_document(HEAD + 'Date of service: 10/14/2026\n' + lines + '\n' + COLO_PLAIN, '2026-10-14')
+                # (refutation phase 2, rule 1: the note's own date is its header block's; the outside one follows it)
+                self.assert_document(HEAD + 'Date of service: 10/14/2026\n\n' + lines + '\n' + COLO_PLAIN, '2026-10-14')
 
     def test_controls_a_field_above_about_something_else_or_naming_no_occurrence(self):
+        # refutation phase 2 (P2DATES, rule 1): above a label in a header block, a header field or the title holds
+        # nothing; any other field, sentence or line asks the date whatever its words (an over-hold, a known limit,
+        # where these controls had it documented), and the labelled date answers it
+        for above in ('Patient: Synthetic, Alex', 'Last name: Synthetic', 'GI follow-up visit'):
+            with self.subTest(above=above):
+                text = HEAD + above + '\nProcedure date: 10/14/2026\n\n' + COLO_PLAIN
+                self.assert_document(text, '2026-10-14')
+                self.assert_member_conflict(text, ELENA_DATE)
         for above in ('Last colonoscopy: 05/01/2019', 'Patient: Synthetic, Alex', 'Last name: Synthetic',
                       'Indication: screening colonoscopy', 'GI follow-up visit', 'Previous surgeries: appendectomy',
                       'Next colonoscopy: 10/2029', 'Prior colonoscopy 2019, normal'):
             with self.subTest(above=above):
-                text = HEAD + above + '\nProcedure date: 10/14/2026\n' + COLO_PLAIN
-                self.assert_document(text, '2026-10-14')
-                self.assert_member_conflict(text, ELENA_DATE)
+                self.assert_question(HEAD + above + '\nProcedure date: 10/14/2026\n' + COLO_PLAIN, '2026-10-14')
         for line in ('Procedure date: 10/14/2026    Indication: personal history of colon polyps',
                      'Procedure date: 10/14/2026\nIndication: surveillance after prior polypectomy.',
                      'Procedure date: 10/14/2026\nOutside records were reviewed.',
                      'Date of service: 10/14/2026 (capsule placement) Recording started at 9:00 AM'):
             with self.subTest(line=line[:50]):
-                self.assert_document(HEAD + line + '\n' + COLO_PLAIN, '2026-10-14')
+                self.assert_question(HEAD + line + '\n' + COLO_PLAIN, '2026-10-14')
 
 
 class FieldAboveOrPhraseAfterRequestTests(EndToEnd):
@@ -474,7 +483,7 @@ class LetterDateBesideTheEncounterLineTests(DateAssertions, SimpleTestCase):
         for text in self.CASES:
             with self.subTest(text=text.splitlines()[2][:50]):
                 self.assert_never(text, '2026-10-27')
-                self.assert_conflict(text, '2026-10-27', '2026-10-14')
+                self.assert_question(text, '2026-10-27', '2026-10-14')  # both are evidence (phase 2, rule 2)
 
     def test_alone_a_sentence_ending_with_the_service_s_date_is_kept_as_evidence(self):
         text = HEAD + 'Your patient underwent colonoscopy on 10/14/2026.\n' + COLO_PLAIN
@@ -482,11 +491,15 @@ class LetterDateBesideTheEncounterLineTests(DateAssertions, SimpleTestCase):
         self.assert_member_date(text, '2026-10-14')
 
     def test_controls(self):
-        self.assert_document(HEAD + 'Date: 10/14/2026\nProcedure: Colonoscopy on 10/14/2026\n' + COLO_PLAIN, '2026-10-14')
-        self.assert_document(HEAD + 'Colonoscopy report - 10/14/2026\nProcedure: Colonoscopy on 10/14/2026\n'
-                             + COLO_PLAIN, '2026-10-14')
-        self.assert_document(HEAD + 'Date: 10/14/2026\nNext colonoscopy: 10/14/2029\n' + COLO_PLAIN, '2026-10-14')
-        self.assert_document(HEAD + 'Date: 10/14/2026\nLast colonoscopy on 05/01/2019.\n' + COLO_PLAIN, '2026-10-14')
+        # refutation phase 2 (P2DATES, rule 2): a "Date:" line and a title are evidence, never the date: asked, and the
+        # date they state answers it
+        for text in (HEAD + 'Date: 10/14/2026\nProcedure: Colonoscopy on 10/14/2026\n' + COLO_PLAIN,
+                     HEAD + 'Colonoscopy report - 10/14/2026\nProcedure: Colonoscopy on 10/14/2026\n' + COLO_PLAIN,
+                     HEAD + 'Date: 10/14/2026\nNext colonoscopy: 10/14/2029\n' + COLO_PLAIN,
+                     HEAD + 'Date: 10/14/2026\nLast colonoscopy on 05/01/2019.\n' + COLO_PLAIN):
+            with self.subTest(text=text.splitlines()[2][:40]):
+                self.assert_never(text, '2029-10-14', '2019-05-01')
+                self.assert_question(text, '2026-10-14')
 
 
 class LetterDateBesideTheEncounterLineRequestTests(EndToEnd):
@@ -509,12 +522,18 @@ class DateAndTimeLabelTests(DateAssertions, SimpleTestCase):
     line's date."""
 
     def test_the_labelled_date_is_read(self):
+        # refutation phase 2 (P2DATES): a date-of-service label naming the time is read in a header block (rule 1); a
+        # "Date & Time:" or "Date/Time:" line and a title are evidence (rule 2, dates:1: a fax's "Date/Time: 10/27/2026
+        # 14:30" had been sent) - asked, and answered by the date they state
+        for header in ('DOS/Time: 10/20/2026 09:15', 'DOS / time: 10/20/2026 9:15 AM'):
+            with self.subTest(header=header):
+                text = HEAD + header + '\n\n' + VISIT_BODY
+                self.assert_document(text, '2026-10-20')
+                self.assert_member_conflict(text, ELENA_DATE)
         for header in ('DOS/Time: 10/20/2026 09:15', 'DOS / time: 10/20/2026 9:15 AM', 'Date & Time: 10/20/2026 09:15',
                        'Date/Time: 10/20/2026 9:15 AM', 'GI visit - 10/20/2026 09:15'):
             with self.subTest(header=header):
-                text = HEAD + header + '\n' + VISIT_BODY
-                self.assert_document(text, '2026-10-20')
-                self.assert_member_conflict(text, ELENA_DATE)
+                self.assert_question(HEAD + header + '\n' + VISIT_BODY, '2026-10-20')
 
     def test_a_dated_service_line_with_a_clock_is_kept_as_evidence(self):
         text = HEAD + 'Colonoscopy - 10/14/2026 08:30\n' + COLO_PLAIN
@@ -619,13 +638,18 @@ class HeadingOrSentenceAboveTests(DateAssertions, SimpleTestCase):
                     self.assert_asked(text, 'Procedure date')
 
     def test_controls(self):
+        # refutation phase 2 (P2DATES, rule 1): the document's title above a header block holds nothing; a sentence, a
+        # bracket or a body line in the date's block asks it whatever its words (an over-hold), answered by its date
+        for above in ('Follow-up visit', 'GI follow-up office visit', 'Colonoscopy Report', 'PROCEDURE NOTE'):
+            with self.subTest(above=above):
+                text = HEAD + above + '\nDate of service: 10/14/2026\n\n' + COLO_PLAIN
+                self.assert_document(text, '2026-10-14')
+                self.assert_member_conflict(text, ELENA_DATE)
         for above in ('Follow-up visit', 'GI follow-up office visit', 'Colonoscopy Report', 'PROCEDURE NOTE',
                       'Last colonoscopy 05/01/2019, normal.', 'Seen today in the endoscopy unit.'):
             with self.subTest(above=above):
-                text = HEAD + above + '\nDate of service: 10/14/2026\n' + COLO_PLAIN
-                self.assert_document(text, '2026-10-14')
-                self.assert_member_conflict(text, ELENA_DATE)
-        self.assert_document(HEAD + 'Date of service: 10/14/2026\n(Recorded by Dr. A. Synthetic)\n' + COLO_PLAIN,
+                self.assert_question(HEAD + above + '\nDate of service: 10/14/2026\n' + COLO_PLAIN, '2026-10-14')
+        self.assert_question(HEAD + 'Date of service: 10/14/2026\n(Recorded by Dr. A. Synthetic)\n' + COLO_PLAIN,
                              '2026-10-14')
         # a heading the layout reads as a history section holds its dates out of the reading altogether, as before
         self.assert_never(HEAD + 'Previous procedure\nProcedure date: 05/01/2019\n' + COLO_BODY, '2019-05-01')

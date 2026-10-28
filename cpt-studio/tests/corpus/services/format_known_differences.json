@@ -2,12 +2,117 @@
   "schema": "cpt-studio-services-format-differences@1",
   "note": "Differences between the reading of a corpus document from a digital PDF (or a scan read with OCR) and from its text, kept on purpose with the reason. A new difference, or a recorded one that disappears, fails the test.",
   "pdf": {
+    "svc-05-em25-and-variceal-banding": {
+      "missing": [
+        "act|gi.egd|band_ligation|historical|physician||",
+        "act|gi.egd|band_ligation|planned|physician||",
+        "service_date|2026-10-14"
+      ],
+      "extra": [
+        "act|gi.egd|band_ligation|uncertain|physician||",
+        "service_date|None"
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date is read only from a header block that holds nothing but the title, header fields and agreeing date labels. The PDF writer wraps a header line or drops the blank line after the header, so in the PDF the label's block holds \"then endoscopy unit\" and the date is asked, while the text's header block states it (an over-hold of the PDF reading, a known limit). Without a service date the reader cannot place the timing it reads against that date, so those readings are uncertain in the PDF."
+    },
+    "svc-06-hp-and-colonoscopy-random-biopsies": {
+      "missing": [
+        "service_date|2026-10-15"
+      ],
+      "extra": [
+        "service_date|None"
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date is read only from a header block that holds nothing but the title, header fields and agreeing date labels. The PDF writer wraps a header line or drops the blank line after the header, so in the PDF the label's block holds \"PRE-PROCEDURE HISTORY AND PHYSICAL (same day)\" and the date is asked, while the text's header block states it (an over-hold of the PDF reading, a known limit)."
+    },
+    "svc-07-em-established-partner-mdm-high": {
+      "missing": [
+        "service_date|2026-10-23",
+        "service|gi.egd|historical|unknown|",
+        "service|gi.ercp|planned|unknown|",
+        "service|gi.eus|planned|unknown|"
+      ],
+      "extra": [
+        "service_date|None",
+        "service|gi.egd|uncertain|unknown|",
+        "service|gi.ercp|uncertain|unknown|",
+        "service|gi.eus|uncertain|unknown|"
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date is read only from a header block that holds nothing but the title, header fields and agreeing date labels. The PDF writer wraps a header line or drops the blank line after the header, so in the PDF the label's block holds \"Patient status: Established. This is my first time meeting her, but she was last seen in\" and the date is asked, while the text's header block states it (an over-hold of the PDF reading, a known limit). Without a service date the reader cannot place the timing it reads against that date, so those readings are uncertain in the PDF."
+    },
+    "svc-08-egd-multisite-biopsy-list-negation": {
+      "missing": [
+        "service_date|2026-10-12"
+      ],
+      "extra": [
+        "service_date|None"
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date is read only from a header block that holds nothing but the title, header fields and agreeing date labels. The PDF writer wraps a header line or drops the blank line after the header, so in the PDF the label's block holds \"SEDATION\" and the date is asked, while the text's header block states it (an over-hold of the PDF reading, a known limit)."
+    },
+    "svc-09-egd-balloon-dilation-impression-only": {
+      "missing": [
+        "service_date|2026-10-08"
+      ],
+      "extra": [
+        "service_date|None"
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date is read only from a header block that holds nothing but the title, header fields and agreeing date labels. The PDF writer wraps a header line or drops the blank line after the header, so in the PDF the label's block holds \"by the anesthesia group\" and the date is asked, while the text's header block states it (an over-hold of the PDF reading, a known limit)."
+    },
+    "svc-11-egd-ulcer-bleeding-control": {
+      "missing": [
+        "service_date|2026-10-17"
+      ],
+      "extra": [
+        "service_date|None"
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date is read only from a header block that holds nothing but the title, header fields and agreeing date labels. The PDF writer wraps a header line or drops the blank line after the header, so in the PDF the label's block holds \"Oduya, CRNA (fictional)) provided MAC; anesthesia services are reported separately.\" and the date is asked, while the text's header block states it (an over-hold of the PDF reading, a known limit)."
+    },
     "svc-12-egd-peg": {
       "missing": [
-        "act|gi.egd|snare|performed|physician||"
+        "act|gi.egd|snare|performed|physician||",
+        "service_date|2026-10-19"
       ],
-      "extra": [],
-      "reason": "In the text, the snare that grasps the PEG guidewire is read as a snare act (no lesion is removed: a misreading, recorded); in the PDF its wrapped sentence reads it as part of the guidewire step. Neither reading accounts for a code: 43246 is the PEG."
+      "extra": [
+        "service_date|None"
+      ],
+      "reason": "In the text, the snare that grasps the PEG guidewire is read as a snare act (no lesion is removed: a misreading, recorded); in the PDF its wrapped sentence reads it as part of the guidewire step. Neither reading accounts for a code: 43246 is the PEG. Refutation phase 2 (P2DATES, rule 1): the date is read only from a header block that holds nothing but the title, header fields and agreeing date labels. The PDF writer wraps a header line or drops the blank line after the header, so in the PDF the label's block holds \"Indication: Persistent oropharyngeal dysphagia after a left hemispheric stroke on\" and the date is asked, while the text's header block states it (an over-hold of the PDF reading, a known limit)."
+    },
+    "svc-14-esophagoscopy-stricture-not-traversed": {
+      "missing": [
+        "service_date|2026-10-21"
+      ],
+      "extra": [
+        "service_date|None"
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date is read only from a header block that holds nothing but the title, header fields and agreeing date labels. The PDF writer wraps a header line or drops the blank line after the header, so in the PDF the label's block holds \"PROCEDURE PLANNED: Esophagogastroduodenoscopy.\" and the date is asked, while the text's header block states it (an over-hold of the PDF reading, a known limit)."
+    },
+    "svc-15-egd-rfa-barrett": {
+      "missing": [
+        "act|gi.egd|biopsy|historical|physician||esophagus",
+        "service_date|2026-10-13"
+      ],
+      "extra": [
+        "act|gi.egd|biopsy|uncertain|physician||esophagus",
+        "service_date|None"
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date is read only from a header block that holds nothing but the title, header fields and agreeing date labels. The PDF writer wraps a header line or drops the blank line after the header, so in the PDF the label's block holds \"anesthesiology; separate anesthesia record and billing.\" and the date is asked, while the text's header block states it (an over-hold of the PDF reading, a known limit). Without a service date the reader cannot place the timing it reads against that date, so those readings are uncertain in the PDF."
+    },
+    "svc-16-egd-esophageal-stent": {
+      "missing": [
+        "service_date|2026-10-16"
+      ],
+      "extra": [
+        "service_date|None"
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date is read only from a header block that holds nothing but the title, header fields and agreeing date labels. The PDF writer wraps a header line or drops the blank line after the header, so in the PDF the label's block holds \"anesthesia professional services are billed separately.\" and the date is asked, while the text's header block states it (an over-hold of the PDF reading, a known limit)."
+    },
+    "svc-17-poem": {
+      "missing": [
+        "act|gi.egd|dilation|historical|physician||",
+        "service_date|2026-10-22"
+      ],
+      "extra": [
+        "service_date|None"
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date is read only from a header block that holds nothing but the title, header fields and agreeing date labels. The PDF writer wraps a header line or drops the blank line after the header, so in the PDF the label's block holds \"by the department of anesthesiology (separate record and billing).\" and the date is asked, while the text's header block states it (an over-hold of the PDF reading, a known limit). Without a service date the reader cannot place the timing it reads against that date, so those readings are uncertain in the PDF."
     },
     "svc-18-colo-snare-plus-separate-biopsy-table": {
       "missing": [
@@ -22,10 +127,82 @@
     },
     "svc-20-colo-cold-hot-snare-hot-biopsy": {
       "missing": [
-        "attribution|pathology"
+        "attribution|pathology",
+        "service_date|2026-10-19"
       ],
-      "extra": [],
-      "reason": "The pathology attribution wraps before a proper noun (\"sent ... to Fairhaven\" / \"Laboratory Pathology (fictional)\"): a break before a capitalised word after an ordinary word is kept (session interpretation 20), so the attribution is not read across it."
+      "extra": [
+        "service_date|None"
+      ],
+      "reason": "The pathology attribution wraps before a proper noun (\"sent ... to Fairhaven\" / \"Laboratory Pathology (fictional)\"): a break before a capitalised word after an ordinary word is kept (session interpretation 20), so the attribution is not read across it. Refutation phase 2 (P2DATES, rule 1): the date is read only from a header block that holds nothing but the title, header fields and agreeing date labels. The PDF writer wraps a header line or drops the blank line after the header, so in the PDF the label's block holds \"Sedation: Moderate sedation administered by me, with Corwin Ashdown, RN (fictional), as\" and the date is asked, while the text's header block states it (an over-hold of the PDF reading, a known limit)."
+    },
+    "svc-22-colo-incomplete-poor-prep": {
+      "missing": [
+        "act|gi.colonoscopy|snare|historical|physician||",
+        "service_date|2026-10-08"
+      ],
+      "extra": [
+        "act|gi.colonoscopy|snare|uncertain|physician||",
+        "service_date|None"
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date is read only from a header block that holds nothing but the title, header fields and agreeing date labels. The PDF writer wraps a header line or drops the blank line after the header, so in the PDF the label's block holds \"Anesthesia Associates (fictional); separately billed.\" and the date is asked, while the text's header block states it (an over-hold of the PDF reading, a known limit). Without a service date the reader cannot place the timing it reads against that date, so those readings are uncertain in the PDF."
+    },
+    "svc-23-colo-incomplete-obstruction": {
+      "missing": [
+        "service_date|2026-10-13"
+      ],
+      "extra": [
+        "service_date|None"
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date is read only from a header block that holds nothing but the title, header fields and agreeing date labels. The PDF writer wraps a header line or drops the blank line after the header, so in the PDF the label's block holds \"anesthesia department (separate record).\" and the date is asked, while the text's header block states it (an over-hold of the PDF reading, a known limit)."
+    },
+    "svc-24-colo-screening-complete-not-discontinued": {
+      "missing": [
+        "service_date|2026-10-26"
+      ],
+      "extra": [
+        "service_date|None"
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date is read only from a header block that holds nothing but the title, header fields and agreeing date labels. The PDF writer wraps a header line or drops the blank line after the header, so in the PDF the label's block holds \"Indication: Average-risk colorectal cancer screening; age 45; no prior colonoscopy; no\" and the date is asked, while the text's header block states it (an over-hold of the PDF reading, a known limit)."
+    },
+    "svc-25-colo-screening-to-therapeutic-extent-missing": {
+      "missing": [
+        "service_date|2026-10-23"
+      ],
+      "extra": [
+        "service_date|None"
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date is read only from a header block that holds nothing but the title, header fields and agreeing date labels. The PDF writer wraps a header line or drops the blank line after the header, so in the PDF the label's block holds \"(fictional)); anesthesia services billed separately.\" and the date is asked, while the text's header block states it (an over-hold of the PDF reading, a known limit)."
+    },
+    "svc-31-eus-limited-esophageal-wall": {
+      "missing": [
+        "service_date|2026-10-09"
+      ],
+      "extra": [
+        "service_date|None"
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date is read only from a header block that holds nothing but the title, header fields and agreeing date labels. The PDF writer wraps a header line or drops the blank line after the header, so in the PDF the label's block holds \"Sedation: Moderate sedation was given by me (midazolam 5 mg, fentanyl 100 mcg IV) while\" and the date is asked, while the text's header block states it (an over-hold of the PDF reading, a known limit)."
+    },
+    "svc-34-ercp-failed-cannulation": {
+      "missing": [
+        "service_date|2026-10-24",
+        "service|gi.eus|planned|unknown|"
+      ],
+      "extra": [
+        "service_date|None",
+        "service|gi.eus|uncertain|unknown|"
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date is read only from a header block that holds nothing but the title, header fields and agreeing date labels. The PDF writer wraps a header line or drops the blank line after the header, so in the PDF the label's block holds \"Indication: Suspected choledocholithiasis - common bile duct 10 mm on ultrasound with\" and the date is asked, while the text's header block states it (an over-hold of the PDF reading, a known limit). Without a service date the reader cannot place the timing it reads against that date, so those readings are uncertain in the PDF."
+    },
+    "svc-35-push-enteroscopy-apc": {
+      "missing": [
+        "service_date|2026-10-07",
+        "service|gi.capsule|historical|unknown|"
+      ],
+      "extra": [
+        "service_date|None",
+        "service|gi.capsule|uncertain|unknown|"
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date is read only from a header block that holds nothing but the title, header fields and agreeing date labels. The PDF writer wraps a header line or drops the blank line after the header, so in the PDF the label's block holds \"anesthesia department; anesthesia services billed separately.\" and the date is asked, while the text's header block states it (an over-hold of the PDF reading, a known limit). Without a service date the reader cannot place the timing it reads against that date, so those readings are uncertain in the PDF."
     },
     "svc-36-balloon-enteroscopy-apc-biopsy-table": {
       "missing": [
@@ -33,6 +210,27 @@
       ],
       "extra": [],
       "reason": "A table row that wraps onto a second line is read as its own line: the planned jejunal biopsy row loses its anatomy, so the planned act is not read in the PDF (a planned act never accounts for a code)."
+    },
+    "svc-40-hrm-achalasia-poem-planned": {
+      "missing": [
+        "act|gi.egd|myotomy|planned|physician||",
+        "service_date|2026-10-15",
+        "service|gi.egd|planned|unknown|"
+      ],
+      "extra": [
+        "service_date|None",
+        "service|gi.egd|uncertain|unknown|"
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date is read only from a header block that holds nothing but the title, header fields and agreeing date labels. The PDF writer wraps a header line or drops the blank line after the header, so in the PDF the label's block holds \"Referral question: Progressive dysphagia to solids and liquids with regurgitation and 6 kg\" and the date is asked, while the text's header block states it (an over-hold of the PDF reading, a known limit). Without a service date the reader cannot place the timing it reads against that date, so those readings are uncertain in the PDF."
+    },
+    "svc-43-egd-gastric-esd": {
+      "missing": [
+        "service_date|2026-10-26"
+      ],
+      "extra": [
+        "service_date|None"
+      ],
+      "reason": "Refutation phase 2 (P2DATES, rule 1): the date is read only from a header block that holds nothing but the title, header fields and agreeing date labels. The PDF writer wraps a header line or drops the blank line after the header, so in the PDF the label's block holds \"and billing).\" and the date is asked, while the text's header block states it (an over-hold of the PDF reading, a known limit)."
     }
   },
   "scan": {}

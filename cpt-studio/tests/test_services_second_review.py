@@ -19,10 +19,13 @@ from tests.test_pipeline_api import drain
 
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
 
+# Each document opens with a header block - the title and header fields, then a blank line - so its labelled date is the
+# note's own (refutation phase 2, P2DATES, rule 1: a date beside body text in its block is asked).
 REPORT = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
 Colonoscopy report (fictional)
 Date of service: 2026-10-16
 Place of service: Hospital outpatient department
+
 The colonoscope was advanced to the cecum and the examination was completed.
 A 6 mm polyp in the rectum was removed with a cold snare.
 A separate 10 mm flat lesion in the transverse colon was sampled with cold biopsy forceps; it was not removed.
@@ -294,7 +297,7 @@ class SecondReviewTests(TestCase):
         document supports as done; a biopsy code where no biopsy is documented stays an alternative, and the missing
         EGD stays unresolved instead of hiding behind a held proposal."""
         text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\n'
-                'Date of service: 2026-10-16\nPlace of service: Hospital outpatient department\nThe gastroscope was '
+                'Date of service: 2026-10-16\nPlace of service: Hospital outpatient department\n\nThe gastroscope was '
                 'advanced to the second portion of the duodenum. The mucosa was normal throughout.\n')
         self.provider.first = []
         self.provider.later = [('43239', 'The mucosa was normal throughout.')]
@@ -342,9 +345,9 @@ class SecondReviewTests(TestCase):
 
 
 OFFICE_LIST = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nDate of service: 2026-10-21\n'
-               'Place of service: Office\nEstablished patient office visit for rectal bleeding.\nChief complaint: Rectal '
+               'Place of service: Office\n\nEstablished patient office visit for rectal bleeding.\nChief complaint: Rectal '
                'bleeding.\nMedical decision making: moderate.\n{block}\n')
-REPORT_LIST = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nDate of service: 2026-10-21\n'
+REPORT_LIST = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nDate of service: 2026-10-21\n\n'
                'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. No polyps were seen.\n'
                '{block}\n')
 VISIT_LINE = 'Established patient office visit for rectal bleeding.'

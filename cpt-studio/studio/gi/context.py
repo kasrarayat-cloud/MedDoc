@@ -35,6 +35,14 @@ POS_CODES = {'11': 'office', '22': 'hospital_outpatient', '19': 'hospital_outpat
              '21': 'inpatient', '23': 'emergency', '02': 'telehealth', '10': 'telehealth'}
 NOT_CURRENT_SECTIONS = ('plan', 'history')
 CLAUSE_REACH = 300  # cues further away than this do not qualify a statement
+# Refutation phase 2, ctxcost:1: each setting phrase ("office visit", "HOPD") is checked as a statement - about 37 cue
+# searches over a clause window of up to 600 characters, about 0.45 ms - so 'HOPD ' 70,000 times (350,000 characters,
+# under the paste cap) took 30 s: the analyze stage read it within its 60 s, and every member's POST /context (15 s)
+# was then refused. A document stating setting phrases more often than this is not read for them: the setting is
+# asked, as for a document that states none. A real note states its setting a few times.
+SETTING_STATEMENT_LIMIT = 200
+TOO_MANY_SETTINGS_NOTE = ('The document states a care setting more than {limit} times, more than this service reads; '
+                          'its setting statements were not read, so the setting is asked.')
 
 _MONTHS = ('jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec')
 _MONTH = (r'(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?'
@@ -103,6 +111,7 @@ TITLE_HEAD = cues.rx(r'[ \t]*+(?P<words>' + _TITLE_WORDS + r')\b' + _TITLE_WORD
                      + r'[ \t]*+[-\u2013\u2014:|,]?+[ \t]*+$')
 DATE_LINE = cues.rx(r'[ \t]*+' + DATE_SHAPE + _CLOCK + r'[ \t]*+$')
 TITLE_LINES = 12  # non-empty lines from the top in which a dated title is read
+TITLE_LINE_CHARS = 200  # a longer line is no title line (rule 1 reads each title line in bounded time)
 _HISTORY_WORDS = (('history of', r'history\s+of|hx\s+of|h/o|s/p|status\s+post'),
                   ('prior', r'prior|previous|previously|last|most\s+recent|recent|recently|remote|earlier|past|index'
                             r'|outside'))
@@ -124,8 +133,56 @@ _OTHER_DOCUMENT = cues.rx(r'\b(?:[a-z]*patholog[a-z]*|path|histolog[a-z]*|[a-z]*
                           r'|anesthesia|anaesthesia|nursing|nurse)\b')
 _NEUTRAL_WORDS = frozenset(('the', 'this', 'a', 'an'))
 
-POS = cues.rx(r'(?<![\w/-])(?:place[ \t]+of[ \t]+service|POS)\b[ \t]*(?:\([ \t]*POS[ \t]*\)[ \t]*)?(?:code[ \t]*)?'
-              r'[:#=\u2013-]?[ \t]*(?P<code>\d{2})(?![\w/-])')
+# Refutation phase 2 (P2DATES): the date sent is read by its SOURCE, never by vocabulary. Four rounds of qualifier words
+# and reaches were each refuted by the next paraphrase, so the reader no longer decides what a date means; it decides
+# only where a date may come from (ARCHITECTURE 5.2):
+# 1. a document date reaches the request only from a date-of-service label's own value, when that value is a date alone
+#    (a clock may follow it) and the label's block - its paragraph and the line above it - holds nothing but the
+#    document's title, header fields of the closed list below (their values are read: a qualifier word there still
+#    holds the date) and date-of-service labels that agree. Anything else in the block makes the date a question;
+# 2. a dated title, a "Date:" line, a dated line naming the service or a letter's subject line is evidence only: it can
+#    question a labelled date, or be the only dated text (the date is then asked, as on the installed revision);
+# 3. a date of birth is no candidate's value and is never read from the evidence a member date must agree with;
+# 4. a member date is taken only when it is a date some candidate states as its own value (merge_user_values).
+_BIRTH_LABEL = r'(?:D\.?+[ \t]?+O\.?+[ \t]?+B\b\.?+|date[ \t]++of[ \t]++birth|birth[ \t]*+date|born(?:[ \t]++on)?+|b\.)'
+# A date with a birth label right before it, in any position or bracket ("DOB: 01/01/1998", "(DOB 01/01/1998)",
+# "Date of birth - 01/01/1998", "born on 01/01/1998", "b. 01/01/1998"): read in the few characters before the date.
+_BIRTH_BEFORE = cues.rx(r'(?<![\w/.-])' + _BIRTH_LABEL + r'[ \t]*+(?:[:#=\u2013-][ \t]*+)?+(?:\([ \t]*+)?+$')
+_BIRTH_REACH = 32
+_BIRTH_HEAD = cues.rx(r'(?<![\w/.-])' + _BIRTH_LABEL + r'(?![\w/-])')
+# The header fields rule 1 allows beside a date of service: a closed allow-list of LABELS (the patient, a name, the
+# record, chart or account number, the date of birth, age, sex, the physician, the location or facility, the referring
+# physician; a patient's status or type, a place of service or care setting, the operator, assistant or anesthesia
+# provider are those fields too). Their
+# values are read for the words of another occurrence and for any date but a date of birth; no other field is a
+# header field.
+_HEADER_LABEL = (r'(?:patient(?:[ \t]++(?:name|id|number|no\.?+|status|type))?+'
+                 r'|(?:full|first|last|given|family|middle)[ \t]++name|name|MRN'
+                 r'|(?:(?:medical|patient|synthetic)[ \t]++)?+record(?:[ \t]++(?:number|no\.?+|id))?+'
+                 r'|chart(?:[ \t]++(?:number|no\.?+))?+|account(?:[ \t]++(?:number|no\.?+))?+|acct\.?+|age|sex|gender'
+                 r'|(?:(?:performing|attending|rendering|treating|primary|assisting)[ \t]++)?+(?:physician|provider'
+                 r'|endoscopist|endosonographer|clinician|surgeon|gastroenterologist|operator|proceduralist|assistant'
+                 r'|anesthesiologist|anesthetist|anesthesia(?:[ \t]++provider)?+|CRNA)|(?:service[ \t]++)?+location'
+                 r'|facility(?:[ \t]++name)?+|site|place[ \t]++of[ \t]++service|POS|(?:care[ \t]++|service[ \t]++)?+setting'
+                 r'|referring(?:[ \t]++(?:physician|provider|clinician|doctor))?+|referred[ \t]++by)')
+# A field's head on a header line: a date-of-service label, a birth label or a header label, each a whole label.
+_FIELD_HEAD = cues.rx(r'(?<![\w/.-])(?:(?P<svc>' + _DATE_LABEL + r')|(?P<birth>' + _BIRTH_LABEL + r')|(?P<hdr>'
+                      + _HEADER_LABEL + r'))(?![\w/-])')
+_HDR_TAIL = re.compile(r'[ \t]*+(?:(?P<hash>#)[ \t]*+)?+(?P<sep>[:=])?+[ \t]*+')
+_BIRTH_TAIL = re.compile(r'[ \t]*+(?P<sep>[:#=\u2013-])?+[ \t]*+')
+# A lone date in a date label's field: the date, a clock at most, then nothing but the field's end.
+_LONE_DATE = cues.rx(r'(?:' + _FULL_DATE + r')(?![\w/-])(?:[ \t]++(?:at[ \t]++)?+\d{1,2}:\d{2}(?::\d{2})?+'
+                     r'(?:[ \t]*+[ap]\.?m\.?)?+)?+[ \t|]*+$')
+_VALUE_FIELD = re.compile(r'(?<!\d)[:=]|[:=](?!\d)')  # another field's label inside a value (a clock's colon is none)
+_VALUE_DATE = cues.rx(r'(?<![\w/])(?:' + r'\d{1,4}[-/.]\d{1,2}[-/.]\d{2,4}|' + _MONTH + r'\.?[ \t]+\d{1,2}(?:st|nd|rd|th)?,?'
+                      r'[ \t]+\d{2,4}|\d{1,2}(?:st|nd|rd|th)?[ \t]+(?:of[ \t]+)?' + _MONTH + r'\b)')
+_LIST_MARKER = re.compile(r'[ \t]*+(?:[-*>\u2022\u25cf\u25aa\u2013\u2014]|\d{1,3}[.)]|[A-Za-z][.)])[ \t]')
+
+POS = cues.rx(r'(?<![\w/-])(?:place[ \t]++of[ \t]++service|POS)\b[ \t]*+(?:\([ \t]*+POS[ \t]*+\)[ \t]*+)?+'
+              r'(?:code[ \t]*+)?+[:#=\u2013-]?+[ \t]*+(?P<code>\d{2})(?![\w/-])')
+# Refutation phase 2, ctxcost:0: every whitespace run in POS is possessive. 'POS', a long run of spaces and no code was
+# read in time quadratic in the run (two adjacent optional runs, every split tried): a 96,000-character paste overran
+# the analyze stage's 60 s, and 48,000 a member's POST /context (15 s).
 SETTING_LABEL = cues.rx(r'(?<![\w/-])(?:place[ \t]+of[ \t]+service|site[ \t]+of[ \t]+service|care[ \t]+setting'
                         r'|service[ \t]+setting|service[ \t]+location|setting|location|facility|encounter[ \t]+type'
                         r'|visit[ \t]+type)[ \t]*[:\u2013-][ \t]*(?P<value>[^\n]{1,160})')
@@ -311,6 +368,9 @@ class _Candidate:
     # A "Date:" line with no title word (refutation round 3, sk:6): it names no encounter - a letter's or a document's
     # date - so a dated line naming the service beside it ('line') questions it.
     bare: bool = False
+    # Refutation phase 2, rule 1: a date-of-service label whose value is a date alone and whose block holds nothing but
+    # the title, header fields and date labels that agree (_Blocks). Only such a label's date is ever the note's own.
+    header: bool = False
 
     @property
     def spans(self) -> tuple[Span, ...]:
@@ -616,6 +676,158 @@ def _field_end(text: str, pos: int, line_end: int) -> int:
     return _strip_span(text, pos, brk.start() if brk else limit)[1]
 
 
+_BLANKS = re.compile(r'[ \t\r]*+')
+
+
+def _blank_to(text: str, start: int, end: int) -> bool:
+    """Whether [start, end) holds nothing but blanks: a scan of its leading blanks only (never a slice of a long line)."""
+    return _BLANKS.match(text, start, end).end() >= end
+
+
+@functools.lru_cache(maxsize=16)
+def _birth_cells(text: str) -> frozenset:
+    """Where a date of birth starts whose birth label is not right before it (rule 3, "any row"): the cell under a
+    birth label heading a table column ("Patient | DOB | Date of Service" above "Synthetic, Alex | 01/01/1998 |
+    10/14/2026"), and the value on the line under a birth label that ends its line ("Date of birth:" above
+    "01/01/1998"). One pass over the birth labels; each line's bars and the row under it are read once (_Rows)."""
+    found, rows = set(), _Rows(text)
+    for m in _BIRTH_HEAD.finditer(text):
+        ls, le = rows.line(m.start())
+        tail = _BIRTH_TAIL.match(text, m.end(), le).end()
+        bars = rows.bars(ls, le)
+        if bars:
+            col = bisect.bisect_left(bars, m.start())
+            cell_start = bars[col - 1] + 1 if col else ls
+            cell_end = bars[col] if col < len(bars) else le
+            if not (_blank_to(text, cell_start, m.start()) and _blank_to(text, tail, cell_end)):
+                continue  # the label is not its cell's only text
+            row = rows.below(le)
+            cells = rows.cells(*row) if row else []
+            if col < len(cells):
+                value = _first_value(text, *cells[col], births=False)
+                if value is not None:
+                    found.add(value[0])
+        elif _blank_to(text, tail, le):
+            row = rows.below(le)
+            if row is not None:
+                value = _first_value(text, row[0], min(row[1], row[0] + VALUE_REACH), births=False)
+                if value is not None:
+                    found.add(value[0])
+    return frozenset(found)
+
+
+def _is_birth(text: str, start: int) -> bool:
+    """Whether the date starting at ``start`` is a date of birth (rule 3): its birth label is right before it, in any
+    bracket, or heads its table column or the line above it (_birth_cells)."""
+    return (_BIRTH_BEFORE.search(text, max(0, start - _BIRTH_REACH), start) is not None
+            or start in _birth_cells(text))
+
+
+def _title_line(text: str, ls: int, le: int) -> bool:
+    """Whether a line near the top can be part of the document's title (rule 1): no field (a colon, unless it is a
+    dated title's own, "Colonoscopy report: 10/14/2026"), no "Date:" or "Re:" line, no sentence or list item, no date
+    but a dated title's own, and no word of another occurrence that is not part of the name of a service this release
+    codes ("Office follow-up visit" names the visit itself; "Outside colonoscopy" is no title), no table row's bar. Fail
+    closed: a line this cannot place is not the title, so a block holding it is asked."""
+    start, end = _strip_span(text, ls, le)
+    if (start >= end or end - start > TITLE_LINE_CHARS or text[end - 1] in '.,;!?'
+            or _LIST_MARKER.match(text, start, end) or text.find('|', start, end) >= 0):
+        return False  # a long line, a sentence, a list item or a table row
+    m = TITLE_DATE.match(text, ls, le)
+    if m is not None:
+        if m.group('field') is not None or not m.group('keyword'):
+            return False
+    elif text.find(':', start, end) >= 0 or _DIGIT.search(text, start, end):
+        return False
+    names = [(n.start(), n.end()) for p in _THIS_SERVICE for n in p.finditer(text, start, end)]
+    return not any(not any(a <= q.start() and q.end() <= b for a, b in names)
+                   for q in _OTHER_OCCURRENCE.finditer(text, start, end))
+
+
+def _header_line(text: str, ls: int, le: int) -> Optional[tuple]:
+    """A header line (rule 1): fields only, each headed by a date-of-service label, a birth label or a header label of
+    the closed list (_HEADER_LABEL), the first opening the line - "Patient: Synthetic, Alex    DOB: 01/01/1998    MRN:
+    0000", "Date of service: 10/14/2026". Returns the values its date-of-service labels state (an ISO date, or None
+    when a label's value is not a lone date: rule 1's "nothing else follows it"), or None when the line is anything
+    else: another field, a heading, a sentence, a list item, a header value naming another occurrence, holding another
+    field's label or a date that is no date of birth. One scan of the line's heads."""
+    start, end = _strip_span(text, ls, le)
+    heads = []
+    for h in _FIELD_HEAD.finditer(text, start, end):
+        kind = h.lastgroup
+        if kind == 'hdr':
+            tail = _HDR_TAIL.match(text, h.end(), end)
+            if tail.group('hash') is None and tail.group('sep') is None:
+                continue  # a header word with no separator is a value's word ("Established patient")
+        elif kind == 'birth':
+            tail = _BIRTH_TAIL.match(text, h.end(), end)
+            if tail.group('sep') is None and not _VALUE_DATE_START.match(text, tail.end(), end):
+                continue
+        else:
+            tail = _LABEL_TAIL.match(text, h.end(), end)
+        heads.append((kind, h.start(), tail.end()))
+    if not heads or heads[0][1] != start:
+        return None
+    values = []
+    for i, (kind, _, value_start) in enumerate(heads):
+        value_end = heads[i + 1][1] if i + 1 < len(heads) else end
+        if kind == 'svc':
+            lone = _LONE_DATE.match(text, value_start, value_end)
+            values.append(date_from_match(lone).isoformat() if lone and date_from_match(lone) else None)
+        elif kind == 'hdr':
+            if (_OTHER_OCCURRENCE.search(text, value_start, value_end) or _VALUE_FIELD.search(text, value_start, value_end)
+                    or _VALUE_DATE.search(text, value_start, value_end)):
+                return None
+    return tuple(values)
+
+
+class _Blocks:
+    """Rule 1's header of one text, read once from the top: the document's title (its first non-blank lines that
+    _title_line reads as title, at most TITLE_LINES of them), then header lines (_header_line), blank lines between;
+    the header ends at the first other line. A date-of-service label's date is the note's own only when the label's
+    whole paragraph (its contiguous non-blank lines) lies in that header and every date label from the top to the
+    paragraph's end states that one date alone. This is the block of rule 1 - the label's paragraph and the line above
+    it - read up to the title: a heading two paragraphs above ("Outside colonoscopy:", a blank line, "Patient: ...", a
+    blank line, "Procedure date: ...") holds the date as one on the line above does. Linear: each line is read once."""
+
+    def __init__(self, text: str):
+        lines, pos = [], 0
+        while pos <= len(text):
+            end = text.find('\n', pos)
+            end = len(text) if end < 0 else end
+            lines.append((pos, end))
+            pos = end + 1
+        self.starts = [ls for ls, _ in lines]
+        blank = [_blank_to(text, ls, le) for ls, le in lines]
+        count = len(lines)
+        self.last = [0] * count  # each line's paragraph's last line (one pass from the end)
+        for i in range(count - 1, -1, -1):
+            self.last[i] = self.last[i + 1] if i + 1 < count and not blank[i] and not blank[i + 1] else i
+        self.end, self.bad, self.value, titles, title = count, count, None, 0, True
+        stated = False
+        for i, (ls, le) in enumerate(lines):
+            if blank[i]:
+                continue
+            if title and titles < TITLE_LINES and _title_line(text, ls, le):
+                titles += 1
+                continue
+            title = False
+            got = _header_line(text, ls, le)
+            if got is None:
+                self.end = i
+                break
+            for value in got:
+                if not stated:
+                    stated, self.value = True, value
+                if (value is None or value != self.value) and self.bad == count:
+                    self.bad = i
+
+    def own(self, pos: int, value: Optional[str]) -> bool:
+        """Whether the date-of-service label at ``pos`` stating ``value`` alone is the note's own (rule 1)."""
+        last = self.last[bisect.bisect_right(self.starts, pos) - 1]
+        return value is not None and value == self.value and last < self.end and last < self.bad
+
+
 # The value a date label states: the first date-shaped run of its value field - a weekday, then at most three date
 # parts (digits with an ordinal, or a month name) joined by a separator, "of" or a space ("10/14/26", "20-Oct-26",
 # "Tuesday, October 20, 2026"). The rest of the field is not the label's value (refutation round 3, sk:1: the field of
@@ -628,9 +840,10 @@ _GLUED = re.compile(r'[\w/-]')
 _NON_SPACE = re.compile(r'\S*')
 
 
-def _first_value(text: str, start: int, end: int) -> Optional[tuple[int, int]]:
+def _first_value(text: str, start: int, end: int, births: bool = True) -> Optional[tuple[int, int]]:
     """The first date-shaped run in [start, end) that carries a digit (_VALUE_TOKEN), or None; one glued to more of its
-    kind ("10/14/2026-10/15/2026") runs on to the next space, so a cut never makes a date of its own."""
+    kind ("10/14/2026-10/15/2026") runs on to the next space, so a cut never makes a date of its own. A date of birth
+    is passed over (rule 3: it is no candidate's value) unless ``births``."""
     pos = start
     while True:
         m = _VALUE_TOKEN.search(text, pos, end)
@@ -640,14 +853,31 @@ def _first_value(text: str, start: int, end: int) -> Optional[tuple[int, int]]:
             stop = m.end()
             if stop < end and _GLUED.match(text, stop):
                 stop = _NON_SPACE.match(text, stop, end).end()
+            if births and _is_birth(text, m.start()):
+                pos = stop
+                continue
             return m.start(), stop
         pos = m.end()
 
 
-def _value_extent(text: str, start: int, end: int) -> tuple[int, int]:
-    """The label's own value in its value field [start, end): the field's first date-shaped run (_first_value); the
-    whole field when it has none."""
-    return _first_value(text, start, end) or (start, end)
+# Another field's label inside a label's value field ("DOB:", "MRN:", "Note:"): words and a colon that is not a clock's.
+_NEXT_LABEL = re.compile(r"(?<![\w/.-])[A-Za-z][A-Za-z .'’/()#&-]{0,40}?[ \t]*+[:=](?!\d)")
+
+
+def _value_extent(text: str, start: int, end: int) -> Optional[tuple[int, int]]:
+    """The label's own value in its value field [start, end): the first date-shaped run that is no date of birth
+    (_first_value) before another field's label; that part whole when it has a digit and no date-shaped run; None when
+    another field opens it or its only dates are dates of birth (refutation phase 2, dates:0: "DOS: DOB: 01/01/1998 MRN:
+    0000", "Date of Service: Date of Birth: 01/01/1998" made the date of birth the label's value, so a member's
+    1998-01-01 agreed with it and was sent - an empty field states no date)."""
+    other = _NEXT_LABEL.search(text, start, end)
+    stop = other.start() if other is not None else end
+    found = _first_value(text, start, stop)
+    if found is not None:
+        return found
+    if _first_value(text, start, stop, births=False) is not None or not _DIGIT.search(text, start, stop):
+        return None
+    return _strip_span(text, start, stop)
 
 
 def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int, bool]]:
@@ -702,14 +932,17 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
     service, whatever their reading or form, and the dated titles near the top (_title_candidates)."""
     found = []
     read = set()
+    blocks = _Blocks(text)
     for m in SERVICE_DATE.finditer(text):
         read.add(m.start())
         if lay.section_at(m.start()).kind in NOT_CURRENT_SECTIONS:
             continue
         value = date_from_match(m)
         kind, start = _labelled_kind(text, m.start('label'), m.end('label'), m.start('date'), m.end(), value)
+        # rule 1 (refutation phase 2): the date is the note's own only from a header block that states it alone
+        header = value is not None and blocks.own(m.start(), value.isoformat())
         found.append(_Candidate(_span(text, start, m.end()), value.isoformat() if value else None, 'label',
-                                _READING[kind], 'read' if value else 'invalid'))
+                                _READING[kind], 'read' if value else 'invalid', header=header))
     rows = _Rows(text)
     for m in DATE_LABEL.finditer(text):
         # refutation r1, context-3, and round 2, c2:8: a labelled date the reader does not read is documented date text
@@ -719,8 +952,12 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
         if where is None:
             continue
         kind, start = _labelled_kind(text, m.start('label'), m.end('label'), where[0], where[1], None)
-        # refutation round 3, sk:1: the evidence is the label and its own value, never the text beside it
-        value_start, value_end = _value_extent(text, where[0], where[1])
+        # refutation round 3, sk:1: the evidence is the label and its own value, never the text beside it; and a field
+        # whose only dates are dates of birth states no date (refutation phase 2, rule 3)
+        extent = _value_extent(text, where[0], where[1])
+        if extent is None:
+            continue
+        value_start, value_end = extent
         if where[2]:  # a table column: the label's cell and its value's cell, never the cells between
             span, extra = _span(text, start, m.end('label')), (_span(text, value_start, value_end),)
         else:
@@ -813,13 +1050,13 @@ _LINE_END_DATE = cues.rx(r'(?<![\w/-])(?:' + _FULL_DATE + r'|(?P<unread>' + DATE
 
 # Between a service's name and the date ending its line: another field's label (a colon that is not a clock's) or the
 # start of another date (refutation round 3, sk:1).
-_GAP_FIELD = re.compile(r'(?<!\d)[:=]|[:=](?!\d)')
 _GAP_DATE = cues.rx(r'(?<![\w/.-])(?:' + _VALUE_DATE_START.pattern + r')')
 
 
 # A letter's subject line opening a line ("Re: ", "Regarding: ", "Subject: "): the structure is the subject line naming
 # the encounter the letter is about; these labels are its vocabulary.
 _SUBJECT_FIELD = cues.rx(r'[ \t]*+(?:re|regarding|subject|subj)\.?[ \t]*+:[ \t]*+')
+SERVICE_LINE_READ = 160  # a line near the top this long or shorter is read for a service's date anywhere on it
 
 
 def _dated_service_line(text: str, ls: int, le: int) -> Optional[_Candidate]:
@@ -838,13 +1075,20 @@ def _dated_service_line(text: str, ls: int, le: int) -> Optional[_Candidate]:
     colonoscopy of 10/14/2026" or a sentence ending "... colonoscopy on 10/14/2026.", so a letter's date was sent and a
     snare polypectomy done on 10/14 excluded as historical; only a "Re:", "Regarding:" or "Subject:" line questioned it)."""
     m = _LINE_END_DATE.search(text, ls, le)
-    if m is None or m.start() - ls > 80:
+    if m is not None and m.start() - ls <= 80:
+        hi = m.start()
+    elif le - ls <= SERVICE_LINE_READ and _GAP_DATE.search(text, ls, le):
+        # refutation phase 2, rule 2: a short line naming the service with its date anywhere ("Procedure: Colonoscopy
+        # on 10/14/2026 at Synthetic Endoscopy Center", "Your patient underwent colonoscopy on 10/14/2026 at our unit.")
+        # is kept as evidence too, so a member's answer with its date agrees with it
+        hi = le
+    else:
         return None
-    names = [name for p in _THIS_SERVICE for name in p.finditer(text, ls, m.start())]
+    names = [name for p in _THIS_SERVICE for name in p.finditer(text, ls, hi)]
     if not names:
         return None
-    field = _SUBJECT_FIELD.match(text, ls, m.start())
-    if field is not None and any(p.search(text, field.end(), m.start()) for p in _THIS_SERVICE):
+    field = _SUBJECT_FIELD.match(text, ls, hi)
+    if field is not None and any(p.search(text, field.end(), hi) for p in _THIS_SERVICE):
         source, reading = 'field', 'unplaced'
     elif _title_qualified(text, ls, le, None):
         return None
@@ -856,27 +1100,58 @@ def _dated_service_line(text: str, ls: int, le: int) -> Optional[_Candidate]:
     # in "Colonoscopy DOS: 10-14-26 DOB: 01/01/1998" or "Colonoscopy 10-14-26 DOB 01/01/1998" it is the date of birth,
     # and the service's own is the first date after its name (here one this service does not read) - so a member's date
     # of birth never agrees with this line.
-    name_start, name_end = max((name.start(), name.end()) for name in names)
+    name_start, name_end = min((name.start(), name.end()) for name in names)  # the dates after its first name
     start = _strip_span(text, ls, le)[0]
     for before in FULL_DATE.finditer(text, start, name_start):
         start = before.end()
     while start < name_start and text[start] in ' \t,;:|-–':
         start += 1
-    gap = name_end
-    while gap < m.start() and text[gap] in ' \t:,-–—':  # "Colonoscopy: 10/14/2026", "EGD - 10/14/2026"
-        gap += 1
-    if _GAP_FIELD.search(text, gap, m.start()) or _GAP_DATE.search(text, gap, m.start()):
-        own = _first_value(text, gap, m.start())
-        if own is None:  # the line's only date is another field's ("Colonoscopy DOB: 01/01/1998")
-            return None
-        return _Candidate(_span(text, start, own[1]), None, source, reading, 'unread')
-    day = None if m.group('unread') is not None else date_from_match(m)
-    form = 'read' if day else ('unread' if m.group('unread') is not None else 'invalid')
-    return _Candidate(_span(text, start, _strip_span(text, m.start(), m.end())[1]),
-                      day.isoformat() if day else None, source, reading, form)
+    # Refutation phase 2 (rules 3 and 4; dates:2, interplay:0): the line's own date is its ONLY date after the service's
+    # name that is no date of birth. Round 3 took the first date after the name whenever a field or a date stood
+    # between, so in "Procedure: EGD  Patient: Alex Synthetic  DOB: 01/01/1998  Date: 10/14/2026" or "Re: Colonoscopy
+    # - Synthetic, Alex (DOB 01/01/1998) - 10/14/2026" the date of birth was the line's value: a member's 1998-01-01
+    # agreed with it and was sent, and the line's own 10/14 answer was held. A line with two such dates states none the
+    # reader can tell ("Re: EGD referral 09/01/2026 10/14/2026"): it is kept, reading no date. Its evidence holds no
+    # other date, so a member date agrees only with the line's own.
+    runs, born, pos = [], [], name_end
+    for at in _GAP_DATE.finditer(text, name_end, le):  # the dates after the name ("#2" or a clock is none)
+        run = _first_value(text, at.start(), le, births=False) if at.start() >= pos else None
+        if run is None:
+            continue
+        (born if _is_birth(text, run[0]) else runs).append(run)
+        pos = run[1]
+    if not runs:  # the line's only dates are dates of birth ("Colonoscopy DOB: 01/01/1998")
+        return None
+    if len(runs) > 1:
+        cut = _strip_span(text, start, min(r[0] for r in runs + born))
+        return _Candidate(_span(text, *cut), None, source, reading, 'unread')
+    own = runs[0]
+    full = FULL_DATE.match(text, own[0], own[1])
+    whole = full is not None and full.end() == own[1]
+    day = date_from_match(full) if whole else None
+    form = 'read' if day else ('invalid' if whole else 'unread')
+    value = day.isoformat() if day else None
+    before = [r for r in born if r[1] <= own[0]]
+    if not before:
+        return _Candidate(_span(text, start, own[1]), value, source, reading, form)
+    # a date of birth between the name and the line's own date: the evidence is the line around it, never the birth date
+    label = _BIRTH_BEFORE.search(text, max(start, before[0][0] - _BIRTH_REACH), before[0][0])
+    head = _strip_span(text, start, label.start() if label else before[0][0])
+    tail = _strip_span(text, before[-1][1], own[1])
+    spans = [_span(text, *s) for s in (head, tail) if s[0] < s[1]]
+    return _Candidate(spans[0], value, source, reading, form, extra=tuple(spans[1:]))
 
 
-def _settings(text: str, lay: Layout) -> list[tuple[str, Span]]:
+def _settings(text: str, lay: Layout) -> Optional[list[tuple[str, Span]]]:
+    """The documented settings, or None when the text states setting phrases more often than SETTING_STATEMENT_LIMIT
+    (refutation phase 2, ctxcost:1): each phrase is checked as a statement, and that check is not repeated without
+    bound - the phrases are then not read, and the setting is asked (never a choice among the first ones read)."""
+    phrases = []
+    for setting, pattern in SETTING_PHRASES:
+        for m in pattern.finditer(text):
+            phrases.append((setting, m))
+            if len(phrases) > SETTING_STATEMENT_LIMIT:
+                return None
     found = []
     for m in POS.finditer(text):
         if lay.section_at(m.start()).kind in NOT_CURRENT_SECTIONS:
@@ -890,10 +1165,9 @@ def _settings(text: str, lay: Layout) -> list[tuple[str, Span]]:
         for setting, pattern in SETTING_WORDS:
             for w in pattern.finditer(m.group('value')):
                 found.append((setting, _span(text, m.start(), value_start + w.end())))
-    for setting, pattern in SETTING_PHRASES:
-        for m in pattern.finditer(text):
-            if is_current_statement(text, lay, m.start(), m.end()):
-                found.append((setting, _span(text, m.start(), m.end())))
+    for setting, m in phrases:
+        if is_current_statement(text, lay, m.start(), m.end()):
+            found.append((setting, _span(text, m.start(), m.end())))
     return found
 
 
@@ -925,6 +1199,12 @@ INVALID_DATE_NOTE = 'A labelled or title date of service is not a valid calendar
 UNREAD_DATE_NOTE = 'A labelled or title date of service is not written in a form this service reads.'
 UNPLACED_DATE_NOTE = ('A dated label or title is qualified, names another occurrence or another document, or carries '
                       'words this service cannot place, so its date is not taken as the date of service.')
+HEADER_DATE_NOTE = ('A date of service is taken only from a labelled date standing alone in a header block that holds '
+                    'nothing but the title, patient, record, birth date, age, sex, physician, location or referring '
+                    'fields and agreeing date labels; other text beside this labelled date may date another '
+                    'occurrence, so it is asked.')
+EVIDENCE_DATE_NOTE = ('A dated title, a "Date:" line or a dated line naming the service is kept as evidence; it is never '
+                      'taken as the date of service by itself.')
 
 
 def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
@@ -943,27 +1223,33 @@ def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
     the paste cap, overran the analyze stage's 60 s, and 12,000 a member's POST /context).
 
     A dated line naming the service ('line', _dated_service_line) questions only a bare "Date:" line, which names no
-    encounter (refutation round 3, sk:6: a letter's "Date:" won over "Procedure: Colonoscopy on 10/14/2026")."""
+    encounter (refutation round 3, sk:6: a letter's "Date:" won over "Procedure: Colonoscopy on 10/14/2026").
+
+    Refutation phase 2 (P2DATES) narrows the own date by its source, never by vocabulary. Only a date-of-service label
+    whose value is a date alone and whose block holds nothing but the title, header fields and agreeing date labels
+    (rule 1, _Candidate.header) is the note's own date; a labelled date in any other block is asked. A dated title, a
+    "Date:" line, a dated line or a letter's subject line is never the date (rule 2): it can only question a labelled
+    date, or stand as the evidence of the date asked - as the installed revision (057a7d398) sent no date for those
+    shapes. Round 3 read them as the note's own and a fax's "Date/Time: 10/27/2026 14:30", a letter's "Date:" above the
+    encounter it names, or "Cardiology consultation: 10/09/2026" above a colonoscopy was sent, and the snare
+    polypectomy done on 10/14 excluded against it (dates:1, 3, 5); a planned, outside, cancelled or pending date beside a
+    label was documented whenever its qualifier was a word, a reach or a line the reader did not read (dates:4, 6-8)."""
     labels = [c for c in found if c.source == 'label']
-    own = [c for c in labels if c.reading == 'own' and c.form == 'read']
-    if own:
-        speaks = [c for c in labels if c.reading in ('own', 'unplaced') and not (c.reading == 'own' and c.form == 'read')]
-        support = list(speaks)  # what joins the date's evidence when it agrees: as before, labels only
-        speaks += [c for c in found if c.source != 'label' and c.reading in ('own', 'unplaced')]
-    else:
-        own = [c for c in found if c.source == 'title' and c.reading == 'own' and c.form == 'read']
-        own_ids = {id(c) for c in own}
-        bare = bool(own) and all(c.bare for c in own)
-        speaks = [c for c in found if id(c) not in own_ids
-                  and (c.source not in ('title', 'line') or c.reading in ('own', 'unplaced', 'other')
-                       or (bare and c.source == 'line'))]
-        support = [c for c in speaks if c.reading != 'aside']  # never another occurrence's label that agrees
+    own = [c for c in labels if c.reading != 'aside' and c.form == 'read' and c.header]
+    own_ids = {id(c) for c in own}
+    speaks = [c for c in labels if id(c) not in own_ids and c.reading in ('own', 'unplaced')]
+    support = list(speaks)  # what joins the date's evidence when it agrees: as before, labels only
+    speaks += [c for c in found if c.source != 'label' and c.reading in ('own', 'unplaced')]
     values = {c.value for c in own}
     unusable = [c for c in (speaks if own else found) if c.form != 'read']
     note = ' '.join(text for present, text in (
         (any(c.form == 'invalid' for c in unusable), INVALID_DATE_NOTE),
         (any(c.form == 'unread' for c in unusable), UNREAD_DATE_NOTE),
-        (not own and any(c.form == 'read' for c in found), UNPLACED_DATE_NOTE)) if present)
+        (not own and any(c.source == 'label' and c.form == 'read' and c.reading != 'aside' for c in found),
+         HEADER_DATE_NOTE),
+        (not own and any(c.source != 'label' and c.form == 'read' for c in found), EVIDENCE_DATE_NOTE),
+        (not own and any(c.form == 'read' and c.reading in ('aside', 'other') for c in found), UNPLACED_DATE_NOTE))
+        if present)
     if own and len(values) == 1 and all(c.form == 'read' and c.value in values for c in speaks):
         return _fact('service_date', [(c.value, s) for c in own + support for s in c.spans])
     unread = tuple(s for c in unusable for s in c.spans)
@@ -986,7 +1272,9 @@ def _sorted_spans(spans) -> tuple[Span, ...]:
 def _context(text: str) -> tuple[Fact, ...]:
     lay = layout(text)
     service_date = _service_date_fact(_service_dates(text, lay))
-    setting = _fact('setting', _settings(text, lay))
+    settings_found = _settings(text, lay)
+    setting = (_fact('setting', settings_found) if settings_found is not None else
+               Fact('setting', None, 'missing', (), TOO_MANY_SETTINGS_NOTE.format(limit=SETTING_STATEMENT_LIMIT)))
     if setting.origin == 'document' and setting.value not in SETTINGS:
         setting = Fact('setting', None, 'missing', setting.evidence,
                        f'The documented {setting.value} is not a care setting this service recognises.')
@@ -1052,7 +1340,11 @@ def _date_readings(spans) -> Optional[set]:
     beside a date of service ("DOS: 10/14/26 DOB: 01/01/1998", "Patient | DOB | Date of Service") is never one."""
     values = set()
     for span in spans:
-        values |= {day.isoformat() for day in (date_from_match(m) for m in FULL_DATE.finditer(str(span.text))) if day}
+        quoted = str(span.text)
+        # refutation phase 2, rule 3: a date of birth is never read, wherever an evidence span holds one
+        values |= {day.isoformat() for day in (date_from_match(m) for m in FULL_DATE.finditer(quoted)
+                                                if _BIRTH_BEFORE.search(quoted, max(0, m.start() - _BIRTH_REACH),
+                                                                        m.start()) is None) if day}
     return values or None
 
 
