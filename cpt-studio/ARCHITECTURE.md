@@ -1410,8 +1410,10 @@ Each of these questions is indexed once per code (the routed families' mention
 spans for the other-service question, each sentence's leading name, the
 own-procedure sentence readings), never rescanned per passage. An exclusion never presents the code's own passage as the
 service "documented as performed elsewhere". Routing and span status read
-dated history against the encounter's effective service date (a member value
-overrides the document's).
+dated history against the encounter's effective service date (the context's:
+the document's own date, or a member's date that agrees with the document or
+supplies one it does not give; none while the date is a conflict or asked,
+5.2 - a member value never overrides the document's).
 
 Validation reads routing's cues by prefix, a contract with 5.3:
 `uncertain: no performance evidence` (silent), `performed:` (an explicit
