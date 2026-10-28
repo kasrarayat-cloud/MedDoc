@@ -802,8 +802,10 @@ def _column(text: str, rows: '_Rows', ls: int, le: int, cell_start: int, label_e
         return None
     row = rows.below(le)
     values = rows.aligned(*row) if row is not None else []
-    if len(values) == len(cells) and _under_their_heads(cells, ls, values, row[0]):
-        return values[k]
+    if len(values) == len(cells) and _under_their_heads(cells, ls, values, row[0]) \
+            and all(_line_label(text, *head) not in ('dos', 'birth') or _date_alone(text, *value)
+                    for head, value in zip(cells, values)):
+        return values[k]  # fr-dr:1: and every date or birth label's column holds a date alone, as a stack's place does
     return _UNPLACED if row is not None and rows.states_a_date(*row) else _NO_VALUE
 
 

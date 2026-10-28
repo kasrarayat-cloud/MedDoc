@@ -390,6 +390,8 @@ SHIFTED = {  # counts that match, positions that do not (the finding's C2, C7, C
     'C10 a title split at a double space': 'Physician               DOB           Date of Service    Room\n'
                                            'Dr.  Robin Synthetic    01/01/1998    10/14/2026\n',
     'smallest column': 'Patient    DOB    DOS\nDoe,  Jane    01/01/1998\n',
+    'narrow heads over wide cells': 'Patient   DOB   DOS   X\nSynthetic,  Alex   01/01/1998   10/14/2026\n',
+    'a last cell split, the date cell empty': 'Patient  DOB  DOS  Endoscopist\nAlex  01/01/1998  Dr.  Robin\n',
     'C2 tab-separated': 'Patient\tDOB\tDate of Service\tEndoscopist\nSynthetic,  Alex\t01/01/1998\t10/14/2026\n',
     'S3 a heading over the stack': 'PATIENT INFORMATION:\nDate of service:\nDOB:\n10/14/2026\n01/01/1998\n'
                                    '1.5 cm sigmoid polyp removed with a cold snare.\n',
@@ -407,8 +409,9 @@ class HeaderValuesArePlacedByPositionTests(DateAssertions, SimpleTestCase):
     shifted by one. The date of birth became the label's value and a member's 1998-01-01 was taken and sent, where
     a62a18c85 held it (and the member's correct 10/14 was then refused). ARCHITECTURE 5.2's own rule - where the
     positions do not match no value is the label's - is now checked by POSITION: a value cell lies under its own head
-    (it overlaps the columns from its head's start to the next head's), and a stack's value line is of its label's kind
-    (a date or birth label's place holds a date alone, any other label's place holds no date alone)."""
+    (it overlaps the columns from its head's start to the next head's) and a date or birth label's column holds a date
+    alone, and a stack's value line is of its label's kind (a date or birth label's place holds a date alone, any other
+    label's place holds no date alone)."""
 
     def test_the_date_of_birth_is_never_the_label_s_value(self):
         for name, rows in SHIFTED.items():
@@ -421,11 +424,23 @@ class HeaderValuesArePlacedByPositionTests(DateAssertions, SimpleTestCase):
                     if top:  # the dated text above still answers the question
                         self.assert_member_date(text, '2026-10-14')
 
+    def test_another_date_column_s_value_is_never_the_label_s(self):
+        # a split name shifts an admission date into the date-of-service column, a date alone of the right kind: only
+        # the position tells it is the admission column's (the cell stands under "Admit date"), so it is never the label's
+        for top in ('Colonoscopy report - 10/14/2026\n', ''):
+            text = (HEAD + top + 'Patient            Admit date    Date of Service    Room\n'
+                    'Synthetic,  Alex   10/12/2026    10/14/2026\n' + COLO_BODY)
+            with self.subTest(top=top[:12]):
+                self.assert_member_conflict(text, '2026-10-12')
+                self.assertFalse(any('10/12/2026' in quoted for quoted in evidence_text(text)), evidence_text(text))
+
     def test_controls_aligned_columns_and_stacks_read_their_own_values(self):
         for rows in ('Patient            DOB           Date of Service    Endoscopist\n'
                      'Synthetic, Alex    01/01/1998    10/14/2026         Dr. Robin\n',
                      'Physician              DOB           Date of Service    Room\n'
                      'Dr. Robin Synthetic    01/01/1998    10/14/2026         2\n',
+                     'Patient   DOB   DOS   X\nAlex   01/01/1998   10/14/2026   Y\n',
+                     'D.O.B.        DOS\n01/01/1998        10/14/2026\n',
                      'DOB            Date of Service\n01/01/1998     10/14/2026\n',
                      'Date of Service    DOB\n10/14/2026         01/01/1998\n',
                      'DOB\tDate of Service\n01/01/1998\t10/14/2026\n',
