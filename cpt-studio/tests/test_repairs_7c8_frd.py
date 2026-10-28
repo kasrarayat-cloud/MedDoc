@@ -136,14 +136,19 @@ class BracketAfterADateFieldTests(DateAssertions, SimpleTestCase):
     dateless request where a62a18c85 and 057a7d398 sent 10/14), and a member's 10/27 or 11/04 - at upload or as the
     answer - was taken as a listed documented value and sent (45385 excluded against the planned date). A bracket that
     names another event makes the field another field's: only a date format ("(mm/dd/yyyy)") or "(DOS)" keeps it the
-    line's own date field."""
+    line's own date field. The differential round, df-d:2: only a word list could tell such a bracket from one naming
+    THIS service ("Date (performed):", silenced, let the labelled 10/14 it contradicts be sent where c3c034a08 asked),
+    so the field's date is one this service cannot place: the subject line is asked - it speaks against the labelled
+    date - and reads no date, so the other event's date is still never a member's answer (re-decided pins below: the
+    labelled 10/14 beside such a subject line is asked, no longer documented)."""
 
     def test_the_finding_s_lines_beside_the_labelled_date(self):
         for subject, other in (('Re: Colonoscopy - Date (signed): 10/27/2026', '2026-10-27'),
                                ('Re: Colonoscopy - DOS (planned): 11/04/2026', '2026-11-04')):
             text = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\n' + subject + '\n' + COLO_BODY
             with self.subTest(subject=subject):
-                self.assert_document(text, '2026-10-14')
+                self.assert_never(text, '2026-10-14', other)  # df-d:2: asked, never documented
+                self.assert_member_date(text, '2026-10-14')
                 self.assert_member_conflict(text, other)
 
     def test_the_family_in_four_layouts(self):
@@ -155,10 +160,9 @@ class BracketAfterADateFieldTests(DateAssertions, SimpleTestCase):
                     with self.subTest(layout=layout, line=text.splitlines()[-4]):
                         self.assert_never(text, iso(other))
                         self.assert_member_conflict(text, iso(other))
-                        if layout == 'labelled date':
-                            self.assert_document(text, '2026-10-14')
-                        else:  # the dated text above is evidence: asked, and its 10/14 answers
-                            self.assert_member_date(text, '2026-10-14')
+                        # asked (the labelled date beside the subject line too, df-d:2), and the 10/14 above answers
+                        self.assert_never(text, '2026-10-14')
+                        self.assert_member_date(text, '2026-10-14')
 
     def test_controls_a_date_format_keeps_the_line_s_own_date_field(self):
         for subject in ('Re: Colonoscopy - Date (mm/dd/yyyy): 10/14/2026', 'Re: Colonoscopy - Date (MM/DD/YYYY): 10/14/2026',
@@ -180,9 +184,9 @@ class BracketAfterADateFieldRequestTests(EndToEnd):
     PLANNED = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nRe: Colonoscopy - DOS (planned): 11/04/2026\n' \
         + COLO_BODY
 
-    def test_the_note_s_date_is_sent_and_the_other_event_s_date_held(self):
+    def test_the_note_s_date_is_asked_and_the_other_event_s_date_held(self):
         own = self.finished(self.TEXT)
-        self.assertEqual(self.dates_sent(own), [['Date of service: 2026-10-14']])
+        self.assertEqual(self.dates_sent(own), [[]])  # df-d:2: asked, as c3c034a08 asked
         self.assertEqual(self.bucket(own, '45385'), 'selected')
         for text, other in ((self.TEXT, '2026-10-27'), (self.PLANNED, '2026-11-04')):
             with self.subTest(other=other):
@@ -196,7 +200,7 @@ class BracketAfterADateFieldRequestTests(EndToEnd):
         encounter_id = self.finished(self.TEXT)
         self.set_context(encounter_id, {'service_date': '2026-10-27'})
         self.assert_never_sent(encounter_id, '2026-10-27')
-        self.assertEqual(self.dates_sent(encounter_id), [['Date of service: 2026-10-14']])
+        self.assertEqual(self.dates_sent(encounter_id), [[]])  # df-d:2: the first request asked, the 10/27 held
 
 
 # --- fr-dr:3: a field's value ends; a date after its end is not that field's ------------------------------------------

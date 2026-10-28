@@ -16,6 +16,8 @@ df-d:1  (fr-dr:1, the column) a row whose date-of-service cell is no date alone 
         its header, so the cell under "DOB" was no longer a date of birth and a dated service line read it as its date.
 df-d:3  (fr-dr:1 with fr-dr:0) a date-of-service column cell of digits that are no date with separators ("20261014")
         made the unplaced row state no date: silent, where c3c034a08 asked.
+df-d:2  (fr-dr:2) any bracket but a format after a subject line's "Date" or date-of-service label made the field
+        another field's, so "Date (performed): 10/21/2026" was silenced and the labelled 10/14 it contradicts sent.
 
 Synthetic text only; no network (the suite's FakeProvider).
 """
@@ -314,3 +316,65 @@ class DigitsInADateOfServiceColumnRequestTests(EndToEnd):
             + COLO_PLAIN
         encounter_id = self.finished(text)
         self.assertEqual(self.dates_sent(encounter_id), [[]])
+
+
+# --- df-d:2: a bracket that is no format after a subject line's date field leaves the date asked, never silent ---------
+
+THIS_SERVICE_BRACKETS = ('corrected', 'performed', 'actual', 'of procedure', 'done', 'amended', 'final')
+OTHER_EVENT_BRACKETS = ('signed', 'dictated', 'planned')
+BRACKETED_FIELDS = ('Date', 'DOS', 'Date of service', 'Procedure date')
+
+
+class BracketThatIsNoFormatTests(DateAssertions, SimpleTestCase):
+    """df-d:2 (4ca4458a8, the final refutation's fr-dr:2): a bracket after a subject line's "Date" or date-of-service
+    label kept the field the line's own only when it held a date format; any other made the field another field's, so
+    its date was excluded and the line - evidence reading no date (form 'empty') - never spoke. That silenced brackets
+    naming THIS service ("Date of service (corrected): 10/21/2026", "Date (performed): 10/21/2026"), and "Date of
+    service: 10/14/2026" above, which the line contradicts, was documented and sent with 45385 ready, where c3c034a08
+    asked. A bracket the grammar cannot read as a format (only a word list could tell "(performed)" from "(signed)")
+    leaves the field's date one this service cannot place: the line speaks against the labelled date (asked) and reads
+    no date, so no member date agrees with it alone - fr-dr:2's other-event dates ("(signed)", "(planned)") stay held."""
+
+    def test_beside_the_labelled_date_the_date_is_asked(self):
+        for word in THIS_SERVICE_BRACKETS + OTHER_EVENT_BRACKETS:
+            for label in BRACKETED_FIELDS:
+                for lead in ('Re: Colonoscopy - ', 'Regarding: Colonoscopy, '):
+                    line = f'{lead}{label} ({word}): 10/21/2026'
+                    text = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\n' + line + '\n' + COLO_PLAIN
+                    with self.subTest(line=line):
+                        self.assert_never(text, '2026-10-14', '2026-10-21')
+                        self.assertIn(date_fact(text).origin, ('conflict', 'missing'))
+                        self.assert_member_date(text, '2026-10-14')
+                        self.assert_member_conflict(text, '2026-10-21')
+                        self.assert_member_conflict(text, ELENA_DATE)
+
+    def test_the_verifier_s_smallest_form(self):
+        text = HEAD + 'DOS: 10/14/2026\nRe: EGD Date (done): 10/21/2026\n'
+        self.assert_never(text, '2026-10-14')
+        self.assert_member_date(text, '2026-10-14')
+        self.assert_member_conflict(text, '2026-10-21')
+
+    def test_controls(self):
+        # a date format, or no bracket at all: the line's own date field, as before
+        for subject, member in (('Re: Colonoscopy - Date (mm/dd/yyyy): 10/14/2026', '2026-10-14'),
+                                ('Re: Colonoscopy - Date of service (DOS): 10/14/2026', '2026-10-14'),
+                                ('Re: Colonoscopy - Date: 10/14/2026', '2026-10-14')):
+            text = HEAD + 'Colonoscopy report\n' + subject + '\n' + COLO_PLAIN
+            with self.subTest(subject=subject):
+                self.assert_member_date(text, member)
+                self.assert_member_conflict(text, ELENA_DATE)
+        # another field's label is still another field's: the labelled date stands
+        text = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nRe: Colonoscopy - Signed: 10/27/2026\n' + COLO_PLAIN
+        self.assert_document(text, '2026-10-14')
+        self.assert_member_conflict(text, '2026-10-27')
+
+
+class BracketThatIsNoFormatRequestTests(EndToEnd):
+    B2 = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nRe: Colonoscopy - Date (performed): 10/21/2026\n' \
+        + COLO_PLAIN
+
+    def test_b2_no_date_is_sent_where_the_subject_line_differs(self):
+        encounter_id = self.finished(self.B2)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.set_context(encounter_id, {'service_date': '2026-10-21'})
+        self.assert_never_sent(encounter_id, '2026-10-21')

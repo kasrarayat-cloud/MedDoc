@@ -1510,13 +1510,19 @@ _FIELD_START = re.compile(r'[ \t]{2,}+|\t|[:=|,;]|[ \t][-–—][ \t]')
 _DATE_FORMAT = r'(?:DOS|[mdy]{1,4}+(?:[ \t]*+[-/.][ \t]*+[mdy]{1,4}+){1,2}+)'
 _LINE_DATE_FIELD = cues.rx(r'(?:date' + _DATE_TIME + r'|' + _DATE_LABEL + r')(?:[ \t]*+\([ \t]*+' + _DATE_FORMAT
                            + r'[ \t]*+\))?+')
+# The differential round, df-d:2: the same field with a bracket that is no format ("Date (performed):", "Date of service
+# (corrected):", as c3c034a08 read a bracket of up to 20 characters). Only a word list could tell one naming THIS service
+# from one naming another event ("Date (signed):"), so its date is neither the line's own nor another field's: one this
+# service cannot place - the line speaks against the labelled date and reads no date (_AFTER_VALUE). Read as another
+# field's, the line was silent, and "Date of service: 10/14/2026" it contradicts was sent where c3c034a08 asked.
+_BRACKETED_DATE_FIELD = cues.rx(r'(?:date' + _DATE_TIME + r'|' + _DATE_LABEL + r')[ \t]*+\([^()\n]{0,20}+\)')
 
 
 # The final refutation, fr-dr:3: where another field's VALUE ends before a later date - a semicolon, a comma, a spaced
 # dash, a field break, a bracket it does not open, or the field's own date (_GAP_DATE).
 _VALUE_END = re.compile(r'[;,]|[ \t][-–—][ \t]|\t| {2,}')
-_AFTER_VALUE = -1  # _other_field: the date follows another field whose value had ended - neither that field's nor
-# certainly the line's own
+_AFTER_VALUE = -1  # _other_field: the date follows another field whose value had ended, or a date field whose bracket
+# is no format (df-d:2) - neither that field's nor certainly the line's own
 
 
 def _value_ended(text: str, start: int, end: int) -> bool:
@@ -1554,6 +1560,8 @@ def _other_field(text: str, gap: int, start: int) -> Optional[int]:
     s, e = _strip_span(text, lo, colon.start())
     if s >= e or _LINE_DATE_FIELD.fullmatch(text, s, e) is not None:
         return None
+    if _BRACKETED_DATE_FIELD.fullmatch(text, s, e) is not None:
+        return _AFTER_VALUE  # df-d:2: a date field whose bracket is no format - a date this service cannot place
     return _AFTER_VALUE if _value_ended(text, colon.end(), start) else s
 
 
