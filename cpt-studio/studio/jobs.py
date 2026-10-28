@@ -723,8 +723,16 @@ def _second_run_for(revision, run, *, any_outcome=False):
     the decision set and another could not be asked for; ec5: also when that second review had been made for a primary
     that was itself a reuse, as when the same report is uploaded twice in a workspace). ``any_outcome``: the newest
     one made for that answer, whatever its outcome (second_review_status names it for the page)."""
+    found = _second_runs_for(revision, run, any_outcome=any_outcome)
+    return found[0] if found else None
+
+
+def _second_runs_for(revision, run, *, any_outcome=False):
+    """Every second review _second_run_for matches for the answer ``run`` carries (on this revision and date), newest
+    first: a reconciled unknown one releases another ask, so an older one can stand behind a newer one (refutation P2FR,
+    ROLLBACK 0: a retry that failed hid an older second review whose outcome is unknown)."""
     if run is None or run.state != models.ProviderRun.SUCCEEDED or run.purpose != models.ProviderRun.PRIMARY:
-        return None
+        return []
     seconds = models.ProviderRun.objects.filter(revision=revision, purpose=models.ProviderRun.SECOND_REVIEW,
                                                 service_date=run.service_date)
     if not any_outcome:
@@ -738,10 +746,8 @@ def _second_run_for(revision, run, *, any_outcome=False):
             continue
     answers = {str(primary.pk): _answer_of(primary) for primary in models.ProviderRun.objects.filter(
         pk__in=made_for, revision=revision, purpose=models.ProviderRun.PRIMARY, state=models.ProviderRun.SUCCEEDED)}
-    for second in seconds:
-        if answers.get(str((second.scope or {}).get('primary_run'))) == _answer_of(run):
-            return second
-    return None
+    return [second for second in seconds
+            if answers.get(str((second.scope or {}).get('primary_run'))) == _answer_of(run)]
 
 
 def _second_inputs(second):

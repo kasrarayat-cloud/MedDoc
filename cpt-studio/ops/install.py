@@ -1402,8 +1402,9 @@ COMMON_STAGE_KINDS = ('analyze', 'assess', 'extract', 'predict')
 #              'Provider request failed', and its blocker is 'No CPT code was proposed' either way. No state can be put
 #              back for it, and a stopped worker does not keep a web from showing it (SHOWN_HAZARDS; the skeptic of
 #              refutation p2's install2:1 repair; must-fix class 3).
-#   second_review_unread - the current assessment did not read the bounded second review made for the answer it reads
-#              (review._unread_second_review) and that review may hold codes nobody read - sent with an outcome still
+#   second_review_unread - the current assessment did not read a bounded second review made for the answer it reads
+#              (review._unread_second_reviews: every one, not only the newest - refutation P2FR, ROLLBACK 0) and that
+#              review may hold codes nobody read - sent with an outcome still
 #              unknown or reconciled as unknown, or answered and not read yet - while that succeeded answer leaves
 #              nothing to decide. This revision states that review's outcome ('Second review outcome unknown'); 057a7d39
 #              reads no second review, so whatever state it is handed it says that no code was proposed: 'No CPT codes
@@ -1478,15 +1479,17 @@ def undo_hazards():
                     and not any(review._reviewable(proposal, decisions.get(proposal.pk))
                                 for proposal in assessment.proposals.all())):
                 found.setdefault(str(encounter.pk), set()).add('second_review_refused')
-        # or did not read the second review made for that answer, which may hold codes nobody read (unknown, or answered
+        # or did not read a second review made for that answer which may hold codes nobody read (unknown, or answered
         # and not read yet), beside that answer with nothing to decide - where 057a7d39, which reads no second review,
         # says that no code was proposed (refutation P2RA, ROLLBACK lens 0). One that failed or was never sent proposed
-        # nothing, and 057a7d39's statement is true of it.
+        # nothing, and 057a7d39's statement is true of it - but every such review is read, not only the newest: a
+        # reconciled unknown one releases another ask, and a retry that then failed or was not sent hid it (refutation
+        # P2FR, ROLLBACK 0).
         if (assessment is not None and assessment.provider_run_id is not None
                 and assessment.provider_run.state == Run.SUCCEEDED
                 and Run.objects.filter(encounter_id=encounter.pk, purpose=Run.SECOND_REVIEW).exists()):
-            unread = review._unread_second_review(assessment)
-            if unread is not None and unread.state not in (Run.FAILED, Run.NOT_SENT, Run.CANCELLED):
+            if any(unread.state not in (Run.FAILED, Run.NOT_SENT, Run.CANCELLED)
+                   for unread in review._unread_second_reviews(assessment)):
                 decisions = review.current_decisions(assessment)
                 if not any(review._reviewable(proposal, decisions.get(proposal.pk))
                            for proposal in assessment.proposals.all()):

@@ -707,6 +707,15 @@ def _unread_second_review(assessment):
     return second
 
 
+def _unread_second_reviews(assessment):
+    """Every second review made for the answer the assessment reads (jobs._second_runs_for, whatever its outcome) that
+    the assessment did not read, newest first: behind a newer retry an older one can stand whose outcome is unknown
+    (refutation P2FR, ROLLBACK 0)."""
+    from .jobs import _second_runs_for  # local import: jobs imports this module
+    return [second for second in _second_runs_for(assessment.revision, assessment.provider_run, any_outcome=True)
+            if second.pk != assessment.second_run_id]
+
+
 def _second_review_unread(assessment):
     """How the second review made for the answer the assessment reads ended when the assessment did not read it; '' when
     none was made or the assessment read it."""

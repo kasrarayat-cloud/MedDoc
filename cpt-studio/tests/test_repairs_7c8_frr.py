@@ -312,3 +312,84 @@ class ARejectedCodeIncludesNothingTests(ReviewHarness):
                 reviewed = self.reviewed(encounter_id)
                 self.assertIn(f'      {INCLUDED_TXT}\n', section(reviewed, 'DOCUMENTED SERVICES') + '\n')
                 self.assertIn(INCLUDED_PAGE, screen(self.detail(encounter_id))['codes'])
+
+
+# --- ROLLBACK 0 and 1: what an undo hands 057a7d39 about a second review ---------------------------------------------
+
+from unittest import mock  # noqa: E402
+
+from studio import jobs, models, review  # noqa: E402
+from tests import test_repairs_7c8_p2ra as p2ra  # noqa: E402  (the module, so its tests are not collected here)
+from tests.test_repairs_7c8_p2install import Base as P2Base  # noqa: E402
+from tests.test_repairs_7c8_p2install import OLD_IMAGE, SNARE, VISIT, WEB, WORKER, installed_label  # noqa: E402
+from tests.test_repairs_7c8_p2install import REPORT as P2_REPORT  # noqa: E402
+from tests.test_repairs_r1_m import install, run_app_script  # noqa: E402  (the installer as its tests load it)
+
+
+class SecondReviewRollbackBase(P2Base):
+    asked = p2ra.AnUnreadSecondReviewIsNamedNeverHandedOverTests.asked
+    hazards = p2ra.AnUnreadSecondReviewIsNamedNeverHandedOverTests.hazards
+
+    def ask_again(self, encounter_id, outcome, provider=None):
+        """The second review the panel offers again once an unknown one is reconciled (jobs: a reconciled unknown
+        releases another ask), ending ``outcome``; with ``provider`` the retry is made by that adapter instead."""
+        offered = self.client.get(f'/api/encounters/{encounter_id}').json()['second_review']
+        self.assertTrue(offered['available'], offered)
+        self.provider.outcomes = [outcome]
+        with mock.patch('studio.jobs.get_provider', return_value=provider or self.provider):
+            self.assertEqual(self.post(f'/api/encounters/{encounter_id}/second-review').status_code, 201)
+            drain()
+
+    def second_reviews(self, encounter_id):
+        return [(run.state, bool(run.reconciled_at)) for run in models.ProviderRun.objects.filter(
+            encounter_id=encounter_id, purpose=models.ProviderRun.SECOND_REVIEW).order_by('created_at')]
+
+
+class AnOlderUnreadSecondReviewIsNamedBehindARetryTests(SecondReviewRollbackBase):
+    """ROLLBACK 0 (verified must-fix, class 3 reached through a class 5 path; pre-existing at a62a18c85, not at
+    057a7d398, which cannot write a second review): a second review sent with an unknown outcome is reconciled, which
+    releases another ask; the retry - the identical excerpt request - fails (HTTP 500) or is not sent. The hazard read
+    only the newest second review made for the answer, so the failed retry hid the unknown one: UNDO_HAZARDS named
+    nothing, rollback-app put the state back and removed the pair, the failure path restored 057a7d39's pair, and
+    057a7d39 then said "No CPT codes were proposed" beside a request sent whose outcome nobody knows. Every second
+    review made for that answer is read (review._unread_second_reviews)."""
+
+    def assert_named_and_refused(self, encounter_id):
+        self.assertEqual(self.hazards(), {encounter_id: ['second_review_unread']})
+        sent = self.sent()
+        for parked in (None, 'installed'):
+            with self.subTest(parked=parked):
+                error, world = self.rollback(parked=parked)
+                self.assertIsInstance(error, install.InstallError)
+                self.assertIn('nothing was stopped or removed', str(error))
+                self.assertEqual(error.details['hazards'], {encounter_id: ['second_review_unread']})
+                self.assertEqual([call[2] for call in world.calls if call[0] == 'script'], ['UNDO_HAZARDS_READ'])
+        error, world = self.fail_install('installed')
+        self.assertIn('the new pair was left stopped and the previous pair parked', str(error))
+        self.assertEqual(world.ids(), {WEB + '-previous': 'old-web', WORKER + '-previous': 'old-worker',
+                                       WEB: 'new-web', WORKER: 'new-worker'})
+        self.assertFalse([call for call in world.calls if call[0] == 'script'
+                          and call[2] in ('RECOMPUTE_STATES', 'INSTALLED_STATES')])  # nothing was put back
+        self.assertEqual(self.sent(), sent)  # nothing is sent
+
+    def test_a_retry_that_failed_never_hides_the_unknown_outcome(self):
+        encounter_id = self.asked('RF', 'unknown', reconcile=True)
+        self.ask_again(encounter_id, 'failed')
+        self.assertEqual(self.second_reviews(encounter_id), [('unknown', True), ('failed', False)])
+        self.assertEqual(self.listed(encounter_id), ('no_codes', 'Second review failed'))
+        self.assert_named_and_refused(encounter_id)
+
+    def test_a_retry_that_was_not_sent_never_hides_the_unknown_outcome(self):
+        encounter_id = self.asked('RN', 'unknown', reconcile=True)
+        self.ask_again(encounter_id, 'none',
+                       provider=p2ra.ExcerptNotBuilt(first=[VISIT], later=[VISIT]))
+        self.assertEqual(self.second_reviews(encounter_id), [('unknown', True), ('not_sent', False)])
+        self.assertEqual(self.listed(encounter_id), ('no_codes', 'Second review not sent'))
+        self.assert_named_and_refused(encounter_id)
+
+    def test_control_a_failed_second_review_alone_is_put_back_as_before(self):
+        failed = self.asked('FL', 'failed')
+        self.assertEqual(self.hazards(), {})
+        answer, world = self.rollback()
+        self.assertNotIsInstance(answer, install.InstallError, answer)
+        self.assertEqual(self.encounter(failed).state, 'no_codes')

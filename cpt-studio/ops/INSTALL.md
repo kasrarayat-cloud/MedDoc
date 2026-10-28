@@ -259,11 +259,13 @@ failure path of `app` read them as it reads the rows):
   return proposals."), and its blocker is "No CPT code was proposed" and its
   page "No CPT codes were proposed for this document." either way. No list
   state can be put back for it, so it is named, never handed over.
-- **second_review_unread**: the current assessment did not read the bounded
+- **second_review_unread**: the current assessment did not read a bounded
   second review made for the answer it reads, and that review may hold codes
   nobody read - it was sent and its outcome is unknown (reconciled or not), or
   it was answered and not read yet - beside a primary answer that was used and
-  leaves nothing to decide. This revision states that review's outcome ('Second
+  leaves nothing to decide. Every second review made for that answer is read,
+  not only the newest: a reconciled unknown one releases another ask, and a
+  retry that then failed or was not sent does not clear it. This revision states that review's outcome ('Second
   review outcome unknown', "No CPT code was proposed in the response that was
   read; the second review has an unknown outcome"); 057a7d39 reads no second
   review, so whatever state it is handed it lists 'No CPT codes proposed' (or
@@ -272,7 +274,8 @@ failure path of `app` read them as it reads the rows):
   a request that was sent. No list state can be put back for it, so it is
   named, never handed over. A second review that failed or was not sent
   proposed nothing, so what 057a7d39 says of those rows is true: they are put
-  back (below).
+  back (below) - unless an earlier one made for the same answer is unread as
+  above, which names the encounter.
 - a stage of a kind it has no stage for (the second review), queued, running,
   or stopped as the latest: its worker ends on it.
 
