@@ -31,6 +31,9 @@ class CodeProfile:
     base: bool = False  # the family's examination without an intervention
     exam: str = ''  # an examination class where the family distinguishes them (EUS: 'limited' | 'full')
     addon: bool = False
+    # the documented service kinds of ANOTHER family whose examination the code includes: an EGD-with-EUS code includes
+    # the upper endoscopy that is the EUS's endoscopic portion (services._included); none for any other code
+    includes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -49,8 +52,8 @@ class FamilyEntry:
     notes: tuple[str, ...] = ()
 
 
-def _c(family, covers=(), *, base=False, exam='', addon=False):
-    return CodeProfile(family=family, covers=tuple(covers), base=base, exam=exam, addon=addon)
+def _c(family, covers=(), *, base=False, exam='', addon=False, includes=()):
+    return CodeProfile(family=family, covers=tuple(covers), base=base, exam=exam, addon=addon, includes=tuple(includes))
 
 
 C, EGD, ESO, ENT, SIG, EUS, ERCP = ('gi.colonoscopy', 'gi.egd', 'gi.egd', 'gi.enteroscopy', 'gi.flex_sig', 'gi.eus',
@@ -101,11 +104,15 @@ CODES: dict[str, CodeProfile] = {
     '45337': _c(SIG, ('decompression',)), '45338': _c(SIG, ('snare',)), '45340': _c(SIG, ('dilation',)),
     '45346': _c(SIG, ('ablation',)), '45347': _c(SIG, ('stent',)), '45349': _c(SIG, ('emr',)),
     '45350': _c(SIG, ('band_ligation',)),
-    # Endoscopic ultrasound
+    # Endoscopic ultrasound. Only the codes of an EGD with EUS include an upper endoscopy's examination (includes); an
+    # esophagoscopy, sigmoidoscopy, colonoscopy or stoma EUS code includes none (refutation p2, reports2:0).
     '43231': _c(EUS, ('eus_exam',), exam='limited'), '43232': _c(EUS, ('eus_exam', 'fna'), exam='limited'),
-    '43237': _c(EUS, ('eus_exam',), exam='limited'), '43238': _c(EUS, ('eus_exam', 'fna'), exam='limited'),
-    '43242': _c(EUS, ('eus_exam', 'fna'), exam='full'), '43259': _c(EUS, ('eus_exam',), exam='full'),
-    '43253': _c(EUS, ('eus_exam', 'injection')), '43240': _c(EUS, ('eus_exam', 'drainage')),
+    '43237': _c(EUS, ('eus_exam',), exam='limited', includes=('egd',)),
+    '43238': _c(EUS, ('eus_exam', 'fna'), exam='limited', includes=('egd',)),
+    '43242': _c(EUS, ('eus_exam', 'fna'), exam='full', includes=('egd',)),
+    '43259': _c(EUS, ('eus_exam',), exam='full', includes=('egd',)),
+    '43253': _c(EUS, ('eus_exam', 'injection'), includes=('egd',)),
+    '43240': _c(EUS, ('eus_exam', 'drainage'), includes=('egd',)),
     '45341': _c(EUS, ('eus_exam',)), '45342': _c(EUS, ('eus_exam', 'fna')),
     '45391': _c(EUS, ('eus_exam',)), '45392': _c(EUS, ('eus_exam', 'fna')),
     '44406': _c(EUS, ('eus_exam',)), '44407': _c(EUS, ('eus_exam', 'fna')),
@@ -334,6 +341,14 @@ UNSUPPORTED_ACTS = frozenset(('esd',))
 
 def code_profile(code: str):
     return CODES.get(code)
+
+
+def includes_examination(code: str, kind: str) -> bool:
+    """Whether a selected ``code`` includes the examination of a documented service of ``kind`` of another family (an
+    EGD-with-EUS code includes the upper endoscopy that is the EUS's endoscopic portion). A code this table does not
+    profile includes none: coverage not established is never coverage."""
+    profile = CODES.get(code)
+    return profile is not None and kind in profile.includes
 
 
 def entry(family: str):

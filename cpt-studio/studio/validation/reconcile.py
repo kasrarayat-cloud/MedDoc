@@ -19,8 +19,8 @@ from typing import Optional, Sequence
 
 from studio.gi import catalogue
 from studio.gi.context import is_member_conflict
-from studio.gi.services import (ANATOMY, LOWER, ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE, SERVICES, UPPER, Act,
-                                 Conflict, DocumentedService, ServiceInventory)
+from studio.gi.services import (LUMEN, ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE, SERVICES, Act, Conflict,
+                                 DocumentedService, ServiceInventory, act_regions, examined_regions)
 from studio.types import Check, ClarificationSpec, EvidenceSpan, Span
 from studio.validation import checks
 
@@ -319,27 +319,9 @@ def _needle_sampling(service: DocumentedService, act: Act) -> Optional[Act]:
 
 
 # The reader's anatomy vocabulary (canonical name -> region) and the regions of the GI lumen, where an endoscope's
-# forceps act: what a READ_UNDER rule reads an act's site and its examination's sites with.
-REGION_OF = {name: region for name, region, _ in ANATOMY}
-LUMEN = UPPER | LOWER | {'small_bowel'}
-
-
-def _act_sites(service: DocumentedService, act: Act) -> set:
-    """The regions an act names: its anatomy's, and the lesion's it is directed at."""
-    lesion = next((les for les in service.lesions if les.id == act.lesion), None) if act.lesion else None
-    sites = {REGION_OF.get(name, '') for name in act.anatomy} | {act.region}
-    if lesion is not None:
-        sites |= {lesion.region, REGION_OF.get(lesion.anatomy, '')}
-    return sites - {''}
-
-
-def _exam_sites(service: DocumentedService) -> set:
-    """The regions a service's own documentation names: its passages, its extent, its lesions and its acts done."""
-    texts = [span.text for span in (*service.evidence, *service.completion_evidence)] + [service.extent]
-    sites = {region for text in texts if text for _, region, pattern in ANATOMY if pattern.search(text)}
-    sites |= {site for lesion in service.lesions for site in (lesion.region, REGION_OF.get(lesion.anatomy, ''))}
-    sites |= {site for act in service.acts if act.status == 'performed' for site in _act_sites(service, act)}
-    return sites - {''}
+# forceps act: what a READ_UNDER rule reads an act's site and its examination's sites with - one reading with the
+# inventory's, which reads an endoscopic ultrasound's tract with it (studio.gi.services: REGION_OF, LUMEN).
+_act_sites, _exam_sites = act_regions, examined_regions
 
 
 def _read_under(inventory: ServiceInventory, service: DocumentedService, act: Act) -> Optional[str]:
@@ -364,6 +346,22 @@ def _read_under(inventory: ServiceInventory, service: DocumentedService, act: Ac
     return '' if reads else f'no {label} documented at this encounter reads it'
 
 
+def inclusion_asks_no_code(inventory: ServiceInventory, service: DocumentedService,
+                           selected: Sequence[tuple[str, str]]) -> bool:
+    """Whether ``service``, read as included in another service of this encounter (``included_in``: an EGD as the
+    endoscopic portion of an EUS), asks for no code of its own beside ``selected`` = (code, family) of the selected,
+    non-excluded proposals: while that other service has no selected code (it is listed itself, and the code it asks
+    for includes the examination), or when one of its selected codes includes the examination
+    (catalogue.includes_examination). A selected code of it that includes no such examination - a sigmoidoscopy,
+    colonoscopy or esophagoscopy EUS code never includes an upper endoscopy - accounts for nothing of this service,
+    which is then a service without a proposal like any other (refutation p2, reports2:0)."""
+    including = inventory.service(service.included_in) if service.included_in else None
+    if including is None:
+        return False
+    codes = [code for code, family in selected if family == including.family]
+    return not codes or any(catalogue.includes_examination(code, service.kind) for code in codes)
+
+
 def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]], procedure_day: bool = False
               ) -> tuple[list[Unresolved], list[Bundled], dict[str, list[str]]]:
     """(unresolved items, bundled acts, covered: service id -> codes) for ``selected`` = (code, family) of the selected,
@@ -380,7 +378,7 @@ def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]], 
             continue
         codes = [code for code, family in selected if family == service.family]
         covered[service.id] = codes
-        if not codes and service.included_in:
+        if not codes and inclusion_asks_no_code(inventory, service, selected):
             pass  # the including service's code covers the examination (an EGD inside an EUS); its own acts still count
         elif not codes:
             if service.family == 'gi.office_em' and (procedure_day or any(

@@ -564,3 +564,195 @@ class WalkReadsSupportSourceMarksTests(Harness):
         keys, results = judged_marks(detail)
         self.assertFalse(any(':s' in key for group in keys for key in group), keys)
         self.assertEqual([r['id'] for r in results if r['status'] == 'fail'], [])
+
+
+# --- reports2:0, round 2 (the skeptic of 5bb28ad85): an EGD is accounted for only by a code that includes it ---------
+
+RECTAL_FNA = 'was sampled by fine-needle aspiration with two passes'
+EGD_AND_RECTAL_EUS = (SYNTHETIC + 'Date of service: 2026-10-14\nIndication: staging of a rectal mass; dyspepsia.\n'
+                      'Procedure: EGD and lower endoscopic ultrasound.\n'
+                      'EGD: The gastroscope was advanced to the second portion of the duodenum and the examination was '
+                      'completed. The upper examination was normal.\n'
+                      'Rectal EUS: The echoendoscope was advanced to the rectosigmoid junction. A 12 mm perirectal lymph '
+                      'node ' + RECTAL_FNA + '.\n')
+# The lower-tract site is named only by the EUS's own act (its passage names none).
+EGD_AND_EUS_OF_A_RECTAL_MASS = (SYNTHETIC + 'Date of service: 2026-10-14\nProcedures: EGD and endoscopic ultrasound.\n'
+                                'EGD: The gastroscope was advanced to the second portion of the duodenum and the '
+                                'examination was completed. The upper examination was normal.\n'
+                                'EUS: The radial echoendoscope was then introduced. A 2 cm hypoechoic mass in the rectum '
+                                + RECTAL_FNA + '.\n')
+# An upper EUS whose own passage names no site at all: the EGD stays its endoscopic portion.
+EGD_WITH_LIMITED_EUS = (SYNTHETIC + 'Date of service: 2026-10-14\n'
+                        'Procedure: Upper endoscopy with limited endoscopic ultrasound.\n'
+                        'Endoscopic portion: A standard gastroscope was advanced to the second portion of the duodenum. '
+                        'The stomach and duodenum were normal.\n\n'
+                        'Ultrasound portion: The radial echoendoscope was then introduced. The sonographic evaluation '
+                        'was limited to the esophageal wall; a 14 mm hypoechoic lesion arose from the fourth layer.\n')
+LIMITED_EUS = 'The radial echoendoscope was then introduced.'
+LOWER_TRACT_EUS_CODES = ('45341', '45342', '45391', '45392', '44406', '44407')
+ESOPHAGOSCOPY_EUS_CODES = ('43231', '43232')
+EGD_WITH_EUS_CODES = ('43237', '43238', '43240', '43242', '43253', '43259')
+EGD_LABEL = PROFILES['gi.egd'].label
+NO_EGD_PROPOSAL = 'upper endoscopy (documented as performed) has no supported proposal'
+
+
+def unresolved_items(result):
+    return [(u['service'], u['act'], u['reason'], u['label']) for u in result.completeness['unresolved_items']]
+
+
+class AnEgdBesideALowerTractEusIsItsOwnServiceTests(SimpleTestCase):
+    """reports2:0, round 2 (the skeptic of 5bb28ad85, at bf9367d65): services._included marked every performed EGD
+    included in the first performed EUS, whatever tract that EUS examines, and _accounted_elsewhere then counted ANY
+    selected code of that EUS as accounting for the EGD. An EGD beside a rectal EUS whose sigmoidoscopy EUS code was
+    selected and approved read "Every performed service that routing detected in the document has a selected
+    proposal" (services.unproposed), "Every documented service has a proposal" (coding completeness) and "included in
+    S2: that service's code includes this examination" (documented services) - the original false PASS on a
+    paraphrase. An EUS whose own documentation names a lower-tract site includes no upper endoscopy, so the EGD is a
+    service of its own whatever code the EUS has; 057a7d398 named it."""
+
+    def test_the_egd_is_never_read_as_part_of_a_rectal_eus(self):
+        for text in (EGD_AND_RECTAL_EUS, EGD_AND_EUS_OF_A_RECTAL_MASS):
+            with self.subTest(text[100:140]):
+                result = run(text, [sel('45342', span(text, RECTAL_FNA))])
+                self.assertEqual([(s['family'], s['included_in']) for s in result.services['services']],
+                                 [('gi.egd', ''), ('gi.eus', '')])
+                inventory = next(c for c in result.encounter_checks if c.id == 'services.inventory')
+                self.assertNotIn('included in', inventory.detail)
+
+    def test_no_selected_code_of_a_rectal_eus_accounts_for_the_egd(self):
+        # a sigmoidoscopy, colonoscopy, stoma or esophagoscopy EUS code includes no upper endoscopy; nor does an
+        # EGD-with-EUS code selected for this EUS, which the document places in the rectum
+        for text in (EGD_AND_RECTAL_EUS, EGD_AND_EUS_OF_A_RECTAL_MASS):
+            for code in LOWER_TRACT_EUS_CODES + ESOPHAGOSCOPY_EUS_CODES + EGD_WITH_EUS_CODES:
+                with self.subTest(code=code, text=text[100:140]):
+                    result = run(text, [sel(code, span(text, RECTAL_FNA))])
+                    check = unproposed(result)
+                    self.assertEqual(check.status, 'warn')
+                    self.assertTrue(check.detail.startswith(f'Possible missed service: {EGD_LABEL}'), check.detail)
+                    self.assertNotIn(EVERY_DETECTED, check.detail)
+                    self.assertIn(('S1', '', 'no_proposal', NO_EGD_PROPOSAL), unresolved_items(result))
+                    self.assertEqual(result.completeness['state'], 'incomplete')
+                    self.assertFalse(result.completeness['statement'].startswith('Every documented service'))
+
+    def test_control_the_codes_of_the_rectal_eus_with_the_egd_code_pass(self):
+        text = EGD_AND_RECTAL_EUS
+        egd = 'The gastroscope was advanced to the second portion of the duodenum'
+        result = run(text, [sel('45342', span(text, RECTAL_FNA)), sel('43235', span(text, egd))])
+        self.assertEqual((unproposed(result).status, unproposed(result).detail), ('pass', checks.UNPROPOSED_PASS))
+        self.assertEqual(unresolved_items(result), [])
+
+
+class AnIncludedEgdIsAccountedForOnlyByACodeThatIncludesItTests(SimpleTestCase):
+    """reports2:0, round 2: an EGD the inventory reads as the endoscopic portion of an upper EUS is accounted for only
+    by a selected code of that EUS that includes the examination - an EGD-with-EUS code (catalogue
+    includes_examination). A sigmoidoscopy, colonoscopy, stoma or esophagoscopy EUS code selected for it includes none:
+    the EGD is then named by services.unproposed and listed by the reconciliation, and the documented services never
+    say that service's code includes it. While the EUS has no code at all, the EGD asks for none of its own (the EUS is
+    listed itself), as before."""
+
+    def test_a_code_that_includes_no_upper_endoscopy_leaves_the_egd_without_a_proposal(self):
+        for text, quote, egd in ((EUS_WITH_EGD, FNA, 'S2'), (EGD_WITH_LIMITED_EUS, LIMITED_EUS, 'S1')):
+            for code in LOWER_TRACT_EUS_CODES + ESOPHAGOSCOPY_EUS_CODES:
+                with self.subTest(code=code, egd=egd):
+                    result = run(text, [sel(code, span(text, quote))])
+                    including = {s['id']: s['included_in'] for s in result.services['services']}
+                    self.assertTrue(including[egd])  # the document reading is unchanged: an upper EUS's portion
+                    check = unproposed(result)
+                    self.assertEqual((check.status, check.detail), ('warn', MISSED_EGD))
+                    self.assertIn((egd, '', 'no_proposal', NO_EGD_PROPOSAL), unresolved_items(result))
+                    self.assertEqual(result.completeness['state'], 'incomplete')
+
+    def test_control_an_egd_with_eus_code_accounts_for_the_egd(self):
+        for text, quote in ((EUS_WITH_EGD, FNA), (EGD_WITH_LIMITED_EUS, LIMITED_EUS)):
+            for code in EGD_WITH_EUS_CODES:
+                with self.subTest(code=code, text=text[100:140]):
+                    result = run(text, [sel(code, span(text, quote))])
+                    self.assertTrue(any(s['included_in'] for s in result.services['services']))
+                    check = unproposed(result)
+                    self.assertEqual((check.status, check.detail), ('pass', checks.UNPROPOSED_PASS))
+                    self.assertFalse([u for u in unresolved_items(result) if u[1] == '' and u[2] == 'no_proposal'])
+
+    def test_control_an_eus_with_no_code_is_listed_and_its_egd_asks_for_none(self):
+        result = run(EGD_WITH_LIMITED_EUS, [])
+        self.assertEqual([(u[0], u[2]) for u in unresolved_items(result)], [('S2', 'no_proposal')])
+        self.assertEqual(unproposed(result).status, 'warn')
+
+    def test_which_codes_include_an_upper_endoscopy(self):
+        from studio.gi import catalogue
+        self.assertEqual(sorted(c for c in catalogue.CODES if catalogue.includes_examination(c, 'egd')),
+                         sorted(EGD_WITH_EUS_CODES))
+        for code in LOWER_TRACT_EUS_CODES + ESOPHAGOSCOPY_EUS_CODES + ('43235', '45378', '99999', ''):
+            self.assertFalse(catalogue.includes_examination(code, 'egd'), code)
+        self.assertFalse(catalogue.includes_examination('43242', 'esophagoscopy'))
+
+    def test_the_reconciliation_rule_on_a_constructed_inventory(self):
+        from studio.gi.services import DocumentedService, ServiceInventory
+        from studio.validation import reconcile
+        eus = DocumentedService('S1', 'gi.eus', 'eus', 'performed')
+        egd = DocumentedService('S2', 'gi.egd', 'egd', 'performed', included_in='S1')
+        inventory = ServiceInventory('test', services=(eus, egd))
+        self.assertTrue(reconcile.inclusion_asks_no_code(inventory, egd, []))
+        self.assertTrue(reconcile.inclusion_asks_no_code(inventory, egd, [('43259', 'gi.eus')]))
+        self.assertTrue(reconcile.inclusion_asks_no_code(inventory, egd, [('45342', 'gi.eus'), ('43242', 'gi.eus')]))
+        self.assertFalse(reconcile.inclusion_asks_no_code(inventory, egd, [('45342', 'gi.eus')]))
+        self.assertFalse(reconcile.inclusion_asks_no_code(inventory, eus, [('43259', 'gi.eus')]))  # included in none
+        unresolved, _, covered = reconcile.reconcile(inventory, [('43231', 'gi.eus')])
+        self.assertEqual([(u.service, u.reason) for u in unresolved], [('S2', 'no_proposal')])
+        self.assertEqual(covered, {'S1': ['43231'], 'S2': []})
+
+
+class TheReportsNeverAccountForAnEgdBesideARectalEusTests(Harness):
+    """reports2:0, round 2, through the API as the skeptic ran it: the provider selects only 45342 for the rectal EUS's
+    sampling, the reviewer approves it, and the reviewed report is produced (201). The stored check, the reviewed TXT and
+    the Checks tab name the EGD; coding completeness says the encounter is incomplete; nothing says the EGD is included
+    in the EUS or that the EUS's code includes it."""
+
+    def stored(self, text, *selections):
+        self.use(FakeProvider(selections=list(selections)))
+        encounter_id = self.create(text)
+        drain()
+        return encounter_id
+
+    def test_the_reviewed_report_names_the_egd(self):
+        encounter_id = self.stored(EGD_AND_RECTAL_EUS, ('45342', RECTAL_FNA))
+        self.decide(encounter_id, '45342', 'approve')
+        reply = self.post(f'/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
+        self.assertEqual(reply.status_code, 201, reply.content)
+        check = self.encounter_check(encounter_id, 'services.unproposed')
+        self.assertEqual((check['status'], check['detail']), ('warn', MISSED_EGD))
+        reviewed = self.txt(encounter_id, 'reviewed')
+        self.assertIn('[WARN] services.unproposed', reviewed)
+        self.assertIn(MISSED_EGD, reviewed)
+        self.assertNotIn(EVERY_DETECTED, reviewed)
+        self.assertIn('State: incomplete', reviewed)
+        self.assertNotIn('Every documented service has a proposal', reviewed)
+        self.assertNotIn('included in S2', reviewed)
+        self.assertNotIn('included in endoscopic ultrasound', reviewed)
+        shown = screen(self.detail(encounter_id))
+        self.assertIn(MISSED_EGD, shown['checks'])
+        self.assertNotIn(EVERY_DETECTED, shown['checks'])
+        self.assertNotIn('Included in S2', shown['codes'] + shown['checks'])
+
+    def test_an_eus_code_that_includes_no_upper_endoscopy_is_never_said_to_include_it(self):
+        encounter_id = self.stored(EUS_WITH_EGD, ('45342', FNA))
+        check = self.encounter_check(encounter_id, 'services.unproposed')
+        self.assertEqual((check['status'], check['detail']), ('warn', MISSED_EGD))
+        draft = self.txt(encounter_id)
+        self.assertIn('read as part of S1, but no selected code of that service includes this examination', draft)
+        self.assertNotIn("included in S1: that service's code includes this examination", draft)
+        shown = screen(self.detail(encounter_id))
+        self.assertIn('Read as part of S1, but no selected code of that service includes this examination.',
+                      shown['codes'] + shown['checks'])
+        self.assertNotIn("Included in S1: that service's code includes this examination",
+                         shown['codes'] + shown['checks'])
+
+    def test_control_an_egd_with_eus_code_still_includes_the_egd(self):
+        encounter_id = self.stored(EUS_WITH_EGD, ('43242', FNA))
+        check = self.encounter_check(encounter_id, 'services.unproposed')
+        self.assertEqual((check['status'], check['detail']), ('pass', checks.UNPROPOSED_PASS))
+        draft = self.txt(encounter_id)
+        self.assertIn("included in S1: that service's code includes this examination", draft)
+        self.assertNotIn('read as part of', draft)
+        shown = screen(self.detail(encounter_id))
+        self.assertIn("Included in S1: that service's code includes this examination, so no code of its own is asked.",
+                      shown['codes'] + shown['checks'])

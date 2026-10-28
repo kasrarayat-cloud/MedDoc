@@ -119,6 +119,11 @@ ANATOMY: tuple[tuple[str, str, re.Pattern], ...] = tuple((name, region, _rx(patt
 
 UPPER = frozenset(('esophagus', 'stomach', 'duodenum'))
 LOWER = frozenset(('colon', 'rectum', 'anus'))
+# The anatomy vocabulary by canonical name -> region, and the regions of the GI lumen, where an endoscope's forceps act:
+# what an examination's sites are read with (examined_regions) - by a READ_UNDER rule (validation.reconcile) and by the
+# inclusion of an upper endoscopy in an endoscopic ultrasound (_included).
+REGION_OF = {name: region for name, region, _ in ANATOMY}
+LUMEN = UPPER | LOWER | {'small_bowel'}
 
 # --- vocabulary: services --------------------------------------------------------------------------------------
 # (family, kind, pattern). A family is an internal profile (studio.gi.profiles); kind is the documented service.
@@ -3389,11 +3394,39 @@ def doubted_by_routing_alone(service) -> bool:
         cue.startswith((ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE)) for cue in service.cues)
 
 
+def act_regions(service, act) -> set:
+    """The regions an act names: its anatomy's, and the lesion's it is directed at."""
+    lesion = next((les for les in service.lesions if les.id == act.lesion), None) if act.lesion else None
+    sites = {REGION_OF.get(name, '') for name in act.anatomy} | {act.region}
+    if lesion is not None:
+        sites |= {lesion.region, REGION_OF.get(lesion.anatomy, '')}
+    return sites - {''}
+
+
+def examined_regions(service) -> set:
+    """The regions a service's own documentation names: its passages, its extent, its lesions and its acts done."""
+    texts = [span.text for span in (*service.evidence, *service.completion_evidence)] + [service.extent]
+    sites = {region for text in texts if text for _, region, pattern in ANATOMY if pattern.search(text)}
+    sites |= {site for lesion in service.lesions for site in (lesion.region, REGION_OF.get(lesion.anatomy, ''))}
+    sites |= {site for act in service.acts if act.status == 'performed' for site in act_regions(service, act)}
+    return sites - {''}
+
+
 def _included(services: list) -> list:
     """An upper endoscopy performed with an EUS in the same session is the EUS's endoscopic portion: the EUS code
     includes the examination (EGD with EUS), so the EGD is kept, marked included, and asks for no code of its own. How
-    far the ultrasound went never makes the endoscopic examination incomplete. Its own acts are still reconciled."""
-    eus = next((s for s in services if s.family == 'gi.eus' and s.status in POSITIVE_STATUSES), None)
+    far the ultrasound went never makes the endoscopic examination incomplete. Its own acts are still reconciled.
+
+    Only an EUS of the upper GI tract has an upper endoscopy as its endoscopic portion: an EUS whose own documentation
+    names a site of the lower tract (colon, rectum, anus) among its passages, extent, lesions and acts - the reading a
+    READ_UNDER rule reads an examination's tract with (examined_regions) - includes none, and the EGD beside it stays a
+    service of its own (refutation p2, reports2:0: an EGD beside a rectal EUS was marked included in it, so a
+    sigmoidoscopy EUS code was read as accounting for the EGD - "every performed service that routing detected has a
+    selected proposal", "every documented service has a proposal to review", "included in S2: that service's code
+    includes this examination"). Whether a selected code of the EUS includes the examination is the reconciliation's
+    question (catalogue.includes_examination)."""
+    eus = next((s for s in services if s.family == 'gi.eus' and s.status in POSITIVE_STATUSES
+                and not examined_regions(s) & LOWER), None)
     if eus is None:
         return services
     out = []

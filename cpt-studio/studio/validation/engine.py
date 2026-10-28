@@ -1608,13 +1608,18 @@ def _fingerprint(code, family, profile_version, evidence, found, context_values,
 def _accounted_elsewhere(inventory: Optional[gi_services.ServiceInventory], covered: Mapping[str, Sequence[str]]
                          ) -> set:
     """The families the documented-service reconciliation accounts for with ANOTHER service's selected code: every
-    service of the family done today is included in another service (an EGD inside an EUS) that a selected,
-    non-excluded code covers - that code includes the examination (reconcile.reconcile)."""
+    service of the family done today is included in another service (an EGD inside an EUS of the upper GI tract) one of
+    whose selected, non-excluded codes includes its examination (catalogue.includes_examination: an EGD-with-EUS code).
+    Any other selected code of that service - a sigmoidoscopy, colonoscopy, stoma or esophagoscopy EUS code - includes
+    no upper endoscopy, so the family is named (refutation p2, reports2:0: any selected code of the EUS had accounted
+    for the EGD)."""
     if inventory is None:
         return set()
     done = [s for s in inventory.services if s.status in checks.POSITIVE]
     return {family for family in {s.family for s in done}
-            if all(s.included_in and covered.get(s.included_in) for s in done if s.family == family)}
+            if all(s.included_in and any(reconcile.catalogue.includes_examination(code, s.kind)
+                                         for code in covered.get(s.included_in, ()))
+                   for s in done if s.family == family)}
 
 
 def _missed(routing: RoutingResult, selections: Sequence[_Selection], procedure_day: bool,

@@ -725,7 +725,14 @@ def _documented_section(snap):
             lines.append(f'      rejected by the reviewer: {", ".join(service["rejected_by_reviewer"])}'
                          + ('' if service.get('covered_by') else ' — no other selected code accounts for this service'))
         if service.get('included_in'):
-            lines.append(f'      included in {service["included_in"]}: that service\'s code includes this examination')
+            # listed without a proposal, it is never said to be accounted for by the service it is read as part of: no
+            # selected code of that service includes its examination (refutation p2, reports2:0)
+            if any(item.get('service') == service.get('id') and item.get('reason') == 'no_proposal'
+                   for item in documented.get('unresolved') or []):
+                lines.append(f'      read as part of {service["included_in"]}, but no selected code of that service '
+                             'includes this examination')
+            else:
+                lines.append(f'      included in {service["included_in"]}: that service\'s code includes this examination')
     for item in documented.get('bundled') or []:
         lines.append(f'  - not separately reported: {item["label"]} — {item["why"]}')
     if documented.get('attributions'):

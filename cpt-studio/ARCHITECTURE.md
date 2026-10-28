@@ -1098,9 +1098,11 @@ proposal is named whatever `services.unresolved` also lists for it - the check
 never passes with "Every performed service that routing detected in the
 document has a selected proposal" beside one, as the installed revision never
 did - except a family the reconciliation accounts for with another service's
-selected code: every service of it done today is included in another that a
-selected, non-excluded code covers (an EGD read as the endoscopic portion of an
-EUS whose code is selected; refutation p2, reports2:0)). Each check: `{id, label, status ∈ pass | warn | fail | not_verified |
+selected code: every service of it done today is included in another one of
+whose selected, non-excluded codes includes its examination (an EGD read as the
+endoscopic portion of an upper-tract EUS whose selected code is an EGD-with-EUS
+code, `catalogue.includes_examination`; a sigmoidoscopy, colonoscopy, stoma or
+esophagoscopy EUS code includes no upper endoscopy; refutation p2, reports2:0)). Each check: `{id, label, status ∈ pass | warn | fail | not_verified |
 not_applicable | info, detail, source}`. Engine `cpt-studio-validation@3`.
 A selected, non-excluded `gi.other` code also speaks for the routed procedure
 line its passage opens with (`_Evaluation.speaks_for`: a passage's own sentence
@@ -1507,8 +1509,14 @@ synthetic corpus and fresh paraphrase tests; `gi-routing@4`, `gi-context@2`):
   technique or impression). A planned repeat or an earlier examination named
   elsewhere is another occurrence, never a doubt about today's acts.
 - Families: a PEG placed during an upper endoscopy is that EGD's act; an EGD
-  performed with an EUS is `included_in` the EUS (the EUS code includes the
-  examination: no code of its own is asked, its acts are still reconciled);
+  performed with an EUS of the upper GI tract is `included_in` the EUS (the EUS
+  code includes the examination: no code of its own is asked, its acts are
+  still reconciled); an EUS whose own passages, extent, lesions or acts name a
+  lower-tract site (colon, rectum, anus: `examined_regions`, the reading a
+  READ_UNDER rule reads an examination's tract with) includes no upper
+  endoscopy, and the EGD beside it stays a service of its own (refutation p2,
+  reports2:0: a rectal EUS's sigmoidoscopy EUS code was read as accounting for
+  the EGD);
   manometry, pH and capsule acts go to their own family whatever part names
   them; an unnamed endoscope in upper GI anatomy is an EGD; an act that more
   than one service could take goes to the one documented as performed.
@@ -1571,8 +1579,13 @@ reconciles in a supported family, documented by the physician and not
 bundled, is covered by a selected, non-excluded proposal whose profile covers
 it, or listed as unresolved (`services.unresolved`, one per service and act
 kind; a service with no proposal at all is unresolved as a whole, except an
-office visit beside a same-day procedure and a service included in another,
-and its unsupported acts are still named). No code is added for an unresolved
+office visit beside a same-day procedure and a service included in another
+while that other has no selected code or one that includes its examination
+(`inclusion_asks_no_code`; `CodeProfile.includes`: only the EGD-with-EUS codes
+include an upper endoscopy), and its unsupported acts are still named). The
+documented services then never say the including service's code includes it:
+the TXT and the page read "read as part of <that service>, but no selected code
+of that service includes this examination". No code is added for an unresolved
 item and no alternative is promoted. Conflicts → `services.conflicts` and a
 service-scoped question with both sides; missing documentation → every
 materially necessary question for that service, asked together (a sparse visit
