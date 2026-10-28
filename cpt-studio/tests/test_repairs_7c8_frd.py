@@ -22,6 +22,9 @@ fr-dr:0  a date-of-service field that STATES a date the reader cannot take as it
 fr-dr:1  the positional header readers matched values to labels by COUNT: an extra split in a cell, or a heading
          and a findings line counted into a stack, shifted the date of birth into the date-of-service label's place, so
          a member's 1998-01-01 was taken and sent.
+fr-dr:4, fr-di:0, fr-di:1  a date qualifier opening a field of its own on the label's line ("Scheduled by:",
+         "Requested by:", "Planned sedation:"), or with only a date of birth between it and the date, was passed over:
+         a planned procedure's or a recall's date was sent where 057a7d398 sent none, or another date than it sent (N7).
 
 Synthetic text only; no network (the suite's FakeProvider).
 """
@@ -435,3 +438,99 @@ class HeaderValuesArePlacedByPositionRequestTests(EndToEnd):
                 encounter_id = self.finished(text, service_date=ELENA_DATE)
                 self.assert_held(encounter_id)
                 self.assert_never_sent(encounter_id, ELENA_DATE)
+
+
+# --- fr-dr:4, fr-di:0, fr-di:1: a date qualifier on the label's line is never passed over (N7) ------------------------
+
+OFFICE_VISIT = ('Office visit note\nHistory: Synthetic patient seen in clinic for constipation; colonoscopy discussed.\n'
+                'Assessment and plan: colonoscopy with possible polypectomy will be performed at the endoscopy unit.\n')
+QUALIFIER_FIELDS = ('Scheduled by', 'Requested by', 'Planned by', 'Scheduled at', 'Due for', 'Follow-up with',
+                    'Proposed by', 'Tentative per', 'Rescheduled by', 'Due at', 'Next steps')
+OFFICE_LINES = (  # the DATES-INSTALLED lens's EQ1-EQ3, ER1, ER2a and the verifiers' smallest forms
+    'Scheduled by: Front desk    Procedure date: 11/04/2026',
+    'Procedure date: 11/04/2026    Requested by: Dr. Robin Synthetic',
+    'Planned sedation: MAC    DOS: 11/04/2026',
+    'Repeat colonoscopy for Synthetic, Alex (DOB 01/01/1998) Procedure date: 11/04/2026',
+    'Procedure date: 11/04/2026    DOB: 01/01/1998    Status: Scheduled',
+    'Due by:  DOS: 11/04/2026',
+    'Due (DOB 01/01/1998) DOS: 11/04/2026',
+    'DOS: 11/04/2026 Due by:',
+    'Procedure date: 11/04/2026    Due    DOB: 01/01/1998',
+)
+RECALL = {  # the DATES-INSTALLED lens's F2a and F2b, and the verifier's smallest forms
+    'F2a': 'Repeat colonoscopy:\nDate of service: 10/14/2026\n' + 'Procedure: Colonoscopy\nTechnique: The colonoscope was '
+           'advanced to the cecum.\nFindings: A 5 mm sigmoid polyp was removed with a cold snare.\n'
+           'Scheduled by: Front desk    Procedure date: 10/14/2029\n',
+    'F2b': 'Colonoscopy report\nDate of service: 10/14/2026 (history of colon polyps)\nProcedure: Colonoscopy\nTechnique: '
+           'The colonoscope was advanced to the cecum.\nFindings: A 5 mm sigmoid polyp was removed with a cold snare.\n'
+           'Recall:\nProcedure date: 10/14/2029    DOB: 01/01/1998    Status: Scheduled\n',
+    'smallest': 'DOS: 1/1/2026, s/p\nDue by: X DOS: 1/1/2029\n',
+    'heading': 'Findings: A 5 mm polyp was removed with a cold snare.\nLast:\nDOS: 10/14/2026\nDue by: X DOS: 10/14/2029\n',
+}
+
+
+class DateQualifierOnTheLabelSLineTests(DateAssertions, SimpleTestCase):
+    """fr-dr:4, fr-di:0 and fr-di:1 (round 2's c2:1 pass-over, kept by 3dcfe0ee9; at a62a18c85 and every P2DN commit,
+    never at 057a7d398): _line_reading passed over a date qualifier on the label's own line when it opened a field whose
+    label names no occurrence ("Scheduled by: Front desk", "Requested by:", "Planned sedation: MAC") and when only a date
+    of birth stood between it and the date ("Repeat colonoscopy for ... (DOB 01/01/1998) Procedure date:", "... DOB:
+    01/01/1998    Status: Scheduled"). So a planned procedure's 11/04 was sent with an office visit's request (7,168 +
+    1,728 family texts), and a recall's 10/14/2029 was sent where the encounter's own 10/14/2026 had been set aside (384 of
+    384) - where 057a7d398's same-line window held the date: a date the head sent that the installed revision did not,
+    which N7 says cannot happen. A date qualifier on the label's line that opens a field of its own is never passed over
+    - whatever that field names, the line states another occurrence's date beside the label's, and the date is asked -
+    and a date of birth between a qualifier and the date passes nothing over (it dates no occurrence, rule N2). A history
+    word opening a field about something else ("Outside records:") is still passed over, as the installed revision's
+    window never read history words."""
+
+    def test_a_qualifier_field_after_or_before_the_label_asks_the_date(self):
+        for field in QUALIFIER_FIELDS:
+            for line in (f'Procedure date: 11/04/2026    {field}: Dr. Robin Synthetic',
+                         f'Procedure date: 11/04/2026 {field}: Dr. Robin Synthetic',
+                         f'{field}: Dr. Robin Synthetic    Procedure date: 11/04/2026',
+                         f'DOS: 11/04/2026\t{field}:'):
+                text = HEAD + 'GI office visit\n' + line + '\n' + OFFICE_VISIT
+                with self.subTest(line=line):
+                    self.assert_never(text, '2026-11-04')
+
+    def test_the_office_visit_lines_send_no_planned_date(self):
+        for line in OFFICE_LINES:
+            for top in ('GI office visit\n', ''):
+                text = HEAD + top + line + '\n' + OFFICE_VISIT
+                with self.subTest(line=line, top=bool(top)):
+                    self.assert_never(text, '2026-11-04')
+                    self.assert_member_conflict(text, ELENA_DATE)
+
+    def test_a_recall_s_date_is_never_the_note_s(self):
+        for name, shape in RECALL.items():
+            text = HEAD + shape
+            with self.subTest(shape=name):
+                self.assert_never(text, '2029-10-14', '2029-01-01')
+
+    def test_controls_a_history_word_s_field_and_the_line_above(self):
+        for text in (HEAD + 'Colonoscopy report\nDate of service: 10/14/2026    Recent labs: normal\n' + COLO_BODY,
+                     HEAD + 'Colonoscopy report\nOutside records: none    Date of service: 10/14/2026\n' + COLO_BODY,
+                     HEAD + 'Colonoscopy report\nLast colonoscopy: 05/01/2019\nDate of service: 10/14/2026\n' + COLO_BODY,
+                     HEAD + 'Colonoscopy report\nDate of service: 10/14/2026    DOB: 01/01/1998\n' + COLO_BODY,
+                     HEAD + 'Colonoscopy report\nDate of service: 10/14/2026    Endoscopist: Dr. Robin Synthetic\n'
+                     + COLO_BODY):
+            with self.subTest(lines=text.splitlines()[1:3]):
+                self.assert_document(text, '2026-10-14')
+
+
+class DateQualifierOnTheLabelSLineRequestTests(EndToEnd):
+    VISIT = ('99213', 'seen in clinic for constipation')
+
+    def test_the_office_visit_sends_no_planned_date(self):
+        for line in OFFICE_LINES[:5]:
+            text = HEAD + 'GI office visit\n' + line + '\n' + OFFICE_VISIT
+            with self.subTest(line=line):
+                encounter_id = self.finished(text)
+                self.assertEqual(self.dates_sent(encounter_id), [[]])
+
+    def test_the_recall_s_date_is_never_sent(self):
+        for name in ('F2a', 'F2b'):
+            with self.subTest(shape=name):
+                encounter_id = self.finished(HEAD + RECALL[name])
+                self.assert_never_sent(encounter_id, '2029-10-14')
+                self.assert_not_excluded(encounter_id, '45385')

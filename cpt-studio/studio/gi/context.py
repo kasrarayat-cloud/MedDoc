@@ -555,15 +555,23 @@ def _line_reading(text: str, label_start: int, label_end: int, date_start: int, 
     # tell which is this encounter's: the date is asked (unplaced), never passed over. Round 2 (c2:1) passed such a
     # qualifier over as belonging elsewhere, so "Date of service: 10/07/2026 Rescheduled to: 10/14/2026" documented the
     # superseded 10/07, which was sent and 45385 done on 10/14 excluded against it, where the installed revision's
-    # same-line window held it. A qualifier opening a field about something else ("Last name: Synthetic") is still
-    # passed over, and so is one on the line above (round 3's rule).
+    # same-line window held it. One on the line above is still passed over (round 3's rule).
+    # The final refutation, fr-dr:4, fr-di:0 and fr-di:1 (rule N7: nothing is sent that the installed revision would not
+    # send): a DATE qualifier on the label's own line that opens a field of its own is never passed over, whatever that
+    # field names ("Scheduled by: Front desk", "Requested by:", "Planned sedation: MAC", "Last name:") - the installed
+    # revision's same-line window held every such date, and passed over, a planned procedure's 11/04 was sent with an
+    # office visit's request, and a recall's 10/14/2029 instead of the encounter's 10/14/2026. A date of birth between a
+    # qualifier and the date passes nothing over (it dates no occurrence; "Repeat colonoscopy for ... (DOB 01/01/1998)
+    # Procedure date:", "... DOB: 01/01/1998    Status: Scheduled"). A HISTORY word opening a field about something else
+    # ("Outside records:", "Recent labs:") is still passed over: the installed revision never read those words.
     reading = 'own'
     for q in _OTHER_OCCURRENCE.finditer(text, lo, label_start):
         field = _qualifier_field(text, q.start(), q.end(), label_start, has_date)
-        if field == 'dated' or (field != 'else' and dated(q.end(), label_start)):
+        qualifier = DATE_QUALIFIER.fullmatch(q.group()) is not None
+        if field == 'dated' or (field == 'else' and qualifier) or (field != 'else' and dated(q.end(), label_start)):
             reading = 'unplaced'
             continue
-        if field == 'else' or other_dates(q.end(), label_start):
+        if field == 'else':
             continue
         if not opens and not _NOT_ATTACHED.search(_ROW_BAR.sub(' ', text[q.end():label_start])):
             return 'another'
@@ -588,18 +596,18 @@ def _line_reading(text: str, label_start: int, label_end: int, date_start: int, 
             return 'another'
     for q in _OTHER_OCCURRENCE.finditer(text, date_end, hi):
         field = _qualifier_field(text, q.start(), q.end(), hi, has_date)
-        if field == 'else':
+        qualifier = DATE_QUALIFIER.fullmatch(q.group()) is not None
+        if field == 'else' and not qualifier:
             continue
-        own = other_dates(q.end(), hi)
+        own = dated(q.end(), hi)  # a date of birth dates no occurrence (fr-di:0)
         nearer = bool(own) and own[0].start - q.end() < q.start() - date_end
-        if field == 'dated' or nearer or other_dates(date_end, q.start()):
-            # issue 5: the qualifier dates another occurrence on the label's line - a date of birth dates none
-            if field == 'dated' or dated(date_end, q.start()) or (nearer and not _is_birth(text, own[0].start)):
-                reading = 'unplaced'
+        if field in ('dated', 'else') or nearer or dated(date_end, q.start()):
+            # issue 5: the qualifier dates another occurrence on the label's line; fr-dr:4: a date qualifier's own field
+            reading = 'unplaced'
             continue
         if not _NOT_ATTACHED.search(_ROW_BAR.sub(' ', text[date_end:q.start()])):
             return 'another'
-        if DATE_QUALIFIER.fullmatch(q.group()):  # a history word across a field break does not place the date
+        if qualifier:  # a history word across a field break does not place the date
             reading = 'unplaced'
     return reading
 

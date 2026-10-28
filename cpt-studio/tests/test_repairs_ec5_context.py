@@ -144,7 +144,10 @@ class QualifierOfAnotherFieldTests(DateAssertions, SimpleTestCase):
     date - which then left a letter or title date to be taken and sent."""
 
     def test_the_labelled_date_is_read(self):
-        self.assert_document(HEAD + 'Last name: Synthetic    First name: Alex    DOS: 10/14/2026\n', '2026-10-14')
+        # the final refutation, fr-dr:4 and fr-di:0 (rule N7): a DATE qualifier opening a field of its own on the label's
+        # line ("Last name:") holds the date as the installed revision's same-line window did - asked, the labelled date
+        # kept, never discarded, and answering the question (this pin had it documented: a date 057a7d398 never sent)
+        self.assert_question(HEAD + 'Last name: Synthetic    First name: Alex    DOS: 10/14/2026\n', '2026-10-14')
         # P2DN's fix round, issue 5: a qualifier with a date of its own on the label's line makes the line state two
         # occurrences' dates (W1: "Rescheduled to: 10/14/2026" after the labelled 10/07 sent the superseded date): the
         # date is asked, as at the installed revision - the labelled date never discarded, and it answers the question
@@ -171,8 +174,9 @@ class QualifierOfAnotherFieldTests(DateAssertions, SimpleTestCase):
                 self.assert_never(HEAD + body, other)
                 if body.startswith('GI procedure report'):
                     # a report naming no service this release codes is never the note's heading (refutation round 2,
-                    # c2:7): the labelled date stands
-                    self.assert_document(HEAD + body, value)
+                    # c2:7); the final refutation, fr-dr:4 (N7): "Last name:" on the label's line holds the labelled
+                    # date as the installed revision did - asked, the labelled date answering (this pin had it documented)
+                    self.assert_question(HEAD + body, value)
                 elif 'Next colonoscopy' in body:
                     # P2DN's fix round, issue 5: the label's line states two occurrences' dates, so the labelled date is
                     # asked beside the evidence-only title; both answer the question (this pin had a conflict listing

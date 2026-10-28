@@ -138,8 +138,16 @@ class PlannedDateIsNeverTheServiceDateTests(DateAssertions, SimpleTestCase):
                 self.assert_asked(text, 'Procedure date')
 
     def test_controls_a_field_about_something_else_is_passed_over(self):
+        # the final refutation, fr-dr:4 and fr-di:0 (rule N7): a DATE qualifier opening a field of its own on the label's
+        # line is never passed over - the installed revision's same-line window held these dates, and passed over,
+        # "Scheduled by: Front desk    Procedure date: 11/04/2026" sent a planned procedure's date with an office visit:
+        # asked, the labelled date kept and answering (this pin had them documented, dates 057a7d398 never sent)
         for line in ('Last name: Synthetic    First name: Alex    DOS: 10/14/2026',
                      'Procedure date: 10/14/2026    Previous surgeries: appendectomy'):
+            with self.subTest(line=line):
+                self.assert_question(HEAD + line + '\n' + COLO_PLAIN, '2026-10-14')
+        # a HISTORY word opening a field about something else is still passed over (the installed revision never read it)
+        for line in ('Outside records: none    DOS: 10/14/2026', 'Procedure date: 10/14/2026    Recent labs: normal'):
             with self.subTest(line=line):
                 self.assert_document(HEAD + line + '\n' + COLO_PLAIN, '2026-10-14')
         # P2DN's fix round, issue 5: a qualifier field with a date of its own on the label's line is no longer passed

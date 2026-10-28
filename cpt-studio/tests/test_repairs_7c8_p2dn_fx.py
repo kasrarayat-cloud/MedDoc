@@ -428,12 +428,17 @@ class QualifierWithItsOwnDateOnTheLineTests(DateAssertions, SimpleTestCase):
                 self.assert_question(HEAD + 'Colonoscopy report\n' + line + '\n' + COLO_BODY, '2026-10-14')
 
     def test_controls(self):
-        for text in (HEAD + 'Colonoscopy report\nDate of service: 10/14/2026    Last name: Synthetic\n' + COLO_BODY,
-                     HEAD + 'Colonoscopy report\nLast colonoscopy: 05/01/2019\nDate of service: 10/14/2026\n' + COLO_BODY,
-                     HEAD + 'Colonoscopy report\nDate of service: 10/14/2026    DOB: 01/01/1998\n' + COLO_BODY,
-                     HEAD + 'Colonoscopy report\nDate of service: 10/14/2026    Previous name: Synthetic\n' + COLO_BODY):
+        for text in (HEAD + 'Colonoscopy report\nLast colonoscopy: 05/01/2019\nDate of service: 10/14/2026\n' + COLO_BODY,
+                     HEAD + 'Colonoscopy report\nDate of service: 10/14/2026    DOB: 01/01/1998\n' + COLO_BODY):
             with self.subTest(lines=text.splitlines()[2:4]):
                 self.assert_document(text, '2026-10-14')
+        # the final refutation, fr-dr:4 and fr-di:0 (rule N7): a DATE qualifier opening a field of its own on the
+        # label's line ("Last name:", "Previous name:") is no longer passed over - the installed revision's same-line
+        # window held these dates: asked, the labelled date answering (this pin had them documented)
+        for text in (HEAD + 'Colonoscopy report\nDate of service: 10/14/2026    Last name: Synthetic\n' + COLO_BODY,
+                     HEAD + 'Colonoscopy report\nDate of service: 10/14/2026    Previous name: Synthetic\n' + COLO_BODY):
+            with self.subTest(lines=text.splitlines()[2:4]):
+                self.assert_question(text, '2026-10-14')
 
 
 class QualifierWithItsOwnDateOnTheLineRequestTests(EndToEnd):
