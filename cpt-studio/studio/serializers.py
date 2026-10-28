@@ -4,6 +4,7 @@ from django.conf import settings
 from . import models, review
 from .gi.context import is_member_conflict
 from .gi.profiles import PROFILES, profile
+from .providers.base import ProviderUnavailable
 
 
 def _iso(value):
@@ -25,7 +26,10 @@ def user_json(user):
 def session_json(user, membership):
     workspace = membership.workspace
     encounters = workspace.encounters.all()
-    queue_states = {'needs_clarification', 'ready_for_review', 'provider_unknown'}
+    # the review queue's own rule, row by row (queue_reasons): a state that always waited on a member is on it whatever
+    # else is found, so its rows are counted without reading further
+    queued = sum(1 for encounter in encounters.select_related('current_revision', 'current_context', 'current_assessment')
+                 if encounter.state in QUEUE_STATES or queue_reasons(encounter))
     return {
         'user': user_json(user),
         'workspace': {'id': str(workspace.pk), 'name': workspace.name, 'subtitle': 'Synthetic demonstration workspace',
@@ -33,7 +37,7 @@ def session_json(user, membership):
                                    'profiles_version': workspace.category.profiles_version}},
         'role': membership.role, 'can_review': membership.can_review,
         'acknowledgement': review.ACKNOWLEDGEMENTS.get(user.actor_kind, ''),
-        'counts': {'documents': encounters.count(), 'queue': encounters.filter(state__in=queue_states).count()},
+        'counts': {'documents': encounters.count(), 'queue': queued},
         'synthetic_only': settings.SYNTHETIC_ONLY, 'provider_mode': settings.PROVIDER_MODE,
         'release': settings.RELEASE_SHA,
     }
@@ -85,7 +89,57 @@ def _source_kind(revision):
     return root.kind
 
 
+# The states that have always waited on a workspace member (a clarification, a review decision, a reconciliation): an
+# encounter in one stays on the review queue whatever else is found (queue_reasons).
+QUEUE_STATES = frozenset({'needs_clarification', 'ready_for_review', 'provider_unknown'})
+
+
+def queue_reasons(encounter, coding=None):
+    """What the encounter waits on a workspace member for, in this order; the review queue - and the session's count of it
+    - lists the encounter when this is not empty (refutation gi2, demo RC6: ho-06, no code selected with a second review
+    available, and ho-09, reviewed with a documented service unresolved, were off a queue of three states):
+      'question'        an open clarification on the assessment of the current revision;
+      'decision'        a code that needs a reviewer's decision - selected or reinstated with none that stands, or an
+                        exclusion to confirm or reinstate - counted as readiness counts it (review._decisions_waiting);
+      'reconciliation'  a provider request whose outcome is unknown and not reconciled;
+      'incomplete'      the encounter's coding completeness reads incomplete (review.coding_completeness, the encounter
+                        view's banner): a documented service or act without a supported proposal, a conflict in the
+                        record, a question, or no provider response read;
+      'second_review'   the bounded second review can be asked for now - only ever for a documented service left
+                        without a supported proposal, so only beside 'incomplete' (jobs.second_review_status);
+      'state'           a state that always waited on a member (QUEUE_STATES), when none of the above is found.
+    Nothing while the encounter is processing: it waits on its stages then. Read-only, from the rows; ``coding``: the
+    coding completeness already read for this encounter."""
+    if encounter.state == 'processing':
+        return []
+    reasons = []
+    assessment = review.live_assessment(encounter)
+    if assessment is not None:
+        if assessment.clarifications.filter(state=models.Clarification.OPEN).exists():
+            reasons.append('question')
+        if review._decisions_waiting(assessment)[0]:
+            reasons.append('decision')
+    if review._unreconciled_unknown(encounter):  # the rule the derived state and every send block read
+        reasons.append('reconciliation')
+    coding = review.coding_completeness(encounter) if coding is None else coding
+    if coding.get('state') == 'incomplete':
+        reasons.append('incomplete')
+        from .jobs import second_review_status  # local import: jobs imports this module's peers
+        try:
+            offered = second_review_status(encounter)['available']
+        except ProviderUnavailable:
+            # a provider this installation cannot build (no credentials configured) can be asked nothing: never claimed,
+            # and the list and the session - every page - never fail for it (only the encounter view reads it otherwise)
+            offered = False
+        if offered:
+            reasons.append('second_review')
+    if not reasons and encounter.state in QUEUE_STATES:
+        reasons.append('state')
+    return reasons
+
+
 def encounter_summary(encounter):
+    coding = review.coding_completeness(encounter)
     return {
         'id': str(encounter.pk), 'title': encounter.title, 'state': encounter.state,
         # worded from the run a provider_failed state reads: a response refused whole is "not used" (7c8 reports-5)
@@ -95,6 +149,9 @@ def encounter_summary(encounter):
         'open_clarifications': encounter.clarifications.filter(state=models.Clarification.OPEN,
                                                                assessment=encounter.current_assessment_id).count()
         if encounter.current_assessment_id else 0,
+        # the encounter view's coding completeness, so a reviewed encounter whose coding is incomplete says so in the
+        # lists, and what it waits on a member for: on the review queue when not empty (refutation gi2, demo RC6)
+        'coding_state': coding['state'], 'queue_reasons': queue_reasons(encounter, coding),
         'created_at': _iso(encounter.created_at),
     }
 
