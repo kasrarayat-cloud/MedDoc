@@ -1243,9 +1243,15 @@ def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
     shapes. Round 3 read them as the note's own and a fax's "Date/Time: 10/27/2026 14:30", a letter's "Date:" above the
     encounter it names, or "Cardiology consultation: 10/09/2026" above a colonoscopy was sent, and the snare
     polypectomy done on 10/14 excluded against it (dates:1, 3, 5); a planned, outside, cancelled or pending date beside a
-    label was documented whenever its qualifier was a word, a reach or a line the reader did not read (dates:4, 6-8)."""
+    label was documented whenever its qualifier was a word, a reach or a line the reader did not read (dates:4, 6-8).
+
+    The P2DATES skeptic (sk:1): the own label is one READ as the note's own - P2FIX's closed list of labels, at most
+    with the name of a service this release codes ("Colonoscopy procedure date") - as at 2fc8cde3d. The repair took
+    every label not set aside, so a label whose words name nothing this release codes ("Initial visit date: 01/15/2025",
+    "Cancelled procedure date", "Recall visit date", "Referral visit date") on a header line was the sent date. Such a
+    label ('unplaced') is asked, with the note that its words cannot be placed; it still speaks against an own date."""
     labels = [c for c in found if c.source == 'label']
-    own = [c for c in labels if c.reading != 'aside' and c.form == 'read' and c.header]
+    own = [c for c in labels if c.reading == 'own' and c.form == 'read' and c.header]
     own_ids = {id(c) for c in own}
     speaks = [c for c in labels if id(c) not in own_ids and c.reading in ('own', 'unplaced')]
     support = list(speaks)  # what joins the date's evidence when it agrees: as before, labels only
@@ -1255,10 +1261,12 @@ def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
     note = ' '.join(text for present, text in (
         (any(c.form == 'invalid' for c in unusable), INVALID_DATE_NOTE),
         (any(c.form == 'unread' for c in unusable), UNREAD_DATE_NOTE),
-        (not own and any(c.source == 'label' and c.form == 'read' and c.reading != 'aside' for c in found),
+        (not own and any(c.source == 'label' and c.form == 'read' and c.reading == 'own' for c in found),
          HEADER_DATE_NOTE),
         (not own and any(c.source != 'label' and c.form == 'read' for c in found), EVIDENCE_DATE_NOTE),
-        (not own and any(c.form == 'read' and c.reading in ('aside', 'other') for c in found), UNPLACED_DATE_NOTE))
+        (not own and any(c.form == 'read' and (c.reading in ('aside', 'other')
+                                               or (c.source == 'label' and c.reading == 'unplaced')) for c in found),
+         UNPLACED_DATE_NOTE))
         if present)
     if own and len(values) == 1 and all(c.form == 'read' and c.value in values for c in speaks):
         return _fact('service_date', [(c.value, s) for c in own + support for s in c.spans])
