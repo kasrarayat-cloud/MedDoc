@@ -223,6 +223,9 @@ class Analysis:
     adjustments: dict = field(default_factory=dict)
     # (start, end) of each OTHER_FAMILY procedure name, sorted: items of a check-box line (_unchecked_box)
     other_names: tuple = ()
+    # family -> [(reference Mention, negation start)] of bare negated status words (gi2 negation lens), decided per
+    # family in _route: released only when today's report independently establishes the procedure (_bare_negation_hold)
+    bare_negations: dict = field(default_factory=dict)
 
     def __post_init__(self):
         self._service_starts = [m.start for m in self.services]
@@ -577,6 +580,11 @@ def _token_explanations(an: Analysis, clause: tuple[int, int], token: tuple[int,
         cs, ce = clause
         explains = [(c.start, c.end) for c in an.cues_in(max(cs, token[0] - 200), min(ce, token[1] + 200))]
         explains += _landmark_negations_near(an, clause, token)
+        # gi2 negation lens: the negation of a bare negated status word is accounted for by that word ("Examination
+        # complete, not aborted."): it denies the status, not anything the passage reads
+        explains += [(negated[0], c.end) for c in an.cues_in(max(cs, token[0] - 200), min(ce, token[1] + 200))
+                     if c.status in ('cancelled', 'incomplete')
+                     for negated in (_negated_status(an, c.start),) if negated is not None and negated[1]]
         masked, where = _masked_map(an, max(cs, token[0] - 40), min(ce, token[1] + 400))
         for pattern in (cues.COMPLICATION_NEGATION, cues.QUALIFIER_NEGATION, _OPTION_LABEL):
             explains += [(where[m.start()], where[m.end()]) for m in pattern.finditer(masked)]
@@ -1873,6 +1881,17 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
                 if read is not None:
                     found += read
                     continue
+            negated = _negated_status(an, cue.start) if cue.status in ('cancelled', 'incomplete') else None
+            if negated is not None:
+                # gi2 negation lens: a negated status word ("Colonoscopy was not cancelled", "was never aborted; the
+                # cecum was reached") is never that status of the service: it holds as a doubt. Only a bare one in a
+                # passage that names no service (a cited "Examination complete, not aborted.") says nothing to hold:
+                # its negation is its own (_token_explanations), and the family's reading decides (_bare_negation_hold).
+                if not negated[1] or any(m in names for m in members):
+                    # the hold keeps the rank of the status word it stands for (as round 4c-2 box2:I's option holds
+                    # do), so a plan or a history cue in the same reading never outranks it into a non-contradiction
+                    found.append(('uncertain', _negated_status_cue(an, negated[0], cue.end), False, True, cue.status))
+                continue
             if cue.name in _OWNED_TIME_CUES:
                 owned = _owned_time_cue(an, cue, named, (cs, ce), em, today, history)
                 if owned is not None:
@@ -1907,6 +1926,11 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
     for ms, me in members:
         post = _masked_post(an, me, ce)
         negations, _ = _member_negations(an, cs, ce, ms, me, post)
+        if (ms, me) not in names and _opens_on_a_negated_status(an, ms, me):
+            # gi2 negation lens: a cited passage that opens on a negated status word ("aborted" of "Examination
+            # complete, not aborted.") - the negation written before it is the status word's (read by the clause cue
+            # above), never the passage's own denial
+            negations = [n for n in negations if n[2][1] != ms]
         for label, past, (ns, ne) in negations:  # round 4c-2 box2:I: "Colonoscopy: Not performed ☐ | Performed ☒"
             read = _B2_option_words(an, ns, ne, ts, te, label.split(': ', 1)[-1], 'negated')
             found += [('negated', label, past, False)] if read is None else read
@@ -5205,6 +5229,86 @@ def _B3_long_row(an: Analysis, start: int, end: int) -> bool:
     return row is not None and row[9]
 
 
+NEGATED_STATUS_HELD = 'uncertain: a negation governs the status word, not the service, and its sentence says more'
+
+
+def _negated_status(an: Analysis, start: int) -> Optional[tuple[int, bool]]:
+    """(negation start, bare) when the status word at ``start`` ("aborted", "cancelled", "terminated" ...) is governed
+    by a negation written directly before it (cues.status_negation: "not aborted", "never cancelled", "wasn't
+    postponed", "without being aborted"); None otherwise. ``bare``: its sentence, service names masked, is a bare
+    statement that the procedure was not called off or cut short and nothing more (cues.BARE_STATUS_DENIAL:
+    "Examination complete, not aborted.", "The procedure was never aborted."). Such a negation denies the status, not
+    the service: a bare one says nothing a reader must hold, anything more holds (gi2 negation lens, ho-02)."""
+    key = ('negated-status', start)
+    if key not in an.memo:
+        negation = cues.status_negation(an.text, start)
+        an.memo[key] = None if negation is None else (negation.start(),
+                                                      _bare_status_sentence(an, *an.lay.sentence_for(start, start + 1)))
+    return an.memo[key]
+
+
+def _bare_status_sentence(an: Analysis, s: int, e: int) -> bool:
+    """Whether the sentence [s, e), service names masked, is a bare statement that the procedure was not called off or
+    cut short (cues.BARE_STATUS_DENIAL). Read once per sentence, however many status words it holds, so a long line of
+    them stays linear."""
+    key = ('bare-status-sentence', s, e)
+    if key not in an.memo:
+        an.memo[key] = bool(cues.BARE_STATUS_DENIAL.fullmatch(_masked(an, s, e)))
+    return an.memo[key]
+
+
+def _opens_on_a_negated_status(an: Analysis, start: int, end: int) -> bool:
+    """Whether the passage [start, end) opens on a status word ("aborted", "cancelled" ...) that a negation written
+    directly before it governs (_negated_status): a cited "aborted" of "Examination complete, not aborted.". That
+    negation is the status word's own; the service-name grammar before a member ("but not the colonoscopy",
+    cues.NEGATED_PRE) never reads it as the passage's denial."""
+    lead = start
+    while lead < end and an.text[lead].isspace():
+        lead += 1
+    return any(c.start == lead and c.status in ('cancelled', 'incomplete') and _negated_status(an, lead) is not None
+               for c in an.cues_in(lead, end))
+
+
+def _negated_status_cue(an: Analysis, start: int, end: int) -> str:
+    return f"{NEGATED_STATUS_HELD} ('{' '.join(an.text[start:end].split())[:60]}')"
+
+
+BARE_NEGATION_UNESTABLISHED = ('uncertain: a negation governs the status word, not the service, but nothing else in '
+                               "today's report establishes the procedure as performed")
+BARE_NEGATION_UNREAD = 'uncertain: a negation governs the status word, not the service, but today\'s report also says'
+_UNREAD_DOUBT_SECTIONS = ('plan', 'history', 'indication')  # another occasion's text: never consulted for this hold
+
+
+def _unread_service_doubt(an: Analysis) -> Optional[str]:
+    """The first statement in today's report (outside plan, history and indication sections) that a procedure was not
+    done, was called off or is in doubt while naming no service or intervention (cues.UNREAD_SERVICE_DOUBT: "It was
+    not performed.", "This was postponed.", "It is unclear whether the procedure was completed."), or None. Routing
+    reads no such statement, so it never releases a bare negated status word beside one."""
+    key = ('unread-service-doubt',)
+    if key not in an.memo:
+        an.memo[key] = None
+        for cs, ce in an.lay.clauses:
+            if an.lay.section_at(cs).kind in _UNREAD_DOUBT_SECTIONS:
+                continue
+            hit = cues.UNREAD_SERVICE_DOUBT.search(an.text, cs, ce)
+            if hit is not None and not an.services_in(cs, ce) and not an.interventions_in(cs, ce):
+                an.memo[key] = ' '.join(hit.group(0).split())[:60]
+                break
+    return an.memo[key]
+
+
+def _bare_negation_hold(an: Analysis, family_readings: list, evidenced: bool) -> Optional[str]:
+    """None when a family's bare negated status words ("Examination complete, not aborted.") are released: the
+    family's own text establishes the procedure as performed today - an explicit performance cue, or a documented
+    extent, intervention, cannulation or sampling (EVIDENCE_FACTS) - and today's report has no statement routing
+    cannot read that a procedure was not done or is in doubt (_unread_service_doubt). Otherwise the cue each holds
+    with: the release must never make a procedure performed that only the bare sentence was keeping in question."""
+    if not (evidenced or any(r.status == 'performed' and r.basis == 'cue' for r in family_readings)):
+        return BARE_NEGATION_UNESTABLISHED
+    unread = _unread_service_doubt(an)
+    return f"{BARE_NEGATION_UNREAD} '{unread}'" if unread else None
+
+
 def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, Reading]:
     """Clauses that refer to a family's service without naming it ("the procedure
     was cancelled", "unable to advance beyond the splenic flexure"). Only these
@@ -5250,6 +5354,17 @@ def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, 
                     if status in ('incomplete', None) and _only_a_sub_act(an, attributed, family, s, e):
                         continue  # "The terminal ileum was not intubated" after the cecum was reached
                     mention = Mention(family, m.start(), m.end(), 'reference', m.group(0))
+                    negated = _negated_status(an, m.start())
+                    if negated is not None:
+                        # gi2 negation lens: the negation governs the status word, not the service. A bare statement
+                        # ("Examination complete, not aborted.") refers to no service that was not done; anything more
+                        # in its sentence holds it as a doubt - never a denial, a cancellation or an incompleteness.
+                        if negated[1]:
+                            an.bare_negations.setdefault(family, []).append((mention, negated[0]))  # decided in _route
+                        else:
+                            found[mention] = Reading('uncertain', (_negated_status_cue(an, negated[0], m.end()),), 'cue',
+                                                     doubt=True)
+                        continue
                     if status:
                         found[mention] = Reading(status, (f'{status}: {m.group(0)}',), 'cue')
                     else:  # "aborted": cancelled before insertion, incomplete after, otherwise held as a doubt
@@ -6981,6 +7096,15 @@ def _route(an: Analysis) -> RoutingResult:
         evidenced = any(f.name in EVIDENCE_FACTS and f.origin == 'document' and f.value not in (None, 'none documented')
                         for f in facts)
         family_readings = [readings[m] for m in mentions]
+        bare = an.bare_negations.get(family, [])
+        hold = _bare_negation_hold(an, family_readings, evidenced) if bare else None
+        if hold is not None:  # gi2 negation lens: not released, so each bare negated status word holds as a doubt
+            for mention, negation_start in bare:
+                held = Reading('uncertain', (f"{hold} ('{' '.join(an.text[negation_start:mention.end].split())[:60]}')",),
+                               'cue', doubt=True)
+                readings[mention] = an.references[mention] = held
+            mentions = sorted(mentions + [mention for mention, _ in bare], key=lambda m: m.start)
+            family_readings = [readings[m] for m in mentions]
         kinds = tuple(an.lay.section_at(m.start).kind for m in mentions)
         away = tuple(_elsewhere(an, m) for m in mentions)
         status = _aggregate(family_readings, section_suffices=evidenced or not has_basis, kinds=kinds, away=away,

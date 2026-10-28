@@ -272,6 +272,65 @@ CANCELLED_CLAUSE = (
     ('not started', rx(r'\bnot\s+(?:started|begun)\b')),
     ('no-show', rx(r'\bno[- ]show(?:ed)?\b|\bdid\s+not\s+(?:show|arrive|present\s+for)\b')),
 )
+# --- a negation that governs a status word (gi2 negation lens, ho-02 at 2b82889f) -----------------------------------
+# A status word says the procedure was called off or cut short ("aborted", "cancelled", "postponed", "terminated").
+# A negation written directly before it - only a passive auxiliary between - negates that STATUS, not the service:
+# "Examination complete, not aborted." says the examination was not cut short, "The colonoscopy was never cancelled"
+# that it was not called off. Routing's readers read such a status word as the service's own denial ("not aborted"
+# read with the service-name grammar of NEGATED_PRE, "but not the colonoscopy"), cancellation or incompleteness; the
+# documented-service reader already reads a negated negative as positive (ARCHITECTURE 5.9). One predicate, read by
+# routing's reference and clause-cue readers and by its reading of a cited passage that opens on the status word
+# (detect._negated_status, detect._opens_on_a_negated_status).
+STATUS_NEGATION = rx(r"(?:\b(?:not|never|neither|nor|without)|n['\u2019]t)(?:\s+(?:being|been|be))?\s+$")
+STATUS_NEGATION_REACH = 40  # the negation and its auxiliary stand within this many characters before the status word
+
+
+def status_negation(text: str, start: int):
+    """The negation that governs the status word starting at ``start`` (STATUS_NEGATION), or None."""
+    return STATUS_NEGATION.search(text, max(0, start - STATUS_NEGATION_REACH), start)
+
+
+# A sentence that is a bare statement that the procedure was not called off or cut short, and nothing more: the
+# procedure (or a service name, masked as SERVICE_TOKEN) as its subject or none, an optional completion predicate
+# ("complete,", "complete;", "was completed and"), the auxiliaries, the negation (also contracted with a typographic
+# apostrophe), its status word(s) and an optional "early" or intensifier (_BARE_TAIL). Read whole (fullmatch on the
+# masked sentence, once per sentence): any other word - a hedge, a time, "until", "but", another act, a reason -
+# keeps the sentence from being one, and the negated status word is then held as a doubt, never released.
+STATUS_WORD = (r'(?:aborted|cancel(?:l)?ed|postponed|deferred|called\s+off|terminated|discontinued|halted|stopped|'
+               r'interrupted|abandoned)')
+_BARE_SUBJECT = r'(?:(?:the|this)\s+)?(?:procedure|examination|exam|study|endoscopy|' + SERVICE_TOKEN + r'|it)'
+# What may follow a status word in a bare statement: "early", and a negative-polarity intensifier, which only
+# strengthens the negation ("at any point", "at any time", "at any stage", "at all": a closed class).
+_BARE_TAIL = r'(?:\s+(?:early|prematurely|at\s+any\s+(?:point|time|stage)|at\s+all))?'
+_BARE_NEGATION = r"(?:not|never|neither|without|(?:was|were|is|had|has)n['\u2019]t)(?:\s+(?:being|been|be))?"
+BARE_STATUS_DENIAL = rx(
+    r'[\s*\u2022-]*(?:' + _BARE_SUBJECT + r'\s+)?'
+    r'(?:(?:was|is)\s+)?(?:complete(?:d|ly)?(?:\s*[,;]\s*|\s+and\s+|\s+))?'
+    r'(?:(?:was|were|is|has\s+been|had\s+been)\s+)?'
+    + _BARE_NEGATION + r'\s+' + STATUS_WORD + _BARE_TAIL +
+    r'(?:\s*(?:,|or|nor|and)\s+(?:(?:not|never)\s+)?' + STATUS_WORD + _BARE_TAIL + r')*'
+    r'[\s.!]*')
+# A statement that a procedure was not done, was called off, was cut short or is in doubt, whose subject routing never
+# resolves (a pronoun, or "the procedure" with a predicate the reference patterns do not read): "It was not performed.",
+# "It was cancelled before sedation.", "This was postponed.", "It is unclear whether the procedure was completed." Read
+# only to keep a bare negated status word held (detect._bare_negation_hold): beside such a statement the bare sentence
+# may be the only words routing reads about whether the procedure happened. Never read to deny or hold anything else.
+_UNREAD_SUBJECT = r'(?:it|this|(?:the\s+)?(?:procedure|exam|examination|study|endoscopy))'
+UNREAD_SERVICE_DOUBT = rx(
+    r'\b' + _UNREAD_SUBJECT + r'\s+(?:was|is|has\s+been|had\s+been|will\s+be|would\s+be)\s+'
+    r'(?:(?:not|never)\s+(?:(?:been|be|yet)\s+)?(?:performed|done|started|begun|undertaken|attempted|completed?|possible|'
+    r'feasible|carried\s+out)'
+    r'|' + STATUS_WORD + r'|incomplete|rescheduled|abbreviated|limited)\b'
+    r'|\b' + _UNREAD_SUBJECT + r"\s+(?:did\s+not|didn't|never|could\s+not|couldn't)\s+(?:happen|occur|take\s+place|start|"
+    r'begin|proceed|be\s+(?:performed|done|completed))\b'
+    r'|\b(?:unclear|uncertain|unknown|not\s+(?:clear|certain|known|documented))\s+(?:whether|if)\b'
+    r'|\b' + _UNREAD_SUBJECT + r'\s+(?:was|is)\s+(?:possibly|probably|likely|perhaps|maybe|reportedly|presumably)\b'
+    # a modal about the procedure itself ("The procedure may have been incomplete.", "It might not have been completed.")
+    r'|\b' + _UNREAD_SUBJECT + r'\s+(?:may|might|could|would|must)\s+(?:not\s+)?(?:have\s+)?(?:been|be)\b'
+    # the patient leaving before or without it ("The patient left before the procedure began."), a no-show, a refusal
+    # of "it"
+    r'|\b(?:left|departed|leaves|leaving)\s+(?:\w+\s+){0,2}?(?:before|without|prior\s+to)\b'
+    r"|\bno[- ]show\b|\bdid\s+not\s+(?:show|arrive)\b|\b(?:declined|refused)\s+(?:it|this)\b")
 # "aborted" after the scope went in is an incomplete procedure, not a cancellation;
 # "before sedation" keeps it a cancellation. An abort that says neither is held as
 # uncertain (detect._abort_status), never excluded as cancelled.
