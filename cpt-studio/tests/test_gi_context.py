@@ -250,11 +250,13 @@ class OwnTitleDateTests(unittest.TestCase):
 
     def test_the_first_title_decides(self):
         head = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
+        # the final refutation, fr-di:3: a dated title read as another document's ("Pathology report") or another
+        # occurrence's ("Next visit") is kept as evidence but never read as a date a member's answer agrees with (these
+        # pins had its date read too)
         cases = (
-            ('GI follow-up visit: 2026-10-20\nPathology report: 2026-10-14\nEstablished patient.\n',
-             {'2026-10-20', '2026-10-14'}),
-            ('GI consultation note: 2026-10-20\nPathology report: 2026-10-14\n', {'2026-10-20', '2026-10-14'}),
-            ('GI consultation note: 2026-10-20\nNext visit: 2026-12-01\n', {'2026-10-20', '2026-12-01'}),
+            ('GI follow-up visit: 2026-10-20\nPathology report: 2026-10-14\nEstablished patient.\n', {'2026-10-20'}),
+            ('GI consultation note: 2026-10-20\nPathology report: 2026-10-14\n', {'2026-10-20'}),
+            ('GI consultation note: 2026-10-20\nNext visit: 2026-12-01\n', {'2026-10-20'}),
             ('Outside colonoscopy report: 2026-09-03\nGastroenterology consultation.\n', {'2026-09-03'}),
             ('Post-procedure note: 2026-10-20\nUpper endoscopy.\n', {'2026-10-20'}),
             ('Colonoscopy report: 14 Oct 2026\nThe colonoscope was advanced to the cecum.\n', {'2026-10-14'}),
