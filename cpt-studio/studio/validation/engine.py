@@ -184,7 +184,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         # service's selected code is not.
         documented_em = any(checks.separate_em_statement(f) for f in routing.findings if f.family in checks.EM_FAMILIES)
         coverage.append(checks.unproposed_check(*_missed(routing, selections, procedure_day,
-                                                         _accounted_elsewhere(usable, included_by)),
+                                                         _accounted_elsewhere(usable, included_by, routing)),
                                                 separate_em=documented_em))
     service_questions = _service_questions(usable, proposals, context) if usable else []
     unsupported = _unsupported(routing, selections)
@@ -1645,8 +1645,8 @@ def _included_by(inventory: Optional[gi_services.ServiceInventory], covered: Map
     return out
 
 
-def _accounted_elsewhere(inventory: Optional[gi_services.ServiceInventory], included_by: Mapping[str, Sequence[str]]
-                         ) -> dict:
+def _accounted_elsewhere(inventory: Optional[gi_services.ServiceInventory], included_by: Mapping[str, Sequence[str]],
+                         routing: Optional[RoutingResult] = None) -> dict:
     """{routing family: the labels services.unproposed names it by} for each family routing reads of which the
     documented-service reconciliation accounts for a service done today with ANOTHER service's selected code: the
     service is included in another one (an EGD inside an EUS of the upper GI tract) of whose selected, non-excluded
@@ -1660,17 +1660,32 @@ def _accounted_elsewhere(inventory: Optional[gi_services.ServiceInventory], incl
     never the examination the code includes (refutation P2RA, EUS lens 0: an EGD inside an EUS whose EGD-with-EUS code
     was selected made the whole upper GI routing family read as accounted for, so a push enteroscopy beside it with no
     proposal passed as "Every performed service that routing detected in the document has a selected proposal" - which
-    the installed revision named)."""
+    the installed revision named).
+
+    Keyed on ``routing``'s own reading too, since the check speaks for what routing detected: every mention routing
+    reads as performed under the family is accounted for only when the service it names - read by the inventory's own
+    service names (gi_services.SERVICES, its first match) - is a service done today that such a code includes; any
+    other is named by that service's label. A service the inventory does not read as done today is never counted as
+    accounted for (refutation P2FR, EUS-SECOND 0: a push enteroscopy routing read as performed under the upper GI family,
+    which the inventory held as uncertain, was not among the services counted, so the family again read as accounted
+    for). A mention routing itself does not read as performed names nothing: never "documented as performed"."""
     if inventory is None:
         return {}
     done = [s for s in inventory.services if s.status in checks.POSITIVE]
     accounted = {}
     for family in dict.fromkeys(legacy_family(s.family) for s in done):
         under = [s for s in done if legacy_family(s.family) == family]
-        left = [s for s in under if not included_by.get(s.id)]
+        left = [s.family for s in under if not included_by.get(s.id)]
         if len(left) < len(under):
-            accounted[family] = tuple(dict.fromkeys(PROFILES[s.family].label if s.family in PROFILES else s.family
-                                                    for s in left))
+            included = {s.family for s in under if included_by.get(s.id)}
+            finding = routing.finding(family) if routing is not None else None
+            for mention in finding.mentions if finding is not None else ():
+                if mention.status in checks.POSITIVE:
+                    named = next((f for f, _, pattern in gi_services.SERVICES if pattern.search(mention.span.text)),
+                                 family)
+                    if named not in included:
+                        left.append(named)
+            accounted[family] = tuple(dict.fromkeys(PROFILES[f].label if f in PROFILES else f for f in left))
     return accounted
 
 

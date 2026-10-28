@@ -1474,7 +1474,14 @@ of), and when only some of them are so accounted for, the rest are named by
 their own family - "Small-bowel enteroscopy", never the examination the code
 includes (refutation P2RA, EUS lens 0: an EGD inside an EUS whose EGD-with-EUS
 code was selected let the check pass beside a push enteroscopy with no
-proposal, which the installed revision named)). Each check: `{id, label, status ∈ pass | warn | fail | not_verified |
+proposal, which the installed revision named). The family is keyed on routing's
+own reading as well: every mention routing reads as performed under it must
+name (by the inventory's own service names) a service done today that such a
+code includes; one naming a service the documented-service reading does not
+read as done today - a push enteroscopy routing reads as performed and that
+reading holds as uncertain - is named by its own family too, and a mention
+routing itself does not read as performed names nothing (refutation P2FR,
+EUS-SECOND 0)). Each check: `{id, label, status ∈ pass | warn | fail | not_verified |
 not_applicable | info, detail, source}`. Engine `cpt-studio-validation@3`.
 A selected, non-excluded `gi.other` code also speaks for the routed procedure
 line its passage opens with (`_Evaluation.speaks_for`: a passage's own sentence
