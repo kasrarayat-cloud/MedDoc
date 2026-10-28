@@ -138,8 +138,9 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   stale-stage sweep settles them (the closed encounters' states are refreshed).
   Nothing finished is touched and no row is removed. If the close then names
   an encounter whose state the parked revision would show wrongly whatever it
-  is handed - a bounded second review's response refused whole
-  (**second_review_refused**, under **Reinstalling an older revision**) - and
+  is handed - a bounded second review's response refused whole, or a second
+  review left unread (**second_review_refused**, **second_review_unread**,
+  under **Reinstalling an older revision**) - and
   the parked pair is not this revision, nothing is restored over it: the new
   pair is left stopped and the parked pair parked, and the receipt names the
   encounters. To keep this revision, remove the parked pair by hand and rerun
@@ -258,11 +259,25 @@ failure path of `app` read them as it reads the rows):
   return proposals."), and its blocker is "No CPT code was proposed" and its
   page "No CPT codes were proposed for this document." either way. No list
   state can be put back for it, so it is named, never handed over.
+- **second_review_unread**: the current assessment did not read the bounded
+  second review made for the answer it reads, and that review may hold codes
+  nobody read - it was sent and its outcome is unknown (reconciled or not), or
+  it was answered and not read yet - beside a primary answer that was used and
+  leaves nothing to decide. This revision states that review's outcome ('Second
+  review outcome unknown', "No CPT code was proposed in the response that was
+  read; the second review has an unknown outcome"); 057a7d39 reads no second
+  review, so whatever state it is handed it lists 'No CPT codes proposed' (or
+  its name for the state it is given), with the blocker "No CPT code was
+  proposed" and the page "No CPT codes were proposed for this document.", beside
+  a request that was sent. No list state can be put back for it, so it is
+  named, never handed over. A second review that failed or was not sent
+  proposed nothing, so what 057a7d39 says of those rows is true: they are put
+  back (below).
 - a stage of a kind it has no stage for (the second review), queued, running,
   or stopped as the latest: its worker ends on it.
 
 `rollback-app` closes the last as failed, and refuses, naming the encounters,
-while any of the first five exists. They are cleared on this revision's web:
+while any of the first six exists. They are cleared on this revision's web:
 reconcile each unknown outcome; Resume the stopped stage, or answer the date
 question (correct or clear the metadata date), after which this revision makes
 the request for the agreed date (re-assessing with, or re-using, a recorded
@@ -270,9 +285,10 @@ answer to it where one exists). A request that failed or was not sent stays
 recorded on its revision, so only an addendum (a newer revision, whose own
 request then stands) clears an encounter a metadata save would send it again
 for, or this revision stays installed. A code only a second review selected,
-and a second review's response refused whole, are cleared likewise by an
-addendum (the newer revision's assessment reads no second review until one is
-asked for), or this revision stays installed. So,
+a second review's response refused whole, and a second review left unread are
+cleared likewise by an addendum (the newer revision's assessment reads no second
+review, and none is made for its answer, until one is asked for), or this
+revision stays installed. So,
 before reinstalling an older revision over this one:
 
 1. Clear those records on this revision's web.
@@ -311,8 +327,18 @@ so there are no CPT proposals - what 057a7d39 itself shows for that row. A
 bounded second review's response refused whole has no such state (057a7d39
 reads a refusal of the primary answer only: as `no_codes` it would say "No CPT
 code was proposed"), so it is never put back: it is **second_review_refused**,
-named above, and `rollback-app` refuses while one exists. Every other state is
-labelled alike by both revisions and keeps this revision's derivation:
+named above, and `rollback-app` refuses while one exists; nor is a second
+review left unread (**second_review_unread**, named above). This revision also
+words `no_codes` from its rows: a second review that failed ('Second review
+failed') or was not sent ('Second review not sent'), and codes the provider
+proposed that none can decide ('No code selected for approval': excluded with
+no reinstatement, or alternatives only). Put back to 057a7d39's own derivation,
+also `no_codes`, each reads 'No CPT codes proposed' with the blocker "No CPT
+code was proposed": true of the first two (neither request proposed anything;
+the review is not named, as 057a7d39 reads none), and for the last what
+057a7d39 says of such rows it writes itself (refutation p2, reports2:3,
+pre-existing there). Every other state is labelled alike by both revisions and
+keeps this revision's derivation:
 057a7d39's own reading of a hold (a request that failed) or of a second review
 the undo closed (a failed stage) would list a date question as 'Provider
 request failed' and drop both from its review queue - and a state on the review

@@ -14,22 +14,31 @@ provider is an in-process fake (no network).
 - EUS lens 2 (engine._second_review): an EGD-with-EUS code the bounded second review selected for the EGD the primary
   proposals left listed was kept as an alternative that "accounts for no documented service or act the primary
   proposals left unresolved": the merge accepted a code for an open item only inside the item's own family.
+- ROLLBACK lens 0 (ops/install.py UNDO_HAZARDS, SHOWN_HAZARDS): an encounter whose second review's outcome is unknown,
+  beside a primary answer that proposes nothing, was put back to the installed revision's no_codes and handed over,
+  and 057a7d39 then said that no code was proposed beside a request that was sent and that nobody read.
 """
 import dataclasses
 from unittest import mock
 
 from django.test import SimpleTestCase
 
-from studio import jobs
+from studio import jobs, models, review
 from studio.gi.profiles import PROFILES
+from studio.providers import ProviderUnavailable
 from studio.types import NormalizedResponse
 from studio.validation import checks
 from tests.test_pipeline_api import FakeProvider, drain
 from tests.test_repairs_7c8_p1reports import Harness
+from tests.test_repairs_7c8_p2install import BANNER, SNARE, VISIT, WEB, WORKER
+from tests.test_repairs_7c8_p2install import REPORT as P2_REPORT
+from tests.test_repairs_7c8_p2install import Base as P2Base
+from tests.test_repairs_7c8_p2install import Provider as P2Provider
 from tests.test_repairs_7c8_p2reports import (EGD_LABEL, EGD_WITH_EUS_CODES, EGD_WITH_LIMITED_EUS, EUS_WITH_EGD,
                                               EVERY_DETECTED, FNA, LIMITED_EUS, NO_EGD_PROPOSAL, screen, unproposed,
                                               unresolved_items)
 from tests.test_services_reconcile import run, sel, span
+from tests.test_repairs_r1_m import install, run_app_script
 from tests.test_services_second_review import TwoPassProvider
 
 SYNTHETIC = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
@@ -335,3 +344,176 @@ class TheSecondReviewsIncludingCodeThroughTheApiTests(Harness):
         shown = screen(self.detail(encounter_id))
         self.assertNotIn(NOT_ADDED, shown['codes'])
         self.assertIn('43237', shown['codes'])
+
+
+# --- ROLLBACK lens 0: a second review the shown assessment did not read is named, never handed to an older revision ---
+
+BIOPSY = ('45380', 'was sampled with cold biopsy forceps')
+
+
+class ExcerptNotBuilt(P2Provider):
+    """A request for anything but the whole document (the bounded second review's excerpt) cannot be built: that run is
+    recorded as not sent, and nothing is sent."""
+
+    def build_request(self, text, service_date):
+        if not text.startswith(BANNER):
+            raise ProviderUnavailable('The excerpt cannot be sent (synthetic stand-in for an adapter refusal).')
+        return super().build_request(text, service_date)
+
+
+class AnUnreadSecondReviewIsNamedNeverHandedOverTests(P2Base):
+    """ROLLBACK lens 0 (verified must-fix, class 3 reached through a class 5 path; not pre-existing at 057a7d398, which
+    has no second review): the bounded second review a reviewer asked for over a primary answer that proposes nothing
+    was sent and its outcome is unknown; a member reconciled it, and the re-assessment reads the primary answer alone.
+    This revision lists it 'Second review outcome unknown', with the blocker 'No CPT code was proposed in the response
+    that was read; the second review has an unknown outcome'. rollback-app, and the failure path of `app`, put it back
+    to 057a7d39's own derivation (no_codes) and handed the rows over - and 057a7d39, which reads no second review, then
+    listed 'No CPT codes proposed' with the blocker 'No CPT code was proposed' and the page 'No CPT codes were proposed
+    for this document.' beside a request that was sent and may have proposed codes nobody read (measured with its real
+    code by the verifier; every state it could be handed says the same). Such an encounter is named instead
+    ('second_review_unread', a SHOWN_HAZARDS reason, as a response refused whole is): rollback-app refuses before
+    stopping anything, and the failure path of `app` leaves the new pair stopped and the previous pair parked. A second
+    review that failed or was never sent proposed nothing, so 057a7d39's "no code was proposed" is true of those rows:
+    they are put back as before. The live installation's shape is neither refused nor altered
+    (RefusedResponseHandedBackTests.test_controls_a_copy_of_the_live_installation_has_nothing_to_put_back)."""
+
+    def asked(self, tag, outcome, *, reconcile=False, primary=(VISIT,), provider=None):
+        """A report whose primary answer (HTTP 200) names only the ``primary`` quotes the report holds - none for VISIT
+        alone - then the bounded second review a reviewer asks for, ending ``outcome``; a member reconciles an unknown
+        one when ``reconcile``, and the re-assessment reads the primary answer again (reused, nothing sent)."""
+        if provider is not None:
+            self.provider = provider
+            patcher = mock.patch('studio.jobs.get_provider', return_value=provider)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.provider.first, self.provider.later = list(primary), list(primary)
+        encounter_id = self.create(tag, text=P2_REPORT)
+        self.assertTrue(self.client.get(f'/api/encounters/{encounter_id}').json()['second_review']['available'])
+        self.provider.outcomes = [outcome]
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/second-review').status_code, 201)
+        drain()
+        if reconcile:
+            run = models.ProviderRun.objects.get(encounter_id=encounter_id, state=models.ProviderRun.UNKNOWN,
+                                                 reconciled_at__isnull=True)
+            sent = self.sent()
+            reply = self.post(f'/api/encounters/{encounter_id}/reconcile',
+                              {'provider_run_id': str(run.pk), 'note': 'Checked the provider console (synthetic).'})
+            self.assertEqual(reply.status_code, 201, reply.content)
+            drain()
+            self.assertEqual(self.sent(), sent)  # the primary answer is reused
+        return encounter_id
+
+    def hazards(self):
+        return run_app_script(install.UNDO_HAZARDS_READ, {})['hazards']
+
+    def close(self):
+        since = models.Job.objects.order_by('-created_at').first().created_at.isoformat()
+        return run_app_script(install.CLOSE_STAGES, {'since': since, 'note': 'Closed (synthetic).',
+                                                     'kinds': list(install.COMMON_STAGE_KINDS)})
+
+    def test_the_read_and_the_close_name_a_reconciled_unknown_outcome_until_an_addendum(self):
+        unknown = self.asked('UK', 'unknown', reconcile=True)
+        self.assertEqual(self.listed(unknown), ('no_codes', 'Second review outcome unknown'))
+        self.assertIn('No CPT code was proposed in the response that was read; the second review has an unknown '
+                      'outcome', review.readiness(self.encounter(unknown))['blockers'])
+        self.assertEqual(self.hazards(), {unknown: ['second_review_unread']})
+        closed = self.close()
+        self.assertEqual(closed['hazards'], {unknown: ['second_review_unread']})
+        self.assertIn(unknown, closed['relabel'])
+        # cleared as ops/INSTALL.md says: an addendum - a newer revision, whose own request is sent and whose
+        # assessment has no second review made for its answer until one is asked for
+        sent = self.sent()
+        reply = self.post(f'/api/encounters/{unknown}/addenda', {'text': 'Addendum (synthetic): no change to the plan.',
+                                                                 'synthetic_attestation': 'yes'})
+        self.assertEqual(reply.status_code, 201, reply.content)
+        drain()
+        self.assertEqual(self.sent(), sent + 1)
+        self.assertIsNone(review._unread_second_review(self.encounter(unknown).current_assessment))
+        self.assertEqual(self.hazards(), {})
+
+    def test_an_unreconciled_unknown_outcome_is_named_too(self):
+        # 057a7d39's blocker says 'No CPT code was proposed' beside it as well; it is also an outcome its worker would
+        # reconcile under its own rules ('unknown')
+        unknown = self.asked('UU', 'unknown')
+        self.assertEqual(self.encounter(unknown).state, 'provider_unknown')
+        self.assertEqual(self.hazards(), {unknown: ['second_review_unread', 'unknown']})
+
+    def test_a_second_review_answered_and_not_read_yet_is_named_too(self):
+        # the second review succeeded - its answer names the biopsy's code - and the assessment it queued was stopped
+        # before it ran: the shown assessment is the one before it, with nothing to decide, beside which 057a7d39's
+        # blocker and page would say that no code was proposed
+        self.provider.first, self.provider.later = [VISIT], [VISIT, BIOPSY]
+        encounter_id = self.create('RN', text=P2_REPORT)
+        self.assertTrue(self.client.get(f'/api/encounters/{encounter_id}').json()['second_review']['available'])
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/second-review').status_code, 201)
+        job = jobs.claim_next()
+        self.assertEqual(job.kind, models.Job.REVIEW2)
+        jobs.run_job(job)
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/stop').status_code, 200)
+        encounter = self.encounter(encounter_id)
+        self.assertEqual(encounter.state, 'stopped')
+        second = models.ProviderRun.objects.get(encounter_id=encounter_id, purpose=models.ProviderRun.SECOND_REVIEW)
+        self.assertEqual((second.state, second.http_status), (models.ProviderRun.SUCCEEDED, 200))
+        self.assertEqual(review._unread_second_review(encounter.current_assessment).pk, second.pk)
+        self.assertIn('No CPT code was proposed in the response that was read; the second review has not been read yet',
+                      review.readiness(encounter)['blockers'])
+        self.assertEqual(self.hazards(), {encounter_id: ['second_review_unread']})
+
+    def test_controls_a_second_review_that_failed_or_was_never_sent_is_put_back_as_before(self):
+        # it proposed nothing, so what 057a7d39 says of the rows - no code was proposed - is true; a second review
+        # unread beside a code to decide is never named either: 057a7d39 shows that code
+        failed = self.asked('FL', 'failed')
+        self.assertEqual(self.listed(failed), ('no_codes', 'Second review failed'))
+        decided = self.asked('DC', 'unknown', reconcile=True, primary=(VISIT, SNARE))
+        self.assertNotIn(self.encounter(decided).state, ('no_codes', 'provider_failed'))
+        not_sent = self.asked('NS', 'none', provider=ExcerptNotBuilt(first=[VISIT], later=[VISIT]))
+        self.assertEqual(self.listed(not_sent), ('no_codes', 'Second review not sent'))
+        self.assertEqual(self.hazards(), {})
+        closed = self.close()
+        self.assertEqual(closed['hazards'], {})
+        self.assertEqual(sorted(closed['relabel']), sorted([failed, not_sent]))
+        answer, world = self.rollback()
+        self.assertNotIsInstance(answer, install.InstallError, answer)
+        self.assertEqual(answer['states_put_back'], {'encounters': 2, 'changed': {}})  # 057a7d39's no_codes, as stored
+        self.assertEqual({self.encounter(pk).state for pk in (failed, not_sent)}, {'no_codes'})
+
+    def test_rollback_app_refuses_naming_it_before_anything_is_stopped(self):
+        unknown = self.asked('UK', 'unknown', reconcile=True)
+        sent = self.sent()
+        for parked in (None, 'installed', 'same'):
+            with self.subTest(parked=parked):
+                error, world = self.rollback(parked=parked)
+                self.assertIsInstance(error, install.InstallError)
+                self.assertIn('nothing was stopped or removed', str(error))
+                self.assertIn('1 encounter(s): second_review_unread 1', str(error))
+                self.assertEqual(error.details['hazards'], {unknown: ['second_review_unread']})
+                self.assertFalse([call for call in world.calls if call[0] in ('stop', 'rm')])
+                self.assertEqual([call[2] for call in world.calls if call[0] == 'script'], ['UNDO_HAZARDS_READ'])
+                self.assertEqual(self.listed(unknown), ('no_codes', 'Second review outcome unknown'))
+        self.assertEqual(self.sent(), sent)
+
+    def test_the_failure_path_leaves_the_new_pair_stopped_and_the_previous_pair_parked(self):
+        unknown = self.asked('UK', 'unknown', reconcile=True)
+        sent = self.sent()
+        error, world = self.fail_install('installed')
+        message = str(error)
+        self.assertIn('cpt-studio-worker did not become ready', message)
+        self.assertIn('1 encounter(s): second_review_unread 1', message)
+        self.assertIn('the new pair was left stopped and the previous pair parked', message)
+        self.assertEqual(error.details['hazards'], {unknown: ['second_review_unread']})
+        self.assertEqual(world.ids(), {WEB + '-previous': 'old-web', WORKER + '-previous': 'old-worker',
+                                       WEB: 'new-web', WORKER: 'new-worker'})
+        self.assertFalse([call for call in world.calls if call[0] in ('start', 'rm')])
+        self.assertFalse([call for call in world.calls if call[0] == 'script'
+                          and call[2] in ('RECOMPUTE_STATES', 'INSTALLED_STATES')])  # nothing was put back
+        self.assertEqual(self.listed(unknown), ('no_codes', 'Second review outcome unknown'))
+        self.assertEqual(self.sent(), sent)
+
+    def test_controls_a_same_revision_re_runs_failure_path_restores_its_pair_as_before(self):
+        unknown = self.asked('UK', 'unknown', reconcile=True)
+        error, world = self.fail_install('same')
+        self.assertIn('cpt-studio-worker did not become ready', str(error))
+        self.assertNotIn('left stopped', str(error))
+        self.assertEqual(world.ids(), {WEB: 'old-web', WORKER: 'old-worker'})
+        self.assertEqual(sorted(call[1] for call in world.calls if call[0] == 'start'), sorted((WEB, WORKER)))
+        self.assertEqual(self.listed(unknown), ('no_codes', 'Second review outcome unknown'))

@@ -1402,6 +1402,14 @@ COMMON_STAGE_KINDS = ('analyze', 'assess', 'extract', 'predict')
 #              'Provider request failed', and its blocker is 'No CPT code was proposed' either way. No state can be put
 #              back for it, and a stopped worker does not keep a web from showing it (SHOWN_HAZARDS; the skeptic of
 #              refutation p2's install2:1 repair; must-fix class 3).
+#   second_review_unread - the current assessment did not read the bounded second review made for the answer it reads
+#              (review._unread_second_review) and that review may hold codes nobody read - sent with an outcome still
+#              unknown or reconciled as unknown, or answered and not read yet - while that succeeded answer leaves
+#              nothing to decide. This revision states that review's outcome ('Second review outcome unknown'); 057a7d39
+#              reads no second review, so whatever state it is handed it says that no code was proposed: 'No CPT codes
+#              proposed', its blocker 'No CPT code was proposed', its page 'No CPT codes were proposed for this
+#              document.' (SHOWN_HAZARDS; refutation P2RA, ROLLBACK lens 0; must-fix class 3). One that failed or was
+#              not sent proposed nothing, so that statement is true of its rows: it is put back like any other state.
 UNDO_HAZARDS = '''
 def undo_hazards():
     import datetime
@@ -1470,6 +1478,19 @@ def undo_hazards():
                     and not any(review._reviewable(proposal, decisions.get(proposal.pk))
                                 for proposal in assessment.proposals.all())):
                 found.setdefault(str(encounter.pk), set()).add('second_review_refused')
+        # or did not read the second review made for that answer, which may hold codes nobody read (unknown, or answered
+        # and not read yet), beside that answer with nothing to decide - where 057a7d39, which reads no second review,
+        # says that no code was proposed (refutation P2RA, ROLLBACK lens 0). One that failed or was never sent proposed
+        # nothing, and 057a7d39's statement is true of it.
+        if (assessment is not None and assessment.provider_run_id is not None
+                and assessment.provider_run.state == Run.SUCCEEDED
+                and Run.objects.filter(encounter_id=encounter.pk, purpose=Run.SECOND_REVIEW).exists()):
+            unread = review._unread_second_review(assessment)
+            if unread is not None and unread.state not in (Run.FAILED, Run.NOT_SENT, Run.CANCELLED):
+                decisions = review.current_decisions(assessment)
+                if not any(review._reviewable(proposal, decisions.get(proposal.pk))
+                           for proposal in assessment.proposals.all()):
+                    found.setdefault(str(encounter.pk), set()).add('second_review_unread')
     return {pk: sorted(reasons) for pk, reasons in sorted(found.items())}
 '''
 UNDO_HAZARDS_READ = UNDO_HAZARDS + "print(ANSWER + json.dumps({'hazards': undo_hazards()}))\n"
@@ -1520,8 +1541,9 @@ for pk in encounters:
 # state the older revision derives for its rows before the rows are handed over. Never one on the review queue (the
 # states serializers.session_json counts, 057a7d39's alike): a put-back never takes an encounter off it. That state is
 # truthful only for the PRIMARY answer's refusal, which 057a7d39 reads (its blocker 'The provider response was not
-# used'); a second review's response refused whole is 'second_review_refused' in the hazards above, and an undo hands
-# no older pair the rows while one is named (SHOWN_HAZARDS).
+# used'); a second review's response refused whole is 'second_review_refused' in the hazards above, a second review the
+# shown assessment did not read 'second_review_unread', and an undo hands no older pair the rows while one is named
+# (SHOWN_HAZARDS).
 REVIEW_QUEUE = ('needs_clarification', 'ready_for_review', 'provider_unknown')
 relabel = []
 for encounter in models.Encounter.objects.exclude(state__in=REVIEW_QUEUE).order_by('created_at', 'pk').iterator():
@@ -1810,8 +1832,9 @@ def hazard_summary(hazards) -> str:
 
 # Refutation p2, the skeptic of the install2:1 repair: the UNDO_HAZARDS reasons about what an older revision's web SAYS,
 # not what its worker does. No stored state can be put back for them - it says the same thing whatever state it is
-# handed - and a worker left stopped does not keep its web from saying it.
-SHOWN_HAZARDS = ('second_review_refused',)
+# handed - and a worker left stopped does not keep its web from saying it. Refutation P2RA, ROLLBACK lens 0: a second
+# review the shown assessment did not read is one too (it says that no code was proposed of a response nobody read).
+SHOWN_HAZARDS = ('second_review_refused', 'second_review_unread')
 
 
 def hazards_by_kind(hazards):
@@ -1841,10 +1864,12 @@ def put_back_states(closed, older_image, image_id, env_bytes) -> dict:
     label alike, and stays: the older derivation of a hold or of a second review closed by the undo is a request that
     failed or a failed stage, off its review queue. An answer that names nothing it read is not read as "none".
     The state put back is truthful for the PRIMARY answer's refusal only: 057a7d39 reads that one (no_codes, with its
-    blocker 'The provider response was not used'). Beside a second review's response refused whole it says that no code
-    was proposed whatever state it is handed, so the close names that encounter as a hazard (second_review_refused) and
-    no undo reaches this step for it, unless the pair it hands the rows to is this same revision (the failure path of a
-    same-revision re-run), whose own derivation keeps it."""
+    blocker 'The provider response was not used'). Beside a second review's response refused whole, or a second review
+    the shown assessment did not read whose outcome is unknown or that was answered, it says that no code was proposed
+    whatever state it is handed, so the close names that encounter as a hazard (second_review_refused,
+    second_review_unread) and no undo reaches this step for it, unless the pair it hands the rows to is this same
+    revision (the failure path of a same-revision re-run), whose own derivation keeps it. A second review that failed or
+    was not sent proposed nothing: put back to 057a7d39's no_codes, 'No CPT codes proposed' is true of its rows."""
     relabel = closed.get('relabel') if isinstance(closed, dict) else None
     if not isinstance(relabel, list) or not all(isinstance(pk, str) for pk in relabel):
         raise InstallError('The close did not say which list states an older revision labels otherwise.')
@@ -1899,16 +1924,18 @@ def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref)
             hazards = closed.get('hazards')
             shown, acting = hazards_by_kind(hazards)
             # Refutation p2, the skeptic of the install2:1 repair: a state the restored web would show wrongly whatever
-            # it is handed (SHOWN_HAZARDS: a second review's response refused whole, beside which an older revision says
-            # that no code was proposed) has no state to be put back to, so the previous pair is not restored over it -
-            # as when the states cannot be put back. A pair of this same revision (a same-revision re-run) shows those
-            # states as this revision does, and is restored as usual.
+            # it is handed (SHOWN_HAZARDS: a second review's response refused whole, or one the shown assessment did not
+            # read - refutation P2RA, ROLLBACK lens 0 - beside which an older revision says that no code was proposed)
+            # has no state to be put back to, so the previous pair is not restored over it - as when the states cannot
+            # be put back. A pair of this same revision (a same-revision re-run) shows those states as this revision
+            # does, and is restored as usual.
             if (shown is None or shown) and not same_revision(previous, ctx.revision):
                 named = hazard_summary(shown) if shown is not None else 'the close did not say which encounters'
                 raise InstallError(
                     f'{failure}; {named} hold states the previous revision would show wrongly whatever it is handed '
-                    '(a bounded second review\'s response refused whole: it does not read that refusal and would say '
-                    'that no code was proposed), so the new pair was left stopped and the previous pair parked '
+                    '(a bounded second review whose response was refused whole, or whose outcome is unknown or not '
+                    'read yet: it reads neither and would say that no code was proposed), so the new pair was left '
+                    'stopped and the previous pair parked '
                     '(*-previous). To keep this revision, remove the parked pair by hand and run --phase app again '
                     'once its failure is fixed; to go back, start this pair again, clear them on its web '
                     '(ops/INSTALL.md, Reinstalling an older revision), run --phase rollback-app, then rename the '
@@ -2575,10 +2602,11 @@ def phase_verify(ctx) -> dict:
 
 def phase_rollback_app(ctx) -> dict:
     """Refuse, before stopping anything, while their revision recorded what an older revision would act on, or show,
-    wrongly (undo_hazards: a second review's response refused whole is shown wrongly whatever state it is handed, so it
-    is refused, never put back); otherwise stop the web and worker, close every stage their revision left open since
-    they were created and every open stage of a kind the next worker does not run (close_undone_stages, with their own
-    image), read again, put back the list states the next pair labels otherwise (put_back_states), then remove them -
+    wrongly (undo_hazards: a second review's response refused whole, or one the shown assessment did not read, is shown
+    wrongly whatever state it is handed, so it is refused, never put back); otherwise stop the web and worker, close
+    every stage their revision left open since they were created and every open stage of a kind the next worker does
+    not run (close_undone_stages, with their own image), read again, put back the list states the next pair labels
+    otherwise (put_back_states), then remove them -
     so a parked pair renamed back or an older revision installed afterwards never runs that work under its own rules,
     nor shows a state it would misread. When the stages cannot be closed, the states cannot be put back, or the second
     read names a record (a send in flight when the worker stopped is an unknown outcome), the pair is left stopped, not
@@ -2599,8 +2627,8 @@ def phase_rollback_app(ctx) -> dict:
         # Refutation p1, migrate-0/-1: an older revision's web and worker - a parked pair renamed back, or one
         # reinstalled - would act on these under their own rules (a send without a date, an identical re-send of a
         # request that failed), or show them wrongly whatever state they are handed (p2, the skeptic of the install2:1
-        # repair: a second review's response refused whole); they are cleared on this revision's web, which keeps
-        # serving meanwhile.
+        # repair: a second review's response refused whole; P2RA, ROLLBACK lens 0: one the shown assessment did not
+        # read); they are cleared on this revision's web, which keeps serving meanwhile.
         found = undo_hazards(first['Image'], env, revision)
         if found:
             raise InstallError(f'{hazard_summary(found)} hold records an older revision would act on, or show, wrongly '
