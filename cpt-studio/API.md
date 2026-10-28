@@ -203,7 +203,9 @@ member date conflict's hold. A member service date that differs from the
 document's is that conflict: nothing is built, reused or sent (a `not_sent` run
 held for it, and the date question asked) until the metadata is corrected or
 cleared or an addendum settles it. A date the document leaves in question (a
-conflict within the document; dated text the service cannot read or place; a
+conflict within the document; dated text the service cannot read or place - a
+date-of-service field stating a date after other words in its field, or where a
+header's positions do not match; a
 labelled date with a bracket or words after it in its field, or written in a
 form the installed revision did not send - a day-first date, a label naming the
 time, a table row; or dated text the service keeps only as evidence - a dated
@@ -211,8 +213,10 @@ title, a "Date:" line, a dated line naming the service - which is never the
 date by itself) is no date: the request goes out without a date line, and a
 member's answer makes a second, dated request. The answer must be one of the
 dates the document states as some dated text's own value - the withheld
-labelled date's where there is one - never a date of birth or another field's
-date; where its dated text reads no calendar date (an empty or non-date
+labelled date's where there is one - never a date of birth, another field's
+date, or a date only a label or title read as another occurrence's or another
+document's states ("Next procedure date: ...", "Surgical pathology report:
+..."); where its dated text reads no calendar date (an empty or non-date
 date-of-service field among it), any member date is a conflict until an
 addendum dates the encounter (ARCHITECTURE 5.2). The
 document's own facts are read again inside this request under a

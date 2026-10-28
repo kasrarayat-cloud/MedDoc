@@ -367,30 +367,51 @@ occurrence's date, be sent):
   or the next non-blank line under a label ending its line - and kept as
   unread evidence; a value that is no calendar date ("02/30/2026") likewise.
   A label's own value opens its field (N2): a field that another field's
-  label opens ("Date of Service: Referral date: 10/13/2026"), whose only date
-  is a date of birth, or that anything but its own value opens ("DOS: N/A
-  Referral date: 10/13/2026", "Visit Date: TBD DOB (age) 01/01/1998") states
-  no date of its own and is kept as evidence that reads no date - the label
-  alone, never its field (N3). So is any date-of-service FIELD - a label with
+  label opens ("Date of Service: Referral date: 10/13/2026") or whose only
+  date is a date of birth ("DOS: N/A Referral date: 10/13/2026", "Visit Date:
+  TBD DOB (age) 01/01/1998") states no date of its own and is kept as
+  evidence that reads no date - the label alone, never its field (N3). So is
+  any date-of-service FIELD - a label with
   its separator, or alone on its line - that states no date: empty, "N/A",
   "pending", its value after an alignment gap another field's ("DOS:    DOB:
   01/01/1998"), or on no line below ("Date of service:" over "DOB: ..."; P2DN's
   fix round, issue 6, N3 as written - each had kept nothing, so a member's
   1998-01-01 was sent). Such a field never questions the note's own date - it
   states none that could differ - but with no own date it holds every member
-  date until the document states one. A label in prose has no field;
+  date until the document states one. Only a field that states no date is
+  silent: one that STATES a date it cannot place - a date-shaped value that is
+  no date of birth after other words in its field ("rescheduled to
+  10/14/2026", "~10/14/2026", "see 10/20/2026"), one value under a joined
+  header, a column or a stack whose positions do not match while a date
+  stands there - speaks against the labelled date: it is asked, the label
+  alone kept (a date after other words is not certainly the label's own value
+  - only a word list could tell "see" from "rescheduled to" - so no member
+  date agrees with it alone; the final refutation, fr-dr:0: read as stating
+  none, "Date of service: rescheduled to 10/14/2026" beside "Procedure date:
+  10/07/2026" sent 10/07). A label in prose has no field;
 - a header's values are its fields' by POSITION (P2DN's fix round, issues 3
   and 4): a label heading a column of a space- or tab-aligned header row (two
   to 24 cells, each a label with no digit) reads the cell at its place in the
   row below; a label alone on its line in a run of label-only lines (at most 8
   either side) reads the value line at its place in the run of value lines
-  below, when every date or birth label's place there opens with a date; a
-  birth label joined to the date-of-service label ("DOB / Date of Service:",
-  "Date of Birth & DOS:", "Visit Date & Date of Birth:") names two fields, and
-  two values are theirs in order - the label's is kept beside it, never the
-  note's own date. Where the positions do not match (another cell count, a
-  value missing, one value for two names) the label states no date and every
-  value of a joined header may be the date of birth;
+  below; a birth label joined to the date-of-service label ("DOB / Date of
+  Service:", "Date of Birth & DOS:", "Visit Date & Date of Birth:") names two
+  fields, and two values are theirs in order - the label's is kept beside it,
+  never the note's own date. Positions are checked by POSITION, never by count
+  (the final refutation, fr-dr:1: "Synthetic,  Alex" split at a double space
+  under "Patient" with the last cell empty, or a heading "PATIENT
+  INFORMATION:" counted into a stack and "1.5 cm ..." counted as a value, gave
+  the counts the header asked for and shifted the date of birth into the
+  date-of-service label's place - a member's 1998-01-01 was taken and sent):
+  each value cell must lie under its own head (it overlaps the columns from
+  its head's start to the next head's start), and a stack's value line must be
+  of its label's kind (a date or birth label's place holds a date alone - a
+  clock or a full stop at most - and any other label's place holds no date
+  alone). Where the positions do not match (another cell count, a cell under
+  another head, a place of the other kind, a value missing, one value for two
+  names) no value is the label's: it states no date where none stands there,
+  and a date it cannot place - asked, the label alone - where one does
+  (fr-dr:0); every value of a joined header may be the date of birth;
 - dated titles in the first 12 non-empty lines: "<words> visit | encounter |
   consultation | consult | note | report" with its date (or with the date
   alone on the next line), a bare "Date:" or "Date/Time:" line (clocked or
@@ -402,7 +423,18 @@ occurrence's date, be sent):
   no other field's label - only a bare date field ("Date:", "Date/Time:") or a
   date-of-service label gives the line its date (P2DN's fix round, issue 1:
   "Procedure: Colonoscopy    Referral date: 10/13/2026" took the referral date,
-  a member's 10/13 agreed and was sent). A line with two such dates reads none;
+  a member's 10/13 agreed and was sent), a bracket after its label only when
+  it holds the date's format ("Date (mm/dd/yyyy):", "(DOS)"; the final
+  refutation, fr-dr:2: "Date (signed):" and "DOS (planned):" were read as the
+  line's own date field, so a member's signing or planned date was taken and
+  sent). Another field's value ends - at a semicolon, a comma, a spaced dash, a
+  field break, a bracket it does not open, or its own date - and a date after
+  that end is not that field's; the line then states a date it cannot place
+  (neither the field's nor certainly the line's own): it is asked, speaking
+  against the labelled date, and reads no date (fr-dr:3: "Re: Colonoscopy -
+  Referral date: 10/13/2026; performed 10/21/2026" had its performed date
+  given to the referral field, the line silenced and the labelled 10/14 it
+  contradicts sent). A line with two such dates reads none;
   a line whose dates are all other fields' or dates of birth states none and is
   kept as evidence that reads no date - its text before them - never dropped
   (dropped, "Exam: Colonoscopy Patient DOB: 01/01/1998 Exam date: 10/14/2026"
@@ -420,8 +452,11 @@ bracket, at a birth label's place in a bar table, an aligned row, a stack or a
 joined header, or on the line under a birth label alone on its line when that
 line opens with the value, is no candidate's value, never agrees with a member
 date and is never read from the evidence a member date is matched against. A
-birth label is a LABEL (P2DN's fix round, issue 7): "b." only in lower case,
-never a capital initial after a name ("Dr. Robin B. - 10/14/2026"); a birth word
+birth label is a LABEL (P2DN's fix round, issue 7): "b." in lower case wherever
+it stands, after a name too ("Re: Colonoscopy for Alex Synthetic b. 01/01/1998";
+the final refutation, fr-dr:5: refused there, the date of birth was the subject
+line's own and a member's 1998-01-01 was taken and sent), never a capital initial
+after a name ("Dr. Robin B. - 10/14/2026"); a birth word
 ending a line with other text ("To: Dr. Robin B.", "chronic hepatitis B.", an
 empty "DOB:" after a name) labels nothing; and the few characters before a date
 end at the date, never at the line break above it - each had made the line's
@@ -435,9 +470,10 @@ Each candidate reads as the note's own, unplaced (it may be the date), aside
   "09/03/2026, outside facility", a bracket a history word opens after the
   date), and unplaced when a qualifier stands across another field's label, a
   sentence end or a field break, or when the label carries words this service
-  cannot place ("Initial visit date", "Referring visit date"). A qualifier
-  opening a field about something else ("Last name:", "Next colonoscopy:
-  10/2029") or with a date of its own nearer to it is passed over. Before a
+  cannot place ("Initial visit date", "Referring visit date"). On the
+  label's own line a date qualifier is never passed over (below); a history
+  word opening a field about something else ("Outside records:", "Recent
+  labs:") is. Before a
   capitalised label written one space after a lower-case word ("... colon
   polyps Date of service:", a flattened header row) the words are another
   field's value: a qualifier among them holds the date (unplaced). The line
@@ -468,8 +504,22 @@ birth - in its own field ("Rescheduled to: 10/14/2026", "Next colonoscopy:
 two occurrences' dates: the date is asked (P2DN's fix round, issue 5: round 2
 passed such a qualifier over, and "Date of service: 10/07/2026 Rescheduled to:
 10/14/2026" sent the superseded 10/07 where the installed revision's same-line
-window held it). One opening a field about something else ("Last name:
-Synthetic") is still passed over, and so is one on the line above.
+window held it). The final refutation, fr-dr:4, fr-di:0 and fr-di:1 (rule N7):
+a DATE qualifier on the label's own line that opens a field of its own is never
+passed over, whatever that field names ("Scheduled by: Front desk", "Requested
+by:", "Planned sedation: MAC", "Last name:", "Previous surgeries:") - the line
+may state another occurrence's date beside the label's, and the installed
+revision's same-line window held every such date - and a date of birth between a
+qualifier and the date passes nothing over ("Repeat colonoscopy for ... (DOB
+01/01/1998) Procedure date:", "... DOB: 01/01/1998    Status: Scheduled"). Passed
+over, a planned procedure's 11/04 was sent with an office visit's request, and a
+recall's 10/14/2029 instead of the encounter's 10/14/2026, where the installed
+revision sent no date or the encounter's. A history word opening a field about
+something else is still passed over (the installed revision never read those
+words), and so is a qualifier on the line above (the installed revision read the
+label's line only). Every date qualifier in the installed revision's same-line
+window now holds the label's date: a label read as the note's own is one the
+installed revision read too.
 
 The date is the note's own read labelled dates when they agree, and only those
 (N1): a label read as the note's own - the closed list above, at most with the
@@ -541,8 +591,21 @@ every speaking candidate is measured against it, a difference is a conflict
 listing both, and the member's answer must agree with it (asked by its table
 row alone, a document's history line - "... colonoscopy on 2021-08-17" - would
 otherwise have been a date the member's answer agreed with). Nothing the
-installed revision sent is withheld, and nothing it left dateless is sent from
-a labelled date. Measured against P2DN: 6 of the reading gate's 8,446 texts are
+installed revision sent is withheld for its form. A labelled date is the note's
+own only where no date qualifier stands in the installed revision's same-line
+window (the final refutation, fr-dr:4, fr-di:0, fr-di:1; above), so no date that
+window held is sent, and no date other than the one the installed revision sent:
+measured over 119,170 texts - the reading gate's 8,446, the corpus, the
+verification documents, the live encounters and every lens, verifier and skeptic
+case text - 0 texts send another date than 057a7d398. 83 constructed texts (none
+of the existing ones, each the same at c3c034a08) send the note's own labelled
+date where the installed revision sent none: 48 beside another labelled date
+this reader reads as another occurrence's ("Outside procedure date:", "Index
+DOS:", "... (index colonoscopy)"), which the installed revision read as a
+conflict, and 35 under a heading that ends a plan or history section in this
+release's section reader (studio/gi/sections; "PART 2 - PROCEDURE NOTE",
+"Section B: Procedure note") and not in the installed revision's. Measured
+against P2DN: 6 of the reading gate's 8,446 texts are
 asked (a day-first office note and five Word-table rows - exactly the gate's
 texts the installed revision left dateless), the corpus's svc-18 and svc-36
 (table rows), and the live Elena encounter ("Service date 20 October 2026 |
@@ -559,7 +622,14 @@ date of service ("DOS: 10/14/26 DOB: 01/01/1998", a table whose header names
 both, "Re: Colonoscopy - Synthetic, Alex (DOB 01/01/1998) - 10/14/2026") is
 never one, and evidence that reads no calendar date - an unread value, or a
 date-of-service field that states none - holds every member date until the
-document is amended or the value cleared. With no dated evidence any member
+document is amended or the value cleared. A label or title this reader reads
+as another occurrence's ("Next procedure date: 11/04/2026", "Procedure date:
+11/04/2026 (scheduled)", "Last visit date") or another document's ("Surgical
+pathology report: 10/17/2026") is kept as evidence - quoted and shown as before
+- but a member date never agrees with it (the final refutation, fr-di:3: an
+office visit took the member's 11/04 - its next procedure's date - and sent it,
+while the correct 10/20 was held); a dated service line is evidence of the
+service's own date (N1) and still answers. With no dated evidence any member
 date supplies the fact. An agreeing member value is stored as the member's
 (`origin=user`, no evidence). A date asked of the member is no date in the
 provider request: the predict sends the request without a date line, and the
@@ -621,6 +691,24 @@ date in a day-first, time-naming or table-row form (N7). A birth label joined
 to the date label with no space ("DOB/DOS: 01/01/1998") is no date label at all
 - as at every earlier revision, the document then states no date and any
 member date supplies it.
+
+Over-holds the final refutation's rules accept (asked or held, never another
+date; none in the reading gate's texts, the corpus, the verification documents
+or the live encounters): a date qualifier opening a field of its own on the
+label's line ("Last name: Synthetic    Date of service: ...", "Previous
+surgeries:") asks the date, as the installed revision did; a date after other
+words in the date-of-service field ("rescheduled to 10/14/2026") is asked and a
+member's answer with it held, as a positional header's unplaced value is (the
+installed revision sent the other labelled date and took any member date); a
+subject line whose date follows another field's ended value ("Re: Colonoscopy -
+Synthetic, Alex (DOB: 01/01/1998) - 10/14/2026") asks the labelled date it
+agrees with, which the installed revision sent; and a member's answer equal to a
+date only another occurrence's or another document's dated label or title states
+- also where that reading is a known over-hold ("Nurse practitioner visit -
+10/20/2026", "Date of service: 10/14/2026 (recall due in 3 years)", "Surveillance
+colonoscopy for history of adenomatous polyps, procedure date 10/14/2026.") - is
+held until the document is amended or the value cleared, where the installed
+revision took any member date.
 
 ### 5.3 `studio/gi/profiles` + `studio/gi/detect` — routing
 
