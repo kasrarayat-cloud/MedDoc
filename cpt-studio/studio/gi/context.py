@@ -788,11 +788,13 @@ def _states_a_date(text: str, start: int, end: int) -> bool:
                for at in _GAP_DATE.finditer(text, start, end))
 
 
-def _column(text: str, rows: '_Rows', ls: int, le: int, cell_start: int, label_end: int, cell_tail: int):
+def _column(text: str, rows: '_Rows', ls: int, le: int, cell_start: int, label_end: int, cell_tail: int,
+            births: bool = False):
     """For a label that is a whole cell of an aligned header row: the cell at its position in the row below, or - when
     the row below has another number of cells - _UNPLACED where that row states a date and _NO_VALUE where it states
     none (fr-dr:0); None when the label heads no aligned column (it is not one cell's only text, or runs across two
-    cells)."""
+    cells). ``births``: the label is a birth label (_birth_places) - its cell is placed whatever the other columns hold,
+    and by count alone (_Counted) where the cells do not lie under their heads (df-d:1)."""
     cells = _header_row(text, rows, ls, le)
     if cells is None:
         return None
@@ -802,11 +804,23 @@ def _column(text: str, rows: '_Rows', ls: int, le: int, cell_start: int, label_e
         return None
     row = rows.below(le)
     values = rows.aligned(*row) if row is not None else []
+    if births and len(values) == len(cells):
+        # the differential round, df-d:1: the tests below say where a date label's VALUE is, never where a date of
+        # birth stands - read for "DOB" too, a date-of-service cell "TBD" (or tabs whose offsets do not line up) left
+        # the cell under it unmarked, a dated service line "Colonoscopy  TBD  01/01/1998" read it as its own date, and
+        # a member's 1998-01-01 was taken and sent where c3c034a08, placing it by count, held it
+        return values[k] if _under_their_heads(cells, ls, values, row[0]) else _Counted(values[k])
     if len(values) == len(cells) and _under_their_heads(cells, ls, values, row[0]) \
             and all(_line_label(text, *head) not in ('dos', 'birth') or _date_alone(text, *value)
                     for head, value in zip(cells, values)):
         return values[k]  # fr-dr:1: and every date or birth label's column holds a date alone, as a stack's place does
     return _UNPLACED if row is not None and rows.states_a_date(*row) else _NO_VALUE
+
+
+class _Counted(tuple):
+    """A birth label's column cell placed by count alone - the row's cells number the header's but do not lie under their
+    heads (df-d:1): its date may be the date of birth, so it is no candidate's value and no member date's agreement, but
+    a dated line stating it is asked, never silent (it may as well be the line's own date, shifted under "DOB")."""
 
 
 def _under_their_heads(cells: list[tuple[int, int]], ls: int, values: list[tuple[int, int]], rs: int) -> bool:
@@ -937,15 +951,15 @@ def _joined(text: str, rows: '_Rows', label_start: int, label_end: int):
 
 
 @functools.lru_cache(maxsize=16)
-def _birth_cells(text: str) -> frozenset:
+def _birth_places(text: str) -> tuple[frozenset, frozenset]:
     """Where a date of birth starts whose birth label is not right before it (rule N2, "any row"): the cell under a
     birth label heading a table column ("Patient | DOB | Date of Service" above "Synthetic, Alex | 01/01/1998 |
     10/14/2026"), or an aligned column ("DOB            Date of Service" above "01/01/1998     10/14/2026"); the value
     line at a birth label's place in a stack, or the line under a birth label alone on its line when it opens with the
     value ("Date of birth:" above "01/01/1998"); the value at a birth label's place in a joined header ("DOB / Date of
     Service: 01/01/1998 / 10/14/2026"). One pass over the birth labels and one over the date labels; each line's cells
-    and the row under it are read once (_Rows)."""
-    found, rows = set(), _Rows(text)
+    and the row under it are read once (_Rows). (Those, and apart the aligned cells placed by count alone: _Counted.)"""
+    found, counted, rows = set(), set(), _Rows(text)
     for m in _BIRTH_HEAD.finditer(text):
         ls, le = rows.line(m.start())
         tail = _BIRTH_TAIL.match(text, m.end(), le).end()
@@ -963,19 +977,26 @@ def _birth_cells(text: str) -> frozenset:
                 if value is not None:
                     found.add(value[0])
             continue
-        column = _column(text, rows, ls, le, m.start(), m.end(), tail)
+        column = _column(text, rows, ls, le, m.start(), m.end(), tail, births=True)
         if column is None and _blank_to(text, ls, m.start()) and _blank_to(text, tail, le):
             stacked = _stacked_value(text, rows, ls, le)  # the birth label alone on its line
             column = stacked[0] if isinstance(stacked, tuple) else None
-        if isinstance(column, tuple):  # a value placed by position (never _NO_VALUE or _UNPLACED)
+        if isinstance(column, tuple):  # a value placed by position (never _NO_VALUE or _UNPLACED), or by count
             value = _first_value(text, column[0], min(column[1], column[0] + VALUE_REACH), births=False)
             if value is not None:
-                found.add(value[0])
+                (counted if isinstance(column, _Counted) else found).add(value[0])
     for m in DATE_LABEL.finditer(text):
         joined = _joined(text, rows, m.start('label'), m.end('label'))
         if joined is not None:
             found.update(run[0] for run in joined[2])
-    return frozenset(found)
+    return frozenset(found), frozenset(counted - found)
+
+
+@functools.lru_cache(maxsize=16)
+def _birth_cells(text: str) -> frozenset:
+    """Every date of birth _birth_places finds, placed by position or by count: no candidate's value, no reading."""
+    found, counted = _birth_places(text)
+    return found | counted
 
 
 def _is_birth(text: str, start: int) -> bool:
@@ -1424,6 +1445,10 @@ def _dated_service_line(text: str, ls: int, le: int) -> Optional[_Candidate]:
         if _is_birth(text, run[0]):
             label = _BIRTH_BEFORE.search(text, max(start, run[0] - _BIRTH_REACH), run[0])
             excluded.append((run, label.start() if label else run[0]))
+            if label is None and run[0] in _birth_places(text)[1]:
+                # df-d:1: a date of birth only by a count placement (_Counted) - no value, but the line states a date
+                # it cannot place: asked, never silent
+                unplaced.append(run)
             continue
         other = _other_field(text, gap, run[0])
         if other == _AFTER_VALUE:

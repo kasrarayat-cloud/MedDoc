@@ -12,6 +12,8 @@ df-d:0  (fr-dr:1, the stack) an 'other' label's place could hold no date alone, 
         has a date ("Patient DOB:", "Referral date:", "Date signed:") was unplaceable, and a date label last in it read
         the line right below it - the first label's date of birth or referral date; a date label's place holding a
         date and more ("10/14/2026 (done)") made it read a name there and fall silent.
+df-d:1  (fr-dr:1, the column) a row whose date-of-service cell is no date alone ("TBD") was unplaced for every label of
+        its header, so the cell under "DOB" was no longer a date of birth and a dated service line read it as its date.
 
 Synthetic text only; no network (the suite's FakeProvider).
 """
@@ -148,4 +150,108 @@ class StackOfAnotherDatedLabelRequestTests(EndToEnd):
 
     def test_s4_no_other_labelled_date_is_sent(self):
         encounter_id = self.finished(self.S4)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+
+
+# --- df-d:1: the cell under a birth head is a date of birth whatever the date-of-service cell holds -------------------
+
+UNDATED_DOS_CELLS = ('TBD', 'pending', 'N/A', 'today', 'see below', '2026', '20261014')
+
+
+def aligned(*cells, width=19):
+    """One space-aligned row: each cell but the last padded to ``width`` characters."""
+    return ''.join(cell.ljust(width) for cell in cells[:-1]) + cells[-1]
+
+
+def birth_column(layout, cell):
+    """A header with a "DOB" column over a row naming the service, its date-of-service cell ``cell``."""
+    if layout == 'tabs':
+        return 'Procedure\tDate of Service\tDOB\nColonoscopy\t' + cell + '\t' + BIRTH + '\n'
+    heads, first, width = {'spaces': (('Procedure', 'Date of Service', 'DOB'), 'Colonoscopy', 19),
+                           'short heads': (('Exam', 'DOS', 'DOB'), 'Colonoscopy', 14),
+                           'a subject row': (('Re', 'Date of Service', 'DOB'), 'Re: Colonoscopy', 19)}[layout]
+    return aligned(*heads, width=width) + '\n' + aligned(first, cell, BIRTH, width=width) + '\n'
+
+
+BIRTH_LAYOUTS = ('spaces', 'tabs', 'short heads', 'a subject row')
+
+
+class BirthColumnBesideAnUndatedCellTests(DateAssertions, SimpleTestCase):
+    """df-d:1 (826fcff2d and d8ad4bd92, the final refutation's fr-dr:1): an aligned row is placed for a header's labels
+    only where each cell lies under its own head and every date or birth label's column holds a date alone - tests of
+    where a date-of-service label's VALUE is (narrow heads over wide cells shift the date of birth into its column).
+    _birth_cells read the same placement, so a date-of-service cell that is no date ("TBD", "pending", "N/A", "today",
+    "see below", "2026") - or a tab-separated row, whose character offsets need not line up with its header's - left the
+    row unplaced for the "DOB" label too, and the cell under it was no longer a date of birth: the row's dated service
+    line ("Colonoscopy  TBD  01/01/1998") read it as its own date, and a member's 1998-01-01 was taken and sent - on
+    upload and on the answer path - where c3c034a08, placing it by count, held it. A birth label's cell is placed by
+    POSITION whatever the other columns hold (the date-alone test is the date label's), and by count alone where the
+    cells do not lie under their heads: such a date is no value and no member's agreement either, but - as it may as
+    well be a shifted date of the row's own - a dated line stating it is asked, never silent."""
+
+    def test_the_date_of_birth_is_never_the_row_s_date(self):
+        for layout in BIRTH_LAYOUTS:
+            for cell in UNDATED_DOS_CELLS:
+                text = HEAD + birth_column(layout, cell) + COLO_PLAIN
+                with self.subTest(layout=layout, cell=cell):
+                    self.assert_never(text, ELENA_DATE)
+                    self.assert_member_conflict(text, ELENA_DATE)
+                    self.assertFalse(any(BIRTH in quoted for quoted in evidence_text(text)), evidence_text(text))
+
+    def test_beside_the_labelled_date_the_member_s_date_of_birth_is_held(self):
+        for cell in UNDATED_DOS_CELLS:
+            text = (HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\n' + birth_column('a subject row', cell)
+                    + COLO_PLAIN)
+            with self.subTest(cell=cell):
+                self.assert_member_conflict(text, ELENA_DATE)
+                self.assert_member_date(text, '2026-10-14')
+
+    def test_the_verifier_s_smallest_forms(self):
+        for rows in ('DOS      DOB\nEGD TBD  01/01/1998\n', 'Exam  DOS  DOB\nEGD  TBD  01/01/1998\n'):
+            text = HEAD + rows
+            with self.subTest(rows=rows):
+                self.assert_member_conflict(text, ELENA_DATE)
+
+    def test_a_row_placed_by_count_alone_is_asked(self):
+        # cells that do not lie under their heads (a cell split at a double space, a cell left empty; tabs): the date
+        # under "DOB" by count is no member's answer, and the subject line stating it is asked beside the labelled
+        # date - c3c034a08 marked it a date of birth, silencing the line, and sent the labelled 10/07
+        for rows in (aligned('Re', 'Exam', 'DOB', width=23) + '\nRe: Colonoscopy  EGD   10/14/2026\n',
+                     'Re\tExam\tDOB\nRe: Colonoscopy\tEGD\t10/14/2026\n'):
+            text = HEAD + 'Colonoscopy report\nDate of service: 10/07/2026\n' + rows + COLO_PLAIN
+            with self.subTest(rows=rows.splitlines()[0]):
+                self.assert_never(text, '2026-10-07')
+                self.assert_member_date(text, '2026-10-07')
+                self.assert_member_conflict(text, '2026-10-14')
+
+    def test_controls(self):
+        # a dated cell under the date-of-service head: its own value answers, the date of birth never does
+        for rows in ('Exam  DOS  DOB\nEGD  10/14/2026  01/01/1998\n',
+                     birth_column('spaces', '10/14/2026')):
+            text = HEAD + rows + COLO_PLAIN
+            with self.subTest(rows=rows.splitlines()[0]):
+                self.assert_member_date(text, '2026-10-14')
+                self.assert_member_conflict(text, ELENA_DATE)
+        # fr-dr:1's shifted columns: the date of birth is still never the date-of-service label's value
+        for rows in ('Patient            DOB           Date of Service    Endoscopist\n'
+                     'Synthetic,  Alex   01/01/1998    10/14/2026\n',
+                     'Patient   DOB   DOS   X\nSynthetic,  Alex   01/01/1998   10/14/2026\n',
+                     'Patient    DOB    DOS\nDoe,  Jane    01/01/1998\n'):
+            for top in ('Colonoscopy report - 10/14/2026\n', ''):
+                text = HEAD + top + rows + COLO_PLAIN
+                with self.subTest(rows=rows.splitlines()[0], top=bool(top)):
+                    self.assert_member_conflict(text, ELENA_DATE)
+                    self.assertFalse(any(BIRTH in quoted for quoted in evidence_text(text)), evidence_text(text))
+
+
+class BirthColumnBesideAnUndatedCellRequestTests(EndToEnd):
+    C1 = HEAD + birth_column('spaces', 'TBD') + COLO_PLAIN
+
+    def test_c1_the_member_s_date_of_birth_is_never_sent(self):
+        held = self.finished(self.C1, service_date=ELENA_DATE)
+        self.assert_held(held)
+        self.assert_never_sent(held, ELENA_DATE)
+        encounter_id = self.finished(self.C1)  # dateless, then the answer path
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.set_context(encounter_id, {'service_date': ELENA_DATE})
         self.assertEqual(self.dates_sent(encounter_id), [[]])
