@@ -616,3 +616,351 @@ test('a STOP file in the evidence directory stops the batch before the next uplo
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// --- round gi2 (ops): the member's upload date, the context edit, labelled decisions, --no-auto-approve ---------------
+//
+// Request hashes below were computed by the server's own studio.providers.corti.build_coding_request (adapter
+// corti-coding-v2@cptstudio-1) for this module's gi-08 TEXT, never by the function under test.
+const GI08_REQUEST = {
+  '2026-10-07': '561a5130f8e9fad308fb30c30086946e40f2631291d151da8b89bba3cd6cc7c8',  // the documented date
+  '2026-10-08': '658ce35622517460b847eccb84a8efc524409c324be124cb21d33eaec3acbbfc',  // a member date one day later
+  none: '6a2cf0891c7628d13ba7226b808b7e44ddb10708c4e30a977cec4e394c525053',  // no date
+};
+// studio/jobs.py MEMBER_DATE_CONFLICT_MESSAGE, written out here so a wrong constant in the module cannot pass.
+const HOLD_MESSAGE = 'Nothing was sent: the service date entered as encounter metadata differs from the documented one. '
+  + 'Correct or clear the metadata (or add an addendum), and the request is made for the agreed date.';
+const DOCUMENTED = '2026-10-07';
+const MEMBER = '2026-10-08';
+
+function run(id, extra = {}) {
+  return { id, provider: 'corti', mode: 'live', state: 'succeeded', http_status: 200, latency_ms: 900,
+    usage: { creditsConsumed: 0.03 }, usage_basis: 'provider_reported_credits_not_usd', request_sha256: GI08_REQUEST[DOCUMENTED],
+    response_sha256: 'f'.repeat(64), reused_from: null, error: '', reconciled: false, created_at: '2026-10-28T20:00:00Z',
+    purpose: 'primary', scope_items: [], ...extra };
+}
+
+function hold(id = 'run-hold') {
+  return run(id, { state: 'not_sent', http_status: null, latency_ms: null, usage: {}, usage_basis: '', request_sha256: '',
+    response_sha256: '', error: HOLD_MESSAGE });
+}
+
+// The encounter after processing a document uploaded with a member date that differs from the documented one: the
+// conflict is held, one not-sent hold run records it, nothing was requested and no code was proposed.
+function heldEncounter(member = MEMBER) {
+  const enc = encounter({ state: 'no_codes', provider_runs: [hold()],
+    clarifications: [{ id: 'c-date', scope: 'encounter', fact: 'service_date', state: 'open', question: 'Which date?' }] });
+  enc.context = { facts: {
+    service_date: { value: null, origin: 'conflict', member_conflict: true, evidence: [at('Date of procedure: 2026-10-07')],
+      note: `A member entered ${member}; the document states ${DOCUMENTED}.` },
+    setting: { value: 'office', origin: 'document', evidence: [], note: '', member_conflict: false } }, user_values: { service_date: member } };
+  enc.assessment = { ...enc.assessment, id: 'asm-held', proposals: [] };
+  enc.readiness = { draft: true, reviewed: false, blockers: [] };
+  return enc;
+}
+
+// The same encounter once a context save settled the conflict and its one request was answered.
+function editedEncounter(before, { date = DOCUMENTED, origin = 'user', userValue = DOCUMENTED, runs = null } = {}) {
+  const enc = encounter({ provider_runs: runs || [...before.provider_runs, run('run-sent', { request_sha256: GI08_REQUEST[date || 'none'] })] });
+  enc.context = { facts: {
+    service_date: { value: date, origin: date ? origin : 'missing', member_conflict: false, evidence: [], note: '' },
+    setting: { value: 'office', origin: 'document', evidence: [], note: '', member_conflict: false } },
+    user_values: userValue ? { service_date: userValue } : {} };
+  return enc;
+}
+
+const EDIT_OK = { http_status: 201, error: null, posted: { service_date: DOCUMENTED, setting: '', billing_context: '' },
+  identical: { via: 'api', form_posted: false, form_toast: 'No context change to save.', http_status: 201, error: null } };
+const SERVICE_DATE_PLAN = { service_date: DOCUMENTED, clear_member_date: false };
+const CLEAR_PLAN = { service_date: '', clear_member_date: true };
+const clone = value => JSON.parse(JSON.stringify(value));
+const hardFailures = results => results.filter(r => r.severity === 'hard' && r.status === 'fail').map(r => r.id);
+
+test('parseArgs: --no-auto-approve is an option, off by default', () => {
+  const base = ['--base-url', 'https://x', '--credentials', 'c', '--docs', 'd', '--manifest', 'm', '--out', 'o'];
+  assert.equal(vb.parseArgs(base).noAutoApprove, false);
+  assert.equal(vb.parseArgs([...base, '--no-auto-approve']).noAutoApprove, true);
+  assert.throws(() => vb.parseArgs([...base, '--no-auto-approve=yes']), vb.UsageError);
+});
+
+test('primaryRequestSha256 is the server\'s canonical request hash (vectors from build_coding_request)', () => {
+  const vectors = [
+    ['Date of procedure: 2026-10-07\nColonoscopy to the cecum.\n', '2026-10-07', '9165b5094a547781f268c21f16ad97e81f6cff963536cc62acbe7ddc5705cc84'],
+    ['Colonoscopy to the cecum.\n', null, '554e6f5af2eb9b422a002f008eeb4fb3733621774cc082b92d8aacc24cb6f6e6'],
+    ['He said "no" \\ then\ttabbed\r\nend', '2026-10-23', '088ee1dc1d27bef5b664178c96702eac0fdba1d3f90a9e3574384f92ac6bbf94'],
+    ['a\u0001b\u001fc\u007fd\u000be\ff\bg', '2026-10-24', '7ac40e8c919d01a4bc33d93b9086a51f0a1c1b77ee8f7b484f7fd6e0f00c5006'],
+    ['Café — µg ≥ 5 °C “quoted”', '2026-10-23', 'ddc40e6edcfb208e1232326b28cf41f37d1701f1a96b56592d33bf9673db0f82'],
+    ['emoji 😀 line para end ﻿bom', '2026-01-02', '704a1728dfd12a575957ec3843461af2ff86aa0a648780ec1bba52da3eec5500'],
+    [TEXT, DOCUMENTED, GI08_REQUEST[DOCUMENTED]], [TEXT, MEMBER, GI08_REQUEST[MEMBER]], [TEXT, null, GI08_REQUEST.none],
+  ];
+  for (const [text, date, want] of vectors) assert.equal(vb.primaryRequestSha256(text, date), want, JSON.stringify([text.slice(0, 30), date]));
+});
+
+test('the pinned request shape and hold message are the server\'s own (studio/providers, studio/jobs.py)', () => {
+  const corti = fs.readFileSync(path.join(ROOT, 'studio', 'providers', 'corti.py'), 'utf8');
+  const base = fs.readFileSync(path.join(ROOT, 'studio', 'providers', 'base.py'), 'utf8');
+  const jobs = fs.readFileSync(path.join(ROOT, 'studio', 'jobs.py'), 'utf8');
+  const systems = /^SYSTEMS = \(([^)]*)\)/m.exec(corti);
+  assert.ok(systems, 'SYSTEMS not found in corti.py');
+  assert.deepEqual([...systems[1].matchAll(/'([^']*)'/g)].map(m => m[1]), vb.PROVIDER_SYSTEMS);
+  assert.ok(corti.includes("(text, f'Date of service: {service_date.isoformat()}')"), 'the date context line changed');
+  assert.ok(corti.includes("body = {'system': list(SYSTEMS), 'context': [{'type': 'text', 'text': item} for item in contexts]}"), 'the request body changed');
+  assert.ok(base.includes("json.dumps(body, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()"), 'canonical_body changed');
+  const message = /^MEMBER_DATE_CONFLICT_MESSAGE = \(((?:\s*'[^']*')+)\)/m.exec(jobs);
+  assert.ok(message, 'MEMBER_DATE_CONFLICT_MESSAGE not found in jobs.py');
+  assert.equal([...message[1].matchAll(/'([^']*)'/g)].map(m => m[1]).join(''), vb.MEMBER_DATE_HOLD_MESSAGE);
+  assert.equal(vb.MEMBER_DATE_HOLD_MESSAGE, HOLD_MESSAGE);
+  // jobs._member_date_hold is the one writer of that message, and it always records scope {'held': ...}
+  assert.equal(jobs.split('error=MEMBER_DATE_CONFLICT_MESSAGE').length - 1, 1);
+});
+
+test('isMemberDateHold reads the served hold run, and nothing else', () => {
+  assert.equal(vb.isMemberDateHold(hold()), true);
+  for (const extra of [{ request_sha256: GI08_REQUEST.none }, { error: 'No recorded response for this request.' },
+    { purpose: 'second_review' }, { state: 'succeeded' }, { state: 'cancelled' }]) {
+    assert.equal(vb.isMemberDateHold({ ...hold(), ...extra }), false, JSON.stringify(extra));
+  }
+});
+
+test('checkContextEdit: a settled member conflict sends one request for the edited date, keeps the hold, and an identical save sends nothing', () => {
+  const before = heldEncounter();
+  const after = editedEncounter(before);
+  const results = vb.checkContextEdit(before, after, clone(after), SERVICE_DATE_PLAN, EDIT_OK, MEMBER);
+  assert.deepEqual(results.filter(r => r.status !== 'pass').map(r => `${r.id}:${r.status}`), []);
+  assert.deepEqual(results.filter(r => r.severity === 'hard').map(r => r.id), ['context_edit.held_before', 'context_edit.nothing_sent_before',
+    'context_edit.request', 'context_edit.date_after', 'context_edit.one_request', 'context_edit.sent_at_most_once', 'context_edit.hold_kept',
+    'context_edit.identical_save']);
+  assert.match(results.find(r => r.id === 'context_edit.one_request').reason, /2026-10-07/);
+  // clearing the member's date: the request carries the documented date
+  const cleared = editedEncounter(before, { origin: 'document', userValue: null });
+  assert.deepEqual(hardFailures(vb.checkContextEdit(before, cleared, clone(cleared), CLEAR_PLAN, { ...EDIT_OK, posted: { service_date: '', setting: '', billing_context: '' } }, MEMBER)), []);
+});
+
+test('checkContextEdit: the request is proven by its hash, so a wrong or missing date fails and is named', () => {
+  const before = heldEncounter();
+  const wrong = editedEncounter(before);
+  wrong.provider_runs[1].request_sha256 = GI08_REQUEST[MEMBER];  // the member's conflicting date went out
+  const results = vb.checkContextEdit(before, wrong, clone(wrong), SERVICE_DATE_PLAN, EDIT_OK, MEMBER);
+  assert.deepEqual(hardFailures(results), ['context_edit.one_request', 'context_edit.sent_at_most_once']);
+  assert.match(results.find(r => r.id === 'context_edit.one_request').reason, /2026-10-08/);
+  const dateless = editedEncounter(before);
+  dateless.provider_runs[1].request_sha256 = GI08_REQUEST.none;
+  assert.match(vb.checkContextEdit(before, dateless, clone(dateless), SERVICE_DATE_PLAN, EDIT_OK, MEMBER)
+    .find(r => r.id === 'context_edit.one_request').reason, /no date/);
+  // the context does not state the edited date
+  const other = editedEncounter(before, { date: '2026-10-09', userValue: '2026-10-09' });
+  assert.ok(hardFailures(vb.checkContextEdit(before, other, clone(other), SERVICE_DATE_PLAN, EDIT_OK, MEMBER)).includes('context_edit.date_after'));
+  // a clear that left the member's value in place
+  const kept = editedEncounter(before, { origin: 'document', userValue: MEMBER });
+  assert.ok(hardFailures(vb.checkContextEdit(before, kept, clone(kept), CLEAR_PLAN, EDIT_OK, MEMBER)).includes('context_edit.date_after'));
+});
+
+test('checkContextEdit: each hard check fails on the defect it exists for', () => {
+  const before = heldEncounter();
+  const after = editedEncounter(before);
+  // the conflict was not held: the member value agreed, or no hold was recorded, or another member value is stored
+  const agreed = clone(before);
+  agreed.context.facts.service_date = { value: MEMBER, origin: 'user', member_conflict: false, evidence: [], note: '' };
+  assert.ok(hardFailures(vb.checkContextEdit(agreed, after, clone(after), SERVICE_DATE_PLAN, EDIT_OK, MEMBER)).includes('context_edit.held_before'));
+  const unheld = clone(before);
+  unheld.provider_runs = [];
+  assert.ok(hardFailures(vb.checkContextEdit(unheld, editedEncounter(unheld), null, SERVICE_DATE_PLAN, EDIT_OK, MEMBER)).includes('context_edit.held_before'));
+  assert.ok(hardFailures(vb.checkContextEdit(before, after, clone(after), SERVICE_DATE_PLAN, EDIT_OK, '2026-10-30')).includes('context_edit.held_before'));
+  // a request went out while the conflict held
+  const leaked = clone(before);
+  leaked.provider_runs.push(run('run-leak', { request_sha256: GI08_REQUEST.none }));
+  assert.ok(hardFailures(vb.checkContextEdit(leaked, editedEncounter(leaked), null, SERVICE_DATE_PLAN, EDIT_OK, MEMBER)).includes('context_edit.nothing_sent_before'));
+  // the save was refused: nothing after it is judged
+  const refused = vb.checkContextEdit(before, null, null, SERVICE_DATE_PLAN, { ...EDIT_OK, http_status: 409, error: 'Wait for processing to finish' }, MEMBER);
+  assert.deepEqual(refused.map(r => `${r.id}:${r.status}`), ['context_edit.held_before:pass', 'context_edit.nothing_sent_before:pass', 'context_edit.request:fail']);
+  // two requests sent, or none, or a second hold instead of a request
+  const twice = editedEncounter(before, { runs: [hold(), run('run-a'), run('run-b')] });
+  assert.deepEqual(hardFailures(vb.checkContextEdit(before, twice, clone(twice), SERVICE_DATE_PLAN, EDIT_OK, MEMBER)), ['context_edit.one_request', 'context_edit.sent_at_most_once']);
+  const none = editedEncounter(before, { runs: [hold()] });
+  assert.deepEqual(hardFailures(vb.checkContextEdit(before, none, clone(none), SERVICE_DATE_PLAN, EDIT_OK, MEMBER)), ['context_edit.one_request']);
+  const heldAgain = editedEncounter(before, { runs: [hold(), hold('run-hold-2')] });
+  assert.ok(hardFailures(vb.checkContextEdit(before, heldAgain, clone(heldAgain), SERVICE_DATE_PLAN, EDIT_OK, MEMBER)).includes('context_edit.one_request'));
+  // a request that was not sent (refused before it left) is not the one request the edit owes
+  const unsent = editedEncounter(before, { runs: [hold(), run('run-x', { state: 'not_sent', usage: {}, error: 'Corti refused the token request; nothing was sent.' })] });
+  assert.ok(hardFailures(vb.checkContextEdit(before, unsent, clone(unsent), SERVICE_DATE_PLAN, EDIT_OK, MEMBER)).includes('context_edit.one_request'));
+  // the hold was removed or rewritten
+  const dropped = editedEncounter(before, { runs: [run('run-sent')] });
+  assert.ok(hardFailures(vb.checkContextEdit(before, dropped, clone(dropped), SERVICE_DATE_PLAN, EDIT_OK, MEMBER)).includes('context_edit.hold_kept'));
+  const rewritten = clone(after);
+  rewritten.provider_runs[0].error = 'Nothing was sent.';
+  assert.ok(hardFailures(vb.checkContextEdit(before, rewritten, clone(rewritten), SERVICE_DATE_PLAN, EDIT_OK, MEMBER)).includes('context_edit.hold_kept'));
+  // the identical save sent the request again, held again, was refused, or was never made
+  const resent = clone(after);
+  resent.provider_runs.push(run('run-again'));
+  assert.deepEqual(hardFailures(vb.checkContextEdit(before, after, resent, SERVICE_DATE_PLAN, EDIT_OK, MEMBER)), ['context_edit.identical_save']);
+  const reheld = clone(after);
+  reheld.provider_runs.push(hold('run-hold-3'));
+  assert.deepEqual(hardFailures(vb.checkContextEdit(before, after, reheld, SERVICE_DATE_PLAN, EDIT_OK, MEMBER)), ['context_edit.identical_save']);
+  const changed = clone(after);
+  changed.provider_runs[1].usage = {};
+  assert.deepEqual(hardFailures(vb.checkContextEdit(before, after, changed, SERVICE_DATE_PLAN, EDIT_OK, MEMBER)), ['context_edit.identical_save']);
+  const refusedAgain = { ...EDIT_OK, identical: { ...EDIT_OK.identical, http_status: 409, error: 'Wait for processing to finish' } };
+  assert.deepEqual(hardFailures(vb.checkContextEdit(before, after, null, SERVICE_DATE_PLAN, refusedAgain, MEMBER)), ['context_edit.identical_save']);
+  assert.deepEqual(hardFailures(vb.checkContextEdit(before, after, null, SERVICE_DATE_PLAN, EDIT_OK, MEMBER)), ['context_edit.identical_save']);
+});
+
+test('checkContextEdit: a reused answer sends nothing and passes; the soft checks record what is unusual', () => {
+  const before = heldEncounter();
+  const reused = editedEncounter(before, { runs: [hold(), run('run-reused', { reused_from: 'run-elsewhere', usage: {}, http_status: null })] });
+  const results = vb.checkContextEdit(before, reused, clone(reused), SERVICE_DATE_PLAN, EDIT_OK, MEMBER);
+  assert.deepEqual(hardFailures(results), []);
+  assert.match(results.find(r => r.id === 'context_edit.one_request').reason, /reused/);
+  const after = editedEncounter(before);
+  // the identical save re-assessed through a reused run instead of re-checking: nothing sent, but not a pure re-check
+  const viaReuse = clone(after);
+  viaReuse.provider_runs.push(run('run-again', { reused_from: 'run-sent', usage: {} }));
+  const soft = vb.checkContextEdit(before, after, viaReuse, SERVICE_DATE_PLAN, EDIT_OK, MEMBER);
+  assert.deepEqual(hardFailures(soft), []);
+  assert.deepEqual(statuses(soft, 'context_edit.identical_save_rechecks'), ['warn']);
+  // the screen posted an identical save instead of refusing it (the server then judged it)
+  const posted = { ...EDIT_OK, identical: { via: 'form', form_posted: true, form_toast: '', http_status: 201, error: null } };
+  assert.deepEqual(statuses(vb.checkContextEdit(before, after, clone(after), SERVICE_DATE_PLAN, posted, MEMBER), 'context_edit.form_refuses_identical'), ['warn']);
+  // an unknown outcome is the operator's to reconcile: soft
+  const unknown = editedEncounter(before, { runs: [hold(), run('run-u', { state: 'unknown', http_status: null, usage: {}, response_sha256: '' })] });
+  const outcome = vb.checkContextEdit(before, unknown, clone(unknown), SERVICE_DATE_PLAN, EDIT_OK, MEMBER);
+  assert.deepEqual(hardFailures(outcome), []);
+  assert.deepEqual(statuses(outcome, 'context_edit.outcome'), ['warn']);
+});
+
+test('checkUploadDate: the member date the manifest asked for reached the encounter', () => {
+  const enc = heldEncounter();
+  assert.deepEqual(vb.checkUploadDate(MEMBER, enc).map(r => r.status), ['pass']);
+  assert.deepEqual(vb.checkUploadDate('2026-10-09', enc).map(r => r.status), ['fail']);
+  assert.deepEqual(vb.checkUploadDate(MEMBER, encounter()).map(r => r.status), ['fail']);
+  assert.deepEqual(vb.checkUploadDate(null, encounter()), []);
+});
+
+test('planProblems: refuses a malformed context_edit, approve_codes, upload date or unlabelled note before anything is uploaded', () => {
+  const notes = { approve: 'Agent-executed synthetic verification review', reject: 'Agent-executed synthetic verification review - designated rejection' };
+  const doc = (reviewPlan, upload = { service_date: MEMBER }) => ({ id: 'h', upload, review_plan: reviewPlan });
+  assert.deepEqual(vb.planProblems(doc({ reject: null }, { service_date: null }), notes), []);
+  assert.deepEqual(vb.planProblems(doc({ context_edit: { service_date: DOCUMENTED } }), notes), []);
+  assert.deepEqual(vb.planProblems(doc({ context_edit: { clear_member_date: true }, approve_codes: ['43276'] }), notes), []);
+  const bad = [
+    doc({ context_edit: { service_date: DOCUMENTED } }, { service_date: null }),  // nothing for the edit to settle
+    doc({ context_edit: { service_date: DOCUMENTED, clear_member_date: true } }),
+    doc({ context_edit: {} }),
+    doc({ context_edit: { clear_member_date: false } }),
+    doc({ context_edit: { service_date: '2026-02-30' } }),
+    doc({ context_edit: { service_date: '10/07/2026' } }),
+    doc({ context_edit: { service_date: MEMBER } }),  // the same date: no change to save
+    doc({ context_edit: { servicedate: DOCUMENTED } }),
+    doc({ context_edit: 'clear' }),
+    doc({ approve_codes: '43276' }),
+    doc({ approve_codes: ['43276', ''] }),
+    doc({ approve_codes: ['43276', '43276'] }),
+    doc({ reject: null }, { service_date: '2026-13-01' }),
+  ];
+  for (const item of bad) assert.equal(vb.planProblems(item, notes).length, 1, JSON.stringify(item));
+  assert.equal(vb.planProblems(doc({ reject: null }), { approve: 'Synthetic verification review' }).length, 1);
+  assert.equal(vb.planProblems(doc({ reject: { family: 'gi.egd' } }), { approve: notes.approve }).length, 1);
+  assert.equal(vb.planProblems(doc({ second_review: { ask: true } }), { ...notes, second_review_approve: 'approved' }).length, 1);
+});
+
+const MUST_NOT = [{ family: 'gi.colonoscopy', reason: 'historical' }];
+
+test('planDecisions never approves a code of a must_not_code family, and says so', () => {
+  const plan = vb.planDecisions(encounter(), { reject: null }, NOTES, { mustNotCode: MUST_NOT });
+  assert.deepEqual(plan.decisions.map(d => [d.code, d.action]), [['45331', 'approve']]);
+  assert.deepEqual(plan.must_not_code_held, ['45380']);
+  // a designated rejection may still fall in that family: rejecting is not approving
+  const reject = vb.planDecisions(encounter(), { reject: { family: 'gi.colonoscopy', prefer_codes: ['45380'] } }, NOTES, { mustNotCode: MUST_NOT });
+  assert.deepEqual(reject.decisions.map(d => [d.code, d.action]), [['45331', 'approve'], ['45380', 'reject']]);
+  assert.deepEqual(reject.must_not_code_held, []);
+  // without options, as before
+  assert.deepEqual(vb.planDecisions(encounter(), { reject: null }, NOTES).decisions.map(d => d.action), ['approve', 'approve']);
+});
+
+test('planDecisions --no-auto-approve: no approval at all except the codes review_plan.approve_codes names', () => {
+  const none = vb.planDecisions(encounter(), { reject: null }, NOTES, { noAutoApprove: true });
+  assert.deepEqual(none.decisions, []);
+  assert.deepEqual(none.not_in_approve_codes, ['45331', '45380']);
+  const listed = vb.planDecisions(encounter(), { reject: null, approve_codes: ['45331', '45378', '99999'] }, NOTES, { noAutoApprove: true });
+  assert.deepEqual(listed.decisions.map(d => [d.code, d.action, d.note]), [['45331', 'approve', NOTES.approve]]);
+  assert.deepEqual(listed.not_in_approve_codes, ['45380']);
+  assert.deepEqual(listed.approve_codes_unmatched, ['45378 (excluded)', '99999 (not proposed)']);
+  // an explicit list is honoured without the option too, and the designated rejection never takes a listed code
+  const both = vb.planDecisions(encounter(), { reject: { family: 'gi.colonoscopy', prefer_codes: ['45380'] }, approve_codes: ['45380'] }, NOTES);
+  assert.deepEqual(both.decisions.map(d => [d.code, d.action]), [['45380', 'approve']]);
+  assert.equal(both.designated_missing, true);
+  // a listed code of a must_not_code family is never approved: the plan contradicts the manifest
+  const conflict = vb.planDecisions(encounter(), { reject: null, approve_codes: ['45380'] }, NOTES, { noAutoApprove: true, mustNotCode: MUST_NOT });
+  assert.deepEqual(conflict.decisions, []);
+  assert.deepEqual(conflict.plan_conflicts, ['45380 (gi.colonoscopy)']);
+  // a second-review code still needs second_review.approve_codes
+  const second = encounter();
+  second.assessment.proposals[1].support = { origin: 'second_review', service: 'S1' };
+  const secondPlan = vb.planDecisions(second, { reject: null, approve_codes: ['45331', '45380'] }, NOTES, { noAutoApprove: true });
+  assert.deepEqual(secondPlan.decisions.map(d => d.code), ['45331']);
+  assert.deepEqual(secondPlan.second_review_held, ['45380']);
+});
+
+test('planDecisions reports every ready code it leaves undecided exactly once', () => {
+  const buckets = plan => [...plan.must_not_code_held, ...plan.plan_conflicts.map(c => c.split(' ')[0]), ...plan.not_in_approve_codes];
+  // a second-review code the plan names, in a must_not_code family: a conflict, not also held
+  const second = encounter();
+  second.assessment.proposals[1].support = { origin: 'second_review', service: 'S1' };
+  const named = vb.planDecisions(second, { reject: null, second_review: { approve_codes: ['45380'] } }, NOTES, { mustNotCode: MUST_NOT });
+  assert.deepEqual(named.decisions.map(d => d.code), ['45331']);
+  assert.deepEqual([named.plan_conflicts, named.must_not_code_held], [['45380 (gi.colonoscopy)'], []]);
+  // under an explicit list, a code of a must_not_code family the list does not name is held, not lost
+  const unnamed = vb.planDecisions(encounter(), { reject: null, approve_codes: ['45331'] }, NOTES, { mustNotCode: MUST_NOT });
+  assert.deepEqual(unnamed.decisions.map(d => d.code), ['45331']);
+  assert.deepEqual(buckets(unnamed), ['45380']);
+  for (const plan of [named, unnamed, vb.planDecisions(encounter(), { reject: null }, NOTES, { noAutoApprove: true, mustNotCode: MUST_NOT })]) {
+    const left = buckets(plan);
+    assert.equal(new Set(left).size, left.length, JSON.stringify(plan));
+  }
+});
+
+test('checkDecisionLabels: every decision made carries the agent label and its labelled note; none approved a must_not_code family', () => {
+  const ack = 'I am an automated agent. ... This agent-executed synthetic review is not clinical approval or billing advice.';
+  const LABELLED = { approve: NOTES.approve, reject: 'Agent-executed synthetic verification review - designated rejection' };
+  const enc = decided(decided(encounter(), 'p-flex', 'approve', NOTES.approve), 'p-colo', 'reject', LABELLED.reject);
+  enc.decisions.history.forEach(h => { h.acknowledgement = h.action === 'approve' ? ack : ''; });
+  enc.assessment.proposals.forEach(p => { if (p.decision) p.decision.acknowledgement = p.decision.action === 'approve' ? ack : ''; });
+  const made = [{ proposal_id: 'p-flex', code: '45331', family: 'gi.flex_sig', action: 'approve', note: NOTES.approve, http_status: 201, decision_id: 'd-p-flex' },
+    { proposal_id: 'p-colo', code: '45380', family: 'gi.colonoscopy', action: 'reject', note: LABELLED.reject, http_status: 201, decision_id: 'd-p-colo' }];
+  const good = vb.checkDecisionLabels(made, enc, MUST_NOT);
+  assert.deepEqual(good.checks.map(r => `${r.id}:${r.status}`), ['decisions.labelled:pass', 'decisions.never_approved_must_not_code:pass']);
+  assert.deepEqual(good.labels.map(l => [l.code, l.agent, l.note_kept, l.note_labelled, l.acknowledgement_labelled]),
+    [['45331', true, true, true, true], ['45380', true, true, true, null]]);
+  const human = clone(enc);
+  human.decisions.history[0].reviewer_kind = 'human';
+  assert.deepEqual(failures(vb.checkDecisionLabels(made, human, MUST_NOT).checks), ['decisions.labelled']);
+  const edited = clone(enc);
+  edited.decisions.history[1].note = 'rejected';
+  assert.deepEqual(failures(vb.checkDecisionLabels(made, edited, MUST_NOT).checks), ['decisions.labelled']);
+  const unacknowledged = clone(enc);
+  unacknowledged.decisions.history[0].acknowledgement = 'I read the whole source document.';
+  assert.deepEqual(failures(vb.checkDecisionLabels(made, unacknowledged, MUST_NOT).checks), ['decisions.labelled']);
+  const unlabelled = [{ ...made[0], note: 'approved' }];
+  const plain = clone(enc);
+  plain.decisions.history[0].note = 'approved';
+  assert.deepEqual(failures(vb.checkDecisionLabels(unlabelled, plain, MUST_NOT).checks), ['decisions.labelled']);
+  assert.deepEqual(failures(vb.checkDecisionLabels([made[0]], decided(encounter(), 'p-flex', 'approve', NOTES.approve), MUST_NOT).checks), ['decisions.labelled']);
+  const approvedMustNot = [{ ...made[1], action: 'approve', note: NOTES.approve }];
+  const wrong = decided(encounter(), 'p-colo', 'approve', NOTES.approve);
+  wrong.decisions.history[0].acknowledgement = ack;
+  assert.deepEqual(failures(vb.checkDecisionLabels(approvedMustNot, wrong, MUST_NOT).checks), ['decisions.never_approved_must_not_code']);
+  assert.deepEqual(vb.checkDecisionLabels([], encounter(), MUST_NOT).checks.map(r => r.status), ['pass', 'pass']);
+});
+
+test('the context step\'s selectors and the screen behaviour it relies on are the live frontend\'s', { skip: !fs.existsSync(APP) && 'studio/static/studio/app.js is not present' }, () => {
+  const app = require(APP);
+  const source = fs.readFileSync(APP, 'utf8');
+  const page = fs.readFileSync(path.join(ROOT, 'studio', 'templates', 'studio', 'index.html'), 'utf8');
+  for (const id of ['contextDialog', 'contextForm', 'contextServiceDate', 'contextSetting', 'contextBilling', 'saveContext', 'serviceDate', 'toast']) {
+    assert.ok(page.includes(`id="${id}"`), id);
+  }
+  const idle = encounter();
+  assert.ok(app.reviewView(idle, app.documentLayout(idle), 'codes', false).includes('data-action="edit-context"'));
+  const busy = encounter({ pipeline: { busy: true, can_stop: true, stages: [] } });
+  assert.equal(app.reviewView(busy, app.documentLayout(busy), 'codes', false).includes('data-action="edit-context"'), false);
+  assert.ok(source.includes("toast('No context change to save.')"), 'the screen no longer refuses an identical save with that message');
+  assert.ok(/\nasync function api\(path, \{ method = 'GET', json, form \} = \{\}\)/.test(source), 'the page\'s api() client changed');
+});
