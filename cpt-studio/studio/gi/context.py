@@ -864,7 +864,8 @@ def _stacked_value(text: str, rows: '_Rows', ls: int, le: int):
     """For a label alone on its line: (the line holding its value, whether read by position) - the value line at the
     label's place in the run of value lines under a stack of label-only lines, or the next line when it opens with a
     date - else None; when the stack's values cannot be placed, _UNPLACED where a date stands at a date or birth label's
-    place and _NO_VALUE where none does (fr-dr:0)."""
+    place and _NO_VALUE where none does (fr-dr:0) - for a date label last in a stack whose every label has its value
+    line, where a date stands at any place (df-d:0)."""
     up, cur = [], ls
     for _ in range(STACK_REACH + 1):
         line = rows.above(cur)
@@ -896,6 +897,15 @@ def _stacked_value(text: str, rows: '_Rows', ls: int, le: int):
             # fr-dr:0: "DOB:" / "Date of service:" over "10/14/2026" alone states a date whose place cannot be told
             return _UNPLACED if any(kind != 'other' and rows.states_a_date(*values[i])
                                     for i, kind in enumerate(kinds[:len(values)])) else _NO_VALUE
+        if kinds[here] != 'birth' and len(values) == len(lines):
+            # the differential round, df-d:0: every label has its value line and the places do not fit - another
+            # label's place holds a date ("Patient DOB:", "Referral date:", "Date signed:" over theirs), or the date
+            # label's holds a date and more ("10/14/2026 (done)") - so the line right below the date label is the FIRST
+            # label's place, never its own: read, it gave the date of birth or the referral date as the label's value
+            # (a member's 1998-01-01 taken and sent) or a name (silent: another labelled date sent). A date anywhere in
+            # the values is asked, the label alone kept; also for a date label of the 'other' kind ("Date of Service
+            # (DOS):").
+            return _UNPLACED if any(rows.states_a_date(*value) for value in values) else _NO_VALUE
     row = rows.below(le)  # one label above its value, or the last of labels of another kind: the next line
     return (row, False) if row is not None and _opens_with_date(text, *row) else None
 
