@@ -636,3 +636,25 @@ What it changes, so a later session does not re-derive it:
     owner of this branch, its install and its live verification. Edits ec5e7910's agents had proven but not committed
     are committed by 7c8d38da, each commit naming its origin; ec5e7910's integration branch `wip/ec5-integ` carries on,
     and the unfinished cluster work continues in worktrees `.worktrees/cpt-7c8-*` branched from its head.
+
+### Session interpretation, 2026-10-28 (7c8d38da) — recorded, not owner-ruled
+
+27. **A status exclusion is a recommendation; a misread one is a known limit.** The must-fix class "a code approved or
+    removed from the decision set without a reviewer's decision" (owner decisions of 2026-10-25 and 2026-10-27) is read
+    with interpretation 5, which the code enforces at the integrated head 2fc8cde3d: every exclusion a documentation
+    (status) check makes is reinstatable (`studio/validation/engine.py`, `reinstatable=s.excluded`; only an exclusion
+    for scope or for no exact evidence is not, as at the installed revision) and stays in the decision set, and no
+    reviewed report exists until the reviewer confirms it or reinstates the code (`studio/review.py`,
+    `_assessment_blockers`: "<code> was excluded by a documentation check: confirm the exclusion or reinstate it").
+    The decision set is the selected and the excluded proposals (as the installer's own rollback rules read it). A
+    misreading that recommends excluding an act the document states done today - both readers reading it planned,
+    historical, cancelled or negated - is therefore a wrong recommendation the reviewer decides, recorded as a known
+    limit in `cpt-studio/ACCURACY-RESIDUALS.md`, like a misreading that makes a code ready or held. Class 4 stays for: an
+    approval without a reviewer; a code that leaves the decision set (neither selected nor excluded) without one, as
+    refutation phase 1's reports-0 did; an exclusion for a status reason that is not reinstatable or confirmable; and a
+    reviewed report or export produced while an exclusion is undecided. Session ec5e7910's cluster brief had graded
+    every exclusion of a done-today act as class 4; the repairs made under it stand (they remove wrong
+    recommendations), and from refutation phase 2 (2026-10-28) such findings are graded by this interpretation. The
+    owner's own list in the "Narrow, install-first" decision ("wrong date sent to Corti, re-sending an identical
+    request, reports or the UI misstating saved state, rollback safety, time/memory") names no exclusion and says "the
+    reviewer still decides every code". The owner may overrule this; the PR body and the install report say so.
