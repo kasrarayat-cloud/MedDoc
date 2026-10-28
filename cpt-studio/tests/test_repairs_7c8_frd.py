@@ -9,6 +9,9 @@ installed revision 057a7d398 would not send.
 
 fr-dr:5  a lower-case "b." after a name ("Alex Synthetic b. 01/01/1998") was no birth label, so the date of birth was a
          subject line's own date: the note's labelled 10/14 became a question and a member's 1998-01-01 was taken.
+fr-dr:2  a bracket after a bare "Date" or a date-of-service label on a dated line ("Date (signed):", "DOS (planned):")
+         was read as the line's own date field, so the signing or planned date was the line's date: the labelled 10/14
+         became a question and a member's 10/27 or 11/04 was taken and sent.
 
 Synthetic text only; no network (the suite's FakeProvider).
 """
@@ -89,3 +92,92 @@ class LowerCaseBirthLabelAfterANameRequestTests(EndToEnd):
         self.set_context(encounter_id, {'service_date': ELENA_DATE})
         self.assert_never_sent(encounter_id, ELENA_DATE)
         self.assertEqual(self.dates_sent(encounter_id), [[]])
+
+
+# --- fr-dr:2: only a date format in a bracket keeps a "Date" field the line's own ---------------------------------------
+
+BRACKET_WORDS = ('signed', 'dictated', 'referral', 'ordered', 'report', 'planned')
+BRACKET_DATES = {'signed': '10/27/2026', 'dictated': '10/26/2026', 'referral': '10/13/2026', 'ordered': '10/12/2026',
+                 'report': '10/28/2026', 'planned': '11/04/2026'}
+BRACKET_LAYOUTS = {  # the note's own date or a dated text naming it, above a subject line
+    'labelled date': 'Colonoscopy report\nDate of service: 10/14/2026\n',
+    'dated title': 'Colonoscopy report - 10/14/2026\n',
+    'letter date': 'Date: 10/14/2026\n',
+    'dated service line': 'Colonoscopy - 10/14/2026\n',
+}
+
+
+def iso(us):
+    month, day, year = us.split('/')
+    return f'{year}-{month}-{day}'
+
+
+class BracketAfterADateFieldTests(DateAssertions, SimpleTestCase):
+    """fr-dr:2 (87fb157ca dropped a62a18c85's _GAP_FIELD; 10bdfeb2f's issue-1 rule - a date after ANOTHER field's label is
+    that field's - read any bracket of up to 20 characters after "date" or a date-of-service label as part of the line's
+    own date field): "Re: Colonoscopy - Date (signed): 10/27/2026" and "DOS (planned): 11/04/2026" gave the subject line
+    the signing or planned date, so beside "Date of service: 10/14/2026" the note's own date became a question (a
+    dateless request where a62a18c85 and 057a7d398 sent 10/14), and a member's 10/27 or 11/04 - at upload or as the
+    answer - was taken as a listed documented value and sent (45385 excluded against the planned date). A bracket that
+    names another event makes the field another field's: only a date format ("(mm/dd/yyyy)") or "(DOS)" keeps it the
+    line's own date field."""
+
+    def test_the_finding_s_lines_beside_the_labelled_date(self):
+        for subject, other in (('Re: Colonoscopy - Date (signed): 10/27/2026', '2026-10-27'),
+                               ('Re: Colonoscopy - DOS (planned): 11/04/2026', '2026-11-04')):
+            text = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\n' + subject + '\n' + COLO_BODY
+            with self.subTest(subject=subject):
+                self.assert_document(text, '2026-10-14')
+                self.assert_member_conflict(text, other)
+
+    def test_the_family_in_four_layouts(self):
+        for layout, top in BRACKET_LAYOUTS.items():
+            for word in BRACKET_WORDS:
+                for label in ('Date', 'DOS', 'Date of service'):
+                    other = BRACKET_DATES[word]
+                    text = HEAD + top + f'Re: Colonoscopy - {label} ({word}): {other}\n' + COLO_BODY
+                    with self.subTest(layout=layout, line=text.splitlines()[-4]):
+                        self.assert_never(text, iso(other))
+                        self.assert_member_conflict(text, iso(other))
+                        if layout == 'labelled date':
+                            self.assert_document(text, '2026-10-14')
+                        else:  # the dated text above is evidence: asked, and its 10/14 answers
+                            self.assert_member_date(text, '2026-10-14')
+
+    def test_controls_a_date_format_keeps_the_line_s_own_date_field(self):
+        for subject in ('Re: Colonoscopy - Date (mm/dd/yyyy): 10/14/2026', 'Re: Colonoscopy - Date (MM/DD/YYYY): 10/14/2026',
+                        'Re: Colonoscopy - Date of service (DOS): 10/14/2026', 'Re: Colonoscopy - Date: 10/14/2026',
+                        'Re: Colonoscopy - DOS (yyyy-mm-dd): 2026-10-14'):
+            text = HEAD + 'Colonoscopy report\n' + subject + '\n' + COLO_BODY
+            with self.subTest(subject=subject):
+                self.assert_member_date(text, '2026-10-14')
+                self.assert_member_conflict(text, ELENA_DATE)
+        # another field's label without a bracket is still another field's (issue 1)
+        text = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nRe: Colonoscopy - Signed: 10/27/2026\n' + COLO_BODY
+        self.assert_document(text, '2026-10-14')
+        self.assert_member_conflict(text, '2026-10-27')
+
+
+class BracketAfterADateFieldRequestTests(EndToEnd):
+    TEXT = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nRe: Colonoscopy - Date (signed): 10/27/2026\n' \
+        + COLO_BODY
+    PLANNED = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nRe: Colonoscopy - DOS (planned): 11/04/2026\n' \
+        + COLO_BODY
+
+    def test_the_note_s_date_is_sent_and_the_other_event_s_date_held(self):
+        own = self.finished(self.TEXT)
+        self.assertEqual(self.dates_sent(own), [['Date of service: 2026-10-14']])
+        self.assertEqual(self.bucket(own, '45385'), 'selected')
+        for text, other in ((self.TEXT, '2026-10-27'), (self.PLANNED, '2026-11-04')):
+            with self.subTest(other=other):
+                held = self.finished(text, service_date=other)
+                self.assert_held(held)
+                self.assert_never_sent(held, other)
+
+    def test_the_answer_path_never_sends_the_signing_date(self):
+        # the verifier's E7: the head asked (a dateless request), then took the member's 10/27 as a listed value and sent
+        # a second paid request with it
+        encounter_id = self.finished(self.TEXT)
+        self.set_context(encounter_id, {'service_date': '2026-10-27'})
+        self.assert_never_sent(encounter_id, '2026-10-27')
+        self.assertEqual(self.dates_sent(encounter_id), [['Date of service: 2026-10-14']])

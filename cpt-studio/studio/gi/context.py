@@ -1361,7 +1361,15 @@ def _dated_service_line(text: str, ls: int, le: int) -> Optional[_Candidate]:
 # colon, a comma, a semicolon or a spaced dash). Only a bare date field or a date-of-service label is the line's own.
 _GAP_FIELD = re.compile(r'(?<!\d)[:=]|[:=](?!\d)')
 _FIELD_START = re.compile(r'[ \t]{2,}+|\t|[:=|,;]|[ \t][-–—][ \t]')
-_LINE_DATE_FIELD = cues.rx(r'(?:date' + _DATE_TIME + r'|' + _DATE_LABEL + r')(?:[ \t]*+\([^()\n]{0,20}+\))?+')
+# The final refutation, fr-dr:2: a bracket after the field's "date" or date-of-service label keeps the field the line's
+# own date field only when it holds the date's FORMAT ("Date (mm/dd/yyyy):", "DOS (YYYY-MM-DD):") or "(DOS)". Any other
+# bracket names another event ("Date (signed):", "Date (dictated):", "DOS (planned):"), so the field is another field's
+# and its date never the line's: read as the line's own, the signing or planned date made the note's labelled 10/14 a
+# question, and a member's 10/27 or 11/04 was taken as a listed documented value and sent. A format is the grammar of a
+# date's parts (letters m, d and y with separators), never a word list.
+_DATE_FORMAT = r'(?:DOS|[mdy]{1,4}+(?:[ \t]*+[-/.][ \t]*+[mdy]{1,4}+){1,2}+)'
+_LINE_DATE_FIELD = cues.rx(r'(?:date' + _DATE_TIME + r'|' + _DATE_LABEL + r')(?:[ \t]*+\([ \t]*+' + _DATE_FORMAT
+                           + r'[ \t]*+\))?+')
 
 
 def _other_field(text: str, gap: int, start: int) -> Optional[int]:
