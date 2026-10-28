@@ -325,12 +325,20 @@ class NextFieldSLabelIsALabelTests(DateAssertions, SimpleTestCase):
 
     def test_words_in_the_label_s_field_ask_the_date(self):
         for text, _code in IN_THE_FIELD:
-            with self.subTest(line=text.splitlines()[2]):
+            line = text.splitlines()[2]
+            with self.subTest(line=line):
                 self.assert_never(text, '2026-11-04')
                 fact = date_fact(text)
                 self.assertEqual((fact.origin, fact.value), ('missing', None), fact.evidence)
-                self.assertIn(context.FIELD_DATE_NOTE, fact.note)
-                self.assert_member_date(text, '2026-11-04')
+                if 'Cancelled' in line:
+                    # the owner's narrow source rule (2026-10-28, second round): a status word (cues.CANCELLED_CLAUSE)
+                    # in the label's field names another occurrence - asked as before, its date never a member's
+                    # answer (this pin had it read as below: FIELD_DATE_NOTE, answered)
+                    self.assertIn(context.UNPLACED_DATE_NOTE, fact.note)
+                    self.assert_member_conflict(text, '2026-11-04')
+                else:
+                    self.assertIn(context.FIELD_DATE_NOTE, fact.note)
+                    self.assert_member_date(text, '2026-11-04')
 
     def test_a_sentence_or_a_list_before_a_lower_case_label(self):
         # what only the sentence-end rule asks: a full stop or a comma ends a word before a label written in lower case
@@ -340,7 +348,10 @@ class NextFieldSLabelIsALabelTests(DateAssertions, SimpleTestCase):
             text = HEAD + 'Colonoscopy report\n' + line + '\n' + COLO_BODY
             with self.subTest(line=line):
                 self.assert_never(text, '2026-11-04')
-                self.assert_member_date(text, '2026-11-04')
+                if 'Pending' in line:
+                    self.assert_member_date(text, '2026-11-04')
+                else:  # the owner's narrow source rule: a status word after the date (this pin had them answer)
+                    self.assert_member_conflict(text, '2026-11-04')
 
     def test_the_skeptic_s_family_a(self):
         words = ('Cancelled.', 'Cancelled', 'Pending authorization.', 'Not yet performed.', 'Postponed (patient request)',

@@ -413,14 +413,23 @@ class LabelSOwnFieldTests(DateAssertions, SimpleTestCase):
     cell bar or the next field's label on the same line. A bracket or words there make the date a question - asked,
     never sent, the date kept as evidence the member's answer may agree with. The structure only: no word list."""
 
+    # the owner's narrow source rule (2026-10-28, second round): a status word (cues.CANCELLED_CLAUSE) in the label's
+    # field names another occurrence - asked as before, but its date is never a member's answer (an addendum settles it)
+    STATUS_IN_FIELD = ('(cancelled)', '(postponed)', 'cancelled Status: closed')
+
     def test_a_bracket_or_words_after_the_date_ask_it(self):
         for text, value in NOT_ALONE:
-            with self.subTest(line=text.splitlines()[2]):
+            line = text.splitlines()[2]
+            with self.subTest(line=line):
                 self.assert_never(text, value)
                 fact = date_fact(text)
                 self.assertEqual((fact.origin, fact.value), ('missing', None), fact.evidence)
-                self.assertIn(context.FIELD_DATE_NOTE, fact.note)
-                self.assert_member_date(text, value)  # its date is evidence the member's answer agrees with
+                if line.endswith(self.STATUS_IN_FIELD):  # this pin had them read as below (FIELD_DATE_NOTE, answered)
+                    self.assertIn(context.UNPLACED_DATE_NOTE, fact.note)
+                    self.assert_member_conflict(text, value)
+                else:
+                    self.assertIn(context.FIELD_DATE_NOTE, fact.note)
+                    self.assert_member_date(text, value)  # its date is evidence the member's answer agrees with
                 self.assert_member_conflict(text, ELENA_DATE)
 
     def test_controls_the_date_alone_in_its_field(self):
@@ -439,8 +448,13 @@ class LabelSOwnFieldTests(DateAssertions, SimpleTestCase):
 
     def test_beside_the_own_labelled_date_it_speaks(self):
         # a labelled date with more in its field questions the own labelled date when it differs, agrees otherwise
-        self.assert_conflict(HEAD + 'Date of service: 10/14/2026\nProcedure date: 11/04/2026 (cancelled)\n' + COLO_BODY,
-                             '2026-10-14', '2026-11-04')
+        self.assert_conflict(HEAD + 'Date of service: 10/14/2026\nProcedure date: 11/04/2026 (pending authorization)\n'
+                             + COLO_BODY, '2026-10-14', '2026-11-04')
+        # the owner's narrow source rule (2026-10-28): a cancelled procedure's date still questions it (asked), but is no
+        # value a member may choose - the own date answers, the cancelled one is held (this pin had both answer)
+        text = HEAD + 'Date of service: 10/14/2026\nProcedure date: 11/04/2026 (cancelled)\n' + COLO_BODY
+        self.assert_question(text, '2026-10-14')
+        self.assert_member_conflict(text, '2026-11-04')
         self.assert_document(HEAD + 'Date of service: 10/14/2026\nProcedure date: 10/14/2026 (completed)\n' + COLO_BODY,
                              '2026-10-14')
 
@@ -519,17 +533,30 @@ class KnownLimitTests(DateAssertions, SimpleTestCase):
     """Pre-existing qualifier gaps where the lines around a labelled date say it is another occurrence's date. Closing
     them by structure (a header region) asked the date of most documents (P2DATES, wip/7c8-p2dates); closing them by
     vocabulary has leaked in every refutation round. They stay as at 2fc8cde3d and 057a7d398 - the qualified date is
-    documented and sent - and each is recorded in ARCHITECTURE 5.2. A change here is a change of a known limit: say so."""
+    documented and sent - and each is recorded in ARCHITECTURE 5.2. A change here is a change of a known limit: say so.
+
+    Changed by the owner's narrow source rule (2026-10-28, second round; tests/test_repairs_gi2_occurrence.py): a date
+    a heading, a title or a field on its row naming another occurrence governs is asked, never sent, and a member's
+    answer equal to it is held. It closes dates:4, dates:6, dates:8's "Cancelled procedure:" above and its short row,
+    and sk:5's cancelled title; "Recall", the status field beside the label (dates:7, sk:6) and another discipline's
+    undated title (sk:7) stay as the owner kept them."""
 
     def test_dates4_known_limit_a_long_flattened_row(self):
-        self.assert_document(HEAD + 'EGD report\nPlanned procedure: colonoscopy with possible cold snare polypectomy under '
-                             'monitored anesthesia care Procedure Date: 11/04/2026\n' + EGD_BODY, '2026-11-04')
+        # closed (the narrow source rule): the planned procedure's field governs the label more than 80 characters back
+        text = (HEAD + 'EGD report\nPlanned procedure: colonoscopy with possible cold snare polypectomy under '
+                'monitored anesthesia care Procedure Date: 11/04/2026\n' + EGD_BODY)
+        self.assert_never(text, '2026-11-04')
+        self.assert_member_conflict(text, '2026-11-04')
 
     def test_dates6_known_limit_a_heading_above_a_block_or_a_list(self):
-        self.assert_document(HEAD + 'Colonoscopy report\nOutside colonoscopy:\nFacility: Synthetic Regional Hospital\n'
-                             'Procedure date: 09/03/2026\nFindings: two adenomas.\n\n' + COLO_BODY, '2026-09-03')
-        self.assert_document(HEAD + 'Colonoscopy report\nOutside colonoscopy:\n- Procedure date: 09/03/2026\n'
-                             '- Findings: two adenomas.\n\n' + COLO_BODY, '2026-09-03')
+        # closed (the narrow source rule): "Outside colonoscopy:" heads the label's block or list
+        for text in (HEAD + 'Colonoscopy report\nOutside colonoscopy:\nFacility: Synthetic Regional Hospital\n'
+                     'Procedure date: 09/03/2026\nFindings: two adenomas.\n\n' + COLO_BODY,
+                     HEAD + 'Colonoscopy report\nOutside colonoscopy:\n- Procedure date: 09/03/2026\n'
+                     '- Findings: two adenomas.\n\n' + COLO_BODY):
+            with self.subTest(text=text.splitlines()[3]):
+                self.assert_never(text, '2026-09-03')
+                self.assert_member_conflict(text, '2026-09-03')
 
     def test_dates7_known_limit_another_field_beside_the_label(self):
         self.assert_document(HEAD + 'EGD report\nProcedure date: 11/04/2026\nStatus: Scheduled\n' + EGD_BODY, '2026-11-04')
@@ -539,14 +566,22 @@ class KnownLimitTests(DateAssertions, SimpleTestCase):
                              + EGD_BODY, '2026-11-04')  # P2DATES sk:2 (d)
 
     def test_dates8_known_limit_a_qualifier_field_above_or_a_short_row(self):
-        for above in ('Recall:', 'Cancelled procedure:'):
-            self.assert_document(HEAD + 'Colonoscopy report\n' + above + '\nProcedure date: 11/04/2026\n\n' + COLO_BODY,
-                                 '2026-11-04')
-        self.assert_document(HEAD + 'Colonoscopy report\nCancelled colonoscopy: yes Procedure Date: 11/04/2026\n\n'
-                             + COLO_BODY, '2026-11-04')
+        # "Recall:" names no other occurrence in the reader's vocabulary: a known limit the owner kept
+        self.assert_document(HEAD + 'Colonoscopy report\nRecall:\nProcedure date: 11/04/2026\n\n' + COLO_BODY,
+                             '2026-11-04')
+        # closed (the narrow source rule): a cancelled procedure's heading above, its field on the short row
+        for text in (HEAD + 'Colonoscopy report\nCancelled procedure:\nProcedure date: 11/04/2026\n\n' + COLO_BODY,
+                     HEAD + 'Colonoscopy report\nCancelled colonoscopy: yes Procedure Date: 11/04/2026\n\n' + COLO_BODY):
+            with self.subTest(text=text.splitlines()[2]):
+                self.assert_never(text, '2026-11-04')
+                self.assert_member_conflict(text, '2026-11-04')
 
     def test_sk5_known_limit_a_title_above(self):
-        self.assert_document(HEAD + 'Cancelled colonoscopy\nProcedure date: 11/04/2026\n\n' + COLO_BODY, '2026-11-04')
+        # closed (the narrow source rule): a cancelled colonoscopy's title above the label
+        text = HEAD + 'Cancelled colonoscopy\nProcedure date: 11/04/2026\n\n' + COLO_BODY
+        self.assert_never(text, '2026-11-04')
+        self.assert_member_conflict(text, '2026-11-04')
+        # "Recall procedure": a known limit the owner kept
         self.assert_document(HEAD + 'Colonoscopy report\nRecall procedure\nProcedure date: 11/04/2026\n\n' + COLO_BODY,
                              '2026-11-04')
 

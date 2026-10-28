@@ -20,7 +20,7 @@ from datetime import date
 from typing import Optional
 
 from studio.gi import cues
-from studio.gi.sections import Layout, layout
+from studio.gi.sections import HEADINGS, Layout, layout
 from studio.types import CONTEXT_FACTS, Fact, Span
 
 SETTINGS = ('office', 'hospital_outpatient', 'asc', 'inpatient', 'emergency', 'telehealth')
@@ -646,7 +646,190 @@ def _labelled_kind(text: str, label_start: int, label_end: int, date_start: int,
         return reading, start
     if reading == 'unplaced' or (words and not _names_this_service(words, words + ' ' + text[label_start:label_end])):
         return 'unplaced', start
+    # the owner's narrow source rule (2026-10-28): read again only here, and only ever moved to 'beside'
+    if _another_occurrence_governs(text, label_start, label_end, date_start, date_end, value, start):
+        return 'beside', label_start
     return 'own', label_start
+
+
+# --- the narrow source rule (owner decision 2026-10-28, second round; ARCHITECTURE 5.2) -------------------------------
+# Interpretation 28 left one family to the owner: a labelled date the text around it marks as ANOTHER occurrence's - a
+# heading over its block ("Outside colonoscopy:" above "Facility: ..." above "Procedure date: 09/03/2026"), a title
+# ("Cancelled colonoscopy" above the label) or a field on its row more than 80 characters before it ("Planned procedure:
+# colonoscopy with ... Procedure Date: 11/04/2026") - was read as the note's own date, documented and sent, and an act
+# done that day excluded against it. The owner ruled the narrow source rule: such a date is asked, never sent, and a
+# member's answer equal to it is not taken (an addendum settles it); a neutral heading the reader cannot place
+# ("Patient information:", "Recall:") changes nothing. It reads again only a label the installed reading reads as the
+# note's own (_labelled_kind) and only moves it to 'beside' (_another_occurrence_governs): the label keeps speaking - the
+# date is asked - and is quoted but never a member's answer (_ElsewhereSpan), so no candidate is silenced ('aside') and
+# no date is created.
+ROW_REACH = 400  # characters of a label's row read before it (the installed reading reads 80)
+# The rule's vocabulary: the installed reader's (_OTHER_OCCURRENCE: the date qualifiers and the history words) and the
+# act status the services reader reads (cues.CANCELLED_CLAUSE: cancelled, aborted, postponed, deferred, not done, called
+# off, not started, no-show) - the reader's own closed class of status words, read as date qualifiers for the date only.
+_STATUS_WORDS = '|'.join('(?:' + pattern.pattern + ')' for _, pattern in cues.CANCELLED_CLAUSE)
+_STATUS = cues.rx(_STATUS_WORDS)
+_OCCURRENCE_WORDS = cues.rx(r'(?:' + _OTHER_OCCURRENCE.pattern + '|' + _STATUS_WORDS + ')')
+# The sections whose heading is never read: the document's top, the app's addendum header and a PDF form or annotation
+# block (studio/gi/sections).
+_UNREAD_SECTIONS = frozenset(('', 'addendum', 'pdf form fields', 'pdf annotation text'))
+_LIST_MARK = re.compile(r'[ \t]*+(?:[-*\u2022][ \t]++|\d{1,2}[.)][ \t]++)')
+_NON_BLANK = re.compile(r'\S')
+
+
+class _OccurrenceScope:
+    """What the narrow source rule reads of one text, each part computed once - never a scan per label of a long line
+    (refutation phase 2's cost rule): every word of the rule's vocabulary, found in one pass the first time a label
+    needs one, as (start, end, whether it is a status word); and each section heading's verdict."""
+
+    def __init__(self, text: str):
+        self.text, self._index, self._headings = text, None, {}
+
+    def words(self, start: int, end: int) -> list[tuple[int, int, bool]]:
+        """The vocabulary's words standing wholly in [start, end)."""
+        if self._index is None:
+            found = [(m.start(), m.end(), _STATUS.fullmatch(m.group()) is not None)
+                     for m in _OCCURRENCE_WORDS.finditer(self.text)]
+            self._index = (found, [w[0] for w in found])
+        found, starts = self._index
+        out, i = [], bisect.bisect_left(starts, start)
+        while i < len(found) and found[i][0] < end:
+            if found[i][1] <= end:
+                out.append(found[i])
+            i += 1
+        return out
+
+    def heading_governs(self, label_start: int) -> bool:
+        """(a) Whether the label stands, below its heading's line, in a section studio/gi/sections opened with a heading
+        it cannot place (kind 'other', no heading it knows) whose own words name another occurrence
+        (_heading_names_another). Never the document's top, the app's addendum header or a PDF form block, nor a heading
+        on the label's own line ("Date of service:" alone on its line opens a section of its own)."""
+        sec = layout(self.text).section_at(label_start)
+        if sec.heading is None or sec.kind != 'other' or sec.label in HEADINGS or sec.label in _UNREAD_SECTIONS:
+            return False
+        verdict = self._headings.get(sec.heading.start)
+        if verdict is None:
+            line_end = self.text.find('\n', sec.heading.end)
+            verdict = self._headings[sec.heading.start] = (len(self.text) if line_end < 0 else line_end,
+                                                           _heading_names_another(self.text, sec.heading))
+        return verdict[1] and label_start > verdict[0]
+
+
+@functools.lru_cache(maxsize=16)
+def _occurrence_scope(text: str) -> _OccurrenceScope:
+    return _OccurrenceScope(text)
+
+
+def _heading_names_another(text: str, heading: Span) -> bool:
+    """Whether a section heading names another occurrence: a word of the rule's vocabulary outside a name of a service
+    this release codes ("Outside colonoscopy:", "Cancelled procedure:", "Index EMR:"). Never a heading naming only such a
+    service ("Colonoscopy:", "Follow-up visit:"), a date-of-service or birth label alone on its line (an empty field over
+    its value), or a label alone on its line over another label or a bare value (a stacked header's field: "Patient:"
+    over "DOB:" over their values; _stacked_label). A heading naming no other occurrence ("Recall:", "Patient
+    information:", "Pending colonoscopy:") changes nothing (the owner's decision)."""
+    words = str(heading.text).rstrip(': \t')
+    if not words or _names_this_service(words, words) or DATE_LABEL.fullmatch(words) or _BIRTH_HEAD.fullmatch(words):
+        return False
+    names = [(n.start(), n.end()) for p in _THIS_SERVICE for n in p.finditer(words)]
+    if all(any(s <= q.start() and q.end() <= e for s, e in names) for q in _OCCURRENCE_WORDS.finditer(words)):
+        return False  # no word of the vocabulary outside a service's name
+    return not _stacked_label(text, heading.end)
+
+
+def _stacked_label(text: str, heading_end: int) -> bool:
+    """Whether a label alone on its line heads no block: the next non-blank line starting within GAP_REACH characters is
+    neither a field with a value nor a list item (another label alone or a bare value, as a stacked header writes its
+    fields), or there is none."""
+    end = text.find('\n', heading_end)
+    start = end + 1
+    while 0 < start < min(len(text), end + 1 + GAP_REACH):
+        stop = text.find('\n', start)
+        stop = len(text) if stop < 0 else stop
+        if _NON_BLANK.search(text, start, stop) is not None:
+            if _LIST_MARK.match(text, start, stop) is not None:
+                return False
+            field = _LINE_FIELD.match(text, start, stop)
+            return field is None or _NON_BLANK.search(text, field.end(), stop) is None
+        start = stop + 1
+    return True
+
+
+def _phrase_end(text: str, date_end: int) -> int:
+    """Where _line_reading stops reading after a labelled date (the same window): the end of the date's line within 80
+    characters, or of the next line within 80 more when the phrase wraps onto it (that line opens in lower case or a
+    bracket)."""
+    hi = text.find('\n', date_end, date_end + 80)
+    hi = min(len(text), date_end + 80) if hi < 0 else hi
+    if hi < len(text) and text[hi] == '\n':
+        wrap = hi + 1
+        while wrap < min(len(text), hi + 81) and text[wrap] in ' \t':
+            wrap += 1
+        if wrap < len(text) and (text[wrap].islower() or text[wrap] in '(['):
+            stop = text.find('\n', wrap, hi + 81)
+            hi = min(len(text), hi + 81) if stop < 0 else stop
+    return hi
+
+
+def _another_occurrence_governs(text: str, label_start: int, label_end: int, date_start: int, date_end: int,
+                                value: Optional[date], phrase_start: int) -> bool:
+    """The narrow source rule for a label the installed reading reads as the note's own: whether a heading, a title or a
+    field on its row names another occurrence and governs the label, read where the installed reading does not read:
+    (a) the heading of the label's section (_OccurrenceScope.heading_governs);
+    (c) a status word (cues.CANCELLED_CLAUSE) read exactly as _line_reading reads a date qualifier, where it reads one:
+        any one on the label's line within its 80 characters before the label, or after the date within its phrase,
+        makes the date another occurrence's or one it cannot place (fr-dr:4: a date qualifier there is never passed
+        over: "Status: cancelled    Procedure date:", "11/04/2026 (cancelled)", "11/04/2026 cancelled Status: closed");
+        one on the line above a label opening its line governs unless that rule passes it over (inside a coded
+        service's name, before another date on that line, or opening a field about something else or with a date of
+        its own) - a title or heading above ("Cancelled colonoscopy", "Cancelled procedure:");
+    (b) beyond those 80 characters, up to ROW_REACH on the label's row (refutation phase 2, dates:4), a word of the
+        vocabulary governs only when it names the label's occurrence by structure: it opens a field naming an occurrence
+        ("Planned procedure: colonoscopy with ... Procedure Date:", "Cancelled colonoscopy: yes ...") or is attached to
+        the label (nothing but words, commas, hyphens, brackets or a row's cell bars between them: "Outside colonoscopy
+        at ... adenomas, procedure date:"), with no date but a date of birth between them. A field about something else
+        ("Last name:"), one with a date of its own ("Next visit: 11/24/2026"), or a word across a break ("Visit type:
+        Follow-up", "Indication: history of polyps.") that far back names no occurrence of the label: nothing changes.
+    The label's own words need no reading: any word there but a coded service's name already makes the installed
+    reading 'unplaced'."""
+    scope = _occurrence_scope(text)
+    if scope.heading_governs(label_start):
+        return True
+    near = max(text.rfind('\n', max(0, label_start - 80), label_start) + 1, label_start - 80, 0)
+    far = max(text.rfind('\n', max(0, label_start - ROW_REACH), label_start) + 1, label_start - ROW_REACH, 0)
+    row = scope.words(far, label_start)
+    if any(status and q_start >= near for q_start, _, status in row) \
+            or any(status for _, _, status in scope.words(date_end, _phrase_end(text, date_end))):
+        return True  # (c) on the label's line, where every date qualifier holds the date
+    farther = [w for w in row if w[0] < near]
+    above = _line_above(text, phrase_start)
+    window = 0 if above is None else min(above[1], above[0] + 200)
+    upper = [] if above is None else [w for w in scope.words(above[0], window) if w[2]]
+    if not (farther or upper):
+        return False
+    dates, starts = find_dates(text), _date_starts(text)
+
+    def other_dates(a: int, b: int) -> list:  # _line_reading's: the dates in [a, b) other than this one
+        return [dates[j] for j in range(bisect.bisect_left(starts, a), bisect.bisect_left(starts, b))
+                if not date_start <= dates[j].start < date_end
+                and (value is None or compare_to_service(dates[j], value) != 0)]
+
+    def has_date(a: int, b: int) -> bool:
+        return bool(other_dates(a, b))
+
+    if upper:  # (c) on the line above, as _line_reading reads its date qualifiers there
+        names = [(n.start(), n.end()) for p in _THIS_SERVICE for n in p.finditer(text, above[0], min(above[1], window + 60))]
+        for q_start, q_end, _ in upper:
+            if not (any(s <= q_start and q_end <= e for s, e in names) or other_dates(q_end, above[1])
+                    or _qualifier_field(text, q_start, q_end, above[1], has_date) in ('else', 'dated')):
+                return True
+    opens = _opens_field(text, label_start, label_end)
+    for q_start, q_end, _ in farther:  # (b)
+        field = _qualifier_field(text, q_start, q_end, label_start, has_date)
+        if field in ('dated', 'else') or any(not _is_birth(text, d.start) for d in other_dates(q_end, label_start)):
+            continue
+        if field == 'occurrence' or not opens and not _NOT_ATTACHED.search(_ROW_BAR.sub(' ', text[q_end:label_start])):
+            return True
+    return False
 
 
 class _Rows:
@@ -1439,7 +1622,7 @@ def _title_candidates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
             if head is None or index + 1 == len(lines) or not DATE_LINE.match(text, *lines[index + 1]):
                 dated = _dated_service_line(text, ls, le)
                 if dated is not None:
-                    out.append(dated)
+                    out.append(_line_under_another(text, dated, ls))
                 continue
             day, form, end, words, keyword, field = None, 'unread', lines[index + 1][1], head.group('words'), \
                 head.group('keyword'), False
@@ -1466,6 +1649,19 @@ def _title_qualified(text: str, ls: int, le: int, m) -> bool:
         return True
     head = text[ls:le]
     return any(pattern.search(head) for _, pattern in _HISTORY_TITLE)
+
+
+def _line_under_another(text: str, c: _Candidate, ls: int) -> _Candidate:
+    """The narrow source rule (a) for a dated service line ('line', 'aside': it never speaks, and its date is the
+    evidence a member's answer may agree with when the note gives no date of its own): standing in a section whose
+    heading names another occurrence (_OccurrenceScope.heading_governs), its date is that occurrence's - quoted as
+    _ElsewhereSpan, never a member's answer. Read as the service's own, it gave a member's answer once the label beside
+    it under the same heading was asked: "Index procedure - Encounter date:" over "Colonoscopy: 10/27/2026" took a
+    member's 10/27, the index procedure's date."""
+    if c.source != 'line' or not _occurrence_scope(text).heading_governs(ls):
+        return c
+    return _Candidate(_ElsewhereSpan(c.span.start, c.span.end, c.span.text), c.value, c.source, c.reading, c.form,
+                      tuple(_ElsewhereSpan(e.start, e.end, e.text) for e in c.extra), c.alone, c.installed)
 
 
 # A date that ends a line near the top ("Colonoscopy - 10/14/2026", "EGD 10/14/2026"): read by _dated_service_line.
