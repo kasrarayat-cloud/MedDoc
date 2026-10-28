@@ -356,29 +356,58 @@ sent to Corti with the act done that day excluded against it):
 1. *What may be sent.* A document date is the note's own - documented, used for
    the dated checks and sent - only from a date-of-service label (date of
    service, DOS, service, procedure, visit or encounter date, date of
-   procedure/visit/encounter, a label naming the time too) whose value is a date
-   alone (a clock may follow it), standing in the document's **header**: from
-   the top, the title lines (no field, sentence, list item, table row, date or
-   year but a dated title's own, or word of another occurrence outside a service
-   name; at most 12 lines of at most 200 characters), then header lines whose fields
-   are all of a closed list - patient (name, id, status, type), name, record,
-   chart or account number, date of birth, age, sex or gender, the physician,
-   provider, endoscopist, operator, assistant or anesthesia provider, location,
-   facility, site, place of service or care setting, referring physician - and
-   date-of-service labels. The label's whole paragraph (its contiguous non-blank
-   lines) must lie in that header, every date label up to its end must state the
-   same date alone, and the header values are read too: a word of another
-   occurrence or any date but a date of birth in a header value ends the header.
-   Anything else in the block - another field, a heading, a sentence, a bullet,
-   a bracket after the date, a body line without a blank line before it - makes
-   the date a question: a dateless request and a question for the member. An
-   addendum the app appends opens a header of its own (its "ADDENDUM (revision
-   N, added ...)" line is its title), so an addendum stating the date alone
-   documents it. This is an over-hold for many real notes - a header followed
-   directly by the procedure, a "Sedation:", "Billing:" or "Patient status: ...
-   last seen ..." field in the header, and every digital PDF or Word document,
-   whose extracted text keeps no blank line - a known limit: the member's answer
-   with the labelled date settles it (a second, dated request).
+   procedure/visit/encounter, a label naming the time too) **read as the note's
+   own** - the label alone, or with the name of a service this release codes
+   ("Colonoscopy procedure date"; a label carrying any other word, "Initial visit
+   date" or "Cancelled procedure date", is asked) - whose value is a date alone (a
+   clock may follow it), standing in the document's **header**: from the top, the
+   title lines, then header lines whose fields are all of a closed list - patient
+   (name, id, number), name, record, chart or account number, MRN, date of birth,
+   age, sex or gender, the physician, provider or endoscopist (a clinician, a
+   gastroenterologist, an endosonographer), location, facility, referring
+   physician - and date-of-service labels. A title line (no field,
+   sentence, list item, table row, date or year but a dated title's own, or word of
+   another occurrence outside a service name; at most 12 lines of at most 200
+   characters) is read for **what it names**: one naming a service, an encounter
+   or a document is the title only when every word of it is part of a service's
+   name or of a closed list of title words (the document, the encounter, this
+   release's discipline and settings, the kinds of service, the words joining
+   them); one naming them in other words, or naming another discipline's
+   document, ends the header ("Cancelled colonoscopy", "Recall procedure",
+   "Cardiology consultation", "Pathology report"; another discipline's name alone,
+   "Pathology", too). A line naming nothing stands above the title as its
+   letterhead ("Riverside Endoscopy Unit (fictional)" over "Colonoscopy procedure
+   report"), never in a label's block; below the title it is a heading that ends
+   the header ("Colonoscopy report" over "Recall"). The document's first line
+   stands anywhere when it names nothing (its banner). The label's whole
+   paragraph (its contiguous non-blank lines) must lie in that header, every date
+   label up to its end must state the same date alone, and the header values are
+   read: a birth field holds its date alone; a value naming an occurrence (a
+   service, a procedure, a visit, an appointment), a word of another occurrence or
+   any date but a date of birth ends the header; and in the label's **block** - its
+   paragraph and the nearest line above it - a header value is a name, a number or
+   a code (no bracket, sentence stop or word in lower case) and no letterhead
+   stands. Anything else in the block - another field, a heading, a sentence, a
+   bullet, a bracket after the date, a body line without a blank line before it -
+   makes the date a question: a dateless request and a question for the member. An
+   addendum the app appends opens a header of its own (its "ADDENDUM (revision N,
+   added ...)" line is its title), so an addendum stating the date alone documents
+   it. This is an over-hold for many real notes - a header followed directly by
+   the procedure; a "Place of service:", "Setting:", "Sedation:", "Billing:" or
+   "Patient status: ..." field, a "(fictional)" or "52 years" value, or a title
+   with a word outside the list ("Colonoscopy with polypectomy") beside the label;
+   a first line naming a document in other words; and every digital PDF or Word
+   document, whose extracted text keeps no blank line - a known limit: the
+   member's answer with the labelled date settles it (a second, dated request).
+   Known limits the other way, each needing words to tell apart and kept so
+   rather than read by a vocabulary: a line naming nothing above the title, or at
+   the top of a document with none ("CANCELLED" over "Colonoscopy report"), stands
+   as a letterhead outside the label's block; a header value holding a phrase that
+   names no occurrence, two paragraphs above the label ("Facility: Synthetic
+   Hospital (cancelled)"), is not read for it; a qualifier written with a capital
+   in a name-shaped header value ("Provider: Dr. A. Synthetic - Cancelled") reads
+   as a name; and a document's first line naming nothing ("CANCELLED" with no
+   banner above it) stands as its banner.
 2. *Everything else is evidence, never the sent date.* A dated title, a bare
    "Date:" or "Date/Time:" line, a dated line naming the service and a letter's
    subject line are kept as evidence. They can only make a labelled date a
@@ -391,12 +420,18 @@ sent to Corti with the act done that day excluded against it):
    10/09/2026" above a colonoscopy was sent, with the snare polypectomy done on
    10/14 excluded against it.
 3. *A date of birth is never a service date.* A date with a birth label (DOB,
-   D.O.B., date of birth, birth date, born, b.) right before it, in any bracket,
-   or heading its table column or the line above it, is no candidate's value and
-   is never read from the evidence. An empty date-of-service field ("DOS: DOB:
-   01/01/1998") states no date, and a dated line's own date is its only date
-   after the service's name that is no date of birth (a line with two is kept as
-   evidence that reads no date).
+   D.O.B., D-O-B, date of birth, birth date, birth, birthday, born, b.; also
+   joined to another field's name, "DOB/Age", "Age/DOB", "DOB (age)") right
+   before it, in any bracket, or heading its table column or the line above it, is
+   no candidate's value and is never read from the evidence. A date-of-service
+   label's own value **opens its field**: a field opened by anything else -
+   another field, a date of birth, a word ("DOS: DOB: 01/01/1998", "Visit Date:
+   TBD DOB (age) 01/01/1998", "Date of service: see 10/20/2026") - states no date,
+   and the label is kept as evidence that reads no date, so a member date is held
+   unless another candidate states it (a field with no digit at all, "N/A", keeps
+   nothing: the member supplies the date). A dated line's own date is its only
+   date after the service's name that is no date of birth (a line with two is
+   kept as evidence that reads no date).
 4. *A member date* is taken only when it is a date some candidate states as its
    own value; otherwise it is a member conflict (held, nothing sent).
 
