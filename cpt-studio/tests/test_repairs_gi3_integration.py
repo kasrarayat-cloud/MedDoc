@@ -10,6 +10,8 @@
   occurrence, and a table's column label, still govern.
 - NoOwnDateTests (H2): B4's visit or procedure field in a note that labels no date of its own stays dropped as the
   installed reading dropped it, so a planned date is never the only answer a member may give.
+- ActTechniqueTests (services._OTHER_INSTRUMENT): an act never takes the technique of the instrument its own kind rules
+  out (ho-01's biopsy had read as "forceps biopsy (cold snare)").
 - IntegrationInvariantTests: H1 and H2 never send a date the installed reading does not send.
 """
 import itertools
@@ -17,7 +19,7 @@ from datetime import date
 
 from django.test import SimpleTestCase
 
-from studio.gi import context
+from studio.gi import context, services
 from studio.gi.detect import route
 from studio.providers import corti
 from studio.reference.store import InMemoryReferenceLookup
@@ -158,6 +160,32 @@ class NoOwnDateTests(SimpleTestCase):
         self.assertEqual(date_of(self.note(OWN, b4)), ('conflict', None))
         self.assertEqual(date_of(self.note(OWN, 'Plan:\nReturn to clinic in 6 weeks.\nVisit date: 2026-11-16\n')),
                          ('document', '2026-10-05'))
+
+
+class ActTechniqueTests(SimpleTestCase):
+    """services._OTHER_INSTRUMENT: a forceps act never takes a snare technique, a snare act never a forceps one."""
+
+    def acts(self, text):
+        day = context.service_date_of(text)
+        inventory = services.build(text, service_date=day, routing=route(text, day), context_facts=facts(text),
+                                   pages=())
+        return [(a.kind, a.technique) for s in inventory.services for a in s.acts]
+
+    def test_ho_01s_biopsy_is_no_snare_biopsy(self):
+        for name in ('live-text/ho-01__30d3f32d__2026-10-29.txt', 'ho/ho-01-egd-colonoscopy-tattoo-conflict.txt'):
+            with self.subTest(text=name):
+                acts = self.acts(fixture(name))
+                self.assertTrue(any(kind == 'biopsy' for kind, _ in acts))
+                self.assertFalse([t for kind, t in acts if kind in ('biopsy', 'hot_biopsy') and 'snare' in t])
+                self.assertIn(('snare', 'cold snare'), acts)
+
+    def test_one_clause_two_instruments(self):
+        text = (BANNER + 'Synthetic GI clinic (fictional)\nColonoscopy report\nDate of service: 2026-10-05\n'
+                'Findings\nA 6 mm polyp in the ascending colon was removed with a cold snare, and a 3 mm polyp in the '
+                'rectum was removed with cold forceps.\nImpression\nTwo polyps removed.\n')
+        acts = self.acts(text)
+        self.assertFalse([t for kind, t in acts if kind == 'snare' and 'forceps' in t])
+        self.assertFalse([t for kind, t in acts if kind in ('biopsy', 'hot_biopsy') and 'snare' in t])
 
 
 class IntegrationInvariantTests(SimpleTestCase):

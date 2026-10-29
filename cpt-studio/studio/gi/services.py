@@ -2951,11 +2951,23 @@ def _anatomy_in(text: str, start: int, end: int) -> list[tuple[str, str, int, in
     return sorted(found, key=lambda x: x[2])
 
 
-def _technique(text: str, start: int, end: int, near: Optional[int] = None) -> str:
+# gi3 integration: the instrument an act's own kind names rules out the other instrument's techniques - a forceps biopsy
+# or a hot forceps removal is never done with a snare, a snare removal never with forceps (the instrument is what tells
+# 45380 and 45384 from 45385). ho-01's procedure line "colonoscopy with cold snare polypectomy, biopsies of a separate
+# lesion" gave its biopsy the clause's only technique and described it as "forceps biopsy (cold snare)".
+_OTHER_INSTRUMENT = {'biopsy': ('cold snare', 'hot snare', 'snare'), 'hot_biopsy': ('cold snare', 'hot snare', 'snare'),
+                     'snare': ('cold forceps', 'hot forceps', 'forceps')}
+
+
+def _technique(text: str, start: int, end: int, near: Optional[int] = None, kind: str = '') -> str:
     """The technique named in [start, end); with ``near``, the one closest to that position ("cold snare polypectomy
-    and cold forceps biopsy": the snare's technique is the cold snare)."""
+    and cold forceps biopsy": the snare's technique is the cold snare); with ``kind``, never one naming the instrument
+    that act's kind rules out (_OTHER_INSTRUMENT)."""
     best, distance = '', None
+    ruled_out = _OTHER_INSTRUMENT.get(kind, ())
     for name, pattern in TECHNIQUES:
+        if name in ruled_out:
+            continue
         for m in pattern.finditer(text, start, end):
             if near is None:
                 return name
@@ -4123,7 +4135,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     raise _Capped(f'More than {MAX_ACTS:,} acts are documented; the rest were not inventoried.')
                 act = Act(id='', service='', kind=kind, status=reading.status, role=role,
                           anatomy=tuple(dict.fromkeys(a[0] for a in anat)), region=region,
-                          technique=_technique(text, *bc, near=ms), lesion=lesion.id if lesion else '',
+                          technique=_technique(text, *bc, near=ms, kind=kind), lesion=lesion.id if lesion else '',
                           evidence=(_span(text, *bc),), cues=reading.cues, detail=_detail(text, *bc, kind))
                 placements.note(act, _covers_of(text, anat),
                                 lesion is not None and lesion.id in own_lesions and one_place)
