@@ -124,6 +124,33 @@ LOWER = frozenset(('colon', 'rectum', 'anus'))
 # inclusion of an upper endoscopy in an endoscopic ultrasound (_included).
 REGION_OF = {name: region for name, region, _ in ANATOMY}
 LUMEN = UPPER | LOWER | {'small_bowel'}
+# What a site may cover, read only to tell whether a denial scoped to sites and a statement of the act are about one
+# place (_same_subject; refutation gi2 status-2: the round's scoped denial read the regions as a partition, so "No small
+# bowel biopsies were taken" no longer paired with the duodenal biopsies a site-less summary may be about): its own
+# region, and the places inside it that this vocabulary keeps in regions of their own. The small bowel holds the
+# duodenum, and the duodenum (its second part) the papilla in its wall, which the ampulla's 'biliary' region does not
+# say; the large bowel - which the canonical name 'colon' also reads ("large bowel", "large intestine") - holds the
+# colon and the rectum. Two sites are different places only when what they cover is disjoint: a denial whose site holds
+# the act's site, or lies inside it, is about it. A name's own region stays its region everywhere else (REGION_OF).
+SITE_COVERS = {
+    'small bowel': frozenset(('small_bowel', 'duodenum', 'papilla')),
+    'duodenum': frozenset(('duodenum', 'papilla')),
+    'second portion of the duodenum': frozenset(('duodenum', 'papilla')),
+    'ampulla': frozenset(('biliary', 'papilla')),
+}
+LARGE_BOWEL = _rx(r'large\s+(?:bowel|intestine)')  # the 'colon' name written as the large bowel
+LARGE_BOWEL_COVERS = frozenset(('colon', 'rectum'))
+
+
+def site_covers(name: str, written: str = '') -> frozenset:
+    """What the site ``name`` (an ANATOMY canonical name), as ``written`` in the document, may cover (SITE_COVERS)."""
+    if name == 'colon' and LARGE_BOWEL.fullmatch(written):
+        return LARGE_BOWEL_COVERS
+    covers = SITE_COVERS.get(name)
+    if covers is not None:
+        return covers
+    region = REGION_OF.get(name, '')
+    return frozenset((region,)) if region else frozenset()
 
 # --- vocabulary: services --------------------------------------------------------------------------------------
 # (family, kind, pattern). A family is an internal profile (studio.gi.profiles); kind is the documented service.
@@ -2164,14 +2191,51 @@ NOTE_UNKNOWN = _rx(r'\b(?:unknown|unsure|unclear|pending|n/?a)\b')  # ANSWER_DOU
 NOTE_DONE = _rx(r'\b' + ACT_PARTICIPLES + r'\b')
 
 
-def _note_denies(note: str) -> bool:
+# Where a clause of a field's note ends, for the scope of a negation in it (refutation gi2 status-3): a mark that ends
+# a clause (a comma, a semicolon, a colon, a parenthesis, a full stop, a spaced dash) or "but", the conjunction that
+# sets a clause against the one before it. A closed class: the clause-ending punctuation and the adversative conjunction.
+NOTE_CLAUSE_BREAK = re.compile(r'[,;:()]|\.(?=\s|$)|[ \t][-\u2013\u2014](?=[ \t])|\bbut\b', FLAGS)
+
+
+def _note_clause(note: str, start: int, end: int) -> tuple[int, int]:
+    """The clause of ``note`` that holds [start, end): from the last NOTE_CLAUSE_BREAK before it to the next after it."""
+    clause_start = 0
+    for m in NOTE_CLAUSE_BREAK.finditer(note, 0, start):
+        clause_start = m.end()
+    after = NOTE_CLAUSE_BREAK.search(note, end)
+    return clause_start, after.start() if after is not None else len(note)
+
+
+def _note_denies(note: str, kinds: frozenset = frozenset()) -> bool:
     """Whether the note after a denying answer leaves the denial standing (FIELD_DENIAL_NOTE): it neither affirms nor
-    doubts, and every act, service or done participle it names has a negation of its own before it ("none used")."""
+    doubts, and every act, service or done participle it names has a negation of its own before it ("none used").
+
+    A negation governs its own clause (NOTE_CLAUSE_BREAK; refutation gi2 status-3: "No - not by nursing; placed by the
+    physician" had read as the nurse's denial of the tattoo the physician documented, a false conflict). A later clause
+    with no negation in it that states the item's own act done - naming that act (``kinds``, the item's act kinds, or an
+    act RELATED_KINDS ties to them: a tattoo and its injection) or opening with a done participle, whose subject is then
+    the item - says the act was done, by whoever did it ("No (not by me) - injected by the fellow", "No, not by nursing;
+    tattoo placed by the endoscopist"): the answer is then no denial and holds its item, as "No - placed by the fellow"
+    does. A later clause about anything else only explains the denial, which stands ("No - none placed; the lesion was
+    completely removed", "No - none used; biopsies only")."""
     if NOTE_AFFIRMS.search(note) or HEDGE_WORDS.search(note) or NOTE_UNKNOWN.search(note):
         return False
-    named = [m.start() for pattern in [p for _, p in ACTS] + [p for _, _, p in SERVICES] + [NOTE_DONE, BARE_PARTICIPLE]
-             for m in pattern.finditer(note)]
-    return all(NEGATION_WORD.search(note, 0, at) for at in named)
+    own = {related for kind in kinds for related in (kind, *RELATED_KINDS.get(kind, ()))}
+    named: list[tuple[Optional[str], int, int]] = [(kind, m.start(), m.end()) for kind, pattern in ACTS
+                                                   for m in pattern.finditer(note)]
+    named += [('', m.start(), m.end()) for _, _, pattern in SERVICES for m in pattern.finditer(note)]
+    named += [(None, m.start(), m.end()) for pattern in (NOTE_DONE, BARE_PARTICIPLE) for m in pattern.finditer(note)]
+    for kind, at, end in named:
+        if not NEGATION_WORD.search(note, 0, at):
+            return False  # it names or states something with no negation before it
+        clause_start, clause_end = _note_clause(note, at, end)
+        if NEGATION_WORD.search(note, clause_start, clause_end):
+            continue  # its own clause negates it ("none used")
+        names_the_act = bool(kind) and kind in own
+        opens_with_participle = kind is None and not note[clause_start:at].strip()
+        if names_the_act or opens_with_participle:
+            return False  # a later clause of its own states the item's act done
+    return True
 
 
 def _field_or_box_line(text: str, pos: int, end: int) -> bool:
@@ -2285,7 +2349,8 @@ def _field_answer_read(text: str, pos: int, end: int, service_date: Optional[dat
             return _denying_answer(text, ls, colon, pos, end, value)
         return Reading('uncertain', (f'field: the answer \u201c{value}\u201d is not read as done or not done',))
     noted = FIELD_DENIAL_NOTE.fullmatch(value)
-    if noted is not None and _note_denies(noted.group('note')):
+    if noted is not None and _note_denies(noted.group('note'),
+                                          frozenset(kind for kind, _, _ in _acts_in(text, pos, end))):
         return _denying_answer(text, ls, colon, pos, end, value)  # "No - none used" (gi2 conflicts, PR2)
     both = FIELD_BOTH_OPTIONS.fullmatch(value) is not None
     if value and not both and ANSWER_DOUBT.search(value) and not ANSWER_NEGATED_PREDICATE.fullmatch(value):
@@ -3197,6 +3262,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
     performed_families: list[str] = []  # families with a performed reading (a title, a statement, an instrument)
     encounter_intents: list[str] = []
     routine_em: list[Span] = []
+    placements = _Placements()  # how each statement of an act is placed, for pairing them (_conflicts)
     # A sentence (or its first SENTENCE_READ_CHARS) is cut into clauses once, and every mention read in it shares the
     # cut (refutation r1, cost-6: each named service and each instrument cut its whole sentence again - 299 names at
     # the head of one 196,000-character sentence took 13 s).
@@ -3361,7 +3427,13 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
         # Pass 3: lesions and acts.
         act_count = 0
         last_lesion: dict[str, Lesion] = {}
-        unplaced: list[Act] = []  # the encounter's denials: no service named for them (see below)
+        # where each lesion was last named as itself, and where each service's text last named a lesion this reader did
+        # not record: "the polyp" after an unrecorded polyp may be that one, not the last one recorded (status-1, below)
+        last_named: dict[str, int] = {}
+        unrecorded: dict[str, int] = {}
+        # the encounter's denials: no service named for them, each with the one service its part's heading names, if any
+        # (see below)
+        unplaced: list[tuple[Act, str]] = []
         for ss, se in sentences:
             part = _part_at(plist, starts, ss)
             read_end = min(se, ss + SENTENCE_READ_CHARS)
@@ -3386,6 +3458,12 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             denies_further = bool(NEG_OTHER.match(sentence_text))
             # Lesions in this sentence (never from a denial or a "no other" statement).
             sentence_lesions: list[Lesion] = []
+            # the lesions this sentence names as its own: recorded here, or named by their size, their site or their own
+            # noun ("the stricture") with no lesion this reader did not record named since - never one that "the
+            # lesion", "the mass" or "it" falls back to, the last recorded whatever it was (refutation gi2 status-1: a
+            # rectal mass the lesion reader does not record left "The lesion was tattooed" at the transverse polyp
+            # before it, and the rectal tattoo denial was read as another subject)
+            own_lesions: set[str] = set()
             for lm in lesion_matches:
                 lead = (lm.group('lead') or '').strip().lower()
                 tail = text[lm.end():lm.end() + 14].lower()
@@ -3416,10 +3494,12 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 if existing is None and creatable and anat and (status or lesion_status(clause, lm, part)) not in (
                         'negated', 'historical', 'planned'):
                     if lm.group('noun').lower().rstrip('s') in ('stricture', 'ring', 'erosion') and not size:
+                        unrecorded[fam] = lm.start()
                         continue
                     if len(d.lesions) >= MAX_LESIONS_PER_SERVICE:
                         problems.append(f'More than {MAX_LESIONS_PER_SERVICE} lesions are documented for one service; '
                                         'the rest were not inventoried.')
+                        unrecorded[fam] = lm.start()
                         continue
                     specimen = SPECIMEN.search(text, ss, se)
                     lesion = Lesion(id=f'{d.id}-L{len(d.lesions) + 1}', service=d.id, noun=lm.group('noun').lower(),
@@ -3429,12 +3509,24 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                                     evidence=(_span(text, ss, read_end),))
                     d.lesions.append(lesion)
                     sentence_lesions.append(lesion)
+                    own_lesions.add(lesion.id)
+                    last_named[lesion.id] = lm.start()
+                    placements.lesions[lesion.id] = _covers_of(text, anat)  # every site its clause names
                 elif existing is not None:
                     sentence_lesions.append(existing)
+                    if size or anat or (_noun_key(lm.group('noun')) == _noun_key(existing.noun)
+                                        and last_named.get(existing.id, -1) > unrecorded.get(fam, -1)):
+                        own_lesions.add(existing.id)
+                        last_named[existing.id] = lm.start()
+                else:
+                    unrecorded[fam] = lm.start()  # a lesion named that this reader does not record
             if not sentence_lesions and ANAPHORA.match(text, ss, se):
                 fam = part_family
                 if fam and fam in last_lesion:
                     sentence_lesions.append(last_lesion[fam])
+            # an act's lesion is at one known place only when every lesion its sentence names is at the same places
+            # (_lesion_for picks one of several by position)
+            one_place = len({placements.lesions.get(lesion.id) for lesion in sentence_lesions}) == 1
             if denies_further:
                 continue  # "No other colon biopsy or lesion treatment was performed": nothing beyond the documented acts
             # Acts in this sentence.
@@ -3536,8 +3628,10 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                           anatomy=tuple(dict.fromkeys(a[0] for a in anat)), region=region,
                           technique=_technique(text, *bc, near=ms), lesion=lesion.id if lesion else '',
                           evidence=(_span(text, *bc),), cues=reading.cues, detail=_detail(text, *bc, kind))
+                placements.note(act, _covers_of(text, anat),
+                                lesion is not None and lesion.id in own_lesions and one_place)
                 if not fam:
-                    unplaced.append(act)
+                    unplaced.append((act, _heading_service(part, drafts)))
                     continue
                 d.acts.append(replace(act, id=f'{d.id}-A{len(d.acts) + 1}', service=d.id))
             if sentence_lesions:
@@ -3547,13 +3641,16 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                         last_lesion[f] = lesion
         # The encounter's denials (above): each is set beside every service that documents done an act it denies - the
         # two statements are about the same act, and _conflicts keeps them as a conflict there - and beside no other,
-        # so a denial of an act no service documents adds nothing, and no service's own scope grows by it.
+        # so a denial of an act no service documents adds nothing, and no service's own scope grows by it. A part whose
+        # own heading names one documented service ("Nursing checklist - colonoscopy") is about that service: its
+        # denials are set beside that service only (refutation gi2 status-5: such a checklist's "Biopsy taken | No" had
+        # been set beside the upper endoscopy's antral biopsies too, a false conflict the heading rules out).
         from studio.gi import catalogue  # local: catalogue reads this module's vocabulary
         done_kinds = {d.id: {a.kind for a in d.acts if a.status == 'performed'} for d in drafts.values()}
-        for denial in unplaced:
+        for denial, heading_family in unplaced:
             # an act never reported on its own (clips, cannulation) is no coding conflict (_conflicts)
             contradicted = DENIED_BY.get(denial.kind, frozenset((denial.kind,))) - catalogue.NOT_REPORTED
-            for d in drafts.values():
+            for d in ((drafts[heading_family],) if heading_family else drafts.values()):
                 if not done_kinds[d.id] & contradicted:
                     continue
                 act_count += 1
@@ -3568,7 +3665,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
     if em is not None:
         services.append(em)
     services = tuple(services)
-    conflicts = _conflicts(services)
+    conflicts = _conflicts(services, placements)
     return ServiceInventory(version=INVENTORY_VERSION, services=services, conflicts=conflicts,
                             attributions=_dedupe_attributions(attributions), problems=tuple(dict.fromkeys(problems)),
                             sedation_by_endoscopist=sedation_denied)
@@ -3786,6 +3883,33 @@ def _match_lesion(lesions: Sequence[Lesion], size: str, anatomy: str) -> Optiona
     return None
 
 
+def _noun_key(noun: str) -> str:
+    """A lesion noun (LESION_NOUN) in the singular: whether "the stricture" names a recorded stricture (_build)."""
+    noun = noun.lower().replace('tumour', 'tumor')
+    for plural, singular in (('ices', 'ix'), ('iae', 'ia'), ('sses', 'ss')):
+        if noun.endswith(plural):
+            return noun[:-len(plural)] + singular
+    return noun[:-1] if noun.endswith('s') and not noun.endswith('ss') else noun
+
+
+def _covers_of(text: str, anatomy: Sequence[tuple[str, str, int, int]]) -> frozenset:
+    """What the sites named at ``anatomy`` (_anatomy_in's mentions) may cover, together (site_covers)."""
+    out: frozenset = frozenset()
+    for name, _, start, end in anatomy:
+        out |= site_covers(name, text[start:end])
+    return out
+
+
+def _heading_service(part: _Part, drafts) -> str:
+    """The one documented service (a family in ``drafts``) the part's own heading names ("Nursing checklist -
+    colonoscopy"), else '' - a heading that names none, or several, says nothing of which service its entries are
+    about."""
+    if part.title is None:
+        return ''
+    named = {family for family, _, pattern in SERVICES if pattern.search(part.title.text)}
+    return next(iter(named)) if len(named) == 1 and next(iter(named)) in drafts else ''
+
+
 def _lesion_for(lesions: Sequence[Lesion], pos: int) -> Optional[Lesion]:
     """The lesion an act at ``pos`` is directed at: the only lesion of its sentence, else the last one named before it."""
     if not lesions:
@@ -3989,19 +4113,40 @@ def _dedupe_attributions(items: Sequence[Attribution]) -> tuple[Attribution, ...
     return tuple(out.values())
 
 
+@dataclass
+class _Placements:
+    """Where the statements of acts are, read while they are read (_build) and used only to pair them (_same_subject):
+    for each passage of an act (its span and kind) what its own sites may cover (site_covers) and whether the lesion it
+    is at is one its own sentence names (by its size, its site or its own noun), and for each recorded lesion every site
+    its clause names. Never part of the inventory (refutation gi2 status-1 and status-2)."""
+    acts: dict = field(default_factory=dict)  # (start, end, kind) -> (covers, own lesion)
+    lesions: dict = field(default_factory=dict)  # lesion id -> covers
+
+    def note(self, act: Act, covers: frozenset, own_lesion: bool):
+        key = (act.evidence[0].start, act.evidence[0].end, act.kind)
+        if key in self.acts:  # two mentions of one kind in one passage: either may be the doubtful one
+            known, own = self.acts[key]
+            covers, own_lesion = known | covers, own and own_lesion
+        self.acts[key] = (covers, own_lesion)
+
+
 class _DoneIndex:
     """The performed acts of one service, counted by kind for _same_subject: by lesion, those with anatomy and no
-    lesion, and the regions those at a lesion or a site are at. Built once per service, so a pair of statements is
+    lesion, and the places those at a lesion or a site may cover. Built once per service, so a pair of statements is
     compared in constant time (refutation r1, cost: the scan of every act for every pair of statements was cubic and
-    took the assess stage past its limit); only_outside is answered once per kind and set of regions."""
+    took the assess stage past its limit); only_outside is answered once per kind and set of places."""
 
-    def __init__(self, acts: Sequence[Act], lesions: Sequence[Lesion] = ()):
+    def __init__(self, acts: Sequence[Act], lesions: Sequence[Lesion] = (), placements: Optional[_Placements] = None):
         self.by_lesion: dict[str, dict[str, int]] = {}
         self.lesioned: dict[str, int] = {}
         self.sited: dict[str, int] = {}
-        self.lesion_region = {lesion.id: lesion.region or REGION_OF.get(lesion.anatomy, '') for lesion in lesions}
-        self.placed: dict[str, set[frozenset]] = {}  # per kind, the region sets of its acts at a lesion or a site
+        self.placements = placements if placements is not None else _Placements()
+        self.lesion_covers = {lesion.id: self.placements.lesions.get(lesion.id)
+                              or (site_covers(lesion.anatomy) if lesion.anatomy else frozenset((lesion.region,)) - {''})
+                              for lesion in lesions}
+        self.placed: dict[str, set[frozenset]] = {}  # per kind, what its acts at a lesion or a site may cover
         self._outside: dict[tuple[str, frozenset], bool] = {}
+        self._regions: dict[str, frozenset] = {}  # by act id (unique in a service): read once per statement
         for a in acts:
             if a.status != 'performed':
                 continue
@@ -4016,11 +4161,23 @@ class _DoneIndex:
                 self.placed.setdefault(a.kind, set()).add(regions)
 
     def regions(self, act: Act) -> frozenset:
-        """The regions a statement of an act is at: its own anatomy's, else - naming none - its lesion's."""
+        """The places a statement of an act may be at (site_covers): its own anatomy's, else - naming none - its
+        lesion's when every passage of it names that lesion as its own (_Placements). A lesion "the lesion" or "it"
+        only fell back to is at no place that can be told, so nothing is read from it (refutation gi2 status-1)."""
+        if act.id in self._regions:
+            return self._regions[act.id]
+        noted = [self.placements.acts.get((span.start, span.end, act.kind)) for span in act.evidence]
         if act.anatomy:
-            return frozenset(region for region in (REGION_OF.get(name, '') for name in act.anatomy) if region)
-        site = self.lesion_region.get(act.lesion, '') if act.lesion else ''
-        return frozenset((site,)) if site else frozenset()
+            known = [placed[0] for placed in noted if placed is not None and placed[0]]
+            out = frozenset().union(*known) if known else frozenset().union(*(site_covers(name)
+                                                                               for name in act.anatomy))
+        elif act.lesion and noted and all(placed is not None and placed[1] for placed in noted):
+            out = self.lesion_covers.get(act.lesion, frozenset())
+        else:
+            out = frozenset()
+        if act.id:
+            self._regions[act.id] = out
+        return out
 
     def only_outside(self, kind: str, regions: frozenset) -> bool:
         """Whether acts of ``kind`` are documented done at lesions or sites, each of them outside all ``regions``."""
@@ -4054,7 +4211,10 @@ def _same_subject(done: Act, denied: Act, index: _DoneIndex) -> bool:
       were taken" beside the esophageal biopsies it lists). Read by region, never by site name: one such act inside a
       denied region ("biopsies were also taken from the antrum" under "no gastric biopsies", which the site names alone
       never pair) keeps the summary paired, so a statement that may be about the denied site still pairs and the doubt
-      is kept."""
+      is kept. Regions are compared by what their sites may cover (site_covers: the small bowel holds the duodenum,
+      the large bowel the rectum), so only disjoint places are different subjects; and an act is at its lesion's site
+      only when its own sentence names that lesion - one "the lesion" fell back to pairs, as any statement whose place
+      cannot be told does (refutation gi2 status-1 and status-2)."""
     if done.lesion and denied.lesion:
         return done.lesion == denied.lesion
     if done.anatomy and denied.anatomy and not set(done.anatomy) & set(denied.anatomy):
@@ -4065,8 +4225,8 @@ def _same_subject(done: Act, denied: Act, index: _DoneIndex) -> bool:
         denied_regions = index.regions(denied)
         if denied_regions:
             if done.lesion:
-                site = index.lesion_region.get(done.lesion, '')
-                return not site or site in denied_regions
+                site = index.regions(done)
+                return not site or bool(site & denied_regions)
             return not index.only_outside(done.kind, denied_regions)
     return True
 
@@ -4080,10 +4240,12 @@ DENIED_BY = {kind: frozenset(done for done in ACT_KINDS if kind in RELATED_KINDS
 TISSUE_KINDS = frozenset(('biopsy', 'hot_biopsy', 'snare', 'emr', 'esd', 'fna', 'foreign_body'))
 
 
-def _conflicts(services: Sequence[DocumentedService]) -> tuple[Conflict, ...]:
+def _conflicts(services: Sequence[DocumentedService],
+               placements: Optional[_Placements] = None) -> tuple[Conflict, ...]:
     """Acts of one service that the document states both as done and as not done today. A difference of time
     (historical vs today) is not a conflict, nor a denial of further acts beyond the documented ones; a statement about
-    one lesion never conflicts with one about another lesion or another site."""
+    one lesion never conflicts with one about another lesion or another site. ``placements`` (read by _build) says
+    where each statement is; without it nothing is read from a lesion an act is at."""
     out: list[Conflict] = []
     for service in services:
         # an act never reported on its own (catalogue.NOT_REPORTED: clips, cannulation) changes no code, so its done and
@@ -4092,7 +4254,7 @@ def _conflicts(services: Sequence[DocumentedService]) -> tuple[Conflict, ...]:
         from studio.gi import catalogue  # local: catalogue reads this module's vocabulary
         done = [a for a in service.acts if a.status == 'performed' and a.kind not in catalogue.NOT_REPORTED]
         denied = [a for a in service.acts if a.status in ('negated', 'cancelled')]
-        index = _DoneIndex(service.acts, service.lesions)
+        index = _DoneIndex(service.acts, service.lesions, placements)
         for d_act in done:
             kinds = RELATED_KINDS.get(d_act.kind, (d_act.kind,))
             if d_act.kind == 'specimen' and any(a.kind in TISSUE_KINDS for a in done):
