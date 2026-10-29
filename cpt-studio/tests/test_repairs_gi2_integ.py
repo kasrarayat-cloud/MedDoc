@@ -89,3 +89,30 @@ class ListedDateQuotesTheKeptEvidenceTests(PresentHarness):
         row, shown = self.run_documents(NO_PLACE)
         self.assertEqual((row['service_date'], row['service_date_evidence']), ('2026-10-20', ''))
         self.assertNotIn('Not read', shown['row'])
+
+
+class EmTimeReadOncePerSentenceTests(TestCase):
+    """gi2 integration, cost (the dates fix agent's pre-existing report): every E/M time statement re-read its whole
+    sentence for "this time is not E/M time", so one pasted line of 7,500 "Total time on the date of service: 34
+    minutes;" statements - one sentence - took 60.1 s to route at 2b82889f (the analyze stage's limit is 60 s)."""
+
+    def test_a_sentence_is_searched_once_for_not_em_time(self):
+        from datetime import date
+        from unittest import mock
+
+        from studio.gi import cues, detect
+        text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nGastroenterology Office Visit\nDate of service: 2026-10-22\n'
+                'Assessment\nChronic constipation.\n' + 'Total time on the date of service: 34 minutes; ' * 200 + '\n')
+        real = cues.NOT_EM_TIME
+        searched = []
+
+        class Counting:
+            def search(self, string, *span):
+                searched.append(span)
+                return real.search(string, *span)
+
+        with mock.patch.object(cues, 'NOT_EM_TIME', Counting()):
+            routed = detect.route(text, date(2026, 10, 22))
+        self.assertTrue(searched)
+        self.assertEqual(len(searched), len(set(searched)), 'a sentence was searched again')
+        self.assertEqual(routed, detect.route(text, date(2026, 10, 22)))

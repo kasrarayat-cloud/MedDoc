@@ -159,9 +159,14 @@ def _em_mentions(text: str, lay: Layout) -> tuple[Mention, ...]:
                                          str(int(m.group('minutes')))))
     for m in cues.EM_VISIT.finditer(text):
         found.append(Mention('gi.office_em', m.start(), m.end(), 'em-visit', m.group(0)))
+    # Whether a sentence says its time is not E/M time is read once per sentence (gi2 integration, cost: one pasted line
+    # of 7,500 time statements made one sentence that every statement rescanned, 60.1 s at 2b82889f).
+    not_em_time: dict[tuple[int, int], bool] = {}
     for m in cues.EM_TIME.finditer(text):
-        s_start, s_end = lay.sentence_for(m.start(), m.end())
-        if not cues.NOT_EM_TIME.search(text, s_start, s_end):
+        sentence = lay.sentence_for(m.start(), m.end())
+        if sentence not in not_em_time:
+            not_em_time[sentence] = cues.NOT_EM_TIME.search(text, *sentence) is not None
+        if not not_em_time[sentence]:
             found.append(Mention('gi.office_em', m.start(), m.end(), 'em-time', 'E/M time',
                                  str(int(m.group('minutes')))))
     for m in cues.MDM_LEVEL.finditer(text):
