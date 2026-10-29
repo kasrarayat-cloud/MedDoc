@@ -41,7 +41,7 @@ from django.test import SimpleTestCase
 
 from studio import bounded
 from studio.gi import context as gi_context
-from studio.gi import detect, services
+from studio.gi import detect, sections, services
 from studio.reference.store import InMemoryReferenceLookup
 from studio.types import EvidenceSpan, NormalizedResponse, ProviderCode
 from studio.validation import reconcile
@@ -272,11 +272,11 @@ class TableModelTests(SimpleTestCase):
 
     def table(self, lines):
         text = HEAD + 'Procedure summary\n' + '\n'.join(lines) + '\nImpression\nNormal.\n'
-        return text, services._tables(text)
+        return text, sections.tables(text)
 
     def test_the_shape_of_a_table(self):
         text = variant('h2-01-live')
-        tables = services._tables(text)
+        tables = sections.tables(text)
         self.assertEqual(len(tables), 1)
         table = tables[0]
         self.assertEqual(text[table.header[0]:table.header[1]], H2_01_HEADER)

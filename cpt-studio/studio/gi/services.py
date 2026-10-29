@@ -1356,52 +1356,12 @@ def _next_line_is_a_table_row(text: str, i: int) -> bool:
     return end >= 0 and _table_row_bar(text, i + 1, end) >= 0
 
 
-# A table with a header row (gi3 inventory, R2; interpretation 45: one table model, the rule routing's sections.tables
-# reads too). The DOCX reader writes a table row as one line, its cells joined by " | " (studio/ingest/docx.py). A header
-# row has three or more cells, each a bare label - a letter first, at most five words, no digit, no sentence punctuation
-# and no answer word ("Examination | Instrument | Furthest point reached | Tissue sampled") - except that its first cell
+# A table with a header row (gi3 inventory, R2; interpretation 45): the one table model, routing's own (sections.tables).
+# The DOCX reader writes a table row as one line, its cells joined by " | " (studio/ingest/docx.py). A header row has
+# three or more cells, each a bare label - a letter first, at most five words, no digit, no sentence punctuation and
+# no answer word ("Examination | Instrument | Furthest point reached | Tissue sampled") - except that its first cell
 # may be a numbering column ("#", "No.", "No", "Item" or empty) beside worded labels; the rows under it have as many
 # cells. A row of three or more cells under no such header is no table here, and reads as before.
-class _Table(NamedTuple):
-    header: tuple[int, int]  # the header line
-    labels: tuple[str, ...]  # its cells' labels, normalised as section labels are (sections.normalize_label)
-    rows: tuple[tuple[tuple[int, int], ...], ...]  # each row's cells, as (start, end) spans
-
-
-_CELL_SEPARATOR = ' | '
-# A header cell's own shape - a letter first, then no digit and no sentence punctuation (. , ; : ! ?) - read on the cell
-# without the whitespace around it; its words are counted apart.
-_HEADER_LABEL = re.compile(r'[A-Za-z][^0-9.,;:!?]*', re.A)
-# What answers a question rather than naming a column (a closed class: the field readers' own answer words).
-_ANSWER_WORD = re.compile(r'(?:yes|no|none|nil|n/?a|not[ \t]+applicable|y|n)', re.A | re.I)
-_NUMBERING = frozenset(('#', 'no.', 'no', 'item', ''))  # a numbering column's first cell, in any case
-
-
-def _cells(text: str, ls: int, le: int) -> tuple[tuple[int, int], ...]:
-    """The cells of the line [ls, le): the spans between its separators, exactly as extraction joined them (an empty
-    cell is an empty span; one cell when the line has no separator)."""
-    out, pos = [], ls
-    found = text.find(_CELL_SEPARATOR, pos, le)
-    while found >= 0:
-        out.append((pos, found))
-        pos = found + len(_CELL_SEPARATOR)
-        found = text.find(_CELL_SEPARATOR, pos, le)
-    out.append((pos, le))
-    return tuple(out)
-
-
-def _bare_label(cell: str) -> bool:
-    body = cell.strip()
-    return bool(_HEADER_LABEL.fullmatch(body)) and len(body.split()) <= 5 and not _ANSWER_WORD.fullmatch(body)
-
-
-def _header_row(text: str, cells: Sequence[tuple[int, int]]) -> bool:
-    """Whether a line of these cells is a header row: three or more cells, every one a bare label, the first one
-    possibly a numbering column (with three cells or more, two worded labels then follow it)."""
-    if len(cells) < 3 or not all(_bare_label(text[a:b]) for a, b in cells[1:]):
-        return False
-    first = text[cells[0][0]:cells[0][1]]
-    return _bare_label(first) or first.strip().lower() in _NUMBERING
 
 
 def _trimmed(text: str, span: tuple[int, int]) -> tuple[int, int]:
@@ -1414,31 +1374,6 @@ def _trimmed(text: str, span: tuple[int, int]) -> tuple[int, int]:
     return a, b
 
 
-@functools.lru_cache(maxsize=16)
-def _tables(text: str) -> tuple[_Table, ...]:
-    """The tables of ``text`` with a header row, in document order. One pass over the lines: a line is read as a header
-    once, and the rows under a header are not read as headers again."""
-    lines = _lines(text)
-    out: list[_Table] = []
-    i = 0
-    while i < len(lines):
-        ls, le = lines[i]
-        n = text.count(_CELL_SEPARATOR, ls, le)
-        if n >= 2:
-            cells = _cells(text, ls, le)
-            if _header_row(text, cells):
-                j = i + 1
-                while j < len(lines) and text.count(_CELL_SEPARATOR, *lines[j]) == n:
-                    j += 1
-                if j > i + 1:
-                    out.append(_Table((ls, le), tuple(_sections.normalize_label(text[a:b]) for a, b in cells),
-                                      tuple(_cells(text, *lines[k]) for k in range(i + 1, j))))
-                    i = j
-                    continue
-        i += 1
-    return tuple(out)
-
-
 # A table cell's own answer (gi3 inventory, R2): a denial ("No", "None", "Not done", "0") or an affirmative ("Yes", "Yes,
 # duodenum and stomach", "Done"); anything else - a site, a size, a date, "N/A", both options ("Yes/No") - answers
 # nothing of an act.
@@ -1449,7 +1384,7 @@ TABLE_CELL_CUE = 'field: its table row answers it under the column '
 
 
 class _TableRow(NamedTuple):
-    table: _Table
+    table: _sections.Table
     number: int  # the row's index in table.rows; -1 for the header line
     line: tuple[int, int]
     label: int  # the table's label column (_label_column)
@@ -1466,10 +1401,10 @@ _ITEM_ANSWER_COLUMN = re.compile(r'(?:(?:nursing|nurse|physician|staff)\s+)?(?:e
                                  r'today)?|done|completed)', re.A)
 
 
-def _label_column(text: str, table: _Table) -> int:
+def _label_column(text: str, table: _sections.Table) -> int:
     """The column whose cells name each row's item: the first, or the second after a numbering column."""
-    a, b = _cells(text, *table.header)[0]
-    return 0 if _bare_label(text[a:b]) else 1
+    a, b = _sections._cells(text, *table.header)[0]
+    return 0 if _sections._table_label(text[a:b]) else 1
 
 
 def _row_answer(text: str, row: '_TableRow') -> Optional[tuple[tuple[int, int], tuple[int, int], str]]:
@@ -1486,7 +1421,7 @@ def _table_lines(text: str) -> dict:
     """Each line of a table (its header and its rows) by its start: the _TableRow it is, with its table's label and
     item-answer columns read once."""
     out = {}
-    for table in _tables(text):
+    for table in _sections.tables(text):
         label = _label_column(text, table)
         answer = next((j for j, name in enumerate(table.labels) if j != label and _ITEM_ANSWER_COLUMN.fullmatch(name)),
                       -1)
@@ -1505,7 +1440,7 @@ def _sentences(text: str) -> list[tuple[int, int]]:
     list label, at a line that starts a numbered or labelled item, after a line that ends in an answer of its own
     (_answered_line), and at blank lines. Line wraps inside a sentence are kept (PDF text wraps mid-sentence). A
     check-box row is a sentence of its own, and so is a two-column table row next to another, and each line of a table
-    with a header row (_tables): what one row's entry says never reaches the next row."""
+    with a header row (sections.tables): what one row's entry says never reaches the next row."""
     out: list[tuple[int, int]] = []
     start = 0
     n = len(text)
@@ -3870,7 +3805,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
         # of the tables (R2: a header names its columns, never an act done), the lines inside an extraction block (R1:
         # no denial is read there, so the ruled annotation reading stands), each sentence's service names as pass 1 read
         # them (R6), and each listed line's nominal sentences (R4)
-        tables = _tables(text)
+        tables = _sections.tables(text)
         headers = [table.header for table in tables]
         header_starts = [hs for hs, _ in headers]
         line_starts = [ls for ls, _ in _lines(text)]
@@ -4215,7 +4150,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 continue
             label = _label_column(text, table)
             columns = []
-            for j, (cs, ce) in enumerate(_cells(text, *table.header)):
+            for j, (cs, ce) in enumerate(_sections._cells(text, *table.header)):
                 kinds = [k for k, _, _ in _acts_in(text, cs, ce) if k not in OBJECT_NOUN_KINDS]
                 if j != label and kinds:
                     columns.append((j, kinds[0], ' '.join(text[cs:ce].split())))
