@@ -43,8 +43,16 @@ not documented.
 Encounter `state` ∈ `processing`, `stopped`, `extraction_failed`,
 `processing_failed`, `provider_not_run`, `provider_failed`, `provider_unknown`,
 `needs_clarification`, `ready_for_review`, `reviewed`, `no_codes`.
-`counts.queue` in the session counts `needs_clarification`, `ready_for_review`
-and `provider_unknown`.
+`counts.queue` in the session counts the encounters the review queue lists: those whose `queue_reasons` is not
+empty (GI round 2; until then it counted `needs_clarification`, `ready_for_review` and `provider_unknown` only). Each
+list row carries `queue_reasons` - what the encounter waits on a workspace member for, in this order: `question` (an
+open clarification), `decision` (a code needing a reviewer's decision, or an exclusion to confirm or reinstate),
+`reconciliation` (an unknown provider outcome not reconciled), `incomplete` (the coding completeness reads
+incomplete), `second_review` (the bounded second review can be asked for now, by the predicate POST second-review
+accepts an ask by), and `state` (a state that always waited on a member, when nothing above is found); empty while
+processing - plus `coding_state` (the encounter view's coding completeness: `incomplete`, `pending_review`,
+`reviewed`, `not_established`) and `service_date_evidence` (the documented text the reader kept as evidence of a
+service date it could not use, quoted by the list instead of "not documented"; '' otherwise).
 `state_label` is the human label (design vocabulary). A response refused whole
 (the primary's, or the bounded second review's) is never `no_codes`: with nothing
 left to decide the state is `provider_failed`, its `state_run` the refused run,
@@ -235,7 +243,10 @@ failed): nothing is ever sent for a document that could not be read.
 Asks for the one bounded second review of the current assessment
 (ARCHITECTURE 5.11); owners and reviewers only (403 otherwise). 201
 `{"second_review": "queued"}`, or 409 with the reason a bound stands (the
-same reason the encounter view's `second_review.reason` shows). The encounter
+same reason the encounter view's `second_review.reason` shows; one predicate answers the view, the queue and the ask,
+so "A second review was already requested for this assessment." is both the view's reason and the 409 once an ask's
+stage was queued, whether it later ran, failed or was stopped - Resume runs a stopped one). A second review recorded not
+sent, or cancelled before sending, does not use up the bound: the reviewer may ask again (GI round 2, L1). The encounter
 view carries `"second_review": {"available": bool, "reason": "...", "items":
 ["<unresolved item>", ...], "can_request": bool, "run": "uuid" | null}`; `items` is empty when no
 documented service is left without a supported proposal. `run` is the id (in
