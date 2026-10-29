@@ -20,7 +20,7 @@ from datetime import date
 from typing import Optional
 
 from studio.gi import cues
-from studio.gi.sections import HEADINGS, Layout, layout
+from studio.gi.sections import ADDENDUM_HEADER, DOCUMENT_PART, HEADINGS, Layout, layout
 from studio.types import CONTEXT_FACTS, Fact, Span
 
 SETTINGS = ('office', 'hospital_outpatient', 'asc', 'inpatient', 'emergency', 'telehealth')
@@ -371,6 +371,11 @@ class _Candidate:
     # another form ("3 Sep 2026", "Date/Time of Service:", "| Date of service | 09/03/2026 |") they sent another
     # occurrence's date where it sent none. Another form is evidence: asked, the member's answer agreeing with its date.
     installed: bool = True
+    # Fix round (dates lens, F1): why an own labelled date is asked though nothing qualifies it (_own_dates_in_doubt):
+    # 'birth' - its date is the date the document gives as the patient's date of birth ('beside': never a member's
+    # answer); 'part' - it stands in a later numbered part that documents no procedure ('unplaced'); 'order' - it is
+    # earlier than a date the note reads as an earlier occurrence's ('unplaced').
+    doubt: str = ''
 
     @property
     def spans(self) -> tuple[Span, ...]:
@@ -665,11 +670,59 @@ def _labelled_kind(text: str, label_start: int, label_end: int, date_start: int,
 # no date is created.
 ROW_REACH = 400  # characters of a label's row read before it (the installed reading reads 80)
 # The rule's vocabulary: the installed reader's (_OTHER_OCCURRENCE: the date qualifiers and the history words) and the
-# act status the services reader reads (cues.CANCELLED_CLAUSE: cancelled, aborted, postponed, deferred, not done, called
-# off, not started, no-show) - the reader's own closed class of status words, read as date qualifiers for the date only.
-_STATUS_WORDS = '|'.join('(?:' + pattern.pattern + ')' for _, pattern in cues.CANCELLED_CLAUSE)
+# act status the services reader reads (cues.CANCELLED_CLAUSE: cancelled, postponed, deferred, not done, called off, not
+# started, no-show) - the reader's own closed class of status words, read as date qualifiers for the date only. Fix
+# round (dates lens, F2): only a status word that says the dated occurrence did NOT happen on its date - an aborted
+# procedure happened on its date ("Status: procedure aborted at the splenic flexure" is today's own status, and
+# "Incomplete colonoscopy - aborted" today's own title), so "aborted" is no word of the rule.
+_STATUS_WORDS = '|'.join('(?:' + pattern.pattern + ')' for name, pattern in cues.CANCELLED_CLAUSE if name != 'aborted')
 _STATUS = cues.rx(_STATUS_WORDS)
 _OCCURRENCE_WORDS = cues.rx(r'(?:' + _OTHER_OCCURRENCE.pattern + '|' + _STATUS_WORDS + ')')
+# Fix round, F2: a heading's word that names another occurrence by itself ("Outside colonoscopy:", "Index procedure:",
+# "Cancelled procedure:", "Postponed colonoscopy:"). The rest of the vocabulary may name something else in a heading -
+# "Last name:", "Last updated:", "Balance due:", "Requested by:", "Cancellation policy:" - and governs a block only
+# beside an occurrence noun or a coded service's name ("Last colonoscopy:", "Requested procedure:"):
+# _heading_names_another.
+_HEADING_OCCURRENCE = cues.rx(r'(?:outside|prior|previous(?:ly)?|earlier|index|cancel(?:l)?ed|postponed|deferred'
+                              r'|rescheduled|scheduled|planned|next|upcoming|future|proposed|anticipated|tentative'
+                              r'|not\s+done|called\s+off|not\s+(?:started|begun)|no[- ]show(?:ed)?'
+                              r'|did\s+not\s+(?:show|arrive|present\s+for)|history\s+of|hx\s+of|h/o|s/p|status\s+post)')
+# Fix round, F2: a status word answered as not having happened ("Cancelled: No", "Cancellation reason: N/A",
+# "Cancelled? no."): the rest of its field label, then the answer alone in its field.
+_STATUS_LABEL_REST = re.compile(r"[A-Za-z0-9 '’/()-]{0,40}?[ \t]*+[:=?](?!\d)")
+_NO_ANSWER = cues.rx(r'[ \t]*+(?:none|n/?a|not[ \t]++applicable|no|nil)[ \t]*+\.?+[ \t]*+')
+# ... or the first word of another field's value whose label names neither an occurrence nor a status ("Copay:
+# deferred", "Payment: deferred"): that field's own status, never the dated occurrence's.
+_VALUE_OF_FIELD = re.compile(r"(?<![A-Za-z0-9'’-])(?P<label>[A-Za-z][A-Za-z0-9 '’/()&-]{0,40}?)[ \t]*+[:=][ \t]*+\Z")
+_STATUS_FIELD = cues.rx(r'\bstatus\b')
+
+
+def _status_marks(text: str, start: int, end: int) -> bool:
+    """Fix round, F2 (the refutation lens "dates": "Examination complete, not aborted.", "Cancelled: No", "Copay:
+    deferred" were read as marking another occurrence, so today's date was asked and a member's correct answer held):
+    whether the status word at [start, end) may say that the dated occurrence did not happen - it is not negated (the
+    negation that governs a status word, cues.status_negation: "not cancelled", "was never cancelled"), not answered
+    No, N/A or none in its own field ("Cancelled: No", "Cancellation reason: N/A"), and not the first word of the value
+    of a field about something else ("Copay: deferred"; a field naming an occurrence or a status still speaks:
+    "Status: cancelled", "Procedure: cancelled"). Each reads a few characters around the word only (the rule's index
+    reads every word once)."""
+    if cues.status_negation(text, start) is not None:
+        return False
+    line_end = text.find('\n', end, end + VALUE_REACH + 60)
+    line_end = min(len(text), end + VALUE_REACH + 60) if line_end < 0 else line_end
+    rest = _STATUS_LABEL_REST.match(text, end, line_end)
+    if rest is not None and '  ' not in text[end:rest.end()] and '\t' not in text[end:rest.end()]:
+        brk = _FIELD_BREAK.search(text, rest.end(), line_end)
+        if _NO_ANSWER.fullmatch(text, rest.end(), brk.start() if brk else line_end):
+            return False
+    line_start = text.rfind('\n', max(0, start - 60), start) + 1
+    field = _VALUE_OF_FIELD.search(text, max(line_start, start - 60), start)
+    if field is not None:
+        label = field.group('label')
+        if not (_OCCURRENCE_NOUN.search(label) or _STATUS_FIELD.search(label)
+                or any(p.search(label) for p in _THIS_SERVICE)):
+            return False
+    return True
 # The sections whose heading is never read: the document's top, the app's addendum header and a PDF form or annotation
 # block (studio/gi/sections).
 _UNREAD_SECTIONS = frozenset(('', 'addendum', 'pdf form fields', 'pdf annotation text'))
@@ -688,8 +741,12 @@ class _OccurrenceScope:
     def words(self, start: int, end: int) -> list[tuple[int, int, bool]]:
         """The vocabulary's words standing wholly in [start, end)."""
         if self._index is None:
-            found = [(m.start(), m.end(), _STATUS.fullmatch(m.group()) is not None)
-                     for m in _OCCURRENCE_WORDS.finditer(self.text)]
+            found = []
+            for m in _OCCURRENCE_WORDS.finditer(self.text):
+                status = _STATUS.fullmatch(m.group()) is not None
+                if status and not _status_marks(self.text, m.start(), m.end()):
+                    continue  # fix round, F2: a negated, answered or another field's status word marks no occurrence
+                found.append((m.start(), m.end(), status))
             self._index = (found, [w[0] for w in found])
         found, starts = self._index
         out, i = [], bisect.bisect_left(starts, start)
@@ -726,13 +783,20 @@ def _heading_names_another(text: str, heading: Span) -> bool:
     service ("Colonoscopy:", "Follow-up visit:"), a date-of-service or birth label alone on its line (an empty field over
     its value), or a label alone on its line over another label or a bare value (a stacked header's field: "Patient:"
     over "DOB:" over their values; _stacked_label). A heading naming no other occurrence ("Recall:", "Patient
-    information:", "Pending colonoscopy:") changes nothing (the owner's decision)."""
+    information:", "Pending colonoscopy:") changes nothing (the owner's decision). Fix round (dates lens, F2): a word
+    that may name something else in a heading ("Last name:", "Last updated:", "Balance due:", "Requested by:") names
+    another occurrence only beside an occurrence noun or a coded service's name ("Last colonoscopy:", "Requested
+    procedure:"); the words that name one by themselves are _HEADING_OCCURRENCE ("Outside", "Index", "Cancelled")."""
     words = str(heading.text).rstrip(': \t')
     if not words or _names_this_service(words, words) or DATE_LABEL.fullmatch(words) or _BIRTH_HEAD.fullmatch(words):
         return False
     names = [(n.start(), n.end()) for p in _THIS_SERVICE for n in p.finditer(words)]
-    if all(any(s <= q.start() and q.end() <= e for s, e in names) for q in _OCCURRENCE_WORDS.finditer(words)):
+    found = [q for q in _OCCURRENCE_WORDS.finditer(words) if not any(s <= q.start() and q.end() <= e for s, e in names)]
+    if not found:
         return False  # no word of the vocabulary outside a service's name
+    if not any(_HEADING_OCCURRENCE.fullmatch(q.group()) for q in found) \
+            and not (names or _OCCURRENCE_NOUN.search(words)):
+        return False  # fix round, F2: only a word that may name something else, beside no occurrence
     return not _stacked_label(text, heading.end)
 
 
@@ -1348,7 +1412,48 @@ def _holds_duration(text: str, start: int, end: int, alone: bool = False) -> boo
                 or (alone and _WORD_OR_DIGIT.search(text, pos, s) is not None)):
             return False
         pos = e
-    return True
+    # fix round (dates lens, F4): and the field's whole LINE holds no token that may state a day (_day_marks)
+    free, breaks = _day_marks(text)
+    i = bisect.bisect_left(breaks, start)
+    line_start, line_end = (breaks[i - 1] + 1 if i else 0), (breaks[i] if i < len(breaks) else len(text))
+    j = bisect.bisect_left(free, line_start)
+    return not (j < len(free) and free[j] < line_end)
+
+
+# Fix round (dates lens, F4): the elapsed-time rule reads the time statement's WHOLE LINE, never only its field. The
+# field ends at the next field's label or break, so a date in the next field of its row ("34 min | Date: 10/23/2026",
+# "34 minutes; Date: 10/23/2026", "(see note: 10/23/2026)") was never read, nor were date forms the field's guards do
+# not read ("(23OCT26)", "(23OCT)", "on X/23"): the header's date was sent where the installed tree asked - a genuine
+# date conflict ignored. A token that may state a day: a date start this reader reads (as _GAP_DATE), a number of three
+# digits or more, an ordinal day or a weekday (_DAY_WORD), a slash or a dash with a digit after it ("X/23", "10-23"),
+# or a month's name or abbreviation beside a number ("23OCT26", "Oct 23"). It is read outside the line's durations
+# ("120 minutes", "30-39 minutes") and outside a date-of-service label with its read date (SERVICE_DATE: "34 minutes.
+# Date of service: 10/23/2026" - that date is the label's own, and it speaks as a label of its own).
+_DAY_MARK = cues.rx(r'(?<![\w/.-])(?:' + _VALUE_DATE_START.pattern + r')|\d{3,}|' + _DAY_WORD.pattern
+                    + r'|(?<![\w/.-])[A-Za-z0-9]{1,4}[/-]\d|\d[ \t.,/-]{0,2}' + _MONTH + r'(?![A-Za-z])|(?<![A-Za-z])'
+                    + _MONTH + r'\.?[ \t.,/-]{0,2}\d')
+_LINE_BREAK = re.compile('\n')
+
+
+@functools.lru_cache(maxsize=16)
+def _day_marks(text: str) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    """Where a token that may state a day (_DAY_MARK) starts outside every duration and every read date-of-service
+    label, and where the text's lines break: each found once per text, so a time field's line is two bisections (never
+    a scan per label of a long line)."""
+    starts, ends = [], []
+    for s, e in sorted([(m.start(), m.end()) for m in DURATION.finditer(text)]
+                       + [(m.start(), m.end()) for m in SERVICE_DATE.finditer(text)]):
+        if ends and s < ends[-1]:
+            ends[-1] = max(ends[-1], e)
+        else:
+            starts.append(s)
+            ends.append(e)
+    free = []
+    for m in _DAY_MARK.finditer(text):
+        k = bisect.bisect_right(starts, m.start()) - 1
+        if k < 0 or m.start() >= ends[k]:
+            free.append(m.start())
+    return tuple(free), tuple(m.start() for m in _LINE_BREAK.finditer(text))
 
 
 def _measured_on(text: str, label_start: int, label_end: int) -> bool:
@@ -1538,10 +1643,103 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
         else:
             span, extra = _span(text, start, value_end), ()
         found.append(_Candidate(span, None, 'label', _READING[kind], 'unread', extra))
-    return _after_another_header(text, lay, tuple(found) + _title_candidates(text, lay))
+    return _own_dates_in_doubt(text, lay, _after_another_header(text, lay, tuple(found) + _title_candidates(text, lay)))
+
+
+# Fix round (dates lens, F1; the refutation of the integrated head b8cc7b5b5). The elapsed-time rule stopped reading
+# "Total time on the date of service: 34 minutes" as a date this service cannot read; that misreading had made the
+# installed tree ASK - by accident - a labelled date it otherwise sends, so with a time statement added the head sent
+# dates neither installed revision sends. Decided per shape from the source: the note's own date of service beside
+# another occurrence's qualified date, or in a procedure part that documents its procedure, is the encounter's date and
+# is sent (the installed ask was the misread "34"). Three shapes are wrong or genuinely uncertain, and are asked with or
+# without a time statement - each moves an own label only (never a date created or sent):
+# - BIRTH: its date is the date the document gives as the patient's date of birth ("Encounter date: 01/01/1998" beside
+#   "DOB: 01/01/1998"). Rule N2: a date of birth is never a service date. 'beside' - it speaks (asked) and is quoted,
+#   but is never a member's answer: an addendum settles it.
+# - PART: it stands in a later numbered part of the document (sections.DOCUMENT_PART numbered after the first: "PART 2 -
+#   PROCEDURE NOTE", "Section B: Procedure note", "Part 2: Procedure: Colonoscopy") that the section reader opens as a
+#   procedure, and that part documents no procedure - no technique, findings or impression heading in it, up to the
+#   next numbered part. Its date then dates the procedure the part only names (an office visit's planned colonoscopy, a
+#   2019 procedure note's colonoscopy), not a service this note documents. 'unplaced' - asked; a member's answer equal
+#   to it is taken (the member confirms the part dates this encounter).
+# - ORDER: it is EARLIER than a labelled date the note itself reads as an EARLIER occurrence's - another occurrence's
+#   ('aside') with a history word around it (_HISTORY_WORDS: prior, previous, last, recent, index, outside, s/p, ...)
+#   and no date qualifier of a planned one (next, planned, scheduled, due, ...) - outside an authored addendum, which
+#   is written later ("DOS: 05/01/2019" beside "Index colonoscopy - Encounter date: 10/14/2026"; "Encounter date:
+#   01/01/1998" beside "Recent colonoscopy - Date of service: 11/04/2026"). Both cannot be right: a genuine date
+#   conflict, never ignored. 'unplaced' - asked; a member's answer equal to it is taken. Both vocabularies are the
+#   reader's own closed classes, split by the direction in time they name.
+_PART_NUMBER = re.compile(r'[ \t]*(?=' + DOCUMENT_PART + r')[A-Za-z]+[ \t]+(?P<number>\w+)', re.A)
+_FIRST_PART = frozenset(('1', '01', 'I', 'i', 'A'))
+_REPORT_BODY = ('technique', 'findings', 'impression')
+_EARLIER_OCCURRENCE = cues.rx(r'\b(?:' + '|'.join(w for _, w in _HISTORY_WORDS) + r')\b')
+_PLANNED_OCCURRENCE = cues.rx(r'\b(?:next|planned|scheduled|future|follow-?up|repeat|anticipated|tentative|proposed'
+                              r'|requested|rescheduled|upcoming|due)\b')
+
+
+def _own_dates_in_doubt(text: str, lay: Layout, found: tuple[_Candidate, ...]) -> tuple[_Candidate, ...]:
+    """The own labelled dates the three F1 shapes above put in doubt, moved to 'beside' (BIRTH) or 'unplaced' (PART,
+    ORDER); each part of the text read once per text (the numbered parts and the report sections are bisected per label,
+    the earlier occurrences' windows read once each)."""
+    own = [c for c in found if c.source == 'label' and c.reading == 'own' and c.form == 'read']
+    if not own:
+        return found
+    # the dates the document gives as a date of birth (rule N2's _is_birth), never an own label's own value: a joined
+    # header's values are each field's by position ("Visit Date & Date of Birth: 10/14/2026 & 01/01/1998"), where the
+    # birth label right before the visit's date does not make it a date of birth
+    held_starts, held_ends = [], []
+    for s, e in sorted((s.start, s.end) for c in own for s in c.spans):
+        if held_ends and s < held_ends[-1]:
+            held_ends[-1] = max(held_ends[-1], e)
+        else:
+            held_starts.append(s)
+            held_ends.append(e)
+
+    def own_value(pos: int) -> bool:
+        k = bisect.bisect_right(held_starts, pos) - 1
+        return k >= 0 and pos < held_ends[k]
+
+    births = {d.value.isoformat() for d in find_dates(text)
+              if d.precision == 'day' and _is_birth(text, d.start) and not own_value(d.start)}
+    parts = [s for s in lay.sections if s.heading is not None and _PART_NUMBER.match(text, s.start)]
+    part_starts = [s.start for s in parts]
+    bodies = [s.start for s in lay.sections if s.kind in _REPORT_BODY and s.label in HEADINGS]
+    authored = _AUTHORED_ADDENDUM.search(text)
+    earlier = ''  # the latest date the note reads as an earlier occurrence's (ORDER), read in the label's 80-character
+    for c in found:  # windows either side on its line, as _line_reading reads its qualifiers
+        if c.source == 'label' and c.reading == 'aside' and c.form == 'read' and c.value and c.value > earlier \
+                and (authored is None or c.span.start < authored.start()):
+            lo = max(text.rfind('\n', max(0, c.span.start - 80), c.span.start) + 1, c.span.start - 80, 0)
+            hi = text.find('\n', c.span.end, c.span.end + 80)
+            hi = min(len(text), c.span.end + 80) if hi < 0 else hi
+            if _EARLIER_OCCURRENCE.search(text, lo, hi) and not _PLANNED_OCCURRENCE.search(text, lo, hi):
+                earlier = c.value
+    moved = {}
+    for c in own:
+        if c.value in births:
+            moved[id(c)] = replace(c, reading='beside', doubt='birth')
+            continue
+        if c.value < earlier:
+            moved[id(c)] = replace(c, reading='unplaced', doubt='order')
+            continue
+        k = bisect.bisect_right(part_starts, c.span.start) - 1
+        if k < 0 or parts[k].kind != 'procedure' \
+                or _PART_NUMBER.match(text, parts[k].start).group('number') in _FIRST_PART:
+            continue
+        part_end = part_starts[k + 1] if k + 1 < len(parts) else len(text)
+        b = bisect.bisect_left(bodies, part_starts[k])
+        if b < len(bodies) and bodies[b] < part_end:
+            continue  # the part documents its procedure: the date is that procedure's, the note's own
+        moved[id(c)] = replace(c, reading='unplaced', doubt='part')
+    return tuple(moved.get(id(c), c) for c in found) if moved else found
 
 
 _BODY_KINDS = ('technique', 'findings', 'impression', 'assessment', 'exam', 'mdm', 'time')
+# Fix round (dates lens, F3): an authored addendum's heading - the part's name alone on its line, perhaps marked as a
+# heading ("## Addendum", "**Addendum**") or closed by a colon or a dash. A closed list of part names; prose that names
+# an addendum ("An addendum may follow.") and the app's own header ("ADDENDUM (revision 2, added ...)") are none.
+_AUTHORED_ADDENDUM = cues.rx(r'^[ \t#*]*+(?:addendum|late[ \t]++entry|amendment)[ \t*]*+[:\u2013\u2014-]?+[ \t*]*+$',
+                             cues.FLAGS | re.M)
 
 
 def _after_another_header(text: str, lay: Layout, found: tuple[_Candidate, ...]) -> tuple[_Candidate, ...]:
@@ -1559,7 +1757,14 @@ def _after_another_header(text: str, lay: Layout, found: tuple[_Candidate, ...])
     performed service is dated by), and no own label stands in the app's addendum or a PDF form or annotation block
     (which extraction places after its page's text). Then the own labels, all after the body, are read 'unplaced':
     they speak and are asked, a member's answer equal to one of them is taken, and the header's other-occurrence date
-    stays one (never a member's answer). It only moves a label from 'own' to 'unplaced': no date is created or sent."""
+    stays one (never a member's answer). It only moves a label from 'own' to 'unplaced': no date is created or sent.
+
+    Fix round (dates lens, F3): only own labels that stand in an AUTHORED addendum part after the body - after a line
+    that is an addendum's heading alone (_AUTHORED_ADDENDUM: "Addendum", "Addendum:", "ADDENDUM", "Late entry",
+    "Amendment"; a closed list of part names, never prose): the date written in an addendum dates the addendum, not what
+    the header dates. A footer's own date of service ("Signature" / "Electronically signed ..." / "Date of service:
+    10/22/2026" under "Last visit date: 07/14/2026") is the note's own, as at the installed revision. The app's own
+    addendum is its header (sections.ADDENDUM_HEADER), never an authored "Addendum:" heading of the same label."""
     aside = [c for c in found if c.source == 'label' and c.reading == 'aside' and c.form == 'read']
     own = [c for c in found if c.source == 'label' and c.reading == 'own' and c.form == 'read']
     if not aside or not own:
@@ -1573,7 +1778,11 @@ def _after_another_header(text: str, lay: Layout, found: tuple[_Candidate, ...])
     earliest_own = min(c.value for c in own)
     if not any(c.span.start < body and c.value < earliest_own for c in aside):
         return found
-    added = next((s.start for s in lay.sections if s.label == 'addendum'), None)
+    authored = _AUTHORED_ADDENDUM.search(text, body)
+    if authored is None or any(c.span.start < authored.end() for c in own):
+        return found  # fix round, F3: an own label that stands in no authored addendum part is the note's own
+    added = next((s.start for s in lay.sections if s.heading is not None
+                  and ADDENDUM_HEADER.fullmatch(str(s.heading.text))), None)
     if any((added is not None and c.span.start >= added) or lay.section_at(c.span.start).label.startswith('pdf ')
            for c in own):
         return found
@@ -1969,6 +2178,15 @@ FORM_DATE_NOTE = ('A labelled date of service is written in a form this release 
 EMPTY_DATE_NOTE = ('Dated text states no date of its own (an empty or non-date date-of-service field, or a line whose '
                    "dates are another field's or a date of birth), so a member's date is held until the document "
                    'states it.')
+# Fix round (dates lens, F1; _own_dates_in_doubt): why an own labelled date nothing qualifies is asked.
+BIRTH_DATE_NOTE = ("A labelled date of service states the date the document gives as the patient's date of birth, so "
+                   'it is not taken as the date of service.')
+PART_DATE_NOTE = ('A date of service is labelled in a later numbered part of the document that documents no procedure '
+                  '(no technique, findings or impression), so it may date another service than the one the note '
+                  'documents and is not taken as the date of service by itself.')
+ORDER_DATE_NOTE = ('A labelled date of service is earlier than a date the document gives for an earlier occurrence (a '
+                   'prior, last, recent, index or outside one), so the two cannot both be right and it is not taken as '
+                   'the date of service by itself.')
 
 
 def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
@@ -2028,9 +2246,13 @@ def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
         (not own and any(c.source == 'label' and c.form == 'read' and c.reading == 'own' and c.alone and not c.installed
                          for c in found), FORM_DATE_NOTE),
         (not own and any(c.source != 'label' and c.form == 'read' for c in found), EVIDENCE_DATE_NOTE),
-        (any(c.reading == 'beside' for c in unusable)
-         or not own and any(c.form == 'read' and c.reading in ('aside', 'other', 'unplaced') for c in found),
-         UNPLACED_DATE_NOTE)) if present)
+        (any(c.reading == 'beside' and not c.doubt for c in unusable)
+         or not own and any(c.form == 'read' and c.reading in ('aside', 'other', 'unplaced') and not c.doubt
+                            for c in found),
+         UNPLACED_DATE_NOTE),
+        (any(c.doubt == 'birth' for c in (speaks if lead else found)), BIRTH_DATE_NOTE),
+        (any(c.doubt == 'part' for c in (speaks if lead else found)), PART_DATE_NOTE),
+        (any(c.doubt == 'order' for c in (speaks if lead else found)), ORDER_DATE_NOTE)) if present)
     if lead and len(values) == 1 and all(c.form == 'read' and c.value in values for c in speaks):
         fact = _fact('service_date', [(c.value, s) for c in lead + support for s in c.spans])
         return fact if own else Fact('service_date', None, 'missing', fact.evidence, FORM_DATE_NOTE)
@@ -2068,9 +2290,17 @@ class _ElsewhereSpan(Span):
     __hash__ = Span.__hash__
 
 
+class _BirthSpan(_ElsewhereSpan):
+    """An own labelled date's evidence whose date is the date the document gives as the patient's date of birth (fix
+    round, dates lens F1): never a member's answer, as any _ElsewhereSpan; merge_user_values says why it is held."""
+
+
 def _evidence_spans(c: _Candidate) -> tuple[Span, ...]:
     """A candidate's spans as the date's evidence: _ElsewhereSpan for a label or title read as another occurrence's or
-    another document's (fr-di:3), or as maybe another occurrence's (df-d:4, 'beside')."""
+    another document's (fr-di:3), or as maybe another occurrence's (df-d:4, 'beside'); _BirthSpan for a labelled date
+    equal to the document's date of birth (fix round, F1)."""
+    if c.doubt == 'birth':
+        return tuple(_BirthSpan(s.start, s.end, s.text) for s in c.spans)
     if c.source in ('label', 'title') and c.reading in ('aside', 'other', 'beside'):
         return tuple(_ElsewhereSpan(s.start, s.end, s.text) for s in c.spans)
     return c.spans
@@ -2136,6 +2366,12 @@ USER_ELSEWHERE_NOTE = (_USER_CONFLICT_PREFIX + "{user}; this service reads that 
                        "occurrence's or another document's date, or as possibly one ({document}), and not as this "
                        "encounter's date of service. Both are kept and neither is used: correct the metadata, clear it, "
                        'or add an addendum to the document.')
+# Fix round (dates lens, F1): a member's date equal to an own labelled date that states the document's date of birth
+# (_BirthSpan) - held, and said to be so, never as if it were another occurrence's date. Same prefix.
+USER_BIRTH_NOTE = (_USER_CONFLICT_PREFIX + "{user}; the document gives that date as the patient's date of birth, and "
+                   "this service does not read the date-of-service label stating it ({document}) as this encounter's "
+                   'date of service. Both are kept and neither is used: correct the metadata, clear it, or add an '
+                   'addendum to the document.')
 
 
 def is_member_conflict(fact) -> bool:
@@ -2232,11 +2468,12 @@ def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> di
             # possibly one) is said to be so, quoting the spans that state it - never as if the two dates differed
             elsewhere = [ev for ev in documented.evidence if isinstance(ev, _ElsewhereSpan)
                          and value in _span_dates(ev)] if name == 'service_date' else []
+            births = [ev for ev in elsewhere if isinstance(ev, _BirthSpan)]  # fix round, F1
             shown = ', '.join('\u201c' + ' '.join(ev.text.split())[:60] + '\u201d'
-                              for ev in (elsewhere or documented.evidence)[:3])
+                              for ev in (births or elsewhere or documented.evidence)[:3])
             merged[name] = Fact(name, None, 'conflict', documented.evidence,
-                                (USER_ELSEWHERE_NOTE if elsewhere else USER_CONFLICT_NOTE).format(user=value,
-                                                                                                  document=shown))
+                                (USER_BIRTH_NOTE if births else USER_ELSEWHERE_NOTE if elsewhere
+                                 else USER_CONFLICT_NOTE).format(user=value, document=shown))
             continue
         merged[name] = Fact(name, value, 'user', (), USER_NOTE)
     return merged
