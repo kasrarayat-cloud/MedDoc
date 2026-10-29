@@ -7294,11 +7294,14 @@ def _route(an: Analysis) -> RoutingResult:
     an.em_readings = {m: (Reading('uncertain', r.cues + (EM_WITHOUT_BASIS,), 'cue')
                           if r.status == 'performed' and procedure_done and not has_basis else r)
                       for m, r in base.items()}
-    # gi3 scope: on a procedure day the document's title alone is no E/M documentation ("Gastroenterology Clinic Note"
-    # over an anoscopy with banding), so the office E/M is read only beside other E/M documentation - a chief complaint,
-    # reason or MDM heading, MDM, a visit statement or the visit's time - as before titles were read.
-    if an.em and procedure_done and all(m.value == 'title' for m in an.em):
-        an.em, an.em_readings = (), {}  # as if the title named nothing (the span reader too)
+    # gi3 scope: on a procedure day the document's title is no E/M documentation of today by itself ("Gastroenterology
+    # Clinic Note" over an anoscopy with banding, "Endoscopy follow-up note" over an EGD whose plan names a later visit),
+    # so it is read only beside other E/M documentation of today - a chief complaint, reason or MDM heading, MDM, a visit
+    # statement or the visit's time read as performed - and otherwise as before titles were read.
+    if procedure_done and any(m.value == 'title' for m in an.em) and not any(
+            r.status == 'performed' and m.value != 'title' for m, r in base.items()):
+        an.em = tuple(m for m in an.em if m.value != 'title')  # as if the title named nothing (the span reader too)
+        an.em_readings = {m: r for m, r in an.em_readings.items() if m.value != 'title'}
     if an.em:
         status = _aggregate(list(an.em_readings.values()))
         findings['gi.office_em'] = FamilyFinding(
