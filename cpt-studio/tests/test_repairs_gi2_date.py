@@ -78,7 +78,10 @@ TIME_FIELDS = (
     'Total time on the date of service - 34 minutes',
     'Time on date of service: 34 minutes (face-to-face 20 minutes).',
     'Prolonged service time on the date of service: 75 minutes',
-    'Total time on the date of service: 34 minutes; >50% counseling',
+    # 'Total time on the date of service: 34 minutes; >50% counseling' moved (fix round 2, the differential round's
+    # edges-2 and F-2): the elapsed-time rule applies only where the statement's run holds no digit outside its
+    # durations, so a percentage keeps the installed reading (asked) - pinned by name in test_repairs_gi2_fx2_dates
+    # (test_known_limit_a_digit_beside_the_duration_keeps_the_installed_reading)
     'Total time spent on this date of service: 34 minutes',
     'Time with patient on date of service: 30 minutes',
     'Total time for the date of service: 34 minutes',

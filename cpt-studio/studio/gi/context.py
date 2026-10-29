@@ -1412,48 +1412,157 @@ def _holds_duration(text: str, start: int, end: int, alone: bool = False) -> boo
                 or (alone and _WORD_OR_DIGIT.search(text, pos, s) is not None)):
             return False
         pos = e
-    # fix round (dates lens, F4): and the field's whole LINE holds no token that may state a day (_day_marks)
-    free, breaks = _day_marks(text)
-    i = bisect.bisect_left(breaks, start)
-    line_start, line_end = (breaks[i - 1] + 1 if i else 0), (breaks[i] if i < len(breaks) else len(text))
-    j = bisect.bisect_left(free, line_start)
-    return not (j < len(free) and free[j] < line_end)
+    # fix round 2 (the differential round, edges-2 and F-2): and the time statement's soft-wrapped RUN states no day
+    return _run_states_no_day(text, start)
 
 
-# Fix round (dates lens, F4): the elapsed-time rule reads the time statement's WHOLE LINE, never only its field. The
-# field ends at the next field's label or break, so a date in the next field of its row ("34 min | Date: 10/23/2026",
-# "34 minutes; Date: 10/23/2026", "(see note: 10/23/2026)") was never read, nor were date forms the field's guards do
-# not read ("(23OCT26)", "(23OCT)", "on X/23"): the header's date was sent where the installed tree asked - a genuine
-# date conflict ignored. A token that may state a day: a date start this reader reads (as _GAP_DATE), a number of three
-# digits or more, an ordinal day or a weekday (_DAY_WORD), a slash or a dash with a digit after it ("X/23", "10-23"),
-# or a month's name or abbreviation beside a number ("23OCT26", "Oct 23"). It is read outside the line's durations
-# ("120 minutes", "30-39 minutes") and outside a date-of-service label with its read date (SERVICE_DATE: "34 minutes.
-# Date of service: 10/23/2026" - that date is the label's own, and it speaks as a label of its own).
-_DAY_MARK = cues.rx(r'(?<![\w/.-])(?:' + _VALUE_DATE_START.pattern + r')|\d{3,}|' + _DAY_WORD.pattern
-                    + r'|(?<![\w/.-])[A-Za-z0-9]{1,4}[/-]\d|\d[ \t.,/-]{0,2}' + _MONTH + r'(?![A-Za-z])|(?<![A-Za-z])'
-                    + _MONTH + r'\.?[ \t.,/-]{0,2}\d')
+# Fix round 2 (the differential round's edges-2 and F-2, against aec8edf3f; narrowing the fix round's F4 toward the
+# installed reading). F4 read the time statement's whole LINE for a token that may state a day. A line is not the
+# statement: a PDF upload breaks it every 90 characters, so the other day landed on the next line ("... counseling and"
+# / "care coordination; Date: 10/23/2026") and the header's date was sent where the installed tree asked - a TXT or DOCX
+# upload of the same note was asked. And its tokens missed the day words with no digit beside them ("34 minutes on the
+# twenty-third", "October twenty-third") and the Roman-numeral months ("23/X/26"): sent, where installed asked. The rule
+# now reads the statement's RUN - the lines the layout joins into its sentence (a soft wrap: studio/gi/sections' layout,
+# whose sentences run on over a joined break) - with the next line where the run leaves its field open (it ends on ':',
+# ';', ',', a dash, a slash, '&', '|', an open bracket or a word a sentence cannot end on, or leaves a bracket open: "|
+# Date:" over "10/23/2026", "(see note dated" over "10/23/2026)."), where it does not close its sentence ('.', '!' or
+# '?') and that line opens no field or list item of its own ("34 minutes" over "(10/23/2026)."), or where that line
+# opens with a bracket, a date field or a date ("34 minutes" over "Date: 10/23/2026", "34 minutes." over "10/23/2026");
+# and with the line above where that line leaves its field open over the statement ("Time spent on 10/23/2026:" over it)
+# or opens with a date field. Rules (a) and (b) apply only where that run, outside its durations and outside a
+# date-of-service label with its own read date (SERVICE_DATE: that date is the label's, and it speaks as a label of its
+# own), holds NO digit at all and no month's name or abbreviation, weekday or ordinal word (_RUN_DAY: the calendar's own
+# names, closed classes; the ordinal words "first" to "thirty-first", written with a hyphen, a space or neither).
+# Anything else keeps the installed reading (asked). The run, its marks and the lines' joins are found once per text, so
+# a time field's run is a few bisections (never a scan per label).
+_ORDINAL_UNITS = ('first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth')
+_ORDINAL_WORDS = (_ORDINAL_UNITS + ('tenth', 'eleventh', 'twelfth', 'thirteenth', 'fourteenth', 'fifteenth',
+                                    'sixteenth', 'seventeenth', 'eighteenth', 'nineteenth', 'twentieth', 'thirtieth')
+                  + tuple('twenty' + sep + unit for unit in _ORDINAL_UNITS for sep in ('-', ' ', ''))
+                  + tuple('thirty' + sep + 'first' for sep in ('-', ' ', '')))
+_RUN_DAY = cues.rx(r'\d++|\b(?:' + _MONTH + '|' + _WEEKDAY_NAME + '|'
+                   + '|'.join(sorted((re.escape(w).replace(r'\ ', r'[ \t]') for w in _ORDINAL_WORDS),
+                                     key=len, reverse=True)) + r')\b')
 _LINE_BREAK = re.compile('\n')
+# A run that closes its sentence: a full stop, '!' or '?', perhaps inside a closing bracket or quote.
+_RUN_CLOSED = re.compile(r'[.!?][)\]"\'”’]*+[ \t\r]*+\Z')
+# A run (or the line above it) that leaves its field open: a separator, a dash, a slash, '&', '|', an open bracket, or a
+# word a sentence cannot end on (the articles, conjunctions and prepositions labels are written with: a closed class).
+_RUN_OPEN = cues.rx(r'(?:[:;,&|/(\[–—-]|\b(?:and|or|of|on|to|by|at|in|for|with|the|a|an))[ \t\r]*+\Z')
+# A line that opens a statement of its own: a list item or a field ("Plan: ...", "Date: ...").
+_OPENS_ITS_OWN = re.compile(r"[ \t]*+(?:[-*•][ \t]++|\d{1,2}[.)][ \t]++"
+                            r"|[A-Za-z][A-Za-z0-9 '’/()&,.-]{0,40}?[ \t]*+:(?!\d))")
+_OPENS_BRACKET = re.compile(r'[ \t]*+[(\[]')
+# A line that opens with a date field ("Date: 10/23/2026", "Date/Time: ...", a date-of-service label): it may state the
+# statement's day, whatever the run's end (the reader's own date-field grammar, as _LINE_DATE_FIELD reads it).
+_OPENS_DATE_FIELD = cues.rx(r'[ \t]*+(?:date' + _DATE_TIME + r'|' + _DATE_LABEL + r')\b(?:[ \t]*+\([^()\n]{0,20}+\))?+'
+                            r'[ \t]*+[:#=\u2013|-]')
+# A line that opens with a date (a date start the reader reads, as _GAP_DATE: "10/23/2026", "Oct 23", "23 Oct").
+_OPENS_DATE = cues.rx(r'[ \t]*+(?:' + _VALUE_DATE_START.pattern + r')')
+RUN_TAIL = 200  # characters of a run's end read for its shape (bounds the work per run)
+
+
+class _TimeRuns:
+    """What the elapsed-time rule reads of one text, each part found once (refutation phase 2's cost rule; the fix round
+    2 differential's edges-1: a reading per label of a long soft-wrapped run is quadratic): each line's start, where its
+    soft-wrapped run starts and ends (a line runs on into the next where a sentence of the layout spans their break -
+    exactly the layout's joins), where a token that may state a day (_RUN_DAY) starts outside every duration and every
+    read date-of-service label, and each run's statement bounds once read (_statement_bounds)."""
+
+    __slots__ = ('starts', 'run_starts', 'run_ends', 'free', 'bounds')
+
+    def __init__(self, text: str):
+        lay = layout(text)
+        sentence_starts = [s for s, _ in lay.sentences]
+        breaks = [m.start() for m in _LINE_BREAK.finditer(text)]
+        self.starts = (0,) + tuple(b + 1 for b in breaks)
+        ends = tuple(breaks) + (len(text),)
+
+        def joined(at: int) -> bool:
+            k = bisect.bisect_left(sentence_starts, at) - 1
+            return k >= 0 and lay.sentences[k][1] > at
+
+        joins = [joined(b) for b in breaks] + [False]
+        run_starts, run_ends = list(self.starts), list(ends)
+        for k in range(1, len(run_starts)):
+            if joins[k - 1]:
+                run_starts[k] = run_starts[k - 1]
+        for k in range(len(run_ends) - 2, -1, -1):
+            if joins[k]:
+                run_ends[k] = run_ends[k + 1]
+        self.run_starts, self.run_ends = tuple(run_starts), tuple(run_ends)
+        masked_starts, masked_ends = [], []
+        for s, e in sorted([(m.start(), m.end()) for m in DURATION.finditer(text)]
+                           + [(m.start(), m.end()) for m in SERVICE_DATE.finditer(text)]):
+            if masked_ends and s < masked_ends[-1]:
+                masked_ends[-1] = max(masked_ends[-1], e)
+            else:
+                masked_starts.append(s)
+                masked_ends.append(e)
+        free = []
+        for m in _RUN_DAY.finditer(text):
+            k = bisect.bisect_right(masked_starts, m.start()) - 1
+            if k < 0 or m.start() >= masked_ends[k]:
+                free.append(m.start())
+        self.free = tuple(free)
+        self.bounds = {}
 
 
 @functools.lru_cache(maxsize=16)
-def _day_marks(text: str) -> tuple[tuple[int, ...], tuple[int, ...]]:
-    """Where a token that may state a day (_DAY_MARK) starts outside every duration and every read date-of-service
-    label, and where the text's lines break: each found once per text, so a time field's line is two bisections (never
-    a scan per label of a long line)."""
-    starts, ends = [], []
-    for s, e in sorted([(m.start(), m.end()) for m in DURATION.finditer(text)]
-                       + [(m.start(), m.end()) for m in SERVICE_DATE.finditer(text)]):
-        if ends and s < ends[-1]:
-            ends[-1] = max(ends[-1], e)
-        else:
-            starts.append(s)
-            ends.append(e)
-    free = []
-    for m in _DAY_MARK.finditer(text):
-        k = bisect.bisect_right(starts, m.start()) - 1
-        if k < 0 or m.start() >= ends[k]:
-            free.append(m.start())
-    return tuple(free), tuple(m.start() for m in _LINE_BREAK.finditer(text))
+def _time_runs(text: str) -> _TimeRuns:
+    return _TimeRuns(text)
+
+
+def _blank_end(text: str, lo: int, hi: int) -> int:
+    """Where [lo, hi) ends without its trailing blanks."""
+    while hi > lo and text[hi - 1] in ' \t\r':
+        hi -= 1
+    return hi
+
+
+def _left_open(text: str, lo: int, hi: int) -> bool:
+    """Whether the run [lo, hi) leaves its field open (_RUN_OPEN at its end, read in its last RUN_TAIL characters) or
+    leaves a bracket open."""
+    end = _blank_end(text, lo, hi)
+    return (_RUN_OPEN.search(text, max(lo, end - RUN_TAIL), end) is not None
+            or text.count('(', lo, hi) > text.count(')', lo, hi) or text.count('[', lo, hi) > text.count(']', lo, hi))
+
+
+def _statement_bounds(text: str, runs: _TimeRuns, line: int) -> tuple[int, int]:
+    """The span the elapsed-time rule reads for a time statement on ``line``: its soft-wrapped run, with the next line
+    where the run leaves its field open, or does not close its sentence ('.', '!', '?') and that line opens no field
+    or list item of its own, or that line opens with a bracket, a date field or a date; and with the line above where
+    that line leaves its field open over the statement or opens with a date field. Read once per run."""
+    lo, hi = runs.run_starts[line], runs.run_ends[line]
+    got = runs.bounds.get(lo)
+    if got is not None:
+        return got
+    starts = runs.starts
+    first, last = bisect.bisect_right(starts, lo) - 1, bisect.bisect_right(starts, hi) - 1  # the run's lines
+    out_lo, out_hi = lo, hi
+    if last + 1 < len(starts):
+        nxt, nxt_end = starts[last + 1], runs.run_ends[last + 1]
+        if _NON_BLANK.search(text, nxt, nxt_end) is not None:
+            end = _blank_end(text, lo, hi)
+            if (_left_open(text, lo, hi) or _OPENS_BRACKET.match(text, nxt, nxt_end)
+                    or _OPENS_DATE_FIELD.match(text, nxt, nxt_end) or _OPENS_DATE.match(text, nxt, nxt_end)
+                    or not (_RUN_CLOSED.search(text, max(lo, end - RUN_TAIL), end)
+                            or _OPENS_ITS_OWN.match(text, nxt, nxt_end))):
+                out_hi = nxt_end
+    if first > 0 and (_left_open(text, runs.run_starts[first - 1], starts[first] - 1)
+                      or _OPENS_DATE_FIELD.match(text, runs.run_starts[first - 1], starts[first] - 1)):
+        out_lo = runs.run_starts[first - 1]
+    runs.bounds[lo] = (out_lo, out_hi)
+    return out_lo, out_hi
+
+
+def _run_states_no_day(text: str, pos: int) -> bool:
+    """Whether the time statement at ``pos`` - its soft-wrapped run, with the lines beside it the rule above reads -
+    holds no token that may state a day outside its durations and date-of-service labels."""
+    runs = _time_runs(text)
+    lo, hi = _statement_bounds(text, runs, bisect.bisect_right(runs.starts, pos) - 1)
+    j = bisect.bisect_left(runs.free, lo)
+    return not (j < len(runs.free) and runs.free[j] < hi)
 
 
 def _measured_on(text: str, label_start: int, label_end: int) -> bool:
@@ -1663,16 +1772,25 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
 #   2019 procedure note's colonoscopy), not a service this note documents. 'unplaced' - asked; a member's answer equal
 #   to it is taken (the member confirms the part dates this encounter).
 # - ORDER: it is EARLIER than a labelled date the note itself reads as an EARLIER occurrence's - another occurrence's
-#   ('aside') with a history word around it (_HISTORY_WORDS: prior, previous, last, recent, index, outside, s/p, ...)
+#   ('aside') with a history word around it that states an earlier time (_EARLIER_TIME_WORDS: prior, previous, last,
+#   recent, index, s/p, ...; never the place word 'outside', fix round 2)
 #   and no date qualifier of a planned one (next, planned, scheduled, due, ...) - outside an authored addendum, which
 #   is written later ("DOS: 05/01/2019" beside "Index colonoscopy - Encounter date: 10/14/2026"; "Encounter date:
 #   01/01/1998" beside "Recent colonoscopy - Date of service: 11/04/2026"). Both cannot be right: a genuine date
 #   conflict, never ignored. 'unplaced' - asked; a member's answer equal to it is taken. Both vocabularies are the
 #   reader's own closed classes, split by the direction in time they name.
+#   Fix round 2 (the differential round, F-4): ORDER's vocabulary is only the history words that state an EARLIER
+#   TIME, never a PLACE. "Outside" names another facility, not an earlier time: "Outside colonoscopy (Synthetic
+#   Regional Hospital) date of service: 10/27/2026" beside the visit's own "Date of service: 10/13/2026" is consistent
+#   with it (a referred, pending or later outside procedure), and ORDER asked the visit's correct date - and, with the
+#   own date in doubt, let a member's answer equal to any dated line be taken (F-1). The installed reading is restored.
 _PART_NUMBER = re.compile(r'[ \t]*(?=' + DOCUMENT_PART + r')[A-Za-z]+[ \t]+(?P<number>\w+)', re.A)
 _FIRST_PART = frozenset(('1', '01', 'I', 'i', 'A'))
 _REPORT_BODY = ('technique', 'findings', 'impression')
-_EARLIER_OCCURRENCE = cues.rx(r'\b(?:' + '|'.join(w for _, w in _HISTORY_WORDS) + r')\b')
+_PLACE_WORDS = ('outside',)  # the history words that name a place, not a time (fix round 2, F-4)
+_EARLIER_TIME_WORDS = tuple(w for words in (words for _, words in _HISTORY_WORDS) for w in words.split('|')
+                            if w not in _PLACE_WORDS)
+_EARLIER_OCCURRENCE = cues.rx(r'\b(?:' + '|'.join(_EARLIER_TIME_WORDS) + r')\b')
 _PLANNED_OCCURRENCE = cues.rx(r'\b(?:next|planned|scheduled|future|follow-?up|repeat|anticipated|tentative|proposed'
                               r'|requested|rescheduled|upcoming|due)\b')
 
@@ -2185,11 +2303,31 @@ PART_DATE_NOTE = ('A date of service is labelled in a later numbered part of the
                   '(no technique, findings or impression), so it may date another service than the one the note '
                   'documents and is not taken as the date of service by itself.')
 ORDER_DATE_NOTE = ('A labelled date of service is earlier than a date the document gives for an earlier occurrence (a '
-                   'prior, last, recent, index or outside one), so the two cannot both be right and it is not taken as '
+                   'prior, last, recent or index one), so the two cannot both be right and it is not taken as '
                    'the date of service by itself.')
 
 
 def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
+    """The service date fact (_date_fact). Fix round 2 (the differential round, F-1): where the own-dates-in-doubt rules
+    (BIRTH, ORDER, PART) put an own labelled date in doubt, they may only ask - never let a member's answer be taken
+    that the reading without them does not take. With the doubted label read as the note's own (as the installed reading
+    and b8cc7b5b5 read it), the answers are its own value, or the values a documented conflict lists, or the dates its
+    evidence reads; with it in doubt and no other own date, every candidate became the evidence of the date asked, so a
+    member's answer equal to ANY dated line was taken and sent (an office visit's "EGD on 05/01/2019": 2019-05-01 sent,
+    where 2b82889f held it). Now the date asked is answered only by those answers, less a date of birth (BIRTH:
+    _BirthSpan, never a member's answer). The fact itself - its origin, value, note and the spans it quotes, as stored -
+    is unchanged; only which of its spans answers moves."""
+    if not any(c.doubt for c in found):
+        return _date_fact(found)
+    without = _date_fact(tuple(replace(c, reading='own', doubt='') if c.doubt else c for c in found))
+    if without.origin == 'document' and without.value:
+        answers = {without.value}
+    else:
+        answers = set(documented_values(without)) or _date_readings(without.evidence) or set()
+    return _date_fact(found, answers)
+
+
+def _date_fact(found: tuple[_Candidate, ...], answers: Optional[set] = None) -> Fact:
     """The service date fact (refutation round 2, rules A and B). The note's own labelled dates, when they agree, are the
     date - never a dated title (rule N1 below). They give the date only when every candidate that could speak for this
     note's date agrees with it: a labelled date this service cannot place or that does not stand alone in its field, the
@@ -2264,10 +2402,15 @@ def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
             return fact
         return Fact('service_date', None, 'conflict', _sorted_spans(fact.evidence + unread), note)
     # with no date of the note's own every candidate is the evidence of the date asked; another occurrence's or another
-    # document's dated label or title is quoted, never a date a member's answer agrees with (fr-di:3, _ElsewhereSpan)
-    fact = _fact('service_date', [(c.value, s) for c in found if c.form == 'read' for s in _evidence_spans(c)])
+    # document's dated label or title is quoted, never a date a member's answer agrees with (fr-di:3, _ElsewhereSpan).
+    # Fix round 2 (the differential round, F-1): with an own date in doubt, nor is a date the reading without the doubt
+    # does not answer with (``answers``, _service_date_fact): a span stating any other date is quoted as _DoubtSideSpan
+    fact = _fact('service_date', [(c.value, s) for c in found if c.form == 'read'
+                                  for s in _evidence_spans(c, answers)])
     if not found:
         return fact
+    if answers is not None:
+        unread = tuple(s for c in unusable for s in _evidence_spans(c, answers))
     return Fact('service_date', None, 'missing', _sorted_spans(fact.evidence + unread), note)
 
 
@@ -2295,14 +2438,33 @@ class _BirthSpan(_ElsewhereSpan):
     round, dates lens F1): never a member's answer, as any _ElsewhereSpan; merge_user_values says why it is held."""
 
 
-def _evidence_spans(c: _Candidate) -> tuple[Span, ...]:
+class _DoubtSideSpan(Span):
+    """Evidence of a date asked because the own-dates-in-doubt rules (BIRTH, ORDER, PART) put the note's own labelled
+    date in doubt and no other own date remains (fix round 2, the differential round's F-1), that states a date the
+    reading without those rules does not answer with (_service_date_fact): quoted, stored and shown as any span (equal
+    to the plain span it copies), but never a member's answer. Read as the evidence of the date asked, any dated line
+    answered the question - an office visit's "EGD on 05/01/2019" took a member's 2019-05-01 and sent it, where the
+    installed reading held it beside the note's own "Date of service: 10/13/2026". Not an
+    _ElsewhereSpan: its date is not read as another occurrence's, and a member's date equal to it is held with the
+    installed note (USER_CONFLICT_NOTE)."""
+
+    def __eq__(self, other):
+        return isinstance(other, Span) and (self.start, self.end, self.text) == (other.start, other.end, other.text)
+
+    __hash__ = Span.__hash__
+
+
+def _evidence_spans(c: _Candidate, answers: Optional[set] = None) -> tuple[Span, ...]:
     """A candidate's spans as the date's evidence: _ElsewhereSpan for a label or title read as another occurrence's or
     another document's (fr-di:3), or as maybe another occurrence's (df-d:4, 'beside'); _BirthSpan for a labelled date
-    equal to the document's date of birth (fix round, F1)."""
+    equal to the document's date of birth (fix round, F1); ``answers`` (an own date in doubt and none other, fix round
+    2, F-1: the dates the reading without the doubt answers with): _DoubtSideSpan for a span stating any other date."""
     if c.doubt == 'birth':
         return tuple(_BirthSpan(s.start, s.end, s.text) for s in c.spans)
     if c.source in ('label', 'title') and c.reading in ('aside', 'other', 'beside'):
         return tuple(_ElsewhereSpan(s.start, s.end, s.text) for s in c.spans)
+    if answers is not None:
+        return tuple(s if _span_dates(s) <= answers else _DoubtSideSpan(s.start, s.end, s.text) for s in c.spans)
     return c.spans
 
 
@@ -2397,7 +2559,7 @@ def _date_readings(spans) -> Optional[set]:
     (_ElsewhereSpan) - its date is not the note's, as the fact's own note says."""
     values = set()
     for span in spans:
-        if isinstance(span, _ElsewhereSpan):
+        if isinstance(span, (_ElsewhereSpan, _DoubtSideSpan)):  # fix round 2, F-1: nor beside an own date in doubt
             continue
         values |= _span_dates(span)
     return values or None
