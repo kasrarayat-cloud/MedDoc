@@ -1,0 +1,55 @@
+{
+ "note": "The readings the gi3 extent repair must leave unchanged (sections; per family status, extent, interventions; inventory family, status, completion, extent), recorded at the installed revision 90377ec6f413 (studio/gi as at 51b2185f8 and 5e48f2917) over the synthetic known cases.",
+ "readings": {
+  "h2-03-sigmoidoscopy-note.txt": {
+   "sections": [["other", "", 0], ["procedure", "flexible sigmoidoscopy note", 110], ["other", "preparation", 367], ["procedure", "procedure", 618], ["findings", "findings", 931], ["assessment", "assessment", 1661], ["plan", "plan", 1822]],
+   "routing": {"gi.colonoscopy": ["historical", null, null], "gi.flex_sig": ["performed", "55 cm", null]},
+   "inventory": [["gi.colonoscopy", "historical", "unknown", ""], ["gi.flex_sig", "performed", "unknown", "55 cm"]]
+  },
+  "h2-03__5c1bbf3a__2026-10-29.txt": {
+   "sections": [["other", "", 0], ["procedure", "flexible sigmoidoscopy note", 109], ["other", "preparation", 365], ["procedure", "procedure", 614], ["findings", "findings", 926], ["assessment", "assessment", 1655], ["plan", "plan", 1815]],
+   "routing": {"gi.colonoscopy": ["historical", null, null], "gi.flex_sig": ["performed", "55 cm", null]},
+   "inventory": [["gi.colonoscopy", "historical", "unknown", ""], ["gi.flex_sig", "performed", "unknown", "55 cm"]]
+  },
+  "h2-05__5e21f16b__2026-10-29.txt": {
+   "sections": [["other", "", 0], ["assessment", "pre-procedure assessment", 696], ["plan", "plan", 1201]],
+   "routing": {"gi.colonoscopy": ["cancelled", null, null]},
+   "inventory": [["gi.colonoscopy", "cancelled", "unknown", ""]]
+  },
+  "ho-01-egd-colonoscopy-tattoo-conflict.txt": {
+   "sections": [["other", "", 0], ["other", "anesthesia", 357], ["procedure", "procedures", 554], ["indication", "indications", 703], ["other", "upper endoscopy", 1209], ["other", "colonoscopy", 1743], ["impression", "impression", 3104], ["other", "complications", 3417], ["plan", "plan", 3468]],
+   "routing": {"gi.colonoscopy": ["performed", "terminal ileum", "biopsy; cold snare; injection/tattoo"], "gi.egd": ["performed", "second part of duodenum", "biopsy"]},
+   "inventory": [["gi.colonoscopy", "performed", "complete", "terminal ileum"], ["gi.egd", "performed", "complete", "second part of duodenum"]]
+  },
+  "ho-01__30d3f32d__2026-10-29.txt": {
+   "sections": [["other", "", 0], ["other", "anesthesia", 356], ["procedure", "procedures", 553], ["indication", "indications", 701], ["other", "upper endoscopy", 1205], ["other", "colonoscopy", 1738], ["impression", "impression", 3097], ["other", "complications", 3409], ["plan", "plan", 3459]],
+   "routing": {"gi.colonoscopy": ["performed", "terminal ileum", "biopsy; cold snare; injection/tattoo"], "gi.egd": ["performed", "second part of duodenum", "biopsy"]},
+   "inventory": [["gi.colonoscopy", "performed", "complete", "terminal ileum"], ["gi.egd", "performed", "complete", "second part of duodenum"]]
+  },
+  "ho-02-colonoscopy-complete-deferred-emr.txt": {
+   "sections": [["other", "", 0], ["procedure", "colonoscopy report", 68], ["other", "anesthesia", 375], ["procedure", "procedure", 518], ["indication", "indication", 554], ["technique", "description", 687], ["findings", "findings", 1032], ["impression", "impression", 1791], ["plan", "plan", 1962], ["other", "complications", 2234]],
+   "routing": {"gi.colonoscopy": ["performed", "cecum", null]},
+   "inventory": [["gi.colonoscopy", "performed", "complete", "cecum"]]
+  },
+  "ho-02__d2f11d16__2026-10-29.txt": {
+   "sections": [["other", "", 0], ["procedure", "colonoscopy report", 67], ["other", "anesthesia", 374], ["procedure", "procedure", 517], ["indication", "indication", 552], ["technique", "description", 684], ["findings", "findings", 1028], ["impression", "impression", 1785], ["plan", "plan", 1955], ["other", "complications", 2226]],
+   "routing": {"gi.colonoscopy": ["performed", "cecum", "EMR"]},
+   "inventory": [["gi.colonoscopy", "performed", "complete", "cecum"]]
+  },
+  "ho-03-colonoscopy-incomplete-stricture.txt": {
+   "sections": [["other", "", 0], ["procedure", "colonoscopy procedure note", 68], ["other", "anesthesia", 344], ["indication", "indication", 463], ["procedure", "procedure", 635], ["impression", "impression", 1317], ["plan", "plan", 1479]],
+   "routing": {"gi.colonoscopy": ["incomplete", "incomplete: sigmoid colon", "biopsy"]},
+   "inventory": [["gi.colonoscopy", "incomplete", "incomplete", "incomplete: sigmoid colon"]]
+  },
+  "ho-03__a866597c__2026-10-29.txt": {
+   "sections": [["other", "", 0], ["procedure", "colonoscopy procedure note", 68], ["other", "anesthesia", 350], ["indication", "indication", 469], ["procedure", "procedure", 641], ["impression", "impression", 1325], ["plan", "plan", 1487]],
+   "routing": {"gi.colonoscopy": ["incomplete", "incomplete: sigmoid colon", "biopsy"]},
+   "inventory": [["gi.colonoscopy", "incomplete", "incomplete", "incomplete: sigmoid colon"]]
+  },
+  "ho-04__5e02eb08__2026-10-29.txt": {
+   "sections": [["other", "", 0], ["indication", "chief complaint", 408], ["history", "history of present illness", 492], ["exam", "examination", 1301], ["assessment", "assessment", 1435], ["plan", "plan", 1603], ["mdm", "medical decision making", 1982]],
+   "routing": {"gi.egd": ["planned", null, null], "gi.office_em": ["performed", null, null]},
+   "inventory": [["gi.egd", "planned", "unknown", ""], ["gi.office_em", "performed", "unknown", ""]]
+  }
+ }
+}

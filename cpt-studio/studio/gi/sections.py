@@ -65,6 +65,19 @@ object ("Dr. Smith recommended", then "EUS with FNA of the pancreatic head
 mass." on the next line, with or without a list marker) is held: it is an
 ``other`` section of its own, with no default, and the section before it
 resumes on the next line.
+
+A heading whose parts are all procedure, findings or technique headings
+("Procedure and findings", "Procedure/Findings") is that kind of heading.
+
+``tables`` is the one table model (interpretation 45): a header row of three
+or more " | " cells, each a bare label, over rows of as many cells. A
+procedure-summary label ("Procedure summary") straight over a summary table
+(an examination column, an extent column with an extent written in it, no
+dated row, no line naming its service with an earlier occasion before the next
+heading) opens a procedure section; a table alone opens nothing. In a table's data row, a cell that only
+answers ("No") a column that speaks neither for the row's performance or
+status, nor of a landmark or an extent ("Tissue sampled"), is a clause of its
+own. ``Layout.columns`` gives each data cell its column's label.
 """
 from __future__ import annotations
 
@@ -180,9 +193,10 @@ _SEC_FIELD_LINE = re.compile(r'[ \t]*[A-Za-z][^:\n|]{0,39}:[ \t]*\S', re.A)
 # complications, EBL, findings and retroflexion (the fields detect._SEC_NEXT_CELL lists). A field with any other label
 # may name what the plan label orders, in words no list knows ("Right hemicolectomy: Dr. B. Synthetic", "CT
 # abdomen/pelvis: with contrast", "ESD: ascending colon polyp"): it is held, never read in the section before the label.
+# gi3 extent (R4): the extent and depth labels are cues' one class of extent-label words (cues.EXTENT_LABEL_WORDS), so
+# this reader and routing never drift ("Deepest point reached:", "Insertion depth:").
 _S2_REPORT_FIELD = re.compile(
-    r'[ \t]*(?:(?:(?:the|actual|final)[ \t]+)?(?:(?:furthest|maximal|maximum|deepest)[ \t]+)?(?:extent|depth)'
-    r'(?:[ \t]+(?:reached|of[ \t]+(?:the[ \t]+)?(?:exam(?:ination)?|insertion|intubation)))?'
+    r'[ \t]*(?:(?:(?:the|actual|final)[ \t]+)?' + cues.EXTENT_LABEL_WORDS +
     r'|(?:(?:scope|total|cecal|cecum)[ \t]+)?(?:withdrawal|insertion|intubation)[ \t]+time'
     r'|(?:bowel[ \t]+)?prep(?:aration)?(?:[ \t]+quality)?|quality[ \t]+of[ \t]+(?:the[ \t]+)?(?:bowel[ \t]+)?prep(?:aration)?'
     r'|bbps|boston[ \t]+bowel[ \t]+prep(?:aration)?[ \t]+scale(?:[ \t]+\(bbps\))?'
@@ -381,6 +395,20 @@ def _service_named(line: str) -> bool:
     return bool(cues.FS_ABBREVIATION.search(line)) or any(p.search(line) for _, p in cues.SERVICE_PATTERNS)
 
 
+# gi3 extent (R6): a heading whose parts, split on "and", "/" or ",", are all procedure, findings or technique headings
+# is a heading of its first part's kind ("Procedure and findings", "Procedure/Findings", "Technique and findings"): h2-04's
+# "Procedure and findings" was no heading, so its "Indications" section ran over the whole report. Any other part ("Plan")
+# leaves the label to the rules below.
+_COMPOSITE_SPLIT = re.compile(r'[ \t]+and[ \t]+|[ \t]*[/,][ \t]*', re.A)
+
+
+def _composite_kind(label: str) -> Optional[str]:
+    parts = [part for part in _COMPOSITE_SPLIT.split(label) if part]
+    if len(parts) > 1 and all(HEADINGS.get(part) in POSITIVE_KINDS for part in parts):
+        return HEADINGS[parts[0]]
+    return None
+
+
 def _heading(text: str, ls: int, le: int) -> Optional[tuple[str, str, Span]]:
     """(kind, label, heading span) when the line [ls, le) is a heading line."""
     body_start = _PREFIX.match(text, ls, le).end()
@@ -396,6 +424,8 @@ def _heading(text: str, ls: int, le: int) -> Optional[tuple[str, str, Span]]:
         return None
     label = normalize_label(raw)
     kind = HEADINGS.get(label)
+    if kind is None:
+        kind = _composite_kind(label)
     content = '' if colon < 0 else line[colon + 1:]
     if label in _SEC_NO_ANSWER_LABELS and content.strip() and _SEC_NO_ANSWER.fullmatch(content):
         return None  # "Orders: none", "Procedures performed today: N/A": a field, as at R3B-BASE (structure:5, :9)
@@ -672,10 +702,27 @@ class Layout:
     sentences: tuple[tuple[int, int], ...]
     clauses: tuple[tuple[int, int], ...]
     section_starts: tuple[int, ...]
+    # gi3 extent: the text's tables (the one table model, tables()); each table data cell as (start, end, its column's
+    # label), in text order; and the starts of the service parts a reporting service line opened (_reporting_heads)
+    tables: tuple['Table', ...] = ()
+    columns: tuple[tuple[int, int, str], ...] = ()
+    reporting_parts: frozenset = frozenset()
 
     def section_at(self, pos: int) -> Section:
         index = bisect.bisect_right(self.section_starts, pos) - 1
         return self.sections[max(index, 0)]
+
+    def column_at(self, pos: int) -> Optional[tuple[int, int, str]]:
+        """(start, end, column label) of the table data cell that holds ``pos``, else None."""
+        index = bisect.bisect_right(self.columns, (pos, _BIG, '')) - 1
+        if index >= 0 and self.columns[index][0] <= pos < self.columns[index][1]:
+            return self.columns[index]
+        return None
+
+    def in_table_header(self, pos: int) -> bool:
+        """Whether ``pos`` lies on a table's header line: its cells are column labels, never statements."""
+        index = bisect.bisect_right(self.tables, pos, key=lambda table: table.header[0]) - 1
+        return index >= 0 and self.tables[index].header[0] <= pos < self.tables[index].header[1]
 
     def sentence_for(self, start: int, end: int) -> tuple[int, int]:
         return _first_overlap(self.sentences, start, end)
@@ -1016,6 +1063,200 @@ def _field_heading(text: str, ls: int, le: int) -> Optional[tuple[str, str, Span
     return heading if value and not _STATE_VALUE.fullmatch(value) else None
 
 
+# gi3 extent: the ONE table model (interpretation 45), read by this layout (Layout.columns and the summary label below)
+# and by the documented-service inventory. Extraction writes a Word table's row as one line, its cells joined with " | "
+# (studio.ingest.docx). A header row is a line of three or more cells, each a bare label: a letter first, at most five
+# words, no digit, no sentence punctuation and no answer word ("Examination | Instrument | Furthest point reached |
+# Tissue sampled"); its FIRST cell may instead be a numbering column ("#", "No.", "No", "Item" or empty) before the two
+# worded labels at least that the other cells then are ("# | Examination | Extent"). One or more rows with as many cells
+# follow it, and a line with another count of cells ends the table. A cell holding a digit ("Size 5 mm") or an answer
+# ("Yes") makes a line no header row: it is a data row, and with no header over it no table. The cells are split on
+# " | " exactly as extraction joins them, so an empty cell is a cell ("Colonoscopy |  | Cecum").
+TABLE_CELL_SEPARATOR = ' | '
+_TABLE_MIN_CELLS = 3  # a header row's cells at least (two cells are a key and its value: "Extent | Cecum")
+# A header cell's own shape (no digit, no sentence punctuation: . , ; : ! ?); its words are counted apart.
+_TABLE_LABEL = re.compile(r'[A-Za-z][^0-9.,;:!?]*', re.A)
+_TABLE_LABEL_WORDS = 5
+# A cell that is only an answer (a closed class: yes, no, none, nil, n/a, not applicable, y, n; and, as a data cell, a
+# dash): no header cell is one, and a data cell that holds one answers its own column (layout's answer cells).
+_TABLE_ANSWER = r'(?:yes|no|none|nil|n/?a|not[ \t]+applicable|y|n)'
+_TABLE_ANSWER_WORD = re.compile(_TABLE_ANSWER, re.A | re.I)
+_TABLE_ANSWER_CELL = re.compile(r'[ \t]*(?:' + _TABLE_ANSWER + r'|[-\u2013\u2014]+)[ \t]*\.?[ \t]*', re.A | re.I)
+# The first cell of a numbering column, as written (any case) and as normalize_label gives it.
+_TABLE_NUMBERING = frozenset(('#', 'no.', 'no', 'item', ''))
+_TABLE_NUMBERING_LABELS = frozenset(normalize_label(cell) for cell in _TABLE_NUMBERING)
+
+
+@dataclass(frozen=True)
+class Table:
+    """A header-row table: its header line's span, each header cell's label (normalize_label) in column order, and each
+    data row's cell spans (as many as labels, in column order; a cell's span runs between its separators)."""
+    header: tuple[int, int]
+    labels: tuple[str, ...]
+    rows: tuple[tuple[tuple[int, int], ...], ...]
+
+
+def _cells(text: str, ls: int, le: int) -> list[tuple[int, int]]:
+    """The spans of the cells of the line [ls, le), split on TABLE_CELL_SEPARATOR (one cell when it holds none)."""
+    out, pos, width = [], ls, len(TABLE_CELL_SEPARATOR)
+    found = text.find(TABLE_CELL_SEPARATOR, pos, le)
+    while found >= 0:
+        out.append((pos, found))
+        pos = found + width
+        found = text.find(TABLE_CELL_SEPARATOR, pos, le)
+    out.append((pos, le))
+    return out
+
+
+def _table_label(cell: str) -> bool:
+    """Whether a header cell is a bare label (see above)."""
+    body = cell.strip()
+    return bool(_TABLE_LABEL.fullmatch(body)) and len(body.split()) <= _TABLE_LABEL_WORDS \
+        and not _TABLE_ANSWER_WORD.fullmatch(body)
+
+
+def _header_labels(text: str, cells: list[tuple[int, int]]) -> Optional[tuple[str, ...]]:
+    """The normalised labels of a header row's cells, or None when the cells make no header row (see above). With three
+    cells or more, a numbering first cell always has two worded labels after it."""
+    if len(cells) < _TABLE_MIN_CELLS or not all(_table_label(text[a:b]) for a, b in cells[1:]):
+        return None
+    first = text[cells[0][0]:cells[0][1]]
+    if not (_table_label(first) or first.strip().lower() in _TABLE_NUMBERING):
+        return None
+    return tuple(normalize_label(text[a:b]) for a, b in cells)
+
+
+@functools.lru_cache(maxsize=16)
+def tables(text: str) -> tuple[Table, ...]:
+    """Every header-row table of ``text``, in document order (see above). One pass over the lines: each line's
+    separators are counted once as a row and at most once more as a header (linear in the text)."""
+    return _tables(text, _lines(text))
+
+
+def _tables(text: str, lines: list[tuple[int, int]]) -> tuple[Table, ...]:
+    found, i = [], 0
+    while i < len(lines):
+        ls, le = lines[i]
+        shaped = text.count(TABLE_CELL_SEPARATOR, ls, le) >= _TABLE_MIN_CELLS - 1  # a cheap count before the split
+        labels = _header_labels(text, _cells(text, ls, le)) if shaped else None
+        if labels is not None:
+            rows, j = [], i + 1
+            while j < len(lines) and text.count(TABLE_CELL_SEPARATOR, *lines[j]) == len(labels) - 1:
+                rows.append(tuple(_cells(text, *lines[j])))
+                j += 1
+            if rows:
+                found.append(Table((ls, le), labels, tuple(rows)))
+                i = j
+                continue
+        i += 1
+    return tuple(found)
+
+
+# gi3 extent (R2): a data cell that holds only an answer ("No", "None", "-") answers its own column's header, never the
+# row: under a column whose label names neither the row's performance or status (_SPEAKS_FOR_THE_ROW), nor a landmark,
+# nor an extent ("Tissue sampled", "Complications", "Biopsies"), it is a clause of its own (layout), so it never denies or
+# doubts the service or a landmark in another cell (h2-01: the "No" that answers "Tissue sampled" doubted the colonoscopy
+# row). Every other cell reads with its row as before: a status answer ("Performed | No"), a date ("Planned date |
+# 2026-11-12"), a comment ("Comments | Cancelled before insertion") still speaks for the row's service.
+_SPEAKS_FOR_THE_ROW = re.compile(r'\b(?:status|state|perform\w*|done|complet\w*|outcome|cancel\w*|attempt\w*|undertaken|'
+                                 r'carried|today|abort\w*|reach\w*|intubat\w*|seen|visuali[sz]\w*|examined|result)\b',
+                                 re.A | re.I)
+
+
+def _answers_its_column(label: str) -> bool:
+    """Whether an answer-only data cell under the column ``label`` answers that column alone (see above)."""
+    return not (_SPEAKS_FOR_THE_ROW.search(label) or cues.EXTENT_HEADER.fullmatch(label)
+                or any(pattern.search(label) for _, _, pattern in cues.UPPER_LANDMARKS + cues.LOWER_LANDMARKS))
+
+
+# gi3 extent (R1): a procedure-summary label (a closed list) straight over a summary table opens a procedure section (h2-01:
+# "Procedure summary" over "Examination | Instrument | Furthest point reached | Tissue sampled" was no heading, so the
+# "Indications" section ran over the table and both services' parts, and every statement there read as an indication's).
+# A summary table's first worded column names the examination (SERVICE_COLUMNS; a numbering column may stand before it),
+# a later column is an extent label (cues.EXTENT_HEADER: an extent is written only once the examination is done), and no
+# row carries a date (_ITEM_DATE: a table of planned or earlier procedures dates its rows). The label stands bare on its
+# line ("Procedure summary") or with its colon and nothing after it ("Procedure summary:", otherwise an 'other' heading);
+# blank lines may stand between it and the table. It never opens inside a plan or a history section, nor inside an
+# 'other' section that stands in for a procedure, findings or technique section (layout). A table alone opens nothing
+# (an office note's undated table of an outside colonoscopy has the same shape), and neither does the label over prose:
+# a table is never by itself evidence that a service was done today.
+PROCEDURE_SUMMARY_LABELS = frozenset(('procedure summary', 'procedures summary', 'summary of procedure',
+                                      'summary of procedures', 'procedural summary', 'procedure overview',
+                                      'procedures overview', 'examination summary', 'examinations summary'))
+SERVICE_COLUMNS = frozenset(('examination', 'examinations', 'exam', 'exams', 'procedure', 'procedures', 'service',
+                             'services', 'study', 'studies', 'endoscopy', 'endoscopies'))
+
+
+# gi3 extent (R1, built): two conditions the adversarial probes of the investigated design asked for, both narrowing it
+# back to the reading at 90377ec6f413 (the table stays the section's in force, so its services are asked):
+# - a row states an extent under the extent column: its cell opens with a landmark or a depth ("the" or "a" at most
+#   before it; detect._extent_column's own test). An extent column is evidence only once an extent is written in it: a
+#   pre-procedure note's form with the column blank ("Colonoscopy | Adult colonoscope | -") read the booked colonoscopy
+#   as performed;
+# - no line from the table's first row to the next heading or table names one of the table's own services with an
+#   earlier occasion of its own (_names_another_occasion, round 2's reader for procedure lines): an office note that
+#   pasted an outside report's "Procedure summary" table ("The outside colonoscopy above was reviewed with the
+#   patient.") read the outside colonoscopy as performed today. Each table's reach ends where the next table's header
+#   starts, so the lines are read once.
+_CELL_LEAD = re.compile(r'[ \t]*+(?:(?:the|a)[ \t]++)*+', re.A | re.I)
+_STATED_DEPTH = re.compile(r'(?:approximately[ \t]+|about[ \t]+|~[ \t]*)?\d{1,3}[ \t]*cm\b', re.A | re.I)
+
+
+def _states_an_extent(text: str, a: int, b: int) -> bool:
+    """Whether the cell [a, b) opens with a landmark or a depth, "the" or "a" at most before it (see above)."""
+    at = _CELL_LEAD.match(text, a, b).end()
+    return bool(_STATED_DEPTH.match(text, at, b)) \
+        or any(pattern.match(text, at, b) for _, _, pattern in cues.UPPER_LANDMARKS + cues.LOWER_LANDMARKS)
+
+
+def _another_occasion_in_reach(text: str, lines: list[tuple[int, int]], line_starts: list[int], headings: dict,
+                               table: Table, column: int, limit: int) -> bool:
+    """Whether a line from the table's first row up to the next heading line or ``limit`` (the next table's header)
+    names one of the services of the table's examination column (``column``) with an earlier occasion of its own."""
+    families = {family for row in table.rows for family, pattern in cues.SERVICE_PATTERNS
+                if pattern.search(text, *row[column])}
+    patterns = [pattern for family, pattern in cues.SERVICE_PATTERNS if family in families]
+    memo, j = {}, bisect.bisect_left(line_starts, table.rows[0][0][0])
+    while patterns and j < len(lines) and lines[j][0] < limit and not headings[j]:
+        ls, le = lines[j]
+        if any(_names_another_occasion(text, ls, le, m.start(), m.end(), memo)
+               for pattern in patterns for m in pattern.finditer(text, ls, le)):
+            return True
+        j += 1
+    return False
+
+
+def _summary_opens(text: str, lines: list[tuple[int, int]], headings: dict,
+                   found: tuple[Table, ...]) -> dict[int, tuple[str, str, Span]]:
+    """For each procedure-summary label line over a summary table (see above), the procedure section it opens."""
+    opens, line_starts = {}, [ls for ls, _ in lines]
+    for n, table in enumerate(found):
+        column = 1 if table.labels[0] in _TABLE_NUMBERING_LABELS else 0  # the examination column
+        extents = [k for k in range(column + 1, len(table.labels)) if cues.EXTENT_HEADER.fullmatch(table.labels[k])]
+        if table.labels[column] not in SERVICE_COLUMNS or not extents \
+                or not any(_states_an_extent(text, *row[k]) for row in table.rows for k in extents) \
+                or any(_ITEM_DATE.search(text, row[0][0], row[-1][1]) for row in table.rows) \
+                or _another_occasion_in_reach(text, lines, line_starts, headings, table, column,
+                                              found[n + 1].header[0] if n + 1 < len(found) else len(text)):
+            continue
+        above = bisect.bisect_left(line_starts, table.header[0]) - 1
+        while above >= 0 and not text[lines[above][0]:lines[above][1]].strip():
+            above -= 1
+        if above < 0:
+            continue
+        ls, le = lines[above]
+        heading = headings[above]
+        if heading is None:
+            body = text[ls:le].strip(' \t*#')
+            if normalize_label(body) in PROCEDURE_SUMMARY_LABELS:
+                start = ls + text[ls:le].index(body)
+                opens[above] = ('procedure', normalize_label(body), Span(start, start + len(body), body))
+        elif heading[0] == 'other' and heading[1] in PROCEDURE_SUMMARY_LABELS and heading[2].text.endswith(':') \
+                and not text[heading[2].end:le].strip():
+            opens[above] = ('procedure', heading[1], heading[2])
+    return opens
+
+
 def _headings(text: str, lines: list[tuple[int, int]]) -> tuple[dict, set[int], list[tuple[int, int]],
                                                                  list[tuple[int, int]], list[tuple[int, int]]]:
     """Each line's heading (or None); the lines inside an extraction block, which never open a
@@ -1105,8 +1346,9 @@ def layout(text: str) -> Layout:
     # force before a field-label line or a held line resumes (after a label that speaks for its own line only, or
     # the line after an unfinished clause), a held line opens its own 'other' section, a heading opens. So a heading
     # wins where a resume falls on its line (the next page opens with "Findings:", an addendum's header).
-    # A service line (session 7c8d38da GI round 2, extent; see _service_name_only) comes last on its line.
-    resume, field_end, line_end, held_open, heading, service_line = 0, 1, 2, 3, 4, 5
+    # A service line (session 7c8d38da GI round 2, extent; see _service_name_only) comes last on its line, and after it
+    # a bare procedure-summary label (gi3 extent, R1; _summary_opens), which no heading or service line shares.
+    resume, field_end, line_end, held_open, heading, service_line, summary_open = 0, 1, 2, 3, 4, 5, 6
     # Its candidates: a service's name standing alone, never on a heading line, inside an extraction block, held by
     # another rule, run on into or running on, nor before a procedure, findings or technique heading.
     last_positive = max((i for i, h in headings.items() if h and h[0] in POSITIVE_KINDS), default=-1)
@@ -1125,7 +1367,10 @@ def layout(text: str) -> Layout:
         service_lines = {i: (head[0] in declared[i], ('other', head[1], head[2])) for i, head in candidates.items()}
         reporting = _reporting_heads(text, lines, headings, candidates, joins, runs)
     line_starts, firsts = [ls for ls, _ in lines], {}
+    found_tables = tables(text)
+    summaries = _summary_opens(text, lines, headings, found_tables)  # a label with its colon is a heading line already
     marks = sorted([(i, heading, h) for i, h in headings.items() if h]
+                   + [(i, summary_open, h) for i, h in summaries.items() if not headings[i]]
                    + [(i, service_line, i) for i in service_lines]
                    + [(i, held_open, ('other', _SEC_HELD_LABEL, None)) for i in held]
                    + [(i + 1, line_end, i) for i in held if i + 1 < len(lines)]
@@ -1153,8 +1398,16 @@ def layout(text: str) -> Layout:
     opened, current, before_block, before_line, skipped = [], ('other', '', None), {}, {}, set()
     enclosed = False  # whether the 'other' section in force stands in for a procedure, findings or technique section
     service_part, indication = None, None  # the part a service line opened, and the indication it ended
+    reporting_lines = set()  # gi3 extent (R9): the lines whose service line opened that service's own part
     for i, what, value in marks:
         positive = current[0] in POSITIVE_KINDS or enclosed
+        if what == summary_open or (what == heading and i in summaries):  # gi3 extent (R1)
+            if current[0] not in ('plan', 'history') and not enclosed:
+                current, enclosed = summaries[i], False
+                opened.append((i, current))
+                continue
+            if what == summary_open:
+                continue  # inside a plan or a history section it is content; with its colon, the heading it was
         if what == service_line:
             declared_here, section = service_lines[value]
             opens = declared_here and value in reporting
@@ -1165,6 +1418,8 @@ def layout(text: str) -> Layout:
                 indication = current
             current, enclosed = (section if opens else indication), False  # its own part, or the indication's again
             service_part = current if opens else None
+            if opens:
+                reporting_lines.add(i)
             opened.append((i, current))
             continue
         if what in (heading, held_open) and i in gated and not positive \
@@ -1206,13 +1461,33 @@ def layout(text: str) -> Layout:
         if not joins[i]:
             breaks.add(le)
     sentences = _segments(text, sorted(breaks | {0, len(text)}))
+    # gi3 extent (R2, R3): every data cell of every table, with its column's label; and the clause cuts around each
+    # answer cell that answers its own column (_answers_its_column), on both sides, so it is a clause of its own
+    columns, cell_cuts = [], []
+    for table in found_tables:
+        own = [_answers_its_column(label) for label in table.labels]  # each column's label is read once
+        for row in table.rows:
+            for k, (a, b) in enumerate(row):
+                columns.append((a, b, table.labels[k]))
+                if k and own[k] and _TABLE_ANSWER_CELL.fullmatch(text, a, b):
+                    cell_cuts.extend((row[k - 1][1], a))
+                    if k + 1 < len(row):
+                        cell_cuts.extend((b, row[k + 1][0]))
+    cell_cuts.sort()
     clauses = []
     for s, e in sentences:
         cuts = {s, e}
         cuts.update(s + m.end() for m in re.finditer(';', text[s:e]))
         cuts.update(s + m.start() for m in _CLAUSE_WORD.finditer(text[s:e]))
+        cuts.update(cell_cuts[bisect.bisect_right(cell_cuts, s):bisect.bisect_left(cell_cuts, e)])
         clauses.extend(_segments(text, sorted(cuts)))
-    return Layout(text, tuple(sections), tuple(sentences), tuple(clauses), tuple(s.start for s in sections))
+    if cell_cuts:
+        clauses = [c for c in clauses if text[c[0]:c[1]].strip(' \t|')]  # a separator between two cuts says nothing
+    # gi3 extent (R9): the parts the reporting service lines opened (detect._answers_silently reads a label there)
+    part_starts = {lines[i][0] for i in reporting_lines}
+    reporting_parts = frozenset(section.start for section in sections if section.start in part_starts)
+    return Layout(text, tuple(sections), tuple(sentences), tuple(clauses), tuple(s.start for s in sections),
+                  found_tables, tuple(sorted(columns)), reporting_parts)
 
 
 def _segments(text: str, cuts: list[int]) -> list[tuple[int, int]]:

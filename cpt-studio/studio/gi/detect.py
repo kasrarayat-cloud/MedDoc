@@ -3583,7 +3583,9 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
     window end, explicit: negated, cancelled or incomplete), so that a denial in the family's text can still keep such a
     label from reading as reached (_S2_cut_denied, round 4d regression:3). ``labelled``, when given, collects every
     landmark an extent label names (cues.EXTENT_LABEL_BEFORE right before it: "Extent: Cecum | Scope: Olympus",
-    "Intended extent: cecum"), whatever its reading: the document's own statement of the extent (_insertion_only)."""
+    "Intended extent: cecum"; or, gi3 extent, an extent column's cell it opens: _extent_column), whatever its reading:
+    the document's own statement of the extent (_insertion_only). gi3 extent: a landmark on a table's header line names
+    a column, never a reach, and is not read at all."""
     text = an.text
     reached, blocked = [], []
     # session 7c8d38da GI round 2 (extent): the hits read only by a reach to a depth, the mentions that may doubt one,
@@ -3597,6 +3599,8 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                 for m in pattern.finditer(text, cs, ce):
                     if _about_another_procedure(an, m.start(), m.end()):
                         continue
+                    if an.lay.tables and an.lay.in_table_header(m.start()):
+                        continue  # gi3 extent: a table's header names its columns ("Extent | Cecum reached"), never a reach
                     reading = _generic_reading(an, m.start(), m.end())
                     status = reading.status
                     # the reading before an unresolved negation was found: blocked is read from it
@@ -3606,7 +3610,8 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                     if clause is None:
                         clause = _span(text, cs, ce)
                     hit = (depth, label, clause)
-                    if labelled is not None and cues.EXTENT_LABEL_BEFORE.search(text, ws, m.start()):
+                    if labelled is not None and (cues.EXTENT_LABEL_BEFORE.search(text, ws, m.start())
+                                                 or _extent_column(an, m.start()) is not None):  # gi3 extent (R3)
                         labelled.append(hit)
                     if status in ('performed', 'incomplete', 'uncertain'):
                         deeper.append((m.start(), depth, hit))  # a mention that may doubt a shallower reach to a depth
@@ -3749,7 +3754,7 @@ def _P2_tail_contrary(an: Analysis, end: int) -> bool:
     is no unread statement of the extent reached, so it never withholds an extent (round 4c-2 plan:B)."""
     text = an.text
     line_end = text.find('\n', end, end + CLAUSE_REACH)
-    stop = min(len(text), end + CLAUSE_REACH) if line_end < 0 else line_end
+    stop = _value_stop(an, end, min(len(text), end + CLAUSE_REACH) if line_end < 0 else line_end)  # gi3 extent (R3)
     cell = _SEC_NEXT_CELL.search(text, end, stop)
     stop = cell.start() if cell else stop
     return bool(cues.DOUBT_TOKEN.search(text, end, stop) or _P2_AIM_WORD.search(text, end, stop)
@@ -3810,7 +3815,7 @@ def _P2_neutral_tail(an: Analysis, end: int) -> bool:
     that opens a listed report field (_SEC_NEXT_CELL), or CLAUSE_REACH characters."""
     text = an.text
     line_end = text.find('\n', end, end + CLAUSE_REACH)
-    stop = min(len(text), end + CLAUSE_REACH) if line_end < 0 else line_end
+    stop = _value_stop(an, end, min(len(text), end + CLAUSE_REACH) if line_end < 0 else line_end)  # gi3 extent (R3)
     listed = _SEC_NEXT_CELL.search(text, end, stop)
     return _P2_neutral_region(text, end, listed.start() if listed else stop, need_cell=True)
 
@@ -3888,7 +3893,7 @@ def _P2_label_rest(an: Analysis, end: int, depth: int, table) -> int:
     text = an.text
     stop = min(len(text), end + CLAUSE_REACH)
     line_end = text.find('\n', end, stop)
-    stop = line_end if line_end >= 0 else stop
+    stop = _value_stop(an, end, line_end if line_end >= 0 else stop)  # gi3 extent (R3)
     for found in (_P2_SENTENCE_STOP.search(text, end, stop), _SEC_NEXT_CELL.search(text, end, stop),
                   _P2_NEUTRAL_CELL.search(text, end, stop)):
         if found:
@@ -4146,10 +4151,14 @@ def _answers_silently(an: Analysis, reading: Reading, start: int, end: int) -> b
     historical or denied), and no unresolved negation is in its clause (the doubt a positive section would find:
     "Extent: cecum not reached."). An addendum answering "confirm the furthest extent reached" is read so; the label
     itself still has to pass _reached_label (an aim never does). An indication, an assessment or an impression can
-    tell prior work-up, so a label there is still read only when its own wording states performance."""
+    tell prior work-up, so a label there is still read only when its own wording states performance. gi3 extent (R9): so
+    is a label in a service part that a reporting service line opened (sections.Layout.reporting_parts: "Upper
+    Endoscopy" / "... Extent: second portion of the duodenum."), which GI round 2's guards already read as that service's
+    own report of the day."""
     section = an.lay.section_at(start)
     return (reading.basis == 'default' and reading.cues == (SILENT,) and section.kind == 'other'
-            and section.label in _ANSWERING_SECTIONS and not _doubt(an, start, end))
+            and (section.label in _ANSWERING_SECTIONS or section.start in an.lay.reporting_parts)
+            and not _doubt(an, start, end))
 
 
 # The 'other' sections that speak for this report's own procedure (round 4 routing:2): the product's addendum block
@@ -4174,9 +4183,10 @@ def _plain_tail(an: Analysis, end: int, we: int) -> bool:
     """Whether the value after an extent label's landmark adds nothing but punctuation and cues.EXTENT_TAIL words,
     read to the value's sentence or line end, or to a next cell that opens another report field (_SEC_NEXT_CELL)
     (round 4 routing:9, release:3: "Extent: cecum (intended)." and "cecum (intended; not reached)" name no extent
-    reached). A closed list: any other word leaves the extent unread."""
+    reached). A closed list: any other word leaves the extent unread. gi3 extent (R3): an extent column's cell ends the
+    value (_value_stop)."""
     stop = _VALUE_END.search(an.text, end, we)
-    stop_at = stop.start() if stop else we
+    stop_at = _value_stop(an, end, stop.start() if stop else we)
     cell = _SEC_NEXT_CELL.search(an.text, end, stop_at)
     return all(word.lower() in cues.EXTENT_TAIL for word in _value_words(an.text, end, cell.start() if cell else stop_at))
 
@@ -4185,9 +4195,11 @@ def _S2_read_by_the_cut(an: Analysis, end: int, we: int) -> bool:
     """Whether the value after an extent label's landmark (which ends at ``end``; ``we``, its clause window's end), read
     to the value's sentence or line end without declared:11's next-cell cut, holds a word outside cues.EXTENT_TAIL: then
     _plain_tail reads the label only because that cut ends it ("Extent: cecum | Prep quality: Good"; round 4d
-    regression:3). Reads at most the clause window, a depth that opens the value aside (_value_words)."""
+    regression:3). Reads at most the clause window, a depth that opens the value aside (_value_words), and an extent
+    column's cell ends the value (gi3 extent, R3: _value_stop)."""
     stop = _VALUE_END.search(an.text, end, we)
-    return not all(word.lower() in cues.EXTENT_TAIL for word in _value_words(an.text, end, stop.start() if stop else we))
+    stop_at = _value_stop(an, end, stop.start() if stop else we)
+    return not all(word.lower() in cues.EXTENT_TAIL for word in _value_words(an.text, end, stop_at))
 
 
 # Round 4d regression:3, second round: a landmark written as a field's label ("Cecum - not reached", "The cecum | not
@@ -4344,9 +4356,57 @@ _LEAD_BREAK = re.compile(r'[,;:|(\[\u2013\u2014]|\s-\s', re.A)
 _LIST_MARK = re.compile(r'(?:\d{1,2}[.)]?|[A-Za-z][.)]|[^\w]+)', re.A)
 
 
+# gi3 extent (R3): a table's column binds its cells. A landmark that opens a data cell ("the" or "a" at most before it)
+# under a column whose label is an extent label of cues' one class (cues.EXTENT_HEADER: "Furthest point reached",
+# "Extent", "Depth of insertion"; never an aim, "Intended extent") is that row's extent label value, as "Extent: <cell>"
+# written in the row would be (h2-01's "Examination | ... | Furthest point reached | ..." table; a table-only extent was
+# never read). A value in such a cell ends at the cell (interpretation 45): nothing in the next cell, another column's
+# answer, extends, denies or doubts it (_value_stop, read by every reader of a label's tail). A label written inside any
+# other cell ("Colonoscopy | Extent: cecum | Reached: No") reads its tail across the next cells as before (round 4c
+# declared:11). Each cell's opening word and each column's label are read once (memoised), so the work is linear however
+# many landmarks one cell holds.
+_COLUMN_LEAD = frozenset(('the', 'a'))
+_CELL_WORD = re.compile(r'\S+')
+
+
+def _extent_cell(an: Analysis, pos: int) -> Optional[tuple[int, int, str]]:
+    """The table data cell that holds ``pos`` when its column's label is an extent label (see above), else None."""
+    if not an.lay.columns:
+        return None
+    cell = an.lay.column_at(pos)
+    if cell is None:
+        return None
+    key = ('extent-column', cell[2])
+    if key not in an.memo:
+        an.memo[key] = bool(cues.EXTENT_HEADER.fullmatch(cell[2]))
+    return cell if an.memo[key] else None
+
+
+def _extent_column(an: Analysis, pos: int) -> Optional[tuple[int, int, str]]:
+    """The extent column's cell that holds ``pos`` when the landmark at ``pos`` opens it (see above), else None."""
+    cell = _extent_cell(an, pos)
+    if cell is None:
+        return None
+    key = ('cell-opening', cell[0])
+    if key not in an.memo:  # where the cell's first word that is no lead word starts (or its end)
+        an.memo[key] = next((word.start() for word in _CELL_WORD.finditer(an.text, cell[0], cell[1])
+                             if word.group(0).lower() not in _COLUMN_LEAD), cell[1])
+    return cell if an.memo[key] == pos else None
+
+
+def _value_stop(an: Analysis, end: int, stop: int) -> int:
+    """``stop`` (a line's end, a sentence's or a reach), or the end of the extent column's cell that holds a value's
+    last character (``end`` - 1) when that comes first (see above)."""
+    cell = _extent_cell(an, max(end - 1, 0))
+    return stop if cell is None else min(stop, cell[1])
+
+
 def _reached_label(an: Analysis, lo: int, pos: int) -> bool:
     """Whether an extent label ends right before the landmark at ``pos`` ("Extent reached: ", "The furthest extent
-    reached was the ") and names the extent reached (_label_lead_plain), never an aim ("Intended extent: ")."""
+    reached was the ") and names the extent reached (_label_lead_plain), never an aim ("Intended extent: "); or the
+    landmark opens a table data cell under an extent label's column (gi3 extent, R3: _extent_column)."""
+    if _extent_column(an, pos) is not None:
+        return True
     label = cues.EXTENT_LABEL_BEFORE.search(an.text, lo, pos)
     return bool(label) and _label_lead_plain(an, lo, label.start())
 
@@ -5432,6 +5492,8 @@ def _interventions(an: Analysis, attributed: list[Optional[str]], family: str) -
         index = _sentence_index(an, iv.start)
         if family not in iv.families or index < 0 or attributed[index] != family:
             continue
+        if an.lay.tables and an.lay.in_table_header(iv.start):
+            continue  # gi3 extent: a table's header names a column ("Examination | Biopsies | Extent"), never an act done
         if _generic_reading(an, iv.start, iv.end).status == 'performed' \
                 and not _about_another_procedure(an, iv.start, iv.end):
             found.append((iv.label, _span(an.text, iv.start, iv.end)))

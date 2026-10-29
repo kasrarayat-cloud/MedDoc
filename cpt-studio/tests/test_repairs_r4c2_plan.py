@@ -638,7 +638,7 @@ class PlanD2ReachDenialTests(unittest.TestCase):
                     'cecum was not reached', 'not reached at all',
                     'not reached despite position changes', 'owing to looping not reached', 'short of the cecum',
                     'stopped short of the cecum', 'unable to advance the scope', 'cecum: not reached',
-                    'could not be advanced beyond the transverse colon', 'unable to advance past the hepatic flexure',
+                    'could not be advanced beyond the transverse colon',
                     # the reason first, after it, or in its own segment
                     'due to poor prep not reached', 'poor prep so not reached', 'prep poor therefore not visualized',
                     'patient discomfort, so not reached', 'because of the prep, never reached',
@@ -677,6 +677,13 @@ class PlanD2ReachDenialTests(unittest.TestCase):
             with self.subTest(rest=rest, prose='rectum'):
                 text = report('Colonoscopy', COLON_PROSE, 'Extent: cecum; ' + rest)
                 self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('incomplete', 'incomplete: rectum'))
+        # gi3 extent (R5): "past the hepatic flexure" is a place, as its synonym "beyond the" always was: the scope reached
+        # the flexure and could not pass it, so the extent is the flexure, deeper than the prose's transverse colon (this
+        # item stood in REACH_DENIAL while "past" read as an earlier occasion and the flexure as never reached)
+        for rest in ('unable to advance past the hepatic flexure', 'unable to advance beyond the hepatic flexure'):
+            with self.subTest(rest=rest):
+                text = report('Colonoscopy', D_PROSE, 'Extent: cecum; ' + rest)
+                self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('incomplete', 'incomplete: hepatic flexure'))
         # a plain or positive rest is still read as the base reads it, "short of" with no landmark too
         for rest in ('photo documented.', 'no polyps', 'short of breath', 'TI not intubated'):
             with self.subTest(rest=rest):

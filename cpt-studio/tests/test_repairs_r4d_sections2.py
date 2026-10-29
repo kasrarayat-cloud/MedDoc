@@ -1080,7 +1080,10 @@ class S2R2Sections1BeyondACompleteLandmarkTests(unittest.TestCase):
                 ('Extent: terminal ileum; could not be advanced to the cecum', 'gi.colonoscopy', 'incomplete: rectum'),
                 ('Extent: cecum; not advanced beyond the hepatic flexure', 'gi.colonoscopy', 'incomplete: rectum'),
                 ('Extent: D2; not advanced beyond the stomach', 'gi.egd', 'incomplete: esophagus'),
-                ('Extent: D2; could not be advanced past the pylorus', 'gi.egd', 'incomplete: esophagus')):
+                # gi3 extent (R5): "past the pylorus" is a place, as "beyond the pylorus" is: the scope reached the
+                # pylorus (the stomach) and could not pass it ('incomplete: esophagus' read "past" as an earlier time)
+                ('Extent: D2; could not be advanced past the pylorus', 'gi.egd', 'incomplete: stomach'),
+                ('Extent: D2; could not be advanced beyond the pylorus', 'gi.egd', 'incomplete: stomach')):
             text = s1b_note(label) if slug == 'gi.colonoscopy' else s1b_egd(label)
             with self.subTest(label=label):
                 self.assertEqual(extent_status(text, slug)[1], extent)
