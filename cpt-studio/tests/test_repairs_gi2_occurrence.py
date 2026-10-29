@@ -31,6 +31,7 @@ from tests.test_repairs_7c8_context import DateAssertions
 from tests.test_repairs_7c8_context3 import (COLO_BODY, COLO_PLAIN, EGD_BODY, ELENA_DATE, HEAD, EndToEnd, date_fact,
                                              evidence_text)
 
+
 def shape(text):
     """A subtest's name: the text's first lines after the synthetic banner, blank lines skipped."""
     return ' / '.join(line for line in text.splitlines()[1:5] if line.strip())[:90]
