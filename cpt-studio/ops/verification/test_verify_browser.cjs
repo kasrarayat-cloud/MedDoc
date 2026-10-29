@@ -650,8 +650,10 @@ function heldEncounter(member = MEMBER) {
   const enc = encounter({ state: 'no_codes', provider_runs: [hold()],
     clarifications: [{ id: 'c-date', scope: 'encounter', fact: 'service_date', state: 'open', question: 'Which date?' }] });
   enc.context = { facts: {
+    // the note studio/gi/context.py merge_user_values writes for it (USER_CONFLICT_NOTE)
     service_date: { value: null, origin: 'conflict', member_conflict: true, evidence: [at('Date of procedure: 2026-10-07')],
-      note: `A member entered ${member}; the document states ${DOCUMENTED}.` },
+      note: `Encounter metadata entered by a workspace member gives ${member}; the document gives ${DOCUMENTED}. Both are `
+        + 'kept and neither is used until they agree: correct the metadata, clear it, or add an addendum to the document.' },
     setting: { value: 'office', origin: 'document', evidence: [], note: '', member_conflict: false } }, user_values: { service_date: member } };
   enc.assessment = { ...enc.assessment, id: 'asm-held', proposals: [] };
   enc.readiness = { draft: true, reviewed: false, blockers: [] };
@@ -963,4 +965,263 @@ test('the context step\'s selectors and the screen behaviour it relies on are th
   assert.equal(app.reviewView(busy, app.documentLayout(busy), 'codes', false).includes('data-action="edit-context"'), false);
   assert.ok(source.includes("toast('No context change to save.')"), 'the screen no longer refuses an identical save with that message');
   assert.ok(/\nasync function api\(path, \{ method = 'GET', json, form \} = \{\}\)/.test(source), 'the page\'s api() client changed');
+});
+
+// --- fix round gi2, agent 'truth' (refutation lens 'ops') ------------------------------------------------------------
+//
+// ops-1: clearing the member's date was judged against the server's OWN post-edit context, so a server that sent the
+// cleared member date (mutant A), no date (B) or a date the document never states (C) passed with no hard failure.
+// The date a clear must send is now named BEFORE the edit, from the encounter the walk saw: the document's own read
+// date, which the member conflict's note names and its evidence quotes (none where the document gives no usable date),
+// and the manifest's documented_date when it gives one; the edit is made only when that date is named.
+// ops-2: --encounter attached a paste document to an encounter whose original is an uploaded file, or whose text had
+// other line breaks (whitespace was collapsed); a paste document now attaches only to a pasted revision with no stored
+// original whose text has the document's lines (only trailing whitespace and line-ending style normalised).
+
+// studio/gi/context.py USER_CONFLICT_NOTE and USER_ELSEWHERE_NOTE, written out here so a wrong constant cannot pass.
+const CONFLICT_NOTE = (user, document) => `Encounter metadata entered by a workspace member gives ${user}; the document `
+  + `gives ${document}. Both are kept and neither is used until they agree: correct the metadata, clear it, or add an `
+  + 'addendum to the document.';
+const ELSEWHERE_NOTE = (user, document) => `Encounter metadata entered by a workspace member gives ${user}; this service `
+  + 'reads that date in the document as another occurrence\'s or another document\'s date, or as possibly one '
+  + `(${document}), and not as this encounter's date of service. Both are kept and neither is used: correct the metadata, `
+  + 'clear it, or add an addendum to the document.';
+// A date the gi-08 document never states, and the request for it: studio.providers.corti.build_coding_request (adapter
+// corti-coding-v2@cptstudio-1) over this module's TEXT - the same builder reproduces GI08_REQUEST's three hashes.
+const NEVER_STATED = '2026-10-09';
+const NEVER_STATED_REQUEST = '8552d6e0d7df0ae7d3361b1b6e8b6d1b41f7145e805795a2d1899d6355aef8d5';
+const CLEAR_POSTED = { ...EDIT_OK, posted: { service_date: '', setting: '', billing_context: '' } };
+const REQUESTS = { ...GI08_REQUEST, [NEVER_STATED]: NEVER_STATED_REQUEST };
+
+// The encounter once the member's date was cleared and the save's one request answered: the context states ``date``
+// (null: none) and the request was made for ``sent`` (default: the stated date).
+function clearedEncounter(before, { date = DOCUMENTED, origin = 'document', sent } = {}) {
+  const enc = editedEncounter(before, { date, origin, userValue: null });
+  enc.provider_runs[1].request_sha256 = REQUESTS[(sent === undefined ? date : sent) || 'none'];
+  return enc;
+}
+
+function withServiceDate(enc, changes) {
+  const out = clone(enc);
+  out.context.facts.service_date = { ...out.context.facts.service_date, ...changes };
+  return out;
+}
+
+const named = enc => (({ ok, date }) => ({ ok, date }))(vb.documentedServiceDate(enc));
+
+test('the member-conflict notes and the date forms the walk reads are the server\'s own (studio/gi/context.py)', () => {
+  const context = fs.readFileSync(path.join(ROOT, 'studio', 'gi', 'context.py'), 'utf8');
+  const note = /^USER_CONFLICT_NOTE = \(((?:\s*'[^']*')+)\)/m.exec(context);
+  assert.ok(note, 'USER_CONFLICT_NOTE not found in context.py');
+  assert.equal([...note[1].matchAll(/'([^']*)'/g)].map(m => m[1]).join(''), vb.USER_CONFLICT_NOTE);
+  assert.equal(vb.USER_CONFLICT_NOTE, CONFLICT_NOTE('{user}', '{document}'));
+  const elsewhere = /^USER_ELSEWHERE_NOTE = \(_USER_CONFLICT_PREFIX \+ ((?:\s*(?:'[^']*'|"[^"]*"))+)\)/m.exec(context);
+  assert.ok(elsewhere, 'USER_ELSEWHERE_NOTE not found in context.py');
+  const prefix = vb.USER_CONFLICT_NOTE.split('{', 1)[0];
+  assert.equal(prefix + [...elsewhere[1].matchAll(/'([^']*)'|"([^"]*)"/g)].map(m => m[1] ?? m[2]).join(''), vb.USER_ELSEWHERE_NOTE);
+  assert.equal(vb.USER_ELSEWHERE_NOTE, ELSEWHERE_NOTE('{user}', '{document}'));
+  // merge_user_values names the document's value itself only where the document gives one date of its own
+  assert.equal(context.split('USER_CONFLICT_NOTE.format(user=value, document=documented.value))').length - 1, 1);
+  assert.ok(context.includes("if documented is not None and documented.origin == 'document' and documented.value \\"));
+  // the four full-date forms a documented date of service is read in (_FULL_DATE), and their month names
+  for (const line of [
+    "_MONTH = (r'(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?'",
+    "          r'|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)')",
+    "_FULL_DATE = (r'(?P<iy>\\d{4})-(?P<im>\\d{2})-(?P<id>\\d{2})'",
+    "              r'|(?P<um>\\d{1,2})/(?P<ud>\\d{1,2})/(?P<uy>\\d{4})'",
+    "              r'|(?P<lm>' + _MONTH + r')\\.?[ \\t]+(?P<ld>\\d{1,2})(?:st|nd|rd|th)?,?[ \\t]+(?P<ly>\\d{4})'",
+    "              r'|(?P<dd>\\d{1,2})(?:st|nd|rd|th)?(?:[ \\t]+|-)(?P<dm>' + _MONTH + r')\\.?(?:,?[ \\t]+|-)(?P<dy>\\d{4})')",
+    "FULL_DATE = cues.rx(r'(?<![\\w/-])(?:' + _FULL_DATE + r')(?![\\w/-])')",
+  ]) assert.ok(context.includes(`\n${line}\n`), line);
+  const cues = fs.readFileSync(path.join(ROOT, 'studio', 'gi', 'cues.py'), 'utf8');
+  assert.ok(cues.includes('\nFLAGS = re.A | re.I\n'), 'cues.rx flags changed (ASCII \\w, case-insensitive)');
+});
+
+test('quotedDates reads the four full-date forms, as calendar dates, and nothing else', () => {
+  const read = text => [...vb.quotedDates(text)];
+  assert.deepEqual(read('Date of service: 2026-10-07'), ['2026-10-07']);
+  assert.deepEqual(read('DOS: 10/7/2026'), ['2026-10-07']);
+  assert.deepEqual(read('Procedure date: Oct. 7th, 2026'), ['2026-10-07']);
+  assert.deepEqual(read('Visit date: 7 October 2026'), ['2026-10-07']);
+  assert.deepEqual(read('Date of service: 07-OCT-2026'), ['2026-10-07']);
+  assert.deepEqual(read('DOS: 10/07/2026 and 2026-10-08'), ['2026-10-07', '2026-10-08']);
+  for (const text of ['Date: 2026-02-30', 'DOS: 10/07/26', 'DOS: 2026/10/07', 'Date: 13/01/2026', 'x2026-10-07', '2026-10-07a',
+    '1/2026-10-07', 'Date of service: Octember 7, 2026']) {
+    assert.deepEqual(read(text), [], text);
+  }
+});
+
+test('documentedServiceDate: the date clearing the member\'s leaves is named before the edit (ops-1)', () => {
+  const before = heldEncounter();
+  assert.deepEqual(named(before), { ok: true, date: DOCUMENTED });
+  assert.match(vb.documentedServiceDate(before).reason, /2026-10-07/);
+  // a document-internal conflict, a labelled date the reader cannot use, or one it reads as another occurrence's: the
+  // document gives no date a request carries, so clearing the member's leaves a request with no date
+  for (const note of [CONFLICT_NOTE(MEMBER, `${DOCUMENTED} or 2026-10-05`), CONFLICT_NOTE(MEMBER, '“Date of procedure: 2026-10-07”'),
+    ELSEWHERE_NOTE(MEMBER, '“Date of procedure: 2026-10-07”')]) {
+    assert.deepEqual(named(withServiceDate(before, { note })), { ok: true, date: null }, note);
+  }
+  // nothing a clear could be judged against: the walk names why and makes no edit
+  const unnamed = [
+    withServiceDate(before, { evidence: [at(BIOPSY)] }),  // the note's date is not quoted
+    withServiceDate(before, { evidence: [] }),
+    withServiceDate(before, { evidence: [{ ...at('Date of procedure: 2026-10-07'), start: 0, end: 29 }] }),  // inexact
+    withServiceDate(before, { note: CONFLICT_NOTE(MEMBER, MEMBER) }),  // the member's own date
+    withServiceDate(before, { note: CONFLICT_NOTE('2026-10-30', DOCUMENTED) }),  // another member value than stored
+    withServiceDate(before, { note: `A member entered ${MEMBER}; the document states ${DOCUMENTED}.` }),  // unrecognised
+    withServiceDate(before, { origin: 'document', value: DOCUMENTED, member_conflict: false, note: '' }),  // no conflict
+  ];
+  for (const enc of unnamed) assert.deepEqual(named(enc), { ok: false, date: null }, JSON.stringify(enc.context.facts.service_date));
+  // the manifest's documented_date must be the date named before the edit
+  assert.deepEqual(named(before), { ok: true, date: DOCUMENTED });
+  assert.equal(vb.documentedServiceDate(before, { documented_date: DOCUMENTED }).ok, true);
+  assert.equal(vb.documentedServiceDate(before, { documented_date: NEVER_STATED }).ok, false);
+  assert.equal(vb.documentedServiceDate(withServiceDate(before, { note: CONFLICT_NOTE(MEMBER, '“DOS: 2026-10-07”') }), { documented_date: DOCUMENTED }).ok, false);
+});
+
+test('checkContextEdit: a cleared member date must send the date named before the edit, so mutants A, B and C fail (ops-1)', () => {
+  const before = heldEncounter();
+  const judge = after => hardFailures(vb.checkContextEdit(before, after, clone(after), CLEAR_PLAN, CLEAR_POSTED, MEMBER));
+  const control = clearedEncounter(before);
+  const results = vb.checkContextEdit(before, control, clone(control), CLEAR_PLAN, CLEAR_POSTED, MEMBER);
+  assert.deepEqual(hardFailures(results), []);
+  assert.deepEqual(results.filter(r => r.severity === 'hard').map(r => r.id), ['context_edit.held_before', 'context_edit.nothing_sent_before',
+    'context_edit.documented_date', 'context_edit.request', 'context_edit.date_after', 'context_edit.one_request',
+    'context_edit.sent_at_most_once', 'context_edit.hold_kept', 'context_edit.identical_save']);
+  assert.match(results.find(r => r.id === 'context_edit.one_request').reason, /2026-10-07/);
+  const wrong = ['context_edit.date_after', 'context_edit.one_request', 'context_edit.sent_at_most_once'];
+  // A: the cleared member date is stated as the document's and sent
+  assert.deepEqual(judge(clearedEncounter(before, { date: MEMBER })), wrong);
+  // A2: the cleared member date stays the context's date (origin user) and is sent
+  assert.deepEqual(judge(clearedEncounter(before, { date: MEMBER, origin: 'user' })), wrong);
+  // B: no date is stated and the request is sent without one
+  assert.deepEqual(judge(clearedEncounter(before, { date: null })), wrong);
+  // C: a date the document never states is stated and sent
+  assert.deepEqual(judge(clearedEncounter(before, { date: NEVER_STATED })), wrong);
+  const result = vb.checkContextEdit(before, clearedEncounter(before, { date: NEVER_STATED }), null, CLEAR_PLAN, CLEAR_POSTED, MEMBER);
+  assert.match(result.find(r => r.id === 'context_edit.one_request').reason, /2026-10-09, not the one for 2026-10-07/);
+  // D (control): the context states the documented date, the request carries the member's
+  assert.deepEqual(judge(clearedEncounter(before, { sent: MEMBER })), ['context_edit.one_request', 'context_edit.sent_at_most_once']);
+});
+
+test('checkContextEdit: where the document gives no date a request carries, a clear must send none (ops-1)', () => {
+  const before = withServiceDate(heldEncounter(), { note: CONFLICT_NOTE(MEMBER, '“Date of procedure: 2026-10-07”') });
+  const judge = after => hardFailures(vb.checkContextEdit(before, after, clone(after), CLEAR_PLAN, CLEAR_POSTED, MEMBER));
+  assert.deepEqual(judge(clearedEncounter(before, { date: null })), []);
+  assert.deepEqual(judge(clearedEncounter(before, { date: MEMBER })), ['context_edit.date_after', 'context_edit.one_request', 'context_edit.sent_at_most_once']);
+  assert.deepEqual(judge(clearedEncounter(before)), ['context_edit.date_after', 'context_edit.one_request', 'context_edit.sent_at_most_once']);
+});
+
+test('the clear is made only on a date named before the edit, and the manifest\'s documented_date must be it (ops-1)', () => {
+  const before = heldEncounter();
+  const pre = (enc, plan) => vb.contextEditPreconditions(enc, MEMBER, plan).filter(r => r.status === 'fail').map(r => r.id);
+  assert.deepEqual(pre(before, CLEAR_PLAN), []);
+  assert.deepEqual(pre(before, { ...CLEAR_PLAN, documented_date: DOCUMENTED }), []);
+  assert.deepEqual(pre(before, { ...CLEAR_PLAN, documented_date: NEVER_STATED }), ['context_edit.documented_date']);
+  assert.deepEqual(pre(withServiceDate(before, { evidence: [at(BIOPSY)] }), CLEAR_PLAN), ['context_edit.documented_date']);
+  // an edited date names its own date: nothing is added to that plan's preconditions
+  assert.deepEqual(vb.contextEditPreconditions(before, MEMBER, SERVICE_DATE_PLAN).map(r => r.id), ['context_edit.held_before', 'context_edit.nothing_sent_before']);
+  assert.deepEqual(vb.contextEditPreconditions(before, MEMBER).map(r => r.id), ['context_edit.held_before', 'context_edit.nothing_sent_before']);
+  // judged without the date named, nothing after the save passes for it
+  const unnamed = withServiceDate(before, { evidence: [at(BIOPSY)] });
+  const control = clearedEncounter(unnamed);
+  assert.ok(hardFailures(vb.checkContextEdit(unnamed, control, clone(control), CLEAR_PLAN, CLEAR_POSTED, MEMBER)).includes('context_edit.documented_date'));
+  // the manifest names it, and the plan carries it
+  assert.deepEqual(vb.contextEditPlan({ review_plan: { context_edit: { clear_member_date: true, documented_date: DOCUMENTED } } }),
+    { clear_member_date: true, service_date: '', documented_date: DOCUMENTED });
+  assert.deepEqual(vb.contextEditPlan({ review_plan: { context_edit: { clear_member_date: true } } }),
+    { clear_member_date: true, service_date: '', documented_date: null });
+  const notes = { approve: 'Agent-executed synthetic verification review' };
+  const doc = edit => ({ id: 'h', upload: { service_date: MEMBER }, review_plan: { context_edit: edit } });
+  assert.deepEqual(vb.planProblems(doc({ clear_member_date: true, documented_date: DOCUMENTED }), notes), []);
+  for (const edit of [{ service_date: DOCUMENTED, documented_date: DOCUMENTED }, { documented_date: DOCUMENTED },
+    { clear_member_date: true, documented_date: '10/07/2026' }, { clear_member_date: true, documented_date: null },
+    { clear_member_date: true, documented_date: MEMBER }]) {
+    assert.equal(vb.planProblems(doc(edit), notes).length, 1, JSON.stringify(edit));
+  }
+});
+
+// The encounter() fixture is an UPLOAD (stored original gi-08.docx, 'a' x 64, 100 bytes); a pasted one has none.
+function pastedEncounter(text = TEXT) {
+  const enc = encounter();
+  enc.revision = { ...enc.revision, kind: 'paste', source_file: null, text, text_sha256: sha(text),
+    extraction: { ...enc.revision.extraction, method: 'paste' } };
+  return enc;
+}
+
+function pasteItem(sourceText) {
+  return { doc: { source: 'documents/gi-08-flexible-sigmoidoscopy-biopsy.txt', delivery: { file: 'gi-08.paste.txt' } }, sourceText,
+    delivery: { format: 'paste', file: 'gi-08.paste.txt', sha256: sha(sourceText), size: Buffer.byteLength(sourceText) } };
+}
+
+function fileItem(sha256, size, sourceText = TEXT) {
+  return { doc: { source: 'documents/gi-08-flexible-sigmoidoscopy-biopsy.txt', delivery: { file: 'gi-08.docx' } }, sourceText,
+    delivery: { format: 'docx', file: 'gi-08.docx', sha256, size } };
+}
+
+test('attachedProblems: a paste document attaches only to a pasted revision with no stored original (ops-2 (1), (2))', () => {
+  const uploaded = encounter();
+  // (1) the same text delivered as a paste, on an encounter whose original is an uploaded file
+  const same = vb.attachedProblems(uploaded, pasteItem(TEXT));
+  assert.equal(same.length, 1, JSON.stringify(same));
+  assert.match(same[0], /stored original/);
+  // (2) the same, with its lines joined into one
+  const joined = TEXT.replace(/\n/g, ' ');
+  assert.equal(vb.attachedProblems(uploaded, pasteItem(joined)).length, 2);
+  // the walk's own extraction checks fail on exactly what the gate now refuses before anything is done
+  assert.deepEqual(failures(vb.checkExtraction({ text_matches_source: 'exact' }, uploaded, pasteItem(TEXT).delivery, TEXT)), ['revision.source']);
+  assert.deepEqual(failures(vb.checkExtraction({ text_matches_source: 'exact' }, pastedEncounter(), pasteItem(joined).delivery, joined)), ['revision.text_equals_source']);
+});
+
+test('attachedProblems: a paste document\'s text keeps its lines; only trailing whitespace and line endings are normalised (ops-2 (2))', () => {
+  const pasted = pastedEncounter();
+  assert.deepEqual(vb.attachedProblems(pasted, pasteItem(TEXT)), []);
+  assert.deepEqual(vb.attachedProblems(pasted, pasteItem(TEXT.replace(/\n/g, '\r\n'))), []);
+  assert.deepEqual(vb.attachedProblems(pasted, pasteItem(TEXT.replace(/\n/g, '\r'))), []);
+  assert.deepEqual(vb.attachedProblems(pasted, pasteItem(`${TEXT.trimEnd()}\n\n \t`)), []);
+  assert.deepEqual(vb.attachedProblems(pastedEncounter(`${TEXT.trimEnd()}  `), pasteItem(TEXT)), []);
+  for (const other of [
+    TEXT.replace(/\n/g, ' '),  // every line joined
+    TEXT.replace('\nDate of procedure: 2026-10-07', ' Date of procedure: 2026-10-07'),  // one line joined to the last
+    TEXT.replace('Date of procedure: 2026-10-07', 'Date of procedure:\n2026-10-07'),  // a field's value moved to a line of its own
+    TEXT.replace('Date of procedure: 2026-10-07', 'Date of procedure:   2026-10-07'),  // a field break the reader reads
+    TEXT.replace('Date of procedure: 2026-10-07', 'Date of procedure: 2026-10-07  '),  // spaces ending a line, not the text
+    ` ${TEXT}`,
+  ]) {
+    const problems = vb.attachedProblems(pasted, pasteItem(other));
+    assert.equal(problems.length, 1, JSON.stringify(other.slice(0, 80)));
+    assert.match(problems[0], /text is not the text of/);
+  }
+});
+
+test('attachedProblems controls: another date and another file are refused; an uploaded original is matched by its bytes (ops-2 (3), (4))', () => {
+  // (3) a paste with one date changed
+  const otherDate = TEXT.replace('2026-10-07', '2026-10-06');
+  assert.equal(vb.attachedProblems(pastedEncounter(), pasteItem(otherDate)).length, 1);
+  assert.equal(vb.attachedProblems(encounter(), pasteItem(otherDate)).length, 2);
+  // (4) a file document with other bytes; the same bytes attach
+  assert.match(vb.attachedProblems(encounter(), fileItem('b'.repeat(64), 100))[0], /stored original/);
+  assert.equal(vb.attachedProblems(encounter(), fileItem('a'.repeat(64), 101)).length, 1);
+  assert.deepEqual(vb.attachedProblems(encounter(), fileItem('a'.repeat(64), 100)), []);
+  // an uploaded document is identified by its stored original's bytes; its extracted text may space lines otherwise
+  const extracted = encounter();
+  extracted.revision.text = TEXT.replace(/\n/g, '\n\n');
+  assert.deepEqual(vb.attachedProblems(extracted, fileItem('a'.repeat(64), 100)), []);
+  const addendum = encounter();
+  addendum.revision.text = `${TEXT}\nAddendum: signed later (fictional).`;
+  assert.equal(vb.attachedProblems(addendum, fileItem('a'.repeat(64), 100)).length, 1);
+  // a file document never attaches to a pasted encounter
+  assert.match(vb.attachedProblems(pastedEncounter(), fileItem('a'.repeat(64), 100))[0], /stored original/);
+});
+
+test('verifyDocument refuses an attached encounter the gate rejects before it edits, asks or decides anything (ops-2)', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'verify_browser.cjs'), 'utf8');
+  const body = source.slice(source.indexOf('async function verifyDocument('));
+  const refusal = body.indexOf('if (foreign.length) throw new Error(`refusing to act on encounter');
+  assert.ok(refusal > 0, 'the attach refusal is not in verifyDocument');
+  assert.ok(body.indexOf('const foreign = record.attached ? attachedProblems(enc, item) : [];') < refusal);
+  for (const act of ['await editContext(', 'await askSecondReview(', 'await decide(']) {
+    const at = body.indexOf(act);
+    assert.ok(at > refusal, `${act} comes before the attach refusal`);
+  }
 });

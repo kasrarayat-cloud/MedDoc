@@ -10,7 +10,9 @@
  *     [--encounter ENCOUNTER_ID] [--no-auto-approve]
  *
  * --encounter attaches to an EXISTING encounter instead of uploading (with exactly one --only id): nothing is uploaded,
- * and nothing is done to it until its revision text and stored original are shown to be that manifest document's.
+ * and nothing is done to it until it is shown to be that manifest document's - an uploaded document by its stored
+ * original, byte for byte, and its text; a pasted one by a pasted revision with no stored original whose text has the
+ * document's lines (only trailing whitespace and line-ending style may differ).
  *
  * --no-auto-approve: nothing is approved except the codes a document's review_plan.approve_codes names (a labelled
  * synthetic review that mirrors a human reading). An approve_codes list is honoured without the option too; the option
@@ -19,12 +21,15 @@
  * approved, and every decision made is checked to carry the agent label and its labelled note.
  *
  * A manifest upload.service_date is entered in the upload dialog as the member's date, and checked to be stored. A
- * review_plan.context_edit, {"service_date": "YYYY-MM-DD"} or {"clear_member_date": true}, settles the member date
- * conflict that date makes, through the screen's own context form, once processing is done: nothing may have been
- * sent while the conflict held (a not-sent hold run records it); the save sends exactly one request, for the edited
- * date (for a cleared date: the documented one), proven by its request hash; the hold run stays as it was; and the same
- * save made again - the form refuses it, so it is sent as a stale page or a repeated request sends it, through the
- * page's own api() client - sends nothing. The coding checks are then judged on the encounter after the edit.
+ * review_plan.context_edit, {"service_date": "YYYY-MM-DD"} or {"clear_member_date": true} (optionally with
+ * "documented_date": "YYYY-MM-DD"), settles the member date conflict that date makes, through the screen's own context
+ * form, once processing is done: nothing may have been sent while the conflict held (a not-sent hold run records it);
+ * the save sends exactly one request, for the edited date - for a cleared date, the date named BEFORE the edit: the
+ * document's own read date that the member conflict's note names and its evidence quotes from the revision text (none,
+ * where the document gives no date of its own a request carries), which documented_date, when given, must be; no edit
+ * is made when that date cannot be named - proven by its request hash; the hold run stays as it was; and the same save
+ * made again - the form refuses it, so it is sent as a stale page or a repeated request sends it, through the page's own
+ * api() client - sends nothing. The coding checks are then judged on the encounter after the edit.
  *
  * A document whose manifest review_plan carries "second_review": {"ask": true, "approve_codes": [...]} has the bounded
  * second review asked for once, through the screen's own button, when the encounter offers it (ARCHITECTURE 5.11):
@@ -87,8 +92,27 @@ const MEMBER_DATE_HOLD_MESSAGE = 'Nothing was sent: the service date entered as 
 // canonical_body: a primary run's request_sha256 is the hash of this body for the revision text and its date. Recomputed
 // here it proves which date a request carried; the unit tests hold the shape to the source.
 const PROVIDER_SYSTEMS = ['icd10cm-outpatient', 'cpt'];
-const CONTEXT_EDIT_KEYS = new Set(['service_date', 'clear_member_date']);
+const CONTEXT_EDIT_KEYS = new Set(['service_date', 'clear_member_date', 'documented_date']);
 const IDENTICAL_REFUSAL = 'No context change to save.';  // app.js submitContext, for a save that changes nothing
+// studio/gi/context.py USER_CONFLICT_NOTE and USER_ELSEWHERE_NOTE: the notes merge_user_values writes on a member's date
+// held against the document's. {document} is the document's own read date - an ISO date - only where the document gives
+// one date of its own (documented.value); a document-internal conflict lists its dates joined by " or ", and a labelled
+// date the reader cannot use, or reads as another occurrence's, is quoted. The unit tests hold both to the source.
+const USER_CONFLICT_NOTE = 'Encounter metadata entered by a workspace member gives {user}; the document gives {document}. '
+  + 'Both are kept and neither is used until they agree: correct the metadata, clear it, or add an addendum to the document.';
+const USER_ELSEWHERE_NOTE = 'Encounter metadata entered by a workspace member gives {user}; this service reads that date in '
+  + 'the document as another occurrence\'s or another document\'s date, or as possibly one ({document}), and not as this '
+  + 'encounter\'s date of service. Both are kept and neither is used: correct the metadata, clear it, or add an addendum to '
+  + 'the document.';
+// studio/gi/context.py FULL_DATE (cues.rx: ASCII \w, case-insensitive): the four forms a documented date of service is
+// read in - ISO, M/D/YYYY, "Month D, YYYY" and "D Month YYYY" - a closed grammar, mirrored so the walk reads the date a
+// quoted passage states itself; the unit tests hold it to the source.
+const MONTH_NAME = '(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?'
+  + '|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+const FULL_DATE = new RegExp('(?<![\\w/-])(?:(\\d{4})-(\\d{2})-(\\d{2})|(\\d{1,2})/(\\d{1,2})/(\\d{4})'
+  + `|(${MONTH_NAME})\\.?[ \\t]+(\\d{1,2})(?:st|nd|rd|th)?,?[ \\t]+(\\d{4})`
+  + `|(\\d{1,2})(?:st|nd|rd|th)?(?:[ \\t]+|-)(${MONTH_NAME})\\.?(?:,?[ \\t]+|-)(\\d{4}))(?![\\w/-])`, 'gi');
+const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
 // --- small pure helpers ----------------------------------------------------------------
 
@@ -156,6 +180,18 @@ function stripSpace(text) {
 
 function collapse(text) {
   return String(text).replace(/\s+/g, ' ').trim();
+}
+
+// A text as its lines read: only line-ending style (studio/ingest/text.py canonicalize turns CRLF and CR into LF) and
+// trailing whitespace (as the walk's exact source check) are not differences. Line breaks and spacing are kept: the
+// reader reads sections, labels and fields by them.
+function lineText(text) {
+  return String(text ?? '').replace(/\r\n?/g, '\n').replace(/\s+$/, '');
+}
+
+// A pasted revision: text a member pasted, with no stored original.
+function isPastedRevision(rev) {
+  return rev?.kind === 'paste' && !rev.source_file;
 }
 
 function safeName(name) {
@@ -268,7 +304,7 @@ function checkExtraction(expected, enc, delivery, sourceText) {
       'canonical text equals the source once whitespace is collapsed'));
   }
   if (delivery.format === 'paste') {
-    out.push(check('revision.source', 'hard', rev.kind === 'paste' && !rev.source_file, `kind ${rev.kind}, source_file ${JSON.stringify(rev.source_file)}`));
+    out.push(check('revision.source', 'hard', isPastedRevision(rev), `kind ${rev.kind}, source_file ${JSON.stringify(rev.source_file)}`));
   } else {
     const file = rev.source_file || {};
     out.push(check('revision.source', 'hard', file.sha256 === delivery.sha256 && file.size === delivery.size,
@@ -518,13 +554,19 @@ function planProblems(doc, notes = {}) {
   if (plan.context_edit !== undefined && plan.context_edit !== null) {
     const edit = plan.context_edit;
     const keys = edit && typeof edit === 'object' && !Array.isArray(edit) ? Object.keys(edit) : null;
+    const acts = (keys || []).filter(key => key !== 'documented_date');
+    const declared = Boolean(keys) && keys.includes('documented_date');
     const where = `${id}: review_plan.context_edit`;
     if (!keys) problems.push(`${where} must be an object`);
     else if (keys.some(key => !CONTEXT_EDIT_KEYS.has(key))) problems.push(`${where} has an unknown key: ${keys.filter(key => !CONTEXT_EDIT_KEYS.has(key)).join(', ')}`);
-    else if (keys.length !== 1) problems.push(`${where} must give exactly one of service_date or clear_member_date`);
-    else if (keys[0] === 'clear_member_date' && edit.clear_member_date !== true) problems.push(`${where}.clear_member_date must be true`);
-    else if (keys[0] === 'service_date' && !isoDate(edit.service_date)) problems.push(`${where}.service_date ${JSON.stringify(edit.service_date)} is not a YYYY-MM-DD date`);
-    else if (keys[0] === 'service_date' && edit.service_date === upload) problems.push(`${where}.service_date is the date entered at upload: there is no change to save`);
+    else if (acts.length !== 1) problems.push(`${where} must give exactly one of service_date or clear_member_date`);
+    else if (acts[0] === 'clear_member_date' && edit.clear_member_date !== true) problems.push(`${where}.clear_member_date must be true`);
+    else if (acts[0] === 'service_date' && !isoDate(edit.service_date)) problems.push(`${where}.service_date ${JSON.stringify(edit.service_date)} is not a YYYY-MM-DD date`);
+    else if (acts[0] === 'service_date' && edit.service_date === upload) problems.push(`${where}.service_date is the date entered at upload: there is no change to save`);
+    // the date the document states, which clearing the member's must send: only with clear_member_date
+    else if (declared && acts[0] !== 'clear_member_date') problems.push(`${where}.documented_date names the date a cleared member date leaves, so it goes only with clear_member_date`);
+    else if (declared && !isoDate(edit.documented_date)) problems.push(`${where}.documented_date ${JSON.stringify(edit.documented_date)} is not a YYYY-MM-DD date`);
+    else if (declared && edit.documented_date === upload) problems.push(`${where}.documented_date is the member's date entered at upload: clearing it leaves no conflict settled`);
     else if (!uploadSet) problems.push(`${where} settles a member date conflict, so upload.service_date must give the member's date`);
   }
   if (plan.approve_codes !== undefined) {
@@ -602,7 +644,8 @@ function checkSecondReview(before, after, ask) {
 function contextEditPlan(doc) {
   const plan = doc?.review_plan?.context_edit;
   if (plan === undefined || plan === null) return null;
-  return plan.clear_member_date === true ? { clear_member_date: true, service_date: '' }
+  return plan.clear_member_date === true
+    ? { clear_member_date: true, service_date: '', documented_date: isoDate(plan.documented_date) ? plan.documented_date : null }
     : { clear_member_date: false, service_date: plan.service_date };
 }
 
@@ -615,6 +658,67 @@ function isMemberDateHold(run) {
 function contextRequestDate(enc) {
   const fact = enc?.context?.facts?.service_date || {};
   return ['document', 'user'].includes(fact.origin) && isoDate(String(fact.value ?? '')) ? String(fact.value) : null;
+}
+
+// The calendar dates a passage states in the four forms (ISO strings), as the server's date_from_match reads them.
+function quotedDates(text) {
+  const dates = new Set();
+  for (const m of String(text ?? '').matchAll(FULL_DATE)) {
+    const month = name => MONTH_KEYS.indexOf(name.slice(0, 3).toLowerCase()) + 1;
+    const [year, mon, day] = m[1] ? [m[1], m[2], m[3]] : m[6] ? [m[6], m[4], m[5]]
+      : m[9] ? [m[9], month(m[7]), m[8]] : [m[12], month(m[11]), m[10]];
+    const iso = `${year}-${String(Number(mon)).padStart(2, '0')}-${String(Number(day)).padStart(2, '0')}`;
+    if (isoDate(iso)) dates.add(iso);
+  }
+  return dates;
+}
+
+// The {user} and {document} of a note written from ``template``, or null when it is not.
+function noteParts(template, note) {
+  const [head, rest] = template.split('{user}');
+  const [middle, tail] = rest.split('{document}');
+  const text = String(note ?? '');
+  if (text.length < head.length + middle.length + tail.length || !text.startsWith(head) || !text.endsWith(tail)) return null;
+  const body = text.slice(head.length, text.length - tail.length);
+  const at = body.indexOf(middle);
+  return at < 0 ? null : { user: body.slice(0, at), document: body.slice(at + middle.length) };
+}
+
+// The date a request must carry once the member's date is cleared, named from the encounter BEFORE the edit - never from
+// the server's state after it, which is what the edit's checks judge (fix round gi2, ops-1: a server that sent the cleared
+// member date, no date, or a date the document never states passed, judged by its own post-edit context). The member
+// conflict's note says what the document gives (USER_CONFLICT_NOTE): its own read date where it gives one, which a
+// passage its evidence quotes - exactly as the revision text has it - must state; else no date a request carries (a
+// document-internal conflict, or a labelled date the reader cannot use or reads as another occurrence's: the request
+// goes without one, and the date is asked). The manifest's documented_date, when given, must be that date.
+// {ok, date, reason}: ok false when no date can be named, and the walk then makes no edit (contextEditPreconditions).
+function documentedServiceDate(enc, plan = null) {
+  const fact = enc?.context?.facts?.service_date || {};
+  const member = enc?.context?.user_values?.service_date ?? null;
+  const declared = plan?.documented_date ?? null;
+  const refuse = reason => ({ ok: false, date: null, reason: `no date named before the edit: ${reason}` });
+  if (fact.origin !== 'conflict' || fact.member_conflict !== true) {
+    return refuse(`the service date is ${fact.origin || 'not reported'}, not a member's date held against the document's`);
+  }
+  const conflict = noteParts(USER_CONFLICT_NOTE, fact.note);
+  const parts = conflict || noteParts(USER_ELSEWHERE_NOTE, fact.note);
+  if (!parts) return refuse(`its note is not one the walk reads (${JSON.stringify(String(fact.note ?? '').slice(0, 120))})`);
+  if (parts.user !== member) return refuse(`its note holds the member's ${parts.user}, but the member's stored date is ${JSON.stringify(member)}`);
+  let date = null;
+  const excerpt = text => (text.length > 60 ? `${text.slice(0, 59)}…` : text);
+  let said = `the document gives no date of its own a request carries (${conflict ? 'it gives' : 'it reads that date as another occurrence\'s'}: ${excerpt(parts.document)})`;
+  if (conflict && isoDate(parts.document)) {
+    date = parts.document;
+    const points = Array.from(String(enc?.revision?.text ?? ''));
+    const quoting = (Array.isArray(fact.evidence) ? fact.evidence : []).filter(span => span && typeof span.text === 'string'
+      && cpSlice(points, span.start, span.end) === span.text && quotedDates(span.text).has(date));
+    if (!quoting.length) return refuse(`its note says the document gives ${date}, but no passage its evidence quotes from the revision text states it`);
+    if (date === member) return refuse(`its note says the document gives the member's own ${date}`);
+    said = `the document gives ${date} (quoted: ${JSON.stringify(excerpt(quoting[0].text))})`;
+  }
+  if (declared !== null && declared !== date) return refuse(`${said}, not the manifest's documented_date ${declared}`);
+  return { ok: true, date, reason: `before the edit ${said}${declared ? ', as the manifest\'s documented_date says' : ''}; `
+    + `clearing the member's ${member} must send ${date ? `a request for ${date}` : 'a request with no date'}` };
 }
 
 function describeRun(run) {
@@ -641,8 +745,9 @@ function checkUploadDate(uploadDate, enc) {
 }
 
 // What the edit settles, before it is made: the member's date is held as a conflict with the documented one, a not-sent
-// hold run records it, and nothing was built, reused or sent. The walk saves nothing unless both hold.
-function contextEditPreconditions(before, uploadDate) {
+// hold run records it, nothing was built, reused or sent, and - for a clear - the date it must then send is named
+// (documentedServiceDate). The walk saves nothing unless every one holds.
+function contextEditPreconditions(before, uploadDate, plan = null) {
   const fact = before?.context?.facts?.service_date || {};
   const member = before?.context?.user_values?.service_date ?? null;
   const earlier = before?.provider_runs || [];
@@ -650,13 +755,18 @@ function contextEditPreconditions(before, uploadDate) {
   const conflict = fact.origin === 'conflict' && fact.member_conflict === true;
   const sameMember = !uploadDate || member === uploadDate;
   const built = earlier.filter(run => run.request_sha256 || run.reused_from || sentRun(run));
-  return [
+  const out = [
     check('context_edit.held_before', 'hard', conflict && holds.length > 0 && sameMember,
       `service date ${fact.origin}${conflict ? ' (the member value differs from the documented one)' : ''}; member value `
         + `${JSON.stringify(member)}${uploadDate ? ` (entered at upload: ${uploadDate})` : ''}; ${holds.length} not-sent hold run(s)`),
     check('context_edit.nothing_sent_before', 'hard', built.length === 0, built.length
       ? `while the conflict held: ${built.map(describeRun).join(', ')}` : `${earlier.length} run(s), none sent, built or reused`),
   ];
+  if (plan?.clear_member_date) {
+    const named = documentedServiceDate(before, plan);
+    out.push(check('context_edit.documented_date', 'hard', named.ok, named.reason));
+  }
+  return out;
 }
 
 // before: the encounter once processing finished (the member conflict held); after: once the edit's processing settled;
@@ -665,40 +775,44 @@ function checkContextEdit(before, after, settled, plan, edit, uploadDate) {
   const member = before?.context?.user_values?.service_date ?? null;
   const earlier = before?.provider_runs || [];
   const holds = earlier.filter(isMemberDateHold);
-  const out = contextEditPreconditions(before, uploadDate);
+  const out = contextEditPreconditions(before, uploadDate, plan);
   out.push(check('context_edit.request', 'hard', edit?.http_status === 201,
     `POST context answered HTTP ${edit?.http_status ?? 'none'}${edit?.error ? `: ${edit.error}` : ''}; the form sent ${JSON.stringify(edit?.posted ?? null)}`));
   if (edit?.http_status !== 201 || !after) return out;
 
+  // The edited date, or for a cleared member date the date named BEFORE the edit (documentedServiceDate) - never the
+  // date the server states after it, which is what these checks judge (fix round gi2, ops-1). Nothing named, nothing
+  // passes for it.
+  const named = plan.clear_member_date ? documentedServiceDate(before, plan) : { ok: true, date: plan.service_date };
+  const wanted = named.date;
+  const wantedLabel = named.ok ? wanted || 'no date' : 'a date named before the edit (none was)';
   const factAfter = after.context?.facts?.service_date || {};
   const value = after.context?.user_values?.service_date ?? null;
   const stated = contextRequestDate(after);
-  const dateOk = factAfter.member_conflict !== true && (plan.clear_member_date ? !value
-    : value === plan.service_date && stated === plan.service_date);
+  const dateOk = factAfter.member_conflict !== true && named.ok && stated === wanted
+    && (plan.clear_member_date ? !value : value === plan.service_date);
   out.push(check('context_edit.date_after', 'hard', dateOk,
     `member value ${JSON.stringify(value)}; service date ${JSON.stringify(factAfter.value ?? null)} (${factAfter.origin})`
       + `${factAfter.member_conflict === true ? ', still a member conflict' : ''}; a request for this context carries ${stated || 'no date'}`
-      + (plan.clear_member_date ? ' (the member date was cleared)' : ` (edited to ${plan.service_date})`)));
+      + (plan.clear_member_date ? ` (the member date was cleared; it must carry ${wantedLabel})` : ` (edited to ${plan.service_date})`)));
 
-  // The edited date, or for a cleared member date the date the context now states (the documented one).
-  const wanted = plan.clear_member_date ? stated : plan.service_date;
   const text = after.revision?.text || '';
-  const want = primaryRequestSha256(text, wanted);
+  const want = named.ok ? primaryRequestSha256(text, wanted) : null;
   const seen = new Set(earlier.map(run => run.id));
   const fresh = (after.provider_runs || []).filter(run => !seen.has(run.id));
   const heldAgain = fresh.filter(isMemberDateHold);
   const others = fresh.filter(run => !isMemberDateHold(run));
   const one = others.length === 1 ? others[0] : null;
   const answered = Boolean(one) && (sentRun(one) || (one.state === 'succeeded' && Boolean(one.reused_from)));
-  const carries = Boolean(one) && one.request_sha256 === want;
+  const carries = Boolean(one) && want !== null && one.request_sha256 === want;
   out.push(check('context_edit.one_request', 'hard', heldAgain.length === 0 && Boolean(one) && one.purpose === 'primary' && answered && carries,
     `${fresh.length} new run(s): ${fresh.map(describeRun).join(', ') || 'none'}`
       + (one ? `; ${one.reused_from ? 'a retained answer was reused (nothing sent)' : sentRun(one) ? 'one request sent' : 'no request sent'}; `
-        + `its request is ${carries ? `the request for the revision text and ${wanted || 'no date'}`
-          : `${requestDateOf(one, text, [wanted, uploadDate || null, member, null])}, not the one for ${wanted || 'no date'}`}` : '')));
+        + `its request is ${carries ? `the request for the revision text and ${wantedLabel}`
+          : `${requestDateOf(one, text, [wanted, stated, uploadDate || null, member, null])}, not the one for ${wantedLabel}`}` : '')));
   const sent = fresh.filter(sentRun);
-  out.push(check('context_edit.sent_at_most_once', 'hard', sent.length <= 1 && sent.every(run => run.request_sha256 === want),
-    `${sent.length} new request(s) sent${sent.length ? `: ${sent.map(run => `${describeRun(run)} ${run.request_sha256 === want ? 'for' : 'NOT for'} ${wanted || 'no date'}`).join(', ')}` : ''}`));
+  out.push(check('context_edit.sent_at_most_once', 'hard', sent.length <= 1 && sent.every(run => want !== null && run.request_sha256 === want),
+    `${sent.length} new request(s) sent${sent.length ? `: ${sent.map(run => `${describeRun(run)} ${want !== null && run.request_sha256 === want ? 'for' : 'NOT for'} ${wantedLabel}`).join(', ')}` : ''}`));
   const kept = new Map((after.provider_runs || []).map(run => [run.id, run]));
   const changed = earlier.filter(run => !kept.has(run.id) || runRecord(kept.get(run.id)) !== runRecord(run));
   out.push(check('context_edit.hold_kept', 'hard', changed.length === 0, changed.length
@@ -732,15 +846,29 @@ function checkContextEdit(before, after, settled, plan, edit, uploadDate) {
   return out;
 }
 
-// Before anything is done to an attached encounter: it must be this manifest document's (stored original and text).
+// Before anything is done to an attached encounter: it must be this manifest document's. An uploaded document is its
+// stored original, byte for byte, and its text (whitespace aside: an extraction may space lines otherwise). A paste has
+// no stored original, so its text alone identifies it: a pasted revision with no stored original - as the walk's own
+// revision.source check demands - whose text has the document's lines, only trailing whitespace and line-ending style
+// aside (fix round gi2, ops-2: a paste document attached to an uploaded file's encounter, and to text whose line breaks
+// differ, which changes how the reader reads sections, labels and fields; the walk then decided codes there).
 function attachedProblems(enc, item) {
   const problems = [];
   const rev = enc?.revision || {};
-  if (item.delivery.format !== 'paste') {
-    const file = rev.source_file || {};
-    if (file.sha256 !== item.delivery.sha256 || file.size !== item.delivery.size) {
-      problems.push(`its stored original ${file.sha256} (${file.size} bytes) is not ${item.doc.delivery.file} (${item.delivery.sha256}, ${item.delivery.size} bytes)`);
+  if (item.delivery.format === 'paste') {
+    if (!isPastedRevision(rev)) {
+      const file = rev.source_file;
+      problems.push(`its revision ${rev.number} is ${rev.kind}${file ? `, with a stored original ${file.name} (${file.sha256}, ${file.size} bytes)` : ''}`
+        + `: not a pasted revision without a stored original, as ${item.doc.delivery.file} is delivered`);
     }
+    if (lineText(rev.text) !== lineText(item.sourceText)) {
+      problems.push(`its revision ${rev.number} text is not the text of ${item.doc.source}, line for line (only trailing whitespace and line endings may differ)`);
+    }
+    return problems;
+  }
+  const file = rev.source_file || {};
+  if (file.sha256 !== item.delivery.sha256 || file.size !== item.delivery.size) {
+    problems.push(`its stored original ${file.sha256} (${file.size} bytes) is not ${item.doc.delivery.file} (${item.delivery.sha256}, ${item.delivery.size} bytes)`);
   }
   if (collapse(rev.text || '') !== collapse(item.sourceText)) problems.push(`its revision ${rev.number} text is not the text of ${item.doc.source}`);
   return problems;
@@ -1259,7 +1387,7 @@ async function verifyDocument(page, opts, manifest, item, sink) {
     if (foreign.length) throw new Error(`refusing to act on encounter ${id}: ${foreign.join('; ')}`);
     const editPlan = contextEditPlan(doc);
     // the edit is made only on a precondition seen to hold; until then nothing is requested, so coding is judged after it
-    const unmet = editPlan ? contextEditPreconditions(enc, doc.upload?.service_date || null).filter(a => a.status === 'fail') : [];
+    const unmet = editPlan ? contextEditPreconditions(enc, doc.upload?.service_date || null, editPlan).filter(a => a.status === 'fail') : [];
     const editing = Boolean(editPlan) && unmet.length === 0;
     add(checkPipeline(enc));
     add(checkExtraction(doc.expected_extraction || {}, enc, item.delivery, item.sourceText));
@@ -1291,7 +1419,8 @@ async function verifyDocument(page, opts, manifest, item, sink) {
     } else if (editing) {
       if (stopRequested(opts.out)) throw new Error('stopped: a STOP file is present; the context was not edited');
       const edit = await editContext(page, opts.baseUrl, id, editPlan, started + opts.deadlineSeconds * 1000, record.state_history);
-      const wanted = edit.after ? (editPlan.clear_member_date ? contextRequestDate(edit.after) : editPlan.service_date) : null;
+      // the date named before the edit (a clear) or the edited one: what the request must carry, never read back from it
+      const wanted = edit.after ? (editPlan.clear_member_date ? documentedServiceDate(enc, editPlan).date : editPlan.service_date) : null;
       record.context_edit = {
         plan: doc.review_plan.context_edit, asked_at: edit.asked_at, form: edit.form, posted: edit.posted, http_status: edit.http_status,
         error: edit.error, timed_out: edit.timed_out, identical: edit.identical,
@@ -1492,6 +1621,7 @@ module.exports = {
   documentResult, readDom, secondReviewPlan, checkSecondReview, attachedProblems, sentRun,
   contextEditPlan, isMemberDateHold, contextRequestDate, primaryRequestSha256, checkUploadDate, checkContextEdit, contextEditPreconditions,
   checkDecisionLabels, planProblems, MEMBER_DATE_HOLD_MESSAGE, PROVIDER_SYSTEMS,
+  documentedServiceDate, quotedDates, USER_CONFLICT_NOTE, USER_ELSEWHERE_NOTE,
 };
 
 if (require.main === module) {
