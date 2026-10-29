@@ -1,0 +1,13 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Marlowe Bay Endoscopy Suites (fictional)
+Pre-procedure note
+Date of service: 2026-10-20
+Place of service: ambulatory surgery center (POS 24)
+Indications
+Iron deficiency anemia.
+Procedure summary
+Examination | Planned date | Indication
+Upper endoscopy (EGD) | 2026-11-12 | Anemia
+Colonoscopy | 2026-11-12 | Anemia
+Plan
+Both examinations are booked for 2026-11-12.

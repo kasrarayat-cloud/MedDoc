@@ -1,0 +1,467 @@
+{
+ "schema": "cpt-studio-gi3-scope-known-limits@1",
+ "note": "The variants of variants.json that read wrong by their source review at the gi3 scope repair, each pinned by its input (the variant) and its exact output, with the reason. A row that comes to read right fails ScopeCorpusTests and is removed here deliberately; a new wrong row is a regression.",
+ "limits": {
+  "K-h208-author": {
+   "wrong": [
+    "date of service read as ['document', '2026-10-05'], by the source a conflict of 2026-10-05 and 2026-10-06"
+   ],
+   "output": {
+    "service_date": [
+     "document",
+     "2026-10-05"
+    ],
+    "office_em": "performed",
+    "em_facts": {
+     "setting": "office",
+     "patient_status": "established",
+     "em_basis": "time",
+     "time_minutes": "44"
+    },
+    "inventory_em": [
+     "performed"
+    ]
+   },
+   "reason": "The dates repair's, not this one's (interpretation 42, context.py): 'Assessment and plan' governs the charge block's 'Date of service: 2026-10-06', which is dropped, so the date reads 2026-10-05 alone; by the source the two dates of service conflict and the date is asked. Routing's visit and its facts are this repair's and right (office E/M performed, physician time on the service date 44 minutes). The E/M code's status is deliberately not pinned: with this repair alone 99215 reads ready on the contradicted date (the ordering hazard), and the integration owner tests h2-08 with the dates repair."
+  },
+  "K-h208-live": {
+   "wrong": [
+    "date of service read as ['document', '2026-10-05'], by the source a conflict of 2026-10-05 and 2026-10-06"
+   ],
+   "output": {
+    "service_date": [
+     "document",
+     "2026-10-05"
+    ],
+    "office_em": "performed",
+    "em_facts": {
+     "setting": "office",
+     "patient_status": "established",
+     "em_basis": "time",
+     "time_minutes": "44"
+    },
+    "inventory_em": [
+     "performed"
+    ]
+   },
+   "reason": "As K-h208-author, in the text the live service read (PDF line wraps): the charge block's 2026-10-06 date of service is the dates repair's (interpretation 42). Routing's visit and its facts are right; the E/M code's status is deliberately not pinned (the ordering hazard)."
+  },
+  "A08-ev-plan": {
+   "wrong": [
+    "asks documented facts: ['patient_status', 'setting']"
+   ],
+   "output": {
+    "service_date": [
+     "missing",
+     null
+    ],
+    "office_em": "performed",
+    "em_facts": {
+     "em_basis": "time",
+     "time_minutes": "32"
+    },
+    "families": {},
+    "inventory_em": [
+     "performed"
+    ],
+    "proposal": {
+     "code": "99214",
+     "status": "needs_clarification",
+     "questions": [
+      "setting",
+      "patient_status"
+     ]
+    },
+    "encounter_questions": [
+     "service_date"
+    ]
+   },
+   "reason": "The dates repair's (RC5; interpretation 42: a plan or history section opened by the document's own title governs no label): the title 'GI clinic follow-up' opens a plan section over the header, so its visit date, place of service and patient status are read as plan content - the date is asked and so are the setting and the patient status. Today's visit and its 32 minutes are this repair's and right."
+  },
+  "A08-ev-typ": {
+   "wrong": [
+    "asks documented facts: ['patient_status', 'setting']"
+   ],
+   "output": {
+    "service_date": [
+     "missing",
+     null
+    ],
+    "office_em": "performed",
+    "em_facts": {
+     "em_basis": "time",
+     "time_minutes": "32"
+    },
+    "families": {},
+    "inventory_em": [
+     "performed"
+    ],
+    "proposal": {
+     "code": "99214",
+     "status": "needs_clarification",
+     "questions": [
+      "setting",
+      "patient_status"
+     ]
+    },
+    "encounter_questions": [
+     "service_date"
+    ]
+   },
+   "reason": "As A08-ev-plan, with Corti's typical citations: the title 'GI clinic follow-up' opens a plan section over the header (RC5, the dates repair's), so the date, the setting and the patient status are asked."
+  },
+  "A17-ev-plan": {
+   "wrong": [
+    "asks documented facts: ['setting']"
+   ],
+   "output": {
+    "service_date": [
+     "missing",
+     null
+    ],
+    "office_em": "performed",
+    "em_facts": {},
+    "families": {},
+    "inventory_em": [
+     "performed"
+    ],
+    "proposal": {
+     "code": "99213",
+     "status": "needs_clarification",
+     "questions": [
+      "setting",
+      "patient_status",
+      "em_basis"
+     ]
+    },
+    "encounter_questions": [
+     "service_date"
+    ]
+   },
+   "reason": "The dates repair's (RC5, interpretation 42): the title 'GI clinic follow-up' opens a plan section over the header, so the visit date and the place of service are read as plan content and asked. The basis question is right (no time and no MDM), and so is the patient-status question (the source states only the place of service)."
+  },
+  "A17-ev-typ": {
+   "wrong": [
+    "asks documented facts: ['setting']"
+   ],
+   "output": {
+    "service_date": [
+     "missing",
+     null
+    ],
+    "office_em": "performed",
+    "em_facts": {},
+    "families": {},
+    "inventory_em": [
+     "performed"
+    ],
+    "proposal": {
+     "code": "99213",
+     "status": "needs_clarification",
+     "questions": [
+      "setting",
+      "patient_status",
+      "em_basis"
+     ]
+    },
+    "encounter_questions": [
+     "service_date"
+    ]
+   },
+   "reason": "As A17-ev-plan, with Corti's typical citations: the date and the setting are asked because the title opens a plan section over the header (RC5, the dates repair's)."
+  },
+  "A21-ev-plan": {
+   "wrong": [
+    "today's visit not read: routing office E/M = None",
+    "asks whether the visit was performed"
+   ],
+   "output": {
+    "service_date": [
+     "document",
+     "2026-10-21"
+    ],
+    "office_em": null,
+    "em_facts": {},
+    "families": {},
+    "inventory_em": [],
+    "proposal": {
+     "code": "99213",
+     "status": "needs_clarification",
+     "questions": [
+      "performed_status",
+      "em_basis"
+     ]
+    },
+    "encounter_questions": []
+   },
+   "reason": "A note with no marker of today's visit (interpretation 44: such notes stay held, a known limit): no title, heading, visit statement, MDM or time names the visit - only 'Patient status: established', 'Site: office, POS 11' and history, examination, assessment and plan sections - so routing reads no office visit and the E/M code is held with a performed_status question, never excluded and never ready. Its hold no longer presents the plan's follow-up as doubt about today's visit."
+  },
+  "A21-ev-typ": {
+   "wrong": [
+    "today's visit not read: routing office E/M = None",
+    "asks whether the visit was performed"
+   ],
+   "output": {
+    "service_date": [
+     "document",
+     "2026-10-21"
+    ],
+    "office_em": null,
+    "em_facts": {},
+    "families": {},
+    "inventory_em": [],
+    "proposal": {
+     "code": "99213",
+     "status": "needs_clarification",
+     "questions": [
+      "performed_status",
+      "em_basis"
+     ]
+    },
+    "encounter_questions": []
+   },
+   "reason": "As A21-ev-plan, with Corti's typical citations: no marker of today's visit, so the E/M code is held with a performed_status question (interpretation 44), never excluded."
+  },
+  "W04-ev-plan": {
+   "wrong": [
+    "today's visit not read: routing office E/M = None",
+    "asks whether the visit was performed"
+   ],
+   "output": {
+    "service_date": [
+     "missing",
+     null
+    ],
+    "office_em": null,
+    "em_facts": {},
+    "families": {},
+    "inventory_em": [],
+    "proposal": {
+     "code": "99213",
+     "status": "needs_clarification",
+     "questions": [
+      "performed_status",
+      "em_basis"
+     ]
+    },
+    "encounter_questions": [
+     "service_date"
+    ]
+   },
+   "reason": "A Word-table note with no marker of today's visit (interpretation 44, a known limit): its rows name the date, the place of service and 'Established patient', and its sections the history, examination, assessment and plan, but nothing names the visit, so the E/M code is held with a performed_status question, never excluded and never ready. The table-row date is asked by design (context's form-date rule)."
+  },
+  "P02-ev-row": {
+   "wrong": [
+    "office E/M read as performed today"
+   ],
+   "output": {
+    "service_date": [
+     "missing",
+     null
+    ],
+    "office_em": "performed",
+    "em_facts": {
+     "setting": "office",
+     "patient_status": "established"
+    },
+    "families": {},
+    "inventory_em": [
+     "performed"
+    ],
+    "proposal": {
+     "code": "99213",
+     "status": "needs_clarification",
+     "questions": [
+      "em_basis"
+     ]
+    },
+    "encounter_questions": [
+     "service_date"
+    ]
+   },
+   "reason": "A planned-only document read as a visit (known limit RC6, as at the installed revision): the appointment reminder's row 'Visit type | Established patient office visit' has no planning word in its own clause, so routing reads that visit statement performed; the appointment date is in another row. The E/M code is held by its basis and date questions, never ready."
+  },
+  "P05-ev-plan": {
+   "wrong": [
+    "office E/M read as performed today"
+   ],
+   "output": {
+    "service_date": [
+     "missing",
+     null
+    ],
+    "office_em": "performed",
+    "em_facts": {
+     "patient_status": "new"
+    },
+    "families": {},
+    "inventory_em": [
+     "performed"
+    ],
+    "proposal": {
+     "code": "99203",
+     "status": "needs_clarification",
+     "questions": [
+      "setting",
+      "em_basis"
+     ]
+    },
+    "encounter_questions": [
+     "service_date"
+    ]
+   },
+   "reason": "A planned-only document read as a visit (known limit RC6, as at the installed revision): the referral letter's 'for a new patient consultation' is a visit statement with no planning word in its own clause, read performed. The E/M code is held by its setting, basis and date questions, never ready."
+  },
+  "P07-ev-title": {
+   "wrong": [
+    "office E/M read as performed though the note says the visit is in the future"
+   ],
+   "output": {
+    "service_date": [
+     "document",
+     "2026-11-18"
+    ],
+    "office_em": "performed",
+    "em_facts": {},
+    "families": {},
+    "inventory_em": [
+     "performed"
+    ],
+    "proposal": {
+     "code": "99213",
+     "status": "needs_clarification",
+     "questions": [
+      "setting",
+      "patient_status",
+      "em_basis"
+     ]
+    },
+    "encounter_questions": []
+   },
+   "reason": "A pre-charted note read as a visit by its title (known limit, new with the visit title marker): 'Clinic note - return visit' in the head is a visit title naming no other occurrence, and 'Note started in advance of the visit; to be completed on the day.' names no occurrence word, so the title reads as today's visit on its stated 'Visit date: 2026-11-18'. By the source the visit may not have happened. The E/M code is held by its setting, status and basis questions, never ready."
+  },
+  "C06-ev-plan": {
+   "wrong": [
+    "gi.flex_sig routed planned, source performed"
+   ],
+   "output": {
+    "service_date": [
+     "document",
+     "2026-10-21"
+    ],
+    "office_em": null,
+    "em_facts": {},
+    "families": {
+     "gi.flex_sig": "planned"
+    },
+    "inventory_em": [],
+    "proposal": {
+     "code": "45331",
+     "status": "ready",
+     "questions": []
+    },
+    "encounter_questions": []
+   },
+   "reason": "The extent and inventory lens's (RC7), not this one's: the office flexible sigmoidoscopy is documented only by its instrument ('The flexible sigmoidoscope was advanced to 40 cm ... biopsies'), which names no routed mention, so the planned repeat decides routing's family status ('planned'). The inventory reads the sigmoidoscopy performed and 45331 is ready; only routing's family status is wrong."
+  },
+  "F02-ev-time": {
+   "wrong": [
+    "office E/M read as performed today"
+   ],
+   "output": {
+    "service_date": [
+     "document",
+     "2026-10-21"
+    ],
+    "office_em": "performed",
+    "em_facts": {
+     "em_basis": "time",
+     "time_minutes": "25"
+    },
+    "families": {
+     "gi.egd": "performed"
+    },
+    "inventory_em": [
+     "performed"
+    ],
+    "proposal": {
+     "code": "99213",
+     "status": "needs_clarification",
+     "questions": [
+      "setting",
+      "patient_status",
+      "separate_em"
+     ]
+    },
+    "encounter_questions": []
+   },
+   "reason": "A procedure's time read as E/M time (known limit, as at the installed revision): 'Total physician time for the procedure: 25 minutes.' matches the total-time wording and names no word of NOT_EM_TIME, so an EGD report reads an office E/M performed with a time basis. Held by its setting, status and separate-E/M questions, never ready."
+  },
+  "F08-ev-time": {
+   "wrong": [
+    "office E/M read as performed today"
+   ],
+   "output": {
+    "service_date": [
+     "document",
+     "2026-10-21"
+    ],
+    "office_em": "performed",
+    "em_facts": {
+     "em_basis": "time",
+     "time_minutes": "35"
+    },
+    "families": {
+     "gi.egd": "performed"
+    },
+    "inventory_em": [
+     "performed"
+    ],
+    "proposal": {
+     "code": "99213",
+     "status": "needs_clarification",
+     "questions": [
+      "setting",
+      "patient_status",
+      "separate_em"
+     ]
+    },
+    "encounter_questions": []
+   },
+   "reason": "A framed clinician time on a procedure day read as E/M time (known limit, new with the clinician-time subjects; the class of F09): 'Physician time on the date of service: 35 minutes, including the procedure ...' is framed by 'on the date of service' and names no word of NOT_EM_TIME, so an EGD report reads an office E/M performed with a time basis. A time that includes the procedure is not the visit's (AMA E/M time excludes separately reported services); refusing it is a later NOT_EM_TIME repair. Held by its setting, status and separate-E/M questions, never ready."
+  },
+  "F09-ev-time": {
+   "wrong": [
+    "office E/M read as performed today"
+   ],
+   "output": {
+    "service_date": [
+     "document",
+     "2026-10-21"
+    ],
+    "office_em": "performed",
+    "em_facts": {
+     "em_basis": "time",
+     "time_minutes": "35"
+    },
+    "families": {
+     "gi.egd": "performed"
+    },
+    "inventory_em": [
+     "performed"
+    ],
+    "proposal": {
+     "code": "99213",
+     "status": "needs_clarification",
+     "questions": [
+      "setting",
+      "patient_status",
+      "separate_em"
+     ]
+    },
+    "encounter_questions": []
+   },
+   "reason": "A procedure day's total time read as E/M time (known limit, as at the installed revision; F08's control): 'Total time on the date of service: 35 minutes, including the procedure ...' is the total-time wording with no word of NOT_EM_TIME. Held by its setting, status and separate-E/M questions, never ready."
+  }
+ }
+}

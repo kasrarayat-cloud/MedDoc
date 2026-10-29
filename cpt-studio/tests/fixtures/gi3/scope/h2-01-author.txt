@@ -1,0 +1,39 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Brightwater Valley Endoscopy Center (fictional)
+Combined upper and lower endoscopy report
+
+Patient: Marisol Vandermeer (fictional)
+Date of birth: 1957-04-03
+Synthetic record: H2-SYN-1101
+Procedure date: 2026-10-16
+Endoscopist: Kwabena Thistlewood, MD, Gastroenterology (fictional)
+Site of care: freestanding ambulatory surgical center, POS 24
+Anesthesia: monitored anesthesia care by Annika Castellanos-Webb, CRNA (fictional), documented and billed by the anesthesia group
+
+Indications
+Iron deficiency anemia, with ferritin 5 ng/mL and hemoglobin 9.8 g/dL on 2026-09-24, and occasional epigastric burning. No visible bleeding and no diarrhea. She has never had an endoscopy of either kind.
+
+Procedure summary
+Examination | Instrument | Furthest point reached | Tissue sampled
+Upper endoscopy (EGD) | Standard gastroscope | Third portion of the duodenum | Yes, duodenum and stomach
+Colonoscopy | Adult colonoscope | Terminal ileum, about 6 cm beyond the ileocecal valve | No
+
+Upper endoscopy
+Consent was confirmed and the pre-procedure pause completed. Under direct vision the gastroscope crossed the upper esophageal sphincter and reached the third portion of the duodenum. Esophageal mucosa unremarkable; regular Z-line at 38 cm. On retroflexion the cardia and fundus looked normal. Patchy antral erythema, with no erosions or ulcers. Bulb, second portion and third portion of the duodenum unremarkable. For celiac disease I took four pieces from D2, the second portion of the duodenum, and two from the bulb with cold forceps, and for Helicobacter pylori three pieces from the antrum and incisura; each site went into its own container.
+
+Colonoscopy
+With the patient on her left side, the digital rectal examination showed nothing abnormal, and the adult colonoscope then passed easily around the colon. Cecal landmarks (appendiceal orifice, ileocecal valve) were documented with photographs. I entered the terminal ileum and inspected about 6 cm of it. Boston Bowel Preparation Scale score 8 (right 2, transverse 3, left 3). Scattered small-mouthed diverticula in the sigmoid colon. No polyps, masses, vascular lesions or blood; colonic and ileal mucosa normal. I deliberately did not take colon biopsies, because the mucosa was normal and she has no diarrhea. Retroflexion in the rectum showed small, non-bleeding internal hemorrhoids. Withdrawal time was 11 minutes.
+
+Complications
+None.
+
+Impression
+1. Antral erythema; duodenal and gastric biopsies taken.
+2. Normal terminal ileum. Sigmoid diverticulosis and small internal hemorrhoids. No colonic source for the iron deficiency.
+
+Plan
+Await pathology and continue oral iron. If the biopsies do not explain the anemia, small bowel capsule endoscopy will be discussed at the follow-up visit.
+
+Pathology: specimens sent to Greyfield Pathology Associates (fictional), which reports its interpretation separately.
+Electronically signed: Kwabena Thistlewood, MD (fictional), 2026-10-16 10:47

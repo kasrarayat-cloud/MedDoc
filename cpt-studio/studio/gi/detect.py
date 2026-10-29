@@ -89,7 +89,9 @@ class Mention:
     end: int
     kind: str  # service | em-heading | em-visit | em-time | em-mdm
     label: str = ''
-    value: str = ''  # minutes (em-time) or level (em-mdm)
+    # minutes (em-time), level (em-mdm), or 'title' (em-visit: the document's own visit title or a heading naming today's
+    # visit, gi3 scope: never plan or history content, and on a procedure day no E/M documentation by itself)
+    value: str = ''
 
 
 @dataclass(frozen=True)
@@ -137,7 +139,25 @@ def _without_overlaps(found: list[Mention]) -> tuple[Mention, ...]:
     return tuple(kept)
 
 
-def _em_mentions(text: str, lay: Layout) -> tuple[Mention, ...]:
+# gi3 scope (interpretation 44): the owner-ruled words of a heading, title or field naming another occurrence
+# (context._HEADING_OCCURRENCE: "Next", "Scheduled", "Upcoming", "Prior", "Cancelled", ...): a visit title they lead
+# names that occurrence, never this document's own visit.
+_EM_OTHER_OCCURRENCE = re.compile(r'\b(?:' + ctx._HEADING_OCCURRENCE.pattern + r')\b', re.A | re.I)
+_NON_BLANK_LINE = re.compile(r'^[^\S\n]*\S[^\n]*', re.M)
+
+
+def _em_head_end(text: str) -> int:
+    """gi3 scope: where the document's head ends - after its first context.TITLE_LINES non-blank lines, the lines in which
+    the dated-title reader reads a title. A visit title there names the document's own encounter."""
+    for count, line in enumerate(_NON_BLANK_LINE.finditer(text), 1):
+        if count == ctx.TITLE_LINES:
+            return line.end()
+    return len(text)
+
+
+def _em_mentions(text: str, lay: Layout) -> tuple[tuple[Mention, ...], tuple[Mention, ...]]:
+    """The office E/M documentation mentions, and apart from them the clinician times their sentences do not frame as
+    the visit's (cues.EM_TIME's ``clinician`` group): _route reads those only beside a marker of today's visit."""
     found = []
     for section in lay.sections:
         label = EM_HEADINGS.get(section.label)
@@ -157,22 +177,67 @@ def _em_mentions(text: str, lay: Layout) -> tuple[Mention, ...]:
                     start = section.start + line.start()
                     found.append(Mention('gi.office_em', start + m.start(), start + m.end(), 'em-time', 'E/M time',
                                          str(int(m.group('minutes')))))
+    # gi3 scope (interpretation 44): the document's own visit title, or a heading naming today's visit, read before the
+    # plain visit words so that on a tie ("Follow-up visit") the title's reading wins. A title is read in the head only
+    # (context.TITLE_LINES), a heading that says today anywhere; neither when words naming another occurrence lead it.
+    head_end = _em_head_end(text)
+    for m in cues.EM_TITLE.finditer(text):
+        if _EM_OTHER_OCCURRENCE.search(text, m.start(), m.start('title')):
+            continue  # "Next follow-up visit", "Scheduled visit: return visit": another occurrence's
+        heading = m.group('heading') is not None
+        if m.start() >= head_end and not (heading and cues.TODAY.search(m.group('title'))):
+            continue  # a title below the head names no document's own encounter
+        found.append(Mention('gi.office_em', m.start('title'), m.end('title'), 'em-visit',
+                             'visit heading' if heading else 'visit title', 'title'))
     for m in cues.EM_VISIT.finditer(text):
         found.append(Mention('gi.office_em', m.start(), m.end(), 'em-visit', m.group(0)))
     # Whether a sentence says its time is not E/M time is read once per sentence (gi2 integration, cost: one pasted line
-    # of 7,500 time statements made one sentence that every statement rescanned, 60.1 s at 2b82889f).
+    # of 7,500 time statements made one sentence that every statement rescanned, 60.1 s at 2b82889f), and so is whether it
+    # frames a clinician's time as E/M time (gi3 scope).
     not_em_time: dict[tuple[int, int], bool] = {}
+    framed: dict[tuple[int, int], bool] = {}
+    clinician = []
     for m in cues.EM_TIME.finditer(text):
         sentence = lay.sentence_for(m.start(), m.end())
         if sentence not in not_em_time:
             not_em_time[sentence] = cues.NOT_EM_TIME.search(text, *sentence) is not None
-        if not not_em_time[sentence]:
-            found.append(Mention('gi.office_em', m.start(), m.end(), 'em-time', 'E/M time',
-                                 str(int(m.group('minutes')))))
+        if not_em_time[sentence]:
+            continue
+        if m.group('clinician') is not None:
+            if sentence not in framed:
+                framed[sentence] = cues.EM_TIME_FRAME.search(text, *sentence) is not None
+            if not framed[sentence]:  # "Face-to-face time: 24 minutes." - the visit's only beside its marker
+                clinician.append(Mention('gi.office_em', m.start(), m.end(), 'em-time', 'E/M time',
+                                         str(int(m.group('minutes')))))
+                continue
+        found.append(Mention('gi.office_em', m.start(), m.end(), 'em-time', 'E/M time', str(int(m.group('minutes')))))
     for m in cues.MDM_LEVEL.finditer(text):
         level = (m.group('level') or m.group('level2')).lower()
         found.append(Mention('gi.office_em', m.start(), m.end(), 'em-mdm', 'MDM level', level))
-    return _without_overlaps(found)
+    em = _without_overlaps(found)
+    if not clinician:
+        return em, ()
+    # each clinician time overlapping no E/M mention: the documentation already read keeps its place
+    starts = [m.start for m in em]
+    kept = []
+    for m in _without_overlaps(clinician):
+        at = bisect.bisect_right(starts, m.start) - 1
+        if (at >= 0 and em[at].end > m.start) or (at + 1 < len(em) and em[at + 1].start < m.end):
+            continue
+        kept.append(m)
+    return em, tuple(kept)
+
+
+def _visit_clinician_times(an: Analysis, base: dict) -> tuple[Mention, ...]:
+    """gi3 scope (interpretation 43): the clinician times their sentences do not frame (an.clinician_times) that are the
+    visit's time - beside a marker of today's visit, read as performed (a title, a chief complaint, reason or MDM
+    heading, an MDM statement or a visit statement: a later visit's statement places the visit at another time and
+    marks nothing), and outside today's procedure text: a time written under a procedure, findings or technique heading
+    may be that procedure's, and a procedure's time never counts ("Physician time: 25 minutes." in an EGD report).
+    ``base``: the E/M mentions' readings before the document-level judgement."""
+    if not an.clinician_times or not any(r.status == 'performed' and m.kind != 'em-time' for m, r in base.items()):
+        return ()
+    return tuple(m for m in an.clinician_times if an.lay.section_at(m.start).kind not in POSITIVE_SECTIONS)
 
 
 def _clause_cues(text: str) -> tuple[Cue, ...]:
@@ -231,6 +296,9 @@ class Analysis:
     # family -> [(reference Mention, negation start)] of bare negated status words (gi2 negation lens), decided per
     # family in _route: released only when today's report independently establishes the procedure (_bare_negation_hold)
     bare_negations: dict = field(default_factory=dict)
+    # gi3 scope: the clinician times their sentences do not frame as the visit's (_em_mentions), sorted; _route adds those
+    # that are the visit's to ``em`` (_visit_clinician_times)
+    clinician_times: tuple = ()
 
     def __post_init__(self):
         self._service_starts = [m.start for m in self.services]
@@ -420,19 +488,56 @@ def _merge_groups(text: str, items: list[tuple[int, int]]) -> list[list[tuple[in
     return groups
 
 
+# gi3 scope (X2 of the extent investigation): a service name restated in parentheses right after a name of the same
+# family is that name ("Upper endoscopy (EGD)", "EGD (esophagogastroduodenoscopy)", "Endoscopic ultrasound (EUS)"): one
+# mention, so whatever attaches to either - a date, a time, a plan, a denial - attaches to both ("Upper endoscopy (EGD)
+# on 2026-11-12" under a procedure heading read the EGD planned and the upper endoscopy performed). The restated name
+# opens its parentheses and closes them, or ends a part of them ("(EGD, 2026-11-12)"). A name of another family in
+# parentheses ("Colonoscopy (with EGD)") is another service, and a name after other words in them is no restatement.
+_RESTATED_OPEN = re.compile(r'[ \t]*\([ \t]*', re.A)
+_RESTATED_CLOSE = re.compile(r'[ \t]*(?:(?P<close>\))|[,;])', re.A)
+
+
+def _restatements(an: Analysis, services: list[Mention], ce: int) -> list[tuple[tuple[int, int], tuple[int, int], int]]:
+    """(name, restated name, end) for each name of ``services`` (sorted, in a clause window ending at ``ce``) restated in
+    parentheses right after it: the pair ends with its closing parenthesis, or with the restated name when a part of the
+    parentheses follows it."""
+    found = []
+    for a, b in zip(services, services[1:]):
+        if a.family == b.family and _RESTATED_OPEN.fullmatch(an.text, a.end, b.start):
+            close = _RESTATED_CLOSE.match(an.text, b.end, ce)
+            if close is not None:
+                found.append(((a.start, a.end), (b.start, b.end), close.end() if close.group('close') else b.end))
+    return found
+
+
 def _groups(an: Analysis, cs: int, ce: int, ts: int, te: int) -> tuple[list[tuple[int, int]], int, list[tuple[int, int]]]:
     """Coordinated mention groups of a clause ("EGD and colonoscopy" is one group),
     the index of the target's group and that group's members, including every
     service and every intervention named inside the target (each is read with its
-    own anchored cues, so "No biopsies were taken." reads the "No" before "biopsies")."""
+    own anchored cues, so "No biopsies were taken." reads the "No" before "biopsies").
+    A name and its restatement in parentheses are one item (gi3 scope: _restatements), and a target holding either
+    holds both."""
     target = (max(ts, cs), min(max(te, ts + 1), ce))
+    services = an.services_in(cs, ce)
     items, inner = [], []
-    for m in an.services_in(cs, ce):
+    for m in services:
         if _overlaps(m.start, m.end, *target):
             inner.append((m.start, m.end))
             target = (min(target[0], m.start), max(target[1], m.end))
         else:
             items.append((m.start, m.end))
+    restated = _restatements(an, services, ce) if len(services) > 1 else []
+    if restated:
+        held, pairs = set(inner), {}
+        for name, again, end in restated:
+            if name in held or again in held:  # the target names the service: it holds the whole name
+                target = (min(target[0], name[0]), max(target[1], end))
+                inner += [s for s in (name, again) if s not in held]
+                held.update((name, again))
+            else:
+                pairs[name] = pairs[again] = (name[0], end)
+        items = list(dict.fromkeys(pairs.get(s, s) for s in items if s not in held))
     items.append(target)
     groups = _merge_groups(an.text, items)
     index = next(i for i, g in enumerate(groups) if target in g)
@@ -3387,6 +3492,12 @@ def _generic_reading(an: Analysis, start: int, end: int) -> Reading:
     return an.memo[key]
 
 
+# Routing's hold of a visit statement that names another service read at another time (_read_span, round 4 routing:4),
+# followed by that service's status. Part of the cue contract (gi3 scope): validation reads the hold by this constant
+# (engine._visit_statement_own), never by its prose.
+VISIT_NAMES_OTHER = 'uncertain: the visit statement names another service, read '
+
+
 def _read_span(an: Analysis, start: int, end: int, adjust: bool = True) -> Reading:
     """The reading of [start, end). A span with no service name in it that covers
     an E/M documentation mention or a procedure reference reads as that mention.
@@ -3405,8 +3516,7 @@ def _read_span(an: Analysis, start: int, end: int, adjust: bool = True) -> Readi
         # A visit statement that names another service ("Follow-up office visit to discuss the EGD performed last
         # week") takes that service's status from its time; the visit itself is today's, so it holds, never
         # excludes (round 4 routing:4).
-        return Reading('uncertain', (f'uncertain: the visit statement names another service, read {reading.status}',)
-                       + reading.cues, reading.basis)
+        return Reading('uncertain', (VISIT_NAMES_OTHER + reading.status,) + reading.cues, reading.basis)
     return reading
 
 
@@ -6015,10 +6125,11 @@ def _em_base_reading(an: Analysis, m: Mention) -> Reading:
     cue = _cue_reading(an, m.start, m.end, em=True)
     if cue and cue.status != 'performed':
         return cue
-    if m.kind == 'em-visit' and cue is None and an.lay.section_at(m.start).kind in ('plan', 'history'):
+    if m.kind == 'em-visit' and cue is None and an.lay.section_at(m.start).kind in ('plan', 'history') \
+            and m.value != 'title':  # gi3 scope: the document's own title ("GI clinic follow-up") is no plan content
         reading = _default_reading(an, m.start, m.end)
     else:
-        label = 'visit statement' if m.kind == 'em-visit' else m.label
+        label = m.label if m.value == 'title' else 'visit statement' if m.kind == 'em-visit' else m.label
         reading = Reading('performed', (cue.cues if cue else ()) + (f'performed: office E/M documentation ({label})',),
                           'cue')
     if m.kind == 'em-visit' and reading.status == 'performed':
@@ -7135,6 +7246,10 @@ def _route(an: Analysis) -> RoutingResult:
     an.references = _references(an, attributed)
     readings.update(an.references)
     base = {m: _em_base_reading(an, m) for m in an.em}
+    visit_times = _visit_clinician_times(an, base)  # gi3 scope: a clinician's time beside a marker of today's visit
+    if visit_times:
+        an.em = tuple(sorted(an.em + visit_times, key=lambda m: m.start))
+        base.update((m, _em_base_reading(an, m)) for m in visit_times)
     em_facts = _em_facts(an, base)
     has_basis = any(f.name == 'em_basis' for f in em_facts)
     findings: dict[str, FamilyFinding] = {}
@@ -7179,6 +7294,11 @@ def _route(an: Analysis) -> RoutingResult:
     an.em_readings = {m: (Reading('uncertain', r.cues + (EM_WITHOUT_BASIS,), 'cue')
                           if r.status == 'performed' and procedure_done and not has_basis else r)
                       for m, r in base.items()}
+    # gi3 scope: on a procedure day the document's title alone is no E/M documentation ("Gastroenterology Clinic Note"
+    # over an anoscopy with banding), so the office E/M is read only beside other E/M documentation - a chief complaint,
+    # reason or MDM heading, MDM, a visit statement or the visit's time - as before titles were read.
+    if an.em and procedure_done and all(m.value == 'title' for m in an.em):
+        an.em, an.em_readings = (), {}  # as if the title named nothing (the span reader too)
     if an.em:
         status = _aggregate(list(an.em_readings.values()))
         findings['gi.office_em'] = FamilyFinding(
@@ -7197,8 +7317,9 @@ def _analysis(text: str, service_date: Optional[date] = None) -> tuple[Analysis,
     interventions = tuple(Intervention(label, families, m.start(), m.end())
                           for label, pattern, families in cues.INTERVENTIONS for m in pattern.finditer(text))
     effective = service_date if service_date is not None else ctx.service_date_of(text)
-    an = Analysis(text, lay, _service_mentions(text), _em_mentions(text, lay), _clause_cues(text),
-                  ctx.find_dates(text), effective, interventions)
+    em, clinician_times = _em_mentions(text, lay)
+    an = Analysis(text, lay, _service_mentions(text), em, _clause_cues(text), ctx.find_dates(text), effective,
+                  interventions, clinician_times=clinician_times)
     return an, _route(an)
 
 
