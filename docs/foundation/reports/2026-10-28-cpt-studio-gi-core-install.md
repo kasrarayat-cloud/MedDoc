@@ -151,3 +151,21 @@ During repair, the session loaded the held-out manifest once and printed only it
 
 - No accuracy percentage. The walk's expectations are the author's, labelled provisional; no qualified GI-coder adjudication was available (interpretation 12). Browser and export checks are not accuracy.
 - The 12 encounters that existed before the install were neither re-assessed nor re-sent. Their stored states were recomputed and are unchanged.
+
+## Correction, 2026-10-29 (session 7c8d38da, second round)
+
+Appended, not rewritten. Three statements above were wrong or misleading; the second round's investigation found them.
+
+- **"Service date ... nothing is sent that the installed revision would not send (interpretation 28)."** Literally
+  false: against 057a7d398 the install sent a document date in 677 constructed texts of the broad date corpus where
+  057a7d398 asked (0 live or existing texts); 522 of them sent a wrong or uncertain date (an outside or index procedure's
+  report with a practice addendum's date of service). Interpretation 31 in the ruling file records the measurement and
+  the repair.
+- **"The tattoo conflict ... The conflict is detected and asked."** Not for ho-01's table form: the nursing row "Tattoo
+  or marking agent injected | No - none used" was never read as a denial; 45381 was held only by the extent defect's
+  side effects (an "Indications" section that ran over both procedure narratives). Repaired in the second round.
+- **The coding-outcomes table's last column, "Expectations not met".** It lists the verifier's hard assertions that
+  failed, not the author's expected codes. "none" for ho-06 and ho-09 does not mean their codes met the author's
+  provisional expectations: ho-06 proposed no EUS code (the author expected 43242), and ho-09's 46221 was approved by the
+  walk's mechanical plan, which approves every ready selected code, while the author's provisional expectation is 45350,
+  "not 46221". The second round adds a support check that warns on 46221's passages.

@@ -737,3 +737,45 @@ What it changes, so a later session does not re-derive it:
   the label ("Status: Scheduled"), "Recall" and another discipline's undated title stay known limits.
 - One new reviewer account is provisioned for doctor demonstrations, in the one GI workspace, as a declared step of this
   round's install; its password is generated on the server and kept there at mode 0600 for the owner.
+
+### Session interpretation, 2026-10-29 (7c8d38da, second round) — recorded, not owner-ruled
+
+31. **Interpretation 28's last claim, corrected by measurement.** "Nothing is sent that the installed revision would not
+    send" was literally false for the install of 2b82889f: against 057a7d398 it sent a document date in 677 constructed
+    texts of the 164,585-text broad date corpus where 057a7d398 asked (0 existing, live, corpus, verification or gate
+    texts). A triage by shape found 522 wrong or uncertain (rule U: the header's only labelled date is another
+    occurrence's, and the own date stands only in an addendum written after the body), 5 uncertain (an own date inside a
+    block a heading names as another occurrence's - the owner's narrow source rule asks them) and 150 correct (an own date
+    beside a qualified other-occurrence date, a numbered procedure part's own date, an addendum filling an empty field).
+    This round asks the 527. Measured at the final head with dd.py and compare.py: against 2b82889f one document date is
+    newly sent (the E/M time-statement shape of ho-04, the date 057a7d398 sends) and member answers are newly taken only
+    where they equal the note's own dated service line (43, all taken by 057a7d398 too); against 057a7d398 document dates
+    are sent only within the triage's correct shapes (130 of the 150, the others now asked by the round's BIRTH, PART and
+    ORDER rules) and no member answer differs. The claim now reads: no document date is sent that differs from one the
+    installed revision sends, and against 057a7d398 only in the triaged correct shapes.
+32. **Negation scoped to the status word it governs.** "Examination complete, not aborted." no longer reads as the
+    colonoscopy's denial. A bare such sentence releases the service only with corroboration in the family's own text and
+    no unread procedure-level doubt; the release criterion is counterfactual - every newly performed reading is one the
+    installed revision reads as performed once the misread sentence is removed. The unread-doubt guard is a word list and
+    leaks on unseen phrasings; those leaks are known limits under interpretation 27 (the reviewer decides every code).
+33. **Controlled recovery of conclusively not-sent requests.** A context save that settles a member date conflict makes
+    the request when the run in use is a primary attempt that conclusively never reached the provider (recorded not
+    sent, sent false, carrying its request, through the send door, never a sent and failed attempt of it), once per such
+    save; every other save only re-checks. A second review recorded not sent, or cancelled before sending, no longer
+    uses up the once-per-revision-and-date bound: a reviewer may ask again, explicitly. The protections stand: an unknown
+    outcome blocks every send until a member reconciles it; an identical answered request is reused; a failed request is
+    never sent again; nothing is retried automatically; concurrent saves and asks send once. Left for the owner: a
+    not-sent primary attempt with no date question still recovers only by an addendum or a new upload, and a
+    coding-endpoint refusal (401, 403, 429) is recorded failed and never re-sent identically.
+34. **What labels a reviewer-requested second review.** The ask takes no body and an encounter cannot be renamed, so the
+    synthetic label is the reviewer's account, its decision and reconciliation notes and the operator's evidence; the
+    excerpt sent to Corti begins after the document's SYNTHETIC banner line. A request-level note, or a banner in every
+    provider request, would be a product decision; both are listed for the owner.
+35. **A document whose only labelled date is another occurrence's** asks the date and holds ANY member answer (an
+    addendum settles it), because that date keeps speaking - stricter than the ruling's words, which name only a member
+    answer equal to the other occurrence's date. Recorded so the owner can overrule it.
+36. **Pre-existing stage-time defects found by this round's lenses were repaired**, not recorded: a pasted line of
+    repeated status references (60.3 s at 2b82889f, now 8.3 s) and one of repeated E/M time statements (60.1 s, now 1.8 s)
+    passed the analyze stage's 60 s; a third Resume in a row overflowed the job key (HTTP 500). One gate text (a
+    50,087-character repeated "EUS" text) routes in about 57.5 s on both revisions, near the 60 s limit, and stays a known
+    limit.
