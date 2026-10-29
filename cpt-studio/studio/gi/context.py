@@ -15,7 +15,7 @@ from __future__ import annotations
 import bisect
 import functools
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from typing import Optional
 
@@ -1538,7 +1538,47 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
         else:
             span, extra = _span(text, start, value_end), ()
         found.append(_Candidate(span, None, 'label', _READING[kind], 'unread', extra))
-    return tuple(found) + _title_candidates(text, lay)
+    return _after_another_header(text, lay, tuple(found) + _title_candidates(text, lay))
+
+
+_BODY_KINDS = ('technique', 'findings', 'impression', 'assessment', 'exam', 'mdm', 'time')
+
+
+def _after_another_header(text: str, lay: Layout, found: tuple[_Candidate, ...]) -> tuple[_Candidate, ...]:
+    """An own labelled date that stands only after the note's body, where the note's header dates another occurrence,
+    is asked (gi2 triage, rule U; the installed reader sent the later date: "Outside Procedure date: 10/14/2026" over
+    the report's body, then "Addendum" / "Date of service: 10/21/2026" - the body's procedure is dated by the header,
+    and 10/21 may only date what was written after it; a must-fix wrong date in 522 constructed texts).
+
+    It applies when the earliest labelled date read as another occurrence's ('aside', a read date) is followed by a
+    clinical content section the layout opens with a heading of its closed list (sections.HEADINGS, kinds _BODY_KINDS:
+    "Technique:", "Findings:", "Impression:", "Assessment:" - never a title or a header field such as "Procedure note"
+    or "Procedure: Colonoscopy"), nothing before that section states the note's own date (no candidate read 'own', or
+    'unplaced' with a stated date: an empty "Date of service: TBD" field or an own dated title keeps the header the
+    note's own), a header 'aside' date is EARLIER than the own date (a later header date is a planned occurrence no
+    performed service is dated by), and no own label stands in the app's addendum or a PDF form or annotation block
+    (which extraction places after its page's text). Then the own labels, all after the body, are read 'unplaced':
+    they speak and are asked, a member's answer equal to one of them is taken, and the header's other-occurrence date
+    stays one (never a member's answer). It only moves a label from 'own' to 'unplaced': no date is created or sent."""
+    aside = [c for c in found if c.source == 'label' and c.reading == 'aside' and c.form == 'read']
+    own = [c for c in found if c.source == 'label' and c.reading == 'own' and c.form == 'read']
+    if not aside or not own:
+        return found
+    first = min(aside, key=lambda c: c.span.start)
+    body = next((s.start for s in lay.sections if s.start >= first.span.end and s.label in HEADINGS
+                 and s.kind in _BODY_KINDS), None)
+    if body is None or any(c.span.start < body and (c.reading == 'own' or (c.reading == 'unplaced' and c.form != 'empty'))
+                           for c in found):
+        return found
+    earliest_own = min(c.value for c in own)
+    if not any(c.span.start < body and c.value < earliest_own for c in aside):
+        return found
+    added = next((s.start for s in lay.sections if s.label == 'addendum'), None)
+    if any((added is not None and c.span.start >= added) or lay.section_at(c.span.start).label.startswith('pdf ')
+           for c in own):
+        return found
+    own_ids = {id(c) for c in own}
+    return tuple(replace(c, reading='unplaced') if id(c) in own_ids else c for c in found)
 
 
 _TIME_WORD = cues.rx(r'\btime\b')
