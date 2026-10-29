@@ -3582,8 +3582,9 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
     text = an.text
     reached, blocked = [], []
     # session 7c8d38da GI round 2 (extent): the hits read only by a reach to a depth, the mentions that may doubt one,
-    # and the hits blocked or denied (_depth_reach_doubted)
-    depth_only, deeper, refused = [], [], []
+    # the hits blocked or denied, and (fix round, EXT-R5) the depths of the landmarks the text says were not reached or
+    # could not be passed (_depth_reach_doubted)
+    depth_only, deeper, refused, stopped = [], [], [], []
     for s, e in sentences:
         for cs, ce in _clauses_in(an, s, e):
             clause = None  # round 4d bounded:3: one Span of the clause, shared by every hit of it (memory linear in the text)
@@ -3611,6 +3612,7 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                             or cues.REACHED_DEPTH_DENIED.search(pre)):  # session 7c8d38da GI round 2 (extent)
                         blocked.append(_P2_beyond_the_valve(an, m, hit))  # round 4c-2 plan:D2
                         refused.append(hit)
+                        stopped.append(depth)
                         if cut_denials is not None:  # round 4d regression:3
                             cut_denials.append((blocked[-1], m.start(), m.end(), ws, we,
                                                 status in ('negated', 'cancelled', 'incomplete')))
@@ -3624,9 +3626,10 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                                 and not (cues.REACHED_BEFORE.search(pre) or cues.REACHED_AFTER.search(post)
                                          or _straight_after_service(an, ws, m.start())):
                             cut.append(hit)  # read only by declared:11's cell cut (round 4d regression:3)
-                    elif status in ('performed', 'incomplete') and cues.REACHED_DEPTH.search(pre):
+                    elif status in ('performed', 'incomplete') and _depth_reach_today(an, ws, pre):
                         # "The pediatric colonoscope was advanced to 28 cm from the anal verge in the sigmoid colon"
-                        # (session 7c8d38da GI round 2, extent: ho-03), unless a deeper landmark is named after it
+                        # (session 7c8d38da GI round 2, extent: ho-03), unless the family's text doubts it
+                        # (_depth_reach_doubted)
                         reached.append(hit)
                         depth_only.append((m.start(), depth, hit))
                     elif (_answers_silently(an, reading, m.start(), m.end()) and _reached_label(an, ws, m.start())
@@ -3654,28 +3657,60 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                                 cut_denials.append((denied[-1], m.start(), m.end(), ws, we,
                                                     status in ('negated', 'cancelled', 'incomplete')))
     if depth_only:
-        doubted_reaches = {id(hit) for hit in _depth_reach_doubted(depth_only, deeper, refused)}
+        doubted_reaches = {id(hit) for hit in _depth_reach_doubted(depth_only, deeper, refused, stopped)}
         reached = [hit for hit in reached if id(hit) not in doubted_reaches]
     return reached, blocked
 
 
-def _depth_reach_doubted(depth_only, deeper, refused) -> list:
-    """The hits read as reached only by a reach to a depth (cues.REACHED_DEPTH) after which the family's text still names
-    a deeper landmark that no denial explains (its reading performed, incomplete or uncertain, and neither blocked nor
-    denied): the depth may be a waypoint whose onward reach is worded in a way no reach cue reads ("The colonoscope was
-    passed to 20 cm in the sigmoid colon where a polyp was found, and then to the cecum": the 60-character window of
-    cues.REACHED_BEFORE misses "and then to the cecum" once a depth stands before it), so it is no extent, and, as before
-    the depth form was read, none is (session 7c8d38da GI round 2, extent). Only mentions after the reach count: a
-    deeper landmark named first ("A transverse colon mass on CT was the reason for the examination") is why the
-    examination was done, not where it went. The hits are tuples every list here keeps alive, so their ids are stable;
-    one sort and a suffix maximum over the mentions (linear after the sort)."""
+_DEPTH_FIGURE = re.compile(r'\d{1,3}\s*cm\b', re.A | re.I)
+
+
+def _depth_reach_today(an: Analysis, ws: int, pre: str) -> bool:
+    """Whether ``pre`` (the clause window before a landmark, from ``ws``) ends with a reach to a depth (cues.REACHED_DEPTH)
+    that reads as today's act (GI round 2 fix round, extent, EXT-R5). The plain twin is read at its landmark, straight
+    after "advanced to the"; here the depth stands there and the landmark further on, out of reach of a time written
+    before the verb ("In 2024 the colonoscope was advanced to 60 cm in the transverse colon": the depth reads historical,
+    the landmark performed). So the depth's own reading must be performed or incomplete too; and nothing in the clause
+    before the reach may put it at another time: a time cue (historical or planned), a date that is not the day's (as
+    the clause reading reads one: before the service date, after it unless a bare year, or any date while no service
+    date is known), or a word that puts a service at an earlier occasion (cues.EARLIER, cues.HISTORICAL_PRE's own
+    vocabulary: "At the previous attempt the colonoscope was advanced to 60 cm in the transverse colon"). The reach's
+    words, longer than the plain twin's, are read over its clause rather than within a date's reach of the landmark."""
+    found = cues.REACHED_DEPTH.search(pre)
+    if found is None:
+        return False
+    reach = ws + found.start()
+    if cues.EARLIER.search(an.text, ws, reach) or any(c.status in ('historical', 'planned') for c in an.cues_in(ws, reach)):
+        return False
+    for d in an.dates_in(ws, reach):
+        order = None if an.service_date is None else ctx.compare_to_service(d, an.service_date)
+        if order is None or order < 0 or (order > 0 and not d.bare):
+            return False
+    figure = _DEPTH_FIGURE.search(pre, found.start())
+    return figure is None or _generic_reading(an, ws + figure.start(), ws + figure.end()).status in ('performed',
+                                                                                                    'incomplete')
+
+
+def _depth_reach_doubted(depth_only, deeper, refused, stopped=()) -> list:
+    """The hits read as reached only by a reach to a depth (cues.REACHED_DEPTH) that the family's text doubts, so that,
+    as before the depth form was read, they are no extent (session 7c8d38da GI round 2, extent, and its fix round):
+    - the text names a deeper landmark that no denial explains (its reading performed, incomplete or uncertain, and
+      neither blocked nor denied), before or after the reach: the depth may be a waypoint whose onward reach is worded in
+      a way no reach cue reads ("The colonoscope was passed to 20 cm in the sigmoid colon where a polyp was found, and
+      then to the cecum": the 60-character window of cues.REACHED_BEFORE misses "and then to the cecum" once a depth
+      stands before it), or a step after an examination that went deeper ("Normal stomach and duodenum. The endoscope
+      was then passed to 35 cm in the distal esophagus and four bands were placed": the fix round, EXT-R4, where only
+      mentions after the reach counted). A deeper landmark named first for another reason ("A transverse colon mass on
+      CT was the reason for the examination") now withholds the depth too: held, as before the depth form;
+    - or the text says a shallower landmark was not reached or could not be passed (``stopped``: "could not pass the
+      rectosigmoid"): nothing beyond it was reached at that examination, so a reach beyond it is another occasion's or
+      another attempt's ("At the previous attempt the colonoscope was advanced to 60 cm in the transverse colon. Today it
+      could not pass the rectosigmoid."; the fix round, EXT-R5).
+    The hits are tuples every list here keeps alive, so their ids are stable; linear in the mentions."""
     refused_ids = {id(hit) for hit in refused}
-    kept = sorted((pos, depth) for pos, depth, hit in deeper if id(hit) not in refused_ids)
-    deepest_after = [0] * (len(kept) + 1)  # the deepest landmark named from each mention on
-    for i in range(len(kept) - 1, -1, -1):
-        deepest_after[i] = max(deepest_after[i + 1], kept[i][1])
-    positions = [pos for pos, _ in kept]
-    return [hit for pos, depth, hit in depth_only if deepest_after[bisect.bisect_right(positions, pos)] > depth]
+    deepest = max((depth for _, depth, hit in deeper if id(hit) not in refused_ids), default=0)
+    shallowest_stop = min(stopped, default=1 << 30)
+    return [hit for _, depth, hit in depth_only if deepest > depth or shallowest_stop < depth]
 
 
 def _P2_doubted_by_a_next_field(an: Analysis, reading: Reading, end: int, ws: int, we: int) -> bool:

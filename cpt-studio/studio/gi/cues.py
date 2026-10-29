@@ -223,11 +223,16 @@ OTHER_ACT_DENIED = rx(r'\b' + _OTHER_ACT + r"\s*(?:[:=\u2013-]\s*)?(?:(?:was|wer
 
 # --- history: the service happened before this encounter ------------------------
 
+# The words that put a service at an earlier occasion when they stand before its name ("prior colonoscopy"). EARLIER
+# reads the same words anywhere: before a reach to a depth in its clause, they put the reach at an earlier occasion
+# too ("At the previous attempt the colonoscope was advanced to 60 cm"; detect._depth_reach_today, GI round 2 fix
+# round, extent). One string, so the two never drift.
+_EARLIER = r'prior|previous|previously|last|most\s+recent|recent|recently|remote|earlier|past|index|outside'
+EARLIER = rx(r'\b(?:' + _EARLIER + r')\b')
 HISTORICAL_PRE = (
     ('history of', _pre(r'history\s+of|hx\s+of|h/o|s/p|status\s+post|personal\s+history\s+of',
                         _HIST_FILLER, 3)),
-    ('prior', _pre(r'prior|previous|previously|last|most\s+recent|recent|recently|remote|earlier|past|index|outside',
-                   _HIST_FILLER, 3)),
+    ('prior', _pre(_EARLIER, _HIST_FILLER, 3)),
 )
 # Who asked for a service is no history: "requested by her previous gastroenterologist", "ordered by the outside
 # physician" (the "elsewhere" history cue is not read after these).
@@ -334,12 +339,17 @@ UNREAD_SERVICE_DOUBT = rx(
 # "aborted" after the scope went in is an incomplete procedure, not a cancellation;
 # "before sedation" keeps it a cancellation. An abort that says neither is held as
 # uncertain (detect._abort_status), never excluded as cancelled.
-STARTED = rx(r'\b(?:was|were)\s+(?:then\s+)?(?:advanced|inserted|introduced|passed|intubated|reached)\b'
-             r'|\binsertion\b|\bintubation\s+of\b'
-             r'|\b(?:scope|colonoscope|endoscope|gastroscope|sigmoidoscope|duodenoscope|echoendoscope|enteroscope|'
-             r'instrument)\s+(?:had\s+|was\s+|then\s+)?(?:reached|advanced|passed|entered|traversed|inserted|introduced)\b'
-             r'|\bafter\s+(?:reaching|advancing|passing|entering|traversing|intubating|insertion|intubation)\b'
-             r'|\b(?:at|to|of)\s+(?:approximately\s+|about\s+|~\s*)?\d{1,3}\s*cm\b')
+# The instrument's course: it went in and was moved on ("was advanced", "the colonoscope reached", "insertion", "after
+# reaching"). STARTED adds a depth ("at 30 cm"), which also writes a size ("a polyp of 2 cm"); COURSE is the course
+# alone, read where a size would mislead (sections._reporting_heads: a later section that narrates an examination's
+# course; GI round 2 fix round, extent). One string, so the two never drift.
+_COURSE = (r'\b(?:was|were)\s+(?:then\s+)?(?:advanced|inserted|introduced|passed|intubated|reached)\b'
+           r'|\binsertion\b|\bintubation\s+of\b'
+           r'|\b(?:scope|colonoscope|endoscope|gastroscope|sigmoidoscope|duodenoscope|echoendoscope|enteroscope|'
+           r'instrument)\s+(?:had\s+|was\s+|then\s+)?(?:reached|advanced|passed|entered|traversed|inserted|introduced)\b'
+           r'|\bafter\s+(?:reaching|advancing|passing|entering|traversing|intubating|insertion|intubation)\b')
+COURSE = rx(_COURSE)
+STARTED = rx(_COURSE + r'|\b(?:at|to|of)\s+(?:approximately\s+|about\s+|~\s*)?\d{1,3}\s*cm\b')
 BEFORE_START = rx(r'\b(?:before|prior\s+to)\s+(?:the\s+)?(?:sedation|insertion|scope\s+insertion|intubation|'
                   r'start(?:ing)?|the\s+procedure\s+(?:began|started)|procedure\s+start|endoscope\s+insertion)\b')
 
@@ -802,12 +812,24 @@ _DEPTH_THEN_LANDMARK = (r'(?:to|up\s+to|as\s+far\s+as)\s+(?:approximately\s+|abo
                         r'(?:\s+from\s+(?:the\s+)?(?:anal\s+verge|anus|incisors|teeth|dentate\s+line))?\s*,?\s+'
                         r'(?:in|into|within|at)\s+(?:the\s+)?(?:level\s+of\s+(?:the\s+)?)?(?:[\w-]+\s+){0,2}$')
 _DEPTH_INSTRUMENT = r'(?:\w*scope|instrument)'
-_DEPTH_AUXILIARIES = r'(?:\s+(?:was|were|is|are|be|been|had|has|have|could|can|would|then|further|again|also|still|\w+ly))*'
+# GI round 2 fix round (extent, EXT-R6): an adverb that says the advance failed or fell short of where it was going is
+# no auxiliary of the reach: "was unsuccessfully advanced to 30 cm in the sigmoid colon", "was partially advanced to 30
+# cm". A closed class: the negated adverbs of success, effect, completeness and sufficiency, the adverbs of a futile
+# act, and the adverbs of degree that say an act fell short or almost did not happen. Such a reach is held (no reach is
+# read, as before the depth form existed), never read as a denial: "unsuccessfully advanced to 30 cm" does not say
+# whether 30 cm was reached. It is excluded both between the instrument and the verb and right before the verb of the
+# active form ("we unsuccessfully advanced the colonoscope to 30 cm").
+_FALLING_SHORT = ('unsuccessfully', 'ineffectively', 'ineffectually', 'unsatisfactorily', 'fruitlessly', 'futilely',
+                  'vainly', 'incompletely', 'inadequately', 'insufficiently', 'imperfectly', 'partially', 'partly',
+                  'barely', 'hardly', 'scarcely', 'nearly')
+_DEPTH_AUXILIARIES = (r'(?:\s+(?:was|were|is|are|be|been|had|has|have|could|can|would|then|further|again|also|still|'
+                      r'(?!(?:' + '|'.join(_FALLING_SHORT) + r')\b)\w+ly))*')
+_NO_FALLING_SHORT_BEFORE = ''.join(r'(?<!\b' + word + r'\s)' for word in _FALLING_SHORT)
 _DEPTH_VERB = r'(?:advanced|passed|inserted|introduced)'
 REACHED_DEPTH = rx(r'\b' + _DEPTH_INSTRUMENT + _DEPTH_AUXILIARIES + r'\s+' + _DEPTH_VERB + r'\s+(?:[\w-]+\s+){0,2}?'
                    + _DEPTH_THEN_LANDMARK
-                   + r'|\b' + _DEPTH_VERB + r'\s+(?:(?:the|a|an)\s+)?(?:[\w-]+\s+)?' + _DEPTH_INSTRUMENT + r'\s+'
-                   + _DEPTH_THEN_LANDMARK)
+                   + r'|' + _NO_FALLING_SHORT_BEFORE + r'\b' + _DEPTH_VERB + r'\s+(?:(?:the|a|an)\s+)?(?:[\w-]+\s+)?'
+                   + _DEPTH_INSTRUMENT + r'\s+' + _DEPTH_THEN_LANDMARK)
 REACHED_DEPTH_DENIED = rx(r'\b(?:(?:unable\s+to|could\s+not|cannot|can\s*not|failed\s+to|did\s+not)\s+(?:be\s+)?'
                           r'(?:advance|pass|insert|introduce)\w*|(?:was|were|is|are|been)\s+(?:not|never)\s+'
                           r'(?:able\s+to\s+be\s+|successfully\s+|further\s+|safely\s+)?(?:advanced|passed|inserted|'
