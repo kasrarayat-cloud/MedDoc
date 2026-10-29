@@ -676,18 +676,29 @@ holds the request).
 
 **Elapsed time is no date** (GI round 2, session 7c8d38da, 2026-10-28: the
 2b82889f acceptance walk's ho-04, 501184cea; its fix round, 2026-10-29, F4,
-c0f25579b; `_measured_on`, `_holds_duration`, `_day_marks`). A DURATION is a
+c0f25579b; the second fix round, bae4e81ac; `_measured_on`, `_holds_duration`,
+`_TimeRuns`). A DURATION is a
 number, or a range of two, with a unit of time: minutes, hours, seconds and
 their abbreviations (`DURATION`; days, weeks and months are left out, because a
 date offset is written in them: "2 weeks after the index procedure"). A field
 holds one only where nothing in it may state a day: it does not open with
 another number, and outside its durations no date starts, no number runs to
-three or more digits and no ordinal day or weekday stands; and (F4) the time
-statement's whole LINE holds no token that may state a day (`_DAY_MARK`: a date
-start, a number of three or more digits, an ordinal day or a weekday, a slash or
-a dash before a digit, a month's name beside a number) outside its durations and
-outside a date-of-service label with its own read date - the tokens found once
-per text. The field ends at the next field's label, never at one whose words run
+three or more digits and no ordinal day or weekday stands; and (the second fix
+round, edges-2 and F-2) the time STATEMENT holds no digit at all and no month
+name or abbreviation, weekday or ordinal word ("first" to "thirty-first", with
+a hyphen, a space or neither: `_RUN_DAY`) outside its durations and outside a
+date-of-service label with its own read date. The statement is the lines the
+layout joins into its sentence, plus the next line where the statement ends
+open (a separator, a dash, a slash, "&", "|", an open bracket or a word a
+sentence cannot end on), leaves a bracket open, ends without ".", "!" or "?"
+before a line that opens no field or list item of its own, or is followed by a
+line opening with a bracket, a date field or a date; and the line above where
+that line ends open or opens with a date field (`_statement_bounds`). Each
+text's lines, their marks and each statement's bounds are computed once
+(`_TimeRuns`). The fix round's dates-F4 check had read the statement's one raw
+LINE for a day token: a PDF line break hid "Date: 10/23/2026" on the next line,
+and "on the twenty-third" or "23/X/26" stated no day it read, so 2026-10-22 was
+sent where 2b82889f asked (differential round). The field ends at the next field's label, never at one whose words run
 back over a unit ("34 minutes. Date of service: ..."). Two rules read it:
 
 - (a) a date-of-service phrase that is the object of the words before it - they
@@ -709,10 +720,13 @@ note's own "Date of service: 2026-10-22" became a conflict, the request went
 without a date and 99214 waited for a member's answer, and in a note with no
 labelled date every member date was held. Now 2026-10-22 is documented and sent,
 as 057a7d398 sends it. A time statement dated on another day keeps the installed
-reading only where the guards read the day ("34 minutes (99214)", "34 min |
-Date: 10/23/2026": asked); the day words they do not read, and a label that
-dates the time itself ("Total time on 10/23/2026: 34 minutes"), are known limits
-(ACCURACY-RESIDUALS, GI round 2).
+reading wherever the statement holds a digit or a calendar word ("34 minutes
+(99214)", "34 min | Date: 10/23/2026", "... on the twenty-third", "... in
+October": asked), an over-hold included (">50% counseling", "first visit": asked
+as 2b82889f asks). A relative day word ("yesterday"), a day two lines beyond a
+break, a date field two lines above, and a label that dates the time itself
+("Total time on 10/23/2026: 34 minutes") are known limits (ACCURACY-RESIDUALS,
+GI round 2).
 
 **The narrow source rule** (owner decision 2026-10-28, second round, on
 interpretation 28's open family; bf17d23bc, narrowed by the fix round,
@@ -822,7 +836,9 @@ without a time statement, each moving an own label only:
   date is held with `USER_BIRTH_NOTE`;
 - ORDER: the label's date is earlier than the latest labelled date the note
   reads as an EARLIER occurrence's: 'aside', with a history word
-  (`_HISTORY_WORDS`: prior, previous, last, recent, index, outside, s/p ...)
+  (`_EARLIER_TIME_WORDS`: prior, previous, last, recent, remote, earlier, past,
+  index, history of, s/p, status post - never the place word "outside": an
+  outside procedure may be later, differential round F-4)
   within 80 characters either side on its line and no planned-occurrence word
   there (next, planned, scheduled, due, follow-up, repeat ...), before any
   authored addendum ("DOS: 05/01/2019" beside "Index colonoscopy - Encounter
@@ -834,6 +850,18 @@ without a time statement, each moving an own label only:
   Procedure note"), and the part has no technique, findings or impression
   heading up to the next numbered part: its date dates a procedure the part only
   names. Read 'unplaced'. Note `PART_DATE_NOTE`.
+
+The doubt rules only ask (the second fix round, bae4e81ac, differential round
+F-1; `_service_date_fact`, `_date_fact`). Where they leave the note no own date,
+a member's answer counts only if the reading without them would take it: the
+doubted label's own value, the values a documented conflict lists, or the dates
+its evidence reads; a date of birth never answers. Any other evidence span is
+quoted as `_DoubtSideSpan` (equal to the plain span, stored the same way), and a
+member's date equal to it is held with `USER_CONFLICT_NOTE`, so the request goes
+without a date. The fact's origin, value, note and stored evidence are
+unchanged. At c0f25579b any dated line under the doubt could answer: in an
+office visit dated 10/13/2026, "EGD on 05/01/2019" let a member's 2019-05-01 be
+taken and sent, which 2b82889f held.
 
 **The member's note** (GI round 2, 501184cea and fa239f0da). A member's date
 equal to a date this reader reads in the document only as another occurrence's
@@ -1753,11 +1781,24 @@ The extent readers make one span of a clause and share it among its landmark
   both read the same as before. The round's new readers are bounded alike: the
   negated-status grammar reads each sentence once (`_bare_status_sentence`), the
   narrow source rule finds its vocabulary once per text and each heading's
-  verdict once (context `_OccurrenceScope`), the elapsed-time rule finds its day
-  tokens once per text (`_day_marks`), a stand-alone service line's part is read
-  once and every later-text question is one comparison
-  (`sections._reporting_heads`), and pairing answers each act kind and set of
-  places once (`services._DoneIndex.only_outside`).
+  verdict once (context `_OccurrenceScope`), the elapsed-time rule reads its time
+  statements' lines and bounds once per text (`_TimeRuns`), a stand-alone
+  service line's part is read once and every later-text question is one
+  comparison (`sections._reporting_heads`), the procedure lines above such a
+  line are read in one pass (`sections._declared_services`, the second fix
+  round, 5b125e737: a run's planned, historical and cancelled cues once, for its
+  first line that names a service; a name's history words searched from
+  `_PRE_WORDS` (24, `detect.PRE_WORDS`) of its run's words back, which finds
+  exactly what a search from the run's start finds, since a `cues._pre` match
+  spans at most a trigger of six words and five fillers; a run's words and
+  semicolons once and an item's date once, `_names_another_occasion`), and
+  pairing answers each act kind and set of places once
+  (`services._DoneIndex.only_outside`). The fix round's first form of
+  `_declared_services` reread the whole run for each of its lines and the run's
+  prefix and item for each name: a 132,813-character soft-wrapped procedure
+  paragraph over a stand-alone "Colonoscopy" line overran the analyze stage's
+  60 s, and a 71,613-character one a member's 15 s context request (2b82889f:
+  0.8 s and 0.1 s; now 0.9 s and 0.1 s, reading the same).
 
 ### 5.4 `studio/providers` — proposal adapters
 

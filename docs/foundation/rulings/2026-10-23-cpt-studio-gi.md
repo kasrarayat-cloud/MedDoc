@@ -779,3 +779,23 @@ What it changes, so a later session does not re-derive it:
     passed the analyze stage's 60 s; a third Resume in a row overflowed the job key (HTTP 500). One gate text (a
     50,087-character repeated "EUS" text) routes in about 57.5 s on both revisions, near the 60 s limit, and stays a known
     limit.
+37. **Interpretation 31's member figure was wrong, and its "correct" class holds two texts the source contradicts.** A
+    differential round (2026-10-29: three lenses and a verifier per finding, asking only whether the head is worse than
+    the installed revision in a must-fix class) showed that the 37 member answers interpretation 31 counted, beside 6
+    others, as "equal to the note's own dated service line" were not all that: in some the dated line was another,
+    earlier service's ("EGD on 05/01/2019" in an office visit dated 10/13/2026), and that date reached the request. The
+    integrator had accepted the class by its description without reading its members. The second fix round (5b125e737 and
+    bae4e81ac, integrated as e5ea6c627 and 6546d778e) makes the date-of-birth, order and part doubt rules ask only: where
+    they leave the note no own date, a member's answer counts only if the reading without them would take it, and a date
+    of birth never answers. Measured at 6546d778e over the same 164,585 texts: against 2b82889f one document date is
+    newly sent (ho-04's shape) and 6 member answers are newly taken (the head asks an outside colonoscopy's date that
+    2b82889f sends, and the member's date equals the note's own dated title); against 057a7d398, 133 document dates are
+    sent where it asks, and no member answer differs. Read member by member, the 133 hold two texts the source
+    contradicts: lens:3705643aa10a ("Visit date: 05/01/2019" in an EGD note that opens "EGD: 11/04/2026") and
+    lens:0d0e48706876 ("Date of service: 10/13/2026" beside "Colonoscopy - Referral date: 10/13/2026 - performed on
+    11/04/2026"). The triage that called them correct read labels only, and a dated line naming the documented procedure
+    is no label. 2b82889f sends both; so does this round, also with an E/M time statement added, where 2b82889f asked
+    only because it misread "34 minutes" as a date. Closing them needs rule N1 to let a dated service line question the
+    own label - interpretation 28's open family, which the owner ruled only for headings, titles and row fields - so they
+    are listed for the owner (ACCURACY-RESIDUALS, gi2 dates-F1-n1). In the other 131, every other date is stated as
+    another occurrence's on its own line or under its heading.
