@@ -812,8 +812,12 @@ def _declared_services(text: str, lines: list[tuple[int, int]], headings: dict, 
     ...", "Colonoscopy Report", and the lines under it up to the next heading, a list of the procedures performed
     included) whose run of lines (``runs``, _runs) carries no planned, historical or cancelled cue (cues' own
     vocabularies: "Procedures: EGD planned"), each name read in its own item (to the next semicolon or the run's end)
-    with no earlier occasion of its own (_names_another_occasion). One pass over the lines up to the last service line."""
+    with no earlier occasion of its own (_names_another_occasion). One pass over the lines up to the last service line,
+    linear in the text (GI round 2, second fix round, cost: the differential round's DM-1 and edges-1 measured the whole
+    run reread for each of its lines and names): a run's cues are read once, for its first line that names a service,
+    and kept for its other lines; a line that names none declares nothing, whatever its run says."""
     declared, found, in_procedure = {}, set(), False
+    cued, memo = {}, {}  # a run's start -> whether the run carries a cue; what _names_another_occasion reads once
     for i in range(max(candidates) + 1):
         if i in candidates:
             declared[i] = frozenset(found)
@@ -821,11 +825,16 @@ def _declared_services(text: str, lines: list[tuple[int, int]], headings: dict, 
             in_procedure = headings[i][0] == 'procedure'
         if in_procedure:
             ls, le = lines[i]
-            rs, re_ = runs[0][i], runs[1][i]
-            if any(pattern.search(text, rs, re_) for pattern in _NOT_TODAYS):
+            names = [(family, m) for family, pattern in cues.SERVICE_PATTERNS for m in pattern.finditer(text, ls, le)]
+            if not names:
                 continue
-            found |= {family for family, pattern in cues.SERVICE_PATTERNS for m in pattern.finditer(text, ls, le)
-                      if not _names_another_occasion(text, rs, re_, m.start(), m.end())}
+            rs, re_ = runs[0][i], runs[1][i]
+            if rs not in cued:  # the lines of one run share its start, its end and so its answer
+                cued[rs] = any(pattern.search(text, rs, re_) for pattern in _NOT_TODAYS)
+            if cued[rs]:
+                continue
+            found |= {family for family, m in names
+                      if not _names_another_occasion(text, rs, re_, m.start(), m.end(), memo)}
     return declared
 
 
@@ -837,15 +846,35 @@ def _declared_services(text: str, lines: list[tuple[int, int]], headings: dict, 
 # reads a service name as another time's), or a year or a numeric date in the name's own item, says so. A date the item
 # shares with the day's own date is no exception: such a name is held, as before the stand-alone heading was read.
 _ITEM_DATE = re.compile(r'\b(?:19|20)\d{2}\b|\b\d{1,2}/\d{1,2}/\d{2,4}\b', re.A)
+# The second fix round (cost): a cues._pre match before a name ends where the name starts and spans at most a trigger of
+# six words and five fillers, words as cues._pre separates them ([\s,]); routing's bounded pre-trigger reading keeps
+# twice that (detect.PRE_WORDS, the same value). So the historical words are searched from that many of the run's words
+# back, which finds exactly what a search from the run's start finds, and the semicolons that end a name's item are
+# found by bisection: a run's words and semicolons are read once for every name in it, an item's date once for every
+# name in the item.
+_PRE_WORDS = 24
+_PRE_WORD = re.compile(r'[^\s,]+', re.A)
+_ITEM_EDGE = re.compile(';')
 
 
-def _names_another_occasion(text: str, ls: int, le: int, start: int, end: int) -> bool:
+def _names_another_occasion(text: str, ls: int, le: int, start: int, end: int, memo: dict) -> bool:
     """Whether the service name at [start, end) on the procedure line's run [ls, le) names an earlier occasion (see
-    above)."""
-    if any(pattern.search(text, ls, start) for _, pattern in cues.HISTORICAL_PRE):
+    above). ``memo`` (_declared_services) keeps each run's word starts and semicolons, by the run's start, and each
+    item's date answer, by the item."""
+    if ls not in memo:
+        memo[ls] = ([m.start() for m in _PRE_WORD.finditer(text, ls, le)],
+                    [m.start() for m in _ITEM_EDGE.finditer(text, ls, le)])
+    words, semicolons = memo[ls]
+    back = bisect.bisect_left(words, start) - _PRE_WORDS
+    if any(pattern.search(text, words[back] if back >= 0 else ls, start) for _, pattern in cues.HISTORICAL_PRE):
         return True
-    item_start, item_end = text.rfind(';', ls, start), text.find(';', end, le)
-    return bool(_ITEM_DATE.search(text, ls if item_start < 0 else item_start + 1, le if item_end < 0 else item_end))
+    # the item: from the run's last semicolon before the name (text.rfind(';', ls, start)) to its first one after the
+    # name (text.find(';', end, le)), or the run's ends
+    before, after = bisect.bisect_left(semicolons, start), bisect.bisect_left(semicolons, end)
+    item = (semicolons[before - 1] + 1 if before else ls, semicolons[after] if after < len(semicolons) else le)
+    if item not in memo:
+        memo[item] = bool(_ITEM_DATE.search(text, *item))
+    return memo[item]
 
 
 def _reporting_heads(text: str, lines: list[tuple[int, int]], headings: dict, candidates: dict,
