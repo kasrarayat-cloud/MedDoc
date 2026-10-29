@@ -278,7 +278,8 @@ KNOWN_LIMITS = {
     'F2-11b-ocr-hyphen-wrap': ({'gi.colonoscopy': ('incomplete', None, None), 'gi.flex_sig': ('historical', None, None)},
                                'OCR hyphenated the landmark across lines ("hep-" / "atic flexure")'),
     'F4-02-two-services-one-line': ({'gi.egd': ('performed', None, None), 'gi.colonoscopy': ('performed', None, None)},
-                                    'terse service parts with no act predicate: their labels are read nowhere'),
+                                    'terse service parts with no act predicate ("EGD to D2") open no part of their '
+                                    'own, so the indication holds their shorthand extents'),
     'F4-03c-table-ocr': ({'gi.egd': ('performed', None, None), 'gi.colonoscopy': ('uncertain', None, None)},
                          'OCR columns as spaces: no table'),
     'F4-04-table-colon-short': ({'gi.egd': ('performed', 'second part of duodenum', None),
