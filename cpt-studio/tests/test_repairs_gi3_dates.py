@@ -352,6 +352,10 @@ class NeutralHeadingTests(DateAsserts, SimpleTestCase):
     def test_a_lower_case_field_under_a_neutral_heading(self):
         self.assert_conflict(HEADER + 'Assessment and plan\nContinue iron.\n\nCharge information\n'
                              'date of service: 2026-10-06\n', '2026-10-05', '2026-10-06')
+        # in a history, where no field speaks by itself: the heading still ends the reach (an earlier date, so part 4
+        # does not ask it either)
+        self.assert_conflict(HEADER.replace('Subjective\nFollow-up of anemia.\n\n', '') + 'Interval history\n'
+                             'Doing well.\n\nCoding\ndate of service: 2025-03-10\n', '2026-10-05', '2025-03-10')
 
     def test_a_heading_continuing_the_line_above_is_no_heading(self):
         history = HEADER.replace('Subjective\nFollow-up of anemia.\n\n', '') + 'Interval history\n'
@@ -380,6 +384,10 @@ class SettleTests(DateAsserts, SimpleTestCase):
         text = HEADER + 'Assessment and plan\nContinue iron.\n\nCharge information\nNext visit date: 2026-11-16\n'
         self.assert_document(text, '2026-10-05')
         self.assertEqual(member(text, '2026-11-16'), 'held')
+        # with no date of the note's own it holds no member's answer either (kept, it would hold every one)
+        undated = UNDATED + 'Assessment and plan\nContinue iron.\n\nCharge information\nNext visit date: 2026-11-16\n'
+        self.assertEqual((date_fact(undated).origin, date_fact(undated).evidence), ('missing', ()))
+        self.assertEqual(member(undated, STRANGER), 'taken')
 
     def test_an_empty_field_stays_dropped(self):
         text = UNDATED + 'Assessment and plan\nContinue iron.\n\nCharge information\nDate of service: N/A\n'
