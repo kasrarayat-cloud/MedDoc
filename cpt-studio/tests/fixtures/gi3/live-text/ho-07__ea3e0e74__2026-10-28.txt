@@ -1,0 +1,24 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+ERCP Procedure Report
+Hospital: Corrigan Bluff University Hospital (fictional), Interventional Endoscopy
+Place of service: Outpatient hospital, on campus (POS 22); the patient was registered in outpatient status
+Date of procedure: 2026-10-21
+Patient: Leopoldine Varga-Ashworth (fictional), 74-year-old woman
+Endoscopist: Cassius Mbatha-Rourke, MD (fictional)
+Anesthesia: General endotracheal anesthesia by Corrigan Bluff Anesthesiology (fictional), attending Noor Halvorsen, MD (fictional); separate anesthesia record and billing.
+Radiology: Fluoroscopic supervision and interpretation reported separately by Theron Blackwood-Ito, MD (fictional), Department of Radiology.
+Procedure: ERCP with brushings, balloon dilation of a bile duct stricture and placement of a biliary stent.
+Indication
+Painless jaundice (total bilirubin 9.4 mg/dL) from a pancreatic head adenocarcinoma diagnosed by EUS-guided biopsy on 2026-10-06. Biliary drainage before neoadjuvant chemotherapy.
+Procedure Details
+After informed consent and a time-out, the duodenoscope was passed to the second portion of the duodenum. The major papilla looked normal. Deep selective cannulation of the bile duct was achieved on the second attempt with a sphincterotome and a 0.025-inch guidewire. No biliary sphincterotomy was performed. The pancreatic duct was not cannulated or injected.
+The cholangiogram showed a 2.5 cm stricture of the distal common bile duct, with the common bile duct dilated to 13 mm above it and dilated intrahepatic ducts. Brushings of the stricture were taken for cytology. The stricture was dilated with a 6 mm hydrostatic balloon over the wire so that the stent delivery system could pass. One 10 mm by 60 mm fully covered self-expanding metal biliary stent was deployed across the stricture, with prompt drainage of bile and contrast. No pancreatic stent was placed.
+Fluoroscopy time: 5.1 minutes.
+Impression
+1. Malignant-appearing distal common bile duct stricture with upstream dilation.
+2. Brushings taken for cytology.
+3. Balloon dilation of the stricture and placement of one fully covered metal biliary stent, with good drainage.
+4. No sphincterotomy; pancreatic duct not entered.
+Plan
+Brushings to Corrigan Bluff Cytopathology (fictional). Recheck bilirubin in one week. Medical oncology visit as scheduled. Return for pain, fever or vomiting.
+Electronically signed: Cassius Mbatha-Rourke, MD (fictional), 2026-10-21 12:47

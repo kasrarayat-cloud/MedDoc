@@ -1,0 +1,36 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Hollis Creek Gastroenterology (fictional)
+Flexible Sigmoidoscopy Note
+Patient: Benedikt Saarinen-Lowe (fictional)
+DOB: 08/30/1971
+Chart number (synthetic): H2-SYN-1103
+DOS: 10/13/2026
+Location: office procedure suite, place of service 11
+Performing physician: Imani Brightling-Voss, MD (fictional)
+Preparation: two sodium phosphate enemas at home. No sedation.
+Reason for the examination
+For two months he has seen fresh blood when wiping, with mild urgency. His last colonoscopy, at age 47 in
+03/2018 at another practice, was reported as normal.
+Procedure
+Digital rectal examination found no mass and normal sphincter tone. The flexible sigmoidoscope was inserted and
+advanced with gentle insufflation into the distal descending colon.
+Depth of insertion: 55 cm.
+The rectum and sigmoid colon were seen well after a little residual enema fluid was suctioned.
+Findings
+Rectum: a 25 mm flat, granular laterally spreading lesion on the posterior wall, 6 to 9 cm from the anal verge, with
+a regular surface pattern on near-focus imaging and no depressed area. It was photographed and sized against
+an open snare. It was not removed today; it will be resected by endoscopic mucosal resection at a separate
+session after a full bowel preparation. I intentionally did not biopsy it, because forceps sampling can scar the
+submucosa and complicate the later resection. Because the lesion lies in the rectum, I did not tattoo it.
+Sigmoid colon and distal descending colon: normal mucosa, no diverticula.
+Anal canal: small grade 1 internal hemorrhoids with a stigma of recent bleeding; not treated.
+Assessment
+1. Rectal laterally spreading lesion, 25 mm, granular type; probable bleeding source together with the
+hemorrhoids.
+2. Grade 1 internal hemorrhoids.
+Plan
+Colonoscopy with endoscopic mucosal resection of the rectal lesion at Wrenfield General Hospital (fictional). EMR
+scheduled for 11/05/2026, with a full split-dose preparation so that the whole colon can be examined at that
+session.
+Fiber supplement; avoid straining.
+Electronically signed by Imani Brightling-Voss, MD (fictional) on 10/13/2026 at 16:22

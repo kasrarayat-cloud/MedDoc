@@ -1,0 +1,227 @@
+{
+ "schema": "cpt-studio-gi3-dates-known-limits@1",
+ "note": "Rows the repaired reading reads otherwise than their source-reviewed expectation, pinned by their exact output with the reason. A change that fixes one fails its pin and must update this file deliberately.",
+ "limits": {
+  "AN1": {
+   "output": {
+    "service_date": "missing:None",
+    "sent": null,
+    "member": {
+     "1961-03-14": "held",
+     "2025-03-10": "held",
+     "2026-09-28": "held",
+     "2026-10-01": "held",
+     "2026-10-06": "taken"
+    },
+    "setting": "document:office",
+    "patient_status": "document:established"
+   },
+   "reason": "interpretation 42: a label no section governs is asked, never sent by itself, also where it is the only date-of-service label (an accepted over-ask: a member's answer equal to it is taken)"
+  },
+  "AN2": {
+   "output": {
+    "service_date": "missing:None",
+    "sent": null,
+    "member": {
+     "1961-03-14": "held",
+     "2025-03-10": "held",
+     "2026-09-28": "held",
+     "2026-10-01": "held",
+     "2026-10-06": "taken"
+    },
+    "setting": "document:office",
+    "patient_status": "document:established"
+   },
+   "reason": "as AN1, in PDF lines: the only date-of-service label after the plan is asked, never sent by itself; a member's answer equal to it is taken"
+  },
+  "AN3": {
+   "output": {
+    "service_date": "missing:None",
+    "sent": null,
+    "member": {
+     "1961-03-14": "held",
+     "2025-03-10": "held",
+     "2026-09-28": "held",
+     "2026-10-01": "held",
+     "2026-10-06": "taken"
+    },
+    "setting": "document:office",
+    "patient_status": "document:established"
+   },
+   "reason": "as AN1, under another neutral heading: the only date-of-service label after the plan is asked, never sent by itself; a member's answer equal to it is taken"
+  },
+  "AN4": {
+   "output": {
+    "service_date": "missing:None",
+    "sent": null,
+    "member": {
+     "1961-03-14": "held",
+     "2025-03-10": "held",
+     "2026-09-28": "held",
+     "2026-10-01": "held",
+     "2026-10-06": "taken"
+    },
+    "setting": "document:office",
+    "patient_status": "document:established"
+   },
+   "reason": "as AN3, in PDF lines: the only date-of-service label after the plan is asked, never sent by itself; a member's answer equal to it is taken"
+  },
+  "C5": {
+   "output": {
+    "service_date": "missing:None",
+    "sent": null,
+    "member": {
+     "1958-11-30": "held",
+     "2026-10-01": "held",
+     "2026-10-15": "taken"
+    },
+    "setting": "missing",
+    "patient_status": "missing"
+   },
+   "reason": "as AN1: the procedure report's only labelled date stands in a billing block after its recommendations"
+  },
+  "HN1": {
+   "output": {
+    "service_date": "missing:None",
+    "sent": null,
+    "member": {
+     "1961-03-14": "held",
+     "2026-10-01": "held",
+     "2026-10-06": "taken"
+    },
+    "setting": "document:office",
+    "patient_status": "document:established"
+   },
+   "reason": "as AN1: the only date-of-service label stands under a neutral heading after a history section"
+  },
+  "HC6": {
+   "output": {
+    "service_date": "conflict:None",
+    "sent": null,
+    "member": {
+     "1961-03-14": "held",
+     "2025-03-10": "taken",
+     "2026-10-01": "held",
+     "2026-10-05": "taken",
+     "2026-10-06": "held"
+    },
+    "setting": "document:office",
+    "patient_status": "document:established"
+   },
+   "reason": "pre-existing (the head reads the same): an \"Outside records\" block's \"Procedure: EGD\" heading opens a procedure section, so its date reads as the note's own and conflicts with the header; part 3 covers only a procedure section after a plan"
+  },
+  "HC7": {
+   "output": {
+    "service_date": "conflict:None",
+    "sent": null,
+    "member": {
+     "1961-03-14": "held",
+     "2026-09-30": "taken",
+     "2026-10-01": "held",
+     "2026-10-05": "taken",
+     "2026-10-06": "held"
+    },
+    "setting": "document:office",
+    "patient_status": "document:established"
+   },
+   "reason": "pre-existing (the head reads the same): a results table outside any history section; its row date speaks against the header"
+  },
+  "PC4": {
+   "output": {
+    "service_date": "conflict:None",
+    "sent": null,
+    "member": {
+     "1961-03-14": "held",
+     "2025-03-10": "held",
+     "2026-09-28": "held",
+     "2026-10-01": "held",
+     "2026-10-05": "taken",
+     "2026-10-06": "held",
+     "2026-11-04": "taken"
+    },
+    "setting": "document:office",
+    "patient_status": "document:established"
+   },
+   "reason": "B4 (interpretation 42) asks a procedure date field in a plan with no block heading unless the item before it names a later occurrence; \"Colonoscopy with possible polypectomy.\" names the planned service but no later-occurrence word (an over-ask, never a send)"
+  },
+  "PG2": {
+   "output": {
+    "service_date": "conflict:None",
+    "sent": null,
+    "member": {
+     "2026-10-01": "held",
+     "2026-10-20": "taken",
+     "2026-11-04": "taken"
+    },
+    "setting": "document:office",
+    "patient_status": "missing"
+   },
+   "reason": "part 3 asks the planned procedure's date beside the visit's own; the head reads the same conflict (part 3 asks, it does not silence)"
+  },
+  "R-X3-only": {
+   "output": {
+    "service_date": "missing:None",
+    "sent": null,
+    "member": {
+     "2026-10-01": "held",
+     "2026-10-06": "taken"
+    },
+    "setting": "document:office",
+    "patient_status": "missing"
+   },
+   "reason": "X3: a label broken over two lines is a form the installed revision never read (rule N7), so the only one is asked, never sent by itself; a member's answer equal to it is taken"
+  },
+  "R-X3-no-separator": {
+   "output": {
+    "service_date": "document:2026-10-05",
+    "sent": "2026-10-05",
+    "member": {
+     "2026-10-01": "held",
+     "2026-10-05": "taken",
+     "2026-10-06": "held"
+    },
+    "setting": "document:office",
+    "patient_status": "document:established"
+   },
+   "reason": "X3 requires the separator on the second line (interpretation 42's X3); without it the broken label is unread, as at the head, and the header date is sent"
+  },
+  "R-RC5-bare-follow-up": {
+   "output": {
+    "service_date": "missing:None",
+    "sent": null,
+    "member": {
+     "2026-10-01": "taken",
+     "2026-10-21": "taken"
+    },
+    "setting": "missing",
+    "patient_status": "missing"
+   },
+   "reason": "RC5 reads only a follow-up title no heading list holds; a bare \"Follow-up\" is the section reader's own plan heading, so its header stays governed (asked, as at the head)"
+  },
+  "R-RC5-colon": {
+   "output": {
+    "service_date": "missing:None",
+    "sent": null,
+    "member": {
+     "2026-10-01": "taken",
+     "2026-10-21": "taken"
+    },
+    "setting": "missing",
+    "patient_status": "missing"
+   },
+   "reason": "RC5 reads only a colon-less title; \"Hepatology follow-up:\" is a bare plan label, so its header stays governed (asked, as at the head)"
+  },
+  "R-RC6-pos-only": {
+   "output": {
+    "service_date": "missing:None",
+    "sent": null,
+    "member": {
+     "2026-10-01": "taken"
+    },
+    "setting": "missing",
+    "patient_status": "missing"
+   },
+   "reason": "RC6: a setting label the plan no longer governs speaks against the note's own setting but is never the setting by itself; alone it stays unread as at the head (the setting is asked and a member's answer taken)"
+  }
+ }
+}

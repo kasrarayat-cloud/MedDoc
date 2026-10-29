@@ -1,0 +1,36 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Flexible Sigmoidoscopy Procedure Note
+
+Practice: Marigold Creek Gastroenterology (fictional)
+
+Place of service: Physician office procedure room (POS 11)
+
+Date of procedure: 2026-10-14
+
+Patient: Barnaby Adeyinka-Hartmann (fictional), 52-year-old man
+Endoscopist: Seraphina Kowalczyk-Adeyemi, MD (fictional)
+Sedation: None.
+
+Indication
+Recurrent painless bright red blood on the toilet paper from grade II internal hemorrhoids despite fiber and topical
+therapy. A colonoscopy in 2024 at another practice was normal to the cecum, per the outside report.
+
+Procedure
+
+After informed consent, a digital rectal examination was normal. The flexible sigmoidoscope was advanced to 40 cm,
+in the sigmoid colon. The mucosa from 40 cm to the anal verge was normal. On retroflexion in the rectum, grade II
+internal hemorrhoids were seen in the left lateral, right anterior and right posterior positions. Using a multi-band ligator
+mounted on the sigmoidoscope, one rubber band was placed at the apex of the left lateral column and one at the
+apex of the right posterior column, well above the dentate line (2 bands in total). No biopsies were taken. The patient
+had no pain after banding.
+
+Impression
+1. Grade Il internal hemorrhoids; band ligation of two columns through the flexible sigmoidoscope.
+2. Normal rectum and sigmoid colon to 40 cm.
+
+Plan
+Fiber 25 g daily, sitz baths and no straining. Band the right anterior column in 6 weeks if bleeding continues. Call for
+heavy bleeding, fever or trouble passing urine.
+
+Electronically signed: Seraphina Kowalczyk-Adeyemi, MD (fictional), 2026-10-14

@@ -1,0 +1,33 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Esophageal High-Resolution Manometry Report
+Hospital: Pemberton Ridge Hospital (fictional), GI Motility Laboratory
+Place of service: Hospital outpatient department (POS 22)
+Date of service: 2026-10-13
+Patient: Rosalind Ebbesen-Nakamura (fictional), 49-year-old woman
+Interpreting physician: Florian Esterhazy-Bello, MD (fictional), Gastroenterology
+Study performed by: Mireille Duarte, RN (fictional), motility nurse employed by the hospital
+Billing: Professional component only (interpretation and report). The technical component is billed by Pemberton Ridge Hospital (fictional).
+Referring clinician: Tobiah Mwangi-Ferreira, MD (fictional)
+
+Indication
+Eight months of dysphagia to solids and liquids, regurgitation of undigested food and a 5 kg weight loss. An EGD on 2026-09-08 showed a dilated esophagus with retained fluid and no mass or stricture at the gastroesophageal junction.
+
+Technique
+A solid-state high-resolution manometry catheter with 36 circumferential pressure sensors was placed through the nose by the motility nurse after topical anesthesia, without sedation and without endoscopic or fluoroscopic guidance. After a 5-minute baseline, ten 5 mL water swallows were given supine and five upright. No pharmacologic provocation and no acid perfusion were used. Analysis followed the Chicago Classification version 4.0.
+
+Results
+Measure | Supine | Upright
+Median integrated relaxation pressure (mmHg) | 28.4 | 24.1
+Failed peristalsis | 10 of 10 swallows | 5 of 5 swallows
+Panesophageal pressurization | 7 of 10 swallows | 3 of 5 swallows
+Lower esophageal sphincter basal pressure (mmHg) | 41 | 36
+Upper esophageal sphincter | Normal relaxation | Normal relaxation
+
+Interpretation
+Type II achalasia by Chicago Classification version 4.0: elevated median integrated relaxation pressure in both positions, 100 percent failed peristalsis, and panesophageal pressurization in 70 percent of supine swallows.
+
+Recommendations
+Findings were discussed with the referring clinician. Treatment options are peroral endoscopic myotomy, laparoscopic Heller myotomy or pneumatic dilation, and she is referred to the esophageal surgery and therapeutic endoscopy clinic. A timed barium esophagram is recommended before treatment planning.
+
+Electronically signed: Florian Esterhazy-Bello, MD (fictional), 2026-10-14 09:30
