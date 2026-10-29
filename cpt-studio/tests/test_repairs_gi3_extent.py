@@ -14,7 +14,8 @@ The repairs (studio/gi/sections.py, cues.py, detect.py):
 - the ONE table model (sections.tables, read here and by the documented-service inventory): a header row of three or
   more " | " cells, each a bare label (a letter first, at most five words, no digit, no sentence punctuation, no answer
   word), its first cell optionally a numbering column, over rows of as many cells;
-- R1: a procedure-summary label straight over a summary table (an examination column, an extent column, no dated row)
+- R1: a procedure-summary label straight over a summary table (an examination column, an extent column with an extent
+  written in it, no dated row, and no line naming the table's service with an earlier occasion before the next heading)
   opens a procedure section; a table alone opens nothing;
 - R2: a data cell that only answers a column that speaks neither for the row nor of a landmark or extent is a clause of
   its own (both sides);
@@ -551,6 +552,11 @@ class TableTests(unittest.TestCase):
                               'Procedure summary\nExamination | Indication | Preparation\nUpper endoscopy (EGD) | '
                               'Dysphagia | Fasting\nAssessment and plan\nEGD to be booked. Medical decision making: low.\n')
         self.assertEqual(status(office, 'gi.egd', date(2026, 10, 21)), 'planned')
+        # a landmark in another column is no extent written ("Lesion site"): a pre-procedure note's booked colonoscopy
+        booked = SYNTHETIC + ('Marlowe Bay Endoscopy Suites (fictional)\nPre-procedure note\nDate of service: 2026-10-20\n'
+                              'Indications\nPolyp follow-up.\nProcedure summary\nExamination | Indication | Lesion site\n'
+                              'Colonoscopy | Polyp follow-up | Sigmoid colon\nPlan\nColonoscopy is booked for 2026-11-12.\n')
+        self.assertEqual(status(booked, 'gi.colonoscopy', DAY20), 'planned')
         dated = TABLE.format(heading='Procedure summary\n',
                              table='Examination | Planned date | Furthest point reached\n'
                                    'Upper endoscopy (EGD) | 2026-11-12 | Second portion of the duodenum',
@@ -561,10 +567,54 @@ class TableTests(unittest.TestCase):
         # an office note's summary of an outside report's findings names no examination per row: no procedure section
         office = SYNTHETIC + ('Harbor View Gastroenterology (fictional)\nOffice Visit - progress note\nDate of service: '
                               '2026-10-21\nPlace of service: office (POS 11)\nVisit type: established patient\nReason for '
-                              'visit\nReview of an outside report.\nProcedure summary\nFinding | Location | Extent\nPolyp | '
-                              'Sigmoid colon | Five millimetres\nColonoscopy was reviewed with the patient.\nAssessment and '
+                              'visit\nReview of an outside report.\nProcedure summary\nFinding | Location | Furthest point '
+                              'reached\nNormal mucosa | Colon | Cecum\nThe outside colonoscopy was discussed.\nAssessment and '
                               'plan\nRepeat colonoscopy in 3 years. Medical decision making: low.\n')
-        self.assertEqual(status(office, 'gi.colonoscopy', date(2026, 10, 21)), 'planned')
+        self.assertEqual(status(office, 'gi.colonoscopy', date(2026, 10, 21)), 'historical')
+
+    def test_the_summary_label_needs_an_extent_written(self):
+        # a pre-procedure note's summary form with its extent column blank is no summary of a procedure done: the booked
+        # colonoscopy stays planned (as at 90377ec6f413); the investigated design read it performed
+        for cell in ('-', '', 'To be recorded', 'N/A'):
+            with self.subTest(cell=cell):
+                text = SYNTHETIC + ('Marlowe Bay Endoscopy Suites (fictional)\nPre-procedure note\nDate of service: '
+                                    '2026-10-20\nPlace of service: ambulatory surgery center (POS 24)\nIndications\nIron '
+                                    'deficiency anemia.\nProcedure summary\nExamination | Instrument | Furthest point '
+                                    f'reached\nColonoscopy | Adult colonoscope | {cell}\nPlan\nColonoscopy is booked for '
+                                    '2026-11-12.\n')
+                self.assertEqual(status(text, 'gi.colonoscopy', DAY20), 'planned')
+        for cell in ('35 cm', 'About 40 cm'):
+            with self.subTest(cell=cell):  # a depth is an extent written: the summary opens
+                text = SYNTHETIC + ('Northgate Endoscopy (fictional)\nFlexible Sigmoidoscopy Report\nDate of service: '
+                                    '2026-10-20\nIndications\nRectal bleeding.\nProcedure summary\nExamination | Instrument | '
+                                    f'Depth of insertion\nFlexible sigmoidoscopy | Sigmoidoscope | {cell}\nImpression\n'
+                                    'Internal hemorrhoids.\n')
+                self.assertIn(('procedure', 'procedure summary'),
+                              [(s.kind, s.label) for s in sections.layout(text).sections])
+                # Known limit: a column binds a landmark, never a depth, so the depth is not read (asked), as at
+                # 90377ec6f413
+                self.assertEqual(reading(text, DAY20)['gi.flex_sig'][:2], ('performed', None))
+
+    def test_an_outside_report_pasted_into_an_office_note_is_no_summary(self):
+        # the summary's own service named with an earlier occasion below the table: the outside colonoscopy stays
+        # historical (as at 90377ec6f413); the investigated design read it performed today, extent cecum
+        text = SYNTHETIC + ('Harbor View Gastroenterology (fictional)\nOffice Visit - progress note\nDate of service: '
+                            '2026-10-21\nPlace of service: office (POS 11)\nVisit type: established patient\nReason for '
+                            'visit\nReview of outside records.\nProcedure summary\nExamination | Instrument | Furthest point '
+                            'reached\nColonoscopy | Adult colonoscope | Cecum\nThe outside colonoscopy above was reviewed '
+                            'with the patient.\nAssessment and plan\nRepeat in 3 years. Medical decision making: low.\n')
+        self.assertEqual(status(text, 'gi.colonoscopy', date(2026, 10, 21)), 'historical')
+
+    def test_known_limit_an_office_notes_bare_summary_table(self):
+        # Known limit: an office note's "Procedure summary" over an undated table with an extent, and nothing that says
+        # whose or when, opens a procedure section, so the colonoscopy reads performed today (at 90377ec6f413 the table
+        # stayed in the note's first section and the colonoscopy read uncertain, asked). Telling an office note from a
+        # procedure report is the visit-scope reader's (interpretation 44), not the table model's.
+        text = SYNTHETIC + ('Harbor View Gastroenterology (fictional)\nOffice Visit - progress note\nDate of service: '
+                            '2026-10-21\nPlace of service: office (POS 11)\nVisit type: established patient\nProcedure '
+                            'summary\nExamination | Instrument | Furthest point reached\nColonoscopy | Adult colonoscope | '
+                            'Cecum\nAssessment and plan\nRepeat in 3 years. Medical decision making: low.\n')
+        self.assertEqual(reading(text, date(2026, 10, 21))['gi.colonoscopy'][:2], ('performed', 'cecum'))
 
     def test_an_answer_about_a_landmark_or_the_extent_stays_with_its_row(self):
         # "Cecum reached | No" says the reach fell short, "Furthest point reached | None" that nothing was reached: such an
@@ -724,6 +774,25 @@ class CostTests(unittest.TestCase):
                 self.assertIsNone(cues.EXTENT_CM.search(text))
                 self.assertIsNone(cues.EXTENT_LABEL_BEFORE.search(text))
                 self.assertLess(time.process_time() - start, 2.0)  # about 0.01 s; with plain runs about 17 s each
+
+    def test_a_summary_reads_its_reach_once(self):
+        # each summary table's reach for another occasion ends at the next table's header: n tables back to back, with no
+        # heading between them, read each line once (read to the next heading, they read n * n / 2 lines)
+        calls, original = [], sections._names_another_occasion
+
+        def counting(*args):
+            calls.append(args[1])
+            return original(*args)
+
+        block = ('Procedure summary\nExamination | Instrument | Furthest point reached\n'
+                 'Colonoscopy | Adult colonoscope | Cecum\n')
+        text = TABLE.format(heading='', table=block * 200, after='Impression\nSee above.')
+        with mock.patch.object(sections, '_names_another_occasion', counting):
+            sections.layout.cache_clear()
+            sections.layout(text)
+        sections.layout.cache_clear()
+        self.assertGreaterEqual(len(calls), 200)
+        self.assertLessEqual(len(calls), 2 * 200)
 
     def test_a_cells_opening_is_read_once(self):
         # however many landmarks one extent cell holds, its opening word is found once (detect._extent_column)

@@ -72,8 +72,9 @@ A heading whose parts are all procedure, findings or technique headings
 ``tables`` is the one table model (interpretation 45): a header row of three
 or more " | " cells, each a bare label, over rows of as many cells. A
 procedure-summary label ("Procedure summary") straight over a summary table
-(an examination column, an extent column, no dated row) opens a procedure
-section; a table alone opens nothing. In a table's data row, a cell that only
+(an examination column, an extent column with an extent written in it, no
+dated row, no line naming its service with an earlier occasion before the next
+heading) opens a procedure section; a table alone opens nothing. In a table's data row, a cell that only
 answers ("No") a column that speaks neither for the row's performance or
 status, nor of a landmark or an extent ("Tissue sampled"), is a clause of its
 own. ``Layout.columns`` gives each data cell its column's label.
@@ -1186,14 +1187,57 @@ SERVICE_COLUMNS = frozenset(('examination', 'examinations', 'exam', 'exams', 'pr
                              'services', 'study', 'studies', 'endoscopy', 'endoscopies'))
 
 
+# gi3 extent (R1, built): two conditions the adversarial probes of the investigated design asked for, both narrowing it
+# back to the reading at 90377ec6f413 (the table stays the section's in force, so its services are asked):
+# - a row states an extent under the extent column: its cell opens with a landmark or a depth ("the" or "a" at most
+#   before it; detect._extent_column's own test). An extent column is evidence only once an extent is written in it: a
+#   pre-procedure note's form with the column blank ("Colonoscopy | Adult colonoscope | -") read the booked colonoscopy
+#   as performed;
+# - no line from the table's first row to the next heading or table names one of the table's own services with an
+#   earlier occasion of its own (_names_another_occasion, round 2's reader for procedure lines): an office note that
+#   pasted an outside report's "Procedure summary" table ("The outside colonoscopy above was reviewed with the
+#   patient.") read the outside colonoscopy as performed today. Each table's reach ends where the next table's header
+#   starts, so the lines are read once.
+_CELL_LEAD = re.compile(r'[ \t]*+(?:(?:the|a)[ \t]++)*+', re.A | re.I)
+_STATED_DEPTH = re.compile(r'(?:approximately[ \t]+|about[ \t]+|~[ \t]*)?\d{1,3}[ \t]*cm\b', re.A | re.I)
+
+
+def _states_an_extent(text: str, a: int, b: int) -> bool:
+    """Whether the cell [a, b) opens with a landmark or a depth, "the" or "a" at most before it (see above)."""
+    at = _CELL_LEAD.match(text, a, b).end()
+    return bool(_STATED_DEPTH.match(text, at, b)) \
+        or any(pattern.match(text, at, b) for _, _, pattern in cues.UPPER_LANDMARKS + cues.LOWER_LANDMARKS)
+
+
+def _another_occasion_in_reach(text: str, lines: list[tuple[int, int]], line_starts: list[int], headings: dict,
+                               table: Table, column: int, limit: int) -> bool:
+    """Whether a line from the table's first row up to the next heading line or ``limit`` (the next table's header)
+    names one of the services of the table's examination column (``column``) with an earlier occasion of its own."""
+    families = {family for row in table.rows for family, pattern in cues.SERVICE_PATTERNS
+                if pattern.search(text, *row[column])}
+    patterns = [pattern for family, pattern in cues.SERVICE_PATTERNS if family in families]
+    memo, j = {}, bisect.bisect_left(line_starts, table.rows[0][0][0])
+    while patterns and j < len(lines) and lines[j][0] < limit and not headings[j]:
+        ls, le = lines[j]
+        if any(_names_another_occasion(text, ls, le, m.start(), m.end(), memo)
+               for pattern in patterns for m in pattern.finditer(text, ls, le)):
+            return True
+        j += 1
+    return False
+
+
 def _summary_opens(text: str, lines: list[tuple[int, int]], headings: dict,
                    found: tuple[Table, ...]) -> dict[int, tuple[str, str, Span]]:
     """For each procedure-summary label line over a summary table (see above), the procedure section it opens."""
     opens, line_starts = {}, [ls for ls, _ in lines]
-    for table in found:
-        labels = table.labels[1:] if table.labels[0] in _TABLE_NUMBERING_LABELS else table.labels
-        if labels[0] not in SERVICE_COLUMNS or not any(cues.EXTENT_HEADER.fullmatch(label) for label in labels[1:]) \
-                or any(_ITEM_DATE.search(text, row[0][0], row[-1][1]) for row in table.rows):
+    for n, table in enumerate(found):
+        column = 1 if table.labels[0] in _TABLE_NUMBERING_LABELS else 0  # the examination column
+        extents = [k for k in range(column + 1, len(table.labels)) if cues.EXTENT_HEADER.fullmatch(table.labels[k])]
+        if table.labels[column] not in SERVICE_COLUMNS or not extents \
+                or not any(_states_an_extent(text, *row[k]) for row in table.rows for k in extents) \
+                or any(_ITEM_DATE.search(text, row[0][0], row[-1][1]) for row in table.rows) \
+                or _another_occasion_in_reach(text, lines, line_starts, headings, table, column,
+                                              found[n + 1].header[0] if n + 1 < len(found) else len(text)):
             continue
         above = bisect.bisect_left(line_starts, table.header[0]) - 1
         while above >= 0 and not text[lines[above][0]:lines[above][1]].strip():
