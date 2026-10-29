@@ -1,0 +1,2017 @@
+{
+ "schema": "cpt-studio-gi3-dates-variants@1",
+ "note": "Source-reviewed date/section binding variants (gi3 dates). SYNTHETIC text only. Each row: the text (or a fixture of a known case), the source-reviewed expectation and its review. No head or prototype output.",
+ "rows": [
+  {
+   "id": "K-h2-08-live",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "pdf-live",
+   "control": false,
+   "fixture": "fixtures/gi3/live-text/h2-08__e084b793__2026-10-29.txt",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. (h2-08 as the live service read it; \"Charge information\" is a colon-less heading the section reader cannot place, so the plan section runs over it.)",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "K-h2-08-source",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "plain-source",
+   "control": false,
+   "fixture": "fixtures/gi3/h2/h2-08-hepatology-note.txt",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. (h2-08 as authored.)",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "K-h2-07-live",
+   "family": "H-historical-table-control",
+   "layout": "pdf-live",
+   "control": true,
+   "fixture": "fixtures/gi3/live-text/h2-07__fbdd6d27__2026-10-29.txt",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-21"
+   },
+   "review": "The header labels the visit date 2026-10-21; the \"Results reviewed today\" table's Date of service column dates each listed test or study (2026-10-02, 2025-11-12), prior occurrences: the date of service is 2026-10-21 and the table never speaks against it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "K-h2-07-source",
+   "family": "H-historical-table-control",
+   "layout": "plain-source",
+   "control": true,
+   "fixture": "fixtures/gi3/h2/h2-07-clinic-note.txt",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-21"
+   },
+   "review": "As K-h2-07-live, as authored.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A01",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nCharge information\nDate of service: 2026-10-06\nDiagnosis: cirrhosis with ascites\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Heading \"Charge information\" after \"Assessment and plan\"; labels \"Date of service: 2026-10-05\" / \"Date of service: 2026-10-06\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A02",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "pdf",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDOS: 10/05/2026\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling\nand a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a\nnodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small\nesophageal varices without red signs.\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\nPlan:\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic\nmetabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months.\nRepeat upper endoscopy is not needed while he stays on carvedilol.\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling\nand documentation.\nBilling\nDOS: 10/06/2026\nDiagnosis: cirrhosis with ascites\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Heading \"Billing\" after \"Plan:\"; labels \"DOS: 10/05/2026\" / \"DOS: 10/06/2026\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A03",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nVisit date: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nRecommendations:\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nBilling information\nVisit date: 2026-10-06\nDiagnosis: cirrhosis with ascites\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Heading \"Billing information\" after \"Recommendations:\"; labels \"Visit date: 2026-10-05\" / \"Visit date: 2026-10-06\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A04",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of visit: October 5, 2026\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment/Plan:\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nEncounter summary\nDate of visit: October 6, 2026\nDiagnosis: cirrhosis with ascites\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Heading \"Encounter summary\" after \"Assessment/Plan:\"; labels \"Date of visit: October 5, 2026\" / \"Date of visit: October 6, 2026\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A05",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "pdf",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nEncounter date: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling\nand a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a\nnodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small\nesophageal varices without red signs.\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\nPlan of care\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic\nmetabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months.\nRepeat upper endoscopy is not needed while he stays on carvedilol.\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling\nand documentation.\nCoding\nEncounter date: 2026-10-06\nDiagnosis: cirrhosis with ascites\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Heading \"Coding\" after \"Plan of care\"; labels \"Encounter date: 2026-10-05\" / \"Encounter date: 2026-10-06\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A06",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nService date: 10/05/2026\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nDiscussion:\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nCoding summary\nService date: 10/06/2026\nDiagnosis: cirrhosis with ascites\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Heading \"Coding summary\" after \"Discussion:\"; labels \"Service date: 10/05/2026\" / \"Service date: 10/06/2026\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A07",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of encounter: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nFollow-up:\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nVisit details\nDate of encounter: 2026-10-06\nDiagnosis: cirrhosis with ascites\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Heading \"Visit details\" after \"Follow-up:\"; labels \"Date of encounter: 2026-10-05\" / \"Date of encounter: 2026-10-06\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A08",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "pdf",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling\nand a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a\nnodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small\nesophageal varices without red signs.\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\nImpression and plan:\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic\nmetabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months.\nRepeat upper endoscopy is not needed while he stays on carvedilol.\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling\nand documentation.\nVisit information\nDate of service: 2026-10-06\nDiagnosis: cirrhosis with ascites\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Heading \"Visit information\" after \"Impression and plan:\"; labels \"Date of service: 2026-10-05\" / \"Date of service: 2026-10-06\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A09",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDOS: 10/05/2026\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nSuperbill\nDOS: 10/06/2026\nDiagnosis: cirrhosis with ascites\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Heading \"Superbill\" after \"Assessment and plan\"; labels \"DOS: 10/05/2026\" / \"DOS: 10/06/2026\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A10",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nVisit date: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nPlan:\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nClaim details\nVisit date: 2026-10-06\nDiagnosis: cirrhosis with ascites\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Heading \"Claim details\" after \"Plan:\"; labels \"Visit date: 2026-10-05\" / \"Visit date: 2026-10-06\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A11",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "pdf",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of visit: October 5, 2026\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling\nand a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a\nnodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small\nesophageal varices without red signs.\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\nRecommendations:\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic\nmetabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months.\nRepeat upper endoscopy is not needed while he stays on carvedilol.\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling\nand documentation.\nEncounter details\nDate of visit: October 6, 2026\nDiagnosis: cirrhosis with ascites\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Heading \"Encounter details\" after \"Recommendations:\"; labels \"Date of visit: October 5, 2026\" / \"Date of visit: October 6, 2026\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A12",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nEncounter date: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment/Plan:\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nCharges\nEncounter date: 2026-10-06\nDiagnosis: cirrhosis with ascites\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Heading \"Charges\" after \"Assessment/Plan:\"; labels \"Encounter date: 2026-10-05\" / \"Encounter date: 2026-10-06\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A13",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nService date: 10/05/2026\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nPlan of care\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nAdministrative\nService date: 10/06/2026\nDiagnosis: cirrhosis with ascites\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Heading \"Administrative\" after \"Plan of care\"; labels \"Service date: 10/05/2026\" / \"Service date: 10/06/2026\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A14",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "pdf",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of encounter: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling\nand a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a\nnodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small\nesophageal varices without red signs.\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\nDiscussion:\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic\nmetabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months.\nRepeat upper endoscopy is not needed while he stays on carvedilol.\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling\nand documentation.\nSignature block\nDate of encounter: 2026-10-06\nDiagnosis: cirrhosis with ascites\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Heading \"Signature block\" after \"Discussion:\"; labels \"Date of encounter: 2026-10-05\" / \"Date of encounter: 2026-10-06\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A15",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nFollow-up:\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nCHARGE INFORMATION\nDate of service: 2026-10-06\nDiagnosis: cirrhosis with ascites\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Heading \"CHARGE INFORMATION\" after \"Follow-up:\"; labels \"Date of service: 2026-10-05\" / \"Date of service: 2026-10-06\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A16",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDOS: 10/05/2026\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nImpression and plan:\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nCharge Information\nDOS: 10/06/2026\nDiagnosis: cirrhosis with ascites\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Heading \"Charge Information\" after \"Impression and plan:\"; labels \"DOS: 10/05/2026\" / \"DOS: 10/06/2026\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A17",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "table",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nCharge information\nDate of service | 2026-10-06\nDiagnosis | cirrhosis with ascites\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. The charge block as a Word table (two-cell rows).",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A18",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "table",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nCharge information | Date of service: 2026-10-06 | Diagnosis: cirrhosis with ascites\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. The charge block as a Word table (one row, three cells).",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A19",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "table",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nBilling\nField | Value\nDate of service | 2026-10-06\nPlace of service | office\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. The charge block as a Word table (a field/value table).",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A20",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "table",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nCharge information\nDate of service | Diagnosis | CPT\n2026-10-06 | cirrhosis with ascites | 99214\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. The charge block as a Word table (a header row over one charge row).",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A21",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "ocr",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling\nand a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a\nnodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small\nesophageal varices without red signs.\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic\nmetabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months.\nRepeat upper endoscopy is not needed while he stays on carvedilol.\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling\nand documentation.\nCHARGE  INFORMATION\nDate of Service : 2026-10-06\nDiagnosis : cirrhosis with ascites\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Scanned-page shape: spacing and case.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A22",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "ocr",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling\nand a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a\nnodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small\nesophageal varices without red signs.\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic\nmetabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months.\nRepeat upper endoscopy is not needed while he stays on carvedilol.\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling\nand documentation.\nCharge lnformation\nDate of service:2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Scanned-page shape: a misread letter and no space after the colon.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A23",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "ocr",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling\nand a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a\nnodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small\nesophageal varices without red signs.\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic\nmetabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months.\nRepeat upper endoscopy is not needed while he stays on carvedilol.\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling\nand documentation.\nCharge information\nDate of service:\n2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Scanned-page shape: the value on the next line.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "A24",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "ocr",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling\nand a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a\nnodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small\nesophageal varices without red signs.\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic\nmetabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months.\nRepeat upper endoscopy is not needed while he stays on carvedilol.\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling\nand documentation.\nCharge information Date of service: 2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Scanned-page shape: the heading run into the field on one line.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "AS1",
+   "family": "A-same-date-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nCharge information\nDate of service: 2026-10-05\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "Both date-of-service labels state the same date; the date of service is 2026-10-05.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "AS2",
+   "family": "A-same-date-control",
+   "layout": "pdf",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling\nand a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a\nnodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small\nesophageal varices without red signs.\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic\nmetabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months.\nRepeat upper endoscopy is not needed while he stays on carvedilol.\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling\nand documentation.\nBilling\nDate of service: 2026-10-05\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "Both date-of-service labels state the same date; the date of service is 2026-10-05.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "AS3",
+   "family": "A-same-date-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nVisit details\nDate of service: 2026-10-05\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "Both date-of-service labels state the same date; the date of service is 2026-10-05.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "AN1",
+   "family": "A-nohead-only-label-after-plan",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nCharge information\nDate of service: 2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-06"
+   },
+   "review": "The only date-of-service label is in the administrative block after the plan; it is unqualified, so it is the encounter's date of service (2026-10-06), and the signature date agrees. Heading \"Charge information\", label \"Date of service: 2026-10-06\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "AN2",
+   "family": "A-nohead-only-label-after-plan",
+   "layout": "pdf",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling\nand a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a\nnodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small\nesophageal varices without red signs.\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic\nmetabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months.\nRepeat upper endoscopy is not needed while he stays on carvedilol.\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling\nand documentation.\nBilling\nDOS: 10/06/2026\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-06"
+   },
+   "review": "The only date-of-service label is in the administrative block after the plan; it is unqualified, so it is the encounter's date of service (2026-10-06), and the signature date agrees. Heading \"Billing\", label \"DOS: 10/06/2026\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "AN3",
+   "family": "A-nohead-only-label-after-plan",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nEncounter summary\nVisit date: 2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-06"
+   },
+   "review": "The only date-of-service label is in the administrative block after the plan; it is unqualified, so it is the encounter's date of service (2026-10-06), and the signature date agrees. Heading \"Encounter summary\", label \"Visit date: 2026-10-06\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "AN4",
+   "family": "A-nohead-only-label-after-plan",
+   "layout": "pdf",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling\nand a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a\nnodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small\nesophageal varices without red signs.\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic\nmetabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months.\nRepeat upper endoscopy is not needed while he stays on carvedilol.\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling\nand documentation.\nVisit details\nEncounter date: 2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-06"
+   },
+   "review": "The only date-of-service label is in the administrative block after the plan; it is unqualified, so it is the encounter's date of service (2026-10-06), and the signature date agrees. Heading \"Visit details\", label \"Encounter date: 2026-10-06\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "AC1",
+   "family": "A-colon-heading-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nCharge information:\nDate of service: 2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. \"Charge information:\" with a colon.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "AC2",
+   "family": "A-colon-heading-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nPlan:\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nSignature\nDate of service: 2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. \"Signature\" is a heading the section reader knows.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "AC3",
+   "family": "A-colon-heading-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nPlan:\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\n[PDF form fields on page 1]\nDate of service: 2026-10-06\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. The second label in a PDF form-field block.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "B1",
+   "family": "B-label-inside-plan-no-heading",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nDate of service: 2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later line of the plan section labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. The field \"Date of service: 2026-10-06\" ends the plan; no plan item names it or qualifies it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "B2",
+   "family": "B-label-inside-plan-no-heading",
+   "layout": "pdf",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling\nand a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a\nnodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small\nesophageal varices without red signs.\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\nPlan:\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic\nmetabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months.\nRepeat upper endoscopy is not needed while he stays on carvedilol.\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling\nand documentation.\nDOS: 10/06/2026\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later line of the plan section labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. The field \"DOS: 10/06/2026\" ends the plan; no plan item names it or qualifies it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "B3",
+   "family": "B-label-inside-plan-no-heading",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nRecommendations:\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nEncounter date: 2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later line of the plan section labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. The field \"Encounter date: 2026-10-06\" ends the plan; no plan item names it or qualifies it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "B4",
+   "family": "B-label-inside-plan-no-heading",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nVisit date: 2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later line of the plan section labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. The field \"Visit date: 2026-10-06\" ends the plan; no plan item names it or qualifies it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "B5",
+   "family": "B-label-inside-plan-no-heading",
+   "layout": "table",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nDate of service | 2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later line of the plan section labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. The field \"Date of service | 2026-10-06\" ends the plan; no plan item names it or qualifies it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "B6",
+   "family": "B-label-inside-plan-no-heading",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional). Date of service: 2026-10-06\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and the signature line labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. The date of service on the signature line.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "BN1",
+   "family": "B-label-inside-plan-no-heading",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nDate of service: 2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "uncertain",
+    "acceptable": [
+     "document:2026-10-06",
+     "asked"
+    ]
+   },
+   "review": "The only date-of-service label ends the plan section; it is unqualified and nothing ties it to a planned item, so it most likely dates this encounter, but its place inside the plan leaves a doubt: sending it or asking it are both defensible; sending another date is not.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "C1",
+   "family": "C-procedure-report-billing",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLantern Bay Endoscopy Center (fictional)\nColonoscopy report\nPatient: Imre Solano-Whitcombe (fictional)\nDate of birth: 1958-11-30\nProcedure date: 2026-10-14\nEndoscopist: Priya Halvorsen-Mbeki, MD (fictional)\n\nIndication: surveillance, history of adenomatous polyps.\nProcedure: Colonoscopy with cold snare polypectomy.\nTechnique: The colonoscope was advanced to the cecum; the appendiceal orifice and ileocecal valve were photographed. Withdrawal time 9 minutes.\nFindings: A 6 mm sigmoid polyp was removed with a cold snare. Otherwise normal to the cecum.\nImpression: one sigmoid polyp removed.\n\nRecommendations:\nAwait pathology. Repeat colonoscopy in 3 years if the polyp is an adenoma.\n\nBilling\nProcedure date: 2026-10-15\nCPT: 45385\nElectronically signed: Priya Halvorsen-Mbeki, MD (fictional), 2026-10-15 08:40\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-14",
+     "2026-10-15"
+    ]
+   },
+   "review": "The report header labels the procedure date 2026-10-14 and the billing block after the recommendations labels it 2026-10-15, unqualified: two applicable procedure dates that disagree; query.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "C2",
+   "family": "C-procedure-report-billing",
+   "layout": "pdf",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLantern Bay Endoscopy Center (fictional)\nColonoscopy report\nPatient: Imre Solano-Whitcombe (fictional)\nDate of birth: 1958-11-30\nDate of service: 10/14/2026\nEndoscopist: Priya Halvorsen-Mbeki, MD (fictional)\nIndication: surveillance, history of adenomatous polyps.\nProcedure: Colonoscopy with cold snare polypectomy.\nTechnique: The colonoscope was advanced to the cecum; the appendiceal orifice and ileocecal valve were\nphotographed. Withdrawal time 9 minutes.\nFindings: A 6 mm sigmoid polyp was removed with a cold snare. Otherwise normal to the cecum.\nImpression: one sigmoid polyp removed.\nRecommendations:\nAwait pathology. Repeat colonoscopy in 3 years if the polyp is an adenoma.\nCharges\nDate of service: 10/15/2026\nCPT: 45385\nElectronically signed: Priya Halvorsen-Mbeki, MD (fictional), 2026-10-15 08:40\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-14",
+     "2026-10-15"
+    ]
+   },
+   "review": "As C1, \"Charges\" block, US dates.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "C3",
+   "family": "C-procedure-report-billing",
+   "layout": "table",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLantern Bay Endoscopy Center (fictional)\nColonoscopy report\nPatient: Imre Solano-Whitcombe (fictional)\nDate of birth: 1958-11-30\nDate of service: 10/14/2026\nEndoscopist: Priya Halvorsen-Mbeki, MD (fictional)\n\nIndication: surveillance, history of adenomatous polyps.\nProcedure: Colonoscopy with cold snare polypectomy.\nTechnique: The colonoscope was advanced to the cecum; the appendiceal orifice and ileocecal valve were photographed. Withdrawal time 9 minutes.\nFindings: A 6 mm sigmoid polyp was removed with a cold snare. Otherwise normal to the cecum.\nImpression: one sigmoid polyp removed.\n\nRecommendations:\nAwait pathology. Repeat colonoscopy in 3 years if the polyp is an adenoma.\n\nBilling | Date of service: 10/15/2026 | CPT: 45385\nElectronically signed: Priya Halvorsen-Mbeki, MD (fictional), 2026-10-15 08:40\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-14",
+     "2026-10-15"
+    ]
+   },
+   "review": "As C1, one Word-table row.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "C4",
+   "family": "C-procedure-report-billing",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLantern Bay Endoscopy Center (fictional)\nColonoscopy report\nPatient: Imre Solano-Whitcombe (fictional)\nDate of birth: 1958-11-30\nDate of service: 10/14/2026\nEndoscopist: Priya Halvorsen-Mbeki, MD (fictional)\n\nIndication: surveillance, history of adenomatous polyps.\nProcedure: Colonoscopy with cold snare polypectomy.\nTechnique: The colonoscope was advanced to the cecum; the appendiceal orifice and ileocecal valve were photographed. Withdrawal time 9 minutes.\nFindings: A 6 mm sigmoid polyp was removed with a cold snare. Otherwise normal to the cecum.\nImpression: one sigmoid polyp removed.\n\nRecommendations:\nAwait pathology. Repeat colonoscopy in 3 years if the polyp is an adenoma.\n\nCoding summary\nDate of service: 10/14/2026\nCPT: 45385\nElectronically signed: Priya Halvorsen-Mbeki, MD (fictional), 2026-10-15 08:40\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-14"
+   },
+   "review": "Both labels state 2026-10-14.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "C5",
+   "family": "C-procedure-report-billing",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLantern Bay Endoscopy Center (fictional)\nColonoscopy report\nPatient: Imre Solano-Whitcombe (fictional)\nDate of birth: 1958-11-30\nEndoscopist: Priya Halvorsen-Mbeki, MD (fictional)\n\nIndication: surveillance, history of adenomatous polyps.\nProcedure: Colonoscopy with cold snare polypectomy.\nTechnique: The colonoscope was advanced to the cecum; the appendiceal orifice and ileocecal valve were photographed. Withdrawal time 9 minutes.\nFindings: A 6 mm sigmoid polyp was removed with a cold snare. Otherwise normal to the cecum.\nImpression: one sigmoid polyp removed.\n\nRecommendations:\nAwait pathology. Repeat colonoscopy in 3 years if the polyp is an adenoma.\n\nBilling\nProcedure date: 2026-10-15\nCPT: 45385\nElectronically signed: Priya Halvorsen-Mbeki, MD (fictional), 2026-10-15 08:40\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-15"
+   },
+   "review": "The only labelled procedure date is in the billing block, unqualified; the signature date agrees: 2026-10-15.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "H1",
+   "family": "H-neutral-heading-in-history",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nReason for visit\nFollow-up of iron deficiency anemia.\n\nAssessment\nIron deficiency anemia, improving on oral iron.\n\nPlan\nContinue ferrous sulfate. Recheck CBC in eight weeks.\n\nPast medical history:\nHypothyroidism. Colonoscopy in 2019 normal.\n\nVisit information\nDate of service: 2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a \"Visit information\" block after the past medical history labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "H2",
+   "family": "H-neutral-heading-in-history",
+   "layout": "pdf",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\nReason for visit\nFollow-up of iron deficiency anemia.\nAssessment\nIron deficiency anemia, improving on oral iron.\nPlan\nContinue ferrous sulfate. Recheck CBC in eight weeks.\nSocial history:\nHypothyroidism. Colonoscopy in 2019 normal.\nBilling\nDOS: 10/06/2026\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a \"Billing\" block after the social history labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "HN1",
+   "family": "H-neutral-heading-in-history",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nReason for visit\nFollow-up of iron deficiency anemia.\n\nAssessment\nIron deficiency anemia, improving on oral iron.\n\nPlan\nContinue ferrous sulfate. Recheck CBC in eight weeks.\n\nPast medical history:\nHypothyroidism. Colonoscopy in 2019 normal.\n\nVisit information\nDate of service: 2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-06"
+   },
+   "review": "The only date-of-service label is in the administrative block after the past medical history; it is unqualified, so it is the encounter's date of service (2026-10-06), and the signature date agrees.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "HC1",
+   "family": "H-historical-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nReason for visit\nFollow-up of iron deficiency anemia.\n\nPast medical history:\nColon polyps.\nPrior colonoscopy - Date of service: 2019-05-01\n\nAssessment\nIron deficiency anemia, improving.\n\nPlan\nContinue ferrous sulfate.\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header labels the date of service 2026-10-05; a prior colonoscopy's date of service, qualified on its line is a prior occurrence's date: never the date of service, never speaking against it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "HC2",
+   "family": "H-historical-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nReason for visit\nFollow-up of iron deficiency anemia.\n\nPrior procedures:\nColonoscopy\nDate of service: 2019-05-01\nFindings: two tubular adenomas.\n\nAssessment\nIron deficiency anemia, improving.\n\nPlan\nContinue ferrous sulfate.\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header labels the date of service 2026-10-05; a \"Prior procedures\" history block naming the colonoscopy over its date of service is a prior occurrence's date: never the date of service, never speaking against it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "HC3",
+   "family": "H-historical-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nReason for visit\nFollow-up of iron deficiency anemia.\n\nHistory of present illness:\nSeen here in 2019 for anemia; colonoscopy then was normal. Date of service: 2019-05-01.\n\nAssessment\nIron deficiency anemia, improving.\n\nPlan\nContinue ferrous sulfate.\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header labels the date of service 2026-10-05; a date of service inside the history narrative of a 2019 visit is a prior occurrence's date: never the date of service, never speaking against it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "HC4",
+   "family": "H-historical-control",
+   "layout": "table",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nReason for visit\nFollow-up of iron deficiency anemia.\n\nInterval history\nStable on oral iron.\nResults reviewed today\nTest or study | Date of service | Result\nFerritin | 2026-09-30 | 41 ng/mL\nHemoglobin | 2026-09-30 | 12.1 g/dL\n\nAssessment\nIron deficiency anemia, improving.\n\nPlan\nContinue ferrous sulfate.\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header labels the date of service 2026-10-05; a results table whose Date of service column dates each prior test (h2-07's shape) is a prior occurrence's date: never the date of service, never speaking against it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "HC5",
+   "family": "H-historical-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nReason for visit\nFollow-up of iron deficiency anemia.\n\nInterval history\nStable on oral iron.\nResults reviewed today\nFerritin: 41 ng/mL\nDate of service: 2026-09-30\n\nAssessment\nIron deficiency anemia, improving.\n\nPlan\nContinue ferrous sulfate.\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header labels the date of service 2026-10-05; a results block of fields whose date of service dates the prior test is a prior occurrence's date: never the date of service, never speaking against it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "HC6",
+   "family": "H-historical-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nReason for visit\nFollow-up of iron deficiency anemia.\n\nPast surgical history:\nCholecystectomy.\nOutside records\nProcedure: EGD\nProcedure date: 2025-03-10\n\nAssessment\nIron deficiency anemia, improving.\n\nPlan\nContinue ferrous sulfate.\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header labels the date of service 2026-10-05; an \"Outside records\" block naming a prior EGD and its procedure date is a prior occurrence's date: never the date of service, never speaking against it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "HC7",
+   "family": "H-historical-table-outside-history",
+   "layout": "table",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nVisit date: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nReason for visit\nFollow-up of iron deficiency anemia.\n\nExamination\nNo pallor.\n\nResults reviewed today\nTest or study | Date of service | Result\nFerritin | 2026-09-30 | 41 ng/mL\nHemoglobin | 2026-09-30 | 12.1 g/dL\n\nAssessment\nImproving.\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "As HC4, the results table after the examination section: the visit date 2026-10-05; the column dates the tests.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "PC1",
+   "family": "P-planned-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nPlan:\nContinue diuretics.\nNext colonoscopy date: 2027-10-05\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header labels the date of service 2026-10-05; a next colonoscopy date is a planned occurrence's date: never the date of service, never speaking against it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "PC2",
+   "family": "P-planned-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nPlan:\nContinue diuretics.\nFollow-up visit: 2026-11-18\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header labels the date of service 2026-10-05; a follow-up visit date (no label) is a planned occurrence's date: never the date of service, never speaking against it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "PC3",
+   "family": "P-planned-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nPlan:\nContinue diuretics.\nFollow-up visit date: 2026-11-18\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header labels the date of service 2026-10-05; a follow-up visit date is a planned occurrence's date: never the date of service, never speaking against it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "PC4",
+   "family": "P-planned-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nPlan:\nColonoscopy with possible polypectomy.\nProcedure date: 11/04/2026\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header labels the date of service 2026-10-05; a planned colonoscopy's procedure date on the line after the plan item is a planned occurrence's date: never the date of service, never speaking against it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "PC5",
+   "family": "P-planned-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nContinue diuretics.\nFollow-up\nVisit date: 2026-11-18\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header labels the date of service 2026-10-05; a \"Follow-up\" heading over the return visit's date is a planned occurrence's date: never the date of service, never speaking against it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "PC6",
+   "family": "P-planned-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nContinue diuretics.\nNext appointment\nVisit date: 2026-11-18\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header labels the date of service 2026-10-05; a \"Next appointment\" heading over its date is a planned occurrence's date: never the date of service, never speaking against it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "PC7",
+   "family": "P-planned-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nContinue diuretics.\nReturn visit\nVisit date: 2026-11-18\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header labels the date of service 2026-10-05; a \"Return visit\" heading over the return visit's date is a planned occurrence's date: never the date of service, never speaking against it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "PC8",
+   "family": "P-planned-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nRecommendations:\nRepeat colonoscopy in 3 years.\nRecall\nProcedure date: 2029-10-05\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header labels the date of service 2026-10-05; a \"Recall\" heading over the recall colonoscopy's date is a planned occurrence's date: never the date of service, never speaking against it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "PC9",
+   "family": "P-planned-control",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nPlan:\nScheduled EGD\nDate of service: 2026-11-04\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "uncertain",
+    "acceptable": [
+     "document:2026-10-05",
+     "asked"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05; a date of service on the line under a scheduled EGD: most likely the planned procedure's date, but \"date of service\" is the encounter's own billing label - sending the header date or asking are both defensible; the planned date must never be sent.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "PC10",
+   "family": "P-planned-control",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nPlan:\nColonoscopy with possible polypectomy, date of service 11/04/2026.\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "uncertain",
+    "acceptable": [
+     "document:2026-10-05",
+     "asked"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05; a planned colonoscopy with its date of service in the same sentence: most likely the planned procedure's date, but \"date of service\" is the encounter's own billing label - sending the header date or asking are both defensible; the planned date must never be sent.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "PC11",
+   "family": "P-planned-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nPlan:\nReturn to clinic in 6 weeks.\nVisit date: 2026-11-16\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header labels the date of service 2026-10-05; a return-to-clinic plan item over the return visit's date is a planned occurrence's date: never the date of service, never speaking against it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "PC12",
+   "family": "P-planned-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nPlan:\nUpper endoscopy for variceal surveillance.\nScheduled procedure\nProcedure date: 2026-11-04\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header labels the date of service 2026-10-05; a \"Scheduled procedure\" heading over its date is a planned occurrence's date: never the date of service, never speaking against it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "PC13",
+   "family": "P-planned-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nPlan:\nSurveillance ultrasound\nProcedure date: 2027-04-05\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header labels the date of service 2026-10-05; a \"Surveillance ultrasound\" line over its date is a planned occurrence's date: never the date of service, never speaking against it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "PN1",
+   "family": "P-planned-nohead",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nPlan:\nColonoscopy with possible polypectomy.\nProcedure date: 11/04/2026\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-11-04"
+    ]
+   },
+   "review": "No label dates this encounter; the only labelled date is the planned colonoscopy's: the date is undocumented and must be asked; 2026-11-04 must never be sent.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "PN2",
+   "family": "P-planned-nohead",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nContinue diuretics.\nReturn visit\nVisit date: 2026-11-18\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-11-18"
+    ]
+   },
+   "review": "No label dates this encounter; the return visit's date is planned: asked; 2026-11-18 never sent.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "PG1",
+   "family": "P-planned-no-part",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGI office visit\nPatient: Alex Synthetic (fictional)\nHistory of present illness: Synthetic patient seen in clinic for constipation.\nAssessment: Chronic constipation; due for colonoscopy.\nPlan:\nColonoscopy with possible polypectomy.\n\nProcedure: Colonoscopy    Procedure date: 11/04/2026\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-11-04"
+    ]
+   },
+   "review": "An office visit with no date of its own; after \"Plan:\" and a blank line, \"Procedure: Colonoscopy  Procedure date: 11/04/2026\" schedules the planned colonoscopy (no technique, findings or impression documents it): the visit's date is undocumented and asked; 2026-11-04 must never be sent (gi2 dates-planned-no-part).",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "PG2",
+   "family": "P-planned-no-part",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nDate of service: 10/20/2026\nGI office visit\nPatient: Alex Synthetic (fictional)\nHistory of present illness: Synthetic patient seen in clinic for constipation.\nAssessment: Chronic constipation; due for colonoscopy.\nPlan:\nColonoscopy with possible polypectomy.\n\nProcedure: Colonoscopy    Procedure date: 11/04/2026\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-20"
+   },
+   "review": "As PG1 with the visit's own date of service 10/20/2026 in the header: the date of service is 2026-10-20; the planned colonoscopy's 11/04 never speaks against it.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "PG3",
+   "family": "P-planned-no-part",
+   "layout": "pdf",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGI office visit\nPatient: Alex Synthetic (fictional)\nHistory of present illness: Synthetic patient seen in clinic for constipation.\nAssessment: Chronic constipation; due for colonoscopy.\nPlan:\nColonoscopy with possible polypectomy.\nProcedure: Colonoscopy\nProcedure date: 11/04/2026\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-11-04"
+    ]
+   },
+   "review": "As PG1, PDF lines, the date on its own line.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "PG4",
+   "family": "P-planned-no-part",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGI office visit\nPatient: Alex Synthetic (fictional)\nHistory of present illness: Synthetic patient seen in clinic for constipation.\nAssessment: Chronic constipation; due for colonoscopy.\nRecommendations:\nSchedule colonoscopy.\n\nProcedure: Colonoscopy with possible polypectomy\nProcedure date: 11/04/2026\nLocation: Synthetic Endoscopy Unit\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-11-04"
+    ]
+   },
+   "review": "As PG1 under \"Recommendations:\", with the scheduled procedure's location.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "PG5",
+   "family": "P-planned-no-part",
+   "layout": "table",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGI office visit\nPatient: Alex Synthetic (fictional)\nHistory of present illness: Synthetic patient seen in clinic for constipation.\nAssessment: Chronic constipation; due for colonoscopy.\nPlan:\nColonoscopy with possible polypectomy.\nProcedure: Colonoscopy | Procedure date: 11/04/2026\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-11-04"
+    ]
+   },
+   "review": "As PG1, one Word-table row.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "PG6",
+   "family": "P-planned-no-part-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report\nIndication: hematochezia.\nPlan:\nProceed with colonoscopy.\n\nProcedure: Colonoscopy    Procedure date: 10/14/2026\nTechnique: The colonoscope was advanced to the cecum.\nFindings: A 5 mm sigmoid polyp was removed with a cold snare.\nImpression: one polyp removed.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-14"
+   },
+   "review": "A colonoscopy report whose \"Plan: proceed\" precedes the documented procedure (technique, findings, impression): the procedure date 2026-10-14 is the date of service.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "X1",
+   "family": "X-plan-date-before-visit",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nPlan:\nContinue diuretics.\nDate of service: 2026-09-01\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-09-01"
+    ]
+   },
+   "review": "A second unqualified date of service inside the plan, earlier than the header's: it cannot be a planned occurrence; two applicable dates of service disagree: query.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "X2",
+   "family": "X-history-date-after-visit",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nHistory of present illness:\nDate of service: 2026-10-06\nAnkle swelling for two weeks.\n\nPlan\nContinue diuretics.\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "A second unqualified date of service opening the history section, later than the header's: it cannot be a prior occurrence; query.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "X3",
+   "family": "X-label-split-by-ocr",
+   "layout": "ocr",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nCharge information\nDate of\nservice: 2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. The OCR broke the label over two lines.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "X4",
+   "family": "X-pos-in-charge-block",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nCharge information\nDate of service: 2026-10-05\nPlace of service: 22\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05",
+    "setting": "conflict"
+   },
+   "review": "Both dates agree (2026-10-05); the charge block's place of service 22 conflicts with the header's POS 11 (the setting fact, outside this investigator's date scope - recorded for the setting reader).",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "E1",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "numbered",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\n1. Subjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\n2. Objective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\n3. Assessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\n4. Charge information\nDate of service: 2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. A numbered template: \"4. Charge information\" continues \"3. Assessment and plan\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "E2",
+   "family": "P-planned-control",
+   "layout": "numbered",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nPlan:\n1. Continue diuretics.\n2. Follow-up visit\nVisit date: 2026-11-18\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header labels the date of service 2026-10-05; item 2 of the plan is the follow-up visit, dated 2026-11-18: planned.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "E3",
+   "family": "P-planned-leak",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nVisit details\nReturn in 6 weeks.\nVisit date: 2026-11-16\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header labels the date of service 2026-10-05; under \"Visit details\" the plan says \"Return in 6 weeks.\" and the next line dates that return visit (2026-11-16): planned, never speaking against the header.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "E4",
+   "family": "P-planned-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nCharge information\nNext visit date: 2026-11-16\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header labels 2026-10-05; the charge block's label is qualified \"Next\": the next visit's date.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "E5",
+   "family": "A-empty-field-nohead",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nCharge information\nDate of service: N/A\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "asked",
+    "never": []
+   },
+   "review": "No label states a date of service (the charge block's field is N/A): the date is undocumented and asked.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "E6",
+   "family": "P-planned-uncertain",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nPlan:\nDiet\nLow sodium diet.\nProcedure date: 2026-11-04\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "uncertain",
+    "acceptable": [
+     "document:2026-10-05",
+     "asked"
+    ]
+   },
+   "review": "The header labels 2026-10-05; a \"Procedure date: 2026-11-04\" under a \"Diet\" block names no procedure: it may date a planned procedure or be misplaced - sending the header date or asking are both defensible.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "E7",
+   "family": "C-procedure-report-other-document",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLantern Bay Endoscopy Center (fictional)\nColonoscopy report\nPatient: Imre Solano-Whitcombe (fictional)\nDate of birth: 1958-11-30\nDate of service: 10/14/2026\nEndoscopist: Priya Halvorsen-Mbeki, MD (fictional)\n\nIndication: surveillance, history of adenomatous polyps.\nProcedure: Colonoscopy with cold snare polypectomy.\nTechnique: The colonoscope was advanced to the cecum; the appendiceal orifice and ileocecal valve were photographed. Withdrawal time 9 minutes.\nFindings: A 6 mm sigmoid polyp was removed with a cold snare. Otherwise normal to the cecum.\nImpression: one sigmoid polyp removed.\n\nRecommendations:\nAwait pathology. Repeat colonoscopy in 3 years if the polyp is an adenoma.\n\nPathology\nDate of service: 10/16/2026\nSpecimen: sigmoid polyp\nElectronically signed: Priya Halvorsen-Mbeki, MD (fictional), 2026-10-15 08:40\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-14"
+   },
+   "review": "The report's date of service is 2026-10-14; the \"Pathology\" block's date of service dates the pathology report, another document.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "E8",
+   "family": "A-addendum-uncertain",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nAddendum\nDate of service: 2026-10-06\nSpoke with the patient by phone about diuretics.\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "uncertain",
+    "acceptable": [
+     "document:2026-10-05",
+     "asked"
+    ]
+   },
+   "review": "An authored addendum after the plan labels its own date of service 2026-10-06: it may date the addendum's phone call (a later service) or correct the visit's date - sending 10/05 or asking are both defensible.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "E9",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nCharge information\nDate of service: 2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Without the time statement.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "E10",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "markdown",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\n**Assessment and plan**\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\n**Charge information**\nDate of service: 2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Markdown emphasis on the headings.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "E11",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "pdf-split",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nCharge\ninformation\nDate of service: 2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. The heading split over two lines.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "E12",
+   "family": "H-historical-control",
+   "layout": "table",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nPlan:\nContinue diuretics.\nResults\nTest | Date of service | Result\nFerritin | 2026-09-30 | 41 ng/mL\nSodium | 2026-09-28 | 134 mmol/L\n\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header labels 2026-10-05; the results table's Date of service column dates each prior test.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "E13",
+   "family": "H-neutral-heading-in-history",
+   "layout": "numbered",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\n1. Reason for visit\nFollow-up of anemia.\n\n2. Assessment\nImproving.\n\n3. Past medical history\nHypothyroidism.\n\n4. Visit information\nDate of service: 2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. Numbered sections; the visit block follows \"3. Past medical history\".",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "E14",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor Mill Digestive Clinic (fictional)\nGastroenterology follow-up note\nPatient: Rowan Vey-Castellan (fictional)\nDate of birth: 1961-03-14\nSynthetic record: H3-DATES-A\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Odile Marsh-Kavanagh, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 118/72; weight 88 kg, up 2 kg. Shifting dullness present, trace ankle edema.\n\nPlan:\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 38 minutes, covering review of the results, the examination, counseling and documentation.\n\nEncounter\nDate of service: 2026-10-06\nElectronically signed: Odile Marsh-Kavanagh, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels the date of service 2026-10-05 and a later administrative block labels the date of service 2026-10-06, unqualified; nothing ties the second to a planned or prior occurrence, so a careful coder has two applicable dates of service that disagree and queries the date: neither may be sent. A one-word \"Encounter\" block heading.",
+   "source": "investigator dates (gi3)"
+  },
+  {
+   "id": "RC5-A08",
+   "family": "RC5",
+   "layout": "live",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPatient status: established\nSite: office, POS 11\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Follow up in 3 months.\nTotal time on the date of service: 32 minutes, including record review, examination, counseling and documentation.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "expected": {
+    "kind": "facts",
+    "service_date": "document:2026-10-21",
+    "setting": "document:office",
+    "patient_status": "document:established"
+   },
+   "review": "A clinic note titled \"GI clinic follow-up\" over its header (\"Visit date: 2026-10-21\", POS 11 and \"Patient status: established\"): the header is this visit's; the title is no plan heading.",
+   "source": "investigator scope (gi3), A08-ev-plan"
+  },
+  {
+   "id": "RC5-A17",
+   "family": "RC5",
+   "layout": "live",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Follow up in 3 months. Recheck labs next week.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "expected": {
+    "kind": "facts",
+    "service_date": "document:2026-10-21",
+    "setting": "document:office",
+    "patient_status": "missing"
+   },
+   "review": "A clinic note titled \"GI clinic follow-up\" over its header (\"Visit date: 2026-10-21\", POS 11 and no patient status): the header is this visit's; the title is no plan heading.",
+   "source": "investigator scope (gi3), A17-ev-plan"
+  },
+  {
+   "id": "R-B4-visit",
+   "family": "B4",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nAssessment and plan\nContinue iron.\nVisit date: 2026-10-06\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels 2026-10-05; a visit date field closing the plan, unqualified, with no plan item naming a later visit: two applicable dates disagree, query.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-B4-proc",
+   "family": "B4",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nAssessment and plan\nContinue iron.\nProcedure date: 2026-10-06\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The header labels 2026-10-05; a procedure date field closing the plan names no planned procedure before it: two applicable dates disagree, query.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-B4-later",
+   "family": "B4-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nPlan:\nFollow up in 6 weeks.\nVisit date: 2026-11-16\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "A follow-up in six weeks right above a later visit date: that visit's date, never the date of service.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-B4-later-inline",
+   "family": "B4-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nPlan: Return to clinic in 6 weeks.\nVisit date: 2026-11-16\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The plan heading's own item names the return visit; the later visit date under it is that visit's.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-B4-earlier",
+   "family": "B4",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nPlan:\nFollow up in 6 weeks.\nVisit date: 2026-09-01\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-09-01"
+    ]
+   },
+   "review": "A visit date EARLIER than the visit under a follow-up item cannot be that later visit's: two applicable dates disagree, query.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-B4-same",
+   "family": "B4-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nPlan:\nFollow up in 6 weeks.\nVisit date: 2026-10-05\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The plan's visit date equals the header's date of service: one date, documented.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-B4-noown",
+   "family": "B4-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nPlace of service: office (POS 11)\n\nSubjective\nFollow-up of anemia.\n\nPlan:\nReturn to clinic in 6 weeks.\nVisit date: 2026-11-16\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-11-16"
+    ]
+   },
+   "review": "No label dates this encounter; the only labelled date is the planned return visit's: asked, and never sent.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-B4-heading-only",
+   "family": "B4",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nPlan:\nVisit date: 2026-11-16\n",
+   "expected": {
+    "kind": "uncertain",
+    "acceptable": [
+     "document:2026-10-05",
+     "asked"
+    ]
+   },
+   "review": "A bare plan heading over a later visit date: most likely the next visit's, but no item names it: sending the header date or asking are both defensible.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-B4-denied",
+   "family": "B4",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nAssessment and plan\nRepeat colonoscopy is not needed.\nVisit date: 2026-10-06\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The item denies a later occurrence, so nothing names the visit date after it: two applicable dates disagree, query.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-B4-wrapped",
+   "family": "B4",
+   "layout": "pdf",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nAssessment and plan\nIron deficiency anemia. Continue oral iron and check a ferritin and CBC in three\nmonths with a return visit then.\nVisit date: 2026-10-06\n",
+   "expected": {
+    "kind": "uncertain",
+    "acceptable": [
+     "document:2026-10-05",
+     "asked"
+    ]
+   },
+   "review": "A return visit in three months right above a visit date only one day after the header's: it may be the return visit's (misdated) or the encounter's; both readings are defensible.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-B4-occurrence-heading",
+   "family": "B4-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nFollow-up:\nVisit date: 2026-10-06\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "A \"Follow-up:\" section over its visit date: the follow-up visit's date, never the date of service.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-B4-in-sentence",
+   "family": "B4-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nPlan:\nColonoscopy with polypectomy, procedure date 11/04/2026.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "A planned colonoscopy's procedure date in the plan item's own sentence: the planned occurrence's date.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-X3-dateof",
+   "family": "X3",
+   "layout": "ocr",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nAssessment and plan\nContinue iron.\n\nCharge information\nDate of\nservice: 2026-10-06\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The charge block's date of service, its label broken by OCR after \"Date of\": two applicable dates disagree, query.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-X3-date",
+   "family": "X3",
+   "layout": "ocr",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nAssessment and plan\nContinue iron.\n\nCharge information\nDate\nof service: 2026-10-06\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The same label broken after \"Date\": two applicable dates disagree, query.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-X3-service",
+   "family": "X3",
+   "layout": "ocr",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nAssessment and plan\nContinue iron.\n\nCharge information\nService\ndate: 2026-10-06\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "A service date label broken after \"Service\": two applicable dates disagree, query.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-X3-capital",
+   "family": "X3",
+   "layout": "ocr",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nAssessment and plan\nContinue iron.\n\nCharge information\nDate of\nService: 2026-10-06\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The broken label with a capital on its second line: two applicable dates disagree, query.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-X3-colon-block",
+   "family": "X3",
+   "layout": "ocr",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nCharge information:\nDate of\nservice: 2026-10-06\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "A broken label under a colon heading outside the plan: two applicable dates disagree, query.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-X3-same",
+   "family": "X3-control",
+   "layout": "ocr",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nCharge information:\nDate of\nservice: 2026-10-05\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The broken label states the header's own date: one date, documented.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-X3-only",
+   "family": "X3",
+   "layout": "ocr",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nPlace of service: office (POS 11)\n\nSubjective\nFollow-up of anemia.\n\nCharge information:\nDate of\nservice: 2026-10-06\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-06"
+   },
+   "review": "The only date-of-service label, broken by OCR: it dates this encounter.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-X3-no-separator",
+   "family": "X3",
+   "layout": "ocr",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nCharge information:\nDate of\nservice 2026-10-06\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The broken label with no separator still labels the date of service: two applicable dates disagree, query.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-X3-prose",
+   "family": "X3-prose",
+   "layout": "pdf",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nAssessment and plan\nWe will confirm the\nDate of\nservice: 2026-10-06\n",
+   "expected": {
+    "kind": "uncertain",
+    "acceptable": [
+     "document:2026-10-05",
+     "asked"
+    ]
+   },
+   "review": "A sentence that runs into \"Date of\" / \"service: 2026-10-06\" (the date still to be confirmed): reading it as a field or as prose is defensible.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-X3-prose-inline",
+   "family": "X3-prose",
+   "layout": "pdf",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nAssessment and plan\nWe discussed the date of\nservice: 2026-10-06\n",
+   "expected": {
+    "kind": "uncertain",
+    "acceptable": [
+     "document:2026-10-05",
+     "asked"
+    ]
+   },
+   "review": "Prose that names \"the date of\" and wraps: a discussion, perhaps of the date of service; either reading is defensible.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-lower-field",
+   "family": "A-neutral-heading-in-plan",
+   "layout": "ocr",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nAssessment and plan\nContinue iron.\n\nCharge information\ndate of service: 2026-10-06\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "A charge block whose field OCR wrote in lower case: two applicable dates disagree, query.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-RC5-title",
+   "family": "RC5",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nGI clinic follow-up\nPatient: Synthetic Patient (fictional)\nVisit date: 2026-10-21\nPlace of service: office (POS 11)\nPatient status: established\nInterval history\nDoing well.\nPlan\nContinue.\n",
+   "expected": {
+    "kind": "facts",
+    "service_date": "document:2026-10-21",
+    "setting": "document:office",
+    "patient_status": "document:established"
+   },
+   "review": "A follow-up clinic note titled \"GI clinic follow-up\": its header's visit date, office and status are this visit's.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-RC5-bare-follow-up",
+   "family": "RC5",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nFollow-up\nPatient: Synthetic Patient (fictional)\nVisit date: 2026-10-21\nPlace of service: office (POS 11)\nInterval history\nDoing well.\n",
+   "expected": {
+    "kind": "facts",
+    "service_date": "document:2026-10-21",
+    "setting": "document:office"
+   },
+   "review": "A note titled \"Follow-up\" over its header: the visit date and office are this visit's.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-RC5-next",
+   "family": "RC5-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nNext follow-up\nVisit date: 2026-11-21\nInterval history\nDoing well.\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-11-21"
+    ]
+   },
+   "review": "\"Next follow-up\" heads the next visit: its date is never the date of service.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-RC5-prep",
+   "family": "RC5-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nBowel prep instructions\nProcedure date: 2026-11-04\nArrive at 7:30.\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-11-04"
+    ]
+   },
+   "review": "Preparation instructions for a planned procedure: its date is never the date of service.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-RC5-history",
+   "family": "RC5-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nPast endoscopic history\nProcedure date: 2019-05-01\nColonoscopy normal.\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2019-05-01"
+    ]
+   },
+   "review": "A pasted history: its procedure date is an earlier occurrence's, never the date of service.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-RC5-not-first",
+   "family": "RC5-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nIndication: anemia\nHepatology follow-up\nVisit date: 2026-11-21\n",
+   "expected": {
+    "kind": "uncertain",
+    "acceptable": [
+     "asked",
+     "document:2026-11-21"
+    ]
+   },
+   "review": "A follow-up line after the indication may head a later visit or title this one: both readings are defensible.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-RC5-colon",
+   "family": "RC5",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nHepatology follow-up:\nVisit date: 2026-10-21\nInterval history\nDoing well.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-21"
+   },
+   "review": "A title written with a colon over the header: the visit date is this visit's.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-RC6-pos",
+   "family": "RC6",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nAssessment and plan\nContinue.\n\nCharge information\nPlace of service: 22\n",
+   "expected": {
+    "kind": "facts",
+    "service_date": "document:2026-10-05",
+    "setting": "conflict"
+   },
+   "review": "The header's office (POS 11) and a charge block's POS 22 disagree: the setting is queried.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-RC6-status",
+   "family": "RC6",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nAssessment and plan\nContinue.\n\nCharge information\nPatient status: new\n",
+   "expected": {
+    "kind": "facts",
+    "service_date": "document:2026-10-05",
+    "patient_status": "conflict"
+   },
+   "review": "The header's established patient and a charge block's new patient disagree: the status is queried.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-RC6-pos-only",
+   "family": "RC6",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\n\nSubjective\nFollow-up of anemia.\n\nAssessment and plan\nContinue.\n\nCharge information\nPlace of service: 22\n",
+   "expected": {
+    "kind": "facts",
+    "setting": "document:hospital_outpatient"
+   },
+   "review": "The only place of service is the charge block's POS 22: the encounter's setting.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-RC6-status-plan",
+   "family": "RC6-control",
+   "layout": "plain",
+   "control": true,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of anemia.\n\nPlan:\nReturn as a new patient to hepatology.\nPatient status: new\n",
+   "expected": {
+    "kind": "facts",
+    "patient_status": "document:established"
+   },
+   "review": "A plan item about a later referral: its status field is the later visit's, never this one's.",
+   "source": "repair agent dates (gi3), provisional"
+  },
+  {
+   "id": "R-ruleU",
+   "family": "rule-U",
+   "layout": "plain",
+   "control": false,
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic Endoscopy Center (fictional)\nColonoscopy report\nOutside procedure date: 10/14/2026\nPatient: Synthetic Patient (fictional)\n\nInterval history\nSeen for a polyp found elsewhere.\nCoding\nDate of service: 10/21/2026\n\nFindings:\nA 6 mm polyp was removed with a cold snare.\n\nImpression:\nPolyp removed.\n\nAddendum\nDate of service: 10/21/2026\n",
+   "expected": {
+    "kind": "uncertain",
+    "acceptable": [
+     "document:2026-10-21",
+     "asked"
+    ]
+   },
+   "review": "An outside procedure header, a coding block in the history and an addendum both labelling 10/21: 10/21 may be the encounter's, or the addendum's; asking is defensible.",
+   "source": "repair agent dates (gi3), provisional"
+  }
+ ]
+}

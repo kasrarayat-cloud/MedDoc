@@ -1,0 +1,14 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Gastroenterology Note
+Patient: Esperanza Lindqvist-Haddad (fictional)
+DOB: 1979-02-11
+Clinician: Anselm Ricci-Thornbury, DO (fictional)
+
+Reason for visit: bloating and loose stools.
+Reports bloating most days and two or three loose stools a day for several weeks. No blood seen.
+Abdomen soft, mildly distended, not tender.
+Impression: bloating with loose stools, cause unclear.
+Plan: options discussed with the patient. Consider EGD with duodenal biopsies if symptoms continue.
+
+Signed: Anselm Ricci-Thornbury, DO (fictional)
