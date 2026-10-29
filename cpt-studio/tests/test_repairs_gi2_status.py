@@ -264,9 +264,14 @@ WITH_TATTOO = 'A 15 mm polyp in the descending colon was resected with a hot sna
 # Spot" - is denied by that clause's own words, not by the note grammar, on the installed reader too: not read here.)
 AFFIRMING = ('No - not by nursing; placed by the physician', 'No (not by the RN) - injected by the fellow',
              'No - none by nursing, the attending injected India ink', 'No, not by nursing staff; tattoo placed by MD',
-             'No - not charted here, see MD note: tattoo injected', 'No - not by nursing but placed by the physician')
+             'No - not charted here, see MD note: tattoo injected', 'No - not by nursing but placed by the physician',
+             'No - not by nursing; placed by the physician as planned')
+# a later clause about another act, or about the act at another time, explains the denial: it stands
 EXPLAINING = ('No - none used', 'No - not indicated', 'No - none placed; the lesion was completely removed',
-              'No - none used; biopsies only', 'No, not placed - the polyp was removed whole')
+              'No - none used; biopsies only', 'No, not placed - the polyp was removed whole',
+              'No - none; tattoo to be placed at surgery', 'No - none today; tattoo placed at a prior colonoscopy',
+              'No - none placed; tattoo deferred', 'No - not today, placed previously',
+              'No - none; tattoo will be injected next time')
 
 
 class NoteClauseTests(SimpleTestCase):

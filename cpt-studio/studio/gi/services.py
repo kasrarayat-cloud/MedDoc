@@ -2206,18 +2206,37 @@ def _note_clause(note: str, start: int, end: int) -> tuple[int, int]:
     return clause_start, after.start() if after is not None else len(note)
 
 
+# What makes a participle state nothing done: the infinitive marker or a modal or future auxiliary before it ("tattoo to
+# be placed at surgery", "will be injected"). A closed class: "to" and the auxiliaries.
+NOTE_NOT_DONE = _rx(r'\b(?:to|will|would|shall|should|could|can|cannot|may|might|must)\b')
+
+
+def _note_states_done(note: str, start: int, end: int) -> bool:
+    """Whether the clause [start, end) of a note states something done today: a done participle with no infinitive
+    marker or auxiliary before it (NOTE_NOT_DONE), and no plan, history or cancel word in the clause outside a manner
+    phrase ("as planned" keeps a booking, never dates the act) - "placed by the physician", never "to be placed at
+    surgery", "placed at a prior colonoscopy" or "deferred"."""
+    manner = [(m.start(), m.end()) for m in MANNER_PHRASE.finditer(note, start, end)]
+    for pattern in (PLAN_WORDS, HISTORY_WORDS, CANCEL_WORDS):
+        if any(not any(a <= m.start() < b for a, b in manner) for m in pattern.finditer(note, start, end)):
+            return False
+    return any(not NOTE_NOT_DONE.search(note, start, m.start())
+               for pattern in (NOTE_DONE, BARE_PARTICIPLE) for m in pattern.finditer(note, start, end))
+
+
 def _note_denies(note: str, kinds: frozenset = frozenset()) -> bool:
     """Whether the note after a denying answer leaves the denial standing (FIELD_DENIAL_NOTE): it neither affirms nor
     doubts, and every act, service or done participle it names has a negation of its own before it ("none used").
 
     A negation governs its own clause (NOTE_CLAUSE_BREAK; refutation gi2 status-3: "No - not by nursing; placed by the
     physician" had read as the nurse's denial of the tattoo the physician documented, a false conflict). A later clause
-    with no negation in it that states the item's own act done - naming that act (``kinds``, the item's act kinds, or an
-    act RELATED_KINDS ties to them: a tattoo and its injection) or opening with a done participle, whose subject is then
-    the item - says the act was done, by whoever did it ("No (not by me) - injected by the fellow", "No, not by nursing;
-    tattoo placed by the endoscopist"): the answer is then no denial and holds its item, as "No - placed by the fellow"
-    does. A later clause about anything else only explains the denial, which stands ("No - none placed; the lesion was
-    completely removed", "No - none used; biopsies only")."""
+    with no negation in it that states the item's own act done today (_note_states_done) - naming that act (``kinds``,
+    the item's act kinds, or an act RELATED_KINDS ties to them: a tattoo and its injection) or opening with a done
+    participle, whose subject is then the item - says the act was done, by whoever did it ("No (not by me) - injected
+    by the fellow", "No, not by nursing; tattoo placed by the endoscopist"): the answer is then no denial and holds its
+    item, as "No - placed by the fellow" does. A later clause about anything else, or about the act at another time,
+    only explains the denial, which stands ("No - none placed; the lesion was completely removed", "No - none used;
+    biopsies only", "No - none; tattoo to be placed at surgery", "No - none today; placed at a prior colonoscopy")."""
     if NOTE_AFFIRMS.search(note) or HEDGE_WORDS.search(note) or NOTE_UNKNOWN.search(note):
         return False
     own = {related for kind in kinds for related in (kind, *RELATED_KINDS.get(kind, ()))}
@@ -2233,7 +2252,7 @@ def _note_denies(note: str, kinds: frozenset = frozenset()) -> bool:
             continue  # its own clause negates it ("none used")
         names_the_act = bool(kind) and kind in own
         opens_with_participle = kind is None and not note[clause_start:at].strip()
-        if names_the_act or opens_with_participle:
+        if (names_the_act or opens_with_participle) and _note_states_done(note, clause_start, clause_end):
             return False  # a later clause of its own states the item's act done
     return True
 
