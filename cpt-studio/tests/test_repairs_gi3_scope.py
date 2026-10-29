@@ -276,6 +276,17 @@ class FutureFollowUpIsNeverDoubtTests(unittest.TestCase):
         self.assertEqual(status, 'uncertain')
         self.assertEqual(read[0], detect.VISIT_NAMES_OTHER + 'planned')
 
+    def test_a_later_visits_own_statement_naming_a_service_stays_held(self):
+        # the visit statement is itself the later occurrence (routing reads it planned): it is never read as today's visit,
+        # and the code is held, never excluded and never ready
+        for visit in ('Follow-up office visit scheduled for 2026-11-18 to discuss the colonoscopy.',
+                      'Next office visit to review the colonoscopy done last week.'):
+            text = HEADER + 'Place of service: Office (POS 11)\n' + visit + '\n'
+            with self.subTest(visit=visit):
+                self.assertEqual(family(text, 'gi.office_em'), 'planned')
+                proposals, _ = run_engine(text, [('99213', [visit])])
+                self.assertEqual(proposals['99213'].status, 'needs_clarification')
+
     def test_a_cancelled_visit_named_with_another_service_still_holds(self):
         # a cancellation or a denial may be the visit's own: it is never read as the visit's performance
         visit = 'Office visit and colonoscopy were cancelled.'
