@@ -24,7 +24,9 @@ A step that fails ends the run there (a refused sign-in makes no further request
 always signed out. The contract is studio/views.py login_view and logout_view, studio/api.py session (api_view
 answers 401 without a session) and the cookie names in cptstudio/settings.py; the unit tests hold each to the source.
 
---credentials names a JSON file {"username": ..., "password": ...}: a regular file no group or other user may read or
+--credentials names a JSON file {"username": ..., "password": ...}; or --username names the account and
+--password-file a file holding only its password (one trailing line break is not part of it), the form in which the
+demonstration reviewer's password is kept. Either file must be a regular file no group or other user may read or
 write (mode 0600 or stricter); anything else is refused before any request. The password is never printed or
 written, also where a server would echo it back. TLS is verified normally (the system trust store and the host
 name); a plain http base URL is refused unless its host is the loopback (a local test server), so the password never
@@ -124,19 +126,19 @@ def origin_of(base_url: str) -> str:
     return f'{parts.scheme}://{netloc}'
 
 
-def load_credentials(path: Path) -> tuple[str, str, int]:
-    """(username, password, file mode) from a private JSON file, checked on the descriptor that is read."""
+def _read_private(path: Path, what: str) -> tuple[bytes, int]:
+    """(content, file mode) of a private regular file, checked on the descriptor that is read."""
     try:
         fd = os.open(path, os.O_RDONLY | getattr(os, 'O_CLOEXEC', 0))
     except OSError as exc:
-        raise UsageError(f'cannot open the credentials file {path}: {exc.strerror}') from None
+        raise UsageError(f'cannot open the {what} {path}: {exc.strerror}') from None
     try:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode):
-            raise UsageError(f'the credentials file {path} is not a regular file')
+            raise UsageError(f'the {what} {path} is not a regular file')
         mode = stat.S_IMODE(info.st_mode)
         if mode & 0o077:
-            raise UsageError(f'the credentials file {path} has mode {mode:04o}: a group or other user may read or write '
+            raise UsageError(f'the {what} {path} has mode {mode:04o}: a group or other user may read or write '
                              'it; make it private (chmod 600) and keep it so')
         chunks, total = [], 0
         while True:
@@ -145,12 +147,35 @@ def load_credentials(path: Path) -> tuple[str, str, int]:
                 break
             total += len(chunk)
             if total > MAX_CREDENTIALS_BYTES:
-                raise UsageError(f'the credentials file {path} is over {MAX_CREDENTIALS_BYTES} bytes')
+                raise UsageError(f'the {what} {path} is over {MAX_CREDENTIALS_BYTES} bytes')
             chunks.append(chunk)
     finally:
         os.close(fd)
+    return b''.join(chunks), mode
+
+
+def load_password_file(path: Path, username: str) -> tuple[str, str, int]:
+    """(username, password, file mode) from a private file holding only the password; one trailing line break (LF or
+    CRLF) is not part of it. Its content is never quoted."""
+    content, mode = _read_private(path, 'password file')
     try:
-        data = json.loads(b''.join(chunks).decode('utf-8'))
+        password = content.decode('utf-8')
+    except UnicodeDecodeError:
+        raise UsageError(f'the password file {path} is not UTF-8 text') from None
+    if password.endswith('\n'):
+        password = password[:-1]
+        if password.endswith('\r'):
+            password = password[:-1]
+    if not password or '\n' in password or '\r' in password:
+        raise UsageError(f'the password file {path} must hold one non-empty line')
+    return username, password, mode
+
+
+def load_credentials(path: Path) -> tuple[str, str, int]:
+    """(username, password, file mode) from a private JSON file, checked on the descriptor that is read."""
+    content, mode = _read_private(path, 'credentials file')
+    try:
+        data = json.loads(content.decode('utf-8'))
     except (UnicodeDecodeError, ValueError):
         raise UsageError(f'the credentials file {path} is not a JSON object') from None  # never its content
     if not isinstance(data, dict) or not all(isinstance(data.get(key), str) and data[key] for key in ('username', 'password')):
@@ -486,7 +511,10 @@ def sign_out(transport: Transport, origin: str, jar: dict, session: str, checks:
 def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('--base-url', required=True, help='the CPT Studio origin, e.g. https://cpt.quillmd.com')
-    parser.add_argument('--credentials', required=True, type=Path, help='a private JSON file {"username", "password"}')
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument('--credentials', type=Path, help='a private JSON file {"username", "password"}')
+    source.add_argument('--password-file', type=Path, help='a private file holding only the password (with --username)')
+    parser.add_argument('--username', help='the account signed in with --password-file')
     parser.add_argument('--workspace', required=True, help='the workspace name the session must report')
     parser.add_argument('--out', required=True, type=Path, help=f'the evidence directory (gets {EVIDENCE_NAME})')
     return parser.parse_args(argv)
@@ -508,7 +536,14 @@ def main(argv=None) -> int:
         origin = origin_of(args.base_url)
         if not args.workspace.strip():
             raise UsageError('--workspace must name the workspace')
-        username, password, mode = load_credentials(args.credentials)
+        if args.password_file is not None:
+            if not (args.username or '').strip():
+                raise UsageError('--password-file needs --username, the account it signs in')
+            username, password, mode = load_password_file(args.password_file, args.username)
+        else:
+            if args.username is not None:
+                raise UsageError('--username goes with --password-file; a --credentials file names its own account')
+            username, password, mode = load_credentials(args.credentials)
         evidence_path = args.out / EVIDENCE_NAME
         if evidence_path.exists():
             raise UsageError(f'{args.out} already holds {EVIDENCE_NAME}; use a fresh --out directory')

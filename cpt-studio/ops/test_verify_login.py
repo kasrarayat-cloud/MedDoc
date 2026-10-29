@@ -431,6 +431,78 @@ class RefusedBeforeAnyRequestTests(Base):
         self.assertEqual((code, stub.log), (2, []))
 
 
+class PasswordFileTests(Base):
+    """--username with --password-file: the form in which the demonstration reviewer's password is kept (a private file
+    holding only the password). The same checks, the same five requests, the password never shown."""
+
+    def run_argv(self, base, extra, out=None):
+        out = out or self.dir / 'evidence'
+        argv = ['--base-url', base, *extra, '--workspace', WORKSPACE, '--out', str(out)]
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            try:
+                code = vl.main(argv)
+            except SystemExit as exc:  # argparse
+                code = exc.code
+        path = out / vl.EVIDENCE_NAME
+        text = path.read_text(encoding='utf-8') if path.exists() else ''
+        return code, stdout.getvalue(), stderr.getvalue(), (json.loads(text) if text else None), text
+
+    def test_a_password_file_signs_in_with_exactly_five_requests_and_one_trailing_line_break_is_not_the_password(self):
+        for index, ending in enumerate(('', '\n', '\r\n')):
+            with self.subTest(ending=repr(ending)):
+                stub = self.stub()
+                path = private_file(self.dir, PASSWORD + ending, name=f'password-{index}')
+                code, out, err, evidence, text = self.run_argv(
+                    stub.base, ['--username', USERNAME, '--password-file', str(path)], out=self.dir / f'ok-{index}')
+                self.assertEqual(code, 0, out + err)
+                self.assertEqual(evidence['result'], 'pass')
+                self.assertEqual(self.requests(stub), EXPECTED)
+                self.assertEqual(parse_qs(stub.log[1]['body'].decode())['password'], [PASSWORD])
+                self.assertEqual(evidence['credentials'], {'username': USERNAME, 'file_mode': '0600'})
+                self.assert_no_password(out, err, text)
+
+    def test_a_password_file_a_group_or_other_user_may_read_is_refused_before_any_request(self):
+        stub = self.stub()
+        path = private_file(self.dir, PASSWORD + '\n', name='password')
+        for mode in (0o640, 0o604, 0o644, 0o660, 0o606, 0o666):
+            with self.subTest(mode=oct(mode)):
+                os.chmod(path, mode)
+                code, out, err, evidence, _ = self.run_argv(stub.base, ['--username', USERNAME, '--password-file', str(path)])
+                self.assertEqual((code, stub.log, evidence), (2, [], None))
+                self.assertRegex(err, r'password file .* has mode 0\d{3}: a group or other user may read or write it')
+                self.assert_no_password(out, err)
+
+    def test_an_empty_or_multi_line_password_file_is_refused_without_quoting_it(self):
+        stub = self.stub()
+        for index, content in enumerate(('', '\n', '\r\n', PASSWORD + '\n' + PASSWORD, PASSWORD + '\n\n',
+                                         'line\r' + PASSWORD)):
+            with self.subTest(index=index):
+                path = private_file(self.dir, content, name=f'bad-{index}')
+                code, out, err, evidence, _ = self.run_argv(stub.base, ['--username', USERNAME, '--password-file', str(path)])
+                self.assertEqual((code, stub.log, evidence), (2, [], None))
+                self.assertIn('must hold one non-empty line', err)
+                self.assert_no_password(out, err)
+        code, out, err, evidence, _ = self.run_argv(stub.base, ['--username', USERNAME, '--password-file',
+                                                                str(self.dir / 'missing')])
+        self.assertEqual((code, stub.log), (2, []))
+        self.assertIn('cannot open the password file', err)
+
+    def test_the_two_forms_are_exclusive_and_a_password_file_needs_its_username(self):
+        stub = self.stub()
+        path = private_file(self.dir, PASSWORD, name='password')
+        for extra, pattern in ((['--credentials', str(self.credentials), '--password-file', str(path)], r'not allowed with'),
+                               (['--password-file', str(path)], r'needs --username'),
+                               (['--username', ' ', '--password-file', str(path)], r'needs --username'),
+                               (['--username', USERNAME, '--credentials', str(self.credentials)], r'goes with --password-file'),
+                               ([], r'one of the arguments --credentials --password-file is required')):
+            with self.subTest(extra=extra):
+                code, out, err, evidence, _ = self.run_argv(stub.base, extra)
+                self.assertEqual((code, stub.log, evidence), (2, [], None))
+                self.assertRegex(err, pattern)
+                self.assert_no_password(out, err)
+
+
 class TlsTests(Base):
     """TLS is verified normally: an untrusted certificate or another host's ends the run before any HTTP request (so
     before the password is sent); the same server, its certificate trusted, passes."""
