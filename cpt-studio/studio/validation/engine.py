@@ -21,7 +21,7 @@ from studio.reference.store import PFS, applied_sources
 from studio.types import (CONTEXT_FACTS, AssessmentResult, Check, ClarificationSpec, CodeReference, EvidenceSpan, Fact,
                           FamilyFinding, NormalizedResponse, PageSpan, ProposalAssessment, ProviderCode,
                           ReferenceLookup, ReferenceSourceInfo, RoutingResult, ServiceMention, sha256_json)
-from studio.gi.detect import DOUBT_PREFIX
+from studio.gi.detect import DOUBT_PREFIX, UNESTABLISHED
 from studio.validation import checks, rationale, reconcile
 
 ENGINE_VERSION = 'cpt-studio-validation@4'
@@ -62,6 +62,9 @@ class _Evaluation:
     # The routing-era reading of its own passages that did not decide a status the documented service decided as
     # performed (engine._undecided): named in the status check, never dropped. '' when there is none to name.
     note: str = ''
+    # Where the document places the act the code accounts for when no service of its family is documented
+    # (reconcile.placed_check). None when the inventory documents no such act, or names no service holding it.
+    placed: Optional[Check] = None
 
 
 @dataclass(frozen=True)
@@ -236,13 +239,27 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
 class _SecondMerge:
     """What merging the bounded second review did, worded into its check (_second_review_check) once the reconciliation
     the assessment records is known, so the check never says more than the stored completeness."""
-    what: str  # the asked items, as its request named them
+    what: str  # the asked items, as its request named them, quoted as items (_asked_items)
     asked: tuple[str, ...]  # their labels
     refused: bool
     problems: tuple[str, ...]
     added: tuple[str, ...]  # the codes added as proposals
     listed: tuple[str, ...]  # the codes it selected that are not added (alternatives, each with why)
     accounts_for: tuple[str, ...]  # the labels of the unresolved items the added codes account for
+    unlisted: int = 0  # codes it returned that cannot be listed (empty, or longer than MAX_LISTED_CODE)
+
+
+SECOND_REVIEW_NAMED = 4  # asked items the second review's check names; the rest are counted, never dropped unseen
+
+
+def _asked_items(labels: Sequence[str]) -> str:
+    """The asked items quoted as items: each label as the reconciliation worded it, separated by semicolons, for a list
+    that follows a colon and ends its sentence. A label is a clause ("endoscopic ultrasound (documented as performed)
+    has no supported proposal") or a phrase, so it is never worded into a sentence as a noun phrase (seen live on
+    2026-10-28: "A second review limited to the passages of endoscopic ultrasound (documented as performed) has no
+    supported proposal added no proposal for them."). Past SECOND_REVIEW_NAMED the rest are counted."""
+    more = len(labels) - SECOND_REVIEW_NAMED
+    return '; '.join(labels[:SECOND_REVIEW_NAMED]) + (f' and {more} more' if more > 0 else '')
 
 
 def _second_review(second: NormalizedResponse, scope: dict, selections: list, text: str, pages, routing, reference,
@@ -297,8 +314,15 @@ def _second_review(second: NormalizedResponse, scope: dict, selections: list, te
         elif profile is None:
             listed.append((group[0], 'the coverage catalogue does not establish which documented act it accounts for'))
         elif not accounts and any(family == candidate.family and act == '' for _, family, act, _ in open_items):
-            listed.append((group[0], 'the act it accounts for is not documented as done in the service left '
-                                     'unresolved'))
+            # Why a whole service's own family's code accounts for nothing is said from what was read: only its exact
+            # passages are read, so with none (or out of scope) nothing was, and that is the reason - never a statement
+            # about the document (eus2 F1: an EUS documented as performed with its sampling, a 43242 whose one passage
+            # was three characters off, had read "not documented as done"); an act the document states both ways is the
+            # conflict the assessment records, never one it does not document as done.
+            listed.append((group[0], (candidate.scope_reason or NO_EVIDENCE).rstrip('.') if candidate.evaluation is None
+                           else 'the document states the act it accounts for both as done and as not done (both are '
+                                'kept; neither is chosen)' if match is not None and match.reason == 'conflict'
+                           else 'the act it accounts for is not documented as done in the service left unresolved'))
         elif not accounts:
             listed.append((group[0], 'it accounts for no documented service or act the primary proposals left '
                                      'unresolved'))
@@ -314,11 +338,11 @@ def _second_review(second: NormalizedResponse, scope: dict, selections: list, te
                     for index, (item, why) in enumerate(listed + [(c, '') for c in listable if c.role != 'selected'])]
     alternatives = [replace(a, key=f'alt2:{index}', support={'origin': 'second_review'})
                     for index, a in enumerate(alternatives)]
-    asked = [item for item in scope.get('items', []) if isinstance(item, str)]
-    merge = _SecondMerge(what='; '.join(asked[:4]) or 'the unresolved documented services', asked=tuple(asked),
+    asked = [item for item in scope.get('items', []) if isinstance(item, str) and item]
+    merge = _SecondMerge(what=_asked_items(asked) or 'the unresolved documented services', asked=tuple(asked),
                          refused=bool(second.refused), problems=tuple(second.problems),
                          added=tuple(s.code for s in added), listed=tuple(item.code for item, _ in listed),
-                         accounts_for=tuple(dict.fromkeys(accounted)))
+                         accounts_for=tuple(dict.fromkeys(accounted)), unlisted=len(second.codes) - len(listable))
     return list(selections) + added, alternatives, merge
 
 
@@ -333,24 +357,32 @@ def _second_review_check(merge: _SecondMerge, unresolved: Sequence[reconcile.Unr
     """The second review's check, worded from what the merge did and from ``unresolved``, the reconciliation the
     assessment records: it names the items the added codes account for and the asked items that stay unresolved (a
     warning while any does), never an asked item no added code accounts for (refutation 7c8, reports-2: "selected 45380,
-    which account for them" of a biopsy and a dilation, while the dilation stayed unresolved)."""
-    what, codes = merge.what, ', '.join(merge.listed)
+    which account for them" of a biopsy and a dilation, while the dilation stayed unresolved).
+
+    Each sentence states one persisted fact, and every list of items is quoted as items - after a colon, ending its
+    sentence (_asked_items): the items the run's scope records as asked; the codes added, and the items this
+    reconciliation reads them as accounting for; the codes it selected that are listed as alternatives; the asked items
+    this reconciliation still lists. Its response's own problems and the codes it returned that cannot be listed are
+    said as the primary's are (provider.problems, provider.unlisted), and make it a warning (eus2 F2: they had been
+    said nowhere unless the response was refused whole)."""
+    asked, codes = f'A second review was requested for: {merge.what}.', ', '.join(merge.listed)
     if merge.refused:
         # Refused whole, unread: a failed provider check, as provider.status records a refused primary response (round
         # 7 bypass:1), so nothing reports this run's response as used.
         return Check('provider.second_review', 'Second review', 'fail',
-                     f'A second review was requested for: {what}. Its response was not used '
-                     f'({"; ".join(merge.problems)}).', 'cpt-studio:provider@1')
+                     f'{asked} Its response was not used ({"; ".join(merge.problems)}).', 'cpt-studio:provider@1')
     left = {u.label for u in unresolved}
     still = [label for label in dict.fromkeys(merge.asked) if label in left]
     alternatives = 'an alternative' if len(merge.listed) == 1 else 'alternatives'
+    limited = ('It was limited to the text that documents '
+               + ('this item' if len(merge.asked) == 1 else 'these items' if merge.asked else 'them'))
     if merge.added:
-        one = len(merge.added) == 1
+        one, added = len(merge.added) == 1, ', '.join(merge.added)
         accounted = [label for label in merge.accounts_for if label not in left]
-        detail = (f'A second review limited to the passages of {what} selected {", ".join(merge.added)}, which '
-                  + (f'{"accounts" if one else "account"} for {"; ".join(accounted)} and ' if accounted else '')
-                  + f'{"is added as a proposal" if one else "are added as proposals"} for review (marked as from the '
-                  'second review).')
+        detail = (f'{asked} {limited} and selected {added}, added as {"a proposal" if one else "proposals"} for review '
+                  '(marked as from the second review).')
+        if accounted:
+            detail += f' {added} {"accounts" if one else "account"} for: {"; ".join(accounted)}.'
         if merge.listed:
             detail += f' It also listed {codes}, shown as {alternatives} only.'
         if still:
@@ -359,10 +391,19 @@ def _second_review_check(merge: _SecondMerge, unresolved: Sequence[reconcile.Unr
     else:
         # "selected no code that accounts for them" was false of a code it selected that accounts for an item but is
         # not added (refutation 7c8, reports-0): what is true is that nothing was added; each alternative says why.
-        detail = (f'A second review limited to the passages of {what} added no proposal for them'
-                  + (f' (it listed {codes}, shown as {alternatives} only, with why it is not added)' if merge.listed
-                     else '')
-                  + ('. They stay unresolved; nothing is added.' if still else '. Nothing is added.'))
+        detail = (f'{asked} {limited} and added no proposal'
+                  + (f' (it listed {codes}, shown as {alternatives} only, with why '
+                     f'{"it is" if len(merge.listed) == 1 else "each is"} not added)' if merge.listed else '') + '.')
+        if still and set(still) == set(merge.asked):
+            detail += ' The item stays unresolved.' if len(merge.asked) == 1 else ' The items stay unresolved.'
+        elif still:
+            detail += f' Still unresolved: {"; ".join(still)}.'
+        status = 'warn'
+    if merge.problems:
+        detail += ' ' + checks.response_problems(merge.problems, "the second review's response")
+    if merge.unlisted:
+        detail += ' ' + checks.unlisted_codes(merge.unlisted, MAX_LISTED_CODE, 'The second review')
+    if merge.problems or merge.unlisted:
         status = 'warn'
     return Check('provider.second_review', 'Second review', status, detail, 'cpt-studio:provider@1')
 
@@ -489,6 +530,7 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     outcome = checks.resolve_status(own + checks.routing_readings(finding),
                                     detectable=legacy in DETECTED_FAMILIES)
     found = reconcile.match(code, inventory, selection.family) if inventory is not None else None
+    unmatched = found is None  # the inventory documents no service of the code's family (found is reset below too)
     if found is None and READ_DOCUMENTED_SERVICES and inventory is not None and outcome.state == 'not_performed':
         # No documented service of the code's family: the routing-era reading of its own passage decided alone. The
         # documented-service reader reads that passage too; unless it reads the same not-done status there, the readers
@@ -498,6 +540,7 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
         outcome = _held_unless_agreed(outcome, text, day, legacy, pages)
     supported = None
     note = ''
+    placed = None
     if found is not None:
         # Engine @4: the documented service and act decide the code's status; its passages are verified against them.
         found = _second_opinion(outcome, found, code, text, inventory, routing)
@@ -520,20 +563,43 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
             # documents no act the code accounts for as done or in conflict - it has nothing to add, and the exclusion
             # stands. A code whose act the inventory reads as done, or a base or E/M code, stays held.
             found = None
+
+    def today(span):
+        return _today_passage(text, span, day)
+
+    def report_family(span):
+        # the study's own report speaks for the study only where a report states what was done, found or concluded:
+        # never its header, its signature or another line no such section heads (OWN_REPORT_SECTIONS); and only where
+        # the document reports that study alone and the passage states nothing else (attr-F3: never another study's
+        # result in a combined report, never a biopsy taken after the study)
+        layout = gi_sections.layout(text)
+        if any(layout.section_at(pos).kind not in OWN_REPORT_SECTIONS for pos in (span.start, max(span.start,
+                                                                                                    span.end - 1))):
+            return ''
+        return gi_services.report_family_at(text, span.start, span.end, day, pages, sections=OWN_REPORT_SECTIONS)
+
     if found is not None:
-        note = _undecided(outcome, found)
-        outcome = _service_outcome(found)
         # For an office visit a passage shows the visit when it is a statement of this visit: neither the clause reader
         # nor the routing-era reading with its E/M rules (_undated_visit: a cue that dates or plans the visit, a visit
         # statement in a plan section) puts it at another time - "Return in three months.", "Follow-up office visit."
         # under Plan. The visit's own history and plan sentences are no such reading, so they still show it. A study's
-        # own result sentence shows the study (today=, _today_passage).
+        # own result sentence, or a passage of its own report, shows the study (today=, report_family=).
         another_time = {(r.start, r.end) for r in own if r.status in checks.NEGATIVE}
         supported = reconcile.support(found, kept, current=lambda span: (span.start, span.end) not in another_time
                                       and gi_services.current_statement(text, span.start, span.end, day),
-                                      today=lambda span: _today_passage(text, span, day))
+                                      today=today, report_family=report_family)
+        note = _undecided(outcome, found, supported, kept)
+        outcome = _service_outcome(found)
+    elif unmatched and inventory is not None:
+        # No documented service of the code's family: its own passages still decide its status. Where the inventory
+        # documents the act it accounts for in another family's service, its passages are verified against that act,
+        # and the service is named where the act's own passage names it (refutation gi2 RC5, reconcile.elsewhere).
+        elsewhere = reconcile.elsewhere(code, inventory)
+        if elsewhere is not None:
+            supported = reconcile.support(elsewhere, kept, today=today, report_family=report_family)
+            placed = reconcile.placed_check(elsewhere, inventory, PROFILES[selection.family].label)
     return replace(selection, evaluation=_Evaluation(finding, outcome, reference.lookup(code, day), own, speaks_for,
-                                                     found, supported, note))
+                                                     found, supported, note, placed))
 
 
 def _today_passage(text: str, span, day: Optional[date]) -> bool:
@@ -802,11 +868,14 @@ def _on_matched_act(reading: checks.Reading, found: reconcile.Match) -> bool:
                                              for act in found.acts for ev in act.evidence)
 
 
-def _undecided(old: checks.StatusOutcome, found: reconcile.Match) -> str:
+def _undecided(old: checks.StatusOutcome, found: reconcile.Match, supported: Optional[reconcile.Support] = None,
+               evidence: Sequence[EvidenceSpan] = ()) -> str:
     """The routing-era reading of the code's own passages that did not decide a status the documented service decided
     as performed (ARCHITECTURE 5.10): named in the status check, never dropped - as validation:4 names a hedge about
     another service in a warn, never a hold. '' when there is nothing to name: no such passage, a positive one, or a
-    doubt that is only the routing-era reader's own (silence, a negation it could not resolve)."""
+    doubt that is only the routing-era reader's own (silence, a negation it could not resolve, or a reading no wording
+    of a passage ``supported`` reads as showing the coded act decided - _unworded: a results row of the study's own
+    report, refutation gi2 RC4, ho-08, had been named as "not about the documented manometry")."""
     if found.state not in checks.POSITIVE:
         return ''
     if old.state in checks.POSITIVE:
@@ -817,9 +886,20 @@ def _undecided(old: checks.StatusOutcome, found: reconcile.Match) -> str:
     doubt = old.decisive
     if doubt is None or doubt.origin != 'evidence' or doubt.status in checks.POSITIVE or _readers_own(doubt):
         return ''
+    if _unworded(doubt) and supported is not None and any(
+            i < len(evidence) and (evidence[i].start, evidence[i].end) == (doubt.start, doubt.end)
+            for i in supported.supporting):
+        return ''
     why = ('it is about another time' if doubt.status in ('planned', 'historical')
            else f'it is not about the documented {reconcile.service_label(found.service)}')
     return f'A linked passage reads as {doubt.status}: {checks.cite(doubt)}; {why}, so it does not decide.'
+
+
+def _unworded(reading: checks.Reading) -> bool:
+    """A routing-era reading no wording of its passage decided: its section's default, held at most by routing's summary
+    that no mention of the family documents it as performed (detect.UNESTABLISHED, a family-level reading the inventory
+    already weighs, as _routing_agrees reads it)."""
+    return bool(reading.cues) and all(c.startswith(checks.SECTION_CUE_PREFIX) or c == UNESTABLISHED for c in reading.cues)
 
 
 def _readers_own(reading: checks.Reading) -> bool:
@@ -1121,6 +1201,10 @@ def _undated_visit(own: tuple[checks.Reading, ...], routing: RoutingResult, text
 # Sections that do not document today's service by default (ARCHITECTURE 5.3): a plan or recommendation reads as
 # planned, history as historical, and an indication or chief complaint says why the patient came.
 NOT_TODAY_SECTIONS = ('plan', 'history', 'indication')
+# The sections in which a report states what was done, found or concluded (studio.gi.sections): a passage of a study's
+# own report there - its results under the technique, its interpretation - shows the study (reconcile._study_named). A
+# header line, a signature or any other line no such section heads does not (refutation gi2 RC4).
+OWN_REPORT_SECTIONS = ('procedure', 'technique', 'findings', 'impression', 'assessment')
 
 
 def _speaks_for_today(mention: ServiceMention) -> bool:
@@ -1376,6 +1460,8 @@ def _proposal(s: _Selection, key: str, enc: _Encounter) -> ProposalAssessment:
                           checks.routing_check(profile, finding), status_found]
     if supported is not None:
         found.append(reconcile.support_check(supported))
+    if s.evaluation.placed is not None:
+        found.append(s.evaluation.placed)
     clarifications: list[ClarificationSpec] = []
     considerations: list[str] = []
     if outcome.state == 'incomplete':
@@ -1507,8 +1593,14 @@ def _service_considerations(s: _Selection, m: reconcile.Match) -> list[str]:
 
 
 def _support_json(m, supported, origin='primary') -> dict:
-    if m is None:
+    if m is None and supported is None:
         return {'origin': origin} if origin != 'primary' else {}
+    if m is None:
+        # No documented service of the code's family: how its passages relate to the act it accounts for, documented in
+        # another family's service (reconcile.elsewhere) - never a documented service or a match of its own.
+        return {'origin': origin, 'status': supported.status, 'supporting': list(supported.supporting),
+                'unrelated': list(supported.unrelated), 'detail_support': supported.detail,
+                'source': [{'start': sp.start, 'end': sp.end, 'text': sp.text} for sp in supported.source]}
     out = {'origin': origin, 'service': m.service.id, 'family': m.service.family, 'state': m.state, 'reason': m.reason,
            'detail': m.detail, 'acts': [{'id': a.id, 'kind': a.kind, 'label': reconcile.describe_act(m.service, a)}
                                         for a in m.acts]}

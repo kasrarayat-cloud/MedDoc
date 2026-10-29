@@ -340,11 +340,10 @@ class OutsideOrIndexDateTests(DateAssertions, SimpleTestCase):
                 self.assert_never(text, other)
                 self.assert_question(text, '2026-10-14')  # the title is evidence (phase 2, rule N1)
                 # the final refutation, fr-di:3: the outside or index procedure's date is quoted, never the member's
-                # answer (this pin had it answer too); the last case's label is beyond the reach and only unplaced
-                if 'Regional Medical Center' in line:
-                    self.assert_member_date(text, other)
-                else:
-                    self.assert_member_conflict(text, other)
+                # answer (this pin had it answer too); the owner's narrow source rule (2026-10-28, second round) reads
+                # the label's row 400 characters back, so the last case's attached "Outside" holds its date too (this
+                # pin had it answer: it was beyond the 80-character reach)
+                self.assert_member_conflict(text, other)
 
     def test_alone_a_bracketed_history_word_holds_the_date(self):
         for line in ('Procedure date: 09/03/2026 (outside facility; cold snare polypectomy of two adenomas).',

@@ -679,3 +679,123 @@ What it changes, so a later session does not re-derive it:
     as another occurrence's (a heading, a title, a field above or beside it) - stays as the installed revision has
     it, pinned as known limits, and is open for the owner: keep it, accept the structural rule's asks, or rule a
     narrower trade. The owner may overrule any of this; the PR body says so.
+
+## Owner directive, 2026-10-28 — reliable GI interpretation and a usable synthetic demonstration
+
+Received directly from the owner in session 7c8d38da on 28 October 2026, as pasted instruction text, after the install
+of revision 2b82889f (PR #1440) and its report (PR #1444). Recorded by the receiving session in its first commit, before
+the work that depends on it. Verbatim:
+
+> Continue CPT Studio from installed revision 2b82889f and reports #1440/#1444. The next objective is reliable GI interpretation and a usable synthetic demonstration, beyond the completed narrow installation milestone.
+>
+> Inspect the original sources and retained responses for ho-01 through ho-04. Repair the shared extent, negation and date-field interpretation defects. Establish expected behavior from the source before editing; provisional author expectations are not automatically correct.
+>
+> For ho-04, distinguish elapsed physician time from a calendar service-date field. Preserve the explicit applicable date without ignoring genuine date conflicts. Do not introduce patient-specific patches or automatically merge the overly restrictive date branch.
+>
+> Inspect the documented wrong-occurrence date cases and recommend a source-based policy that preserves genuine uncertainty. Explain interpretations 27 and 28 through concrete product examples before changing their policy.
+>
+> Verify controlled recovery for conclusively not-sent requests after clarification. Preserve protections against duplicate submissions, unknown outcomes and automatic retries.
+>
+> Exercise the reviewer-requested EUS second-review path using an explicitly labelled synthetic review. Preserve raw results, decisions and usage; do not promote unsupported alternatives.
+>
+> Use parallel agents for independent investigation and verification, with one integration/deployment owner. Reuse retained evidence first, then run targeted fresh synthetic checks and actual reviewed downloads.
+>
+> Keep rollback protections intact. Finish with verified fixes, installed revision, remaining limitations and whether a complete doctor-facing synthetic demo is ready. Do not equate installation checks or test volume with clinical coding accuracy.
+
+### Session interpretation, 2026-10-28 (7c8d38da, second round) — recorded, not owner-ruled
+
+29. **The ten held-out documents are development documents from this round.** The owner directs this round to read
+    ho-01..ho-04 and their retained responses, and ho-06 is the second-review case, so none of the ten can be
+    acceptance evidence for this round's repairs. A fresh synthetic set, written by an author who reads neither the
+    application code nor the repairs, is the acceptance set of the walk that follows; ho-01..ho-04 are re-run there as
+    regressions only.
+30. **One integration and deployment owner.** Session 7c8d38da is the single owner of this round's branch
+    (`fix/cpt-studio-gi-interpretation-20261028`), its install and every live action (uploads, the second review,
+    decisions, downloads). Its agents investigate and repair in their own worktrees and never act on the live service.
+
+## Owner decisions, 2026-10-28 (session 7c8d38da, second round) — the wrong-occurrence date family and a demo account
+
+Asked in session 7c8d38da at about 22:15Z on 28 October 2026, after the session explained interpretations 27 and 28
+with product examples (a wrong status exclusion reinstated before a reviewed report exists; a right one confirmed; a
+letter's "Date:" asked; an "Outside colonoscopy:" block whose "Procedure date: 09/03/2026" the installed revision sends
+as today's date). Verbatim questions and the owner's answers:
+
+> Which policy should this round adopt for service dates that the document itself marks as another occurrence's (e.g. an "Outside colonoscopy:" block whose "Procedure date: 09/03/2026" the installed revision sends as today's date)?
+> — Narrow source rule (Recommended): Ask the date (never send it) when a heading, title or row field naming another occurrence (outside/prior/previous/cancelled/scheduled...) governs the label; neutral headings like 'Patient information:' unchanged. Prototype: 0 changes on all live, held-out, corpus and gate texts; ~9.6k constructed wrong-date sends become questions. A member cannot answer with the other occurrence's date (addendum only).
+
+The owner's answer: **"Narrow source rule (Recommended)"**.
+
+> For the doctor-facing demo, which account should a doctor use? Only two accounts exist today: your owner account and the verification agent account.
+> — Separate demo reviewer (Recommended): I provision one new reviewer account in the GI workspace via manage.py provision, with a generated password stored 0600 on the server for you; decisions are attributed to it, not to you. A new credential (class d), so only with your yes.
+
+The owner's answer: **"Separate demo reviewer (Recommended)"**.
+
+What it changes, so a later session does not re-derive it:
+- Interpretation 28's open family is ruled: a labelled date governed by a heading, a title or a field on its row that
+  names another occurrence is asked, never sent, and a member's answer equal to that other occurrence's date is not
+  taken (an addendum settles it). A neutral heading the reader cannot place changes nothing. The status field beside
+  the label ("Status: Scheduled"), "Recall" and another discipline's undated title stay known limits.
+- One new reviewer account is provisioned for doctor demonstrations, in the one GI workspace, as a declared step of this
+  round's install; its password is generated on the server and kept there at mode 0600 for the owner.
+
+### Session interpretation, 2026-10-29 (7c8d38da, second round) — recorded, not owner-ruled
+
+31. **Interpretation 28's last claim, corrected by measurement.** "Nothing is sent that the installed revision would not
+    send" was literally false for the install of 2b82889f: against 057a7d398 it sent a document date in 677 constructed
+    texts of the 164,585-text broad date corpus where 057a7d398 asked (0 existing, live, corpus, verification or gate
+    texts). A triage by shape found 522 wrong or uncertain (rule U: the header's only labelled date is another
+    occurrence's, and the own date stands only in an addendum written after the body), 5 uncertain (an own date inside a
+    block a heading names as another occurrence's - the owner's narrow source rule asks them) and 150 correct (an own date
+    beside a qualified other-occurrence date, a numbered procedure part's own date, an addendum filling an empty field).
+    This round asks the 527. Measured at the final head with dd.py and compare.py: against 2b82889f one document date is
+    newly sent (the E/M time-statement shape of ho-04, the date 057a7d398 sends) and member answers are newly taken only
+    where they equal the note's own dated service line (43, all taken by 057a7d398 too); against 057a7d398 document dates
+    are sent only within the triage's correct shapes (130 of the 150, the others now asked by the round's BIRTH, PART and
+    ORDER rules) and no member answer differs. The claim now reads: no document date is sent that differs from one the
+    installed revision sends, and against 057a7d398 only in the triaged correct shapes.
+32. **Negation scoped to the status word it governs.** "Examination complete, not aborted." no longer reads as the
+    colonoscopy's denial. A bare such sentence releases the service only with corroboration in the family's own text and
+    no unread procedure-level doubt; the release criterion is counterfactual - every newly performed reading is one the
+    installed revision reads as performed once the misread sentence is removed. The unread-doubt guard is a word list and
+    leaks on unseen phrasings; those leaks are known limits under interpretation 27 (the reviewer decides every code).
+33. **Controlled recovery of conclusively not-sent requests.** A context save that settles a member date conflict makes
+    the request when the run in use is a primary attempt that conclusively never reached the provider (recorded not
+    sent, sent false, carrying its request, through the send door, never a sent and failed attempt of it), once per such
+    save; every other save only re-checks. A second review recorded not sent, or cancelled before sending, no longer
+    uses up the once-per-revision-and-date bound: a reviewer may ask again, explicitly. The protections stand: an unknown
+    outcome blocks every send until a member reconciles it; an identical answered request is reused; a failed request is
+    never sent again; nothing is retried automatically; concurrent saves and asks send once. Left for the owner: a
+    not-sent primary attempt with no date question still recovers only by an addendum or a new upload, and a
+    coding-endpoint refusal (401, 403, 429) is recorded failed and never re-sent identically.
+34. **What labels a reviewer-requested second review.** The ask takes no body and an encounter cannot be renamed, so the
+    synthetic label is the reviewer's account, its decision and reconciliation notes and the operator's evidence; the
+    excerpt sent to Corti begins after the document's SYNTHETIC banner line. A request-level note, or a banner in every
+    provider request, would be a product decision; both are listed for the owner.
+35. **A document whose only labelled date is another occurrence's** asks the date and holds ANY member answer (an
+    addendum settles it), because that date keeps speaking - stricter than the ruling's words, which name only a member
+    answer equal to the other occurrence's date. Recorded so the owner can overrule it.
+36. **Pre-existing stage-time defects found by this round's lenses were repaired**, not recorded: a pasted line of
+    repeated status references (60.3 s at 2b82889f, now 8.3 s) and one of repeated E/M time statements (60.1 s, now 1.8 s)
+    passed the analyze stage's 60 s; a third Resume in a row overflowed the job key (HTTP 500). One gate text (a
+    50,087-character repeated "EUS" text) routes in about 57.5 s on both revisions, near the 60 s limit, and stays a known
+    limit.
+37. **Interpretation 31's member figure was wrong, and its "correct" class holds two texts the source contradicts.** A
+    differential round (2026-10-29: three lenses and a verifier per finding, asking only whether the head is worse than
+    the installed revision in a must-fix class) showed that the 37 member answers interpretation 31 counted, beside 6
+    others, as "equal to the note's own dated service line" were not all that: in some the dated line was another,
+    earlier service's ("EGD on 05/01/2019" in an office visit dated 10/13/2026), and that date reached the request. The
+    integrator had accepted the class by its description without reading its members. The second fix round (5b125e737 and
+    bae4e81ac, integrated as e5ea6c627 and 6546d778e) makes the date-of-birth, order and part doubt rules ask only: where
+    they leave the note no own date, a member's answer counts only if the reading without them would take it, and a date
+    of birth never answers. Measured at 6546d778e over the same 164,585 texts: against 2b82889f one document date is
+    newly sent (ho-04's shape) and 6 member answers are newly taken (the head asks an outside colonoscopy's date that
+    2b82889f sends, and the member's date equals the note's own dated title); against 057a7d398, 133 document dates are
+    sent where it asks, and no member answer differs. Read member by member, the 133 hold two texts the source
+    contradicts: lens:3705643aa10a ("Visit date: 05/01/2019" in an EGD note that opens "EGD: 11/04/2026") and
+    lens:0d0e48706876 ("Date of service: 10/13/2026" beside "Colonoscopy - Referral date: 10/13/2026 - performed on
+    11/04/2026"). The triage that called them correct read labels only, and a dated line naming the documented procedure
+    is no label. 2b82889f sends both; so does this round, also with an E/M time statement added, where 2b82889f asked
+    only because it misread "34 minutes" as a date. Closing them needs rule N1 to let a dated service line question the
+    own label - interpretation 28's open family, which the owner ruled only for headings, titles and row fields - so they
+    are listed for the owner (ACCURACY-RESIDUALS, gi2 dates-F1-n1). In the other 131, every other date is stated as
+    another occurrence's on its own line or under its heading.

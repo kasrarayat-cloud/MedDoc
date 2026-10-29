@@ -223,11 +223,16 @@ OTHER_ACT_DENIED = rx(r'\b' + _OTHER_ACT + r"\s*(?:[:=\u2013-]\s*)?(?:(?:was|wer
 
 # --- history: the service happened before this encounter ------------------------
 
+# The words that put a service at an earlier occasion when they stand before its name ("prior colonoscopy"). EARLIER
+# reads the same words anywhere: before a reach to a depth in its clause, they put the reach at an earlier occasion
+# too ("At the previous attempt the colonoscope was advanced to 60 cm"; detect._depth_reach_today, GI round 2 fix
+# round, extent). One string, so the two never drift.
+_EARLIER = r'prior|previous|previously|last|most\s+recent|recent|recently|remote|earlier|past|index|outside'
+EARLIER = rx(r'\b(?:' + _EARLIER + r')\b')
 HISTORICAL_PRE = (
     ('history of', _pre(r'history\s+of|hx\s+of|h/o|s/p|status\s+post|personal\s+history\s+of',
                         _HIST_FILLER, 3)),
-    ('prior', _pre(r'prior|previous|previously|last|most\s+recent|recent|recently|remote|earlier|past|index|outside',
-                   _HIST_FILLER, 3)),
+    ('prior', _pre(_EARLIER, _HIST_FILLER, 3)),
 )
 # Who asked for a service is no history: "requested by her previous gastroenterologist", "ordered by the outside
 # physician" (the "elsewhere" history cue is not read after these).
@@ -272,15 +277,79 @@ CANCELLED_CLAUSE = (
     ('not started', rx(r'\bnot\s+(?:started|begun)\b')),
     ('no-show', rx(r'\bno[- ]show(?:ed)?\b|\bdid\s+not\s+(?:show|arrive|present\s+for)\b')),
 )
+# --- a negation that governs a status word (gi2 negation lens, ho-02 at 2b82889f) -----------------------------------
+# A status word says the procedure was called off or cut short ("aborted", "cancelled", "postponed", "terminated").
+# A negation written directly before it - only a passive auxiliary between - negates that STATUS, not the service:
+# "Examination complete, not aborted." says the examination was not cut short, "The colonoscopy was never cancelled"
+# that it was not called off. Routing's readers read such a status word as the service's own denial ("not aborted"
+# read with the service-name grammar of NEGATED_PRE, "but not the colonoscopy"), cancellation or incompleteness; the
+# documented-service reader already reads a negated negative as positive (ARCHITECTURE 5.9). One predicate, read by
+# routing's reference and clause-cue readers and by its reading of a cited passage that opens on the status word
+# (detect._negated_status, detect._opens_on_a_negated_status).
+STATUS_NEGATION = rx(r"(?:\b(?:not|never|neither|nor|without)|n['\u2019]t)(?:\s+(?:being|been|be))?\s+$")
+STATUS_NEGATION_REACH = 40  # the negation and its auxiliary stand within this many characters before the status word
+
+
+def status_negation(text: str, start: int):
+    """The negation that governs the status word starting at ``start`` (STATUS_NEGATION), or None."""
+    return STATUS_NEGATION.search(text, max(0, start - STATUS_NEGATION_REACH), start)
+
+
+# A sentence that is a bare statement that the procedure was not called off or cut short, and nothing more: the
+# procedure (or a service name, masked as SERVICE_TOKEN) as its subject or none, an optional completion predicate
+# ("complete,", "complete;", "was completed and"), the auxiliaries, the negation (also contracted with a typographic
+# apostrophe), its status word(s) and an optional "early" or intensifier (_BARE_TAIL). Read whole (fullmatch on the
+# masked sentence, once per sentence): any other word - a hedge, a time, "until", "but", another act, a reason -
+# keeps the sentence from being one, and the negated status word is then held as a doubt, never released.
+STATUS_WORD = (r'(?:aborted|cancel(?:l)?ed|postponed|deferred|called\s+off|terminated|discontinued|halted|stopped|'
+               r'interrupted|abandoned)')
+_BARE_SUBJECT = r'(?:(?:the|this)\s+)?(?:procedure|examination|exam|study|endoscopy|' + SERVICE_TOKEN + r'|it)'
+# What may follow a status word in a bare statement: "early", and a negative-polarity intensifier, which only
+# strengthens the negation ("at any point", "at any time", "at any stage", "at all": a closed class).
+_BARE_TAIL = r'(?:\s+(?:early|prematurely|at\s+any\s+(?:point|time|stage)|at\s+all))?'
+_BARE_NEGATION = r"(?:not|never|neither|without|(?:was|were|is|had|has)n['\u2019]t)(?:\s+(?:being|been|be))?"
+BARE_STATUS_DENIAL = rx(
+    r'[\s*\u2022-]*(?:' + _BARE_SUBJECT + r'\s+)?'
+    r'(?:(?:was|is)\s+)?(?:complete(?:d|ly)?(?:\s*[,;]\s*|\s+and\s+|\s+))?'
+    r'(?:(?:was|were|is|has\s+been|had\s+been)\s+)?'
+    + _BARE_NEGATION + r'\s+' + STATUS_WORD + _BARE_TAIL +
+    r'(?:\s*(?:,|or|nor|and)\s+(?:(?:not|never)\s+)?' + STATUS_WORD + _BARE_TAIL + r')*'
+    r'[\s.!]*')
+# A statement that a procedure was not done, was called off, was cut short or is in doubt, whose subject routing never
+# resolves (a pronoun, or "the procedure" with a predicate the reference patterns do not read): "It was not performed.",
+# "It was cancelled before sedation.", "This was postponed.", "It is unclear whether the procedure was completed." Read
+# only to keep a bare negated status word held (detect._bare_negation_hold): beside such a statement the bare sentence
+# may be the only words routing reads about whether the procedure happened. Never read to deny or hold anything else.
+_UNREAD_SUBJECT = r'(?:it|this|(?:the\s+)?(?:procedure|exam|examination|study|endoscopy))'
+UNREAD_SERVICE_DOUBT = rx(
+    r'\b' + _UNREAD_SUBJECT + r'\s+(?:was|is|has\s+been|had\s+been|will\s+be|would\s+be)\s+'
+    r'(?:(?:not|never)\s+(?:(?:been|be|yet)\s+)?(?:performed|done|started|begun|undertaken|attempted|completed?|possible|'
+    r'feasible|carried\s+out)'
+    r'|' + STATUS_WORD + r'|incomplete|rescheduled|abbreviated|limited)\b'
+    r'|\b' + _UNREAD_SUBJECT + r"\s+(?:did\s+not|didn't|never|could\s+not|couldn't)\s+(?:happen|occur|take\s+place|start|"
+    r'begin|proceed|be\s+(?:performed|done|completed))\b'
+    r'|\b(?:unclear|uncertain|unknown|not\s+(?:clear|certain|known|documented))\s+(?:whether|if)\b'
+    r'|\b' + _UNREAD_SUBJECT + r'\s+(?:was|is)\s+(?:possibly|probably|likely|perhaps|maybe|reportedly|presumably)\b'
+    # a modal about the procedure itself ("The procedure may have been incomplete.", "It might not have been completed.")
+    r'|\b' + _UNREAD_SUBJECT + r'\s+(?:may|might|could|would|must)\s+(?:not\s+)?(?:have\s+)?(?:been|be)\b'
+    # the patient leaving before or without it ("The patient left before the procedure began."), a no-show, a refusal
+    # of "it"
+    r'|\b(?:left|departed|leaves|leaving)\s+(?:\w+\s+){0,2}?(?:before|without|prior\s+to)\b'
+    r"|\bno[- ]show\b|\bdid\s+not\s+(?:show|arrive)\b|\b(?:declined|refused)\s+(?:it|this)\b")
 # "aborted" after the scope went in is an incomplete procedure, not a cancellation;
 # "before sedation" keeps it a cancellation. An abort that says neither is held as
 # uncertain (detect._abort_status), never excluded as cancelled.
-STARTED = rx(r'\b(?:was|were)\s+(?:then\s+)?(?:advanced|inserted|introduced|passed|intubated|reached)\b'
-             r'|\binsertion\b|\bintubation\s+of\b'
-             r'|\b(?:scope|colonoscope|endoscope|gastroscope|sigmoidoscope|duodenoscope|echoendoscope|enteroscope|'
-             r'instrument)\s+(?:had\s+|was\s+|then\s+)?(?:reached|advanced|passed|entered|traversed|inserted|introduced)\b'
-             r'|\bafter\s+(?:reaching|advancing|passing|entering|traversing|intubating|insertion|intubation)\b'
-             r'|\b(?:at|to|of)\s+(?:approximately\s+|about\s+|~\s*)?\d{1,3}\s*cm\b')
+# The instrument's course: it went in and was moved on ("was advanced", "the colonoscope reached", "insertion", "after
+# reaching"). STARTED adds a depth ("at 30 cm"), which also writes a size ("a polyp of 2 cm"); COURSE is the course
+# alone, read where a size would mislead (sections._reporting_heads: a later section that narrates an examination's
+# course; GI round 2 fix round, extent). One string, so the two never drift.
+_COURSE = (r'\b(?:was|were)\s+(?:then\s+)?(?:advanced|inserted|introduced|passed|intubated|reached)\b'
+           r'|\binsertion\b|\bintubation\s+of\b'
+           r'|\b(?:scope|colonoscope|endoscope|gastroscope|sigmoidoscope|duodenoscope|echoendoscope|enteroscope|'
+           r'instrument)\s+(?:had\s+|was\s+|then\s+)?(?:reached|advanced|passed|entered|traversed|inserted|introduced)\b'
+           r'|\bafter\s+(?:reaching|advancing|passing|entering|traversing|intubating|insertion|intubation)\b')
+COURSE = rx(_COURSE)
+STARTED = rx(_COURSE + r'|\b(?:at|to|of)\s+(?:approximately\s+|about\s+|~\s*)?\d{1,3}\s*cm\b')
 BEFORE_START = rx(r'\b(?:before|prior\s+to)\s+(?:the\s+)?(?:sedation|insertion|scope\s+insertion|intubation|'
                   r'start(?:ing)?|the\s+procedure\s+(?:began|started)|procedure\s+start|endoscope\s+insertion)\b')
 
@@ -726,6 +795,55 @@ NOT_REACHED_BEFORE = rx(r'\b(?:unable\s+to|could\s+not|cannot|failed\s+to|did\s+
 NOT_REACHED_AFTER = rx(r'^[\s,]*(?:was|were|could)\s+not\s+(?:be\s+)?(?:reached|intubated|entered|examined|visualized|'
                        r'seen|evaluated|inspected)\b')
 REACHED_BEYOND = rx(r'\b(?:beyond|past)\s+(?:the\s+)?(?:[\w-]+\s+){0,2}$')
+# A reach whose object is a depth, then the landmark that depth lies in (session 7c8d38da, GI round 2, extent: ho-03's
+# "The pediatric colonoscope was advanced to 28 cm from the anal verge in the sigmoid colon"): the landmark is where the
+# instrument got to, so it is reached, exactly as "advanced to the sigmoid colon" is. Only straight after the reach verb
+# ("advanced to 28 cm ...", "advanced only to 28 cm ..."), so a depth that locates a finding ("a polyp at 28 cm in the
+# sigmoid colon") never reads a reach; and only as the endoscope's own reach: an endoscope of any kind or "the
+# instrument" (the vocabulary STARTED and detect._P2_INSTRUMENT read a reach by) is the verb's subject, with only
+# auxiliaries, "then" and adverbs between them (a closed class: "was", "could only be", "was then carefully"), or its
+# object right after it ("advanced the pediatric colonoscope to 28 cm in the sigmoid colon"); so an accessory's depth
+# ("A balloon was advanced to 35 cm in the distal esophagus") or a catheter's never says where the endoscope went.
+# REACHED_DEPTH_DENIED is its denial ("could not be advanced to 28 cm in the sigmoid colon"), read first as
+# NOT_REACHED_BEFORE is, so a denied reach is blocked, never reached. detect._landmarks reads a reach to a depth only
+# where no other reach form reads the landmark, and drops it where a deeper landmark is named after it
+# (detect._depth_reach_doubted).
+_DEPTH_THEN_LANDMARK = (r'(?:to|up\s+to|as\s+far\s+as)\s+(?:approximately\s+|about\s+|~\s*)?\d{1,3}\s*cm\b'
+                        r'(?:\s+from\s+(?:the\s+)?(?:anal\s+verge|anus|incisors|teeth|dentate\s+line))?\s*,?\s+'
+                        r'(?:in|into|within|at)\s+(?:the\s+)?(?:level\s+of\s+(?:the\s+)?)?(?:[\w-]+\s+){0,2}$')
+_DEPTH_INSTRUMENT = r'(?:\w*scope|instrument)'
+# GI round 2 fix round (extent, EXT-R6): an adverb that says the advance failed or fell short of where it was going is
+# no auxiliary of the reach: "was unsuccessfully advanced to 30 cm in the sigmoid colon", "was partially advanced to 30
+# cm". A closed class: the negated adverbs of success, effect, completeness and sufficiency, the adverbs of a futile
+# act, and the adverbs of degree that say an act fell short or almost did not happen. Such a reach is held (no reach is
+# read, as before the depth form existed), never read as a denial: "unsuccessfully advanced to 30 cm" does not say
+# whether 30 cm was reached. It is excluded both between the instrument and the verb and right before the verb of the
+# active form ("we unsuccessfully advanced the colonoscope to 30 cm").
+_FALLING_SHORT = ('unsuccessfully', 'ineffectively', 'ineffectually', 'unsatisfactorily', 'fruitlessly', 'futilely',
+                  'vainly', 'incompletely', 'inadequately', 'insufficiently', 'imperfectly', 'partially', 'partly',
+                  'barely', 'hardly', 'scarcely', 'nearly')
+_DEPTH_AUXILIARIES = (r'(?:\s+(?:was|were|is|are|be|been|had|has|have|could|can|would|then|further|again|also|still|'
+                      r'(?!(?:' + '|'.join(_FALLING_SHORT) + r')\b)\w+ly))*')
+_NO_FALLING_SHORT_BEFORE = ''.join(r'(?<!\b' + word + r'\s)' for word in _FALLING_SHORT)
+_DEPTH_VERB = r'(?:advanced|passed|inserted|introduced)'
+REACHED_DEPTH = rx(r'\b' + _DEPTH_INSTRUMENT + _DEPTH_AUXILIARIES + r'\s+' + _DEPTH_VERB + r'\s+(?:[\w-]+\s+){0,2}?'
+                   + _DEPTH_THEN_LANDMARK
+                   + r'|' + _NO_FALLING_SHORT_BEFORE + r'\b' + _DEPTH_VERB + r'\s+(?:(?:the|a|an)\s+)?(?:[\w-]+\s+)?'
+                   + _DEPTH_INSTRUMENT + r'\s+' + _DEPTH_THEN_LANDMARK)
+REACHED_DEPTH_DENIED = rx(r'\b(?:(?:unable\s+to|could\s+not|cannot|can\s*not|failed\s+to|did\s+not)\s+(?:be\s+)?'
+                          r'(?:advance|pass|insert|introduce)\w*|(?:was|were|is|are|been)\s+(?:not|never)\s+'
+                          r'(?:able\s+to\s+be\s+|successfully\s+|further\s+|safely\s+)?(?:advanced|passed|inserted|'
+                          r'introduced)|never\s+(?:advanced|passed))\s+(?:[\w-]+\s+){0,2}?' + _DEPTH_THEN_LANDMARK)
+# The depth an extent label's value may open with, right after its landmark ("Extent reached: sigmoid colon at 28 cm",
+# "Extent: descending colon (35 cm)", "Extent: sigmoid colon, 28 cm from the anal verge"; session 7c8d38da, GI round 2,
+# extent): it says where in that landmark the examination stopped, so it is part of the value (detect._value_words).
+# Only where it opens the value: a depth after any other word ("Extent: cecum and TI at 85 cm", "Extent: transverse colon
+# at 60 cm and cecum at 85 cm" past its first depth) is read as before, so it still leaves the label unread.
+# The blank runs are possessive: with two plain runs around an optional comma or bracket, a run of blanks before no
+# depth was tried at every split, quadratic per label (refutation gi2 ops cost: 1,289 labels padded with blanks routed
+# 56.8-57.6 s against the installed 44 s and the analyze stage's 60 s). Every match is the same span.
+EXTENT_VALUE_DEPTH = rx(r'[ \t]*+[,(\[\u2013\u2014-]?[ \t]*+(?:(?:at|to)\s+)?(?:approximately\s+|about\s+|~\s*)?\d{1,3}\s*cm\b'
+                        r'(?:\s+from\s+(?:the\s+)?(?:anal\s+verge|anus|incisors|teeth|dentate\s+line))?')
 CENTIMETERS = rx(r'\b(?:to|at|of)\s+(?:approximately\s+|about\s+|~\s*)?(?P<cm>\d{1,3})\s*cm\b')
 # Shorthand extents: an extent label line ("Extent: cecum", "Extent reached: terminal ileum", "The furthest
 # extent reached was the cecum", "Depth of insertion: 30 cm"), and "to (the) <landmark | N cm>" straight after

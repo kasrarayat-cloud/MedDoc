@@ -159,9 +159,14 @@ def _em_mentions(text: str, lay: Layout) -> tuple[Mention, ...]:
                                          str(int(m.group('minutes')))))
     for m in cues.EM_VISIT.finditer(text):
         found.append(Mention('gi.office_em', m.start(), m.end(), 'em-visit', m.group(0)))
+    # Whether a sentence says its time is not E/M time is read once per sentence (gi2 integration, cost: one pasted line
+    # of 7,500 time statements made one sentence that every statement rescanned, 60.1 s at 2b82889f).
+    not_em_time: dict[tuple[int, int], bool] = {}
     for m in cues.EM_TIME.finditer(text):
-        s_start, s_end = lay.sentence_for(m.start(), m.end())
-        if not cues.NOT_EM_TIME.search(text, s_start, s_end):
+        sentence = lay.sentence_for(m.start(), m.end())
+        if sentence not in not_em_time:
+            not_em_time[sentence] = cues.NOT_EM_TIME.search(text, *sentence) is not None
+        if not not_em_time[sentence]:
             found.append(Mention('gi.office_em', m.start(), m.end(), 'em-time', 'E/M time',
                                  str(int(m.group('minutes')))))
     for m in cues.MDM_LEVEL.finditer(text):
@@ -223,6 +228,9 @@ class Analysis:
     adjustments: dict = field(default_factory=dict)
     # (start, end) of each OTHER_FAMILY procedure name, sorted: items of a check-box line (_unchecked_box)
     other_names: tuple = ()
+    # family -> [(reference Mention, negation start)] of bare negated status words (gi2 negation lens), decided per
+    # family in _route: released only when today's report independently establishes the procedure (_bare_negation_hold)
+    bare_negations: dict = field(default_factory=dict)
 
     def __post_init__(self):
         self._service_starts = [m.start for m in self.services]
@@ -577,6 +585,11 @@ def _token_explanations(an: Analysis, clause: tuple[int, int], token: tuple[int,
         cs, ce = clause
         explains = [(c.start, c.end) for c in an.cues_in(max(cs, token[0] - 200), min(ce, token[1] + 200))]
         explains += _landmark_negations_near(an, clause, token)
+        # gi2 negation lens: the negation of a bare negated status word is accounted for by that word ("Examination
+        # complete, not aborted."): it denies the status, not anything the passage reads
+        explains += [(negated[0], c.end) for c in an.cues_in(max(cs, token[0] - 200), min(ce, token[1] + 200))
+                     if c.status in ('cancelled', 'incomplete')
+                     for negated in (_negated_status(an, c.start),) if negated is not None and negated[1]]
         masked, where = _masked_map(an, max(cs, token[0] - 40), min(ce, token[1] + 400))
         for pattern in (cues.COMPLICATION_NEGATION, cues.QUALIFIER_NEGATION, _OPTION_LABEL):
             explains += [(where[m.start()], where[m.end()]) for m in pattern.finditer(masked)]
@@ -1873,6 +1886,17 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
                 if read is not None:
                     found += read
                     continue
+            negated = _negated_status(an, cue.start) if cue.status in ('cancelled', 'incomplete') else None
+            if negated is not None:
+                # gi2 negation lens: a negated status word ("Colonoscopy was not cancelled", "was never aborted; the
+                # cecum was reached") is never that status of the service: it holds as a doubt. Only a bare one in a
+                # passage that names no service (a cited "Examination complete, not aborted.") says nothing to hold:
+                # its negation is its own (_token_explanations), and the family's reading decides (_bare_negation_hold).
+                if not negated[1] or any(m in names for m in members):
+                    # the hold keeps the rank of the status word it stands for (as round 4c-2 box2:I's option holds
+                    # do), so a plan or a history cue in the same reading never outranks it into a non-contradiction
+                    found.append(('uncertain', _negated_status_cue(an, negated[0], cue.end), False, True, cue.status))
+                continue
             if cue.name in _OWNED_TIME_CUES:
                 owned = _owned_time_cue(an, cue, named, (cs, ce), em, today, history)
                 if owned is not None:
@@ -1907,6 +1931,11 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
     for ms, me in members:
         post = _masked_post(an, me, ce)
         negations, _ = _member_negations(an, cs, ce, ms, me, post)
+        if (ms, me) not in names and _opens_on_a_negated_status(an, ms, me):
+            # gi2 negation lens: a cited passage that opens on a negated status word ("aborted" of "Examination
+            # complete, not aborted.") - the negation written before it is the status word's (read by the clause cue
+            # above), never the passage's own denial
+            negations = [n for n in negations if n[2][1] != ms]
         for label, past, (ns, ne) in negations:  # round 4c-2 box2:I: "Colonoscopy: Not performed ☐ | Performed ☒"
             read = _B2_option_words(an, ns, ne, ts, te, label.split(': ', 1)[-1], 'negated')
             found += [('negated', label, past, False)] if read is None else read
@@ -3557,6 +3586,10 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
     "Intended extent: cecum"), whatever its reading: the document's own statement of the extent (_insertion_only)."""
     text = an.text
     reached, blocked = [], []
+    # session 7c8d38da GI round 2 (extent): the hits read only by a reach to a depth, the mentions that may doubt one,
+    # the hits blocked or denied, and (fix round, EXT-R5) the depths of the landmarks the text says were not reached or
+    # could not be passed (_depth_reach_doubted)
+    depth_only, deeper, refused, stopped = [], [], [], []
     for s, e in sentences:
         for cs, ce in _clauses_in(an, s, e):
             clause = None  # round 4d bounded:3: one Span of the clause, shared by every hit of it (memory linear in the text)
@@ -3575,11 +3608,16 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                     hit = (depth, label, clause)
                     if labelled is not None and cues.EXTENT_LABEL_BEFORE.search(text, ws, m.start()):
                         labelled.append(hit)
+                    if status in ('performed', 'incomplete', 'uncertain'):
+                        deeper.append((m.start(), depth, hit))  # a mention that may doubt a shallower reach to a depth
                     if status in ('performed', 'incomplete') and cues.REACHED_BEYOND.search(pre):
                         reached.append(hit)
                     elif base in ('performed', 'incomplete', 'negated') and (
-                            cues.NOT_REACHED_BEFORE.search(pre) or cues.NOT_REACHED_AFTER.search(post)):
+                            cues.NOT_REACHED_BEFORE.search(pre) or cues.NOT_REACHED_AFTER.search(post)
+                            or cues.REACHED_DEPTH_DENIED.search(pre)):  # session 7c8d38da GI round 2 (extent)
                         blocked.append(_P2_beyond_the_valve(an, m, hit))  # round 4c-2 plan:D2
+                        refused.append(hit)
+                        stopped.append(depth)
                         if cut_denials is not None:  # round 4d regression:3
                             cut_denials.append((blocked[-1], m.start(), m.end(), ws, we,
                                                 status in ('negated', 'cancelled', 'incomplete')))
@@ -3593,6 +3631,12 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                                 and not (cues.REACHED_BEFORE.search(pre) or cues.REACHED_AFTER.search(post)
                                          or _straight_after_service(an, ws, m.start())):
                             cut.append(hit)  # read only by declared:11's cell cut (round 4d regression:3)
+                    elif status in ('performed', 'incomplete') and _depth_reach_today(an, ws, pre):
+                        # "The pediatric colonoscope was advanced to 28 cm from the anal verge in the sigmoid colon"
+                        # (session 7c8d38da GI round 2, extent: ho-03), unless the family's text doubts it
+                        # (_depth_reach_doubted)
+                        reached.append(hit)
+                        depth_only.append((m.start(), depth, hit))
                     elif (_answers_silently(an, reading, m.start(), m.end()) and _reached_label(an, ws, m.start())
                           and _plain_tail(an, m.end(), we) and not _P2_label_denied(an, m.end(), depth, table)):
                         reached.append(hit)  # "Furthest extent reached: cecum." answered in an addendum
@@ -3607,16 +3651,71 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                     elif doubted is not None and _P2_refused_label(an, reading, m.start(), m.end(), ws, we, depth, table) \
                             and not _P2_reach_denied(an, m.end(), depth, table):
                         doubted.append(hit + ((m.end(), _P2_label_rest(an, m.end(), depth, table)),))  # plan:D2
-                    elif denied is not None and (status in ('negated', 'cancelled', 'incomplete')
-                                                 or (reading.cues and reading.cues[0].startswith(DOUBT_PREFIX)
-                                                     and not _P2_doubt_is_a_finding(an, ws, we))
-                                                 or (_reached_label(an, ws, m.start())
-                                                     and _P2_label_denied(an, m.end(), depth, table))):
-                        denied.append(_P2_beyond_the_valve(an, m, hit))  # a landmark its reading denies or doubts (plan:B2)
-                        if cut_denials is not None:  # round 4d regression:3
-                            cut_denials.append((denied[-1], m.start(), m.end(), ws, we,
-                                                status in ('negated', 'cancelled', 'incomplete')))
+                    elif (status in ('negated', 'cancelled', 'incomplete')
+                          or (reading.cues and reading.cues[0].startswith(DOUBT_PREFIX)
+                              and not _P2_doubt_is_a_finding(an, ws, we))
+                          or (_reached_label(an, ws, m.start()) and _P2_label_denied(an, m.end(), depth, table))):
+                        refused.append(hit)  # whatever the caller collects (session 7c8d38da GI round 2, extent)
+                        if denied is not None:
+                            denied.append(_P2_beyond_the_valve(an, m, hit))  # a landmark its reading denies or doubts (plan:B2)
+                            if cut_denials is not None:  # round 4d regression:3
+                                cut_denials.append((denied[-1], m.start(), m.end(), ws, we,
+                                                    status in ('negated', 'cancelled', 'incomplete')))
+    if depth_only:
+        doubted_reaches = {id(hit) for hit in _depth_reach_doubted(depth_only, deeper, refused, stopped)}
+        reached = [hit for hit in reached if id(hit) not in doubted_reaches]
     return reached, blocked
+
+
+_DEPTH_FIGURE = re.compile(r'\d{1,3}\s*cm\b', re.A | re.I)
+
+
+def _depth_reach_today(an: Analysis, ws: int, pre: str) -> bool:
+    """Whether ``pre`` (the clause window before a landmark, from ``ws``) ends with a reach to a depth (cues.REACHED_DEPTH)
+    that reads as today's act (GI round 2 fix round, extent, EXT-R5). The plain twin is read at its landmark, straight
+    after "advanced to the"; here the depth stands there and the landmark further on, out of reach of a time written
+    before the verb ("In 2024 the colonoscope was advanced to 60 cm in the transverse colon": the depth reads historical,
+    the landmark performed). So the depth's own reading must be performed or incomplete too; and nothing in the clause
+    before the reach may put it at another time: a time cue (historical or planned), a date that is not the day's (as
+    the clause reading reads one: before the service date, after it unless a bare year, or any date while no service
+    date is known), or a word that puts a service at an earlier occasion (cues.EARLIER, cues.HISTORICAL_PRE's own
+    vocabulary: "At the previous attempt the colonoscope was advanced to 60 cm in the transverse colon"). The reach's
+    words, longer than the plain twin's, are read over its clause rather than within a date's reach of the landmark."""
+    found = cues.REACHED_DEPTH.search(pre)
+    if found is None:
+        return False
+    reach = ws + found.start()
+    if cues.EARLIER.search(an.text, ws, reach) or any(c.status in ('historical', 'planned') for c in an.cues_in(ws, reach)):
+        return False
+    for d in an.dates_in(ws, reach):
+        order = None if an.service_date is None else ctx.compare_to_service(d, an.service_date)
+        if order is None or order < 0 or (order > 0 and not d.bare):
+            return False
+    figure = _DEPTH_FIGURE.search(pre, found.start())
+    return figure is None or _generic_reading(an, ws + figure.start(), ws + figure.end()).status in ('performed',
+                                                                                                    'incomplete')
+
+
+def _depth_reach_doubted(depth_only, deeper, refused, stopped=()) -> list:
+    """The hits read as reached only by a reach to a depth (cues.REACHED_DEPTH) that the family's text doubts, so that,
+    as before the depth form was read, they are no extent (session 7c8d38da GI round 2, extent, and its fix round):
+    - the text names a deeper landmark that no denial explains (its reading performed, incomplete or uncertain, and
+      neither blocked nor denied), before or after the reach: the depth may be a waypoint whose onward reach is worded in
+      a way no reach cue reads ("The colonoscope was passed to 20 cm in the sigmoid colon where a polyp was found, and
+      then to the cecum": the 60-character window of cues.REACHED_BEFORE misses "and then to the cecum" once a depth
+      stands before it), or a step after an examination that went deeper ("Normal stomach and duodenum. The endoscope
+      was then passed to 35 cm in the distal esophagus and four bands were placed": the fix round, EXT-R4, where only
+      mentions after the reach counted). A deeper landmark named first for another reason ("A transverse colon mass on
+      CT was the reason for the examination") now withholds the depth too: held, as before the depth form;
+    - or the text says a shallower landmark was not reached or could not be passed (``stopped``: "could not pass the
+      rectosigmoid"): nothing beyond it was reached at that examination, so a reach beyond it is another occasion's or
+      another attempt's ("At the previous attempt the colonoscope was advanced to 60 cm in the transverse colon. Today it
+      could not pass the rectosigmoid."; the fix round, EXT-R5).
+    The hits are tuples every list here keeps alive, so their ids are stable; linear in the mentions."""
+    refused_ids = {id(hit) for hit in refused}
+    deepest = max((depth for _, depth, hit in deeper if id(hit) not in refused_ids), default=0)
+    shallowest_stop = min(stopped, default=1 << 30)
+    return [hit for _, depth, hit in depth_only if deepest > depth or shallowest_stop < depth]
 
 
 def _P2_doubted_by_a_next_field(an: Analysis, reading: Reading, end: int, ws: int, we: int) -> bool:
@@ -3679,8 +3778,19 @@ _P2_NEUTRAL_CELL = re.compile(r'(?:[ \t]*\|[ \t]*|\t[ \t]*|[ ]{2,})(?:scope|inst
 
 
 def _P2_plain_value(text: str, start: int, end: int) -> bool:
-    """Whether [start, end), an extent label's value after its landmark, holds only cues.EXTENT_TAIL words."""
-    return all(word.lower() in cues.EXTENT_TAIL for word in _EXTENT_TAIL_WORD.findall(text, start, end))
+    """Whether [start, end), an extent label's value after its landmark, holds only cues.EXTENT_TAIL words (after the
+    depth it may open with, _value_words)."""
+    return all(word.lower() in cues.EXTENT_TAIL for word in _value_words(text, start, end))
+
+
+def _value_words(text: str, start: int, end: int) -> list[str]:
+    """The words of [start, end), an extent label's value after its landmark, without the depth the value may open with
+    (cues.EXTENT_VALUE_DEPTH: "Extent reached: sigmoid colon at 28 cm"; session 7c8d38da GI round 2, extent): that depth
+    says where in the landmark the examination stopped and never denies, plans or aims, so it is part of the value.
+    Every other word is read as before, a depth after another word too. Read by every reader of an extent label's value
+    alike (_plain_tail, _S2_read_by_the_cut, _P2_plain_value)."""
+    depth = cues.EXTENT_VALUE_DEPTH.match(text, start, end)
+    return _EXTENT_TAIL_WORD.findall(text, depth.end() if depth else start, end)
 
 
 def _P2_neutral_region(text: str, start: int, stop: int, need_cell: bool) -> bool:
@@ -4068,18 +4178,16 @@ def _plain_tail(an: Analysis, end: int, we: int) -> bool:
     stop = _VALUE_END.search(an.text, end, we)
     stop_at = stop.start() if stop else we
     cell = _SEC_NEXT_CELL.search(an.text, end, stop_at)
-    tail = an.text[end:cell.start() if cell else stop_at]
-    return all(word.lower() in cues.EXTENT_TAIL for word in _EXTENT_TAIL_WORD.findall(tail))
+    return all(word.lower() in cues.EXTENT_TAIL for word in _value_words(an.text, end, cell.start() if cell else stop_at))
 
 
 def _S2_read_by_the_cut(an: Analysis, end: int, we: int) -> bool:
     """Whether the value after an extent label's landmark (which ends at ``end``; ``we``, its clause window's end), read
     to the value's sentence or line end without declared:11's next-cell cut, holds a word outside cues.EXTENT_TAIL: then
     _plain_tail reads the label only because that cut ends it ("Extent: cecum | Prep quality: Good"; round 4d
-    regression:3). Reads at most the clause window, stopping at the first such word."""
+    regression:3). Reads at most the clause window, a depth that opens the value aside (_value_words)."""
     stop = _VALUE_END.search(an.text, end, we)
-    return not all(word.group(0).lower() in cues.EXTENT_TAIL
-                   for word in _EXTENT_TAIL_WORD.finditer(an.text, end, stop.start() if stop else we))
+    return not all(word.lower() in cues.EXTENT_TAIL for word in _value_words(an.text, end, stop.start() if stop else we))
 
 
 # Round 4d regression:3, second round: a landmark written as a field's label ("Cecum - not reached", "The cecum | not
@@ -4313,7 +4421,19 @@ def _only_a_sub_act(an: Analysis, attributed: list[Optional[str]], family: str, 
     """Whether the sentence [s, e), which says something was not completed or was aborted, speaks only of
     a sub-act (the terminal ileum, the ileocecal valve, retroflexion) of a procedure that reached its
     expected extent: then it is no incompleteness of the procedure. A landmark short of that extent in the
-    same sentence ("could not be advanced beyond the splenic flexure") keeps it the procedure's."""
+    same sentence ("could not be advanced beyond the splenic flexure") keeps it the procedure's.
+
+    Memoised per family and sentence (gi2 integration, cost): every status reference in one sentence asked the same
+    question and each answer rescanned the whole sentence, so one pasted line repeating "The procedure was not aborted,"
+    grew quadratically and passed the analyze stage's limit. The answer depends only on the family, the sentence and the
+    analysis (``attributed`` is fixed per analysis, as _reached_expected_depth's own memo assumes)."""
+    key = ('only-a-sub-act', family, s, e)
+    if key not in an.memo:
+        an.memo[key] = _only_a_sub_act_read(an, attributed, family, s, e)
+    return an.memo[key]
+
+
+def _only_a_sub_act_read(an: Analysis, attributed: list[Optional[str]], family: str, s: int, e: int) -> bool:
     if family not in ('gi.colonoscopy', 'gi.egd') or not _SUB_ACT.search(an.text, s, e):
         return False
     table = cues.LOWER_LANDMARKS if family == 'gi.colonoscopy' else cues.UPPER_LANDMARKS
@@ -5161,6 +5281,86 @@ def _B3_long_row(an: Analysis, start: int, end: int) -> bool:
     return row is not None and row[9]
 
 
+NEGATED_STATUS_HELD = 'uncertain: a negation governs the status word, not the service, and its sentence says more'
+
+
+def _negated_status(an: Analysis, start: int) -> Optional[tuple[int, bool]]:
+    """(negation start, bare) when the status word at ``start`` ("aborted", "cancelled", "terminated" ...) is governed
+    by a negation written directly before it (cues.status_negation: "not aborted", "never cancelled", "wasn't
+    postponed", "without being aborted"); None otherwise. ``bare``: its sentence, service names masked, is a bare
+    statement that the procedure was not called off or cut short and nothing more (cues.BARE_STATUS_DENIAL:
+    "Examination complete, not aborted.", "The procedure was never aborted."). Such a negation denies the status, not
+    the service: a bare one says nothing a reader must hold, anything more holds (gi2 negation lens, ho-02)."""
+    key = ('negated-status', start)
+    if key not in an.memo:
+        negation = cues.status_negation(an.text, start)
+        an.memo[key] = None if negation is None else (negation.start(),
+                                                      _bare_status_sentence(an, *an.lay.sentence_for(start, start + 1)))
+    return an.memo[key]
+
+
+def _bare_status_sentence(an: Analysis, s: int, e: int) -> bool:
+    """Whether the sentence [s, e), service names masked, is a bare statement that the procedure was not called off or
+    cut short (cues.BARE_STATUS_DENIAL). Read once per sentence, however many status words it holds, so a long line of
+    them stays linear."""
+    key = ('bare-status-sentence', s, e)
+    if key not in an.memo:
+        an.memo[key] = bool(cues.BARE_STATUS_DENIAL.fullmatch(_masked(an, s, e)))
+    return an.memo[key]
+
+
+def _opens_on_a_negated_status(an: Analysis, start: int, end: int) -> bool:
+    """Whether the passage [start, end) opens on a status word ("aborted", "cancelled" ...) that a negation written
+    directly before it governs (_negated_status): a cited "aborted" of "Examination complete, not aborted.". That
+    negation is the status word's own; the service-name grammar before a member ("but not the colonoscopy",
+    cues.NEGATED_PRE) never reads it as the passage's denial."""
+    lead = start
+    while lead < end and an.text[lead].isspace():
+        lead += 1
+    return any(c.start == lead and c.status in ('cancelled', 'incomplete') and _negated_status(an, lead) is not None
+               for c in an.cues_in(lead, end))
+
+
+def _negated_status_cue(an: Analysis, start: int, end: int) -> str:
+    return f"{NEGATED_STATUS_HELD} ('{' '.join(an.text[start:end].split())[:60]}')"
+
+
+BARE_NEGATION_UNESTABLISHED = ('uncertain: a negation governs the status word, not the service, but nothing else in '
+                               "today's report establishes the procedure as performed")
+BARE_NEGATION_UNREAD = 'uncertain: a negation governs the status word, not the service, but today\'s report also says'
+_UNREAD_DOUBT_SECTIONS = ('plan', 'history', 'indication')  # another occasion's text: never consulted for this hold
+
+
+def _unread_service_doubt(an: Analysis) -> Optional[str]:
+    """The first statement in today's report (outside plan, history and indication sections) that a procedure was not
+    done, was called off or is in doubt while naming no service or intervention (cues.UNREAD_SERVICE_DOUBT: "It was
+    not performed.", "This was postponed.", "It is unclear whether the procedure was completed."), or None. Routing
+    reads no such statement, so it never releases a bare negated status word beside one."""
+    key = ('unread-service-doubt',)
+    if key not in an.memo:
+        an.memo[key] = None
+        for cs, ce in an.lay.clauses:
+            if an.lay.section_at(cs).kind in _UNREAD_DOUBT_SECTIONS:
+                continue
+            hit = cues.UNREAD_SERVICE_DOUBT.search(an.text, cs, ce)
+            if hit is not None and not an.services_in(cs, ce) and not an.interventions_in(cs, ce):
+                an.memo[key] = ' '.join(hit.group(0).split())[:60]
+                break
+    return an.memo[key]
+
+
+def _bare_negation_hold(an: Analysis, family_readings: list, evidenced: bool) -> Optional[str]:
+    """None when a family's bare negated status words ("Examination complete, not aborted.") are released: the
+    family's own text establishes the procedure as performed today - an explicit performance cue, or a documented
+    extent, intervention, cannulation or sampling (EVIDENCE_FACTS) - and today's report has no statement routing
+    cannot read that a procedure was not done or is in doubt (_unread_service_doubt). Otherwise the cue each holds
+    with: the release must never make a procedure performed that only the bare sentence was keeping in question."""
+    if not (evidenced or any(r.status == 'performed' and r.basis == 'cue' for r in family_readings)):
+        return BARE_NEGATION_UNESTABLISHED
+    unread = _unread_service_doubt(an)
+    return f"{BARE_NEGATION_UNREAD} '{unread}'" if unread else None
+
+
 def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, Reading]:
     """Clauses that refer to a family's service without naming it ("the procedure
     was cancelled", "unable to advance beyond the splenic flexure"). Only these
@@ -5206,6 +5406,17 @@ def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, 
                     if status in ('incomplete', None) and _only_a_sub_act(an, attributed, family, s, e):
                         continue  # "The terminal ileum was not intubated" after the cecum was reached
                     mention = Mention(family, m.start(), m.end(), 'reference', m.group(0))
+                    negated = _negated_status(an, m.start())
+                    if negated is not None:
+                        # gi2 negation lens: the negation governs the status word, not the service. A bare statement
+                        # ("Examination complete, not aborted.") refers to no service that was not done; anything more
+                        # in its sentence holds it as a doubt - never a denial, a cancellation or an incompleteness.
+                        if negated[1]:
+                            an.bare_negations.setdefault(family, []).append((mention, negated[0]))  # decided in _route
+                        else:
+                            found[mention] = Reading('uncertain', (_negated_status_cue(an, negated[0], m.end()),), 'cue',
+                                                     doubt=True)
+                        continue
                     if status:
                         found[mention] = Reading(status, (f'{status}: {m.group(0)}',), 'cue')
                     else:  # "aborted": cancelled before insertion, incomplete after, otherwise held as a doubt
@@ -6937,6 +7148,15 @@ def _route(an: Analysis) -> RoutingResult:
         evidenced = any(f.name in EVIDENCE_FACTS and f.origin == 'document' and f.value not in (None, 'none documented')
                         for f in facts)
         family_readings = [readings[m] for m in mentions]
+        bare = an.bare_negations.get(family, [])
+        hold = _bare_negation_hold(an, family_readings, evidenced) if bare else None
+        if hold is not None:  # gi2 negation lens: not released, so each bare negated status word holds as a doubt
+            for mention, negation_start in bare:
+                held = Reading('uncertain', (f"{hold} ('{' '.join(an.text[negation_start:mention.end].split())[:60]}')",),
+                               'cue', doubt=True)
+                readings[mention] = an.references[mention] = held
+            mentions = sorted(mentions + [mention for mention, _ in bare], key=lambda m: m.start)
+            family_readings = [readings[m] for m in mentions]
         kinds = tuple(an.lay.section_at(m.start).kind for m in mentions)
         away = tuple(_elsewhere(an, m) for m in mentions)
         status = _aggregate(family_readings, section_suffices=evidenced or not has_basis, kinds=kinds, away=away,

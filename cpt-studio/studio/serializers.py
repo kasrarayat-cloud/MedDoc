@@ -4,6 +4,7 @@ from django.conf import settings
 from . import models, review
 from .gi.context import is_member_conflict
 from .gi.profiles import PROFILES, profile
+from .providers.base import ProviderUnavailable
 
 
 def _iso(value):
@@ -25,7 +26,10 @@ def user_json(user):
 def session_json(user, membership):
     workspace = membership.workspace
     encounters = workspace.encounters.all()
-    queue_states = {'needs_clarification', 'ready_for_review', 'provider_unknown'}
+    # the review queue's own rule, row by row (queue_reasons): a state that always waited on a member is on it whatever
+    # else is found, so its rows are counted without reading further
+    queued = sum(1 for encounter in encounters.select_related('current_revision', 'current_context', 'current_assessment')
+                 if encounter.state in QUEUE_STATES or queue_reasons(encounter))
     return {
         'user': user_json(user),
         'workspace': {'id': str(workspace.pk), 'name': workspace.name, 'subtitle': 'Synthetic demonstration workspace',
@@ -33,7 +37,7 @@ def session_json(user, membership):
                                    'profiles_version': workspace.category.profiles_version}},
         'role': membership.role, 'can_review': membership.can_review,
         'acknowledgement': review.ACKNOWLEDGEMENTS.get(user.actor_kind, ''),
-        'counts': {'documents': encounters.count(), 'queue': encounters.filter(state__in=queue_states).count()},
+        'counts': {'documents': encounters.count(), 'queue': queued},
         'synthetic_only': settings.SYNTHETIC_ONLY, 'provider_mode': settings.PROVIDER_MODE,
         'release': settings.RELEASE_SHA,
     }
@@ -65,6 +69,21 @@ def _service_date_conflict(encounter):
     return (fact or {}).get('origin') == 'conflict'
 
 
+def _service_date_evidence(encounter):
+    """The documented text the reader kept as the evidence of a service date it could not use (origin missing, with
+    evidence): the lists quote it instead of saying "not documented", as the review page's date chip does (gi2
+    integration; occurrence RC5 left the list cell and the overview card saying "Not documented"). '' otherwise."""
+    context = encounter.current_context
+    fact = (context.facts or {}).get('service_date') if context else None
+    if not fact or fact.get('origin') != 'missing' or fact.get('value') not in (None, ''):
+        return ''
+    for item in fact.get('evidence') or []:
+        text = ' '.join(str((item or {}).get('text') or '').split()) if isinstance(item, dict) else ''
+        if text:
+            return text[:120]
+    return ''
+
+
 def _context_facts(context):
     """The stored context facts, each with ``member_conflict`` (context.is_member_conflict): the one predicate every
     reader that words a conflict asks, so the screen never calls a member's value conflicting documentation."""
@@ -85,16 +104,72 @@ def _source_kind(revision):
     return root.kind
 
 
+# The states that have always waited on a workspace member (a clarification, a review decision, a reconciliation): an
+# encounter in one stays on the review queue whatever else is found (queue_reasons).
+QUEUE_STATES = frozenset({'needs_clarification', 'ready_for_review', 'provider_unknown'})
+
+
+def queue_reasons(encounter, coding=None):
+    """What the encounter waits on a workspace member for, in this order; the review queue - and the session's count of it
+    - lists the encounter when this is not empty (refutation gi2, demo RC6: ho-06, no code selected with a second review
+    available, and ho-09, reviewed with a documented service unresolved, were off a queue of three states):
+      'question'        an open clarification on the assessment of the current revision;
+      'decision'        a code that needs a reviewer's decision - selected or reinstated with none that stands, or an
+                        exclusion to confirm or reinstate - counted as readiness counts it (review._decisions_waiting);
+      'reconciliation'  a provider request whose outcome is unknown and not reconciled;
+      'incomplete'      the encounter's coding completeness reads incomplete (review.coding_completeness, the encounter
+                        view's banner): a documented service or act without a supported proposal, a conflict in the
+                        record, a question, or no provider response read;
+      'second_review'   the bounded second review can be asked for now - only ever for a documented service left
+                        without a supported proposal, so only beside 'incomplete' (jobs.second_review_status, by the
+                        predicate POST second-review accepts an ask by: never for an ask already queued, whose stage
+                        Resume runs or that failed - fix round gi2, truth-1);
+      'state'           a state that always waited on a member (QUEUE_STATES), when none of the above is found.
+    Nothing while the encounter is processing: it waits on its stages then. Read-only, from the rows; ``coding``: the
+    coding completeness already read for this encounter."""
+    if encounter.state == 'processing':
+        return []
+    reasons = []
+    assessment = review.live_assessment(encounter)
+    if assessment is not None:
+        if assessment.clarifications.filter(state=models.Clarification.OPEN).exists():
+            reasons.append('question')
+        if review._decisions_waiting(assessment)[0]:
+            reasons.append('decision')
+    if review._unreconciled_unknown(encounter):  # the rule the derived state and every send block read
+        reasons.append('reconciliation')
+    coding = review.coding_completeness(encounter) if coding is None else coding
+    if coding.get('state') == 'incomplete':
+        reasons.append('incomplete')
+        from .jobs import second_review_status  # local import: jobs imports this module's peers
+        try:
+            offered = second_review_status(encounter)['available']
+        except ProviderUnavailable:
+            # a provider this installation cannot build (no credentials configured) can be asked nothing: never claimed,
+            # and the list and the session - every page - never fail for it (only the encounter view reads it otherwise)
+            offered = False
+        if offered:
+            reasons.append('second_review')
+    if not reasons and encounter.state in QUEUE_STATES:
+        reasons.append('state')
+    return reasons
+
+
 def encounter_summary(encounter):
+    coding = review.coding_completeness(encounter)
     return {
         'id': str(encounter.pk), 'title': encounter.title, 'state': encounter.state,
         # worded from the run a provider_failed state reads: a response refused whole is "not used" (7c8 reports-5)
         'state_label': review.encounter_state_label(encounter), 'service_date': _service_date(encounter),
         'service_date_conflict': _service_date_conflict(encounter),
+        'service_date_evidence': _service_date_evidence(encounter),
         'families': _family_labels(encounter), 'source_kind': _source_kind(encounter.current_revision),
         'open_clarifications': encounter.clarifications.filter(state=models.Clarification.OPEN,
                                                                assessment=encounter.current_assessment_id).count()
         if encounter.current_assessment_id else 0,
+        # the encounter view's coding completeness, so a reviewed encounter whose coding is incomplete says so in the
+        # lists, and what it waits on a member for: on the review queue when not empty (refutation gi2, demo RC6)
+        'coding_state': coding['state'], 'queue_reasons': queue_reasons(encounter, coding),
         'created_at': _iso(encounter.created_at),
     }
 
@@ -255,7 +330,7 @@ def _report_json(report):
 ACTIVITY_SUMMARIES = {
     'encounter.created': 'Document added', 'revision.extracted': 'Text extracted',
     'revision.addendum': 'Addendum added', 'context.changed': 'Encounter context changed',
-    'provider.sending': 'Provider request sent', 'provider.finished': 'Provider response recorded',
+    'provider.sending': 'Provider request started', 'provider.finished': 'Provider request finished',
     'provider.reused': 'Retained provider result reused (no new request)',
     'provider.second_review_requested': 'Second provider review requested by a reviewer',
     'provider.reconciled': 'Unknown provider outcome reconciled', 'assessment.created': 'Checks completed',
@@ -264,11 +339,31 @@ ACTIVITY_SUMMARIES = {
     'decisions.invalidated': 'Earlier decisions invalidated by a source revision',
     'account.provisioned': 'Account provisioned',
 }
+# Repair gi2 (the recovery lens): 'provider.sending' is recorded before the exchange, so it says only that the attempt
+# started, and 'provider.finished' is worded from the outcome its own row recorded (every revision records the state and
+# the HTTP status there). An attempt the adapter recorded as not sent, or whose outcome is unknown, read "Provider request
+# sent" and "Provider response recorded" beside a run the Provider runs card listed as not sent. Any other recorded value
+# keeps the neutral 'Provider request finished'.
+FINISHED_SUMMARIES = {'succeeded': 'Provider response recorded', 'failed': 'Provider request failed',
+                      'unknown': 'Provider outcome unknown: no complete response was recorded',
+                      'not_sent': 'Provider request not sent'}
+
+
+def _activity_summary(event):
+    summary = ACTIVITY_SUMMARIES.get(event.event, event.event)
+    data = event.data if isinstance(event.data, dict) else {}
+    state = data.get('state')
+    if event.event != 'provider.finished' or not isinstance(state, str) or state not in FINISHED_SUMMARIES:
+        return summary
+    status = data.get('http_status')
+    if state == 'failed' and isinstance(status, int) and not isinstance(status, bool):
+        return f'{FINISHED_SUMMARIES[state]} (HTTP {status})'
+    return FINISHED_SUMMARIES[state]
 
 
 def _activity_json(event):
     actor = event.actor.label() if event.actor else 'CPT Studio'
-    return {'event': event.event, 'summary': ACTIVITY_SUMMARIES.get(event.event, event.event),
+    return {'event': event.event, 'summary': _activity_summary(event),
             'actor': actor, 'actor_kind': event.actor_kind, 'created_at': _iso(event.created_at),
             'data': {k: v for k, v in event.data.items() if k in {'status', 'method', 'state', 'action', 'code',
                                                                   'kind', 'fmt', 'usage', 'http_status', 'pages',

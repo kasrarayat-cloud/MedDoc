@@ -43,6 +43,11 @@ Format @4 adds, and these are checked only in a file that names that format:
            unresolved_service row per persisted unresolved item and one
            conflict row per persisted conflict; every source passage of a
            proposal row is the API's and quotes the revision text exactly
+
+And only where the encounter JSON records it: a bounded second review (its
+Origin lines, alternatives and usage entry), and a member date conflict's hold
+(PROVIDER USAGE lists it as recorded with nothing sent, no usage and no hashes,
+beside every other persisted run with its state, usage and hashes).
 """
 from __future__ import annotations
 
@@ -130,6 +135,7 @@ COLUMN_CANDIDATES = {
     'documented_service': ('documented_service',),
     'exclusion_reason': ('exclusion_reason',),
     'source_passages': ('source_passages',),
+    'proposal_origin': ('proposal_origin',),
 }
 
 
@@ -374,7 +380,157 @@ def check_txt(doc: str, name: str, text: str, kind: str, api: dict | None) -> li
     out.extend(_txt_passages(doc, name, text, listed, revision_text, sections, kind))
     if FORMAT_4 in head:
         out.extend(_txt_documented(doc, name, text, sections, api, revision_text))
+        out.extend(_txt_second_review(doc, name, sections, api))
+        out.extend(_txt_member_date_hold(doc, name, sections, api))
     return out
+
+
+# --- the bounded second review (ARCHITECTURE 5.11) ------------------------------------------------------------------
+#
+# Checked only where the encounter JSON records one (a second-review run or a proposal from it), so every other report
+# is read exactly as before. What the renderer says of it must match what is persisted: reports._item_block's Origin
+# line on each numbered item from the second review and on no other, reports._alternatives_section's wording of each
+# alternative by its origin, and reports._provider_section's one entry per provider run (a second review labelled as
+# one) with the usage recorded for that run.
+
+SECOND_REVIEW_ORIGIN_LINE = 'Origin: selected by the provider in the bounded second review of an unresolved service'
+ALTERNATIVE_LINE = re.compile(r'^  - (?P<code>\S+) · .*? — (?P<origin>second-review alternative|provider alternative), '
+                              r'never selectable(?::|$)')
+USAGE_LINE = re.compile(r'^    Usage: (?P<usage>none reported|\{.*\})(?: \((?P<basis>[^()]*)\))?$')
+SHA_LINE = re.compile(r'^    Request sha256: (?P<request>\S+) · Response sha256: (?P<response>\S+)$')
+
+
+def proposal_origin(proposal: dict) -> str:
+    return (proposal.get('support') or {}).get('origin') or 'primary'
+
+
+def has_second_review(api: dict) -> bool:
+    proposals = ((api.get('assessment') or {}).get('proposals')) or []
+    return (any(proposal_origin(p) == 'second_review' for p in proposals)
+            or any(run.get('purpose') == 'second_review' for run in api.get('provider_runs') or []))
+
+
+def _run_key(second: bool, usage: str, request: str, response: str) -> tuple:
+    return ('second_review' if second else 'primary', usage, request, response)
+
+
+def _txt_second_review(doc, name, sections, api) -> list[Result]:
+    if not has_second_review(api):
+        return []
+    proposals = ((api.get('assessment') or {}).get('proposals')) or []
+    body = {heading: lines for heading, lines in sections}
+    out = []
+    # 1. the Origin line: on every numbered item the second review added, and on no other
+    second = {str(p.get('code')) for p in proposals if proposal_origin(p) == 'second_review' and p.get('bucket') != 'alternative'}
+    marked, numbered = set(), set()
+    for heading, lines in sections:
+        if heading.startswith((APPROVED_HEADING, 'UNDECIDED')):
+            for code, block in item_blocks(lines):
+                numbered.add(code)
+                if any(line.strip() == SECOND_REVIEW_ORIGIN_LINE for line in block):
+                    marked.add(code)
+    want = second & numbered
+    out.append(Result(doc, name, 'txt.second_review.origin', 'pass' if marked == want else 'fail',
+                      f'{len(marked)} numbered item(s) say they came from the second review, as persisted'
+                      if marked == want else f'Origin line on {sorted(marked)}; the second review added {sorted(want)}'))
+    # 2. every alternative worded by its origin
+    heading = next((h for h in body if h.startswith('ALTERNATIVES')), None)
+    seen = Counter()
+    for line in body.get(heading, []) if heading else []:
+        match = ALTERNATIVE_LINE.match(line)
+        if match:
+            seen[(match.group('code'), match.group('origin'))] += 1
+    expected = Counter((str(p.get('code')), 'second-review alternative' if proposal_origin(p) == 'second_review'
+                        else 'provider alternative') for p in proposals if p.get('bucket') == 'alternative')
+    out.append(Result(doc, name, 'txt.second_review.alternatives', 'pass' if seen == expected else 'fail',
+                      f'{sum(seen.values())} alternative(s), each worded by its origin' if seen == expected else
+                      f'listed {sorted(seen.items())}; persisted {sorted(expected.items())}'))
+    # 3. PROVIDER USAGE: one entry per run, the second review labelled as one, with the usage recorded for it
+    entries, current = [], None
+    for line in body.get('PROVIDER USAGE', []):
+        if line.startswith('  - '):
+            current = {'second': ' · bounded second review' in line, 'usage': None, 'request': None, 'response': None}
+            entries.append(current)
+        elif current is not None:
+            usage, shas = USAGE_LINE.match(line), SHA_LINE.match(line)
+            if usage:
+                current['usage'] = usage.group('usage')
+            elif shas:
+                current['request'], current['response'] = shas.group('request'), shas.group('response')
+    listed = Counter(_run_key(e['second'], e['usage'], e['request'], e['response']) for e in entries)
+    persisted = Counter(_run_key(run.get('purpose') == 'second_review',
+                                 json.dumps(run['usage'], sort_keys=True, ensure_ascii=False) if run.get('usage')
+                                 else 'none reported', run.get('request_sha256') or 'none',
+                                 run.get('response_sha256') or 'none') for run in api.get('provider_runs') or [])
+    out.append(Result(doc, name, 'txt.second_review.provider_usage', 'pass' if listed == persisted else 'fail',
+                      f'{sum(listed.values())} provider run(s) listed with their recorded usage '
+                      f'({sum(n for key, n in persisted.items() if key[0] == "second_review")} second review)'
+                      if listed == persisted else
+                      f'listed {sorted(listed.items())}; persisted {sorted(persisted.items())}'))
+    return out
+
+
+# --- a member date conflict's hold (session interpretation 19) --------------------------------------------------------
+#
+# Checked only where the encounter JSON records one, so every other report is read exactly as before. The API serves no
+# run scope; the run's error names the hold, because only jobs._member_date_hold writes studio/jobs.py's
+# MEMBER_DATE_CONFLICT_MESSAGE (and always with scope {'held': 'member_date_conflict'}). reports._provider_section must
+# list it as recorded, not requested, with nothing sent, no usage and no hashes, beside every other persisted run.
+
+MEMBER_DATE_HOLD_MESSAGE = ('Nothing was sent: the service date entered as encounter metadata differs from the '
+                            'documented one. Correct or clear the metadata (or add an addendum), and the request is '
+                            'made for the agreed date.')
+HOLD_WORDING = ' · nothing was sent: the service date entered as encounter metadata conflicts with the document'
+
+
+def is_member_date_hold(run: dict) -> bool:
+    return ((run.get('purpose') or 'primary') == 'primary' and run.get('state') == 'not_sent'
+            and not run.get('request_sha256') and run.get('error') == MEMBER_DATE_HOLD_MESSAGE)
+
+
+def _provider_entries(lines) -> list[dict]:
+    """PROVIDER USAGE as reports._provider_section writes it: '  - provider · mode · state · ...' per run, then its
+    Usage and sha256 lines."""
+    entries, current = [], None
+    for line in lines:
+        if line.startswith('  - '):
+            fields = line[4:].split(' · ')
+            current = {'head': line, 'fields': fields, 'state': fields[2] if len(fields) > 2 else '',
+                       'usage': None, 'request': None, 'response': None}
+            entries.append(current)
+        elif current is not None:
+            usage, shas = USAGE_LINE.match(line), SHA_LINE.match(line)
+            if usage:
+                current['usage'] = usage.group('usage')
+            elif shas:
+                current['request'], current['response'] = shas.group('request'), shas.group('response')
+    return entries
+
+
+def _txt_member_date_hold(doc, name, sections, api) -> list[Result]:
+    runs = api.get('provider_runs') or []
+    holds = [run for run in runs if is_member_date_hold(run)]
+    if not holds:
+        return []
+    entries = _provider_entries(dict(sections).get('PROVIDER USAGE', []))
+    worded = [e for e in entries if e['head'].endswith(HOLD_WORDING)]
+    right = [e for e in worded if e['state'] == 'not_sent' and e['usage'] == 'none reported' and e['request'] == 'none'
+             and e['response'] == 'none' and any(f.startswith('recorded ') for f in e['fields'])
+             and not any(f.startswith(('requested ', 'HTTP ')) for f in e['fields'])]
+    listed = Counter((e['state'], e['usage'], e['request'], e['response']) for e in entries)
+    persisted = Counter((run.get('state'), json.dumps(run['usage'], sort_keys=True, ensure_ascii=False)
+                         if run.get('usage') else 'none reported', run.get('request_sha256') or 'none',
+                         run.get('response_sha256') or 'none') for run in runs)
+    ok = len(right) == len(worded) == len(holds)
+    return [
+        Result(doc, name, 'txt.member_date_hold.listed', 'pass' if ok else 'fail',
+               f'{len(holds)} hold(s) listed as recorded with nothing sent, no usage and no hashes' if ok else
+               f'{len(holds)} hold(s) persisted; {len(worded)} entry(ies) say nothing was sent for the member date, '
+               f'{len(right)} of them as recorded with no usage and no hashes'),
+        Result(doc, name, 'txt.member_date_hold.provider_usage', 'pass' if listed == persisted else 'fail',
+               f'{sum(listed.values())} provider run(s) listed with their recorded state, usage and hashes'
+               if listed == persisted else f'listed {sorted(listed.items())}; persisted {sorted(persisted.items())}'),
+    ]
 
 
 SOURCE_OPENER = '       + source passage selected by CPT Studio: '  # reports._item_block, at CONTINUATION depth
@@ -714,7 +870,29 @@ def check_csv(doc: str, name: str, text: str, kind: str, api: dict | None) -> li
     out.extend(_csv_evidence(doc, name, items_rows, columns, items, revision_text))
     if 'source_passages' in columns:
         out.extend(_csv_documented(doc, name, encounter_rows, items_rows, columns, api, revision_text))
+    if has_second_review(api):
+        out.append(_csv_second_review(doc, name, items_rows, columns, api))
     return out
+
+
+def _csv_second_review(doc, name, items_rows, columns, api) -> Result:
+    """Each proposal row's proposal_origin is the persisted origin (reports: 'second_review', 'primary' for a primary
+    proposal with support, '' for one without), so a code from the second review never reads as the provider's own."""
+    if 'proposal_origin' not in columns or 'proposal_id' not in columns:
+        return Result(doc, name, 'csv.second_review.origin', 'fail', 'no proposal_origin or proposal_id column')
+    proposals = {str(p['id']): p for p in ((api.get('assessment') or {}).get('proposals')) or []}
+    wrong = []
+    for row in items_rows:
+        proposal = proposals.get(undo_neutralisation(row[columns['proposal_id']]).strip())
+        if proposal is None:
+            continue  # _csv_items reports rows that are not persisted proposals
+        support = proposal.get('support') or {}
+        want = support.get('origin', '') or ('primary' if support else '')
+        got = undo_neutralisation(row[columns['proposal_origin']]).strip()
+        if got != want:
+            wrong.append(f'{proposal.get("code")}: {got!r} != {want!r}')
+    return Result(doc, name, 'csv.second_review.origin', 'fail' if wrong else 'pass',
+                  str(wrong) if wrong else f'{len(items_rows)} row(s) carry their persisted origin')
 
 
 def _documented_expected(api: dict):

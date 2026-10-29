@@ -295,7 +295,8 @@ class ASecondReviewCodeThatIncludesTheExaminationAccountsForItTests(SimpleTestCa
                                      ('pass', checks.UNPROPOSED_PASS))
                     review = next(c for c in result.encounter_checks if c.id == 'provider.second_review')
                     self.assertEqual(review.status, 'info')
-                    self.assertIn(f'selected {code}, which accounts for {NO_EGD_PROPOSAL} and is added as a proposal',
+                    self.assertIn(f'selected {code}, added as a proposal for review (marked as from the second '
+                                  f'review). {code} accounts for: {NO_EGD_PROPOSAL}.',
                                   review.detail)
 
     def test_controls_the_egds_own_code_is_added_and_a_code_that_includes_none_stays_an_alternative(self):

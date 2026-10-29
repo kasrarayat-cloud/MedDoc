@@ -72,3 +72,15 @@
 .login-card{padding:26px 20px}
 .login-card h1{font-size:30px}
 }
+
+/* gi2: clarification cards lead with the question (the engine's reason behind Details); candidate groups and passages. */
+.clarification-eyebrow{display:block;margin-top:17px;font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#9a875b;overflow-wrap:anywhere}
+.clarification-card h3.clarification-lead{font-size:19px;margin:8px 0 12px;overflow-wrap:anywhere}
+.clarification-details{margin-top:8px;font-size:10px;line-height:1.8}
+.clarification-card>.clarification-details{margin-bottom:16px}
+.clarification-details summary,.candidate-passages summary{cursor:pointer;width:max-content;max-width:100%;color:var(--teal);text-decoration:underline;text-underline-offset:3px}
+.clarification-details summary:focus-visible,.candidate-passages summary:focus-visible,.candidate-group>summary:focus-visible{outline:3px solid #83b6a3;outline-offset:4px}
+.candidate-group>summary{cursor:pointer;font-size:11px;font-weight:500;color:var(--ink);overflow-wrap:anywhere}
+.candidate-group[open]>summary{margin-bottom:14px}
+.candidate-passages{margin-top:8px;font-size:10px}
+.check-item .candidate-passages p{margin:6px 0 0;overflow-wrap:anywhere}

@@ -311,7 +311,12 @@ CATALOGUE: dict[str, FamilyEntry] = {e.family: e for e in (
         'gi.other', 'Other GI services (anoscopy, hemorrhoid banding, rigid proctosigmoidoscopy, liver biopsy, '
                     'paracentesis, breath tests, elastography)', RECOGNISED, (),
         documentation=(), acts=(),
-        notes=('Recognised and listed for review; no service profile reconciles them in this release.',)),
+        notes=('Recognised and listed for review; no service profile reconciles them in this release.',
+               'A hemorrhoid band ligation code (46221) is never reconciled either. Where no service of its family is '
+               'documented and the document records a band ligation at the rectum or anus in another documented '
+               'service (or one of no stated site in a sigmoidoscopy or colonoscopy), its passages are checked against '
+               'that act, and that service is named where the act\'s own passage states it done through or with that '
+               'service or its instrument; nothing is added or promoted.')),
 )}
 
 UNSUPPORTED_SERVICES = (
@@ -341,6 +346,27 @@ UNSUPPORTED_ACTS = frozenset(('esd',))
 
 def code_profile(code: str):
     return CODES.get(code)
+
+
+# The documented act a code of a family this catalogue does not reconcile accounts for (gi.other is recognised and
+# listed, never reconciled). Read only where the inventory documents no service of the code's family but documents
+# this act in another family's service: the code's passages are then checked against that act, and the service is named
+# (validation.engine._select). Never reconciled, never proposed, never a coverage claim; a code missing here is "act not
+# established", never "wrong". Act kinds only (studio.gi.services.ACTS), never phrases.
+UNRECONCILED_ACTS: dict[str, tuple[str, ...]] = {'46221': ('band_ligation',)}
+# Where that act is done (studio.gi.services.ANATOMY regions): an act documented in another family's service is checked
+# against such a code only there - by the regions its own passage or lesion names, else by its service's tract - never an
+# esophageal variceal ligation for a hemorrhoid banding (validation.reconcile.elsewhere; refutation gi2 attr-F5).
+UNRECONCILED_REGIONS: dict[str, tuple[str, ...]] = {'46221': ('rectum', 'anus')}
+
+
+def code_acts(code: str) -> tuple[str, ...]:
+    """The documented act kinds ``code`` accounts for: its reconciliation profile's interventions (a base code or an
+    office visit accounts for the service itself, so none), else UNRECONCILED_ACTS's. Empty when not established."""
+    profile = CODES.get(code)
+    if profile is not None:
+        return () if profile.base or 'em_visit' in profile.covers else tuple(profile.covers)
+    return UNRECONCILED_ACTS.get(code, ())
 
 
 def includes_examination(code: str, kind: str) -> bool:

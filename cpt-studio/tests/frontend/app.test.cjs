@@ -214,16 +214,19 @@ test('fact values never invent a value for missing or conflicting facts', () => 
   assert.equal(app.metaFact({ value: 'x', origin: 'conflict' }, {}, 'Setting'), 'Setting conflict');
 });
 
-test('the queue lists clarification, review and reconciliation states only', () => {
+// gi2 'present': a payload that carries no queue_reasons (served before the field existed, as the fixtures are) keeps
+// the queue of the three states that always waited on a member.
+test('without queue_reasons the queue lists the clarification, review and reconciliation states', () => {
   assert.deepEqual([...app.QUEUE_STATES].sort(), ['needs_clarification', 'provider_unknown', 'ready_for_review']);
   const { encounters } = fixture('encounters.json');
+  assert.ok(encounters.every(item => !('queue_reasons' in item)));
   const body = app.listBody('queue', encounters);
   const expected = encounters.filter(item => app.QUEUE_STATES.has(item.state)).length;
   assert.equal(count(body, 'class="document-row"'), expected);
   assert.equal(count(app.listBody('documents', encounters), 'class="document-row"'), encounters.length);
   assert.equal(count(app.listBody('workspace', encounters), 'class="document-row"'), Math.min(5, encounters.length));
   assert.match(app.listBody('queue', []), /Nothing is waiting for review\./);
-  assert.match(app.listDescription('queue', encounters), new RegExp(`^${expected} documents need`));
+  assert.match(app.listDescription('queue', encounters), new RegExp(`^${expected} documents wait on a workspace member`));
 });
 
 test('adversarial fixture: every injected string is rendered escaped, in every tab and list', () => {
@@ -336,7 +339,10 @@ test('clarification fixture: encounter question first, planned service excluded 
   assert.equal(count(html, 'class="clarification-card"'), 1);
   const listed = { ...doc, assessment: { ...doc.assessment, proposals: doc.assessment.proposals.map(p => ({ ...p, clarification_ids: [doc.clarifications[0].id] })) } };
   assert.equal(count(render(listed), 'class="clarification-card"'), 1, 'an encounter question stays a card even if a proposal lists it');
-  assert.equal(count(render(listed), 'class="clarification-question"'), 1);
+  // gi2 'present': the card leads with the question itself; no code card repeats it inline
+  assert.equal(count(render(listed), 'class="clarification-lead"'), 1);
+  assert.equal(count(render(listed), 'class="clarification-question"'), 0);
+  assert.equal(count(render(listed), app.escapeHtml(doc.clarifications[0].question)), 1);
   assert.ok(html.includes('data-decision="reinstate"'));
   assert.equal(html.includes('data-decision="approve"'), false);
   assert.ok(html.includes('Services outside the GI profiles'));
@@ -758,4 +764,238 @@ test('the passages of a support that was not checked are never shown as showing 
   assert.ok(checked.includes('cited by the provider; does not show the coded act'));
   assert.ok(checked.includes('title="Evidence for 43239">UPPER ENDOSCOPY</button>'));
   assert.ok(!checked.includes('not checked against the coded act'));
+});
+
+// --- repair round gi2, agent 'present' (investigations demo PR5/PR6/RC6-RC8 and occurrence R4 (i)) ------------------
+
+function queueRow(n, state, extra = {}) {
+  return { id: `c0000000-0000-4000-8000-0000000001${String(n).padStart(2, '0')}`, title: `Synthetic document ${n}`, state,
+    state_label: state, service_date: '2026-10-21', service_date_conflict: false, families: [], source_kind: 'txt',
+    open_clarifications: 0, created_at: '2026-10-23T14:00:00Z', ...extra };
+}
+const listedIds = html => [...html.matchAll(/href="#doc\/([0-9a-f-]{36})"/g)].map(match => match[1]);
+
+// demo RC6 / PR5 (R9): ho-06 (no_codes, a second review available) and ho-09 (reviewed, a service unresolved) were off
+// the queue, which listed three states only.
+test('the review queue lists every row the server says waits on a member, whatever its state', () => {
+  const rows = [
+    queueRow(1, 'no_codes', { queue_reasons: ['incomplete', 'second_review'], coding_state: 'incomplete' }),
+    queueRow(2, 'reviewed', { queue_reasons: ['incomplete', 'second_review'], coding_state: 'incomplete' }),
+    queueRow(3, 'reviewed', { queue_reasons: [], coding_state: 'reviewed' }),
+    queueRow(4, 'processing', { queue_reasons: [], coding_state: 'not_established' }),
+    queueRow(5, 'provider_failed', { queue_reasons: ['incomplete'], coding_state: 'incomplete' }),
+    queueRow(6, 'ready_for_review', { queue_reasons: ['state'], coding_state: 'pending_review' }),
+    queueRow(7, 'stopped', { queue_reasons: ['decision'], coding_state: 'pending_review' }),
+  ];
+  const queued = [1, 2, 5, 6, 7].map(n => rows[n - 1].id);
+  assert.deepEqual(listedIds(app.listBody('queue', rows)), queued);
+  assert.equal(app.listDescription('queue', rows), '5 documents wait on a workspace member: a clarification, a review decision, a reconciliation, a second review that can be asked for, or coding left incomplete.');
+  assert.equal(app.listDescription('queue', rows.slice(0, 1)), 'One document waits on a workspace member: a clarification, a review decision, a reconciliation, a second review that can be asked for, or coding left incomplete.');
+  assert.equal(app.listDescription('queue', [rows[2]]), 'No document waits on a workspace member for a clarification, a review decision, a reconciliation, a second review or incomplete coding.');
+  // the server's answer is the rule: a state that once queued is not listed when it says nothing waits ...
+  assert.deepEqual(listedIds(app.listBody('queue', [queueRow(8, 'ready_for_review', { queue_reasons: [] })])), []);
+  // ... and a row without the field (or with a malformed one) keeps the three states
+  const old = rows.map(({ queue_reasons, ...rest }) => rest);
+  assert.deepEqual(listedIds(app.listBody('queue', old)), [rows[5].id]);
+  assert.deepEqual(listedIds(app.listBody('queue', [queueRow(9, 'needs_clarification', { queue_reasons: 'yes' })])), [queueRow(9, 'x').id]);
+  // the documents list and the overview are unchanged by the queue rule
+  assert.equal(count(app.listBody('documents', rows), 'class="document-row"'), rows.length);
+});
+
+test('a queued row says what it waits for, from the served reasons only, never twice', () => {
+  const row = queueRow(1, 'ready_for_review', { open_clarifications: 2, queue_reasons: ['question', 'decision', 'reconciliation', 'incomplete', 'second_review', 'state', '<b>other</b>'] });
+  const html = app.listBody('queue', [row]);
+  assert.ok(html.includes('<small>TXT · Gastroenterology · 2 open questions · Decision needed · Provider outcome to reconcile · Coding incomplete · Second review available</small>'), html);
+  assert.equal(html.includes('other'), false, 'an unknown reason is never printed');
+  // the badge already says the coding is incomplete: the meta does not repeat it
+  const reviewed = queueRow(2, 'reviewed', { state_label: 'Reviewed', coding_state: 'incomplete', queue_reasons: ['incomplete', 'second_review'] });
+  const shown = app.listBody('queue', [reviewed]);
+  assert.ok(shown.includes('<small>TXT · Gastroenterology · Second review available</small>'), shown);
+  // the reasons belong to the queue: the documents list keeps its meta
+  assert.ok(app.listBody('documents', [row]).includes('<small>TXT · Gastroenterology · 2 open questions</small>'));
+});
+
+// demo R10: "Reviewed" beside coding incomplete reads as done.
+test('a reviewed row whose coding is incomplete reads "Reviewed · coding incomplete", never a bare green Reviewed', () => {
+  const incomplete = queueRow(1, 'reviewed', { state_label: 'Reviewed', coding_state: 'incomplete', queue_reasons: ['incomplete'] });
+  const row = app.documentRow(incomplete);
+  assert.ok(row.includes('<span class="status amber">Reviewed · coding incomplete</span>'), row);
+  assert.ok(row.includes('doc-file-icon amber'));
+  assert.equal(row.includes('status green'), false);
+  assert.ok(app.inviteMarkup([incomplete]).includes('Most recent · Reviewed · coding incomplete · 21 Oct 2026'));
+  // controls: complete coding, an older payload without coding_state, another state with incomplete coding
+  const complete = app.documentRow({ ...incomplete, coding_state: 'reviewed', queue_reasons: [] });
+  assert.ok(complete.includes('status green') && complete.includes('Reviewed</span>') && !complete.includes('coding incomplete'), complete);
+  const older = app.documentRow({ ...incomplete, coding_state: undefined });
+  assert.ok(older.includes('Reviewed</span>') && !older.includes('coding incomplete'), older);
+  const asked = app.documentRow(queueRow(2, 'needs_clarification', { state_label: 'Needs clarification', coding_state: 'incomplete' }));
+  assert.ok(asked.includes('<span class="status amber">Needs clarification</span>'), asked);
+  const hostile = app.documentRow({ ...incomplete, state_label: '<img src=x onerror="window.__xss=9">' });
+  assert.equal(hostile.includes('<img'), false);
+  assert.ok(hostile.includes('&lt;img src=x onerror=&quot;window.__xss=9&quot;&gt; · coding incomplete'));
+});
+
+// occurrence RC5 / R4 (i): the chip said "Not documented" beside a check quoting the date the reader kept as evidence.
+test('a service date kept as evidence is quoted on the date chips, and said to be asked only when it is', () => {
+  const doc = fixture('encounter-clarification.json');
+  const kept = { value: null, origin: 'missing', note: 'A "Date:" line is kept as evidence.', member_conflict: false,
+    evidence: [{ start: 70, end: 86, text: 'Date: 10/27/2026' }] };
+  const asked = { ...doc, context: { ...doc.context, facts: { ...doc.context.facts, service_date: kept } } };
+  assert.ok(doc.clarifications.some(item => item.fact === 'service_date' && item.state === 'open'));
+  assert.equal(app.serviceDateChip(asked), 'Asked — “Date: 10/27/2026” is not read as the date of service');
+  assert.equal(app.serviceDateMeta(asked), 'Service date asked — “Date: 10/27/2026” is not read as the date of service');
+  const html = render(asked);
+  assert.ok(html.includes('<span><b>SERVICE DATE</b>Asked — “Date: 10/27/2026” is not read as the date of service</span>'), html);
+  assert.ok(html.includes('<span>Service date asked — “Date: 10/27/2026” is not read as the date of service</span>'));
+  assert.equal(html.includes('Service date not documented'), false);
+  // kept but not asked (no open question on the date, e.g. before the assessment ran): quoted, never "asked"
+  const quiet = { ...asked, clarifications: asked.clarifications.map(item => ({ ...item, state: 'answered' })) };
+  assert.equal(app.serviceDateChip(quiet), '“Date: 10/27/2026” is not read as the date of service');
+  assert.equal(app.serviceDateMeta(quiet), 'Service date: “Date: 10/27/2026” is not read as the date of service');
+  const proposalScoped = { ...asked, clarifications: asked.clarifications.map(item => ({ ...item, scope: 'proposal' })) };
+  assert.equal(app.serviceDateChip(proposalScoped).startsWith('Asked'), false);
+  // the quote is an excerpt: whitespace folded, long text cut with an ellipsis, markup escaped where it is drawn
+  const long = { ...kept, evidence: [{ start: 0, end: 1, text: '   ' }, { start: 0, end: 1, text: `Colonoscopy  report\n<b>${'x'.repeat(200)}</b> 10/14/2026` }] };
+  const chip = app.serviceDateChip({ ...asked, context: { facts: { service_date: long } } });
+  assert.ok(chip.startsWith('Asked — “Colonoscopy report <b>xxx'), chip);
+  const quoted = /“(.*)”/.exec(chip)[1];
+  assert.ok(quoted.endsWith('…') && [...quoted].length === 80, quoted);
+  assert.ok(chip.endsWith('…” is not read as the date of service'), chip);
+  assert.equal(render({ ...asked, context: { facts: { service_date: long } } }).includes('<b>xxx'), false);
+  // controls: nothing kept, a documented date, a conflict, a member's date, no fact
+  assert.equal(app.serviceDateChip(doc), 'Not documented');
+  assert.equal(app.serviceDateMeta(doc), 'Service date not documented');
+  const facts = service_date => ({ ...doc, context: { facts: { service_date } } });
+  assert.equal(app.serviceDateChip(facts({ value: '2026-10-21', origin: 'document', evidence: [{ start: 0, end: 4, text: 'Date' }] })), '21 October 2026');
+  assert.equal(app.serviceDateMeta(facts({ value: '2026-10-21', origin: 'document', evidence: [] })), '21 Oct 2026');
+  assert.equal(app.serviceDateChip(facts({ value: null, origin: 'conflict', member_conflict: false, evidence: kept.evidence })), 'Conflicting values documented');
+  assert.equal(app.serviceDateMeta(facts({ value: null, origin: 'conflict', member_conflict: true, evidence: kept.evidence })), 'Service date: member entry differs from the document');
+  assert.equal(app.serviceDateChip(facts({ value: '2026-10-21', origin: 'user', evidence: [] })), '21 October 2026 (entered)');
+  assert.equal(app.serviceDateChip(facts(undefined)), 'Not documented');
+});
+
+// demo RC8 / PR7: the cards led with a slogan and printed the engine's cue strings as the doctor's text.
+test('a clarification card leads with the question; the technical reason is behind a Details disclosure', () => {
+  const doc = fixture('encounter-clarification.json');
+  const reason = 'No documentation establishes it (cue “section: indication (Indications)”, negated: not; routing-era reading) <b>x</b>.';
+  const question = 'Confirm the date of service for this encounter <i>now</i>?';
+  const asked = { ...doc, clarifications: [{ ...doc.clarifications[0], question, reason }] };
+  const html = render(asked);
+  const card = html.slice(html.indexOf('<div class="clarification-card">'));
+  const lead = card.indexOf(`<h3 class="clarification-lead">${app.escapeHtml(question)}</h3>`);
+  const details = card.indexOf(`<details class="clarification-details"><summary>Details</summary><span class="clarification-reason">${app.escapeHtml(reason)}</span></details>`);
+  assert.ok(lead > 0 && details > lead, card.slice(0, 900));
+  assert.equal(count(html, app.escapeHtml(reason)), 1, 'the reason is said once, inside the disclosure');
+  assert.equal(html.includes('A question is better'), false);
+  assert.equal(html.includes('<b>x</b>') || html.includes('<i>now</i>'), false);
+  assert.ok(card.indexOf('data-action="addendum"') > details, 'the answer follows the question and its details');
+  assert.ok(card.includes('<span class="clarification-eyebrow">Clarification needed</span>'));
+  // a family question names its family in the eyebrow, never in place of the question
+  const family = { ...asked, clarifications: [{ ...asked.clarifications[0], family: 'gi.egd' }] };
+  assert.ok(render(family).includes('<span class="clarification-eyebrow">Clarification needed · Upper GI endoscopy (EGD, esophagoscopy, POEM)</span><h3 class="clarification-lead">'));
+  // no reason recorded: no empty disclosure
+  const bare = render({ ...doc, clarifications: [{ ...doc.clarifications[0], reason: '' }] });
+  assert.equal(bare.includes('<details class="clarification-details">'), false);
+  // no question recorded (never expected): the reason is shown openly rather than hidden behind nothing
+  const unasked = render({ ...doc, clarifications: [{ ...doc.clarifications[0], question: '', reason: 'Only a reason.' }] });
+  assert.ok(unasked.includes('<h3 class="clarification-lead">Only a reason.</h3>'), unasked);
+  // a viewer sees the question and its details, and no answer control
+  const viewer = render({ ...asked, permissions: { can_review: false } });
+  assert.ok(viewer.includes('<h3 class="clarification-lead">') && viewer.includes('<summary>Details</summary>'));
+  assert.equal(viewer.includes('data-action="addendum" data-clarification'), false);
+});
+
+test('a question on a code card keeps the question first and its reason behind Details', () => {
+  const doc = fixture('encounter-ready.json');
+  const inline = doc.clarifications.find(item => item.scope === 'proposal' && item.state === 'open');
+  const html = render(doc);
+  const at = html.indexOf(`<div class="clarification-question"><strong>Clarification needed</strong><br>${app.escapeHtml(inline.question)}<details class="clarification-details"><summary>Details</summary><span class="clarification-reason">${app.escapeHtml(inline.reason)}</span></details>`);
+  assert.ok(at > 0, html.slice(html.indexOf('clarification-question') - 50, html.indexOf('clarification-question') + 900));
+  assert.ok(at < html.indexOf('data-action="addendum" data-clarification', at));
+  assert.equal(count(html, app.escapeHtml(inline.reason)), 1);
+});
+
+// demo RC7 / PR6: every provider candidate was one flat list beside the same-family alternatives, without its passage.
+function candidatesDoc() {
+  const doc = fixture('encounter-ready.json');
+  const text = doc.revision.text;
+  const quote = 'UPPER ENDOSCOPY';
+  const evidence = [cpSpan(text, quote, 'x')].map(({ key, ...span }) => span);
+  const alternative = (id, code, family, extra = {}) => ({ id: `e0000000-0000-4000-8000-0000000002${id}`, key: `alt:${id}`, bucket: 'alternative', code,
+    code_kind: 'cpt1', family, family_label: family, eyebrow: 'CPT', supported: family !== 'gi.unsupported', status: 'informational',
+    status_label: 'Not selected', exclusion_reason: 'Provider candidate; not selected. Candidates and alternatives cannot be approved.',
+    reinstatable: false, evidence: [], rationale: '', units: 1, checks: [{ id: 'scope.cpt', status: 'pass', label: 'CPT-only scope', detail: 'In scope.' }],
+    modifier_considerations: [], support: {}, clarification_ids: [], decision: null, decision_state: 'undecided', reinstated_by: null,
+    allowed_actions: [], approve_withheld_by: null, ...extra });
+  const alternatives = [
+    alternative(10, '45380', 'gi.colonoscopy', { evidence }),
+    alternative(11, '19083', 'gi.unsupported', { evidence: [...evidence, ...evidence] }),
+    alternative(12, '43235', 'gi.egd'),
+    alternative(13, 'G0121', 'gi.colonoscopy', { code_kind: 'hcpcs', checks: [{ id: 'scope.cpt', status: 'fail', label: 'CPT-only scope', detail: 'HCPCS Level II code — CPT-only results.' }] }),
+    alternative(14, '<img src=x>', 'gi.unsupported', { code_kind: 'invalid', evidence: [{ ...evidence[0], text: '<b>bold</b>' }] }),
+  ];
+  const services = { services: [{ id: 'S1', family: 'gi.colonoscopy', kind: 'colonoscopy', status: 'performed', acts: [] },
+    { id: 'S2', family: 'gi.office_em', kind: 'office_visit', status: 'planned', acts: [] }] };
+  const proposals = [...doc.assessment.proposals.filter(p => p.bucket !== 'alternative'), ...alternatives];
+  return { ...doc, assessment: { ...doc.assessment, services, proposals } };
+}
+
+test('candidates of a documented service family lead; the others are collapsed with their count; none is dropped or selectable', () => {
+  const doc = candidatesDoc();
+  const html = render(doc);
+  const start = html.indexOf('<h2>Alternatives (never selectable)</h2><span class="small-badge">5</span>');
+  assert.ok(start > 0, 'the never-selectable heading and the total stay');
+  const next = html.indexOf('<div class="section-heading">', start + 1);  // Excluded candidates follow
+  assert.ok(html.slice(next).startsWith('<div class="section-heading"><h2>Excluded candidates</h2>'));
+  const section = html.slice(start, next);
+  const same = section.indexOf('Same GI family as a documented service · 1');
+  const other = section.indexOf('<details class="check-list-card candidate-group"><summary>Outside the documented services or not a CPT code · 4</summary>');
+  assert.ok(same > 0 && other > same, section.slice(0, 600));
+  const first = section.slice(same, other);
+  const rest = section.slice(other);
+  assert.ok(first.includes('<strong>45380 · gi.colonoscopy</strong>'));
+  for (const code of ['19083', '43235', 'G0121', '&lt;img src=x&gt;']) {
+    assert.ok(rest.includes(`<strong>${code} · `), code);
+    assert.equal(first.includes(`<strong>${code} · `), false, code);
+  }
+  // a HCPCS code of a documented family is not a CPT code; a family the document plans but does not do still counts
+  assert.equal(count(section, '<strong>'), 5, 'every candidate listed exactly once');
+  assert.equal(/<details[^>]* open/.test(section), false, 'collapsed by default');
+  // each candidate's cited passage on expand, escaped; one that cites none says so
+  assert.ok(first.includes('<details class="candidate-passages"><summary>Cited passage</summary><p>“UPPER ENDOSCOPY”</p></details>'));
+  assert.ok(rest.includes('<summary>Cited passages (2)</summary><p>“UPPER ENDOSCOPY”</p><p>“UPPER ENDOSCOPY”</p>'));
+  // a passage that is not at its position in the current revision is quoted and flagged, never passed off as found
+  assert.ok(rest.includes('<p>“&lt;b&gt;bold&lt;/b&gt;” — not found at this position in the current revision</p>'), rest);
+  assert.equal(rest.includes('<b>bold</b>'), false);
+  assert.equal(count(section, 'not found at this position'), 1);
+  assert.ok(rest.includes('<small class="check-source">No exact source passage is linked to this candidate.</small>'));
+  // never selectable: no candidate gains a decision control
+  for (const proposal of doc.assessment.proposals.filter(p => p.bucket === 'alternative')) {
+    assert.equal(html.includes(`data-proposal="${proposal.id}"`), false, proposal.code);
+  }
+  assert.ok(section.includes('Candidates and alternatives cannot be approved.'));
+});
+
+test('candidate grouping reads only served fields, and keeps the flat list when no documented-service reading was recorded', () => {
+  const doc = candidatesDoc();
+  const groups = app.candidateGroups(doc.assessment);
+  assert.deepEqual(groups.same.map(p => p.code), ['45380']);
+  assert.deepEqual(groups.other.map(p => p.code), ['19083', '43235', 'G0121', '<img src=x>']);
+  // a document read with no service: every candidate is outside the documented services
+  const none = app.candidateGroups({ ...doc.assessment, services: { services: [] } });
+  assert.deepEqual([none.same.length, none.other.length], [0, 5]);
+  const noneHtml = render({ ...doc, assessment: { ...doc.assessment, services: { services: [] } } });
+  assert.equal(noneHtml.includes('Same GI family as a documented service'), false);
+  assert.ok(noneHtml.includes('Outside the documented services or not a CPT code · 5'));
+  // an assessment from before the reading existed (no services list): the list is drawn as before, ungrouped
+  for (const services of [undefined, null, {}]) {
+    assert.equal(app.candidateGroups({ ...doc.assessment, services }), null);
+    const flat = render({ ...doc, assessment: { ...doc.assessment, services } });
+    assert.ok(flat.includes('<h2>Alternatives (never selectable)</h2><span class="small-badge">5</span>'));
+    assert.equal(flat.includes('candidate-group') || flat.includes('Same GI family'), false);
+    assert.equal(count(flat.slice(flat.indexOf('Alternatives (never selectable)')), 'class="check-item muted"') >= 5, true);
+  }
+  assert.equal(app.candidateGroups({ proposals: [] }), null);
+  // excluded candidates are not regrouped
+  assert.ok(render(excludedDoc({})).includes('Excluded candidates'));
 });

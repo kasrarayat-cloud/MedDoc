@@ -14,8 +14,13 @@ const UPLOAD_NAME = /\.(pdf|docx|txt)$/i;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const REPORT_URL = /^\/api\/reports\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/download$/i;
 const PARAGRAPH_BREAK = /\n(?:[^\S\n]*\n)+/g;
-// States that wait on a member: a clarification, a review decision, or a reconciliation.
+// States that wait on a member: a clarification, a review decision, or a reconciliation. The queue of a list row served
+// without queue_reasons (inQueue).
 const QUEUE_STATES = new Set(['needs_clarification', 'ready_for_review', 'provider_unknown']);
+// What a queued row waits on a member for (queue_reasons, served from the rows), as its meta line says it. 'question' is
+// already the row's open-question count, and 'state' its badge.
+const QUEUE_REASON_LABELS = { decision: 'Decision needed', reconciliation: 'Provider outcome to reconcile', incomplete: 'Coding incomplete', second_review: 'Second review available' };
+const EXCERPT_POINTS = 80;
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const NUMBER_WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
 const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#x27;', '`': '&#x60;' };
@@ -260,6 +265,44 @@ function metaFact(fact, labels, name, isDate = false) {
   return fact.origin === 'user' ? `${value} (entered)` : value;
 }
 
+// Whitespace folded and cut to a length a chip can hold, with an ellipsis, as the checks quote a passage (checks.excerpt).
+function excerpt(text, limit = EXCERPT_POINTS) {
+  const flat = String(text ?? '').split(/\s+/).filter(Boolean).join(' ');
+  const points = [...flat];
+  return points.length <= limit ? flat : `${points.slice(0, limit - 1).join('').trimEnd()}…`;
+}
+
+// The documented text the reader kept as the evidence of a service date it could not use (an unread date form, another
+// occurrence's date, a dated title or "Date:" line): documented text, quoted, never called "not documented" - as the
+// service date check and its question quote it (checks._date_problem; refutation gi2, occurrence RC5: the chip said "Not
+// documented" beside the check quoting it). '' wherever factValue states something else: a value, a conflict.
+function keptDateEvidence(fact) {
+  if (!fact || fact.origin === 'conflict') return '';
+  if (!(fact.origin === 'missing' || fact.value == null || fact.value === '' || fact.value === 'not_documented')) return '';
+  const span = (Array.isArray(fact.evidence) ? fact.evidence : []).find(item => typeof item?.text === 'string' && item.text.trim());
+  return span ? excerpt(span.text) : '';
+}
+
+// Whether the assessment shown asks the date: its encounter question on the service date is open.
+function serviceDateAsked(doc) {
+  return openClarifications(doc).some(item => item.scope === 'encounter' && item.fact === 'service_date');
+}
+
+// The SERVICE DATE chip of the source paper, and the service date of the review header.
+function serviceDateChip(doc) {
+  const fact = doc?.context?.facts?.service_date;
+  const kept = keptDateEvidence(fact);
+  if (!kept) return factValue(fact, null, true);
+  return `${serviceDateAsked(doc) ? 'Asked — ' : ''}“${kept}” is not read as the date of service`;
+}
+
+function serviceDateMeta(doc) {
+  const fact = doc?.context?.facts?.service_date;
+  const kept = keptDateEvidence(fact);
+  if (!kept) return metaFact(fact, null, 'Service date', true);
+  return `${serviceDateAsked(doc) ? 'Service date asked — ' : 'Service date: '}“${kept}” is not read as the date of service`;
+}
+
 function proposalsIn(assessment, bucket) {
   return (assessment?.proposals || []).filter(proposal => proposal.bucket === bucket);
 }
@@ -335,30 +378,63 @@ function proposalBadge(proposal) {
 
 const LIST_HEADER = '<div class="list-header"><span>DOCUMENT</span><span>REVIEW STATUS</span><span class="date-header">SERVICE DATE</span><span></span></div>';
 
-function documentRow(encounter) {
-  const tone = lookup(STATE_TONES, encounter.state, 'gray');
+// A reviewed encounter whose coding is incomplete (coding_state: the encounter view's coding completeness) - "Reviewed"
+// alone reads as done (refutation gi2, demo R10: ho-09 was "Reviewed" with its flexible sigmoidoscopy unresolved).
+function reviewedIncomplete(encounter) {
+  return encounter?.state === 'reviewed' && encounter.coding_state === 'incomplete';
+}
+
+function rowStateLabel(encounter) {
+  return reviewedIncomplete(encounter) ? `${encounter.state_label || 'Reviewed'} · coding incomplete` : encounter.state_label;
+}
+
+// The review queue lists what the API says waits on a member (queue_reasons: an open question, a code to decide, a request
+// to reconcile, coding left incomplete, a second review that can be asked for) - every such row, whatever its state
+// (refutation gi2, demo RC6: ho-06 and ho-09 were off a queue of three states). A row served without the field keeps
+// those three states.
+function inQueue(encounter) {
+  return Array.isArray(encounter?.queue_reasons) ? encounter.queue_reasons.length > 0 : QUEUE_STATES.has(encounter?.state);
+}
+
+// The served reasons a queued row's meta line names; what its open-question count or its badge already says is not repeated.
+function queueReasonLabels(encounter) {
+  const reasons = Array.isArray(encounter.queue_reasons) ? encounter.queue_reasons : [];
+  const said = reasons.filter(reason => !(reason === 'incomplete' && reviewedIncomplete(encounter))).map(reason => lookup(QUEUE_REASON_LABELS, reason, ''));
+  return [...new Set(said.filter(Boolean))];
+}
+
+// A list row's service date the reader kept as evidence but could not use (encounter_summary's service_date_evidence):
+// quoted, never "not documented", as the review page's chip quotes it (gi2 integration, occurrence RC5). '' when none.
+function listedDateEvidence(encounter, prefix) {
+  const text = typeof encounter?.service_date_evidence === 'string' ? encounter.service_date_evidence.trim() : '';
+  return text ? `${prefix}“${excerpt(text, 32)}”` : '';
+}
+
+function documentRow(encounter, queued = false) {
+  const tone = reviewedIncomplete(encounter) ? 'amber' : lookup(STATE_TONES, encounter.state, 'gray');
   const families = Array.isArray(encounter.families) && encounter.families.length ? encounter.families.join(' · ') : categoryName();
   const kind = lookup(SOURCE_KINDS, encounter.source_kind, encounter.source_kind ? String(encounter.source_kind).toUpperCase() : '');
   const open = Number.isInteger(encounter.open_clarifications) && encounter.open_clarifications > 0 ? plural(encounter.open_clarifications, 'open question', 'open questions') : '';
-  const meta = [kind, families, open].filter(Boolean).join(' · ');
-  return `<a class="document-row" href="#doc/${escapeHtml(encodeURIComponent(encounter.id))}"><span class="doc-row-main"><span class="doc-file-icon${tone === 'amber' ? ' amber' : ''}">${icon('file')}</span><span><strong>${escapeHtml(encounter.title || 'Untitled document')}</strong><small>${escapeHtml(meta)}</small></span></span><span>${stateBadge(encounter.state, encounter.state_label)}</span><span class="doc-row-date">${escapeHtml(formatDate(encounter.service_date) || (encounter.service_date_conflict === true ? 'In conflict' : 'Not documented'))}</span>${icon('chevron', 'row-arrow')}</a>`;
+  const meta = [kind, families, open, ...(queued ? queueReasonLabels(encounter) : [])].filter(Boolean).join(' · ');
+  const status = reviewedIncomplete(encounter) ? badge('amber', rowStateLabel(encounter)) : stateBadge(encounter.state, encounter.state_label);
+  return `<a class="document-row" href="#doc/${escapeHtml(encodeURIComponent(encounter.id))}"><span class="doc-row-main"><span class="doc-file-icon${tone === 'amber' ? ' amber' : ''}">${icon('file')}</span><span><strong>${escapeHtml(encounter.title || 'Untitled document')}</strong><small>${escapeHtml(meta)}</small></span></span><span>${status}</span><span class="doc-row-date">${escapeHtml(formatDate(encounter.service_date) || (encounter.service_date_conflict === true ? 'In conflict' : listedDateEvidence(encounter, 'Not read: ') || 'Not documented'))}</span>${icon('chevron', 'row-arrow')}</a>`;
 }
 
 function listRows(name, encounters) {
-  if (name === 'queue') return encounters.filter(item => QUEUE_STATES.has(item.state));
+  if (name === 'queue') return encounters.filter(inQueue);
   return name === 'workspace' ? encounters.slice(0, 5) : encounters;
 }
 
 function listBody(name, encounters) {
   const rows = listRows(name, encounters);
   const empty = { workspace: 'No documents yet. Start with a synthetic GI document.', documents: 'No documents yet. Use New document to upload a synthetic GI document or paste its text.', queue: 'Nothing is waiting for review.' }[name];
-  return LIST_HEADER + (rows.length ? rows.map(documentRow).join('') : `<p class="empty-state">${escapeHtml(empty)}</p>`);
+  return LIST_HEADER + (rows.length ? rows.map(row => documentRow(row, name === 'queue')).join('') : `<p class="empty-state">${escapeHtml(empty)}</p>`);
 }
 
 function listDescription(name, encounters) {
   if (name === 'queue') {
     const count = listRows('queue', encounters).length;
-    return count ? `${count === 1 ? 'One document needs' : `${count} documents need`} a clarification, a review decision or a reconciliation.` : 'No document is waiting for a clarification, a review decision or a reconciliation.';
+    return count ? `${count === 1 ? 'One document waits' : `${count} documents wait`} on a workspace member: a clarification, a review decision, a reconciliation, a second review that can be asked for, or coding left incomplete.` : 'No document waits on a workspace member for a clarification, a review decision, a reconciliation, a second review or incomplete coding.';
   }
   return `${plural(encounters.length, 'synthetic document', 'synthetic documents')} in this workspace.`;
 }
@@ -367,7 +443,7 @@ function inviteMarkup(encounters) {
   const recent = encounters?.[0];
   if (encounters === null) return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>Loading recent documents…</strong><p>One moment.</p></span>`;
   if (!recent) return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>No documents yet</strong><p>Upload a synthetic GI document to see proposals beside the source.</p></span><button type="button" class="button secondary" data-action="upload">New document ${icon('plus')}</button>`;
-  const detail = ['Most recent', recent.state_label, formatDate(recent.service_date) || (recent.service_date_conflict === true ? 'service date in conflict' : 'service date not documented')].filter(Boolean).join(' · ');
+  const detail = ['Most recent', rowStateLabel(recent), formatDate(recent.service_date) || (recent.service_date_conflict === true ? 'service date in conflict' : listedDateEvidence(recent, 'service date not read: ') || 'service date not documented')].filter(Boolean).join(' · ');
   return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>${escapeHtml(recent.title || 'Untitled document')}</strong><p>${escapeHtml(detail)}</p></span><button type="button" class="button secondary" data-open="${escapeHtml(recent.id)}">Open review ${icon('arrow')}</button>`;
 }
 
@@ -380,7 +456,7 @@ function overviewView() {
 
 function documentsView(name) {
   const queue = name === 'queue';
-  return `<section class="view-entrance"><div class="heading-row documents-heading"><div><span class="eyebrow">${queue ? 'A PLACE FOR THE OPEN QUESTIONS' : 'THE ORIGINAL, ALWAYS IN VIEW'}</span><h1>${queue ? 'Review queue.' : 'Your documents.'}</h1><p>${queue ? 'Keep missing information visible, so uncertainty becomes a clear next step.' : 'Keep source notes, supporting evidence and coding decisions together.'}</p></div><div class="heading-actions"><button type="button" class="button primary" data-action="upload">${icon('plus')}New document</button></div></div><p class="section-description" id="listDescription">Loading…</p>${queue ? '' : `<label class="search-field">${icon('search')}<input id="documentSearch" aria-label="Search documents" placeholder="Search documents…" autocomplete="off"></label><div style="height:18px"></div>`}<div class="document-list" id="documentsTable">${LIST_HEADER}<p class="empty-state">Loading documents…</p></div><p class="checks-disclaimer">${queue ? 'Documents waiting for a clarification, a review decision or a provider reconciliation.' : 'Synthetic documents only. Each review decision is tied to the revision it was made on.'}</p></section>`;
+  return `<section class="view-entrance"><div class="heading-row documents-heading"><div><span class="eyebrow">${queue ? 'A PLACE FOR THE OPEN QUESTIONS' : 'THE ORIGINAL, ALWAYS IN VIEW'}</span><h1>${queue ? 'Review queue.' : 'Your documents.'}</h1><p>${queue ? 'Keep missing information visible, so uncertainty becomes a clear next step.' : 'Keep source notes, supporting evidence and coding decisions together.'}</p></div><div class="heading-actions"><button type="button" class="button primary" data-action="upload">${icon('plus')}New document</button></div></div><p class="section-description" id="listDescription">Loading…</p>${queue ? '' : `<label class="search-field">${icon('search')}<input id="documentSearch" aria-label="Search documents" placeholder="Search documents…" autocomplete="off"></label><div style="height:18px"></div>`}<div class="document-list" id="documentsTable">${LIST_HEADER}<p class="empty-state">Loading documents…</p></div><p class="checks-disclaimer">${queue ? 'Documents waiting on a workspace member: a clarification, a review decision, a provider reconciliation, a second review that can be asked for, or coding left incomplete. A document being processed waits on its stages instead.' : 'Synthetic documents only. Each review decision is tied to the revision it was made on.'}</p></section>`;
 }
 
 function howItWorksView() {
@@ -449,7 +525,7 @@ function sourcePanel(doc, layout) {
   if (revision.kind === 'addendum') notes.push(`Revision ${revision.number} appends an addendum to the earlier text; decisions made on earlier revisions no longer apply.`);
   if (extraction.status === 'pending') notes.push('The text is still being extracted.');
   for (const message of extraction.messages || []) notes.push(message);
-  const metadata = [['SERVICE DATE', factValue(facts.service_date, null, true)], ['SETTING', factValue(facts.setting, SETTING_LABELS)], ['PATIENT STATUS', factValue(facts.patient_status, PATIENT_LABELS)], ['BILLING CONTEXT', factValue(facts.billing_context, BILLING_LABELS)]]
+  const metadata = [['SERVICE DATE', serviceDateChip(doc)], ['SETTING', factValue(facts.setting, SETTING_LABELS)], ['PATIENT STATUS', factValue(facts.patient_status, PATIENT_LABELS)], ['BILLING CONTEXT', factValue(facts.billing_context, BILLING_LABELS)]]
     .map(([label, value]) => `<span><b>${label}</b>${escapeHtml(value)}</span>`).join('');
   const header = `<span class="paper-eyebrow">${escapeHtml(`${state.session?.workspace?.name || 'CPT Studio'} · synthetic document`.toUpperCase())}</span><h3>${escapeHtml(sourceName(revision))}</h3><p class="paper-subtitle">${escapeHtml(subtitle)}</p><div class="paper-metadata">${metadata}</div>`;
   const emptyText = extraction.status === 'failed' ? 'No text could be extracted from this document.' : 'The document text will appear here once extraction finishes.';
@@ -464,7 +540,7 @@ function sourcePanel(doc, layout) {
 
 function reviewMeta(doc) {
   const facts = doc.context?.facts || {};
-  const items = [metaFact(facts.service_date, null, 'Service date', true), metaFact(facts.setting, SETTING_LABELS, 'Setting'), categoryName(), doc.revision?.number ? `Revision ${doc.revision.number}` : ''];
+  const items = [serviceDateMeta(doc), metaFact(facts.setting, SETTING_LABELS, 'Setting'), categoryName(), doc.revision?.number ? `Revision ${doc.revision.number}` : ''];
   const extracted = ['ok', 'partial'].includes(doc.revision?.extraction?.status);
   const edit = canEdit(doc) && extracted ? '<span><button type="button" class="meta-link" data-action="edit-context">Edit context</button></span>' : '';
   return items.filter(Boolean).map(item => `<span>${escapeHtml(item)}</span>`).join('') + edit;
@@ -538,9 +614,20 @@ function evidenceChips(proposal, layout) {
   return provider.join('') + sourceLabel + source.join('');
 }
 
+// A question leads in its own words; the engine's reason - the technical record of why it asks (cue strings, the names of
+// its readings) - is kept whole behind a "Details" disclosure (refutation gi2, demo RC8). The reports print both. A
+// question recorded without words leads with its reason, never with nothing.
+function clarificationParts(clarification) {
+  const question = typeof clarification.question === 'string' && clarification.question.trim() ? clarification.question : '';
+  const reason = typeof clarification.reason === 'string' && clarification.reason.trim() ? clarification.reason : '';
+  const details = question && reason ? `<details class="clarification-details"><summary>Details</summary><span class="clarification-reason">${escapeHtml(reason)}</span></details>` : '';
+  return { lead: question || reason, details };
+}
+
 function clarificationQuestion(clarification, doc) {
-  const answer = canEdit(doc) ? `<br><button type="button" class="button secondary" data-action="addendum" data-clarification="${escapeHtml(clarification.id)}">Answer with an addendum</button>` : '';
-  return `<div class="clarification-question"><strong>Clarification needed</strong><br>${escapeHtml(clarification.question)}${clarification.reason ? `<span class="clarification-reason">${escapeHtml(clarification.reason)}</span>` : ''}${answer}</div>`;
+  const { lead, details } = clarificationParts(clarification);
+  const answer = canEdit(doc) ? `${details ? '' : '<br>'}<button type="button" class="button secondary" data-action="addendum" data-clarification="${escapeHtml(clarification.id)}">Answer with an addendum</button>` : '';
+  return `<div class="clarification-question"><strong>Clarification needed</strong><br>${escapeHtml(lead)}${details}${answer}</div>`;
 }
 
 function codeCard(proposal, doc, layout) {
@@ -553,7 +640,8 @@ function codeCard(proposal, doc, layout) {
 function clarificationCard(clarification, doc) {
   const family = clarification.family ? familyLabel(doc, clarification.family) : '';
   const answer = canEdit(doc) ? `<button type="button" class="button primary" data-action="addendum" data-clarification="${escapeHtml(clarification.id)}">Answer with an addendum ${icon('arrow')}</button>` : '';
-  return `<div class="clarification-card"><span class="clarification-icon">${icon('help')}</span><h3>A question is better<br>than an assumption.</h3>${clarification.reason ? `<p>${escapeHtml(clarification.reason)}</p>` : ''}<div class="clarification-question"><strong>${escapeHtml(family ? `Clarification needed · ${family}` : 'Clarification needed')}</strong><br>${escapeHtml(clarification.question)}</div>${answer}</div>`;
+  const { lead, details } = clarificationParts(clarification);
+  return `<div class="clarification-card"><span class="clarification-icon">${icon('help')}</span><span class="clarification-eyebrow">${escapeHtml(family ? `Clarification needed · ${family}` : 'Clarification needed')}</span><h3 class="clarification-lead">${escapeHtml(lead)}</h3>${details}${answer}</div>`;
 }
 
 // What a reviewer did with an excluded candidate, or that a documentation check's exclusion still needs a decision.
@@ -578,20 +666,77 @@ function candidateDecision(proposal) {
   return '';
 }
 
+function candidateItem(proposal, fallback, doc, extra = '') {
+  const allowed = Array.isArray(proposal.allowed_actions) ? proposal.allowed_actions : [];
+  // Every action the server allows, in the card order: a reinstated code is approved or rejected here too.
+  const decisions = ACTION_BUTTONS.filter(([name]) => allowed.includes(name)).map(([name]) => decisionButton(name, proposal));
+  // A reinstated code whose gate withholds approve is told to add the missing documentation, so the row offers the
+  // addendum itself; POST /addenda needs no clarification (round 6, bypass:1).
+  const withheld = proposal.decision_state === 'reinstated' && typeof proposal.approve_withheld_by === 'string' && proposal.approve_withheld_by;
+  const addendum = withheld && doc && canEdit(doc) ? ['<button type="button" class="button secondary" data-action="addendum">Add the missing documentation (addendum)</button>'] : [];
+  const actions = decisions.concat(addendum).join(' ');
+  // A code the bounded second review listed says so here, as the code card's badge, the TXT ("second-review
+  // alternative") and the CSV (proposal_origin) do (eus2 F4: its alternatives were drawn like the primary's).
+  const origin = proposal.support?.origin === 'second_review' ? ' · from the second review' : '';
+  return checkItem('muted', 'info', `${proposal.code} · ${proposal.family_label || proposal.family || ''}${origin}`, [proposal.exclusion_reason || fallback, candidateDecision(proposal)].filter(Boolean).join(' '), actions + extra);
+}
+
 function candidateSection(title, proposals, fallback, doc) {
   if (!proposals.length) return '';
-  const items = proposals.map(proposal => {
-    const allowed = Array.isArray(proposal.allowed_actions) ? proposal.allowed_actions : [];
-    // Every action the server allows, in the card order: a reinstated code is approved or rejected here too.
-    const decisions = ACTION_BUTTONS.filter(([name]) => allowed.includes(name)).map(([name]) => decisionButton(name, proposal));
-    // A reinstated code whose gate withholds approve is told to add the missing documentation, so the row offers the
-    // addendum itself; POST /addenda needs no clarification (round 6, bypass:1).
-    const withheld = proposal.decision_state === 'reinstated' && typeof proposal.approve_withheld_by === 'string' && proposal.approve_withheld_by;
-    const addendum = withheld && doc && canEdit(doc) ? ['<button type="button" class="button secondary" data-action="addendum">Add the missing documentation (addendum)</button>'] : [];
-    const actions = decisions.concat(addendum).join(' ');
-    return checkItem('muted', 'info', `${proposal.code} · ${proposal.family_label || proposal.family || ''}`, [proposal.exclusion_reason || fallback, candidateDecision(proposal)].filter(Boolean).join(' '), actions);
-  });
-  return `${sectionHeading(title, proposals.length)}<div class="check-list-card">${items.join('')}</div>`;
+  return `${sectionHeading(title, proposals.length)}<div class="check-list-card">${proposals.map(proposal => candidateItem(proposal, fallback, doc)).join('')}</div>`;
+}
+
+// Informational candidates (the alternative bucket) by the served rows alone (refutation gi2, demo RC7: every provider
+// candidate was one flat list, a CABG code beside the colonoscopy's own alternatives): those of the GI family of a service
+// the document documents (assessment.services, whatever its status) whose code is in CPT scope (its scope.cpt check did not
+// fail), and the rest - outside the documented services, or not a CPT code. Every candidate is in exactly one group. null
+// when the assessment recorded no documented-service reading (made before it existed): the list is drawn ungrouped.
+function candidateGroups(assessment) {
+  const services = assessment?.services?.services;
+  if (!Array.isArray(services)) return null;
+  const families = new Set(services.map(service => service?.family).filter(family => typeof family === 'string' && family));
+  const inScope = proposal => !(Array.isArray(proposal.checks) ? proposal.checks : []).some(check => check?.id === 'scope.cpt' && check.status === 'fail');
+  const same = [];
+  const other = [];
+  for (const proposal of proposalsIn(assessment, 'alternative')) (families.has(proposal.family) && inScope(proposal) ? same : other).push(proposal);
+  return { same, other };
+}
+
+// Whether a passage is at its position in the revision text (code points, as the API counts them).
+function exactIn(text) {
+  const source = String(text || '');
+  const offsets = codeUnitOffsets(source);
+  const length = offsets ? offsets.length - 1 : source.length;
+  const unit = point => (offsets ? offsets[point] : point);
+  return span => isExactSpan(source, span, length, unit);
+}
+
+// The passages a candidate cites, quoted on expand; one not at its position in the current revision is flagged as an
+// evidence chip flags it, never passed off as found. They are not marked in the source: a candidate is never evidence.
+// The engine keeps only a candidate's exact passages, so none kept is not "none cited".
+function candidatePassages(proposal, exact) {
+  const spans = Array.isArray(proposal.evidence) ? proposal.evidence : [];
+  if (!spans.length) return '<small class="check-source">No exact source passage is linked to this candidate.</small>';
+  const quotes = spans.map(span => `<p>${escapeHtml(`“${span?.text ?? ''}”${exact(span) ? '' : ' — not found at this position in the current revision'}`)}</p>`).join('');
+  return `<details class="candidate-passages"><summary>${spans.length === 1 ? 'Cited passage' : `Cited passages (${spans.length})`}</summary>${quotes}</details>`;
+}
+
+const ALTERNATIVE_NOTE = 'Offered by the provider as an alternative and not selected. Alternatives cannot be approved.';
+
+// The alternatives, never selectable: the candidates of a documented service's family first, the rest collapsed with
+// their count. Nothing is dropped or hidden beyond a disclosure, and no candidate gains an action the server does not
+// allow (none for an alternative). The reports list every candidate as before.
+function alternativesSection(doc) {
+  const alternatives = proposalsIn(doc.assessment, 'alternative');
+  if (!alternatives.length) return '';
+  const exact = exactIn(doc.revision?.text);
+  const items = list => list.map(proposal => candidateItem(proposal, ALTERNATIVE_NOTE, doc, candidatePassages(proposal, exact))).join('');
+  const heading = sectionHeading('Alternatives (never selectable)', alternatives.length);
+  const groups = candidateGroups(doc.assessment);
+  if (!groups) return `${heading}<div class="check-list-card">${items(alternatives)}</div>`;
+  const same = groups.same.length ? `<div class="check-list-card">${groupLabel(`Same GI family as a documented service · ${groups.same.length}`)}${items(groups.same)}</div>` : '';
+  const other = groups.other.length ? `<details class="check-list-card candidate-group"><summary>${escapeHtml(`Outside the documented services or not a CPT code · ${groups.other.length}`)}</summary>${items(groups.other)}</details>` : '';
+  return `${heading}<div class="card-stack">${same}${other}</div>`;
 }
 
 const SERVICE_STATUS_LABELS = { performed: 'performed', incomplete: 'performed, incomplete', planned: 'planned', historical: 'historical', cancelled: 'cancelled', negated: 'documented as not performed', uncertain: 'not established' };
@@ -775,7 +920,7 @@ function suggestionsPanel(doc, layout) {
   const inline = new Set(selected.flatMap(proposal => clarificationsFor(proposal, doc).map(item => item.id)));
   const general = openClarifications(doc).filter(item => !inline.has(item.id)).map(item => clarificationCard(item, doc));
   const cards = selected.length ? selected.map(proposal => codeCard(proposal, doc, layout)) : [`<div class="check-list-card"><p class="card-empty">${escapeHtml(emptySelectionCopy(assessment, doc))}</p></div>`];
-  return `<div class="card-stack">${codingBanner(doc)}${general.join('')}${cards.join('')}</div>${documentedServices(doc)}${unsupportedSection(assessment)}${candidateSection('Alternatives (never selectable)', proposalsIn(assessment, 'alternative'), 'Offered by the provider as an alternative and not selected. Alternatives cannot be approved.', doc)}${candidateSection('Excluded candidates', proposalsIn(assessment, 'excluded'), 'Excluded from CPT-only results.', doc)}<div class="review-insight">${icon('shield')}<div><strong>The source remains the starting point</strong><p>The checks hold or exclude planned, historical, cancelled and uncertain services when they recognise the wording, and they can miss wording they do not recognise. Read the document before deciding; agreement between sources is not treated as verification.</p></div></div>`;
+  return `<div class="card-stack">${codingBanner(doc)}${general.join('')}${cards.join('')}</div>${documentedServices(doc)}${unsupportedSection(assessment)}${alternativesSection(doc)}${candidateSection('Excluded candidates', proposalsIn(assessment, 'excluded'), 'Excluded from CPT-only results.', doc)}<div class="review-insight">${icon('shield')}<div><strong>The source remains the starting point</strong><p>The checks hold or exclude planned, historical, cancelled and uncertain services when they recognise the wording, and they can miss wording they do not recognise. Read the document before deciding; agreement between sources is not treated as verification.</p></div></div>`;
 }
 
 function checkItems(checks) {
@@ -1827,10 +1972,11 @@ if (typeof module === 'object' && module.exports) {
   module.exports = {
     escapeHtml, lookup, parseIsoDate, formatDate, formatTimestamp, readCookie, safeDownloadUrl, pollDelay, parseRoute,
     passagesLabel, codeUnitOffsets, mergeSpans, pageRanges, paragraphRanges, paragraphPieces, layoutDocument,
-    factValue, metaFact, exportStatusText, documentLayout, reviewView, documentRow, listBody, listDescription,
+    factValue, metaFact, exportStatusText, documentLayout, reviewView, documentRow, listBody, listDescription, listedDateEvidence,
     inviteMarkup, overviewView, documentsView, howItWorksView, exportOptions, state, QUEUE_STATES, decisionLine,
     hasAgentDecision, candidateDecision, ACKNOWLEDGEMENTS, emptySelectionCopy, attestationText,
-    codingBanner, documentedServices, evidenceChips, secondReviewUnread,
+    codingBanner, documentedServices, evidenceChips, secondReviewUnread, inQueue, candidateGroups, serviceDateChip,
+    serviceDateMeta,
   };
 }
 if (typeof document !== 'undefined') boot();

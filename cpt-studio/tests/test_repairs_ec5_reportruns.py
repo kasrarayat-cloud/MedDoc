@@ -346,8 +346,10 @@ class UnknownSecondReviewStateTests(Pipeline):
         detail = self.detail(encounter_id)
         self.assertEqual(detail['state'], 'provider_unknown')
         self.assertEqual(self.queue_count(), 1)
+        # the queue's wording since it lists every encounter waiting on a member (refutation gi2, demo RC6)
         self.assertEqual(self.queue_page(),
-                         'One document needs a clarification, a review decision or a reconciliation.')
+                         'One document waits on a workspace member: a clarification, a review decision, a '
+                         'reconciliation, a second review that can be asked for, or coding left incomplete.')
         unknown = models.ProviderRun.objects.get(encounter_id=encounter_id, state='unknown')
         reply = self.post(f'/api/encounters/{encounter_id}/reconcile',
                           {'provider_run_id': str(unknown.pk), 'note': 'Checked the provider console: no response.'})
