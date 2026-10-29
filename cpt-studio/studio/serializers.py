@@ -121,7 +121,9 @@ def queue_reasons(encounter, coding=None):
                         view's banner): a documented service or act without a supported proposal, a conflict in the
                         record, a question, or no provider response read;
       'second_review'   the bounded second review can be asked for now - only ever for a documented service left
-                        without a supported proposal, so only beside 'incomplete' (jobs.second_review_status);
+                        without a supported proposal, so only beside 'incomplete' (jobs.second_review_status, by the
+                        predicate POST second-review accepts an ask by: never for an ask already queued, whose stage
+                        Resume runs or that failed - fix round gi2, truth-1);
       'state'           a state that always waited on a member (QUEUE_STATES), when none of the above is found.
     Nothing while the encounter is processing: it waits on its stages then. Read-only, from the rows; ``coding``: the
     coding completeness already read for this encounter."""

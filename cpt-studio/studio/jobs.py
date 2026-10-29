@@ -774,8 +774,38 @@ def _second_inputs(second):
                               normalized.problems, normalized.refused)
 
 
+# request_second_review's refusal of an ask whose key is used (_second_review_key): its stage waits or runs, or was
+# stopped, expired or swept before it ran (Resume runs it once), or failed before it recorded a run.
+SECOND_REVIEW_ASKED = 'A second review was already requested for this assessment.'
+
+
+def _second_review_key(revision, assessment):
+    """The idempotency key of the ask request_second_review queues for ``assessment``: keyed by the assessment and by
+    how many second reviews of this revision and date conclusively never reached the provider - each releases another
+    ask (_second_review_bounds), which the key of the ask it answered must not refuse. The count only grows (runs are
+    never removed, and those states are final), and it keeps the key as short as a Resume's suffixes need
+    (Job.idempotency_key holds 200 characters)."""
+    released = models.ProviderRun.objects.filter(
+        revision=revision, purpose=models.ProviderRun.SECOND_REVIEW,
+        service_date=assessment.provider_run.service_date, state__in=NEVER_SENT_STATES, sent=False).count()
+    return f'review2:{revision.pk}:{assessment.pk}' + (f':after-unsent:{released}' if released else '')
+
+
 def _second_review_blocker(encounter, revision, context, assessment):
-    """Why the one bounded second review cannot be asked for now, or '' when it can (5.11). The bounds are the ones the
+    """Why the one bounded second review cannot be asked for now, or '' when it can (5.11): the one predicate the API
+    accepts an ask by, so the encounter view's offer, the review queue's 'second_review' reason and POST second-review
+    never disagree. The bounds first (_second_review_bounds, whose reasons stand as they were), then the ask itself:
+    request_second_review queues one stage per key, so once this assessment's key is used every ask is refused (fix
+    round gi2, truth-1: the queue said "Second review available" for an encounter whose ask the server refused - its
+    stage stopped, expired or swept before it ran, or failed before it recorded a run - because this said '' there)."""
+    reason = _second_review_bounds(encounter, revision, context, assessment)
+    if reason or not models.Job.objects.filter(idempotency_key=_second_review_key(revision, assessment)).exists():
+        return reason
+    return SECOND_REVIEW_ASKED
+
+
+def _second_review_bounds(encounter, revision, context, assessment):
+    """Why a bound stands against the one bounded second review, or '' when none does (5.11). The bounds are the ones the
     automatic second review kept (interpretations 10, 19, 22): once per revision and service date whatever its outcome
     - only a reconciled unknown one, or one that conclusively never reached the provider (NEVER_SENT_STATES, not sent),
     releases another ask - only for the current assessment of a usable primary response read under the current context
@@ -867,12 +897,9 @@ def request_second_review(encounter, user):
     """Queue the ONE bounded second review for the current assessment, asked for by a workspace owner or reviewer
     (owner decision 2026-10-27: never queued by an assessment). Refused with the reason when a bound stands.
 
-    The stage is keyed by the assessment and by how many second reviews of this revision and date conclusively never
-    reached the provider: each releases another ask (_second_review_blocker), which the key of the ask it answered must
-    not refuse. The count only grows (runs are never removed, and those states are final), and it keeps the key as short
-    as a Resume's suffixes need (Job.idempotency_key holds 200 characters). Two asks at once still queue one stage (the
-    row lock and the busy check), and a stage stopped before it ran recorded no run, so its key stands and Resume runs
-    it."""
+    The stage is keyed by _second_review_key, and _second_review_blocker refuses an ask whose key is used, so the offer
+    and the ask read one predicate. Two asks at once still queue one stage (the row lock and the busy check), and a
+    stage stopped before it ran recorded no run, so its key stands and Resume runs it."""
     with transaction.atomic():
         encounter = _locked(encounter)
         revision, context, assessment = (encounter.current_revision, encounter.current_context,
@@ -882,14 +909,11 @@ def request_second_review(encounter, user):
             raise Refused(reason)
         items, _ = _second_review_items(assessment)
         clear_stop(encounter)
-        released = models.ProviderRun.objects.filter(
-            revision=revision, purpose=models.ProviderRun.SECOND_REVIEW,
-            service_date=assessment.provider_run.service_date, state__in=NEVER_SENT_STATES, sent=False).count()
-        key = f'review2:{revision.pk}:{assessment.pk}' + (f':after-unsent:{released}' if released else '')
         job = enqueue(Job.REVIEW2, encounter=encounter, revision=revision, context=context,
-                      provider_run=assessment.provider_run, key=key, requested_by=user)
+                      provider_run=assessment.provider_run, key=_second_review_key(revision, assessment),
+                      requested_by=user)
         if job.state != Job.QUEUED:
-            raise Refused('A second review was already requested for this assessment.')
+            raise Refused(SECOND_REVIEW_ASKED)
         audit.record(encounter.workspace, 'provider.second_review_requested', encounter=encounter, actor=user,
                      items=[item.get('label', '') for item in items][:8])
         review.refresh_state(encounter)
