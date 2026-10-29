@@ -839,7 +839,10 @@ REACHED_DEPTH_DENIED = rx(r'\b(?:(?:unable\s+to|could\s+not|cannot|can\s*not|fai
 # extent): it says where in that landmark the examination stopped, so it is part of the value (detect._value_words).
 # Only where it opens the value: a depth after any other word ("Extent: cecum and TI at 85 cm", "Extent: transverse colon
 # at 60 cm and cecum at 85 cm" past its first depth) is read as before, so it still leaves the label unread.
-EXTENT_VALUE_DEPTH = rx(r'[ \t]*[,(\[\u2013\u2014-]?[ \t]*(?:(?:at|to)\s+)?(?:approximately\s+|about\s+|~\s*)?\d{1,3}\s*cm\b'
+# The blank runs are possessive: with two plain runs around an optional comma or bracket, a run of blanks before no
+# depth was tried at every split, quadratic per label (refutation gi2 ops cost: 1,289 labels padded with blanks routed
+# 56.8-57.6 s against the installed 44 s and the analyze stage's 60 s). Every match is the same span.
+EXTENT_VALUE_DEPTH = rx(r'[ \t]*+[,(\[\u2013\u2014-]?[ \t]*+(?:(?:at|to)\s+)?(?:approximately\s+|about\s+|~\s*)?\d{1,3}\s*cm\b'
                         r'(?:\s+from\s+(?:the\s+)?(?:anal\s+verge|anus|incisors|teeth|dentate\s+line))?')
 CENTIMETERS = rx(r'\b(?:to|at|of)\s+(?:approximately\s+|about\s+|~\s*)?(?P<cm>\d{1,3})\s*cm\b')
 # Shorthand extents: an extent label line ("Extent: cecum", "Extent reached: terminal ileum", "The furthest

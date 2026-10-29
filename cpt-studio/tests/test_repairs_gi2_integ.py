@@ -116,3 +116,25 @@ class EmTimeReadOncePerSentenceTests(TestCase):
         self.assertTrue(searched)
         self.assertEqual(len(searched), len(set(searched)), 'a sentence was searched again')
         self.assertEqual(routed, detect.route(text, date(2026, 10, 22)))
+
+
+class ExtentValueDepthIsLinearTests(TestCase):
+    """gi2 integration, cost (refutation gi2 ops; ACCURACY-RESIDUALS gi2 cost-extent-blanks): the depth an extent label's
+    value may open with began with two plain blank runs around an optional comma or bracket, so a run of blanks before no
+    depth was tried at every split - quadratic per label (1,289 blank-padded labels routed 56.8-57.6 s against the
+    installed 44 s). The runs are possessive; every match keeps its span."""
+
+    def test_a_long_blank_run_is_read_at_once_and_spans_are_unchanged(self):
+        import re
+        import time
+
+        from studio.gi import cues
+        start = time.perf_counter()
+        self.assertIsNone(cues.EXTENT_VALUE_DEPTH.match(' ' * 20000 + 'x'))
+        self.assertLess(time.perf_counter() - start, 2.0)  # the plain runs took about 20 s here
+        plain = re.compile(cues.EXTENT_VALUE_DEPTH.pattern.replace('*+', '*'), cues.EXTENT_VALUE_DEPTH.flags)
+        for value in (' at 28 cm', ' (35 cm)', ', 28 cm from the anal verge', ' - 85 cm', '   ,   to approximately 40 cm',
+                      '\tat ~30cm', ' x', '', '  ', ' at 7 minutes', ' — 85 cm', ' about 30 cm from the incisors'):
+            with self.subTest(value=value):
+                ours, theirs = cues.EXTENT_VALUE_DEPTH.match(value), plain.match(value)
+                self.assertEqual(ours and ours.span(), theirs and theirs.span())
