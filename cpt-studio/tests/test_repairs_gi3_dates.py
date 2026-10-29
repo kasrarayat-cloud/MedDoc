@@ -305,7 +305,9 @@ class KnownCaseTests(DateAsserts, SimpleTestCase):
     }
 
     def test_every_other_known_text_reads_as_installed(self):
-        on_disk = {f'{p.parent.name}/{p.name}' for p in FIXTURES.glob('*/*.txt')}
+        # this module's own fixture folders; other lenses keep theirs beside them (tests/fixtures/gi3/scope/)
+        on_disk = {f'{p.parent.name}/{p.name}' for folder in ('h2', 'ho', 'live-text')
+                   for p in (FIXTURES / folder).glob('*.txt')}
         self.assertEqual(on_disk - set(self.UNCHANGED), set(H208))
         for name, (service_date, setting, status) in self.UNCHANGED.items():
             text = fixture(name)
