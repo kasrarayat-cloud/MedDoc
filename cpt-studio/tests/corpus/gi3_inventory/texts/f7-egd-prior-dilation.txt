@@ -1,0 +1,13 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Upper Endoscopy Report
+Date of procedure: 2026-10-07
+Facility type: ambulatory surgical center (POS 24)
+Endoscopist: Test Physician, MD (fictional)
+Indications
+Dysphagia. An EGD in 2024 showed a Schatzki ring that was dilated to 18 mm.
+Procedure and findings
+The gastroscope was advanced to the second portion of the duodenum. A non-obstructing Schatzki ring was seen. No dilation was performed today.
+Impression
+Non-obstructing Schatzki ring.
+Plan
+Proton pump inhibitor.

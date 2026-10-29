@@ -1,0 +1,15 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Colonoscopy Report
+Date of procedure: 2026-10-20
+Place of service: Ambulatory surgery center (POS 24)
+Endoscopist: Test Physician, MD (fictional)
+Indication
+Surveillance colonoscopy.
+Procedure
+The colonoscope was advanced to the cecum, identified by the appendiceal orifice. The colonic stent from the last admission was patent and in good position in the sigmoid colon. The colon was otherwise normal and no polyps were found.
+
+Impression
+Normal surveillance colonoscopy.
+Plan
+Repeat colonoscopy in 5 years.
+Electronically signed: Test Physician, MD (fictional), 2026-10-20 15:41

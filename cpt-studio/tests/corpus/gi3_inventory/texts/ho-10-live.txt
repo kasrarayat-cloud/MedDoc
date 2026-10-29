@@ -1,0 +1,22 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Upper Endoscopy Report
+Facility: Thistledown Ambulatory Endoscopy Center (fictional)
+Place of service: Ambulatory surgery center (POS 24)
+Date of procedure: 2026-10-23
+Patient: Mortimer Adebayo-Lindgren (fictional), 34-year-old man
+Endoscopist: Ottilie Fairweather-Mensah, MD (fictional)
+Anesthesia: Propofol by Lorcan Hughes-Abara, MD (fictional), anesthesiologist with Thistledown Anesthesia Partners (fictional), who reports the anesthesia service separately.
+Procedure: EGD with through-the-scope balloon dilation and cold forceps biopsies.
+Pre-procedure History and Physical
+Intermittent solid-food dysphagia for 3 years, with one food impaction that passed on its own. Seasonal allergies and mild asthma. No anticoagulant or antiplatelet use. Heart and lungs normal on examination; Mallampati class II; ASA class II. He remains a suitable candidate for the planned procedure under anesthesia.
+Procedure Details
+After informed consent and a time-out, the gastroscope was passed under direct vision to the second portion of the duodenum. The esophagus had fixed concentric rings, linear furrows and scattered white exudates along its length. At the gastroesophageal junction there was a short narrowing of about 13 mm, which the gastroscope passed with mild resistance. The stomach and duodenum were normal.
+Dilation: a through-the-scope controlled radial expansion balloon was positioned across the junctional narrowing and inflated to 15, 16.5 and 18 mm in turn under direct vision, holding each size for 60 seconds. Afterward there was a superficial mucosal split with no deep injury.
+Biopsies: cold forceps biopsies were taken from the proximal esophagus at 25 cm and the mid esophagus at 30 cm (container 1), away from the dilated segment, to assess for eosinophilic esophagitis. No gastric or duodenal biopsies were taken.
+Impression
+1. Rings, furrows and exudates suggesting eosinophilic esophagitis; proximal and mid esophageal biopsies taken.
+2. Narrowing at the gastroesophageal junction, dilated with a through-the-scope balloon to 18 mm.
+3. Normal stomach and duodenum.
+Plan
+Pathology by Thistledown Pathology Services (fictional). Liquids today and a soft diet tomorrow. If eosinophilic esophagitis is confirmed, start treatment and repeat the EGD with biopsies, and dilation if needed, in about 12 weeks.
+Electronically signed: Ottilie Fairweather-Mensah, MD (fictional), 2026-10-23 10:18

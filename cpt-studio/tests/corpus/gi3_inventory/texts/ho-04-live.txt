@@ -1,0 +1,36 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Gastroenterology Office Visit
+Practice: Bramblewood Digestive Health (fictional)
+Place of service: Office (POS 11)
+Date of service: 2026-10-22
+Patient: Cornelius Abernathy-Iwu (fictional), 58-year-old man
+Visit type: Established patient, return visit. Previous office visit: 2026-08-27.
+Clinician: Lucinda Farrant-Oyelaran, MD (fictional)
+
+Chief Complaint
+Food sticking in the lower chest, more often since the last visit.
+
+History of Present Illness
+He has had heartburn for years. At the 2026-08-27 visit he started omeprazole 20 mg daily and a barium esophagram was ordered. His heartburn is better, but solid food, mostly bread and meat, now sticks behind the lower sternum two or three times a week, compared with about once a month in August. He clears it by drinking water. No food impaction needing emergency care, no odynophagia, no vomiting and no black stools. Weight stable at 84 kg.
+
+Data Reviewed
+Barium esophagram of 2026-09-30 from Bramblewood Imaging (fictional): images and report reviewed today, showing a smooth distal esophageal ring with brief hold-up of the 13 mm barium tablet. CBC of 2026-09-30: hemoglobin 14.1 g/dL. Records from his previous gastroenterologist at Ostrander Brook GI (fictional) reviewed.
+
+Examination
+Blood pressure 128/78, pulse 72, BMI 27.4. Well appearing. Oropharynx normal. Abdomen soft and nontender without masses.
+
+Assessment
+1. Progressive solid-food dysphagia with a distal esophageal (Schatzki) ring on the esophagram.
+2. Gastroesophageal reflux disease, improved on omeprazole.
+
+Plan
+1. EGD with possible balloon dilation is scheduled for 2026-11-18 at Bramblewood Endoscopy Suite (fictional). Risks, benefits and alternatives were discussed and he wishes to proceed.
+2. Increase omeprazole to 40 mg daily before breakfast.
+3. Cut food small and chew well; go to the emergency department if food will not pass.
+4. Return office visit 4 weeks after the EGD.
+
+Medical decision making: Moderate. One chronic illness with progression; review of the esophagram, the CBC and outside records; prescription drug management.
+Total time on the date of service: 34 minutes, including record review, history, examination, counseling and documentation.
+
+Electronically signed: Lucinda Farrant-Oyelaran, MD (fictional), 2026-10-22 17:05
