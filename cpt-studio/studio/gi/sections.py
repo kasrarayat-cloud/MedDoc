@@ -1226,10 +1226,43 @@ def _another_occasion_in_reach(text: str, lines: list[tuple[int, int]], line_sta
     return False
 
 
+# gi3 integration (interpretation 44's markers): the label opens nothing in a document whose own head titles it an
+# office or clinic encounter's note (cues.EM_TITLE among its first context.TITLE_LINES non-blank lines, not led by a
+# word naming another occurrence: the visit-title marker routing reads). An office visit documents the visit; a
+# procedure-summary table in its note, with nothing saying whose or when, is a pasted report's ("Office Visit -
+# progress note" over "Procedure summary" / "Examination | Instrument | Furthest point reached" / "Colonoscopy | Adult
+# colonoscope | Cecum" read the colonoscopy as performed today), so the table stays the section's in force, as at
+# 90377ec6f413, and its services are asked.
+@functools.lru_cache(maxsize=1)
+def _head_terms() -> tuple[int, re.Pattern]:
+    """context.TITLE_LINES, and the words that lead a title naming another occurrence (detect's own reading of
+    context._HEADING_OCCURRENCE: "Next", "Scheduled", "Prior", ...), read once."""
+    from studio.gi import context  # local: context imports this module
+    return context.TITLE_LINES, re.compile(r'\b(?:' + context._HEADING_OCCURRENCE.pattern + r')\b', re.A | re.I)
+
+
+def _office_titled(text: str) -> bool:
+    """Whether the document's own head titles it an office or clinic encounter's note (see above)."""
+    head_lines, other = _head_terms()
+    count = 0
+    for m in re.finditer(r'[^\n]+', text):
+        if not text[m.start():m.end()].strip():
+            continue
+        count += 1
+        title = cues.EM_TITLE.match(text, m.start(), m.end())
+        if title is not None and not other.search(text, m.start(), title.start('title')):
+            return True
+        if count == head_lines:
+            return False
+    return False
+
+
 def _summary_opens(text: str, lines: list[tuple[int, int]], headings: dict,
                    found: tuple[Table, ...]) -> dict[int, tuple[str, str, Span]]:
     """For each procedure-summary label line over a summary table (see above), the procedure section it opens."""
     opens, line_starts = {}, [ls for ls, _ in lines]
+    if found and _office_titled(text):
+        return opens
     for n, table in enumerate(found):
         column = 1 if table.labels[0] in _TABLE_NUMBERING_LABELS else 0  # the examination column
         extents = [k for k in range(column + 1, len(table.labels)) if cues.EXTENT_HEADER.fullmatch(table.labels[k])]

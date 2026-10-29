@@ -610,15 +610,31 @@ class TableTests(unittest.TestCase):
                             'with the patient.\nAssessment and plan\nRepeat in 3 years. Medical decision making: low.\n')
         self.assertEqual(status(text, 'gi.colonoscopy', date(2026, 10, 21)), 'historical')
 
-    def test_known_limit_an_office_notes_bare_summary_table(self):
-        # Known limit: an office note's "Procedure summary" over an undated table with an extent, and nothing that says
-        # whose or when, opens a procedure section, so the colonoscopy reads performed today (at 90377ec6f413 the table
-        # stayed in the note's first section and the colonoscopy read uncertain, asked). Telling an office note from a
-        # procedure report is the visit-scope reader's (interpretation 44), not the table model's.
-        text = SYNTHETIC + ('Harbor View Gastroenterology (fictional)\nOffice Visit - progress note\nDate of service: '
-                            '2026-10-21\nPlace of service: office (POS 11)\nVisit type: established patient\nProcedure '
-                            'summary\nExamination | Instrument | Furthest point reached\nColonoscopy | Adult colonoscope | '
-                            'Cecum\nAssessment and plan\nRepeat in 3 years. Medical decision making: low.\n')
+    def test_an_office_notes_bare_summary_table_is_asked(self):
+        # gi3 integration (sections._office_titled): an office note's "Procedure summary" over an undated table with an
+        # extent, and nothing that says whose or when, opens no procedure section, so the colonoscopy reads uncertain
+        # and is asked, as at 90377ec6f413 (built, the label read it performed today, extent cecum). The same label and
+        # table under a procedure report's title, or under a head line naming another occurrence's visit, still opens.
+        # "Indications" closes the section a report's title opens (as h2-01's does), so only the label can open one here
+        body = ('Indications\nSurveillance of adenomas.\nProcedure summary\nExamination | Instrument | Furthest point '
+                'reached\nColonoscopy | Adult colonoscope | Cecum\nAssessment and plan\nRepeat in 3 years. Medical '
+                'decision making: low.\n')
+        head = ('Harbor View Gastroenterology (fictional)\n{title}\nDate of service: 2026-10-21\nPlace of service: office '
+                '(POS 11)\nVisit type: established patient\n')
+        for title, expected in (('Office Visit - progress note', ('uncertain', None)),
+                                ('Clinic note - return visit', ('uncertain', None)),
+                                ('Colonoscopy report', ('performed', 'cecum')),
+                                ('Colonoscopy report\nScheduled clinic visit - in 3 months', ('performed', 'cecum'))):
+            with self.subTest(title=title):
+                text = SYNTHETIC + head.format(title=title) + body
+                self.assertEqual(reading(text, date(2026, 10, 21))['gi.colonoscopy'][:2], expected)
+
+    def test_an_office_title_below_the_head_is_no_office_note(self):
+        # the title is read in the document's head only (context.TITLE_LINES non-blank lines), as routing reads it
+        filler = ''.join(f'Line {n} of the report header.\n' for n in range(12))
+        text = SYNTHETIC + 'Colonoscopy report\n' + filler + 'Office visit - progress note\n' + (
+            'Indications\nSurveillance of adenomas.\nProcedure summary\nExamination | Instrument | Furthest point '
+            'reached\nColonoscopy | Adult colonoscope | Cecum\nImpression\nNormal.\n')
         self.assertEqual(reading(text, date(2026, 10, 21))['gi.colonoscopy'][:2], ('performed', 'cecum'))
 
     def test_an_answer_about_a_landmark_or_the_extent_stays_with_its_row(self):

@@ -1729,7 +1729,24 @@ def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int
 # member's answer equal to it is taken), so outside a title's section the binding only ever asks where the installed
 # reading sent. Part 3 (_plans_procedure) and part 4 (_time_directed) ask two more shapes the plan section misread.
 # The setting and patient-status readers share the binding (RC6: _settings, _patient_status).
-_READ, _GOVERNED, _SPEAKS, _LATER = 'read', 'governed', 'speaks', 'later'
+#
+# gi3 integration (the integration owner, after the repairs were merged; interpretation 42 refined):
+# - H1: the encounter's own date-of-service label in a plan section, under a block heading that names its block only
+#   as a kind of service (_Governance.names_a_kind: a service's name or a noun this encounter may be - "Office visit",
+#   "Clinic visit", "Coding review", "Procedure", "Colonoscopy" - with no plan, history, other-occurrence, status,
+#   other-document, return or recall word), is no longer dropped with nothing left behind. Such a heading names a kind
+#   of service, not another occurrence of it ("Next appointment", "Prior visit", "Return visit", "Recall", "Results",
+#   "Labs" and "Follow-up appointment" still govern), so the billing label under it may state this note's date ("Office
+#   visit" / "CPT: 99214" / "Date of service: 2026-10-06" under an "Assessment and plan" whose header says 2026-10-05
+#   sent the header's date). A table's column label ("Test | Date of service | Result") dates each row's item, never
+#   the note, and stays governed;
+# - H2: B4's visit or procedure date field that no later-occurrence item governs, in a note that labels no date of its
+#   own, stays dropped as the installed reading dropped it: settled, its date would be the only answer a member may
+#   give, and in "Plan:" / "Colonoscopy with possible polypectomy." / "Procedure date: 11/04/2026" that is the planned
+#   colonoscopy's date.
+# Each speaks only against a date the note labels as its own (_AGAINST_OWN): settled (_settled: asked, never sent)
+# where the note labels one, dropped as before where it labels none - so neither ever sends a date.
+_READ, _GOVERNED, _SPEAKS, _LATER, _AGAINST_OWN = 'read', 'governed', 'speaks', 'later', 'against-own'
 # The encounter's own date-of-service labels: _DATE_LABEL less the visit and procedure date labels ("Visit date:",
 # "Date of procedure:"), which a plan item may own.
 _ENCOUNTER_LABEL = cues.rx(r'date' + _DATE_TIME + r'[ \t]++of[ \t]++(?:service|encounter)|DOS' + _DATE_TIME
@@ -1740,6 +1757,15 @@ _ENCOUNTER_LABEL = cues.rx(r'date' + _DATE_TIME + r'[ \t]++of[ \t]++(?:service|e
 _OCCURRENCE_NOUNS = (r'(?:visits?|appointments?|procedures?|exams?|examinations?|consultations?|consults?|referrals?'
                      r'|recalls?|surger(?:y|ies)|sessions?|scans?|reviews?|labs?|bloodwork|results?)')
 _OCCURRENCE_HEAD = cues.rx(r'(?:\b' + _OCCURRENCE_NOUNS + '|' + _sections._SECTION_NOUN.pattern + r')[ \t*#]*+$')
+# H1 (gi3 integration): the occurrence nouns of _OCCURRENCE_HEAD this note's own encounter may be named by in its
+# billing block - a visit, an encounter, a procedure, an examination, a consultation, a session or a review of the
+# coding - as against a later booking, another discipline's or another day's work, or a section's own noun
+# ("Appointment", "Referral", "Recall", "Labs", "Results", "Transplant evaluation"), which name another occurrence.
+_OWN_KIND_HEAD = cues.rx(r'\b(?:visits?|encounters?|procedures?|exams?|examinations?|consultations?|consults?|sessions?'
+                         r'|reviews?)[ \t*#]*+$')
+# H1: the words that make a visit or a procedure another occurrence's in a heading that carries no date qualifier: a
+# return, a recall, a pending one, or a follow up written with a space ("Return visit", "Pending procedures").
+_H1_OTHER = cues.rx(r'\b(?:return(?:ing)?|recalls?|pending|follow[ \t]+up)\b')
 # A plan section whose own heading names an occurrence ("Next appointment", "Scheduled procedure", "Follow-up:",
 # "Pending procedures", "Referral:"): the fields right under it date that occurrence, so part 2 and B4 never read them.
 _SECTION_NAMES_OCCURRENCE = cues.rx(r'\b' + _OCCURRENCE_NOUNS + r'[ \t*#:]*+$')
@@ -1881,6 +1907,20 @@ class _Governance:
             self.names[k] = _names_another_block(self.bodies[k])
         return self.names[k]
 
+    def names_a_kind(self, sec, line_start: int) -> bool:
+        """H1: whether the nearest block heading above the line starting at ``line_start`` inside its section names its
+        block only as a kind of service: no word of _BLOCK_WORDS or _H1_OTHER (a plan, a history, another occurrence, a
+        status, another document, a return or a recall), and no head noun but one this note's own encounter may be
+        (_OWN_KIND_HEAD: "Office visit", "Coding review", "Procedure") or a service's name ("Colonoscopy") - never
+        "Results", "Labs", "Appointment", "Referral" or "Transplant evaluation"."""
+        k = bisect.bisect_left(self.starts, line_start) - 1
+        if k < 0 or self.starts[k] < sec.start:
+            return False
+        body = self.bodies[k]
+        if any(p.search(body) for p in _BLOCK_WORDS) or _H1_OTHER.search(body):
+            return False
+        return _OCCURRENCE_HEAD.search(body) is None or _OWN_KIND_HEAD.search(body) is not None
+
     def item_names_later(self, sec, line_start: int) -> bool:
         """B4: whether the plan item right before the line starting at ``line_start`` - the last sentence of the previous
         non-empty line in its section, never the section's own heading - names a later occurrence (_LATER_CUES) and
@@ -1918,8 +1958,9 @@ def _binding(text: str, lay: Layout, start: int, end: int, label: str = '') -> s
     """How the section a label stands in binds it (see above): _READ - no plan or history section holds it, or the
     document's own title opened its section (RC5); _GOVERNED - dropped, as before; _SPEAKS - the section's reach ended at
     a neutral heading, or the plan does not govern the field (part 2, B4); _LATER - governed only if its date is later
-    than every date the note labels as its own (B4). ``label``: 'encounter' (date of service, DOS, service or encounter
-    date), 'visit' (a visit or procedure date), or '' (a setting or patient-status statement: RC6)."""
+    than every date the note labels as its own (B4); _AGAINST_OWN - it speaks only against a date the note labels as
+    its own (gi3 integration, H1 and H2). ``label``: 'encounter' (date of service, DOS, service or encounter date),
+    'visit' (a visit or procedure date), or '' (a setting or patient-status statement: RC6)."""
     sec = lay.section_at(start)
     if sec.kind not in NOT_CURRENT_SECTIONS:
         return _READ
@@ -1928,9 +1969,11 @@ def _binding(text: str, lay: Layout, start: int, end: int, label: str = '') -> s
     gov = _governance(text)
     line_start = gov.line_start(start)
     block = gov.block_heading(sec, line_start)
-    if block:
-        return _GOVERNED
     plan = sec.kind == 'plan'
+    if block:
+        if plan and label == 'encounter' and gov.names_a_kind(sec, line_start) and not lay.in_table_header(start):
+            return _AGAINST_OWN  # gi3 integration, H1
+        return _GOVERNED
     if block is None:
         if not (plan and label) or _plan_names_occurrence(sec.heading) or not _field_start(text, line_start, start, end):
             return _GOVERNED
@@ -1938,6 +1981,8 @@ def _binding(text: str, lay: Layout, start: int, end: int, label: str = '') -> s
             return _SPEAKS  # part 2
     if plan and label == 'visit' and gov.item_names_later(sec, line_start):
         return _LATER
+    if plan and label == 'visit' and block is None:
+        return _AGAINST_OWN  # gi3 integration, H2 (B4)
     return _SPEAKS
 
 
@@ -1952,18 +1997,22 @@ def _settled(c: Optional[_Candidate]) -> Optional[_Candidate]:
     return replace(c, reading='unplaced') if c.reading == 'own' else c
 
 
-def _later_settled(found: list, later: dict) -> list:
+def _later_settled(found: list, later: dict, against: dict) -> list:
     """B4: each candidate of a label governed only when later (_LATER) is dropped when its date is later than every date
     the note labels as its own - as the installed reading dropped it, also where the note labels none - and is otherwise
-    settled (_settled): an earlier, equal or unread date cannot be the later occurrence's."""
-    if not later:
+    settled (_settled): an earlier, equal or unread date cannot be the later occurrence's. Each candidate of a label that
+    speaks only against the note's own dates (_AGAINST_OWN) is settled where the note labels a date of its own, and is
+    otherwise dropped as the installed reading dropped it."""
+    if not later and not against:
         return found
-    own = [c.value for c in found if id(c) not in later and c.source == 'label' and c.reading == 'own'
-           and c.form == 'read' and c.value]
+    own = [c.value for c in found if id(c) not in later and id(c) not in against and c.source == 'label'
+           and c.reading == 'own' and c.form == 'read' and c.value]
     out = []
     for c in found:
         if id(c) in later:
             c = None if c.value and all(value < c.value for value in own) else _settled(c)
+        elif id(c) in against:
+            c = _settled(c) if own else None
         if c is not None:
             out.append(c)
     return out
@@ -2073,13 +2122,16 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
     found = []
     read = set()
     rows = _Rows(text)
-    governed, later = [], {}  # the read labels a plan or history section governs (part 4); B4's pending candidates
+    # the read labels a plan or history section governs (part 4); B4's pending candidates; H1's and H2's
+    governed, later, against = [], {}, {}
 
     def bind(candidate: Optional[_Candidate], binding: str) -> None:
         if binding == _SPEAKS:
             candidate = _settled(candidate)
         elif binding == _LATER and candidate is not None:
             later[id(candidate)] = candidate
+        elif binding == _AGAINST_OWN and candidate is not None:
+            against[id(candidate)] = candidate
         if candidate is not None:
             found.append(candidate)
 
@@ -2097,7 +2149,7 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
         binding = _binding(text, lay, m.start('label'), m.end('label'), _label_kind(text, m))
         if binding != _GOVERNED:
             bind(_unread_label(text, rows, m), binding)
-    found = _later_settled(found, later)
+    found = _later_settled(found, later, against)
     found += _time_directed(text, lay, governed, found)
     return _own_dates_in_doubt(text, lay, _after_another_header(text, lay, tuple(found) + _title_candidates(text, lay)))
 
