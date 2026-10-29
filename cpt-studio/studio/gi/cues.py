@@ -750,12 +750,41 @@ EM_VISIT = rx(r'\b(?:(?:in-person\s+|outpatient\s+|ambulatory\s+)?(?:office|clin
               r'virtual|audio-video)\s+(?:visit|encounter|consultation)|new[- ]patient\s+(?:visit|evaluation|'
               r'consultation|consult|encounter)|established[- ]patient\s+(?:visit|encounter)|follow[- ]?up\s+'
               r'(?:office\s+|clinic\s+)?visit|progress\s+note|evaluation\s+and\s+management)\b')
-EM_TIME = rx(r'\b(?:total\s+(?:\w+\s+){0,2}?time|time\s+spent|(?:i|we)\s+spent|spent\s+a\s+total\s+of)\b[^.;\n]{0,140}?'
+# gi3 scope (interpretation 43): the visit's documented time by its subject. Total time, time spent, the visit's or the
+# encounter's time and "time on the date of ..." are the visit's by their words. A clinician's time ("Face-to-face time",
+# "Physician time", "I personally spent": the ``clinician`` group) is the visit's only where its sentence frames it as
+# E/M time is framed (EM_TIME_FRAME), or beside a marker of today's visit outside today's procedure text
+# (detect._visit_clinician_times): never a procedure's or an interpretation's time ("Physician time: 25 minutes." in an
+# EGD report). A procedure's time is still refused sentence by sentence (NOT_EM_TIME).
+EM_TIME = rx(r'\b(?:total\s+(?:\w+\s+){0,2}?time|time\s+spent|(?:i|we)\s+spent|spent\s+a\s+total\s+of'
+             r'|(?:visit|encounter)\s+time|time\s+on\s+the\s+(?:date|day)\s+of'
+             r'|(?P<clinician>(?:face[- ]to[- ]face|physician|clinician|provider|practitioner)\s+time'
+             r'|(?:i|we)\s+personally\s+spent))\b[^.;\n]{0,140}?'
              r'\b(?P<minutes>\d{1,3})\s*(?:minutes|mins?)\b')
+# The words that frame a clinician's time as E/M time, AMA's own: the date of the encounter or of service, today, and
+# counselling or coordination of care (a closed class).
+EM_TIME_FRAME = rx(r'\b(?:today|on\s+the\s+(?:date|day)\s+of|(?:service|encounter|visit)\s+date'
+                   r'|date\s+of\s+(?:service|the\s+(?:encounter|visit))|counsel(?:l)?(?:ing|ed)?'
+                   r'|coordinat\w*\s+(?:of\s+)?care|care\s+coordination)\b')
 EM_TIME_LINE = rx(r'^[ \t]*(?:total\s+)?time(?:\s+spent)?[ \t]*[:\-][ \t]*(?P<minutes>\d{1,3})\s*(?:minutes|mins?)\b')
-# Times that belong to a procedure, never to an E/M visit.
+# gi3 scope (interpretation 44): the document's own visit marker on a line of its own - a title naming an office, clinic,
+# outpatient, follow-up or return note or visit ("Clinic note - return visit", "Hepatology follow-up note", "GI clinic
+# follow-up", "Return visit note"), after a field label too ("Visit type: return visit", "Note type | Clinic note"), or a
+# heading naming today's visit ("Purpose of today's visit"; the ``heading`` group). The nouns are a closed class: the
+# names of an office or outpatient encounter. detect._em_mentions reads a title only in the document's head and refuses
+# one whose words name another occurrence ("Next follow-up visit", "Scheduled visit: return visit").
+_EM_TITLE_NOUN = (r'(?:office|clinic|outpatient)[ \t]+(?:follow[- ]?up(?:[ \t]+(?:note|visit))?|note|visit(?:[ \t]+note)?'
+                  r'|encounter)'
+                  r'|(?:follow[- ]?up|return|revisit)[ \t]+(?:(?:office|clinic)[ \t]+)?(?:note|visit(?:[ \t]+note)?|encounter)'
+                  r"|(?P<heading>(?:purpose|reason)[ \t]+(?:of|for)[ \t]+(?:today['\u2019]?s|this)[ \t]+visit)")
+EM_TITLE = rx(r'^[ \t]*(?:[A-Za-z][A-Za-z /]{0,30}?[ \t]*[:|\u2013-][ \t]*)?'
+              r"(?:[A-Za-z][\w&/,()'\u2019.-]*[ \t]+){0,4}?(?P<title>" + _EM_TITLE_NOUN + r')\b'
+              r"(?:[ \t]*[-:\u2013\u2014,|][ \t]*[A-Za-z][\w ,/&()'\u2019-]{0,60})?[ \t]*$", FLAGS | re.M)
+# Times that belong to a procedure, never to an E/M visit. gi3 scope (interpretation 43: an interpretation's time never
+# counts): a time whose sentence names an interpretation ("Physician time on the date of service for the interpretation:
+# 20 minutes." in a manometry report) is that study's; a visit's time that names one is asked, never read.
 NOT_EM_TIME = rx(r'\b(?:withdrawal|sedation|procedure\s+time|procedural|intra-?service|fluoroscop\w*|insertion|'
-                 r'cecal|anesthesia|recovery|monitoring)\b')
+                 r'cecal|anesthesia|recovery|monitoring|interpret\w*)\b')
 _LEVEL = r'straightforward|low|moderate|high'
 _LEVEL_END = r'(?=[ \t]*(?:[- ]complexity\b|level\b|[:,.;(]|\n|$))'
 MDM_LEVEL = rx(r'\b(?:medical\s+decision[- ]making|MDM)\b[^.;\n]{0,60}?\b(?P<level>' + _LEVEL + r')' + _LEVEL_END

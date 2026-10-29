@@ -1,0 +1,27 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Redfern Lake Gastroenterology Associates (fictional)
+Clinic note - return visit
+Patient: Philippa Ezeagu-Dunmore (fictional)
+Date of birth: 1963-02-08
+Synthetic record: H2-SYN-1107
+Visit date: 2026-10-21
+Provider: Lucian Stravinsky-Odum, MD (fictional)
+Patient status: established
+Site: office, POS 11
+Purpose of today's visit
+Constipation follow-up and a review of recent laboratory results.
+Interval history
+Since the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.
+Results reviewed today
+Test or study | Date of service | Result
+Thyroid-stimulating hormone | 2026-10-02 | 1.8 mIU/L, normal
+Serum calcium | 2026-10-02 | 9.4 mg/dL, normal
+Colonoscopy, this practice | 2025-11-12 | Normal to the cecum, no polyps
+Examination
+Weight stable at 68 kg. Abdomen soft and non-tender, without distension.
+Assessment
+Chronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.
+Plan
+Continue polyethylene glycol 17 g daily and adjust the dose to effect. Increase dietary fiber gradually and keep fluid intake up. Next colonoscopy due in 2035 if no new symptoms develop. Return in one year, or sooner if symptoms change.
+Face-to-face time: 24 minutes, more than half of it spent counseling about diet, fluids and the expected course.
+Signed: Lucian Stravinsky-Odum, MD (fictional), 2026-10-22 07:55

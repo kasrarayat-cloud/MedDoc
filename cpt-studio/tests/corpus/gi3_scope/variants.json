@@ -1,0 +1,2917 @@
+{
+ "schema": "cpt-studio-gi3-scope-variants@1",
+ "note": "SYNTHETIC text only. The gi3 scope investigation's source-reviewed variants (session 7c8d38da, 2026-10-29): today's office visit against a future follow-up, over varied layouts and paraphrases. Each case: the text, a synthetic provider selection whose evidence passages are exact substrings, the source-reviewed expectation, its one-line review, and the verdict inputs the review fixed. A regression guard, never an accuracy measure: it measures only the phrasings written into it.",
+ "variants": [
+  {
+   "id": "K-h207-author",
+   "group": "known",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nRedfern Lake Gastroenterology Associates (fictional)\nClinic note - return visit\n\nPatient: Philippa Ezeagu-Dunmore (fictional)\nDate of birth: 1963-02-08\nSynthetic record: H2-SYN-1107\nVisit date: 2026-10-21\nProvider: Lucian Stravinsky-Odum, MD (fictional)\nPatient status: established\nSite: office, POS 11\n\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\n\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\n\nResults reviewed today\nTest or study | Date of service | Result\nThyroid-stimulating hormone | 2026-10-02 | 1.8 mIU/L, normal\nSerum calcium | 2026-10-02 | 9.4 mg/dL, normal\nColonoscopy, this practice | 2025-11-12 | Normal to the cecum, no polyps\n\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\n\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\n\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Increase dietary fiber gradually and keep fluid intake up. Next colonoscopy due in 2035 if no new symptoms develop. Return in one year, or sooner if symptoms change.\n\nFace-to-face time: 24 minutes, more than half of it spent counseling about diet, fluids and the expected course.\n\nSigned: Lucian Stravinsky-Odum, MD (fictional), 2026-10-22 07:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Purpose of today's visit",
+     "Colonoscopy, this practice | 2025-11-12 | Normal to the cecum, no polyps",
+     "Return in one year, or sooner if symptoms change."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 24 min face-to-face (more than half counselling); MDM not stated",
+    "em_code_supported": "99213",
+    "future_planned": [
+     "office E/M return visit in one year (planned)",
+     "colonoscopy due 2035 (planned)"
+    ],
+    "historical": [
+     "colonoscopy 2025-11-12 (results table)",
+     "TSH and calcium 2026-10-02"
+    ],
+    "procedures_today": [],
+    "expected_engine": "ready (99213), no performed_status question, no em_basis question"
+   },
+   "review": "Title \"Clinic note - return visit\", \"Purpose of today's visit\", \"Patient status: established\", \"Site: office, POS 11\", an exam and an assessment document an established-patient office visit on 2026-10-21. 24 minutes of documented face-to-face time supports 99213 (20-29 min). \"Return in one year\" plans a later visit; it says nothing about today's.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "24",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "K-h207-live",
+   "group": "known",
+   "layout": "live",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nRedfern Lake Gastroenterology Associates (fictional)\nClinic note - return visit\nPatient: Philippa Ezeagu-Dunmore (fictional)\nDate of birth: 1963-02-08\nSynthetic record: H2-SYN-1107\nVisit date: 2026-10-21\nProvider: Lucian Stravinsky-Odum, MD (fictional)\nPatient status: established\nSite: office, POS 11\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\nResults reviewed today\nTest or study | Date of service | Result\nThyroid-stimulating hormone | 2026-10-02 | 1.8 mIU/L, normal\nSerum calcium | 2026-10-02 | 9.4 mg/dL, normal\nColonoscopy, this practice | 2025-11-12 | Normal to the cecum, no polyps\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Increase dietary fiber gradually and keep fluid intake up. Next colonoscopy due in 2035 if no new symptoms develop. Return in one year, or sooner if symptoms change.\nFace-to-face time: 24 minutes, more than half of it spent counseling about diet, fluids and the expected course.\nSigned: Lucian Stravinsky-Odum, MD (fictional), 2026-10-22 07:55",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Purpose of today's visit",
+     "Colonoscopy, this practice | 2025-11-12 | Normal to the cecum, no polyps",
+     "Return in one year, or sooner if symptoms change."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 24 min face-to-face (more than half counselling); MDM not stated",
+    "em_code_supported": "99213",
+    "future_planned": [
+     "office E/M return visit in one year (planned)",
+     "colonoscopy due 2035 (planned)"
+    ],
+    "historical": [
+     "colonoscopy 2025-11-12 (results table)",
+     "TSH and calcium 2026-10-02"
+    ],
+    "procedures_today": [],
+    "expected_engine": "ready (99213), no performed_status question, no em_basis question"
+   },
+   "review": "Title \"Clinic note - return visit\", \"Purpose of today's visit\", \"Patient status: established\", \"Site: office, POS 11\", an exam and an assessment document an established-patient office visit on 2026-10-21. 24 minutes of documented face-to-face time supports 99213 (20-29 min). \"Return in one year\" plans a later visit; it says nothing about today's.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "24",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "K-h208-author",
+   "group": "known",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nOsprey Point Liver and Digestive Clinic (fictional)\nHepatology follow-up note\n\nPatient: Ignatius Fenwick-Obi (fictional)\nDate of birth: 1959-06-02\nSynthetic record: H2-SYN-1108\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Marguerite Szabo-Reyes, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to metabolic dysfunction-associated steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver, a small amount of ascites and no focal lesion. Laboratory results from 2026-09-28: albumin 3.1 g/dL, total bilirubin 1.6 mg/dL, INR 1.3, sodium 134 mmol/L, creatinine 0.9 mg/dL. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 112/70; weight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Diagnostic paracentesis was offered and declined today; it will be revisited if the ascites increases. Referral to transplant hepatology placed. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 44 minutes, covering review of the ultrasound and laboratory results, the examination, discussion of diuretics and sodium restriction with the patient and his wife, the referral and documentation.\n\nCharge information\nDate of service: 2026-10-06\nDiagnosis: cirrhosis with ascites\n\nElectronically signed: Marguerite Szabo-Reyes, MD (fictional), 2026-10-06 09:12\n",
+   "cited": {
+    "code": "99215",
+    "evidence": [
+     "Surveillance ultrasound in six months.",
+     "examination, discussion of diuretics and sodium restriction with the patient and his wife, the referral and"
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 44 min physician time on the service date",
+    "em_code_supported": "99215",
+    "future_planned": [
+     "abdominal ultrasound in six months (not a GI family)",
+     "basic metabolic panel in one week (labs)",
+     "no repeat upper endoscopy (not planned)",
+     "paracentesis offered and declined today (not done)"
+    ],
+    "historical": [
+     "abdominal ultrasound 2026-09-28",
+     "labs 2026-09-28",
+     "variceal screening endoscopy 2025-03-10"
+    ],
+    "procedures_today": [],
+    "expected_engine": "ready (99215) on time, no performed_status question, no em_basis question; the service date conflict (2026-10-05 header vs 2026-10-06 charge block) is the dates lens's and must be asked"
+   },
+   "review": "Title \"Hepatology follow-up note\", \"Established patient\", \"Place of service: office (POS 11)\", SOAP sections and 44 minutes of physician time on the service date: an established-patient office visit. 44 minutes supports 99215 (>= 40). The surveillance ultrasound and the BMP are other services' future occurrences, never doubt about the visit.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "44",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   }
+  },
+  {
+   "id": "K-h208-live",
+   "group": "known",
+   "layout": "pdf",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nOsprey Point Liver and Digestive Clinic (fictional)\nHepatology follow-up note\nPatient: Ignatius Fenwick-Obi (fictional)\nDate of birth: 1959-06-02\nSynthetic record: H2-SYN-1108\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Marguerite Szabo-Reyes, MD (fictional)\nSubjective\nFollow-up of compensated cirrhosis due to metabolic dysfunction-associated steatohepatitis. Over two weeks he\nhas noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal\nultrasound on 2026-09-28 showed a nodular liver, a small amount of ascites and no focal lesion. Laboratory\nresults from 2026-09-28: albumin 3.1 g/dL, total bilirubin 1.6 mg/dL, INR 1.3, sodium 134 mmol/L, creatinine 0.9\nmg/dL. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\nObjective\nBlood pressure 112/70; weight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg and furosemide 40 mg daily with a\n2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Diagnostic\nparacentesis was offered and declined today; it will be revisited if the ascites increases. Referral to transplant\nhepatology placed. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays\non carvedilol.\nPhysician time on the service date: 44 minutes, covering review of the ultrasound and laboratory results, the\nexamination, discussion of diuretics and sodium restriction with the patient and his wife, the referral and\ndocumentation.\nCharge information\nDate of service: 2026-10-06\nDiagnosis: cirrhosis with ascites\nElectronically signed: Marguerite Szabo-Reyes, MD (fictional), 2026-10-06 09:12\n",
+   "cited": {
+    "code": "99215",
+    "evidence": [
+     "Surveillance ultrasound in six months.",
+     "examination, discussion of diuretics and sodium restriction with the patient and his wife, the referral and"
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 44 min physician time on the service date",
+    "em_code_supported": "99215",
+    "future_planned": [
+     "abdominal ultrasound in six months (not a GI family)",
+     "basic metabolic panel in one week (labs)",
+     "no repeat upper endoscopy (not planned)",
+     "paracentesis offered and declined today (not done)"
+    ],
+    "historical": [
+     "abdominal ultrasound 2026-09-28",
+     "labs 2026-09-28",
+     "variceal screening endoscopy 2025-03-10"
+    ],
+    "procedures_today": [],
+    "expected_engine": "ready (99215) on time, no performed_status question, no em_basis question; the service date conflict (2026-10-05 header vs 2026-10-06 charge block) is the dates lens's and must be asked"
+   },
+   "review": "Title \"Hepatology follow-up note\", \"Established patient\", \"Place of service: office (POS 11)\", SOAP sections and 44 minutes of physician time on the service date: an established-patient office visit. 44 minutes supports 99215 (>= 40). The surveillance ultrasound and the BMP are other services' future occurrences, never doubt about the visit.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "44",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   }
+  },
+  {
+   "id": "K-h206-author",
+   "group": "known-control",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nJuniper Falls Digestive Health (fictional)\nOffice follow-up visit\n\nPatient: Corwin Ashdown-Pereira (fictional)\nDate of birth: 1988-09-14\nSynthetic record: H2-SYN-1106\nDate of service: 2026-10-14\nPlace of service: office (POS 11)\nVisit type: established patient, follow-up\nClinician: Beatriz Holloway-Sung, MD, Gastroenterology (fictional)\n\nChief complaint\nUlcerative colitis flare.\n\nHistory of present illness\nLeft-sided ulcerative colitis diagnosed in 2019 and in remission on mesalamine 4.8 g daily until about three weeks ago, when bloody stools returned: five to six a day, with urgency and one stool at night. No fever. Fecal calprotectin collected on 2026-10-06 was 640 mcg/g, and C-reactive protein on 2026-10-03 was 14 mg/L. Stool testing for Clostridioides difficile on 2026-10-06 was negative. His last colonoscopy, on 2025-02-19, showed mild inflammation from the rectum to the descending colon.\n\nExamination\nTemperature 36.9 C, heart rate 84, blood pressure 124/78. Abdomen soft with mild left lower quadrant tenderness, no guarding, normal bowel sounds.\n\nAssessment\nLeft-sided ulcerative colitis with a moderate flare despite oral mesalamine; infection excluded.\n\nPlan\nStart budesonide extended-release tablets 9 mg daily for eight weeks and mesalamine enemas nightly; continue oral mesalamine. The risks of corticosteroids were discussed. If there is no response within two weeks, we will discuss advanced therapy, with tuberculosis and hepatitis B screening first. Flexible sigmoidoscopy in about eight weeks to check mucosal healing.\nReturn visit: 2026-11-18.\n\nTime spent on the date of the encounter: 33 minutes, including review of the stool and blood results, history and examination, counseling about treatment options, prescriptions and documentation.\n\nSigned: Beatriz Holloway-Sung, MD (fictional), 2026-10-14 17:40\n",
+   "cited": {
+    "code": "99214",
+    "evidence": [
+     "If there is no response within two weeks, we will discuss advanced therapy, with tuberculosis and hepatitis B screening first.",
+     "Time spent on the date of the encounter: 33 minutes, including review of the stool and blood results, history and examination, counseling about treatment options, prescriptions and documentation."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 33 min on the date of the encounter",
+    "em_code_supported": "99214",
+    "future_planned": [
+     "flexible sigmoidoscopy in about eight weeks (planned)",
+     "return visit 2026-11-18 (planned E/M)"
+    ],
+    "historical": [
+     "colonoscopy 2025-02-19",
+     "labs 2026-10-03/06"
+    ],
+    "procedures_today": [],
+    "expected_engine": "ready (99214)"
+   },
+   "review": "Title \"Office follow-up visit\", established, POS 11, 33 minutes: 99214 (30-39).",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "33",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "K-ho04-author",
+   "group": "known-control",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nGastroenterology Office Visit\nPractice: Bramblewood Digestive Health (fictional)\nPlace of service: Office (POS 11)\nDate of service: 2026-10-22\nPatient: Cornelius Abernathy-Iwu (fictional), 58-year-old man\nVisit type: Established patient, return visit. Previous office visit: 2026-08-27.\nClinician: Lucinda Farrant-Oyelaran, MD (fictional)\n\nChief Complaint\nFood sticking in the lower chest, more often since the last visit.\n\nHistory of Present Illness\nHe has had heartburn for years. At the 2026-08-27 visit he started omeprazole 20 mg daily and a barium esophagram was ordered. His heartburn is better, but solid food, mostly bread and meat, now sticks behind the lower sternum two or three times a week, compared with about once a month in August. He clears it by drinking water. No food impaction needing emergency care, no odynophagia, no vomiting and no black stools. Weight stable at 84 kg.\n\nData Reviewed\nBarium esophagram of 2026-09-30 from Bramblewood Imaging (fictional): images and report reviewed today, showing a smooth distal esophageal ring with brief hold-up of the 13 mm barium tablet. CBC of 2026-09-30: hemoglobin 14.1 g/dL. Records from his previous gastroenterologist at Ostrander Brook GI (fictional) reviewed.\n\nExamination\nBlood pressure 128/78, pulse 72, BMI 27.4. Well appearing. Oropharynx normal. Abdomen soft and nontender without masses.\n\nAssessment\n1. Progressive solid-food dysphagia with a distal esophageal (Schatzki) ring on the esophagram.\n2. Gastroesophageal reflux disease, improved on omeprazole.\n\nPlan\n1. EGD with possible balloon dilation is scheduled for 2026-11-18 at Bramblewood Endoscopy Suite (fictional). Risks, benefits and alternatives were discussed and he wishes to proceed.\n2. Increase omeprazole to 40 mg daily before breakfast.\n3. Cut food small and chew well; go to the emergency department if food will not pass.\n4. Return office visit 4 weeks after the EGD.\n\nMedical decision making: Moderate. One chronic illness with progression; review of the esophagram, the CBC and outside records; prescription drug management.\nTotal time on the date of service: 34 minutes, including record review, history, examination, counseling and documentation.\n\nElectronically signed: Lucinda Farrant-Oyelaran, MD (fictional), 2026-10-22 17:05\n",
+   "cited": {
+    "code": "99214",
+    "evidence": [
+     "Total time on the date of service: 34 minutes, including record review, history, examination, counseling and documentation."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 34 min + MDM moderate",
+    "em_code_supported": "99214",
+    "future_planned": [
+     "EGD with possible dilation 2026-11-18 (planned)",
+     "return office visit 4 weeks after the EGD (planned E/M)"
+    ],
+    "historical": [
+     "office visit 2026-08-27",
+     "esophagram and CBC 2026-09-30"
+    ],
+    "procedures_today": [],
+    "expected_engine": "ready (99214)"
+   },
+   "review": "Gastroenterology office visit, established, 34 minutes total time and moderate MDM: 99214.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "34",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "K-h201-author",
+   "group": "known",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nBrightwater Valley Endoscopy Center (fictional)\nCombined upper and lower endoscopy report\n\nPatient: Marisol Vandermeer (fictional)\nDate of birth: 1957-04-03\nSynthetic record: H2-SYN-1101\nProcedure date: 2026-10-16\nEndoscopist: Kwabena Thistlewood, MD, Gastroenterology (fictional)\nSite of care: freestanding ambulatory surgical center, POS 24\nAnesthesia: monitored anesthesia care by Annika Castellanos-Webb, CRNA (fictional), documented and billed by the anesthesia group\n\nIndications\nIron deficiency anemia, with ferritin 5 ng/mL and hemoglobin 9.8 g/dL on 2026-09-24, and occasional epigastric burning. No visible bleeding and no diarrhea. She has never had an endoscopy of either kind.\n\nProcedure summary\nExamination | Instrument | Furthest point reached | Tissue sampled\nUpper endoscopy (EGD) | Standard gastroscope | Third portion of the duodenum | Yes, duodenum and stomach\nColonoscopy | Adult colonoscope | Terminal ileum, about 6 cm beyond the ileocecal valve | No\n\nUpper endoscopy\nConsent was confirmed and the pre-procedure pause completed. Under direct vision the gastroscope crossed the upper esophageal sphincter and reached the third portion of the duodenum. Esophageal mucosa unremarkable; regular Z-line at 38 cm. On retroflexion the cardia and fundus looked normal. Patchy antral erythema, with no erosions or ulcers. Bulb, second portion and third portion of the duodenum unremarkable. For celiac disease I took four pieces from D2, the second portion of the duodenum, and two from the bulb with cold forceps, and for Helicobacter pylori three pieces from the antrum and incisura; each site went into its own container.\n\nColonoscopy\nWith the patient on her left side, the digital rectal examination showed nothing abnormal, and the adult colonoscope then passed easily around the colon. Cecal landmarks (appendiceal orifice, ileocecal valve) were documented with photographs. I entered the terminal ileum and inspected about 6 cm of it. Boston Bowel Preparation Scale score 8 (right 2, transverse 3, left 3). Scattered small-mouthed diverticula in the sigmoid colon. No polyps, masses, vascular lesions or blood; colonic and ileal mucosa normal. I deliberately did not take colon biopsies, because the mucosa was normal and she has no diarrhea. Retroflexion in the rectum showed small, non-bleeding internal hemorrhoids. Withdrawal time was 11 minutes.\n\nComplications\nNone.\n\nImpression\n1. Antral erythema; duodenal and gastric biopsies taken.\n2. Normal terminal ileum. Sigmoid diverticulosis and small internal hemorrhoids. No colonic source for the iron deficiency.\n\nPlan\nAwait pathology and continue oral iron. If the biopsies do not explain the anemia, small bowel capsule endoscopy will be discussed at the follow-up visit.\n\nPathology: specimens sent to Greyfield Pathology Associates (fictional), which reports its interpretation separately.\nElectronically signed: Kwabena Thistlewood, MD (fictional), 2026-10-16 10:47\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "If the biopsies do not explain the anemia, small bowel capsule endoscopy will be discussed at the follow-up visit."
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "follow-up visit (planned E/M; capsule endoscopy may be discussed there)"
+    ],
+    "historical": [],
+    "procedures_today": [
+     "EGD with biopsies to D3",
+     "colonoscopy to the terminal ileum, no biopsies"
+    ],
+    "expected_engine": "no office E/M routed as performed; office E/M \"planned\" is right (a later visit); procedure statuses are the extent lens's"
+   },
+   "review": "A combined procedure report at an ASC (POS 24). \"will be discussed at the follow-up visit\" presupposes a later office visit: a planned occurrence of an E/M, not today's service. No E/M today.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A01-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nClinic note - return visit\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPatient status: established\nSite: office, POS 11\n\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\n\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\n\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\n\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\n\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Return in one year, or sooner if symptoms change.\n\nFace-to-face time: 24 minutes, more than half of it spent counseling about diet, fluids and the expected course.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Return in one year, or sooner if symptoms change."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 24 min",
+    "em_code_supported": "99213",
+    "future_planned": [
+     "return visit in one year (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99213), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "24",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A01-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nClinic note - return visit\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPatient status: established\nSite: office, POS 11\n\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\n\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\n\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\n\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\n\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Return in one year, or sooner if symptoms change.\n\nFace-to-face time: 24 minutes, more than half of it spent counseling about diet, fluids and the expected course.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Clinic note - return visit",
+     "Return in one year, or sooner if symptoms change.",
+     "Face-to-face time: 24 minutes"
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 24 min",
+    "em_code_supported": "99213",
+    "future_planned": [
+     "return visit in one year (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99213), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "24",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A02-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "live",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nClinic note - return visit\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPatient status: established\nSite: office, POS 11\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Return in one year, or sooner if symptoms change.\nFace-to-face time: 24 minutes, more than half of it spent counseling about diet, fluids and the expected course.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Return in one year, or sooner if symptoms change."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 24 min",
+    "em_code_supported": "99213",
+    "future_planned": [
+     "return visit in one year (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99213), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "24",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A02-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "live",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nClinic note - return visit\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPatient status: established\nSite: office, POS 11\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Return in one year, or sooner if symptoms change.\nFace-to-face time: 24 minutes, more than half of it spent counseling about diet, fluids and the expected course.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Clinic note - return visit",
+     "Return in one year, or sooner if symptoms change.",
+     "Face-to-face time: 24 minutes"
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 24 min",
+    "em_code_supported": "99213",
+    "future_planned": [
+     "return visit in one year (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99213), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "24",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A03-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "pdf",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nClinic note - return visit\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPatient status: established\nSite: office, POS 11\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every\none to two days without straining. No rectal bleeding, weight loss or abdominal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and\ncalcium causes excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Return in one year, or sooner if\nsymptoms change.\nFace-to-face time: 24 minutes, more than half of it spent counseling about diet, fluids and the expected\ncourse.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Return in one year, or sooner if\nsymptoms change."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 24 min",
+    "em_code_supported": "99213",
+    "future_planned": [
+     "return visit in one year (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99213), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "24",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A03-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "pdf",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nClinic note - return visit\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPatient status: established\nSite: office, POS 11\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every\none to two days without straining. No rectal bleeding, weight loss or abdominal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and\ncalcium causes excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Return in one year, or sooner if\nsymptoms change.\nFace-to-face time: 24 minutes, more than half of it spent counseling about diet, fluids and the expected\ncourse.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Clinic note - return visit",
+     "Return in one year, or sooner if\nsymptoms change.",
+     "Face-to-face time: 24 minutes"
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 24 min",
+    "em_code_supported": "99213",
+    "future_planned": [
+     "return visit in one year (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99213), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "24",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A04-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "ocr",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL\nUSE\nSaltmarsh Valley Gastroenterology (fictional)\nClinic note - return visit\nPatient : Odalys Fairweather-Nkemelu (fictional)\nDate of birth : 1961-05-17\nVisit date : 2026-10-21\nProvider : Teodor Halvorsen-Abiola, MD (fictional)\nPatient status : established\nSite : office, POS 11\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory\nresults.\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g\ndaily and now has a soft bowel movement every one to two days\nwithout straining.  No rectal bleeding, weight loss or abdo-\nminal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without\ndistension.\nAssessment\nChronic functional constipation, well controlled on\nover-the-counter polyethylene glycol. Thyroid and calcium\ncauses excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to\neffect. Return in one year, or sooner if symptoms change.\nFace-to-face time : 24 minutes, more than half of it spent couns-\neling about diet, fluids and the expected course.\nSigned : Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21\n17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Return in one year, or sooner if symptoms change."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 24 min",
+    "em_code_supported": "99213",
+    "future_planned": [
+     "return visit in one year (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99213), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "24",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A04-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "ocr",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL\nUSE\nSaltmarsh Valley Gastroenterology (fictional)\nClinic note - return visit\nPatient : Odalys Fairweather-Nkemelu (fictional)\nDate of birth : 1961-05-17\nVisit date : 2026-10-21\nProvider : Teodor Halvorsen-Abiola, MD (fictional)\nPatient status : established\nSite : office, POS 11\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory\nresults.\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g\ndaily and now has a soft bowel movement every one to two days\nwithout straining.  No rectal bleeding, weight loss or abdo-\nminal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without\ndistension.\nAssessment\nChronic functional constipation, well controlled on\nover-the-counter polyethylene glycol. Thyroid and calcium\ncauses excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to\neffect. Return in one year, or sooner if symptoms change.\nFace-to-face time : 24 minutes, more than half of it spent couns-\neling about diet, fluids and the expected course.\nSigned : Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21\n17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Clinic note - return visit",
+     "Return in one year, or sooner if symptoms change.",
+     "Face-to-face time : 24 minutes"
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 24 min",
+    "em_code_supported": "99213",
+    "future_planned": [
+     "return visit in one year (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99213), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "24",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A05-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nHepatology follow-up note\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nOver two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites.\n\nExamination\nWeight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\n\nAssessment\nCirrhosis with new ascites, now decompensated.\n\nPlan\nStart spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet. Surveillance ultrasound in six months. Recheck labs next week.\n\nPhysician time on the service date: 44 minutes, covering review of the results, the examination, counseling and documentation.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99215",
+    "evidence": [
+     "Surveillance ultrasound in six months."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 44 min",
+    "em_code_supported": "99215",
+    "future_planned": [
+     "ultrasound in six months (not a GI family)",
+     "labs next week (not a GI family)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99215), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "44",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A05-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nHepatology follow-up note\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\nEstablished patient\n\nSubjective\nOver two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites.\n\nExamination\nWeight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\n\nAssessment\nCirrhosis with new ascites, now decompensated.\n\nPlan\nStart spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet. Surveillance ultrasound in six months. Recheck labs next week.\n\nPhysician time on the service date: 44 minutes, covering review of the results, the examination, counseling and documentation.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99215",
+    "evidence": [
+     "Hepatology follow-up note",
+     "Surveillance ultrasound in six months.",
+     "Physician time on the service date: 44 minutes"
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 44 min",
+    "em_code_supported": "99215",
+    "future_planned": [
+     "ultrasound in six months (not a GI family)",
+     "labs next week (not a GI family)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99215), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "44",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A06-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "pdf",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nHepatology follow-up note\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nOver two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black\nstools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites.\nExamination\nWeight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\nAssessment\nCirrhosis with new ascites, now decompensated.\nPlan\nStart spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet. Surveillance ultrasound in\nsix months. Recheck labs next week.\nPhysician time on the service date: 44 minutes, covering review of the results, the examination, counseling\nand documentation.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99215",
+    "evidence": [
+     "Surveillance ultrasound in\nsix months."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 44 min",
+    "em_code_supported": "99215",
+    "future_planned": [
+     "ultrasound in six months (not a GI family)",
+     "labs next week (not a GI family)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99215), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "44",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A06-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "pdf",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nHepatology follow-up note\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nOver two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black\nstools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites.\nExamination\nWeight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\nAssessment\nCirrhosis with new ascites, now decompensated.\nPlan\nStart spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet. Surveillance ultrasound in\nsix months. Recheck labs next week.\nPhysician time on the service date: 44 minutes, covering review of the results, the examination, counseling\nand documentation.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99215",
+    "evidence": [
+     "Hepatology follow-up note",
+     "Surveillance ultrasound in\nsix months.",
+     "Physician time on the service date: 44 minutes"
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 44 min",
+    "em_code_supported": "99215",
+    "future_planned": [
+     "ultrasound in six months (not a GI family)",
+     "labs next week (not a GI family)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99215), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "44",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A07-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "ocr",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL\nUSE\nSaltmarsh Valley Gastroenterology (fictional)\nHepatology follow-up note\nPatient : Odalys Fairweather-Nkemelu (fictional)\nDate of birth : 1961-05-17\nVisit date : 2026-10-21\nProvider : Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service : office (POS 11)\nEstablished patient\nSubjective\nOver two weeks he has noticed more ankle swelling and a larger abdo-\nminal girth.  No confusion and no black stools. Abdominal\nultrasound on 2026-09-28 showed a nodular liver and a small\namount of ascites.\nExamination\nWeight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle\nedema, no asterixis.\nAssessment\nCirrhosis with new ascites, now decompensated.\nPlan\nStart spironolactone 100 mg and furosemide 40 mg daily with a\n2 g sodium diet. Surveillance ultrasound in six months.\nRecheck labs next week.\nPhysician time on the service date : 44 minutes, covering\nreview of the results, the examination, counseling and\ndocumentation.\nSigned : Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21\n17:55\n",
+   "cited": {
+    "code": "99215",
+    "evidence": [
+     "Surveillance ultrasound in six months."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 44 min",
+    "em_code_supported": "99215",
+    "future_planned": [
+     "ultrasound in six months (not a GI family)",
+     "labs next week (not a GI family)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99215), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "44",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A07-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "ocr",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL\nUSE\nSaltmarsh Valley Gastroenterology (fictional)\nHepatology follow-up note\nPatient : Odalys Fairweather-Nkemelu (fictional)\nDate of birth : 1961-05-17\nVisit date : 2026-10-21\nProvider : Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service : office (POS 11)\nEstablished patient\nSubjective\nOver two weeks he has noticed more ankle swelling and a larger abdo-\nminal girth.  No confusion and no black stools. Abdominal\nultrasound on 2026-09-28 showed a nodular liver and a small\namount of ascites.\nExamination\nWeight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle\nedema, no asterixis.\nAssessment\nCirrhosis with new ascites, now decompensated.\nPlan\nStart spironolactone 100 mg and furosemide 40 mg daily with a\n2 g sodium diet. Surveillance ultrasound in six months.\nRecheck labs next week.\nPhysician time on the service date : 44 minutes, covering\nreview of the results, the examination, counseling and\ndocumentation.\nSigned : Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21\n17:55\n",
+   "cited": {
+    "code": "99215",
+    "evidence": [
+     "Hepatology follow-up note",
+     "Surveillance ultrasound in six months.",
+     "Physician time on the service date : 44 minutes"
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 44 min",
+    "em_code_supported": "99215",
+    "future_planned": [
+     "ultrasound in six months (not a GI family)",
+     "labs next week (not a GI family)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99215), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "44",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A08-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "live",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPatient status: established\nSite: office, POS 11\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Follow up in 3 months.\nTotal time on the date of service: 32 minutes, including record review, examination, counseling and documentation.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99214",
+    "evidence": [
+     "Follow up in 3 months."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 32 min",
+    "em_code_supported": "99214",
+    "future_planned": [
+     "follow-up in 3 months (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99214), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "32",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A08-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "live",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPatient status: established\nSite: office, POS 11\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Follow up in 3 months.\nTotal time on the date of service: 32 minutes, including record review, examination, counseling and documentation.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99214",
+    "evidence": [
+     "GI clinic follow-up",
+     "Follow up in 3 months.",
+     "Total time on the date of service: 32 minutes"
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 32 min",
+    "em_code_supported": "99214",
+    "future_planned": [
+     "follow-up in 3 months (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99214), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "32",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A09-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nReturn visit note\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPatient status: established\nSite: office, POS 11\n\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\n\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\n\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\n\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\n\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Next visit: 2026-12-02.\n\nI personally spent 30 minutes with the patient and on her records on the date of service.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99214",
+    "evidence": [
+     "Next visit: 2026-12-02."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 30 min",
+    "em_code_supported": "99214",
+    "future_planned": [
+     "next visit 2026-12-02 (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99214), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "30",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A09-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nReturn visit note\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPatient status: established\nSite: office, POS 11\n\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\n\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\n\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\n\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\n\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Next visit: 2026-12-02.\n\nI personally spent 30 minutes with the patient and on her records on the date of service.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99214",
+    "evidence": [
+     "Return visit note",
+     "Next visit: 2026-12-02.",
+     "I personally spent 30 minutes with the patient and on her records on the date of service."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 30 min",
+    "em_code_supported": "99214",
+    "future_planned": [
+     "next visit 2026-12-02 (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99214), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "30",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A10-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "live",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nGastroenterology office note\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Repeat colonoscopy in 3 years.\nVisit time: 25 minutes.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Repeat colonoscopy in 3 years."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 25 min",
+    "em_code_supported": "99213",
+    "future_planned": [
+     "colonoscopy in 3 years (planned)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99213), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [
+     "patient_status"
+    ],
+    "time_minutes": "25",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A10-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "live",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nGastroenterology office note\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Repeat colonoscopy in 3 years.\nVisit time: 25 minutes.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Gastroenterology office note",
+     "Repeat colonoscopy in 3 years.",
+     "Visit time: 25 minutes."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 25 min",
+    "em_code_supported": "99213",
+    "future_planned": [
+     "colonoscopy in 3 years (planned)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99213), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [
+     "patient_status"
+    ],
+    "time_minutes": "25",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A11-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "pdf",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nFollow-up visit\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nOver two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black\nstools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites.\nExamination\nWeight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\nAssessment\nCirrhosis with new ascites, now decompensated.\nPlan\nStart spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet. RTC 6 weeks.\nTime on the date of the encounter: 30 minutes.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99214",
+    "evidence": [
+     "RTC 6 weeks."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 30 min",
+    "em_code_supported": "99214",
+    "future_planned": [
+     "return to clinic in 6 weeks (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99214), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "30",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A11-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "pdf",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nFollow-up visit\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nOver two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black\nstools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites.\nExamination\nWeight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\nAssessment\nCirrhosis with new ascites, now decompensated.\nPlan\nStart spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet. RTC 6 weeks.\nTime on the date of the encounter: 30 minutes.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99214",
+    "evidence": [
+     "Follow-up visit",
+     "RTC 6 weeks.",
+     "Time on the date of the encounter: 30 minutes."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 30 min",
+    "em_code_supported": "99214",
+    "future_planned": [
+     "return to clinic in 6 weeks (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99214), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "30",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A12-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nOutpatient gastroenterology follow-up note\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nVisit type: return visit, established patient\nPlace of service: office (POS 11)\n\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\n\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\n\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\n\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\n\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Return visit: 2026-11-18.\n\nClinician time today: 35 minutes, including counseling and documentation.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99214",
+    "evidence": [
+     "Return visit: 2026-11-18."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 35 min",
+    "em_code_supported": "99214",
+    "future_planned": [
+     "return visit 2026-11-18 (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99214), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "35",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A12-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nOutpatient gastroenterology follow-up note\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nVisit type: return visit, established patient\nPlace of service: office (POS 11)\n\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\n\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\n\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\n\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\n\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Return visit: 2026-11-18.\n\nClinician time today: 35 minutes, including counseling and documentation.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99214",
+    "evidence": [
+     "Outpatient gastroenterology follow-up note",
+     "Return visit: 2026-11-18.",
+     "Clinician time today: 35 minutes"
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 35 min",
+    "em_code_supported": "99214",
+    "future_planned": [
+     "return visit 2026-11-18 (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99214), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "35",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A13-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "live",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nEstablished patient office visit\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Follow-up office visit in 4 weeks.\nFace-to-face time: 24 minutes, more than half of it spent counseling about diet, fluids and the expected course.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Follow-up office visit in 4 weeks."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 24 min",
+    "em_code_supported": "99213",
+    "future_planned": [
+     "follow-up office visit in 4 weeks (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99213), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "24",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A13-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "live",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nEstablished patient office visit\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Follow-up office visit in 4 weeks.\nFace-to-face time: 24 minutes, more than half of it spent counseling about diet, fluids and the expected course.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Established patient office visit",
+     "Follow-up office visit in 4 weeks.",
+     "Face-to-face time: 24 minutes"
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 24 min",
+    "em_code_supported": "99213",
+    "future_planned": [
+     "follow-up office visit in 4 weeks (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99213), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "24",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A14-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "ocr",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL\nUSE\nSaltmarsh Valley Gastroenterology (fictional)\nGastroenterology progress note\nPatient : Odalys Fairweather-Nkemelu (fictional)\nDate of birth : 1961-05-17\nVisit date : 2026-10-21\nProvider : Teodor Halvorsen-Abiola, MD (fictional)\nPatient status : established\nSite : office, POS 11\nSubjective\nOver two weeks he has noticed more ankle swelling and a larger abdo-\nminal girth.  No confusion and no black stools. Abdominal\nultrasound on 2026-09-28 showed a nodular liver and a small\namount of ascites.\nExamination\nWeight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle\nedema, no asterixis.\nAssessment\nCirrhosis with new ascites, now decompensated.\nPlan\nStart spironolactone 100 mg and furosemide 40 mg daily with a\n2 g sodium diet. Schedule a follow-up appointment in two\nmonths.\nPhysician time on the service date : 44 minutes, covering\nreview of the results, the examination, counseling and\ndocumentation.\nSigned : Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21\n17:55\n",
+   "cited": {
+    "code": "99215",
+    "evidence": [
+     "Schedule a follow-up appointment in two\nmonths."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 44 min",
+    "em_code_supported": "99215",
+    "future_planned": [
+     "follow-up appointment in two months (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99215), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "44",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A14-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "ocr",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL\nUSE\nSaltmarsh Valley Gastroenterology (fictional)\nGastroenterology progress note\nPatient : Odalys Fairweather-Nkemelu (fictional)\nDate of birth : 1961-05-17\nVisit date : 2026-10-21\nProvider : Teodor Halvorsen-Abiola, MD (fictional)\nPatient status : established\nSite : office, POS 11\nSubjective\nOver two weeks he has noticed more ankle swelling and a larger abdo-\nminal girth.  No confusion and no black stools. Abdominal\nultrasound on 2026-09-28 showed a nodular liver and a small\namount of ascites.\nExamination\nWeight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle\nedema, no asterixis.\nAssessment\nCirrhosis with new ascites, now decompensated.\nPlan\nStart spironolactone 100 mg and furosemide 40 mg daily with a\n2 g sodium diet. Schedule a follow-up appointment in two\nmonths.\nPhysician time on the service date : 44 minutes, covering\nreview of the results, the examination, counseling and\ndocumentation.\nSigned : Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21\n17:55\n",
+   "cited": {
+    "code": "99215",
+    "evidence": [
+     "Gastroenterology progress note",
+     "Schedule a follow-up appointment in two\nmonths.",
+     "Physician time on the service date : 44 minutes"
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 44 min",
+    "em_code_supported": "99215",
+    "future_planned": [
+     "follow-up appointment in two months (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99215), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "44",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A15-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nClinic note - return visit\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPatient status: established\nSite: office, POS 11\n\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\n\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\n\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\n\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\n\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Return in one year, or sooner if symptoms change.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Return in one year, or sooner if symptoms change."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "undocumented (no time, no MDM statement)",
+    "em_code_supported": "99213 (level not determinable from a stated basis)",
+    "future_planned": [
+     "return visit in one year (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "E/M performed; an em_basis question is right; no performed_status question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [
+     "em_basis"
+    ],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A15-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nClinic note - return visit\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPatient status: established\nSite: office, POS 11\n\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\n\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\n\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\n\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\n\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Return in one year, or sooner if symptoms change.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Clinic note - return visit",
+     "Return in one year, or sooner if symptoms change."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "undocumented (no time, no MDM statement)",
+    "em_code_supported": "99213 (level not determinable from a stated basis)",
+    "future_planned": [
+     "return visit in one year (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "E/M performed; an em_basis question is right; no performed_status question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [
+     "em_basis"
+    ],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A16-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "pdf",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nHepatology follow-up note\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nOver two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black\nstools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites.\nExamination\nWeight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\nAssessment\nCirrhosis with new ascites, now decompensated.\nPlan\nStart spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet. Surveillance ultrasound in\nsix months.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Surveillance ultrasound in\nsix months."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "undocumented (no time, no MDM statement)",
+    "em_code_supported": "99213 (level not determinable from a stated basis)",
+    "future_planned": [
+     "ultrasound in six months (not a GI family)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "E/M performed; an em_basis question is right; no performed_status question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [
+     "em_basis"
+    ],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A16-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "pdf",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nHepatology follow-up note\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nOver two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black\nstools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites.\nExamination\nWeight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\nAssessment\nCirrhosis with new ascites, now decompensated.\nPlan\nStart spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet. Surveillance ultrasound in\nsix months.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Hepatology follow-up note",
+     "Surveillance ultrasound in\nsix months."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "undocumented (no time, no MDM statement)",
+    "em_code_supported": "99213 (level not determinable from a stated basis)",
+    "future_planned": [
+     "ultrasound in six months (not a GI family)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "E/M performed; an em_basis question is right; no performed_status question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [
+     "em_basis"
+    ],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A17-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "live",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Follow up in 3 months. Recheck labs next week.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Follow up in 3 months."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "undocumented (no time, no MDM statement)",
+    "em_code_supported": "99213 (level not determinable from a stated basis)",
+    "future_planned": [
+     "follow-up in 3 months (planned E/M)",
+     "labs next week (not a GI family)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "E/M performed; an em_basis question is right; no performed_status question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [
+     "em_basis",
+     "patient_status"
+    ],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A17-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "live",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Follow up in 3 months. Recheck labs next week.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "GI clinic follow-up",
+     "Follow up in 3 months."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "undocumented (no time, no MDM statement)",
+    "em_code_supported": "99213 (level not determinable from a stated basis)",
+    "future_planned": [
+     "follow-up in 3 months (planned E/M)",
+     "labs next week (not a GI family)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "E/M performed; an em_basis question is right; no performed_status question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [
+     "em_basis",
+     "patient_status"
+    ],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A18-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nGastroenterology\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPatient status: established\nSite: office, POS 11\n\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\n\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\n\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\n\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Return in one year, or sooner if symptoms change.\n\nFace-to-face time: 24 minutes, more than half of it spent counseling about diet, fluids and the expected course.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Return in one year, or sooner if symptoms change."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 24 min",
+    "em_code_supported": "99213",
+    "future_planned": [
+     "return visit in one year (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99213), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "24",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A18-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nGastroenterology\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPatient status: established\nSite: office, POS 11\n\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\n\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\n\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\n\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Return in one year, or sooner if symptoms change.\n\nFace-to-face time: 24 minutes, more than half of it spent counseling about diet, fluids and the expected course.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Gastroenterology",
+     "Return in one year, or sooner if symptoms change.",
+     "Face-to-face time: 24 minutes"
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 24 min",
+    "em_code_supported": "99213",
+    "future_planned": [
+     "return visit in one year (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99213), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "24",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A19-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "live",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nGastroenterology\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nOver two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites.\nExamination\nWeight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\nAssessment\nCirrhosis with new ascites, now decompensated.\nPlan\nStart spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet. Surveillance ultrasound in six months.\nPhysician time on the service date: 44 minutes, covering review of the results, the examination, counseling and documentation.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99215",
+    "evidence": [
+     "Surveillance ultrasound in six months."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 44 min",
+    "em_code_supported": "99215",
+    "future_planned": [
+     "ultrasound in six months (not a GI family)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99215), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "44",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A19-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "live",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nGastroenterology\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nOver two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites.\nExamination\nWeight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\nAssessment\nCirrhosis with new ascites, now decompensated.\nPlan\nStart spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet. Surveillance ultrasound in six months.\nPhysician time on the service date: 44 minutes, covering review of the results, the examination, counseling and documentation.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99215",
+    "evidence": [
+     "Gastroenterology",
+     "Surveillance ultrasound in six months.",
+     "Physician time on the service date: 44 minutes"
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 44 min",
+    "em_code_supported": "99215",
+    "future_planned": [
+     "ultrasound in six months (not a GI family)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99215), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "44",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A20-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nGastroenterology\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\n\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\n\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\n\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\n\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\n\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Return in one year, or sooner if symptoms change.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Return in one year, or sooner if symptoms change."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "undocumented (no time, no MDM statement)",
+    "em_code_supported": "99213 (level not determinable from a stated basis)",
+    "future_planned": [
+     "return visit in one year (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "E/M performed; an em_basis question is right; no performed_status question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [
+     "em_basis",
+     "patient_status"
+    ],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A20-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nGastroenterology\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\n\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\n\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\n\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\n\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\n\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Return in one year, or sooner if symptoms change.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Gastroenterology",
+     "Return in one year, or sooner if symptoms change."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "undocumented (no time, no MDM statement)",
+    "em_code_supported": "99213 (level not determinable from a stated basis)",
+    "future_planned": [
+     "return visit in one year (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "E/M performed; an em_basis question is right; no performed_status question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [
+     "em_basis",
+     "patient_status"
+    ],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A21-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "live",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nGastroenterology\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPatient status: established\nSite: office, POS 11\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Follow up in 3 months.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Follow up in 3 months."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "undocumented (no time, no MDM statement)",
+    "em_code_supported": "99213 (level not determinable from a stated basis)",
+    "future_planned": [
+     "follow-up in 3 months (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "E/M performed; an em_basis question is right; no performed_status question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. The note has no title or purpose naming the visit, but it documents an established-patient office encounter (status, POS 11, interval history, exam, assessment, plan): a coder reads a visit today.",
+   "verdict": {
+    "undocumented": [
+     "em_basis"
+    ],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A21-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "live",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nGastroenterology\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPatient status: established\nSite: office, POS 11\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Follow up in 3 months.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Gastroenterology",
+     "Follow up in 3 months."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "undocumented (no time, no MDM statement)",
+    "em_code_supported": "99213 (level not determinable from a stated basis)",
+    "future_planned": [
+     "follow-up in 3 months (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "E/M performed; an em_basis question is right; no performed_status question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. The note has no title or purpose naming the visit, but it documents an established-patient office encounter (status, POS 11, interval history, exam, assessment, plan): a coder reads a visit today.",
+   "verdict": {
+    "undocumented": [
+     "em_basis"
+    ],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A22-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "ocr",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL\nUSE\nSaltmarsh Valley Gastroenterology (fictional)\nGastroenterology office note\nPatient : Odalys Fairweather-Nkemelu (fictional)\nDate of birth : 1961-05-17\nVisit date : 2026-10-21\nProvider : Teodor Halvorsen-Abiola, MD (fictional)\nVisit type : return visit, established patient\nPlace of service : office (POS 11)\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory\nresults.\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g\ndaily and now has a soft bowel movement every one to two days\nwithout straining.  No rectal bleeding, weight loss or abdo-\nminal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without\ndistension.\nAssessment\nChronic functional constipation, well controlled on\nover-the-counter polyethylene glycol. Thyroid and calcium\ncauses excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to\neffect. Recheck labs next week. Repeat colonoscopy in 3 years.\nTotal time on the date of service : 32 minutes, including\nrecord review, examination, counseling and documentation.\nSigned : Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21\n17:55\n",
+   "cited": {
+    "code": "99214",
+    "evidence": [
+     "Recheck labs next week."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 32 min",
+    "em_code_supported": "99214",
+    "future_planned": [
+     "labs next week (not a GI family)",
+     "colonoscopy in 3 years (planned)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99214), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "32",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A22-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "ocr",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL\nUSE\nSaltmarsh Valley Gastroenterology (fictional)\nGastroenterology office note\nPatient : Odalys Fairweather-Nkemelu (fictional)\nDate of birth : 1961-05-17\nVisit date : 2026-10-21\nProvider : Teodor Halvorsen-Abiola, MD (fictional)\nVisit type : return visit, established patient\nPlace of service : office (POS 11)\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory\nresults.\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g\ndaily and now has a soft bowel movement every one to two days\nwithout straining.  No rectal bleeding, weight loss or abdo-\nminal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without\ndistension.\nAssessment\nChronic functional constipation, well controlled on\nover-the-counter polyethylene glycol. Thyroid and calcium\ncauses excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to\neffect. Recheck labs next week. Repeat colonoscopy in 3 years.\nTotal time on the date of service : 32 minutes, including\nrecord review, examination, counseling and documentation.\nSigned : Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21\n17:55\n",
+   "cited": {
+    "code": "99214",
+    "evidence": [
+     "Gastroenterology office note",
+     "Recheck labs next week.",
+     "Total time on the date of service : 32 minutes"
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 32 min",
+    "em_code_supported": "99214",
+    "future_planned": [
+     "labs next week (not a GI family)",
+     "colonoscopy in 3 years (planned)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99214), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "32",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A23-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "pdf",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nReturn visit note\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nOver two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black\nstools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites.\nExamination\nWeight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\nAssessment\nCirrhosis with new ascites, now decompensated.\nPlan\nStart spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet. Surveillance ultrasound in\nsix months.\nVisit time: 25 minutes.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Surveillance ultrasound in\nsix months."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 25 min",
+    "em_code_supported": "99213",
+    "future_planned": [
+     "ultrasound in six months (not a GI family)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99213), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "25",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A23-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "pdf",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nReturn visit note\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nOver two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black\nstools. Abdominal ultrasound on 2026-09-28 showed a nodular liver and a small amount of ascites.\nExamination\nWeight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\nAssessment\nCirrhosis with new ascites, now decompensated.\nPlan\nStart spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet. Surveillance ultrasound in\nsix months.\nVisit time: 25 minutes.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Return visit note",
+     "Surveillance ultrasound in\nsix months.",
+     "Visit time: 25 minutes."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 25 min",
+    "em_code_supported": "99213",
+    "future_planned": [
+     "ultrasound in six months (not a GI family)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99213), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "25",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A24-ev-plan",
+   "group": "A-visit+followup",
+   "layout": "ocr",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL\nUSE\nSaltmarsh Valley Gastroenterology (fictional)\nFollow-up visit\nPatient : Odalys Fairweather-Nkemelu (fictional)\nDate of birth : 1961-05-17\nVisit date : 2026-10-21\nProvider : Teodor Halvorsen-Abiola, MD (fictional)\nPatient status : established\nSite : office, POS 11\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory\nresults.\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g\ndaily and now has a soft bowel movement every one to two days\nwithout straining.  No rectal bleeding, weight loss or abdo-\nminal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without\ndistension.\nAssessment\nChronic functional constipation, well controlled on\nover-the-counter polyethylene glycol. Thyroid and calcium\ncauses excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to\neffect. Return in one year, or sooner if symptoms change.\nClinician time today : 35 minutes, including counseling and\ndocumentation.\nSigned : Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21\n17:55\n",
+   "cited": {
+    "code": "99214",
+    "evidence": [
+     "Return in one year, or sooner if symptoms change."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 35 min",
+    "em_code_supported": "99214",
+    "future_planned": [
+     "return visit in one year (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99214), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "35",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "A24-ev-typ",
+   "group": "A-visit+followup",
+   "layout": "ocr",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL\nUSE\nSaltmarsh Valley Gastroenterology (fictional)\nFollow-up visit\nPatient : Odalys Fairweather-Nkemelu (fictional)\nDate of birth : 1961-05-17\nVisit date : 2026-10-21\nProvider : Teodor Halvorsen-Abiola, MD (fictional)\nPatient status : established\nSite : office, POS 11\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory\nresults.\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g\ndaily and now has a soft bowel movement every one to two days\nwithout straining.  No rectal bleeding, weight loss or abdo-\nminal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without\ndistension.\nAssessment\nChronic functional constipation, well controlled on\nover-the-counter polyethylene glycol. Thyroid and calcium\ncauses excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to\neffect. Return in one year, or sooner if symptoms change.\nClinician time today : 35 minutes, including counseling and\ndocumentation.\nSigned : Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21\n17:55\n",
+   "cited": {
+    "code": "99214",
+    "evidence": [
+     "Follow-up visit",
+     "Return in one year, or sooner if symptoms change.",
+     "Clinician time today : 35 minutes"
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 35 min",
+    "em_code_supported": "99214",
+    "future_planned": [
+     "return visit in one year (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99214), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "35",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "W01-ev-plan",
+   "group": "W-table",
+   "layout": "word-table",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nNote type | Clinic note - return visit\nVisit date | 2026-10-21\nPatient status | Established\nPlace of service | Office (POS 11)\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily without straining.\nExamination\nAbdomen soft and non-tender.\nAssessment\nChronic functional constipation, controlled.\nPlan\nContinue polyethylene glycol. Return in one year.\nFace-to-face time: 24 minutes.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Return in one year."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 24 min",
+    "em_code_supported": "99213",
+    "future_planned": [
+     "return visit in one year (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99213), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [
+     "patient_status"
+    ],
+    "time_minutes": "24",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "W02-ev-plan",
+   "group": "W-table",
+   "layout": "word-table",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nEncounter | Hepatology follow-up note\nDate of service | 2026-10-21\nPlace of service | Office (POS 11)\nPhysician time on the service date | 44 minutes\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily without straining.\nExamination\nAbdomen soft and non-tender.\nAssessment\nChronic functional constipation, controlled.\nPlan\nDiuretics as discussed. Surveillance ultrasound in six months.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99215",
+    "evidence": [
+     "Surveillance ultrasound in six months."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 44 min",
+    "em_code_supported": "99215",
+    "future_planned": [
+     "ultrasound in six months (not GI)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99215), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [
+     "patient_status"
+    ],
+    "time_minutes": "44",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "W03-ev-plan",
+   "group": "W-table",
+   "layout": "word-table",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nVisit type | Return visit\nDate of service | 2026-10-21\nPlace of service | Office (POS 11)\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily without straining.\nExamination\nAbdomen soft and non-tender.\nAssessment\nChronic functional constipation, controlled.\nPlan\nContinue polyethylene glycol. Follow up in 3 months.\nTotal time on the date of service: 32 minutes.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99214",
+    "evidence": [
+     "Follow up in 3 months."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 32 min",
+    "em_code_supported": "99214",
+    "future_planned": [
+     "follow-up in 3 months (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99214), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [
+     "patient_status"
+    ],
+    "time_minutes": "32",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "W04-ev-plan",
+   "group": "W-table",
+   "layout": "word-table",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nField | Value\nDate of service | 2026-10-21\nPlace of service | Office (POS 11)\nPatient | Established patient\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily without straining.\nExamination\nAbdomen soft and non-tender.\nAssessment\nChronic functional constipation, controlled.\nPlan\nContinue polyethylene glycol. Return in one year.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Return in one year."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "undocumented (no time, no MDM statement)",
+    "em_code_supported": "99213 (level not determinable from a stated basis)",
+    "future_planned": [
+     "return visit in one year (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "E/M performed; an em_basis question is right; no performed_status question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. Nothing but the patient status names the encounter; the note documents history, exam, assessment and plan.",
+   "verdict": {
+    "undocumented": [
+     "em_basis"
+    ],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "H01-ev-plan",
+   "group": "H-history-control",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nOffice follow-up visit\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPatient status: established. Last seen in this clinic on 2026-03-02.\nPlace of service: office (POS 11)\n\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\n\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\n\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\n\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\n\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Return in 6 months.\n\nTotal time on the date of service: 32 minutes.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99214",
+    "evidence": [
+     "Return in 6 months."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 32 min",
+    "em_code_supported": "99214",
+    "future_planned": [
+     "return in 6 months (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99214), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. The 2026-03-02 visit is historical.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "32",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "H02-ev-plan",
+   "group": "H-history-control",
+   "layout": "live",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nClinic note - return visit\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPrevious office visit: 2026-08-27.\nPlace of service: office (POS 11)\nEstablished patient\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Return in one year.\nFace-to-face time: 24 minutes.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Return in one year."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 24 min",
+    "em_code_supported": "99213",
+    "future_planned": [
+     "return in one year (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99213), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. The 2026-08-27 office visit is historical.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "24",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "H03-ev-hist",
+   "group": "H-history-control",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nClinic note - return visit\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPatient status: established\nSite: office, POS 11\n\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\n\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\n\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\n\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\n\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Return in one year.\n\nFace-to-face time: 24 minutes.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Since the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 24 min",
+    "em_code_supported": "99213",
+    "future_planned": [
+     "return in one year (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99213), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "24",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "P01-ev-plan",
+   "group": "P-planned-only",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nAppointment confirmation\n\nDate: 2026-10-20\nPatient: Odalys Fairweather-Nkemelu (fictional)\n\nDear Ms Fairweather-Nkemelu,\nYour follow-up office visit with Dr Halvorsen-Abiola is scheduled for 2026-11-18 at 09:30. Please bring your medication list and arrive 15 minutes early.\n\nSaltmarsh Valley Gastroenterology scheduling desk (fictional)\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Your follow-up office visit with Dr Halvorsen-Abiola is scheduled for 2026-11-18 at 09:30."
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "office visit (planned)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "the E/M code is NOT ready: excluded as planned, or held; never performed"
+   },
+   "review": "The document is about a visit that has not happened yet; nothing documents an encounter today.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "P02-ev-row",
+   "group": "P-planned-only",
+   "layout": "word-table",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nAppointment reminder\nPatient | Odalys Fairweather-Nkemelu (fictional)\nVisit type | Established patient office visit\nAppointment date | 2026-11-18\nArrival | 15 minutes before the appointment\nPlace of service | Office (POS 11)\nPlease call to reschedule if you cannot attend.\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Visit type | Established patient office visit"
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "office visit (planned)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "the E/M code is NOT ready: excluded as planned, or held; never performed"
+   },
+   "review": "The document is about a visit that has not happened yet; nothing documents an encounter today.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "P03-ev-plan",
+   "group": "P-planned-only",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nPre-visit planning note\n\nUpcoming return visit: 2026-11-18\nPatient: Odalys Fairweather-Nkemelu (fictional)\n\nAgenda for the visit: review the thyroid and calcium results and the bowel diary.\nLabs to be drawn on 2026-11-11.\nReturn visit to be confirmed by the front desk.\n\nPrepared by: clinic nurse (fictional), 2026-10-29\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Upcoming return visit: 2026-11-18"
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "office visit (planned)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "the E/M code is NOT ready: excluded as planned, or held; never performed"
+   },
+   "review": "The document is about a visit that has not happened yet; nothing documents an encounter today.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "P04-ev-plan",
+   "group": "P-planned-only",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nRecall letter\n\nDate: 2026-10-20\n\nOur records show you are due for your next clinic visit. Please call to book a follow-up appointment in the next month.\n\nRecall office (fictional)\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Our records show you are due for your next clinic visit."
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "office visit (planned)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "the E/M code is NOT ready: excluded as planned, or held; never performed"
+   },
+   "review": "The document is about a visit that has not happened yet; nothing documents an encounter today.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "P05-ev-plan",
+   "group": "P-planned-only",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nReferral letter\n\nDate: 2026-10-20\n\nPlease see Ms Fairweather-Nkemelu (fictional) for a new patient consultation for dysphagia. She will be scheduled at your earliest availability.\n\nReferring physician (fictional)\n",
+   "cited": {
+    "code": "99203",
+    "evidence": [
+     "Please see Ms Fairweather-Nkemelu (fictional) for a new patient consultation for dysphagia."
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "office visit (planned)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "the E/M code is NOT ready: excluded as planned, or held; never performed"
+   },
+   "review": "The document is about a visit that has not happened yet; nothing documents an encounter today.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "P06-ev-title",
+   "group": "P-planned-only",
+   "layout": "live",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Gastroenterology (fictional)\nScheduled visit: return visit\nAppointment date: 2026-11-18\nPatient: Odalys Fairweather-Nkemelu (fictional)\nPlease arrive 15 minutes early.\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Scheduled visit: return visit"
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "office visit (planned)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "the E/M code is NOT ready: excluded as planned, or held; never performed"
+   },
+   "review": "The document is about a visit that has not happened yet; nothing documents an encounter today.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "P07-ev-title",
+   "group": "P-planned-only",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nClinic note - return visit\n\nVisit date: 2026-11-18\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\n\nNote started in advance of the visit; to be completed on the day.\n\nPlan\nReturn visit to review laboratory results.\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Clinic note - return visit",
+     "Return visit to review laboratory results."
+    ]
+   },
+   "expected": {
+    "em_today": "uncertain",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "the 2026-11-18 visit"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "held (not ready): the note says it was started in advance and is not completed"
+   },
+   "review": "A note template opened before the visit: the visit may not have happened. A coder would not code it.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "C01-ev-plan",
+   "group": "C-procedure+followup",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Endoscopy Unit (fictional)\nColonoscopy report\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nProcedure date: 2026-10-21\nEndoscopist: Teodor Halvorsen-Abiola, MD (fictional)\n\nIndication\nSurveillance after adenomas removed in 2021.\n\nProcedure\nThe adult colonoscope was advanced to the cecum, identified by the appendiceal orifice and the ileocecal valve. Boston Bowel Preparation Scale score 8. One 4 mm sigmoid polyp was removed with a cold snare. Withdrawal time 9 minutes.\n\nImpression\nOne small sigmoid polyp removed.\n\nPlan\nAwait pathology. Follow up in clinic in 2 weeks to review pathology.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 10:12\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Follow up in clinic in 2 weeks to review pathology."
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "clinic follow-up in 2 weeks (planned E/M)"
+    ],
+    "historical": [
+     "adenomas 2021"
+    ],
+    "procedures_today": [
+     "colonoscopy to the cecum with cold snare polypectomy (45385)"
+    ],
+    "expected_engine": "colonoscopy performed; no office E/M performed today; an E/M code would not be ready"
+   },
+   "review": "A procedure report: the follow-up is a later occurrence. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {
+     "gi.colonoscopy": "performed"
+    },
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "C02-ev-plan",
+   "group": "C-procedure+followup",
+   "layout": "live",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Endoscopy Unit (fictional)\nColonoscopy report\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nProcedure date: 2026-10-21\nEndoscopist: Teodor Halvorsen-Abiola, MD (fictional)\nIndication\nSurveillance after adenomas removed in 2021.\nProcedure\nThe adult colonoscope was advanced to the cecum, identified by the appendiceal orifice and the ileocecal valve. Boston Bowel Preparation Scale score 8. One 4 mm sigmoid polyp was removed with a cold snare. Withdrawal time 9 minutes.\nImpression\nOne small sigmoid polyp removed.\nPlan\nAwait pathology. Return office visit in 4 weeks.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 10:12\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Return office visit in 4 weeks."
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "return office visit in 4 weeks (planned E/M)"
+    ],
+    "historical": [
+     "adenomas 2021"
+    ],
+    "procedures_today": [
+     "colonoscopy to the cecum with cold snare polypectomy (45385)"
+    ],
+    "expected_engine": "colonoscopy performed; no office E/M performed today; an E/M code would not be ready"
+   },
+   "review": "A procedure report: the follow-up is a later occurrence. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {
+     "gi.colonoscopy": "performed"
+    },
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "C03-ev-plan",
+   "group": "C-procedure+followup",
+   "layout": "pdf",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Endoscopy Unit (fictional)\nColonoscopy report\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nProcedure date: 2026-10-21\nEndoscopist: Teodor Halvorsen-Abiola, MD (fictional)\nIndication\nSurveillance after adenomas removed in 2021.\nProcedure\nThe adult colonoscope was advanced to the cecum, identified by the appendiceal orifice and the ileocecal\nvalve. Boston Bowel Preparation Scale score 8. One 4 mm sigmoid polyp was removed with a cold snare.\nWithdrawal time 9 minutes.\nImpression\nOne small sigmoid polyp removed.\nPlan\nAwait pathology. Repeat colonoscopy in 3 years.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 10:12\n",
+   "cited": {
+    "code": "45385",
+    "evidence": [
+     "Repeat colonoscopy in 3 years."
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "colonoscopy in 3 years (planned repeat)"
+    ],
+    "historical": [
+     "adenomas 2021"
+    ],
+    "procedures_today": [
+     "colonoscopy to the cecum with cold snare polypectomy (45385)"
+    ],
+    "expected_engine": "colonoscopy performed; no office E/M performed today; an E/M code would not be ready"
+   },
+   "review": "A procedure report: the follow-up is a later occurrence. The planned repeat must not doubt today's colonoscopy.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {
+     "gi.colonoscopy": "performed"
+    },
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "C04-ev-plan",
+   "group": "C-procedure+followup",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Endoscopy Unit (fictional)\nColonoscopy report\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nProcedure date: 2026-10-21\nPlace of service: office (POS 11)\nEstablished patient\nEndoscopist: Teodor Halvorsen-Abiola, MD (fictional)\n\nIndication\nSurveillance after adenomas removed in 2021.\n\nProcedure\nThe adult colonoscope was advanced to the cecum, identified by the appendiceal orifice and the ileocecal valve. Boston Bowel Preparation Scale score 8. One 4 mm sigmoid polyp was removed with a cold snare. Withdrawal time 9 minutes.\n\nImpression\nOne small sigmoid polyp removed.\n\nPlan\nAwait pathology. Follow-up visit in 2 weeks.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 10:12\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Follow-up visit in 2 weeks."
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "follow-up visit in 2 weeks (planned E/M)"
+    ],
+    "historical": [
+     "adenomas 2021"
+    ],
+    "procedures_today": [
+     "colonoscopy to the cecum with cold snare polypectomy (45385)"
+    ],
+    "expected_engine": "colonoscopy performed; no office E/M performed today; an E/M code would not be ready"
+   },
+   "review": "A procedure report: the follow-up is a later occurrence. An in-office procedure for an established patient: still no separate E/M documented.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {
+     "gi.colonoscopy": "performed"
+    },
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "C05-ev-plan",
+   "group": "C-procedure+followup",
+   "layout": "ocr",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL\nUSE\nSaltmarsh Valley Endoscopy Unit (fictional)\nColonoscopy report\nPatient : Odalys Fairweather-Nkemelu (fictional)\nDate of birth : 1961-05-17\nProcedure date : 2026-10-21\nEndoscopist : Teodor Halvorsen-Abiola, MD (fictional)\nIndication\nSurveillance after adenomas removed in 2021.\nProcedure\nThe adult colonoscope was advanced to the cecum, identified by\nthe appendiceal orifice and the ileocecal valve.  Boston Bowel Prepa-\nration Scale score 8. One 4 mm sigmoid polyp was removed\nwith a cold snare. Withdrawal time 9 minutes.\nImpression\nOne small sigmoid polyp removed.\nPlan\nAwait pathology. Repeat colonoscopy in 3 years. Clinic\nfollow-up in 2 weeks.\nSigned : Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21\n10:12\n",
+   "cited": {
+    "code": "45385",
+    "evidence": [
+     "Repeat colonoscopy in 3 years."
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "colonoscopy in 3 years (planned repeat)",
+     "clinic follow-up in 2 weeks (planned E/M)"
+    ],
+    "historical": [
+     "adenomas 2021"
+    ],
+    "procedures_today": [
+     "colonoscopy to the cecum with cold snare polypectomy (45385)"
+    ],
+    "expected_engine": "colonoscopy performed; no office E/M performed today; an E/M code would not be ready"
+   },
+   "review": "A procedure report: the follow-up is a later occurrence. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {
+     "gi.colonoscopy": "performed"
+    },
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "C06-ev-plan",
+   "group": "C-procedure+followup",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nOffice procedure note - flexible sigmoidoscopy\n\nDate of service: 2026-10-21\nPlace of service: office (POS 11)\nEstablished patient\n\nIndication\nUlcerative proctosigmoiditis, assessment of mucosal healing.\n\nProcedure\nThe flexible sigmoidoscope was advanced to 40 cm. Mild erythema in the rectum; biopsies were taken with cold forceps.\n\nPlan\nRepeat flexible sigmoidoscopy in 8 weeks. Return visit in 2 weeks to review the biopsies.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 11:40\n",
+   "cited": {
+    "code": "45331",
+    "evidence": [
+     "Repeat flexible sigmoidoscopy in 8 weeks."
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "flexible sigmoidoscopy in 8 weeks (planned repeat)",
+     "return visit in 2 weeks (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [
+     "flexible sigmoidoscopy to 40 cm with biopsy (45331)"
+    ],
+    "expected_engine": "flex sig performed; the planned repeat never doubts it; no E/M"
+   },
+   "review": "In-office procedure note; the title names an office procedure note, not an office visit.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {
+     "gi.flex_sig": "performed"
+    },
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "S01-ev-visit",
+   "group": "S-visit-names-future-service",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nGastroenterology\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\nEstablished patient\n\nOffice visit to discuss the colonoscopy scheduled for 2026-11-18\nConstipation follow-up and a review of recent laboratory results.\n\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\n\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\n\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\n\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Colonoscopy scheduled for 2026-11-18.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Office visit to discuss the colonoscopy scheduled for 2026-11-18"
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "undocumented (no time, no MDM statement)",
+    "em_code_supported": "99213 (level not determinable from a stated basis)",
+    "future_planned": [
+     "colonoscopy 2026-11-18 (planned)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "E/M performed; an em_basis question is right; no performed_status question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. The visit statement names a future colonoscopy; the colonoscopy is planned, the visit is today's.",
+   "verdict": {
+    "undocumented": [
+     "em_basis"
+    ],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "S02-ev-plan",
+   "group": "S-visit-names-future-service",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nOffice follow-up visit\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPlace of service: office (POS 11)\nEstablished patient\n\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\n\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\n\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\n\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\n\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Colonoscopy scheduled for 2026-11-18. Return visit after the colonoscopy.\n\nTotal time on the date of service: 32 minutes.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99214",
+    "evidence": [
+     "Colonoscopy scheduled for 2026-11-18."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 32 min",
+    "em_code_supported": "99214",
+    "future_planned": [
+     "colonoscopy 2026-11-18 (planned)",
+     "return visit after the colonoscopy (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [],
+    "expected_engine": "ready (99214), no performed_status or em_basis question"
+   },
+   "review": "Today's visit is documented by the note's own visit markers (title / visit type / purpose of today's visit / time on the date). The plan's follow-up is a later occurrence, never doubt about today. ",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "32",
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "F01-ev-time",
+   "group": "F-false-positive-probe",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Endoscopy Unit (fictional)\nUpper endoscopy report\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nProcedure date: 2026-10-21\nEndoscopist: Teodor Halvorsen-Abiola, MD (fictional)\n\nIndication\nDysphagia.\n\nProcedure\nEGD: the gastroscope was advanced to the second portion of the duodenum. A Schatzki ring was seen. Cold forceps biopsies were taken from the distal esophagus.\n\nPhysician time: 25 minutes.\n\nImpression\nSchatzki ring; biopsies taken.\n\nPlan\nAwait pathology. Follow-up visit in 2 weeks.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 10:12\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Physician time: 25 minutes."
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "follow-up visit (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [
+     "EGD to D2 with cold forceps biopsy (43239)"
+    ],
+    "expected_engine": "EGD performed; NO office E/M performed or held as a same-day visit; an E/M code is not ready"
+   },
+   "review": "The physician time of a procedure report is the procedure's time, not an office visit.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {
+     "gi.egd": "performed"
+    },
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "F02-ev-time",
+   "group": "F-false-positive-probe",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Endoscopy Unit (fictional)\nUpper endoscopy report\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nProcedure date: 2026-10-21\nEndoscopist: Teodor Halvorsen-Abiola, MD (fictional)\n\nIndication\nDysphagia.\n\nProcedure\nEGD: the gastroscope was advanced to the second portion of the duodenum. A Schatzki ring was seen. Cold forceps biopsies were taken from the distal esophagus.\n\nTotal physician time for the procedure: 25 minutes.\n\nImpression\nSchatzki ring; biopsies taken.\n\nPlan\nAwait pathology. Follow-up visit in 2 weeks.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 10:12\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Total physician time for the procedure: 25 minutes."
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "follow-up visit (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [
+     "EGD to D2 with cold forceps biopsy (43239)"
+    ],
+    "expected_engine": "EGD performed; NO office E/M performed or held as a same-day visit; an E/M code is not ready"
+   },
+   "review": "Total physician time for the procedure is the procedure's.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {
+     "gi.egd": "performed"
+    },
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "F03-ev-time",
+   "group": "F-false-positive-probe",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Endoscopy Unit (fictional)\nUpper endoscopy report\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nProcedure date: 2026-10-21\nEndoscopist: Teodor Halvorsen-Abiola, MD (fictional)\n\nIndication\nDysphagia.\n\nProcedure\nEGD: the gastroscope was advanced to the second portion of the duodenum. A Schatzki ring was seen. Cold forceps biopsies were taken from the distal esophagus.\n\nProvider time for sedation: 20 minutes.\n\nImpression\nSchatzki ring; biopsies taken.\n\nPlan\nAwait pathology. Follow-up visit in 2 weeks.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 10:12\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Provider time for sedation: 20 minutes."
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "follow-up visit (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [
+     "EGD to D2 with cold forceps biopsy (43239)"
+    ],
+    "expected_engine": "EGD performed; NO office E/M performed or held as a same-day visit; an E/M code is not ready"
+   },
+   "review": "Sedation time.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {
+     "gi.egd": "performed"
+    },
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "F04-ev-time",
+   "group": "F-false-positive-probe",
+   "layout": "live",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Endoscopy Unit (fictional)\nUpper endoscopy report\nPatient: Odalys Fairweather-Nkemelu (fictional)\nProcedure date: 2026-10-21\nEndoscopist: Teodor Halvorsen-Abiola, MD (fictional)\nIndication\nDysphagia.\nProcedure\nEGD: the gastroscope was advanced to the second portion of the duodenum. A Schatzki ring was seen. Cold forceps biopsies were taken from the distal esophagus.\nFace-to-face time with the patient and family before the procedure: 15 minutes.\nImpression\nSchatzki ring; biopsies taken.\nPlan\nAwait pathology. Follow-up visit in 2 weeks.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 10:12\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Face-to-face time with the patient and family before the procedure: 15 minutes."
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "follow-up visit (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [
+     "EGD to D2 with cold forceps biopsy (43239)"
+    ],
+    "expected_engine": "EGD performed; NO office E/M performed or held as a same-day visit; an E/M code is not ready"
+   },
+   "review": "Pre-procedure discussion on a procedure day: no separately identifiable E/M is documented.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {
+     "gi.egd": "performed"
+    },
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "F05-ev-title",
+   "group": "F-false-positive-probe",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Endoscopy Unit (fictional)\nEndoscopy follow-up note\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nProcedure date: 2026-10-21\nEndoscopist: Teodor Halvorsen-Abiola, MD (fictional)\n\nIndication\nDysphagia.\n\nProcedure\nEGD: the gastroscope was advanced to the second portion of the duodenum. A Schatzki ring was seen. Cold forceps biopsies were taken from the distal esophagus.\n\nWithdrawal time: not applicable.\n\nImpression\nSchatzki ring; biopsies taken.\n\nPlan\nAwait pathology. Follow-up visit in 2 weeks.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 10:12\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Endoscopy follow-up note"
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "follow-up visit (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [
+     "EGD to D2 with cold forceps biopsy (43239)"
+    ],
+    "expected_engine": "EGD performed; NO office E/M performed or held as a same-day visit; an E/M code is not ready"
+   },
+   "review": "A procedure report whose title says \"follow-up note\" (an unusual title).",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {
+     "gi.egd": "performed"
+    },
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "F06-ev-time",
+   "group": "F-false-positive-probe",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Motility Laboratory (fictional)\nHigh-resolution esophageal manometry interpretation\n\nStudy date: 2026-10-21\nInterpreting physician: Teodor Halvorsen-Abiola, MD (fictional)\n\nFindings\nIntegrated relaxation pressure 9 mmHg; 10 of 10 swallows ineffective.\n\nPhysician time on the interpretation: 20 minutes.\n\nImpression\nIneffective esophageal motility.\n\nPlan\nFollow up in clinic in 4 weeks.\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Physician time on the interpretation: 20 minutes."
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "clinic follow-up in 4 weeks (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [
+     "esophageal manometry interpretation (91010-26 or similar)"
+    ],
+    "expected_engine": "no office E/M performed; an E/M code is not ready"
+   },
+   "review": "A study interpretation; the time is the interpretation's.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "F07-ev-title",
+   "group": "F-false-positive-probe",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Gastroenterology (fictional)\nClinic note - return visit\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nVisit date: 2026-10-21\nProvider: Teodor Halvorsen-Abiola, MD (fictional)\nPatient status: established\nSite: office, POS 11\n\nPurpose of today's visit\nConstipation follow-up and a review of recent laboratory results.\n\nInterval history\nSince the last visit she has taken polyethylene glycol 17 g daily and now has a soft bowel movement every one to two days without straining. No rectal bleeding, weight loss or abdominal pain.\n\nExamination\nWeight stable at 68 kg. Abdomen soft and non-tender, without distension.\n\nAssessment\nChronic functional constipation, well controlled on over-the-counter polyethylene glycol. Thyroid and calcium causes excluded.\n\nProcedure\nAnoscopy was performed and two internal hemorrhoids were banded.\n\nPlan\nContinue polyethylene glycol 17 g daily and adjust the dose to effect. Return in one year.\n\nFace-to-face time: 24 minutes.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 17:55\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Clinic note - return visit",
+     "Face-to-face time: 24 minutes."
+    ]
+   },
+   "expected": {
+    "em_today": "performed",
+    "em_basis": "time: 24 min",
+    "em_code_supported": "99213 with modifier 25 only if separately identifiable; 46221 for the banding",
+    "future_planned": [
+     "return in one year (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [
+     "anoscopy with hemorrhoid banding (46221)"
+    ],
+    "expected_engine": "E/M held for the same-day procedure rule (separately identifiable E/M not documented) - never released by the title marker alone"
+   },
+   "review": "An office visit with a same-day procedure: the E/M needs a separately identifiable statement; the time alone is the visit's.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": "24",
+    "same_day_procedure": true,
+    "procedures_today": {},
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "F08-ev-time",
+   "group": "F-false-positive-probe",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Endoscopy Unit (fictional)\nUpper endoscopy report\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nProcedure date: 2026-10-21\nEndoscopist: Teodor Halvorsen-Abiola, MD (fictional)\n\nIndication\nDysphagia.\n\nProcedure\nEGD: the gastroscope was advanced to the second portion of the duodenum. A Schatzki ring was seen. Cold forceps biopsies were taken from the distal esophagus.\n\nPhysician time on the date of service: 35 minutes, including the procedure and the discussion of the findings with the patient.\n\nImpression\nSchatzki ring; biopsies taken.\n\nPlan\nAwait pathology. Follow-up visit in 2 weeks.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 10:12\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Physician time on the date of service: 35 minutes, including the procedure and the discussion of the findings with the patient."
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "follow-up visit (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [
+     "EGD to D2 with cold forceps biopsy (43239)"
+    ],
+    "expected_engine": "EGD performed; NO office E/M performed or held as a same-day visit; an E/M code is not ready"
+   },
+   "review": "Time on the procedure day that includes the procedure: no separately identifiable E/M.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {
+     "gi.egd": "performed"
+    },
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "F09-ev-time",
+   "group": "F-false-positive-probe",
+   "layout": "plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaltmarsh Valley Endoscopy Unit (fictional)\nUpper endoscopy report\n\nPatient: Odalys Fairweather-Nkemelu (fictional)\nProcedure date: 2026-10-21\nEndoscopist: Teodor Halvorsen-Abiola, MD (fictional)\n\nIndication\nDysphagia.\n\nProcedure\nEGD: the gastroscope was advanced to the second portion of the duodenum. A Schatzki ring was seen. Cold forceps biopsies were taken from the distal esophagus.\n\nTotal time on the date of service: 35 minutes, including the procedure and the discussion of the findings with the patient.\n\nImpression\nSchatzki ring; biopsies taken.\n\nPlan\nAwait pathology. Follow-up visit in 2 weeks.\n\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 10:12\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "Total time on the date of service: 35 minutes, including the procedure and the discussion of the findings with the patient."
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "follow-up visit (planned E/M)"
+    ],
+    "historical": [],
+    "procedures_today": [
+     "EGD to D2 with cold forceps biopsy (43239)"
+    ],
+    "expected_engine": "EGD performed; NO office E/M performed or held as a same-day visit; an E/M code is not ready"
+   },
+   "review": "The same statement in the wording the head already reads as E/M time.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {
+     "gi.egd": "performed"
+    },
+    "service_date_conflict": null
+   }
+  },
+  {
+   "id": "F10-ev-title",
+   "group": "F-false-positive-probe",
+   "layout": "live",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaltmarsh Valley Endoscopy Unit (fictional)\nColonoscopy report\nPatient: Odalys Fairweather-Nkemelu (fictional)\nDate of birth: 1961-05-17\nProcedure date: 2026-10-21\nEndoscopist: Teodor Halvorsen-Abiola, MD (fictional)\nIndication\nSurveillance after adenomas removed in 2021.\nProcedure\nThe adult colonoscope was advanced to the cecum, identified by the appendiceal orifice and the ileocecal valve. Boston Bowel Preparation Scale score 8. One 4 mm sigmoid polyp was removed with a cold snare. Withdrawal time 9 minutes.\nImpression\nOne small sigmoid polyp removed.\nPlan\nAwait pathology.\nClinic follow-up\nIn 2 weeks to review pathology.\nSigned: Teodor Halvorsen-Abiola, MD (fictional), 2026-10-21 10:12\n",
+   "cited": {
+    "code": "99213",
+    "evidence": [
+     "In 2 weeks to review pathology."
+    ]
+   },
+   "expected": {
+    "em_today": "not_performed",
+    "em_basis": "n/a",
+    "em_code_supported": "none",
+    "future_planned": [
+     "clinic follow-up in 2 weeks (planned E/M)"
+    ],
+    "historical": [
+     "adenomas 2021"
+    ],
+    "procedures_today": [
+     "colonoscopy to the cecum with cold snare polypectomy (45385)"
+    ],
+    "expected_engine": "colonoscopy performed; no office E/M performed today; an E/M code would not be ready"
+   },
+   "review": "A procedure report: the follow-up is a later occurrence. A \"Clinic follow-up\" heading in the plan is a later visit.",
+   "verdict": {
+    "undocumented": [],
+    "time_minutes": null,
+    "same_day_procedure": false,
+    "procedures_today": {
+     "gi.colonoscopy": "performed"
+    },
+    "service_date_conflict": null
+   }
+  }
+ ]
+}
