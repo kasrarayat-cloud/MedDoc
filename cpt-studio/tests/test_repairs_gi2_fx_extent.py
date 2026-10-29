@@ -5,22 +5,26 @@ Synthetic data only; routing is a pure function (no database, no provider).
 
 - EXT-R1 (studio/gi/sections.py): a narrative under a service's stand-alone heading inside an indication was released
   as today's report although today's report followed under a later heading of another kind ("Today:", "Examination",
-  "Impression", "Results:" ...). A later heading whose section narrates an examination's course (cues.STARTED), or whose
-  own label says today, now keeps the part held.
+  "Impression", "Results:" ...). From the first heading after the part, an examination's course (cues.COURSE), an act
+  in a section that is no impression, assessment or plan, or a heading whose own label says today now keeps the part
+  held; so does a second line of the same service heading a part between the same headings.
 - EXT-R2 (sections.py): a released part ran over a plain line ("Comparison with the prior report", "Colonoscopy on
   2026-10-20") into a second narrative. A label-like line standing between two statements of what was done, or a
-  landmark the part both reaches and denies (or that later text denies), now keeps the part held.
+  landmark the part both reaches and denies (or that later text denies; read over a PDF's soft-wrapped lines), now
+  keeps the part held.
 - EXT-R3 (sections.py): an intent clause after the performance statement left the indication and was lost. A part
   that states an intent anywhere is no longer released.
 - EXT-R4 (studio/gi/detect.py): a reach to a depth was read as the extent although a deeper landmark of the same family
   was named before it ("Normal stomach and duodenum. The endoscope was then passed to 35 cm in the distal esophagus").
   A deeper landmark named anywhere in the family's text now makes the depth a waypoint.
 - EXT-R5 (detect.py): a dated earlier reach to a depth escaped the time hold its plain twin gets, because the date stands
-  further from the landmark. The depth itself must read as today's too; and a reach to a depth beyond a landmark the
-  family's text says could not be passed is no extent.
+  further from the landmark. The depth itself must read as today's too, nothing in the reach's clause before it may put
+  it at another time (a historical or planned cue, a date that is not the day's, or an earlier-occasion word of
+  cues.HISTORICAL_PRE: "At the previous attempt"), and a reach beyond a landmark the family's text says could not be
+  passed is no extent.
 - EXT-R6 (studio/gi/cues.py): adverbs saying the advance failed or fell short ("unsuccessfully", "ineffectively",
-  "partially", "hardly") passed as auxiliaries. They are no longer auxiliaries; the failing ones are read by the denial
-  twin.
+  "partially", "hardly") passed as auxiliaries. They are no longer auxiliaries, before the active form's verb either;
+  such a reach is held, not read as a denial.
 - A3 (the lens's observation; sections.py): a procedure line naming an earlier occurrence ("Procedures: Colonoscopy 2019
   (tubular adenoma).", "prior colonoscopy", "Colonoscopy on 03/14/2024") declared that service as the report's own.
 
