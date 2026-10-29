@@ -565,13 +565,17 @@ class TableTests(unittest.TestCase):
         self.assertNotIn(status(dated, 'gi.egd', DAY20), ('performed', 'incomplete'))
 
     def test_the_summary_label_needs_an_examination_column(self):
-        # an office note's summary of an outside report's findings names no examination per row: no procedure section
+        # an office note's summary of an outside report's findings names no examination per row: no procedure section, so
+        # the colonoscopy the note talks about is not read as done today (with the section: performed, extent cecum)
         office = SYNTHETIC + ('Harbor View Gastroenterology (fictional)\nOffice Visit - progress note\nDate of service: '
                               '2026-10-21\nPlace of service: office (POS 11)\nVisit type: established patient\nReason for '
                               'visit\nReview of an outside report.\nProcedure summary\nFinding | Location | Furthest point '
-                              'reached\nNormal mucosa | Colon | Cecum\nThe outside colonoscopy was discussed.\nAssessment and '
-                              'plan\nRepeat colonoscopy in 3 years. Medical decision making: low.\n')
-        self.assertEqual(status(office, 'gi.colonoscopy', date(2026, 10, 21)), 'historical')
+                              'reached\nNormal mucosa | Colon | Cecum\n{line}\nAssessment and plan\n{plan} Medical decision '
+                              'making: low.\n')
+        findings = office.format(line='Colonoscopy findings were discussed with the patient.', plan='Repeat in 3 years.')
+        self.assertEqual(reading(findings, date(2026, 10, 21))['gi.colonoscopy'][:2], ('uncertain', None))
+        reviewed = office.format(line='Colonoscopy was reviewed with the patient.', plan='Repeat colonoscopy in 3 years.')
+        self.assertEqual(reading(reviewed, date(2026, 10, 21))['gi.colonoscopy'][:2], ('planned', None))
 
     def test_the_summary_label_needs_an_extent_written(self):
         # a pre-procedure note's summary form with its extent column blank is no summary of a procedure done: the booked
@@ -626,9 +630,12 @@ class TableTests(unittest.TestCase):
                               after='Impression\nSee above.')  # the row contradicts itself: asked, never the ileum
         self.assertIsNone(extent(contra, 'gi.colonoscopy', DAY20))
         nothing = TABLE.format(heading='Procedure summary\n',
-                               table='Examination | Instrument | Extent\nColonoscopy | Adult colonoscope | None',
-                               after='Impression\nSee above.')
-        self.assertNotIn(status(nothing, 'gi.colonoscopy', DAY20), ('performed', 'incomplete'))
+                               table='Examination | Instrument | Extent\nUpper endoscopy (EGD) | Gastroscope | Second portion '
+                                     'of the duodenum\nColonoscopy | Colonoscope | None',
+                               after='Impression\nSee above.')  # the EGD row writes an extent, so the summary opens
+        got = reading(nothing, DAY20)
+        self.assertEqual(got['gi.egd'][:2], ('performed', 'second part of duodenum'))
+        self.assertNotIn(got['gi.colonoscopy'][0], ('performed', 'incomplete'))
 
     def test_the_summary_label_never_opens_in_a_plan(self):
         for label in ('Procedure summary', 'Procedure summary:'):
