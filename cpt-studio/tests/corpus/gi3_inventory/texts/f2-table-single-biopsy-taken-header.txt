@@ -1,0 +1,18 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Colonoscopy Report
+Date of procedure: 2026-10-20
+Place of service: Ambulatory surgery center (POS 24)
+Endoscopist: Test Physician, MD (fictional)
+Indication
+Iron deficiency anemia.
+Findings
+The colonoscope was advanced to the cecum, identified by the appendiceal orifice and the ileocecal valve.
+Segment | Finding | Biopsy taken
+Cecum | Normal | No
+Sigmoid colon | Diverticula | No
+Rectum | Normal | No
+Impression
+Sigmoid diverticulosis. No biopsies.
+Plan
+Await pathology.
+Electronically signed: Test Physician, MD (fictional), 2026-10-20 15:41

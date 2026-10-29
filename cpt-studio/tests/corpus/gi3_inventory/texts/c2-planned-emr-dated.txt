@@ -1,0 +1,15 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Colonoscopy Report
+Date of procedure: 2026-10-20
+Place of service: Ambulatory surgery center (POS 24)
+Endoscopist: Test Physician, MD (fictional)
+Indication
+Iron deficiency anemia.
+Findings
+The colonoscope was advanced to the cecum, identified by the appendiceal orifice and the ileocecal valve.
+Ascending colon: a 30 mm granular laterally spreading tumor; it was not removed today.
+Impression
+Findings as above.
+Plan
+Repeat colonoscopy with endoscopic mucosal resection is scheduled for 2026-11-20.
+Electronically signed: Test Physician, MD (fictional), 2026-10-20 15:41

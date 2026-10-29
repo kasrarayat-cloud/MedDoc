@@ -1,0 +1,16 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+COLONOSCOPY REPORT
+Date of service: 2026-10-05
+Place of service: Ambulatory surgery center
+Endoscopist: Test Physician, MD (fictional)
+
+FINDINGS
+
+# | Location | Size / morphology | Intervention | Specimen
+1 | Transverse colon, mid | 12 mm sessile (Paris Is) | Resected en bloc with a hot snare | Jar A
+2 | Rectum, 8 cm from anal verge | 4 mm sessile | Cold forceps biopsy, removed completely in two bites | Jar B
+3 | Sigmoid colon | Scattered small-mouthed diverticula | None | -
+
+IMPRESSION
+1. 12 mm transverse colon polyp, hot snare polypectomy.
+2. 4 mm rectal polyp, cold forceps removal.

@@ -1,0 +1,15 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Colonoscopy Report
+Date of procedure: 2026-10-20
+Place of service: Ambulatory surgery center (POS 24)
+Endoscopist: Test Physician, MD (fictional)
+Indication
+Iron deficiency anemia.
+Findings
+The colonoscope was advanced to the cecum, identified by the appendiceal orifice and the ileocecal valve.
+A 6 mm sessile polyp in the sigmoid colon was removed with a cold snare and sent for histology.
+Impression
+Sigmoid polyp removed. Surveillance interval deferred until biopsy results are available.
+Plan
+Await pathology.
+Electronically signed: Test Physician, MD (fictional), 2026-10-20 15:41

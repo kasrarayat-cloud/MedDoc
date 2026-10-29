@@ -2,23 +2,14 @@
   "schema": "cpt-studio-services-format-differences@1",
   "note": "Differences between the reading of a corpus document from a digital PDF (or a scan read with OCR) and from its text, kept on purpose with the reason. A new difference, or a recorded one that disappears, fails the test.",
   "pdf": {
-    "svc-12-egd-peg": {
-      "missing": [
-        "act|gi.egd|snare|performed|physician||"
-      ],
-      "extra": [],
-      "reason": "In the text, the snare that grasps the PEG guidewire is read as a snare act (no lesion is removed: a misreading, recorded); in the PDF its wrapped sentence reads it as part of the guidewire step. Neither reading accounts for a code: 43246 is the PEG."
-    },
     "svc-18-colo-snare-plus-separate-biopsy-table": {
       "missing": [
-        "act|gi.colonoscopy|biopsy|performed|physician||anal canal,rectum,sigmoid colon,transverse colon",
-        "act|gi.colonoscopy|snare|performed|physician||anal canal,rectum,sigmoid colon,transverse colon"
+        "act|gi.colonoscopy|biopsy|performed|physician||anal canal,rectum"
       ],
       "extra": [
-        "act|gi.colonoscopy|biopsy|performed|physician||anal canal,rectum,sigmoid colon",
-        "act|gi.colonoscopy|snare|performed|physician||transverse colon"
+        "act|gi.colonoscopy|biopsy|performed|physician||anal canal,rectum,sigmoid colon"
       ],
-      "reason": "A table row that wraps onto a second line is read as its own line (a table row is never joined): the acts keep their kinds and status, and their anatomy lists split along the rows (transverse colon goes to the snare row, the rest to the biopsy row)."
+      "reason": "The findings table has a header row, so the text reads each of its rows on its own (gi3 inventory, R2): the snare is at the transverse colon and the forceps biopsy at the rectum. The PDF wraps the first row onto a second line (\"... with a hot snare |\" / \"Jar A\"), so no row under the header has its five cells and the PDF holds no table: its rows read as before, and the biopsy row, itself wrapped, runs on into the sigmoid row, whose site the biopsy takes too."
     },
     "svc-20-colo-cold-hot-snare-hot-biopsy": {
       "missing": [

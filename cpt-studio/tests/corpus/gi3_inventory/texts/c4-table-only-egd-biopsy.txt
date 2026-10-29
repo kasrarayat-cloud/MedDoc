@@ -1,0 +1,23 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Brightwater Valley Endoscopy Center (fictional)
+Combined upper and lower endoscopy report
+Patient: Marisol Testcase (fictional)
+Procedure date: 2026-10-16
+Endoscopist: Kwabena Testwood, MD (fictional)
+Site of care: freestanding ambulatory surgical center, POS 24
+Indications
+Iron deficiency anemia. She has never had an endoscopy of either kind.
+Procedure summary
+Examination | Instrument | Furthest point reached | Tissue sampled
+Upper endoscopy (EGD) | Standard gastroscope | Third portion of the duodenum | Yes, duodenum and stomach
+Colonoscopy | Adult colonoscope | Terminal ileum, about 6 cm beyond the ileocecal valve | No
+Upper endoscopy
+The gastroscope crossed the upper esophageal sphincter and reached the third portion of the duodenum. Patchy antral erythema, with no erosions or ulcers. The duodenal and gastric mucosa looked normal.
+Colonoscopy
+The adult colonoscope passed easily to the cecum, and I entered the terminal ileum. Scattered diverticula in the sigmoid colon. No polyps, masses or blood; colonic and ileal mucosa normal. 
+Impression
+1. Antral erythema; duodenal and gastric biopsies taken.
+2. Sigmoid diverticulosis; otherwise normal colon and terminal ileum.
+Plan
+Await pathology and continue oral iron.
+Electronically signed: Kwabena Testwood, MD (fictional), 2026-10-16 10:47

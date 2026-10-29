@@ -1,0 +1,27 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Marlowe Bay Endoscopy Suites (fictional)
+Pre-procedure note - procedure cancelled
+
+Patient: Ingrid Tolliver-Haas (fictional)
+Date of birth: 1952-01-25
+Synthetic record: H2-SYN-1105
+Date of service: 2026-10-20
+Physician: Cyrus Delacroix-Amadi, MD, Gastroenterology (fictional)
+Location: ambulatory surgery center, POS 24
+Scheduled procedure: surveillance colonoscopy
+
+Background
+Three tubular adenomas, the largest 12 mm, were removed at colonoscopy on 2023-06-02, and surveillance was advised at three years. Atrial fibrillation treated with apixaban 5 mg twice daily. She had been told to stop apixaban two days before today.
+
+Pre-procedure assessment
+In the admission area she said she took her usual morning dose of apixaban at 07:00 today. Blood pressure 138/82, pulse 76 and irregular. She reported finishing the bowel preparation with clear output.
+
+Decision
+Because removal of polyps is likely at this examination, I cancelled the colonoscopy before any sedation was given. The colonoscope was not inserted, and no part of the procedure was performed. I explained the reason to the patient and her daughter, and they agreed.
+
+Plan
+Colonoscopy rescheduled for 2026-11-12. Apixaban to be held for two days before that date, as agreed with her cardiologist, Selma Ravenscroft, MD (fictional); no bridging is needed.
+Discharged home from the admission area in stable condition.
+
+Signed: Cyrus Delacroix-Amadi, MD (fictional), 2026-10-20 08:15

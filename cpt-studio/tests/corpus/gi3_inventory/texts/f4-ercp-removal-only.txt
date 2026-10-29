@@ -1,0 +1,13 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+ERCP Procedure Note
+Date of service: 2026-10-23
+Location: hospital outpatient endoscopy (POS 22)
+Endoscopist: Test Physician, MD (fictional)
+Indication
+Removal of a biliary stent after the stricture resolved.
+Procedure
+The duodenoscope was advanced to the major papilla. The existing stent was in position and draining. It was grasped with a snare and withdrawn through the working channel. The cholangiogram showed no residual stricture. No new stent was placed.
+Impression
+Resolved stricture; biliary stent removed.
+Plan
+Follow-up in clinic.

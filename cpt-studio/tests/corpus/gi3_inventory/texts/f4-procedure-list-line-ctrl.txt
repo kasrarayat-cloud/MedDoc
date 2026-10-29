@@ -1,0 +1,16 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Colonoscopy Report
+Date of procedure: 2026-10-20
+Place of service: Ambulatory surgery center (POS 24)
+Endoscopist: Test Physician, MD (fictional)
+Indication
+Surveillance colonoscopy.
+Procedure
+Colonoscopy with cold snare polypectomy.
+The colonoscope was advanced to the cecum, identified by the appendiceal orifice. Tattoo ink was seen in the sigmoid colon, and the scar beside it looked healed. A 5 mm sessile polyp in the descending colon was removed with a cold snare.
+
+Impression
+Normal surveillance colonoscopy.
+Plan
+Repeat colonoscopy in 5 years.
+Electronically signed: Test Physician, MD (fictional), 2026-10-20 15:41

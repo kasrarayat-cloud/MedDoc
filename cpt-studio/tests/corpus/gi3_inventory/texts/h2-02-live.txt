@@ -1,0 +1,68 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Saint Aurelio Community Hospital (fictional)
+Outpatient Endoscopy Unit - Colonoscopy Report
+
+Patient: Desmond Okonkwo-Pryce (fictional)
+
+Date of birth: 1966-12-19
+
+Synthetic record: H2-SYN-1102
+
+Date of service: 2026-10-09
+
+Setting: Hospital outpatient department (POS 22)
+
+Endoscopist: Ottoline Valdivia-Moss, MD (fictional)
+
+Sedation: propofol given and monitored by the hospital anesthesia department (fictional), which reports its own
+service
+
+Indication
+
+Six weeks of intermittent bright red blood with stools and a change to looser, more frequent bowel movements. He
+was booked for a complete colonoscopy and finished the split-dose bowel preparation as instructed. A flexible
+sigmoidoscopy elsewhere on 2024-05-14 showed only internal hemorrhoids.
+
+Description of the procedure
+
+The colonoscope was introduced through the anus and advanced under direct vision. The sigmoid colon was long
+and fixed, and the transverse colon was very redundant with repeated looping. The instrument could not be
+advanced past the hepatic flexure despite abdominal pressure by the nurse, turning the patient supine and then onto
+the right side, scope stiffening, and repeated loop reduction. Further pushing would have risked injury, so
+advancement was stopped.
+
+Deepest point reached: hepatic flexure, identified by the bluish liver impression through the colon wall, at about 95
+cm of insertion.
+
+The ascending colon, the cecum and the ileocecal valve were not examined.
+
+Bowel preparation in the segments seen was good.
+
+Findings
+
+On withdrawal, a 7 mm sessile polyp in the descending colon at about 45 cm was removed in one piece with a cold
+snare and retrieved for histology. The resection site was clean with no bleeding.
+
+Moderate left-sided diverticulosis.
+
+Internal hemorrhoids, not bleeding, seen on retroflexion in the rectum.
+
+No other source of bleeding in the examined colon.
+
+Complications
+None.
+
+Impression
+
+Colonoscopy reached the hepatic flexure only, limited by looping in a long, redundant colon. Cold snare
+polypectomy of one descending colon polyp. Left-sided diverticulosis. Internal hemorrhoids.
+
+Recommendations
+
+CT colonography of the unexamined right colon has been requested for 2026-10-30.
+
+Await polyp histology; the timing of the next colonoscopy will depend on the histology and the CT colonography.
+High-fiber diet.
+
+Signed: Ottoline Valdivia-Moss, MD (fictional), 2026-10-09 14:06

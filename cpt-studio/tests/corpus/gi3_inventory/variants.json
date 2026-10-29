@@ -1,0 +1,3981 @@
+{
+ "schema": "cpt-studio-gi3-inventory-variants@1",
+ "note": "Source-reviewed variants of the documented-service inventory's fact binding (GI round 3, lens \"inventory\"). Synthetic: the known cases' texts as the live service read them, and paraphrases, layouts and controls written for them. A row read right by the source is pinned by its checks; a residual by its exact output and its reason (known_limit).",
+ "variants": [
+  {
+   "id": "f1-active-did-not-take",
+   "class": "B1-denial-predicate",
+   "layout": "plain",
+   "expected": "EGD: forceps biopsies of the duodenum and antrum performed. Colonoscopy: complete, no colon biopsy taken (the document says so); no conflict.",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing. Variant: h2-01 wording.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.colonoscopy",
+     "subject": "biopsy",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.colonoscopy:45380",
+     "code": "45380",
+     "fam": "gi.colonoscopy",
+     "state": [
+      "not_performed"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f1-we-did-not-obtain",
+   "class": "B1-denial-predicate",
+   "layout": "plain",
+   "expected": "EGD: forceps biopsies of the duodenum and antrum performed. Colonoscopy: complete, no colon biopsy taken (the document says so); no conflict.",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing. Variant: paraphrase, do-support.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.colonoscopy",
+     "subject": "biopsy",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.colonoscopy:45380",
+     "code": "45380",
+     "fam": "gi.colonoscopy",
+     "state": [
+      "not_performed"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f1-elected-not-to",
+   "class": "B1-denial-predicate",
+   "layout": "plain",
+   "expected": "EGD: forceps biopsies of the duodenum and antrum performed. Colonoscopy: complete, no colon biopsy taken (the document says so); no conflict.",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing. Variant: paraphrase, infinitive verb.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.colonoscopy",
+     "subject": "biopsy",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.colonoscopy:45380",
+     "code": "45380",
+     "fam": "gi.colonoscopy",
+     "state": [
+      "not_performed"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f1-contraction",
+   "class": "B1-denial-predicate",
+   "layout": "plain",
+   "expected": "EGD: forceps biopsies of the duodenum and antrum performed. Colonoscopy: complete, no colon biopsy taken (the document says so); no conflict.",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing. Variant: paraphrase, contraction.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.colonoscopy",
+     "subject": "biopsy",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.colonoscopy:45380",
+     "code": "45380",
+     "fam": "gi.colonoscopy",
+     "state": [
+      "not_performed"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f1-pdf-wrap",
+   "class": "B1-denial-predicate",
+   "layout": "pdf-wrap",
+   "expected": "EGD: forceps biopsies of the duodenum and antrum performed. Colonoscopy: complete, no colon biopsy taken (the document says so); no conflict.",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing. Variant: PDF line wraps inside the sentence.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.colonoscopy",
+     "subject": "biopsy",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.colonoscopy:45380",
+     "code": "45380",
+     "fam": "gi.colonoscopy",
+     "state": [
+      "not_performed"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f1-ocr",
+   "class": "B1-denial-predicate",
+   "layout": "ocr",
+   "expected": "EGD: forceps biopsies of the duodenum and antrum performed. Colonoscopy: complete, no colon biopsy taken (the document says so); no conflict.",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing. Variant: OCR: \"l\" for \"I\", spaces before punctuation.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.colonoscopy",
+     "subject": "biopsy",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.colonoscopy:45380",
+     "code": "45380",
+     "fam": "gi.colonoscopy",
+     "state": [
+      "not_performed"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f1-ctrl-passive",
+   "class": "B1-denial-predicate",
+   "layout": "plain",
+   "expected": "EGD: forceps biopsies of the duodenum and antrum performed. Colonoscopy: complete, no colon biopsy taken (the document says so); no conflict.",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing. Variant: control: passive.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.colonoscopy",
+     "subject": "biopsy",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.colonoscopy:45380",
+     "code": "45380",
+     "fam": "gi.colonoscopy",
+     "state": [
+      "not_performed"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f1-ctrl-no-were",
+   "class": "B1-denial-predicate",
+   "layout": "plain",
+   "expected": "EGD: forceps biopsies of the duodenum and antrum performed. Colonoscopy: complete, no colon biopsy taken (the document says so); no conflict.",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing. Variant: control: \"No ... were taken\".",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.colonoscopy",
+     "subject": "biopsy",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.colonoscopy:45380",
+     "code": "45380",
+     "fam": "gi.colonoscopy",
+     "state": [
+      "not_performed"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f1-ctrl-bare",
+   "class": "B1-denial-predicate",
+   "layout": "plain",
+   "expected": "EGD: forceps biopsies of the duodenum and antrum performed. Colonoscopy: complete, no colon biopsy taken (the document says so); no conflict.",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing. Variant: control: bare participle.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.colonoscopy",
+     "subject": "biopsy",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.colonoscopy:45380",
+     "code": "45380",
+     "fam": "gi.colonoscopy",
+     "state": [
+      "not_performed"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f1-deferred",
+   "class": "B1-denial-predicate",
+   "layout": "plain",
+   "expected": "EGD: forceps biopsies of the duodenum and antrum performed. Colonoscopy: complete, no colon biopsy taken (the document says so); no conflict.",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing. Variant: cancelled-type word.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.colonoscopy",
+     "subject": "biopsy",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.colonoscopy:45380",
+     "code": "45380",
+     "fam": "gi.colonoscopy",
+     "state": [
+      "not_performed"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f1-chose-not",
+   "class": "B1-denial-predicate",
+   "layout": "plain",
+   "expected": "EGD: forceps biopsies of the duodenum and antrum performed. Colonoscopy: complete, no colon biopsy taken (the document says so); no conflict.",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing. Variant: paraphrase: chose not to sample.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.colonoscopy",
+     "subject": "biopsy",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.colonoscopy:45380",
+     "code": "45380",
+     "fam": "gi.colonoscopy",
+     "state": [
+      "not_performed"
+     ],
+     "sev": "full"
+    }
+   ],
+   "known_limit": {
+    "reason": "The verb \"sample\" (\"I chose not to sample the colon\") names no act this reader reads (only \"sampled\" does), so there is nothing to deny: no colon biopsy act, and 45380 is asked, never performed.",
+    "output": "gi.egd=performed acts: biopsy/performed[second portion of the duodenum,gastric antrum]; biopsy/performed[duodenum,stomach] | gi.colonoscopy=performed | RECON[gi.egd:43239,gi.colonoscopy:45380] match 43239=performed, match 45380=uncertain"
+   }
+  },
+  {
+   "id": "h2-01-live",
+   "class": "B1+B2-known",
+   "layout": "word-table",
+   "expected": "EGD: biopsies of D2, bulb, antrum/incisura performed (prose and table row \"Yes, duodenum and stomach\"). Colonoscopy: terminal ileum reached, no colon biopsy (\"I deliberately did not take colon biopsies\"; table row \"No\"). The table header \"Tissue sampled\" is a column name, not an act; no act carries both rows' anatomy.",
+   "review": "Known case (R1, R2): the denial and the table answer bind their own acts.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard",
+     "anat_none": [
+      "terminal ileum",
+      "ileocecal valve"
+     ],
+     "every": true
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.colonoscopy:45380",
+     "code": "45380",
+     "fam": "gi.colonoscopy",
+     "state": [
+      "not_performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "unres",
+     "codes": "gi.egd:43239,gi.colonoscopy:45378",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "present": false,
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f2-table-egd-first",
+   "class": "B2-table",
+   "layout": "word-table",
+   "expected": "EGD: biopsies performed (prose; table row \"Yes\"). Colonoscopy: no tissue sampled (its table row says \"No\"; nothing in the prose says otherwise). The header cell names a column, not an act.",
+   "review": "R2: a header names columns, never an act; a cell answers its own column for its own row's service.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard",
+     "anat_none": [
+      "terminal ileum",
+      "ileocecal valve"
+     ],
+     "every": true
+    },
+    {
+     "t": "unres",
+     "codes": "gi.egd:43239,gi.colonoscopy:45378",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "present": false,
+     "sev": "hard"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.colonoscopy:45380",
+     "code": "45380",
+     "fam": "gi.colonoscopy",
+     "state": [
+      "not_performed",
+      "uncertain"
+     ],
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f2-table-col-first",
+   "class": "B2-table",
+   "layout": "word-table",
+   "expected": "EGD: biopsies performed (prose; table row \"Yes\"). Colonoscopy: no tissue sampled (its table row says \"No\"; nothing in the prose says otherwise). The header cell names a column, not an act. Row order is arbitrary.",
+   "review": "R2: a header names columns, never an act; a cell answers its own column for its own row's service.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard",
+     "anat_none": [
+      "terminal ileum",
+      "ileocecal valve"
+     ],
+     "every": true
+    },
+    {
+     "t": "unres",
+     "codes": "gi.egd:43239,gi.colonoscopy:45378",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "present": false,
+     "sev": "hard"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.colonoscopy:45380",
+     "code": "45380",
+     "fam": "gi.colonoscopy",
+     "state": [
+      "not_performed",
+      "uncertain"
+     ],
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f2-table-col-first-denial",
+   "class": "B2-table",
+   "layout": "word-table",
+   "expected": "EGD: biopsies performed (prose; table row \"Yes\"). Colonoscopy: no tissue sampled (its table row says \"No\"; nothing in the prose says otherwise). The header cell names a column, not an act. The prose agrees with the row.",
+   "review": "R2: a header names columns, never an act; a cell answers its own column for its own row's service.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard",
+     "anat_none": [
+      "terminal ileum",
+      "ileocecal valve"
+     ],
+     "every": true
+    },
+    {
+     "t": "unres",
+     "codes": "gi.egd:43239,gi.colonoscopy:45378",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "present": false,
+     "sev": "hard"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.colonoscopy:45380",
+     "code": "45380",
+     "fam": "gi.colonoscopy",
+     "state": [
+      "not_performed",
+      "uncertain"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.colonoscopy",
+     "subject": "biopsy",
+     "n": 0,
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f2-table-biopsy-header",
+   "class": "B2-table",
+   "layout": "word-table",
+   "expected": "EGD: biopsies performed (prose; table row \"Yes\"). Colonoscopy: no tissue sampled (its table row says \"No\"; nothing in the prose says otherwise). The header cell names a column, not an act.",
+   "review": "R2: a header names columns, never an act; a cell answers its own column for its own row's service.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard",
+     "anat_none": [
+      "terminal ileum",
+      "ileocecal valve"
+     ],
+     "every": true
+    },
+    {
+     "t": "unres",
+     "codes": "gi.egd:43239,gi.colonoscopy:45378",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "present": false,
+     "sev": "hard"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.colonoscopy:45380",
+     "code": "45380",
+     "fam": "gi.colonoscopy",
+     "state": [
+      "not_performed",
+      "uncertain"
+     ],
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f2-table-3col",
+   "class": "B2-table",
+   "layout": "word-table",
+   "expected": "EGD: biopsies performed (prose; table row \"Yes\"). Colonoscopy: no tissue sampled (its table row says \"No\"; nothing in the prose says otherwise). The header cell names a column, not an act.",
+   "review": "R2: a header names columns, never an act; a cell answers its own column for its own row's service.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard",
+     "anat_none": [
+      "terminal ileum",
+      "ileocecal valve"
+     ],
+     "every": true
+    },
+    {
+     "t": "unres",
+     "codes": "gi.egd:43239,gi.colonoscopy:45378",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "present": false,
+     "sev": "hard"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.colonoscopy:45380",
+     "code": "45380",
+     "fam": "gi.colonoscopy",
+     "state": [
+      "not_performed",
+      "uncertain"
+     ],
+     "sev": "hard"
+    }
+   ],
+   "known_limit": {
+    "reason": "The table stands under \"Indications\" with no procedure-summary label over it, so it is in the indication part, which binds nothing (R2): the colonoscopy row's \"No\" is unread and 45380 is asked. A label-less table stays in the indication after the extent repair too.",
+    "output": "gi.colonoscopy=performed | gi.egd=performed acts: biopsy/performed[second portion of the duodenum,gastric antrum]; biopsy/performed[duodenum,stomach] | RECON[gi.egd:43239,gi.colonoscopy:45378] match 43239=performed, match 45378=performed | RECON[gi.egd:43239,gi.colonoscopy:45380] match 43239=performed, match 45380=uncertain"
+   }
+  },
+  {
+   "id": "f2-table-spaces",
+   "class": "B2-table",
+   "layout": "pdf-table",
+   "expected": "EGD: biopsies performed (prose; table row \"Yes\"). Colonoscopy: no tissue sampled (its table row says \"No\"; nothing in the prose says otherwise). The header cell names a column, not an act. (A PDF table extracted with spaces instead of cell bars.)",
+   "review": "R2: a header names columns, never an act; a cell answers its own column for its own row's service.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard",
+     "anat_none": [
+      "terminal ileum",
+      "ileocecal valve"
+     ],
+     "every": true
+    },
+    {
+     "t": "unres",
+     "codes": "gi.egd:43239,gi.colonoscopy:45378",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "present": false,
+     "sev": "hard"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.colonoscopy:45380",
+     "code": "45380",
+     "fam": "gi.colonoscopy",
+     "state": [
+      "not_performed",
+      "uncertain"
+     ],
+     "sev": "hard"
+    }
+   ],
+   "known_limit": {
+    "reason": "A PDF table extracted with spaces instead of cell bars is no table: its header's \"Tissue sampled\" reads as at head, a performed colonoscopy biopsy at the terminal ileum (a contradiction, as at head).",
+    "output": "gi.colonoscopy=performed acts: biopsy/performed[terminal ileum] | gi.egd=performed acts: biopsy/performed[second portion of the duodenum,gastric antrum]; biopsy/performed[duodenum,stomach] | RECON[gi.egd:43239,gi.colonoscopy:45378] match 43239=performed, match 45378=performed unresolved=[('colonoscopy', 'biopsy')] | RECON[gi.egd:43239,gi.colonoscopy:45380] match 43239=performed, match 45380=performed"
+   }
+  },
+  {
+   "id": "f2-table-polypectomy",
+   "class": "B2-table",
+   "layout": "word-table",
+   "expected": "Colonoscopy: two polyps removed by cold snare (prose and row). EGD: no polypectomy (row \"No\"); EGD biopsies performed.",
+   "review": "R2: a header names columns, never an act; a cell answers its own column for its own row's service.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.egd",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "snare",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.egd",
+     "subject": "snare",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.colonoscopy",
+     "subject": "snare",
+     "n": 0,
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f2-table-polypectomy-egd-last",
+   "class": "B2-table",
+   "layout": "word-table",
+   "expected": "As f2-table-polypectomy with the rows swapped.",
+   "review": "R2: a header names columns, never an act; a cell answers its own column for its own row's service.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.egd",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "snare",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.egd",
+     "subject": "snare",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.colonoscopy",
+     "subject": "snare",
+     "n": 0,
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f2-table-single-biopsy-taken-header",
+   "class": "B2-table",
+   "layout": "word-table",
+   "expected": "A single colonoscopy; the table says no segment was biopsied. No biopsy performed.",
+   "review": "R2: a header names columns, never an act; a cell answers its own column for its own row's service.",
+   "checks": [
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "h2-07-live",
+   "class": "B2-table-date",
+   "layout": "word-table",
+   "expected": "Office return visit 2026-10-21. The results table lists a colonoscopy of 2025-11-12 (its own row date); it is historical. No procedure today.",
+   "review": "R2: a row dated another day is another occurrence's row and binds nothing today.",
+   "checks": [
+    {
+     "t": "svc",
+     "fam": "gi.colonoscopy",
+     "status": [
+      "historical"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "cue_date",
+     "fam": "gi.colonoscopy",
+     "date": "2025-11-12",
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f2-results-today-lab-first",
+   "class": "B2-table-date",
+   "layout": "word-table",
+   "expected": "As h2-07, a lab row dated the visit date sits above the colonoscopy row; the colonoscopy stays 2025-11-12, historical.",
+   "review": "R2: a row dated another day is another occurrence's row and binds nothing today.",
+   "checks": [
+    {
+     "t": "svc",
+     "fam": "gi.colonoscopy",
+     "status": [
+      "historical"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "cue_date",
+     "fam": "gi.colonoscopy",
+     "date": "2025-11-12",
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f2-results-today-lab-after",
+   "class": "B2-table-date",
+   "layout": "word-table",
+   "expected": "The colonoscopy row comes first and today's labs follow; the colonoscopy is historical (2025-11-12).",
+   "review": "R2: a row dated another day is another occurrence's row and binds nothing today.",
+   "checks": [
+    {
+     "t": "svc",
+     "fam": "gi.colonoscopy",
+     "status": [
+      "historical"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "cue_date",
+     "fam": "gi.colonoscopy",
+     "date": "2025-11-12",
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f2-results-planned-egd",
+   "class": "B2-table-date",
+   "layout": "word-table",
+   "expected": "The colonoscopy row is historical (2025-11-12); the upper endoscopy row is scheduled for 2026-11-30 (planned).",
+   "review": "R2: a row dated another day is another occurrence's row and binds nothing today.",
+   "checks": [
+    {
+     "t": "svc",
+     "fam": "gi.colonoscopy",
+     "status": [
+      "historical"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "svc",
+     "fam": "gi.egd",
+     "status": [
+      "planned"
+     ],
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f3-firm-friable",
+   "class": "B4-lesion-fallback",
+   "layout": "plain",
+   "expected": "Two lesions: a 12 mm transverse polyp removed by cold snare; a separate 25 mm sigmoid mass, not resected, biopsied with cold forceps. The biopsy is of the sigmoid mass, never of the removed polyp, so it is separately reportable beside the snare.",
+   "review": "R3: a lesion's descriptive words never hide it, and \"the mass\" or \"it\" never binds past a lesion named since and not recorded.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard",
+     "lesion_not_anat": "transverse colon",
+     "every": true
+    },
+    {
+     "t": "unres",
+     "codes": "gi.colonoscopy:45385",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "present": true,
+     "sev": "hard"
+    },
+    {
+     "t": "bundled",
+     "codes": "gi.colonoscopy:45385",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "present": false,
+     "sev": "hard"
+    },
+    {
+     "t": "lesion",
+     "fam": "gi.colonoscopy",
+     "noun_re": "mass",
+     "anat": "sigmoid colon",
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f3-ctrl-ulcerated",
+   "class": "B4-lesion-fallback",
+   "layout": "plain",
+   "expected": "Two lesions: a 12 mm transverse polyp removed by cold snare; a separate 25 mm sigmoid mass, not resected, biopsied with cold forceps. The biopsy is of the sigmoid mass, never of the removed polyp, so it is separately reportable beside the snare. (control)",
+   "review": "R3: a lesion's descriptive words never hide it, and \"the mass\" or \"it\" never binds past a lesion named since and not recorded.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard",
+     "lesion_not_anat": "transverse colon",
+     "every": true
+    },
+    {
+     "t": "unres",
+     "codes": "gi.colonoscopy:45385",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "present": true,
+     "sev": "hard"
+    },
+    {
+     "t": "bundled",
+     "codes": "gi.colonoscopy:45385",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "present": false,
+     "sev": "hard"
+    },
+    {
+     "t": "lesion",
+     "fam": "gi.colonoscopy",
+     "noun_re": "mass",
+     "anat": "sigmoid colon",
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f3-fungating-it",
+   "class": "B4-lesion-fallback",
+   "layout": "plain",
+   "expected": "Two lesions: a 12 mm transverse polyp removed by cold snare; a separate 25 mm sigmoid mass, not resected, biopsied with cold forceps. The biopsy is of the sigmoid mass, never of the removed polyp, so it is separately reportable beside the snare.",
+   "review": "R3: a lesion's descriptive words never hide it, and \"the mass\" or \"it\" never binds past a lesion named since and not recorded.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard",
+     "lesion_not_anat": "transverse colon",
+     "every": true
+    },
+    {
+     "t": "unres",
+     "codes": "gi.colonoscopy:45385",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "present": true,
+     "sev": "hard"
+    },
+    {
+     "t": "bundled",
+     "codes": "gi.colonoscopy:45385",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "present": false,
+     "sev": "hard"
+    },
+    {
+     "t": "lesion",
+     "fam": "gi.colonoscopy",
+     "noun_re": "mass",
+     "anat": "sigmoid colon",
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f3-pdf-wrap",
+   "class": "B4-lesion-fallback",
+   "layout": "pdf-wrap",
+   "expected": "Two lesions: a 12 mm transverse polyp removed by cold snare; a separate 25 mm sigmoid mass, not resected, biopsied with cold forceps. The biopsy is of the sigmoid mass, never of the removed polyp, so it is separately reportable beside the snare.",
+   "review": "R3: a lesion's descriptive words never hide it, and \"the mass\" or \"it\" never binds past a lesion named since and not recorded.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard",
+     "lesion_not_anat": "transverse colon",
+     "every": true
+    },
+    {
+     "t": "unres",
+     "codes": "gi.colonoscopy:45385",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "present": true,
+     "sev": "hard"
+    },
+    {
+     "t": "bundled",
+     "codes": "gi.colonoscopy:45385",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "present": false,
+     "sev": "hard"
+    },
+    {
+     "t": "lesion",
+     "fam": "gi.colonoscopy",
+     "noun_re": "mass",
+     "anat": "sigmoid colon",
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f3-tattoo-distal",
+   "class": "B4-lesion-fallback",
+   "layout": "plain",
+   "expected": "Snare of the transverse polyp; biopsies of the sigmoid lesion; a tattoo placed distal to the sigmoid lesion. The tattoo and biopsies belong to the sigmoid lesion, never to the removed transverse polyp.",
+   "review": "R3: a lesion's descriptive words never hide it, and \"the mass\" or \"it\" never binds past a lesion named since and not recorded.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "tattoo",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard",
+     "lesion_not_anat": "transverse colon",
+     "every": true
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard",
+     "lesion_not_anat": "transverse colon",
+     "every": true
+    },
+    {
+     "t": "bundled",
+     "codes": "gi.colonoscopy:45385,gi.colonoscopy:45381",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "present": false,
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "ho-01-live",
+   "class": "B4-known",
+   "layout": "word-table",
+   "expected": "EGD biopsies (antrum/body; bulb/D2). Colonoscopy: cold snare of the 12 mm transverse polyp; cold forceps biopsies of the 25 mm sigmoid lesion; tattoo distal to the sigmoid lesion (physician) which the nursing checklist denies (\"No - none used\"): one tattoo conflict, kept with both sides. The tattoo is not at the transverse polyp.",
+   "review": "Known case (R3, R6): each act binds its own lesion and site.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "tattoo",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard",
+     "lesion_not_anat": "transverse colon",
+     "every": true
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.colonoscopy",
+     "subject": "tattoo",
+     "n": 1,
+     "sev": "full"
+    },
+    {
+     "t": "conflicts_min",
+     "fam": "gi.colonoscopy",
+     "subject": "tattoo",
+     "n": 1,
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "h2-03-live",
+   "class": "B4+B1-known",
+   "layout": "pdf-wrap",
+   "expected": "Flexible sigmoidoscopy 10/13/2026 to the distal descending colon (55 cm). Rectal 25 mm granular LST: not removed, not biopsied (\"I intentionally did not biopsy it\"), not tattooed (\"I did not tattoo it\"); EMR planned at a separate colonoscopy session (11/05/2026). Hemorrhoids not treated. Colonoscopy: 03/2018 (historical) and planned.",
+   "review": "Known case (R1, R3): the denials bind their acts; the lesion is recorded by its words.",
+   "checks": [
+    {
+     "t": "svc",
+     "fam": "gi.flex_sig",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.flex_sig",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.flex_sig",
+     "kind": "tattoo",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.flex_sig",
+     "kind": "emr",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.flex_sig",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.flex_sig",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "lesion",
+     "fam": "gi.flex_sig",
+     "noun_re": "lesion|tumou?r",
+     "anat": "rectum",
+     "sev": "full"
+    },
+    {
+     "t": "svc_not",
+     "fam": "gi.colonoscopy",
+     "status": [
+      "performed",
+      "incomplete"
+     ],
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "h2-04-live",
+   "class": "B1+B3-known",
+   "layout": "plain",
+   "expected": "EGD to the pyloric channel (incomplete). Pyloric channel ulcer 12 mm: margin biopsied (six pieces). Separate biopsies of the antrum and body for H. pylori. Balloon dilation not attempted. No hemostasis.",
+   "review": "Known case (R1, R6): the denials bind their acts; each biopsy keeps its own sites.",
+   "checks": [
+    {
+     "t": "svc",
+     "fam": "gi.egd",
+     "status": [
+      "incomplete",
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "dilation",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.egd",
+     "kind": "dilation",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "lesion_acts_anat_none",
+     "fam": "gi.egd",
+     "noun_re": "ulcer",
+     "anat_none": [
+      "gastric antrum",
+      "gastric body"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full",
+     "anat_any": [
+      "gastric antrum",
+      "gastric body"
+     ],
+     "lesion": "none"
+    }
+   ],
+   "known_limit": {
+    "reason": "\"separate cold forceps samples came from the antrum and the gastric body\" has no act predicate this reader reads (\"came from\"), so the H. pylori biopsies are no act of their own; the ulcer-margin biopsy is.",
+    "output": "gi.egd=incomplete acts: biopsy/performed@12 mm ulcer pylorus; dilation/negated@12 mm ulcer pylorus; bleeding_control/negated; biopsy/performed lesions: 12 mm ulcer pylorus"
+   }
+  },
+  {
+   "id": "f3-hpylori-separate",
+   "class": "B4-lesion-fallback",
+   "layout": "plain",
+   "expected": "Ulcer margin biopsies (at the ulcer); separate antrum and body biopsies (not at the ulcer).",
+   "review": "R3: a lesion's descriptive words never hide it, and \"the mass\" or \"it\" never binds past a lesion named since and not recorded.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full",
+     "anat_any": [
+      "gastric antrum",
+      "gastric body"
+     ],
+     "lesion": "none"
+    },
+    {
+     "t": "lesion_acts_anat_none",
+     "fam": "gi.egd",
+     "noun_re": "ulcer",
+     "anat_none": [
+      "gastric antrum",
+      "gastric body"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "h2-09-live",
+   "class": "B4+nodes-known",
+   "layout": "pdf-wrap",
+   "expected": "EUS limited to esophagus/stomach/perigastric. Gastric body subepithelial 24 x 19 mm lesion sampled by EUS-guided fine-needle biopsy (22 gauge, three passes). Perigastric nodes NOT sampled. No conflict between them.",
+   "review": "Known case (R3, R6): the sized lesion is recorded; the node denial binds its clause.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.eus",
+     "kind": "fna",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.eus",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full",
+     "anat_any": [
+      "lymph node"
+     ]
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.eus",
+     "subject": "biopsy",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.eus",
+     "subject": "fna",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "lesion",
+     "fam": "gi.eus",
+     "noun_re": "lesion|tumou?r",
+     "anat": "gastric body",
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f3-eus-nodes-neither",
+   "class": "nodes",
+   "layout": "plain",
+   "expected": "As h2-09: nodes not sampled, the lesion sampled; no conflict.",
+   "review": "R6: a lymph node's denial binds its own clause only.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.eus",
+     "kind": "fna",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.eus",
+     "subject": "biopsy",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.eus",
+     "subject": "fna",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.eus",
+     "kind": "fna",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f3-eus-nodes-not-biopsied-but",
+   "class": "nodes",
+   "layout": "plain",
+   "expected": "Nodes not sampled; the lesion sampled with the needle; no conflict.",
+   "review": "R6: a lymph node's denial binds its own clause only.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.eus",
+     "kind": "fna",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.eus",
+     "subject": "biopsy",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.eus",
+     "subject": "fna",
+     "n": 0,
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f3-eus-target-table",
+   "class": "nodes",
+   "layout": "word-table",
+   "expected": "The lesion was sampled (three passes); the nodes were not. No conflict between the two targets.",
+   "review": "R6: a lymph node's denial binds its own clause only.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.eus",
+     "kind": "fna",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.eus",
+     "subject": "biopsy",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.eus",
+     "subject": "fna",
+     "n": 0,
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f1-dilation-we-did-not",
+   "class": "B1-denial-predicate",
+   "layout": "plain",
+   "expected": "EGD: no dilation today (the document says so); biopsies performed.",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "dilation",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.egd",
+     "kind": "dilation",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.egd:43249",
+     "code": "43249",
+     "fam": "gi.egd",
+     "state": [
+      "not_performed"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f1-dilation-not-performed-ctrl",
+   "class": "B1-denial-predicate",
+   "layout": "plain",
+   "expected": "EGD: no dilation today (the document says so); biopsies performed.",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "dilation",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.egd",
+     "kind": "dilation",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.egd:43249",
+     "code": "43249",
+     "fam": "gi.egd",
+     "state": [
+      "not_performed"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f1-dilation-deferred",
+   "class": "B1-denial-predicate",
+   "layout": "plain",
+   "expected": "EGD: no dilation today (the document says so); biopsies performed.",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "dilation",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.egd",
+     "kind": "dilation",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.egd:43249",
+     "code": "43249",
+     "fam": "gi.egd",
+     "state": [
+      "not_performed"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f1-dilation-no-attempt",
+   "class": "B1-denial-predicate",
+   "layout": "plain",
+   "expected": "EGD: no dilation today (the document says so); biopsies performed.",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "dilation",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.egd",
+     "kind": "dilation",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.egd:43249",
+     "code": "43249",
+     "fam": "gi.egd",
+     "state": [
+      "not_performed"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f1-dilation-wrap",
+   "class": "B1-denial-predicate",
+   "layout": "pdf-wrap",
+   "expected": "EGD: no dilation today (the document says so); biopsies performed.",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "dilation",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.egd",
+     "kind": "dilation",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.egd:43249",
+     "code": "43249",
+     "fam": "gi.egd",
+     "state": [
+      "not_performed"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f1-tattoo-we-elected",
+   "class": "B1-denial-predicate",
+   "layout": "pdf-wrap",
+   "expected": "Flexible sigmoidoscopy: the rectal LST was not tattooed (the document says so).",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.flex_sig",
+     "kind": "tattoo",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.flex_sig",
+     "kind": "tattoo",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f1-tattoo-ctrl-passive",
+   "class": "B1-denial-predicate",
+   "layout": "pdf-wrap",
+   "expected": "Flexible sigmoidoscopy: the rectal LST was not tattooed (the document says so).",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.flex_sig",
+     "kind": "tattoo",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.flex_sig",
+     "kind": "tattoo",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f1-biopsy-refrained",
+   "class": "B1-denial-predicate",
+   "layout": "pdf-wrap",
+   "expected": "Flexible sigmoidoscopy: the rectal LST was not biopsied (the document says so).",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.flex_sig",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.flex_sig",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f1-biopsy-ctrl-not-biopsied",
+   "class": "B1-denial-predicate",
+   "layout": "pdf-wrap",
+   "expected": "Flexible sigmoidoscopy: the rectal LST was not biopsied (the document says so).",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.flex_sig",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.flex_sig",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f1-hemostasis-not-needed",
+   "class": "B1-denial-predicate",
+   "layout": "plain",
+   "expected": "EGD: no hemostatic treatment (\"no hemostatic treatment was needed\").",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "bleeding_control",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.egd",
+     "kind": "bleeding_control",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "h2-10-live",
+   "class": "B7-known",
+   "layout": "plain",
+   "expected": "ERCP 2026-10-23: the existing plastic stent was removed (grasped with a snare) and a new plastic stent placed across the stricture: a stent exchange. No sphincterotomy, no stone extraction today. The July stent and sphincterotomy are historical. The snare is the removal instrument, not a polypectomy.",
+   "review": "Known case (R4, R5): a stent exchange; its removal snare is no polypectomy; the indwelling stent no act.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.ercp",
+     "kind": "sphincterotomy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.ercp",
+     "kind": "sphincterotomy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.ercp",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.ercp",
+     "kind": "stent",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act_any_kind",
+     "fam": "gi.ercp",
+     "kinds": [
+      "stent_exchange",
+      "stent_removal"
+     ],
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "match",
+     "codes": "gi.ercp:43276",
+     "code": "43276",
+     "fam": "gi.ercp",
+     "state": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act_evidence",
+     "fam": "gi.ercp",
+     "kind": "stent",
+     "status": [
+      "performed"
+     ],
+     "ev": "existing stent was in position",
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f4-ercp-removal-only",
+   "class": "B7-stent",
+   "layout": "plain",
+   "expected": "ERCP: the existing stent removed; no new stent placed. No stent placement today, so no stent conflict; the code is a stent removal (43275), never a placement.",
+   "review": "R5: a stent removed or exchanged is no placement, and its removal instrument is no polypectomy.",
+   "checks": [
+    {
+     "t": "no_act",
+     "fam": "gi.ercp",
+     "kind": "stent",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.ercp",
+     "subject": "stent",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.ercp",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "unres",
+     "codes": "gi.ercp:43275",
+     "fam": "gi.ercp",
+     "kind": "stent",
+     "present": false,
+     "sev": "hard"
+    },
+    {
+     "t": "act_any_kind",
+     "fam": "gi.ercp",
+     "kinds": [
+      "stent_removal"
+     ],
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "match",
+     "codes": "gi.ercp:43275",
+     "code": "43275",
+     "fam": "gi.ercp",
+     "state": [
+      "performed"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f4-ercp-exchange-paraphrase",
+   "class": "B7-stent",
+   "layout": "plain",
+   "expected": "Stent exchange: the indwelling stent removed, a new stent placed.",
+   "review": "R5: a stent removed or exchanged is no placement, and its removal instrument is no polypectomy.",
+   "checks": [
+    {
+     "t": "no_act",
+     "fam": "gi.ercp",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.ercp",
+     "kind": "stent",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act_any_kind",
+     "fam": "gi.ercp",
+     "kinds": [
+      "stent_exchange",
+      "stent_removal"
+     ],
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f4-procedure-paragraph-old-tattoo",
+   "class": "B7-procline",
+   "layout": "plain",
+   "expected": "A normal surveillance colonoscopy; the tattoo ink seen marks an earlier procedure. No tattoo placed today.",
+   "review": "R4: only a nominal list under a Procedure heading lists acts done; narrative there reads by its words.",
+   "checks": [
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "tattoo",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "unres",
+     "codes": "gi.colonoscopy:45378",
+     "fam": "gi.colonoscopy",
+     "kind": "tattoo",
+     "present": false,
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f4-findings-paragraph-old-tattoo-ctrl",
+   "class": "B7-procline",
+   "layout": "plain",
+   "expected": "As above under a \"Findings\" heading (control).",
+   "review": "R4: only a nominal list under a Procedure heading lists acts done; narrative there reads by its words.",
+   "checks": [
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "tattoo",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "unres",
+     "codes": "gi.colonoscopy:45378",
+     "fam": "gi.colonoscopy",
+     "kind": "tattoo",
+     "present": false,
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f4-procedure-paragraph-old-stent",
+   "class": "B7-procline",
+   "layout": "plain",
+   "expected": "The colonic stent seen is an earlier placement; no stent placed today.",
+   "review": "R4: only a nominal list under a Procedure heading lists acts done; narrative there reads by its words.",
+   "checks": [
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "stent",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "unres",
+     "codes": "gi.colonoscopy:45378",
+     "fam": "gi.colonoscopy",
+     "kind": "stent",
+     "present": false,
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f4-procedure-list-line-ctrl",
+   "class": "B7-procline",
+   "layout": "plain",
+   "expected": "Control: a real procedure line lists a cold snare polypectomy, which the body confirms.",
+   "review": "R4: only a nominal list under a Procedure heading lists acts done; narrative there reads by its words.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "tattoo",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f5-impression-at-colonoscopy",
+   "class": "B3-anatomy",
+   "layout": "plain",
+   "expected": "EGD: biopsies only. Colonoscopy: a 6 mm transverse polyp removed by cold snare. No EGD snare, no gastric polyp.",
+   "review": "R6: a site binds to the mentions of its own segment of its clause.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.egd",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "no_lesion",
+     "fam": "gi.egd",
+     "noun_re": "polyp",
+     "sev": "hard"
+    },
+    {
+     "t": "unres",
+     "codes": "gi.egd:43239,gi.colonoscopy:45385",
+     "fam": "gi.egd",
+     "kind": "snare",
+     "present": false,
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f5-impression-gastric-and-polyp",
+   "class": "B3-anatomy",
+   "layout": "plain",
+   "expected": "EGD: biopsies only. Colonoscopy: a 6 mm transverse polyp removed by cold snare. No EGD snare, no gastric polyp.",
+   "review": "R6: a site binds to the mentions of its own segment of its clause.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.egd",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "no_lesion",
+     "fam": "gi.egd",
+     "noun_re": "polyp",
+     "sev": "hard"
+    },
+    {
+     "t": "unres",
+     "codes": "gi.egd:43239,gi.colonoscopy:45385",
+     "fam": "gi.egd",
+     "kind": "snare",
+     "present": false,
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f5-ctrl-in-the-sigmoid",
+   "class": "B3-anatomy",
+   "layout": "plain",
+   "expected": "Control: the snare is in the sigmoid colon.",
+   "review": "R6: a site binds to the mentions of its own segment of its clause.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard",
+     "anat_any": [
+      "sigmoid colon"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "f5-ctrl-field-site",
+   "class": "B3-anatomy",
+   "layout": "plain",
+   "expected": "Control: the snare is in the sigmoid colon.",
+   "review": "R6: a site binds to the mentions of its own segment of its clause.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard",
+     "anat_any": [
+      "sigmoid colon"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "f5-ctrl-shared-site",
+   "class": "B3-anatomy",
+   "layout": "plain",
+   "expected": "Control: both acts are in the sigmoid colon.",
+   "review": "R6: a site binds to the mentions of its own segment of its clause.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    }
+   ],
+   "known_limit": {
+    "reason": "A coordinated subject (\"Cold forceps biopsies and a cold snare polypectomy were performed in the sigmoid colon\") is cut from its shared predicate (the coordinated-subject cut, R7, left out): the biopsies are dropped; the snare reads.",
+    "output": "gi.colonoscopy=performed acts: snare/performed[sigmoid colon]"
+   }
+  },
+  {
+   "id": "f6-procline-two-services",
+   "class": "B8-procedure-line",
+   "layout": "plain",
+   "expected": "The procedure line states EGD with biopsies and colonoscopy with cold snare polypectomy; the body documents both examinations. EGD biopsy and colonoscopy snare performed; never crossed (no colonoscopy biopsy, no EGD snare).",
+   "review": "R6: on a line naming two services, each act takes the service its own segment names.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.egd",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f6-procline-two-services-rev",
+   "class": "B8-procedure-line",
+   "layout": "plain",
+   "expected": "The procedure line states EGD with biopsies and colonoscopy with cold snare polypectomy; the body documents both examinations. EGD biopsy and colonoscopy snare performed; never crossed (no colonoscopy biopsy, no EGD snare).",
+   "review": "R6: on a line naming two services, each act takes the service its own segment names.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.egd",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f7-ctrl-repeat-planned",
+   "class": "B6-occurrence",
+   "layout": "plain",
+   "expected": "Today: snare of one polyp. The repeat colonoscopy and its removals are planned.",
+   "review": "Control: an act of another occurrence stays historical or planned.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "svc",
+     "fam": "gi.colonoscopy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.colonoscopy",
+     "subject": "snare",
+     "n": 0,
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f7-ercp-prior-sphincterotomy",
+   "class": "B6-occurrence",
+   "layout": "plain",
+   "expected": "No sphincterotomy today; the July one is historical. No conflict.",
+   "review": "Control: an act of another occurrence stays historical or planned.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.ercp",
+     "kind": "sphincterotomy",
+     "status": [
+      "negated",
+      "cancelled",
+      "historical"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.ercp",
+     "kind": "sphincterotomy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.ercp",
+     "subject": "sphincterotomy",
+     "n": 0,
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f7-ercp-we-did-not-sphincterotomy",
+   "class": "B1-denial-predicate",
+   "layout": "plain",
+   "expected": "No sphincterotomy today (the document says so).",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.ercp",
+     "kind": "sphincterotomy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.ercp",
+     "kind": "sphincterotomy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f7-egd-prior-dilation",
+   "class": "B6-occurrence",
+   "layout": "plain",
+   "expected": "Today: EGD, no dilation; the 2024 dilation is historical. No conflict.",
+   "review": "Control: an act of another occurrence stays historical or planned.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "dilation",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.egd",
+     "kind": "dilation",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.egd",
+     "subject": "dilation",
+     "n": 0,
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "ho-02-live",
+   "class": "known",
+   "layout": "pdf-wrap",
+   "expected": "Colonoscopy complete to the cecum. 35 mm ascending LST left in place for planned EMR; no biopsies; no tattoo.",
+   "review": "Known case: read as its source states.",
+   "checks": [
+    {
+     "t": "svc",
+     "fam": "gi.colonoscopy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "tattoo",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "emr",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "tattoo",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "ho-03-live",
+   "class": "known",
+   "layout": "plain",
+   "expected": "Colonoscopy incomplete at a sigmoid stricture (28 cm); cold forceps biopsies of the stricture.",
+   "review": "Known case: read as its source states.",
+   "checks": [
+    {
+     "t": "svc",
+     "fam": "gi.colonoscopy",
+     "status": [
+      "incomplete"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "dilation",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "ho-04-live",
+   "class": "known",
+   "layout": "plain",
+   "expected": "Office visit; EGD with possible dilation scheduled for 2026-11-18 (planned).",
+   "review": "Known case: read as its source states.",
+   "checks": [
+    {
+     "t": "svc",
+     "fam": "gi.egd",
+     "status": [
+      "planned"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.egd",
+     "kind": "dilation",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "h2-02-live",
+   "class": "known",
+   "layout": "plain",
+   "expected": "Colonoscopy to the hepatic flexure (incomplete); cold snare of a 7 mm descending polyp; a 2024 sigmoidoscopy is historical.",
+   "review": "Known case: read as its source states.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "svc",
+     "fam": "gi.flex_sig",
+     "status": [
+      "historical"
+     ],
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "h2-05-live",
+   "class": "known",
+   "layout": "plain",
+   "expected": "A colonoscopy cancelled before it began.",
+   "review": "Known case: read as its source states.",
+   "checks": [
+    {
+     "t": "svc",
+     "fam": "gi.colonoscopy",
+     "status": [
+      "cancelled"
+     ],
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "h2-06-live",
+   "class": "known",
+   "layout": "plain",
+   "expected": "Office visit; a 2025 colonoscopy (historical); a planned sigmoidoscopy.",
+   "review": "Known case: read as its source states.",
+   "checks": [
+    {
+     "t": "svc",
+     "fam": "gi.colonoscopy",
+     "status": [
+      "historical"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "svc",
+     "fam": "gi.flex_sig",
+     "status": [
+      "planned"
+     ],
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "h2-08-live",
+   "class": "known",
+   "layout": "plain",
+   "expected": "Hepatology office visit; no endoscopy today (\"Repeat upper endoscopy is not needed\"); a 2025 screening EGD is historical.",
+   "review": "Known case: read as its source states.",
+   "checks": [
+    {
+     "t": "svc_not",
+     "fam": "gi.egd",
+     "status": [
+      "performed",
+      "incomplete"
+     ],
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "ho-06-live",
+   "class": "known",
+   "layout": "plain",
+   "expected": "EUS with EUS-guided FNB of a pancreatic tail mass.",
+   "review": "Known case: read as its source states.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.eus",
+     "kind": "fna",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "ho-07-live",
+   "class": "known",
+   "layout": "plain",
+   "expected": "ERCP: brushings, balloon dilation of the bile duct stricture, covered metal stent placed; no sphincterotomy; no pancreatic stent (another subject).",
+   "review": "Known case: read as its source states.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.ercp",
+     "kind": "stent",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.ercp",
+     "kind": "dilation",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.ercp",
+     "subject": "stent",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.ercp",
+     "kind": "sphincterotomy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "ho-09-live",
+   "class": "known",
+   "layout": "plain",
+   "expected": "Flexible sigmoidoscopy with hemorrhoid band ligation; no biopsies.",
+   "review": "Known case: read as its source states.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.flex_sig",
+     "kind": "band_ligation",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.flex_sig",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "ho-10-live",
+   "class": "known",
+   "layout": "plain",
+   "expected": "EGD with TTS balloon dilation and esophageal biopsies; no gastric or duodenal biopsies (another site).",
+   "review": "Known case: read as its source states.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "dilation",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.egd",
+     "subject": "biopsy",
+     "n": 0,
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f8-table-hash-header",
+   "class": "B2-table",
+   "layout": "word-table",
+   "expected": "A findings table whose first column is \"#\": polyp 1 removed by hot snare, polyp 2 removed by cold forceps; row 3 (diverticula) has no intervention. No snare is denied; no snare conflict.",
+   "review": "R2: a header names columns, never an act; a cell answers its own column for its own row's service.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.colonoscopy",
+     "subject": "snare",
+     "n": 0,
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f8-plan-no-repeat-needed",
+   "class": "B1-denial-predicate",
+   "layout": "plain",
+   "expected": "Dilation performed today; the plan says no repeat dilation is needed (another occurrence). No dilation conflict.",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "dilation",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.egd",
+     "subject": "dilation",
+     "n": 0,
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "f8-annotation-covers-biopsy",
+   "class": "owner-question",
+   "layout": "pdf-annotation",
+   "expected": "UNCERTAIN (owner question): a FreeText annotation over the biopsy sentence says \"Biopsy deferred.\"; the body says a biopsy was taken. A careful coder would ask. The installed behaviour (test_repairs_r4_ingest_covers) keeps 45380 ready and names the page partial; the prototype keeps that behaviour.",
+   "review": "Owner question: the ruled annotation reading is kept (the page is named partial).",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f9-attr-h2-10-radiology",
+   "class": "attribution",
+   "layout": "plain",
+   "expected": "The document attributes a service to radiology: \"Fluoroscopy: supervision and interpretation reported separately by the hospital radiology department\".",
+   "review": "R8: a labelled line naming another service's own work as reported or billed apart attributes it.",
+   "checks": [
+    {
+     "t": "attribution",
+     "role": "radiology",
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f9-attr-h2-09-cytology",
+   "class": "attribution",
+   "layout": "plain",
+   "expected": "The document attributes a service to pathology: \"Cytology: ... the final cytology report by Northmoor Cytology Group (fictional), which bills for its own work\".",
+   "review": "R8: a labelled line naming another service's own work as reported or billed apart attributes it.",
+   "checks": [
+    {
+     "t": "attribution",
+     "role": "pathology",
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "f9-attr-h2-04-pathology",
+   "class": "attribution",
+   "layout": "plain",
+   "expected": "The document attributes a service to pathology: \"Pathology: Silverbirch Diagnostic Laboratory (fictional), reported separately.\".",
+   "review": "R8: a labelled line naming another service's own work as reported or billed apart attributes it.",
+   "checks": [
+    {
+     "t": "attribution",
+     "role": "pathology",
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "c1-nursing-3col",
+   "class": "B2-table",
+   "layout": "word-table",
+   "expected": "Physician: cold snare and tattoo. The nurse's three-column checklist denies the tattoo: a tattoo conflict kept with both sides; the snare is not denied.",
+   "review": "R2: a header names columns, never an act; a cell answers its own column for its own row's service.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.colonoscopy",
+     "subject": "tattoo",
+     "n": 1,
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "tattoo",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "c2-planned-emr-dated",
+   "class": "control-planned",
+   "layout": "plain",
+   "expected": "Today: no EMR; the EMR is planned for 2026-11-20.",
+   "review": "Control: a planned, dated act stays planned.",
+   "checks": [
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "emr",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "emr",
+     "status": [
+      "planned"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "c3-history-table",
+   "class": "control-historical",
+   "layout": "word-table",
+   "expected": "Today: one cold snare polypectomy. The table lists a 2021 colonoscopy and a 2019 EGD (historical); neither is today.",
+   "review": "Control: a history table's rows stay historical.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "svc_not",
+     "fam": "gi.egd",
+     "status": [
+      "performed",
+      "incomplete"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.colonoscopy",
+     "subject": "snare",
+     "n": 0,
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "c4-table-only-egd-biopsy",
+   "class": "B2-table",
+   "layout": "word-table",
+   "expected": "The summary table is the only statement that the EGD sampled tissue (\"Yes, duodenum and stomach\"); the colonoscopy row says \"No\". EGD biopsy performed; colonoscopy biopsy not done.",
+   "review": "R2: a header names columns, never an act; a cell answers its own column for its own row's service.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "c5-h2-10-wrapped-impression",
+   "class": "B7-stent",
+   "layout": "pdf-wrap",
+   "expected": "As h2-10 with the impression wrapped by a PDF: a stent exchange; no snare polypectomy.",
+   "review": "R5: a stent removed or exchanged is no placement, and its removal instrument is no polypectomy.",
+   "checks": [
+    {
+     "t": "no_act",
+     "fam": "gi.ercp",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.ercp",
+     "kind": "stent",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act_any_kind",
+     "fam": "gi.ercp",
+     "kinds": [
+      "stent_exchange"
+     ],
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "c6-ercp-exchange-plus-pancreatic",
+   "class": "B7-stent",
+   "layout": "plain",
+   "expected": "A biliary stent exchange plus a separate pancreatic duct stent placement: the pancreatic stent is not part of the exchange and stays a placement of its own.",
+   "review": "R5: a stent removed or exchanged is no placement, and its removal instrument is no polypectomy.",
+   "checks": [
+    {
+     "t": "act_any_kind",
+     "fam": "gi.ercp",
+     "kinds": [
+      "stent_exchange"
+     ],
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.ercp",
+     "kind": "stent",
+     "status": [
+      "performed"
+     ],
+     "sev": "full",
+     "anat_any": [
+      "pancreatic duct",
+      "pancreas"
+     ]
+    },
+    {
+     "t": "bundled",
+     "codes": "gi.ercp:43276",
+     "fam": "gi.ercp",
+     "kind": "stent",
+     "present": true,
+     "sev": "full"
+    },
+    {
+     "t": "unres",
+     "codes": "gi.ercp:43276",
+     "fam": "gi.ercp",
+     "kind": "stent",
+     "present": true,
+     "sev": "full"
+    }
+   ]
+  },
+  {
+   "id": "o1-ocr-hyphen-dilation",
+   "class": "B1-denial-predicate",
+   "layout": "ocr",
+   "expected": "EGD: no dilation (the scanned page hyphenates \"dilation\" and \"attempted\" across lines).",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "dilation",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.egd",
+     "kind": "dilation",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    }
+   ],
+   "known_limit": {
+    "reason": "OCR hyphenation splits \"dila-\" / \"tion\" and \"at-\" / \"tempted\": no dilation mention, so its denial is unread.",
+    "output": "gi.egd=incomplete acts: biopsy/performed@12 mm ulcer pylorus; bleeding_control/negated; biopsy/performed lesions: 12 mm ulcer pylorus"
+   }
+  },
+  {
+   "id": "o2-ocr-hyphen-biopsies",
+   "class": "B1-denial-predicate",
+   "layout": "ocr",
+   "expected": "EGD: forceps biopsies of the duodenum and antrum performed. Colonoscopy: complete, no colon biopsy taken (the document says so); no conflict. (OCR hyphenates \"biopsies\" across lines.)",
+   "review": "R1: a past-tense denial, cancellation or choice not to act in the act's own segment denies it; a plan, a finding or an attributive noun denies nothing.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.colonoscopy",
+     "subject": "biopsy",
+     "n": 0,
+     "sev": "hard"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.colonoscopy:45380",
+     "code": "45380",
+     "fam": "gi.colonoscopy",
+     "state": [
+      "not_performed"
+     ],
+     "sev": "full"
+    }
+   ],
+   "known_limit": {
+    "reason": "OCR hyphenation splits \"biop-\" / \"sies\": no biopsy mention, so its denial is unread and 45380 is asked.",
+    "output": "gi.egd=performed acts: biopsy/performed[second portion of the duodenum,gastric antrum]; biopsy/performed[duodenum,stomach] | gi.colonoscopy=performed | RECON[gi.egd:43239,gi.colonoscopy:45380] match 43239=performed, match 45380=uncertain"
+   }
+  },
+  {
+   "id": "o3-ocr-table-cell-broken",
+   "class": "B2-table",
+   "layout": "ocr",
+   "expected": "EGD: biopsies performed (prose; table row \"Yes\"). Colonoscopy: no tissue sampled (its table row says \"No\"; nothing in the prose says otherwise). The header cell names a column, not an act. (OCR broke the colonoscopy row's last cell onto a line of its own.)",
+   "review": "R2: a header names columns, never an act; a cell answers its own column for its own row's service.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.egd",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard",
+     "anat_none": [
+      "terminal ileum",
+      "ileocecal valve"
+     ],
+     "every": true
+    },
+    {
+     "t": "unres",
+     "codes": "gi.egd:43239,gi.colonoscopy:45378",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "present": false,
+     "sev": "hard"
+    },
+    {
+     "t": "match",
+     "codes": "gi.egd:43239,gi.colonoscopy:45380",
+     "code": "45380",
+     "fam": "gi.colonoscopy",
+     "state": [
+      "not_performed",
+      "uncertain"
+     ],
+     "sev": "hard"
+    }
+   ],
+   "known_limit": {
+    "reason": "OCR broke the colonoscopy row's last cell onto a line of its own, so no row under the header has its four cells and there is no table (cells split at \" | \"): the header's \"Tissue sampled\" reads as at head, a performed colonoscopy biopsy at the terminal ileum (a contradiction, as at head).",
+    "output": "gi.colonoscopy=performed acts: biopsy/performed[terminal ileum] | gi.egd=performed acts: biopsy/performed[second portion of the duodenum,gastric antrum]; biopsy/performed[duodenum,stomach] | RECON[gi.egd:43239,gi.colonoscopy:45378] match 43239=performed, match 45378=performed unresolved=[('colonoscopy', 'biopsy')] | RECON[gi.egd:43239,gi.colonoscopy:45380] match 43239=performed, match 45380=performed"
+   }
+  },
+  {
+   "id": "c7-attributive-biopsy-results",
+   "class": "control-attributive",
+   "layout": "plain",
+   "expected": "Today: one cold snare polypectomy. \"deferred until biopsy results are available\" defers the interval, not a biopsy: no biopsy is cancelled, and nothing conflicts.",
+   "review": "Control: an act noun used attributively (\"biopsy results\") denies nothing.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "snare",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "no_act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "negated",
+      "cancelled"
+     ],
+     "sev": "hard"
+    },
+    {
+     "t": "conflicts",
+     "fam": "gi.colonoscopy",
+     "subject": "biopsy",
+     "n": 0,
+     "sev": "hard"
+    }
+   ]
+  },
+  {
+   "id": "c8-lesion-whose-removal-is-denied",
+   "class": "B5b-residual",
+   "layout": "plain",
+   "expected": "Three lesions: the 6 mm sigmoid polyp (snared), the 4 mm rectal polyp (not removed; then biopsied and its site tattooed), the ascending colon polyps (cold forceps). The biopsy and tattoo of \"the 4 mm polyp\" are the rectal polyp's, never the ascending polyps'.",
+   "review": "R3: \"the 4 mm polyp\" is the rectal polyp, never the ascending polyps.",
+   "checks": [
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "biopsy",
+     "status": [
+      "performed"
+     ],
+     "sev": "full"
+    },
+    {
+     "t": "lesion",
+     "fam": "gi.colonoscopy",
+     "noun_re": "polyp",
+     "anat": "rectum",
+     "sev": "full"
+    },
+    {
+     "t": "act",
+     "fam": "gi.colonoscopy",
+     "kind": "tattoo",
+     "status": [
+      "performed"
+     ],
+     "sev": "hard",
+     "lesion_not_anat": "ascending colon",
+     "every": true
+    }
+   ],
+   "known_limit": {
+    "reason": "A lesion whose removal is denied (\"A 4 mm polyp in the rectum was not removed\") is not recorded: the acts of \"the 4 mm polyp\" bind to no lesion (never the ascending polyps), but the rectal polyp is missing from the lesions.",
+    "output": "gi.colonoscopy=performed acts: snare/performed@6 mm polyp sigmoid colon[sigmoid colon]; biopsy/performed@ polyps ascending colon[ascending colon]; biopsy/performed; tattoo/performed lesions: 6 mm polyp sigmoid colon;  polyps ascending colon"
+   }
+  }
+ ]
+}

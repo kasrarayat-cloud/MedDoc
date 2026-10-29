@@ -97,7 +97,9 @@ class Match:
     state: str  # performed | incomplete | not_performed | uncertain
     service: DocumentedService
     acts: tuple[Act, ...]  # the performed acts the code accounts for
-    reason: str  # service | act_denied | act_missing | conflict | service_uncertain | service_negative | profile_unknown
+    # service | act_denied | act_missing | conflict | service_uncertain | service_negative | profile_unknown |
+    # exchange_part (gi3 inventory: the code's act is part of a documented stent exchange; held)
+    reason: str
     detail: str
     conflict: Optional[Conflict] = None
     question: str = ''
@@ -164,8 +166,21 @@ def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match
                      question=f'The record states the {what} both as performed and as not performed. Which is correct '
                               'for this encounter?')
     if done:
-        listed = '; '.join(describe_act(service, a) for a in done[:4])
-        return Match(positive, service, done, 'service',
+        own = tuple(a for a in done if exchange_of(service, a) is None)
+        if not own:
+            # Every stent placement or removal the code accounts for is part of a stent exchange the document records
+            # (gi3 inventory, interpretation 46): which code the exchange takes is the reviewer's decision, so the code
+            # is held with the exchange named - never ready on the exchange's parts, and never excluded.
+            exchange = exchange_of(service, done[0])
+            passage = quote(exchange.evidence[0]) if exchange.evidence else 'its passage'
+            return Match('uncertain', service, (), EXCHANGE_PART,
+                         f'The {name} is documented as {service.status}, and the {what} this code accounts for is part '
+                         f'of the stent exchange the document records ({passage}). Held for the reviewer: which code '
+                         'accounts for the exchange is the reviewer\'s decision; nothing is added or excluded.',
+                         question=f'The document records a stent exchange ({passage}), and the {what} {code} accounts '
+                                  'for is part of it. Confirm which code accounts for the exchange.')
+        listed = '; '.join(describe_act(service, a) for a in own[:4])
+        return Match(positive, service, own, 'service',
                      f'The {name} is documented as {service.status} with {listed}.')
     if denied:
         return Match('not_performed', service, (), 'act_denied',
@@ -386,12 +401,31 @@ class Bundled:
     why: str
 
 
+# A stent placement or removal that is part of a stent exchange the service documents (gi3 inventory, R5;
+# interpretation 46): its match's reason, and why it is no act of its own beside the exchange.
+EXCHANGE_PART = 'exchange_part'
+EXCHANGE_BUNDLED = 'Part of the stent exchange the document records; the exchange code accounts for it.'
+
+
+def exchange_of(service: DocumentedService, act: Act) -> Optional[Act]:
+    """The stent exchange ``service`` documents as done that ``act`` - a stent placement or removal - is part of: one
+    whose sites take in the act's own, or any one when the act names no site. A placement that names a site of its own
+    the exchange does not ("a pancreatic duct stent placed" beside the biliary stent's exchange) is no part of it
+    (R5b). None for any other act."""
+    if act.kind not in ('stent', 'stent_removal'):
+        return None
+    return next((a for a in service.acts if a.kind == 'stent_exchange' and a.status == 'performed'
+                 and (not act.anatomy or (a.anatomy and set(act.anatomy) & set(a.anatomy)))), None)
+
+
 def _bundled(service: DocumentedService, act: Act) -> Optional[str]:
     family = catalogue.entry(service.family)
     if act.kind == 'clip':
         return dict(catalogue.COMMON_BUNDLED)['clip']
     if act.kind == 'cannulation':
         return dict(catalogue.COMMON_BUNDLED)['cannulation']
+    if exchange_of(service, act) is not None:
+        return EXCHANGE_BUNDLED  # the placement and the removal of an exchange are that exchange (R5)
     if act.kind == 'biopsy' and act.lesion and any(
             a.lesion == act.lesion and a.kind in REMOVAL_KINDS and a.status == 'performed' for a in service.acts):
         return dict(catalogue.COMMON_BUNDLED)['biopsy_of_removed_lesion']

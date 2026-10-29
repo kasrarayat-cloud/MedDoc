@@ -1,0 +1,42 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Ashgrove Regional Medical Center (fictional)
+Endoscopic Ultrasound Report
+Patient: Rafaela Quintanilla-Hart (fictional)
+Date of birth: 1970-11-30
+Synthetic record: H2-SYN-1109
+Date of examination: 2026-10-22
+Setting: hospital outpatient endoscopy (POS 22)
+Endosonographer: Emeka Dragomir-Holt, MD (fictional)
+Cytology: on-site adequacy assessment and the final cytology report by Northmoor Cytology Group (fictional),
+which bills for its own work
+Sedation: monitored anesthesia care by the hospital anesthesia department (fictional), billed by that department
+Indication
+A 2 cm subepithelial bulge in the gastric body with normal overlying mucosa, seen at upper endoscopy on
+2026-09-15 at an outside facility. CT of the abdomen on 2026-09-29 showed a 2.3 cm exophytic lesion of the
+gastric wall and no metastases.
+Technique
+The linear-array echoendoscope was introduced and advanced via the esophagus into the stomach. The
+endosonographic examination was limited to the esophagus, the stomach and the structures next to the stomach;
+the echoendoscope was not advanced through the pylorus, because the duodenum was not relevant to this
+question.
+Findings
+Gastric body, greater curvature: a 24 x 19 mm round, hypoechoic, homogeneous lesion arising from the fourth
+layer (muscularis propria), with smooth borders and no cystic spaces. Doppler showed no large vessel in the
+planned needle path.
+Perigastric region: two lymph nodes smaller than 6 mm with benign features.
+Target | Sampled | Passes
+Gastric body lesion | Yes | 3
+Perigastric lymph nodes | No | 0
+Left lobe of the liver, as seen from the stomach: no focal lesion. No ascites.
+Esophagus: normal wall layers.
+Sampling
+Under endosonographic guidance the gastric lesion was sampled through the gastric wall using a fork-tip biopsy
+needle (22 gauge): three passes, fanning between passes. The on-site assessment found adequate spindle cells.
+Further cores went into formalin for immunostaining.
+Impression
+Subepithelial lesion of the gastric muscularis propria, 24 x 19 mm, most consistent with a gastrointestinal stromal
+tumor; fine-needle biopsy obtained. Benign-appearing perigastric lymph nodes.
+Recommendations
+Await immunostains (CD117 and DOG1). Surgical oncology consultation is booked for 2026-11-03 to discuss
+laparoscopic wedge resection.
+Signed: Emeka Dragomir-Holt, MD (fictional), 2026-10-22 15:31

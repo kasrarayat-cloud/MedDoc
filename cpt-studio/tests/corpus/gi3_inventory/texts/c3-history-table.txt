@@ -1,0 +1,19 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Colonoscopy Report
+Date of procedure: 2026-10-20
+Place of service: Ambulatory surgery center (POS 24)
+Endoscopist: Test Physician, MD (fictional)
+Indication
+Surveillance.
+Prior procedures
+Procedure | Date | Findings
+Colonoscopy | 2021-03-02 | Two adenomas removed by cold snare
+Upper endoscopy | 2019-06-11 | Normal
+Findings
+The colonoscope was advanced to the cecum, identified by the appendiceal orifice and the ileocecal valve.
+A 5 mm sessile polyp in the descending colon was removed with a cold snare.
+Impression
+Findings as above.
+Plan
+Await pathology.
+Electronically signed: Test Physician, MD (fictional), 2026-10-20 15:41

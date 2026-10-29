@@ -1,0 +1,8 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Date of service: 2026-10-21
+Procedure: Colonoscopy. The colonoscope was advanced to the cecum.
+Findings: A 6 mm sigmoid polyp was seen.
+A cold forceps biopsy was taken from the polyp.
+
+[PDF annotation text on page 1]
+Biopsy deferred.

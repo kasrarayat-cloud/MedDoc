@@ -333,10 +333,14 @@ class LesionReadTests(SimpleTestCase):
                           ('S1-L2', 'polyps', '', 'ascending colon', 'B', 'diminutive'),
                           ('S1-L3', 'avm', '', 'cecum', '', ''), ('S1-L4', 'avms', '', 'descending colon', '', ''),
                           ('S1-L5', 'ulcer', '', 'descending colon', '', '')])
+        # gi3 inventory, R3: "The 4 mm polyp was biopsied and the site was tattooed" names the rectal 4 mm polyp, which
+        # the reader does not record (its removal is denied) - never the ascending colon's diminutive polyps (S1-L2),
+        # which this pin had both acts bound to (the biopsy merged into their forceps removal). Both now stand on their
+        # own, bound to no lesion.
         self.assertEqual(sorted((a.kind, a.status, a.lesion, a.evidence[0].start) for s in inv.services for a in s.acts),
-                         [('ablation', 'performed', 'S1-L3', 545), ('biopsy', 'performed', 'S1-L2', 312),
-                          ('biopsy', 'performed', 'S1-L5', 677), ('snare', 'performed', 'S1-L1', 157),
-                          ('tattoo', 'performed', 'S1-L2', 522)])
+                         [('ablation', 'performed', 'S1-L3', 545), ('biopsy', 'performed', '', 490),
+                          ('biopsy', 'performed', 'S1-L2', 312), ('biopsy', 'performed', 'S1-L5', 677),
+                          ('snare', 'performed', 'S1-L1', 157), ('tattoo', 'performed', '', 522)])
         self.assertEqual(inv.problems, ())
 
     def test_lesions_past_the_services_cap_are_still_a_recorded_problem(self):
