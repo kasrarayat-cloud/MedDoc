@@ -1,0 +1,1631 @@
+{
+ "schema": "cpt-studio-gi3-extent-variants@1",
+ "note": "Synthetic texts only. Source-reviewed expected facts of the gi3 extent investigation (session 7c8d38da, 2026-10-29); no reader output is stored here.",
+ "variants": [
+  {
+   "id": "F1-01-h201-live",
+   "family": "F1-summary-table",
+   "layout": "docx(live)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nBrightwater Valley Endoscopy Center (fictional)\nCombined upper and lower endoscopy report\nPatient: Marisol Vandermeer (fictional)\nDate of birth: 1957-04-03\nSynthetic record: H2-SYN-1101\nProcedure date: 2026-10-16\nEndoscopist: Kwabena Thistlewood, MD, Gastroenterology (fictional)\nSite of care: freestanding ambulatory surgical center, POS 24\nAnesthesia: monitored anesthesia care by Annika Castellanos-Webb, CRNA (fictional), documented and billed by the anesthesia group\nIndications\nIron deficiency anemia, with ferritin 5 ng/mL and hemoglobin 9.8 g/dL on 2026-09-24, and occasional epigastric burning. No visible bleeding and no diarrhea. She has never had an endoscopy of either kind.\nProcedure summary\nExamination | Instrument | Furthest point reached | Tissue sampled\nUpper endoscopy (EGD) | Standard gastroscope | Third portion of the duodenum | Yes, duodenum and stomach\nColonoscopy | Adult colonoscope | Terminal ileum, about 6 cm beyond the ileocecal valve | No\nUpper endoscopy\nConsent was confirmed and the pre-procedure pause completed. Under direct vision the gastroscope crossed the upper esophageal sphincter and reached the third portion of the duodenum. Esophageal mucosa unremarkable; regular Z-line at 38 cm. On retroflexion the cardia and fundus looked normal. Patchy antral erythema, with no erosions or ulcers. Bulb, second portion and third portion of the duodenum unremarkable. For celiac disease I took four pieces from D2, the second portion of the duodenum, and two from the bulb with cold forceps, and for Helicobacter pylori three pieces from the antrum and incisura; each site went into its own container.\nColonoscopy\nWith the patient on her left side, the digital rectal examination showed nothing abnormal, and the adult colonoscope then passed easily around the colon. Cecal landmarks (appendiceal orifice, ileocecal valve) were documented with photographs. I entered the terminal ileum and inspected about 6 cm of it. Boston Bowel Preparation Scale score 8 (right 2, transverse 3, left 3). Scattered small-mouthed diverticula in the sigmoid colon. No polyps, masses, vascular lesions or blood; colonic and ileal mucosa normal. I deliberately did not take colon biopsies, because the mucosa was normal and she has no diarrhea. Retroflexion in the rectum showed small, non-bleeding internal hemorrhoids. Withdrawal time was 11 minutes.\nComplications\nNone.\nImpression\n1. Antral erythema; duodenal and gastric biopsies taken.\n2. Normal terminal ileum. Sigmoid diverticulosis and small internal hemorrhoids. No colonic source for the iron deficiency.\nPlan\nAwait pathology and continue oral iron. If the biopsies do not explain the anemia, small bowel capsule endoscopy will be discussed at the follow-up visit.\nPathology: specimens sent to Greyfield Pathology Associates (fictional), which reports its interpretation separately.\nElectronically signed: Kwabena Thistlewood, MD (fictional), 2026-10-16 10:47",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "third part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "terminal ileum"
+    },
+    "not_today": [
+     "gi.office_em",
+     "gi.flex_sig"
+    ]
+   },
+   "review": "The table and the narratives state that the gastroscope reached the third portion of the duodenum and the colonoscope the terminal ileum (6 cm beyond the ileocecal valve); both services were done today. The capsule endoscopy and the follow-up visit are future."
+  },
+  {
+   "id": "F1-02-h201-text",
+   "family": "F1-summary-table",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nBrightwater Valley Endoscopy Center (fictional)\nCombined upper and lower endoscopy report\n\nPatient: Marisol Vandermeer (fictional)\nDate of birth: 1957-04-03\nSynthetic record: H2-SYN-1101\nProcedure date: 2026-10-16\nEndoscopist: Kwabena Thistlewood, MD, Gastroenterology (fictional)\nSite of care: freestanding ambulatory surgical center, POS 24\nAnesthesia: monitored anesthesia care by Annika Castellanos-Webb, CRNA (fictional), documented and billed by the anesthesia group\n\nIndications\nIron deficiency anemia, with ferritin 5 ng/mL and hemoglobin 9.8 g/dL on 2026-09-24, and occasional epigastric burning. No visible bleeding and no diarrhea. She has never had an endoscopy of either kind.\n\nProcedure summary\nExamination | Instrument | Furthest point reached | Tissue sampled\nUpper endoscopy (EGD) | Standard gastroscope | Third portion of the duodenum | Yes, duodenum and stomach\nColonoscopy | Adult colonoscope | Terminal ileum, about 6 cm beyond the ileocecal valve | No\n\nUpper endoscopy\nConsent was confirmed and the pre-procedure pause completed. Under direct vision the gastroscope crossed the upper esophageal sphincter and reached the third portion of the duodenum. Esophageal mucosa unremarkable; regular Z-line at 38 cm. On retroflexion the cardia and fundus looked normal. Patchy antral erythema, with no erosions or ulcers. Bulb, second portion and third portion of the duodenum unremarkable. For celiac disease I took four pieces from D2, the second portion of the duodenum, and two from the bulb with cold forceps, and for Helicobacter pylori three pieces from the antrum and incisura; each site went into its own container.\n\nColonoscopy\nWith the patient on her left side, the digital rectal examination showed nothing abnormal, and the adult colonoscope then passed easily around the colon. Cecal landmarks (appendiceal orifice, ileocecal valve) were documented with photographs. I entered the terminal ileum and inspected about 6 cm of it. Boston Bowel Preparation Scale score 8 (right 2, transverse 3, left 3). Scattered small-mouthed diverticula in the sigmoid colon. No polyps, masses, vascular lesions or blood; colonic and ileal mucosa normal. I deliberately did not take colon biopsies, because the mucosa was normal and she has no diarrhea. Retroflexion in the rectum showed small, non-bleeding internal hemorrhoids. Withdrawal time was 11 minutes.\n\nComplications\nNone.\n\nImpression\n1. Antral erythema; duodenal and gastric biopsies taken.\n2. Normal terminal ileum. Sigmoid diverticulosis and small internal hemorrhoids. No colonic source for the iron deficiency.\n\nPlan\nAwait pathology and continue oral iron. If the biopsies do not explain the anemia, small bowel capsule endoscopy will be discussed at the follow-up visit.\n\nPathology: specimens sent to Greyfield Pathology Associates (fictional), which reports its interpretation separately.\nElectronically signed: Kwabena Thistlewood, MD (fictional), 2026-10-16 10:47\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "third part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "terminal ileum"
+    },
+    "not_today": [
+     "gi.office_em",
+     "gi.flex_sig"
+    ]
+   },
+   "review": "The table and the narratives state that the gastroscope reached the third portion of the duodenum and the colonoscope the terminal ileum (6 cm beyond the ileocecal valve); both services were done today. The capsule endoscopy and the follow-up visit are future."
+  },
+  {
+   "id": "F1-03-h201-pdf",
+   "family": "F1-summary-table",
+   "layout": "pdf",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nBrightwater Valley Endoscopy Center (fictional)\nCombined upper and lower endoscopy report\n\nPatient: Marisol Vandermeer (fictional)\nDate of birth: 1957-04-03\nSynthetic record: H2-SYN-1101\nProcedure date: 2026-10-16\nEndoscopist: Kwabena Thistlewood, MD, Gastroenterology (fictional)\nSite of care: freestanding ambulatory surgical center, POS 24\nAnesthesia: monitored anesthesia care by Annika Castellanos-Webb, CRNA (fictional),\ndocumented and billed by the anesthesia group\n\nIndications\nIron deficiency anemia, with ferritin 5 ng/mL and hemoglobin 9.8 g/dL on 2026-09-24, and\noccasional epigastric burning. No visible bleeding and no diarrhea. She has never had an\nendoscopy of either kind.\n\nProcedure summary\nExamination | Instrument | Furthest point reached | Tissue sampled\nUpper endoscopy (EGD) | Standard gastroscope | Third portion of the duodenum | Yes,\nduodenum and stomach\nColonoscopy | Adult colonoscope | Terminal ileum, about 6 cm beyond the ileocecal valve |\nNo\n\nUpper endoscopy\nConsent was confirmed and the pre-procedure pause completed. Under direct vision the\ngastroscope crossed the upper esophageal sphincter and reached the third portion of the\nduodenum. Esophageal mucosa unremarkable; regular Z-line at 38 cm. On retroflexion the\ncardia and fundus looked normal. Patchy antral erythema, with no erosions or ulcers. Bulb,\nsecond portion and third portion of the duodenum unremarkable. For celiac disease I took\nfour pieces from D2, the second portion of the duodenum, and two from the bulb with cold\nforceps, and for Helicobacter pylori three pieces from the antrum and incisura; each site\nwent into its own container.\n\nColonoscopy\nWith the patient on her left side, the digital rectal examination showed nothing abnormal,\nand the adult colonoscope then passed easily around the colon. Cecal landmarks\n(appendiceal orifice, ileocecal valve) were documented with photographs. I entered the\nterminal ileum and inspected about 6 cm of it. Boston Bowel Preparation Scale score 8\n(right 2, transverse 3, left 3). Scattered small-mouthed diverticula in the sigmoid colon.\nNo polyps, masses, vascular lesions or blood; colonic and ileal mucosa normal. I\ndeliberately did not take colon biopsies, because the mucosa was normal and she has no\ndiarrhea. Retroflexion in the rectum showed small, non-bleeding internal hemorrhoids.\nWithdrawal time was 11 minutes.\n\nComplications\nNone.\n\nImpression\n1. Antral erythema; duodenal and gastric biopsies taken.\n2. Normal terminal ileum. Sigmoid diverticulosis and small internal hemorrhoids. No\ncolonic source for the iron deficiency.\n\nPlan\nAwait pathology and continue oral iron. If the biopsies do not explain the anemia, small\nbowel capsule endoscopy will be discussed at the follow-up visit.\n\nPathology: specimens sent to Greyfield Pathology Associates (fictional), which reports its\ninterpretation separately.\nElectronically signed: Kwabena Thistlewood, MD (fictional), 2026-10-16 10:47\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "third part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "terminal ileum"
+    },
+    "not_today": [
+     "gi.office_em",
+     "gi.flex_sig"
+    ]
+   },
+   "review": "The table and the narratives state that the gastroscope reached the third portion of the duodenum and the colonoscope the terminal ileum (6 cm beyond the ileocecal valve); both services were done today. The capsule endoscopy and the follow-up visit are future."
+  },
+  {
+   "id": "F1-04-h201-ocr",
+   "family": "F1-summary-table",
+   "layout": "ocr",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR\nCLINICAL USE\n\nBrightwater Valley Endoscopy Center (fictional)\nCombined upper and lower endoscopy report\n\nPatient: Marisol Vandermeer (fictional)\nDate of birth: 1957-04-03\nSynthetic record: H2-SYN-1101\nProcedure date: 2026-10-16\nEndoscopist: Kwabena Thistlewood, MD, Gastroenterology\n(fictional)\nSite of care: freestanding ambulatory surgical center, POS\n24\nAnesthesia: monitored anesthesia care by Annika Castellanos-\nWebb, CRNA (fictional), documented and billed by the\nanesthesia group\n\nIndications\nIron deficiency anemia, with ferritin 5 ng/mL and hemoglobin\n9.8 g/dL on 2026-09-24, and occasional epigastric burning.\nNo visible bleeding and no diarrhea. She has never had an\nendoscopy of either kind.\n\nProcedure summary\nExamination   Instrument   Furthest point reached   Tissue\nsampled\nUpper endoscopy (EGD)   Standard gastroscope   Third portion\nof the duodenum   Yes, duodenum and stomach\nColonoscopy   Adult colonoscope   Terminal ileum, about 6 cm\nbeyond the ileocecal valve   No\n\nUpper endoscopy\nConsent was confirmed and the pre-procedure pause completed.\nUnder direct vision the gastroscope crossed the upper\nesophageal sphincter and reached the third portion of the\nduodenum. Esophageal mucosa unremarkable; regular Z-line at\n38 cm. On retroflexion the cardia and fundus looked normal.\nPatchy antral erythema, with no erosions or ulcers. Bulb,\nsecond portion and third portion of the duodenum\nunremarkable. For celiac disease I took four pieces from D2,\nthe second portion of the duodenum, and two from the bulb\nwith cold forceps, and for Helicobacter pylori three pieces\nfrom the antrum and incisura; each site went into its own\ncontainer.\n\nColonoscopy\nWith the patient on her left side, the digital rectal\nexamination showed nothing abnormal, and the adult\ncolonoscope then passed easily around the colon. Cecal\nlandmarks (appendiceal orifice, ileocecal valve) were\ndocumented with photographs. I entered the terminal ileum\nand inspected about 6 cm of it. Boston Bowel Preparation\nScale score 8 (right 2, transverse 3, left 3). Scattered\nsmall-mouthed diverticula in the sigmoid colon. No polyps,\nmasses, vascular lesions or blood; colonic and ileal mucosa\nnormal. I deliberately did not take colon biopsies, because\nthe mucosa was normal and she has no diarrhea. Retroflexion\nin the rectum showed small, non-bleeding internal\nhemorrhoids. Withdrawal time was 11 minutes.\n\nComplications\nNone.\n\nImpression\n1. Antral erythema; duodenal and gastric biopsies taken.\n2. Normal terminal ileum. Sigmoid diverticulosis and small\ninternal hemorrhoids. No colonic source for the iron\ndeficiency.\n\nPlan\nAwait pathology and continue oral iron. If the biopsies do\nnot explain the anemia, small bowel capsule endoscopy will\nbe discussed at the follow-up visit.\n\nPathology: specimens sent to Greyfield Pathology Associates\n(fictional), which reports its interpretation separately.\nElectronically signed: Kwabena Thistlewood, MD (fictional),\n2026-10-16 10:47\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "third part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "terminal ileum"
+    },
+    "not_today": [
+     "gi.office_em",
+     "gi.flex_sig"
+    ]
+   },
+   "review": "The table and the narratives state that the gastroscope reached the third portion of the duodenum and the colonoscope the terminal ileum (6 cm beyond the ileocecal valve); both services were done today. The capsule endoscopy and the follow-up visit are future. OCR keeps the words; the bars are lost."
+  },
+  {
+   "id": "F1-05-summary-of-procedures",
+   "family": "F1-summary-table",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nBrightwater Valley Endoscopy Center (fictional)\nCombined upper and lower endoscopy report\nPatient: Marisol Vandermeer (fictional)\nDate of birth: 1957-04-03\nSynthetic record: H2-SYN-1101\nProcedure date: 2026-10-16\nEndoscopist: Kwabena Thistlewood, MD, Gastroenterology (fictional)\nSite of care: freestanding ambulatory surgical center, POS 24\nAnesthesia: monitored anesthesia care by Annika Castellanos-Webb, CRNA (fictional), documented and billed by the anesthesia group\nIndications\nIron deficiency anemia, with ferritin 5 ng/mL and hemoglobin 9.8 g/dL on 2026-09-24, and occasional epigastric burning. No visible bleeding and no diarrhea. She has never had an endoscopy of either kind.\nSummary of procedures\nExamination | Instrument | Furthest point reached | Tissue sampled\nUpper endoscopy (EGD) | Standard gastroscope | Third portion of the duodenum | Yes, duodenum and stomach\nColonoscopy | Adult colonoscope | Terminal ileum, about 6 cm beyond the ileocecal valve | No\nUpper endoscopy\nConsent was confirmed and the pre-procedure pause completed. Under direct vision the gastroscope crossed the upper esophageal sphincter and reached the third portion of the duodenum. Esophageal mucosa unremarkable; regular Z-line at 38 cm. On retroflexion the cardia and fundus looked normal. Patchy antral erythema, with no erosions or ulcers. Bulb, second portion and third portion of the duodenum unremarkable. For celiac disease I took four pieces from D2, the second portion of the duodenum, and two from the bulb with cold forceps, and for Helicobacter pylori three pieces from the antrum and incisura; each site went into its own container.\nColonoscopy\nWith the patient on her left side, the digital rectal examination showed nothing abnormal, and the adult colonoscope then passed easily around the colon. Cecal landmarks (appendiceal orifice, ileocecal valve) were documented with photographs. I entered the terminal ileum and inspected about 6 cm of it. Boston Bowel Preparation Scale score 8 (right 2, transverse 3, left 3). Scattered small-mouthed diverticula in the sigmoid colon. No polyps, masses, vascular lesions or blood; colonic and ileal mucosa normal. I deliberately did not take colon biopsies, because the mucosa was normal and she has no diarrhea. Retroflexion in the rectum showed small, non-bleeding internal hemorrhoids. Withdrawal time was 11 minutes.\nComplications\nNone.\nImpression\n1. Antral erythema; duodenal and gastric biopsies taken.\n2. Normal terminal ileum. Sigmoid diverticulosis and small internal hemorrhoids. No colonic source for the iron deficiency.\nPlan\nAwait pathology and continue oral iron. If the biopsies do not explain the anemia, small bowel capsule endoscopy will be discussed at the follow-up visit.\nPathology: specimens sent to Greyfield Pathology Associates (fictional), which reports its interpretation separately.\nElectronically signed: Kwabena Thistlewood, MD (fictional), 2026-10-16 10:47\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "third part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "terminal ileum"
+    },
+    "not_today": [
+     "gi.office_em",
+     "gi.flex_sig"
+    ]
+   },
+   "review": "The table and the narratives state that the gastroscope reached the third portion of the duodenum and the colonoscope the terminal ileum (6 cm beyond the ileocecal valve); both services were done today. The capsule endoscopy and the follow-up visit are future."
+  },
+  {
+   "id": "F1-06-no-summary-heading",
+   "family": "F1-summary-table",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nBrightwater Valley Endoscopy Center (fictional)\nCombined upper and lower endoscopy report\nPatient: Marisol Vandermeer (fictional)\nDate of birth: 1957-04-03\nSynthetic record: H2-SYN-1101\nProcedure date: 2026-10-16\nEndoscopist: Kwabena Thistlewood, MD, Gastroenterology (fictional)\nSite of care: freestanding ambulatory surgical center, POS 24\nAnesthesia: monitored anesthesia care by Annika Castellanos-Webb, CRNA (fictional), documented and billed by the anesthesia group\nIndications\nIron deficiency anemia, with ferritin 5 ng/mL and hemoglobin 9.8 g/dL on 2026-09-24, and occasional epigastric burning. No visible bleeding and no diarrhea. She has never had an endoscopy of either kind.\nExamination | Instrument | Furthest point reached | Tissue sampled\nUpper endoscopy (EGD) | Standard gastroscope | Third portion of the duodenum | Yes, duodenum and stomach\nColonoscopy | Adult colonoscope | Terminal ileum, about 6 cm beyond the ileocecal valve | No\nUpper endoscopy\nConsent was confirmed and the pre-procedure pause completed. Under direct vision the gastroscope crossed the upper esophageal sphincter and reached the third portion of the duodenum. Esophageal mucosa unremarkable; regular Z-line at 38 cm. On retroflexion the cardia and fundus looked normal. Patchy antral erythema, with no erosions or ulcers. Bulb, second portion and third portion of the duodenum unremarkable. For celiac disease I took four pieces from D2, the second portion of the duodenum, and two from the bulb with cold forceps, and for Helicobacter pylori three pieces from the antrum and incisura; each site went into its own container.\nColonoscopy\nWith the patient on her left side, the digital rectal examination showed nothing abnormal, and the adult colonoscope then passed easily around the colon. Cecal landmarks (appendiceal orifice, ileocecal valve) were documented with photographs. I entered the terminal ileum and inspected about 6 cm of it. Boston Bowel Preparation Scale score 8 (right 2, transverse 3, left 3). Scattered small-mouthed diverticula in the sigmoid colon. No polyps, masses, vascular lesions or blood; colonic and ileal mucosa normal. I deliberately did not take colon biopsies, because the mucosa was normal and she has no diarrhea. Retroflexion in the rectum showed small, non-bleeding internal hemorrhoids. Withdrawal time was 11 minutes.\nComplications\nNone.\nImpression\n1. Antral erythema; duodenal and gastric biopsies taken.\n2. Normal terminal ileum. Sigmoid diverticulosis and small internal hemorrhoids. No colonic source for the iron deficiency.\nPlan\nAwait pathology and continue oral iron. If the biopsies do not explain the anemia, small bowel capsule endoscopy will be discussed at the follow-up visit.\nPathology: specimens sent to Greyfield Pathology Associates (fictional), which reports its interpretation separately.\nElectronically signed: Kwabena Thistlewood, MD (fictional), 2026-10-16 10:47\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "third part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "terminal ileum"
+    },
+    "not_today": [
+     "gi.office_em",
+     "gi.flex_sig"
+    ]
+   },
+   "review": "The table and the narratives state that the gastroscope reached the third portion of the duodenum and the colonoscope the terminal ileum (6 cm beyond the ileocecal valve); both services were done today. The capsule endoscopy and the follow-up visit are future. The table follows the indication with no heading of its own: a table is no part of the indication."
+  },
+  {
+   "id": "F1-07-extent-reached-column",
+   "family": "F1-summary-table",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nBrightwater Valley Endoscopy Center (fictional)\nCombined upper and lower endoscopy report\nPatient: Marisol Vandermeer (fictional)\nDate of birth: 1957-04-03\nSynthetic record: H2-SYN-1101\nProcedure date: 2026-10-16\nEndoscopist: Kwabena Thistlewood, MD, Gastroenterology (fictional)\nSite of care: freestanding ambulatory surgical center, POS 24\nAnesthesia: monitored anesthesia care by Annika Castellanos-Webb, CRNA (fictional), documented and billed by the anesthesia group\nIndications\nIron deficiency anemia, with ferritin 5 ng/mL and hemoglobin 9.8 g/dL on 2026-09-24, and occasional epigastric burning. No visible bleeding and no diarrhea. She has never had an endoscopy of either kind.\nProcedure summary\nExamination | Instrument | Extent reached | Tissue sampled\nUpper endoscopy (EGD) | Standard gastroscope | Third portion of the duodenum | Yes, duodenum and stomach\nColonoscopy | Adult colonoscope | Terminal ileum, about 6 cm beyond the ileocecal valve | No\nUpper endoscopy\nConsent was confirmed and the pre-procedure pause completed. Under direct vision the gastroscope crossed the upper esophageal sphincter and reached the third portion of the duodenum. Esophageal mucosa unremarkable; regular Z-line at 38 cm. On retroflexion the cardia and fundus looked normal. Patchy antral erythema, with no erosions or ulcers. Bulb, second portion and third portion of the duodenum unremarkable. For celiac disease I took four pieces from D2, the second portion of the duodenum, and two from the bulb with cold forceps, and for Helicobacter pylori three pieces from the antrum and incisura; each site went into its own container.\nColonoscopy\nWith the patient on her left side, the digital rectal examination showed nothing abnormal, and the adult colonoscope then passed easily around the colon. Cecal landmarks (appendiceal orifice, ileocecal valve) were documented with photographs. I entered the terminal ileum and inspected about 6 cm of it. Boston Bowel Preparation Scale score 8 (right 2, transverse 3, left 3). Scattered small-mouthed diverticula in the sigmoid colon. No polyps, masses, vascular lesions or blood; colonic and ileal mucosa normal. I deliberately did not take colon biopsies, because the mucosa was normal and she has no diarrhea. Retroflexion in the rectum showed small, non-bleeding internal hemorrhoids. Withdrawal time was 11 minutes.\nComplications\nNone.\nImpression\n1. Antral erythema; duodenal and gastric biopsies taken.\n2. Normal terminal ileum. Sigmoid diverticulosis and small internal hemorrhoids. No colonic source for the iron deficiency.\nPlan\nAwait pathology and continue oral iron. If the biopsies do not explain the anemia, small bowel capsule endoscopy will be discussed at the follow-up visit.\nPathology: specimens sent to Greyfield Pathology Associates (fictional), which reports its interpretation separately.\nElectronically signed: Kwabena Thistlewood, MD (fictional), 2026-10-16 10:47\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "third part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "terminal ileum"
+    },
+    "not_today": [
+     "gi.office_em",
+     "gi.flex_sig"
+    ]
+   },
+   "review": "The table and the narratives state that the gastroscope reached the third portion of the duodenum and the colonoscope the terminal ileum (6 cm beyond the ileocecal valve); both services were done today. The capsule endoscopy and the follow-up visit are future."
+  },
+  {
+   "id": "F1-08-table-only-extent",
+   "family": "F1-summary-table",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nBrightwater Valley Endoscopy Center (fictional)\nCombined upper and lower endoscopy report\nPatient: Marisol Vandermeer (fictional)\nDate of birth: 1957-04-03\nSynthetic record: H2-SYN-1101\nProcedure date: 2026-10-16\nEndoscopist: Kwabena Thistlewood, MD, Gastroenterology (fictional)\nSite of care: freestanding ambulatory surgical center, POS 24\nAnesthesia: monitored anesthesia care by Annika Castellanos-Webb, CRNA (fictional), documented and billed by the anesthesia group\nIndications\nIron deficiency anemia, with ferritin 5 ng/mL and hemoglobin 9.8 g/dL on 2026-09-24, and occasional epigastric burning. No visible bleeding and no diarrhea. She has never had an endoscopy of either kind.\nProcedure summary\nExamination | Instrument | Furthest point reached | Tissue sampled\nUpper endoscopy (EGD) | Standard gastroscope | Third portion of the duodenum | Yes, duodenum and stomach\nColonoscopy | Adult colonoscope | Terminal ileum, about 6 cm beyond the ileocecal valve | No\nUpper endoscopy\nConsent was confirmed and the pre-procedure pause completed. The gastroscope was passed under direct vision. Esophageal mucosa unremarkable; regular Z-line at 38 cm. On retroflexion the cardia and fundus looked normal. Patchy antral erythema, with no erosions or ulcers. The duodenal mucosa was unremarkable. For celiac disease I took four pieces from D2, the second portion of the duodenum, and two from the bulb with cold forceps, and for Helicobacter pylori three pieces from the antrum and incisura; each site went into its own container.\nColonoscopy\nWith the patient on her left side, the digital rectal examination showed nothing abnormal, and the adult colonoscope then passed easily around the colon. Boston Bowel Preparation Scale score 8 (right 2, transverse 3, left 3). Scattered small-mouthed diverticula in the sigmoid colon. No polyps, masses, vascular lesions or blood; mucosa normal. I deliberately did not take colon biopsies, because the mucosa was normal and she has no diarrhea. Retroflexion in the rectum showed small, non-bleeding internal hemorrhoids. Withdrawal time was 11 minutes.\nComplications\nNone.\nImpression\n1. Antral erythema; duodenal and gastric biopsies taken.\n2. Sigmoid diverticulosis and small internal hemorrhoids. No colonic source for the iron deficiency.\nPlan\nAwait pathology and continue oral iron. If the biopsies do not explain the anemia, small bowel capsule endoscopy will be discussed at the follow-up visit.\nPathology: specimens sent to Greyfield Pathology Associates (fictional), which reports its interpretation separately.\nElectronically signed: Kwabena Thistlewood, MD (fictional), 2026-10-16 10:47\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "third part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "terminal ileum"
+    },
+    "not_today": [
+     "gi.office_em",
+     "gi.flex_sig"
+    ]
+   },
+   "review": "The narratives no longer say how far either instrument went; the summary table does: third portion of the duodenum (EGD row) and terminal ileum (colonoscopy row)."
+  },
+  {
+   "id": "F1-08b-table-only-extent-text",
+   "family": "F1-summary-table",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nBrightwater Valley Endoscopy Center (fictional)\nCombined upper and lower endoscopy report\n\nPatient: Marisol Vandermeer (fictional)\nDate of birth: 1957-04-03\nSynthetic record: H2-SYN-1101\nProcedure date: 2026-10-16\nEndoscopist: Kwabena Thistlewood, MD, Gastroenterology (fictional)\nSite of care: freestanding ambulatory surgical center, POS 24\nAnesthesia: monitored anesthesia care by Annika Castellanos-Webb, CRNA (fictional), documented and billed by the anesthesia group\n\nIndications\nIron deficiency anemia, with ferritin 5 ng/mL and hemoglobin 9.8 g/dL on 2026-09-24, and occasional epigastric burning. No visible bleeding and no diarrhea. She has never had an endoscopy of either kind.\n\nProcedure summary\nExamination | Instrument | Furthest point reached | Tissue sampled\nUpper endoscopy (EGD) | Standard gastroscope | Third portion of the duodenum | Yes, duodenum and stomach\nColonoscopy | Adult colonoscope | Terminal ileum, about 6 cm beyond the ileocecal valve | No\n\nUpper endoscopy\nConsent was confirmed and the pre-procedure pause completed. The gastroscope was passed under direct vision. Esophageal mucosa unremarkable; regular Z-line at 38 cm. On retroflexion the cardia and fundus looked normal. Patchy antral erythema, with no erosions or ulcers. The duodenal mucosa was unremarkable. For celiac disease I took four pieces from D2, the second portion of the duodenum, and two from the bulb with cold forceps, and for Helicobacter pylori three pieces from the antrum and incisura; each site went into its own container.\n\nColonoscopy\nWith the patient on her left side, the digital rectal examination showed nothing abnormal, and the adult colonoscope then passed easily around the colon. Boston Bowel Preparation Scale score 8 (right 2, transverse 3, left 3). Scattered small-mouthed diverticula in the sigmoid colon. No polyps, masses, vascular lesions or blood; mucosa normal. I deliberately did not take colon biopsies, because the mucosa was normal and she has no diarrhea. Retroflexion in the rectum showed small, non-bleeding internal hemorrhoids. Withdrawal time was 11 minutes.\n\nComplications\nNone.\n\nImpression\n1. Antral erythema; duodenal and gastric biopsies taken.\n2. Sigmoid diverticulosis and small internal hemorrhoids. No colonic source for the iron deficiency.\n\nPlan\nAwait pathology and continue oral iron. If the biopsies do not explain the anemia, small bowel capsule endoscopy will be discussed at the follow-up visit.\n\nPathology: specimens sent to Greyfield Pathology Associates (fictional), which reports its interpretation separately.\nElectronically signed: Kwabena Thistlewood, MD (fictional), 2026-10-16 10:47\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "third part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "terminal ileum"
+    },
+    "not_today": [
+     "gi.office_em",
+     "gi.flex_sig"
+    ]
+   },
+   "review": "As F1-08, plain text with blank lines."
+  },
+  {
+   "id": "F1-09-colon-incomplete-row",
+   "family": "F1-summary-table",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nBrightwater Valley Endoscopy Center (fictional)\nCombined upper and lower endoscopy report\nPatient: Marisol Vandermeer (fictional)\nDate of birth: 1957-04-03\nSynthetic record: H2-SYN-1101\nProcedure date: 2026-10-16\nEndoscopist: Kwabena Thistlewood, MD, Gastroenterology (fictional)\nSite of care: freestanding ambulatory surgical center, POS 24\nAnesthesia: monitored anesthesia care by Annika Castellanos-Webb, CRNA (fictional), documented and billed by the anesthesia group\nIndications\nIron deficiency anemia, with ferritin 5 ng/mL and hemoglobin 9.8 g/dL on 2026-09-24, and occasional epigastric burning. No visible bleeding and no diarrhea. She has never had an endoscopy of either kind.\nProcedure summary\nExamination | Instrument | Furthest point reached | Tissue sampled\nUpper endoscopy (EGD) | Standard gastroscope | Third portion of the duodenum | Yes, duodenum and stomach\nColonoscopy | Adult colonoscope | Splenic flexure (fixed looping) | No\nUpper endoscopy\nConsent was confirmed and the pre-procedure pause completed. Under direct vision the gastroscope crossed the upper esophageal sphincter and reached the third portion of the duodenum. Esophageal mucosa unremarkable; regular Z-line at 38 cm. On retroflexion the cardia and fundus looked normal. Patchy antral erythema, with no erosions or ulcers. Bulb, second portion and third portion of the duodenum unremarkable. For celiac disease I took four pieces from D2, the second portion of the duodenum, and two from the bulb with cold forceps, and for Helicobacter pylori three pieces from the antrum and incisura; each site went into its own container.\nColonoscopy\nWith the patient on her left side, the digital rectal examination showed nothing abnormal. The adult colonoscope could not be advanced beyond the splenic flexure because of fixed looping despite abdominal pressure and position changes; the cecum was not reached. Boston Bowel Preparation Scale score 8 (right 2, transverse 3, left 3). Scattered small-mouthed diverticula in the sigmoid colon. No polyps, masses, vascular lesions or blood; mucosa normal in the segments seen. I deliberately did not take colon biopsies, because the mucosa was normal and she has no diarrhea. Retroflexion in the rectum showed small, non-bleeding internal hemorrhoids. Withdrawal time was 11 minutes.\nComplications\nNone.\nImpression\n1. Antral erythema; duodenal and gastric biopsies taken.\n2. Incomplete colonoscopy to the splenic flexure. Sigmoid diverticulosis and small internal hemorrhoids. No colonic source for the iron deficiency.\nPlan\nAwait pathology and continue oral iron. If the biopsies do not explain the anemia, small bowel capsule endoscopy will be discussed at the follow-up visit.\nPathology: specimens sent to Greyfield Pathology Associates (fictional), which reports its interpretation separately.\nElectronically signed: Kwabena Thistlewood, MD (fictional), 2026-10-16 10:47\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "third part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: splenic flexure"
+    },
+    "not_today": [
+     "gi.office_em",
+     "gi.flex_sig"
+    ]
+   },
+   "review": "The colonoscopy stopped at the splenic flexure (table row and narrative); the cecum was not reached."
+  },
+  {
+   "id": "F1-10-order-swapped",
+   "family": "F1-summary-table",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nBrightwater Valley Endoscopy Center (fictional)\nCombined upper and lower endoscopy report\nPatient: Marisol Vandermeer (fictional)\nDate of birth: 1957-04-03\nSynthetic record: H2-SYN-1101\nProcedure date: 2026-10-16\nEndoscopist: Kwabena Thistlewood, MD, Gastroenterology (fictional)\nSite of care: freestanding ambulatory surgical center, POS 24\nAnesthesia: monitored anesthesia care by Annika Castellanos-Webb, CRNA (fictional), documented and billed by the anesthesia group\nIndications\nIron deficiency anemia, with ferritin 5 ng/mL and hemoglobin 9.8 g/dL on 2026-09-24, and occasional epigastric burning. No visible bleeding and no diarrhea. She has never had an endoscopy of either kind.\nProcedure summary\nExamination | Instrument | Furthest point reached | Tissue sampled\nColonoscopy | Adult colonoscope | Terminal ileum, about 6 cm beyond the ileocecal valve | No\nUpper endoscopy (EGD) | Standard gastroscope | Third portion of the duodenum | Yes, duodenum and stomach\nColonoscopy\nWith the patient on her left side, the digital rectal examination showed nothing abnormal, and the adult colonoscope then passed easily around the colon. Cecal landmarks (appendiceal orifice, ileocecal valve) were documented with photographs. I entered the terminal ileum and inspected about 6 cm of it. Boston Bowel Preparation Scale score 8 (right 2, transverse 3, left 3). Scattered small-mouthed diverticula in the sigmoid colon. No polyps, masses, vascular lesions or blood; colonic and ileal mucosa normal. I deliberately did not take colon biopsies, because the mucosa was normal and she has no diarrhea. Retroflexion in the rectum showed small, non-bleeding internal hemorrhoids. Withdrawal time was 11 minutes.\nUpper endoscopy\nConsent was confirmed and the pre-procedure pause completed. Under direct vision the gastroscope crossed the upper esophageal sphincter and reached the third portion of the duodenum. Esophageal mucosa unremarkable; regular Z-line at 38 cm. On retroflexion the cardia and fundus looked normal. Patchy antral erythema, with no erosions or ulcers. Bulb, second portion and third portion of the duodenum unremarkable. For celiac disease I took four pieces from D2, the second portion of the duodenum, and two from the bulb with cold forceps, and for Helicobacter pylori three pieces from the antrum and incisura; each site went into its own container.\nComplications\nNone.\nImpression\n1. Antral erythema; duodenal and gastric biopsies taken.\n2. Normal terminal ileum. Sigmoid diverticulosis and small internal hemorrhoids. No colonic source for the iron deficiency.\nPlan\nAwait pathology and continue oral iron. If the biopsies do not explain the anemia, small bowel capsule endoscopy will be discussed at the follow-up visit.\nPathology: specimens sent to Greyfield Pathology Associates (fictional), which reports its interpretation separately.\nElectronically signed: Kwabena Thistlewood, MD (fictional), 2026-10-16 10:47\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "third part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "terminal ileum"
+    },
+    "not_today": [
+     "gi.office_em",
+     "gi.flex_sig"
+    ]
+   },
+   "review": "The table and the narratives state that the gastroscope reached the third portion of the duodenum and the colonoscope the terminal ileum (6 cm beyond the ileocecal valve); both services were done today. The capsule endoscopy and the follow-up visit are future. Rows and parts reordered."
+  },
+  {
+   "id": "F1-11-caps-headings",
+   "family": "F1-summary-table",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nBrightwater Valley Endoscopy Center (fictional)\nCombined upper and lower endoscopy report\nPatient: Marisol Vandermeer (fictional)\nDate of birth: 1957-04-03\nSynthetic record: H2-SYN-1101\nProcedure date: 2026-10-16\nEndoscopist: Kwabena Thistlewood, MD, Gastroenterology (fictional)\nSite of care: freestanding ambulatory surgical center, POS 24\nAnesthesia: monitored anesthesia care by Annika Castellanos-Webb, CRNA (fictional), documented and billed by the anesthesia group\nIndications\nIron deficiency anemia, with ferritin 5 ng/mL and hemoglobin 9.8 g/dL on 2026-09-24, and occasional epigastric burning. No visible bleeding and no diarrhea. She has never had an endoscopy of either kind.\nPROCEDURE SUMMARY\nExamination | Instrument | Furthest point reached | Tissue sampled\nUpper endoscopy (EGD) | Standard gastroscope | Third portion of the duodenum | Yes, duodenum and stomach\nColonoscopy | Adult colonoscope | Terminal ileum, about 6 cm beyond the ileocecal valve | No\nEGD\nConsent was confirmed and the pre-procedure pause completed. Under direct vision the gastroscope crossed the upper esophageal sphincter and reached the third portion of the duodenum. Esophageal mucosa unremarkable; regular Z-line at 38 cm. On retroflexion the cardia and fundus looked normal. Patchy antral erythema, with no erosions or ulcers. Bulb, second portion and third portion of the duodenum unremarkable. For celiac disease I took four pieces from D2, the second portion of the duodenum, and two from the bulb with cold forceps, and for Helicobacter pylori three pieces from the antrum and incisura; each site went into its own container.\nCOLONOSCOPY\nWith the patient on her left side, the digital rectal examination showed nothing abnormal, and the adult colonoscope then passed easily around the colon. Cecal landmarks (appendiceal orifice, ileocecal valve) were documented with photographs. I entered the terminal ileum and inspected about 6 cm of it. Boston Bowel Preparation Scale score 8 (right 2, transverse 3, left 3). Scattered small-mouthed diverticula in the sigmoid colon. No polyps, masses, vascular lesions or blood; colonic and ileal mucosa normal. I deliberately did not take colon biopsies, because the mucosa was normal and she has no diarrhea. Retroflexion in the rectum showed small, non-bleeding internal hemorrhoids. Withdrawal time was 11 minutes.\nComplications\nNone.\nImpression\n1. Antral erythema; duodenal and gastric biopsies taken.\n2. Normal terminal ileum. Sigmoid diverticulosis and small internal hemorrhoids. No colonic source for the iron deficiency.\nPlan\nAwait pathology and continue oral iron. If the biopsies do not explain the anemia, small bowel capsule endoscopy will be discussed at the follow-up visit.\nPathology: specimens sent to Greyfield Pathology Associates (fictional), which reports its interpretation separately.\nElectronically signed: Kwabena Thistlewood, MD (fictional), 2026-10-16 10:47\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "third part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "terminal ileum"
+    },
+    "not_today": [
+     "gi.office_em",
+     "gi.flex_sig"
+    ]
+   },
+   "review": "The table and the narratives state that the gastroscope reached the third portion of the duodenum and the colonoscope the terminal ileum (6 cm beyond the ileocecal valve); both services were done today. The capsule endoscopy and the follow-up visit are future."
+  },
+  {
+   "id": "F1-12-status-column-not-performed",
+   "family": "F1-summary-table",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nBrightwater Valley Endoscopy Center (fictional)\nCombined upper and lower endoscopy report\nPatient: Marisol Vandermeer (fictional)\nDate of birth: 1957-04-03\nSynthetic record: H2-SYN-1101\nProcedure date: 2026-10-16\nEndoscopist: Kwabena Thistlewood, MD, Gastroenterology (fictional)\nSite of care: freestanding ambulatory surgical center, POS 24\nAnesthesia: monitored anesthesia care by Annika Castellanos-Webb, CRNA (fictional), documented and billed by the anesthesia group\nIndications\nIron deficiency anemia, with ferritin 5 ng/mL and hemoglobin 9.8 g/dL on 2026-09-24, and occasional epigastric burning. No visible bleeding and no diarrhea. She has never had an endoscopy of either kind.\nProcedure summary\nExamination | Status | Furthest point reached\nUpper endoscopy (EGD) | Completed | Third portion of the duodenum\nColonoscopy | Not performed | -\nUpper endoscopy\nConsent was confirmed and the pre-procedure pause completed. Under direct vision the gastroscope crossed the upper esophageal sphincter and reached the third portion of the duodenum. Esophageal mucosa unremarkable; regular Z-line at 38 cm. On retroflexion the cardia and fundus looked normal. Patchy antral erythema, with no erosions or ulcers. Bulb, second portion and third portion of the duodenum unremarkable. For celiac disease I took four pieces from D2, the second portion of the duodenum, and two from the bulb with cold forceps, and for Helicobacter pylori three pieces from the antrum and incisura; each site went into its own container.\nColonoscopy\nNot performed: the bowel preparation was inadequate, with solid stool returned on the morning of the procedure. The colonoscope was not inserted. It will be rescheduled after a two-day preparation.\nComplications\nNone.\nImpression\n1. Antral erythema; duodenal and gastric biopsies taken.\n2. Colonoscopy not performed (inadequate preparation).\nPlan\nAwait pathology and continue oral iron. If the biopsies do not explain the anemia, small bowel capsule endoscopy will be discussed at the follow-up visit.\nPathology: specimens sent to Greyfield Pathology Associates (fictional), which reports its interpretation separately.\nElectronically signed: Kwabena Thistlewood, MD (fictional), 2026-10-16 10:47\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "third part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "negated",
+      "cancelled"
+     ],
+     "extent": null
+    },
+    "not_today": [
+     "gi.office_em",
+     "gi.flex_sig"
+    ]
+   },
+   "review": "The status column and the colonoscopy part both say the colonoscopy was not performed (the scope was not inserted); the EGD was completed to the third portion of the duodenum."
+  },
+  {
+   "id": "F1-13-prior-procedures-table",
+   "family": "F1-control",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeshore Endoscopy (fictional)\nColonoscopy Report\nDate of service: 2026-10-21\nPlace of service: ambulatory surgery center (POS 24)\nIndication\nSurveillance after adenomas.\nPrior procedures\nProcedure | Date | Result\nColonoscopy | 2019-05-02 | Two tubular adenomas, both removed\nColonoscopy | 2016-03-11 | Normal to the cecum\nProcedures performed: Colonoscopy\nFindings\nThe colonoscope was advanced to the cecum; the appendiceal orifice and ileocecal valve were photographed. A 4 mm\nsigmoid polyp was removed with a cold snare.\nImpression\nOne small polyp removed.\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "cecum"
+    }
+   },
+   "review": "Control: the table lists earlier colonoscopies (2019, 2016); today's colonoscopy reached the cecum."
+  },
+  {
+   "id": "F1-13b-prior-procedures-table-text",
+   "family": "F1-control",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nLakeshore Endoscopy (fictional)\nColonoscopy Report\nDate of service: 2026-10-21\nPlace of service: ambulatory surgery center (POS 24)\n\nIndication\nSurveillance after adenomas.\nPrior procedures\nProcedure | Date | Result\nColonoscopy | 2019-05-02 | Two tubular adenomas, both removed\nColonoscopy | 2016-03-11 | Normal to the cecum\n\nProcedures performed: Colonoscopy\nFindings\nThe colonoscope was advanced to the cecum; the appendiceal orifice and ileocecal valve were photographed. A 4 mm\nsigmoid polyp was removed with a cold snare.\n\nImpression\nOne small polyp removed.\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "cecum"
+    }
+   },
+   "review": "As F1-13, with blank lines."
+  },
+  {
+   "id": "F1-14-office-procedure-summary-planned",
+   "family": "F1-control",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nHarbor View Gastroenterology (fictional)\nOffice Visit - progress note\nDate of service: 2026-10-21\nPlace of service: office (POS 11)\nVisit type: established patient\n\nHistory of present illness\nIron deficiency anemia; no bleeding seen.\n\nProcedure summary\nEGD and colonoscopy are planned for 2026-11-12 at the ambulatory surgery center.\n\nAssessment and plan\nIron deficiency anemia. Bidirectional endoscopy as above. Medical decision making: moderate.\n",
+   "expected": {
+    "gi.office_em": {
+     "status_in": [
+      "performed"
+     ]
+    },
+    "not_today": [
+     "gi.egd",
+     "gi.colonoscopy"
+    ]
+   },
+   "review": "Control: a \"Procedure summary\" heading in an office note that only plans the endoscopies (dated 2026-11-12)."
+  },
+  {
+   "id": "F1-15-lab-table-in-indication",
+   "family": "F1-control",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nBrightwater Valley Endoscopy Center (fictional)\nColonoscopy Report\nDate of service: 2026-10-16\nPlace of service: ambulatory surgery center (POS 24)\nIndications\nIron deficiency anemia.\nTest | Result | Date\nHemoglobin | 9.8 g/dL | 2026-09-24\nFerritin | 5 ng/mL | 2026-09-24\nProcedures performed: Colonoscopy\nDescription of the procedure\nThe adult colonoscope was advanced to the cecum and the terminal ileum was intubated. No polyps.\nImpression\nNormal colonoscopy.\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "terminal ileum"
+    }
+   },
+   "review": "Control: a laboratory table in the indication; the colonoscopy reached the terminal ileum."
+  },
+  {
+   "id": "F1-17-summary-table-planned-dates",
+   "family": "F1-control",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nMarlowe Bay Endoscopy Suites (fictional)\nPre-procedure note\nDate of service: 2026-10-20\nPlace of service: ambulatory surgery center (POS 24)\nIndications\nIron deficiency anemia.\nProcedure summary\nExamination | Planned date | Indication\nUpper endoscopy (EGD) | 2026-11-12 | Anemia\nColonoscopy | 2026-11-12 | Anemia\nPlan\nBoth examinations are booked for 2026-11-12.\n",
+   "expected": {
+    "not_today": [
+     "gi.egd",
+     "gi.colonoscopy"
+    ]
+   },
+   "review": "Control: a summary table of examinations planned for 2026-11-12 (a date column, no extent column)."
+  },
+  {
+   "id": "F1-18-comments-cell-cancelled",
+   "family": "F1-control",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nMarlowe Bay Endoscopy Suites (fictional)\nPre-procedure note\nDate of service: 2026-10-20\nPlace of service: ambulatory surgery center (POS 24)\nIndications\nIron deficiency anemia.\nProcedure summary\nExamination | Instrument | Comments\nColonoscopy | Adult colonoscope | Cancelled before insertion: inadequate preparation\nPlan\nReschedule the colonoscopy after a two-day preparation.\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "cancelled",
+      "negated"
+     ],
+     "extent": null
+    }
+   },
+   "review": "Control: the comments cell cancels the colonoscopy before insertion."
+  },
+  {
+   "id": "F1-19-performed-column-no",
+   "family": "F1-control",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nMarlowe Bay Endoscopy Suites (fictional)\nPre-procedure note\nDate of service: 2026-10-20\nPlace of service: ambulatory surgery center (POS 24)\nIndications\nIron deficiency anemia.\nProcedure summary\nExamination | Performed | Furthest point reached\nUpper endoscopy (EGD) | Yes | Second portion of the duodenum\nColonoscopy | No | -\nPlan\nColonoscopy not done today (inadequate preparation); rebook.\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "second part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "negated",
+      "cancelled",
+      "uncertain"
+     ],
+     "extent": null
+    }
+   },
+   "review": "Control: the \"Performed\" column answers No for the colonoscopy; the EGD reached the second portion."
+  },
+  {
+   "id": "F1-20-cecum-reached-column-no",
+   "family": "F1-control",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nMarlowe Bay Endoscopy Suites (fictional)\nPre-procedure note\nDate of service: 2026-10-20\nPlace of service: ambulatory surgery center (POS 24)\nIndications\nIron deficiency anemia.\nProcedure summary\nExamination | Instrument | Cecum reached\nColonoscopy | Adult colonoscope | No\nPlan\nIncomplete colonoscopy: the colonoscope could not be advanced beyond the splenic flexure. CT colonography requested.\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete",
+      "uncertain"
+     ]
+    }
+   },
+   "review": "Control: the cecum was not reached (column answer No); the narrative is under Plan, so its extent may be asked.",
+   "hint": "uncertain"
+  },
+  {
+   "id": "F2-01-h202-live-ocr",
+   "family": "F2-label",
+   "layout": "ocr(live)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaint Aurelio Community Hospital (fictional)\nOutpatient Endoscopy Unit - Colonoscopy Report\n\nPatient: Desmond Okonkwo-Pryce (fictional)\n\nDate of birth: 1966-12-19\n\nSynthetic record: H2-SYN-1102\n\nDate of service: 2026-10-09\n\nSetting: Hospital outpatient department (POS 22)\n\nEndoscopist: Ottoline Valdivia-Moss, MD (fictional)\n\nSedation: propofol given and monitored by the hospital anesthesia department (fictional), which reports its own\nservice\n\nIndication\n\nSix weeks of intermittent bright red blood with stools and a change to looser, more frequent bowel movements. He\nwas booked for a complete colonoscopy and finished the split-dose bowel preparation as instructed. A flexible\nsigmoidoscopy elsewhere on 2024-05-14 showed only internal hemorrhoids.\n\nDescription of the procedure\n\nThe colonoscope was introduced through the anus and advanced under direct vision. The sigmoid colon was long\nand fixed, and the transverse colon was very redundant with repeated looping. The instrument could not be\nadvanced past the hepatic flexure despite abdominal pressure by the nurse, turning the patient supine and then onto\nthe right side, scope stiffening, and repeated loop reduction. Further pushing would have risked injury, so\nadvancement was stopped.\n\nDeepest point reached: hepatic flexure, identified by the bluish liver impression through the colon wall, at about 95\ncm of insertion.\n\nThe ascending colon, the cecum and the ileocecal valve were not examined.\n\nBowel preparation in the segments seen was good.\n\nFindings\n\nOn withdrawal, a 7 mm sessile polyp in the descending colon at about 45 cm was removed in one piece with a cold\nsnare and retrieved for histology. The resection site was clean with no bleeding.\n\nModerate left-sided diverticulosis.\n\nInternal hemorrhoids, not bleeding, seen on retroflexion in the rectum.\n\nNo other source of bleeding in the examined colon.\n\nComplications\nNone.\n\nImpression\n\nColonoscopy reached the hepatic flexure only, limited by looping in a long, redundant colon. Cold snare\npolypectomy of one descending colon polyp. Left-sided diverticulosis. Internal hemorrhoids.\n\nRecommendations\n\nCT colonography of the unexamined right colon has been requested for 2026-10-30.\n\nAwait polyp histology; the timing of the next colonoscopy will depend on the histology and the CT colonography.\nHigh-fiber diet.\n\nSigned: Ottoline Valdivia-Moss, MD (fictional), 2026-10-09 14:06\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    },
+    "not_today": [
+     "gi.flex_sig"
+    ]
+   },
+   "review": "The colonoscope reached the hepatic flexure (could not be advanced past it; \"Deepest point reached: hepatic flexure\"); the ascending colon and cecum were not examined. The 2024 flexible sigmoidoscopy is history."
+  },
+  {
+   "id": "F2-02-h202-text",
+   "family": "F2-label",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nSaint Aurelio Community Hospital (fictional)\nOutpatient Endoscopy Unit - Colonoscopy Report\n\nPatient: Desmond Okonkwo-Pryce (fictional)\nDate of birth: 1966-12-19\nSynthetic record: H2-SYN-1102\nDate of service: 2026-10-09\nSetting: Hospital outpatient department (POS 22)\nEndoscopist: Ottoline Valdivia-Moss, MD (fictional)\nSedation: propofol given and monitored by the hospital anesthesia department (fictional), which reports its own service\n\nIndication\nSix weeks of intermittent bright red blood with stools and a change to looser, more frequent bowel movements. He was booked for a complete colonoscopy and finished the split-dose bowel preparation as instructed. A flexible sigmoidoscopy elsewhere on 2024-05-14 showed only internal hemorrhoids.\n\nDescription of the procedure\nThe colonoscope was introduced through the anus and advanced under direct vision. The sigmoid colon was long and fixed, and the transverse colon was very redundant with repeated looping. The instrument could not be advanced past the hepatic flexure despite abdominal pressure by the nurse, turning the patient supine and then onto the right side, scope stiffening, and repeated loop reduction. Further pushing would have risked injury, so advancement was stopped.\nDeepest point reached: hepatic flexure, identified by the bluish liver impression through the colon wall, at about 95 cm of insertion.\nThe ascending colon, the cecum and the ileocecal valve were not examined.\nBowel preparation in the segments seen was good.\n\nFindings\nOn withdrawal, a 7 mm sessile polyp in the descending colon at about 45 cm was removed in one piece with a cold snare and retrieved for histology. The resection site was clean with no bleeding.\nModerate left-sided diverticulosis.\nInternal hemorrhoids, not bleeding, seen on retroflexion in the rectum.\nNo other source of bleeding in the examined colon.\n\nComplications\nNone.\n\nImpression\nColonoscopy reached the hepatic flexure only, limited by looping in a long, redundant colon. Cold snare polypectomy of one descending colon polyp. Left-sided diverticulosis. Internal hemorrhoids.\n\nRecommendations\nCT colonography of the unexamined right colon has been requested for 2026-10-30.\nAwait polyp histology; the timing of the next colonoscopy will depend on the histology and the CT colonography.\nHigh-fiber diet.\n\nSigned: Ottoline Valdivia-Moss, MD (fictional), 2026-10-09 14:06\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    },
+    "not_today": [
+     "gi.flex_sig"
+    ]
+   },
+   "review": "The colonoscope reached the hepatic flexure (could not be advanced past it; \"Deepest point reached: hepatic flexure\"); the ascending colon and cecum were not examined. The 2024 flexible sigmoidoscopy is history."
+  },
+  {
+   "id": "F2-02b-h202-docx",
+   "family": "F2-label",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaint Aurelio Community Hospital (fictional)\nOutpatient Endoscopy Unit - Colonoscopy Report\nPatient: Desmond Okonkwo-Pryce (fictional)\nDate of birth: 1966-12-19\nSynthetic record: H2-SYN-1102\nDate of service: 2026-10-09\nSetting: Hospital outpatient department (POS 22)\nEndoscopist: Ottoline Valdivia-Moss, MD (fictional)\nSedation: propofol given and monitored by the hospital anesthesia department (fictional), which reports its own service\nIndication\nSix weeks of intermittent bright red blood with stools and a change to looser, more frequent bowel movements. He was booked for a complete colonoscopy and finished the split-dose bowel preparation as instructed. A flexible sigmoidoscopy elsewhere on 2024-05-14 showed only internal hemorrhoids.\nDescription of the procedure\nThe colonoscope was introduced through the anus and advanced under direct vision. The sigmoid colon was long and fixed, and the transverse colon was very redundant with repeated looping. The instrument could not be advanced past the hepatic flexure despite abdominal pressure by the nurse, turning the patient supine and then onto the right side, scope stiffening, and repeated loop reduction. Further pushing would have risked injury, so advancement was stopped.\nDeepest point reached: hepatic flexure, identified by the bluish liver impression through the colon wall, at about 95 cm of insertion.\nThe ascending colon, the cecum and the ileocecal valve were not examined.\nBowel preparation in the segments seen was good.\nFindings\nOn withdrawal, a 7 mm sessile polyp in the descending colon at about 45 cm was removed in one piece with a cold snare and retrieved for histology. The resection site was clean with no bleeding.\nModerate left-sided diverticulosis.\nInternal hemorrhoids, not bleeding, seen on retroflexion in the rectum.\nNo other source of bleeding in the examined colon.\nComplications\nNone.\nImpression\nColonoscopy reached the hepatic flexure only, limited by looping in a long, redundant colon. Cold snare polypectomy of one descending colon polyp. Left-sided diverticulosis. Internal hemorrhoids.\nRecommendations\nCT colonography of the unexamined right colon has been requested for 2026-10-30.\nAwait polyp histology; the timing of the next colonoscopy will depend on the histology and the CT colonography.\nHigh-fiber diet.\nSigned: Ottoline Valdivia-Moss, MD (fictional), 2026-10-09 14:06\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    },
+    "not_today": [
+     "gi.flex_sig"
+    ]
+   },
+   "review": "The colonoscope reached the hepatic flexure (could not be advanced past it; \"Deepest point reached: hepatic flexure\"); the ascending colon and cecum were not examined. The 2024 flexible sigmoidoscopy is history."
+  },
+  {
+   "id": "F2-03-deepest-point-label-only",
+   "family": "F2-label",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaint Aurelio Community Hospital (fictional)\nOutpatient Endoscopy Unit - Colonoscopy Report\nPatient: Desmond Okonkwo-Pryce (fictional)\nDate of birth: 1966-12-19\nSynthetic record: H2-SYN-1102\nDate of service: 2026-10-09\nSetting: Hospital outpatient department (POS 22)\nEndoscopist: Ottoline Valdivia-Moss, MD (fictional)\nSedation: propofol given and monitored by the hospital anesthesia department (fictional), which reports its own service\nIndication\nSix weeks of intermittent bright red blood with stools and a change to looser, more frequent bowel movements. He was booked for a complete colonoscopy and finished the split-dose bowel preparation as instructed. A flexible sigmoidoscopy elsewhere on 2024-05-14 showed only internal hemorrhoids.\nDescription of the procedure\nThe colonoscope was introduced through the anus and advanced under direct vision. The sigmoid colon was long and fixed, and the transverse colon was very redundant with repeated looping. Further advancement was not possible despite abdominal pressure by the nurse, turning the patient supine and then onto the right side, scope stiffening, and repeated loop reduction. Further pushing would have risked injury, so advancement was stopped.\nDeepest point reached: hepatic flexure, identified by the bluish liver impression through the colon wall, at about 95 cm of insertion.\nThe ascending colon, the cecum and the ileocecal valve were not examined.\nBowel preparation in the segments seen was good.\nFindings\nOn withdrawal, a 7 mm sessile polyp in the descending colon at about 45 cm was removed in one piece with a cold snare and retrieved for histology. The resection site was clean with no bleeding.\nModerate left-sided diverticulosis.\nInternal hemorrhoids, not bleeding, seen on retroflexion in the rectum.\nNo other source of bleeding in the examined colon.\nComplications\nNone.\nImpression\nColonoscopy reached the hepatic flexure only, limited by looping in a long, redundant colon. Cold snare polypectomy of one descending colon polyp. Left-sided diverticulosis. Internal hemorrhoids.\nRecommendations\nCT colonography of the unexamined right colon has been requested for 2026-10-30.\nAwait polyp histology; the timing of the next colonoscopy will depend on the histology and the CT colonography.\nHigh-fiber diet.\nSigned: Ottoline Valdivia-Moss, MD (fictional), 2026-10-09 14:06\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    },
+    "not_today": [
+     "gi.flex_sig"
+    ]
+   },
+   "review": "Only the labelled field names where the colonoscope stopped: the hepatic flexure; the cecum was not examined."
+  },
+  {
+   "id": "F2-04-label-furthest-point-reached",
+   "family": "F2-label",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaint Aurelio Community Hospital (fictional)\nOutpatient Endoscopy Unit - Colonoscopy Report\nPatient: Desmond Okonkwo-Pryce (fictional)\nDate of birth: 1966-12-19\nSynthetic record: H2-SYN-1102\nDate of service: 2026-10-09\nSetting: Hospital outpatient department (POS 22)\nEndoscopist: Ottoline Valdivia-Moss, MD (fictional)\nSedation: propofol given and monitored by the hospital anesthesia department (fictional), which reports its own service\nIndication\nSix weeks of intermittent bright red blood with stools and a change to looser, more frequent bowel movements. He was booked for a complete colonoscopy and finished the split-dose bowel preparation as instructed. A flexible sigmoidoscopy elsewhere on 2024-05-14 showed only internal hemorrhoids.\nDescription of the procedure\nThe colonoscope was introduced through the anus and advanced under direct vision. The sigmoid colon was long and fixed, and the transverse colon was very redundant with repeated looping. Further advancement was not possible despite abdominal pressure by the nurse, turning the patient supine and then onto the right side, scope stiffening, and repeated loop reduction. Further pushing would have risked injury, so advancement was stopped.\nFurthest point reached: hepatic flexure (about 95 cm).\nThe ascending colon, the cecum and the ileocecal valve were not examined.\nBowel preparation in the segments seen was good.\nFindings\nOn withdrawal, a 7 mm sessile polyp in the descending colon at about 45 cm was removed in one piece with a cold snare and retrieved for histology. The resection site was clean with no bleeding.\nModerate left-sided diverticulosis.\nInternal hemorrhoids, not bleeding, seen on retroflexion in the rectum.\nNo other source of bleeding in the examined colon.\nComplications\nNone.\nImpression\nColonoscopy reached the hepatic flexure only, limited by looping in a long, redundant colon. Cold snare polypectomy of one descending colon polyp. Left-sided diverticulosis. Internal hemorrhoids.\nRecommendations\nCT colonography of the unexamined right colon has been requested for 2026-10-30.\nAwait polyp histology; the timing of the next colonoscopy will depend on the histology and the CT colonography.\nHigh-fiber diet.\nSigned: Ottoline Valdivia-Moss, MD (fictional), 2026-10-09 14:06\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    },
+    "not_today": [
+     "gi.flex_sig"
+    ]
+   },
+   "review": "Only the labelled field names where the colonoscope stopped: the hepatic flexure; the cecum was not examined. Label written \"Furthest point reached:\"."
+  },
+  {
+   "id": "F2-05-label-most-proximal-point-reached",
+   "family": "F2-label",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaint Aurelio Community Hospital (fictional)\nOutpatient Endoscopy Unit - Colonoscopy Report\nPatient: Desmond Okonkwo-Pryce (fictional)\nDate of birth: 1966-12-19\nSynthetic record: H2-SYN-1102\nDate of service: 2026-10-09\nSetting: Hospital outpatient department (POS 22)\nEndoscopist: Ottoline Valdivia-Moss, MD (fictional)\nSedation: propofol given and monitored by the hospital anesthesia department (fictional), which reports its own service\nIndication\nSix weeks of intermittent bright red blood with stools and a change to looser, more frequent bowel movements. He was booked for a complete colonoscopy and finished the split-dose bowel preparation as instructed. A flexible sigmoidoscopy elsewhere on 2024-05-14 showed only internal hemorrhoids.\nDescription of the procedure\nThe colonoscope was introduced through the anus and advanced under direct vision. The sigmoid colon was long and fixed, and the transverse colon was very redundant with repeated looping. Further advancement was not possible despite abdominal pressure by the nurse, turning the patient supine and then onto the right side, scope stiffening, and repeated loop reduction. Further pushing would have risked injury, so advancement was stopped.\nMost proximal point reached: hepatic flexure (about 95 cm).\nThe ascending colon, the cecum and the ileocecal valve were not examined.\nBowel preparation in the segments seen was good.\nFindings\nOn withdrawal, a 7 mm sessile polyp in the descending colon at about 45 cm was removed in one piece with a cold snare and retrieved for histology. The resection site was clean with no bleeding.\nModerate left-sided diverticulosis.\nInternal hemorrhoids, not bleeding, seen on retroflexion in the rectum.\nNo other source of bleeding in the examined colon.\nComplications\nNone.\nImpression\nColonoscopy reached the hepatic flexure only, limited by looping in a long, redundant colon. Cold snare polypectomy of one descending colon polyp. Left-sided diverticulosis. Internal hemorrhoids.\nRecommendations\nCT colonography of the unexamined right colon has been requested for 2026-10-30.\nAwait polyp histology; the timing of the next colonoscopy will depend on the histology and the CT colonography.\nHigh-fiber diet.\nSigned: Ottoline Valdivia-Moss, MD (fictional), 2026-10-09 14:06\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    },
+    "not_today": [
+     "gi.flex_sig"
+    ]
+   },
+   "review": "Only the labelled field names where the colonoscope stopped: the hepatic flexure; the cecum was not examined. Label written \"Most proximal point reached:\"."
+  },
+  {
+   "id": "F2-06-label-extent-of-examination",
+   "family": "F2-label",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaint Aurelio Community Hospital (fictional)\nOutpatient Endoscopy Unit - Colonoscopy Report\nPatient: Desmond Okonkwo-Pryce (fictional)\nDate of birth: 1966-12-19\nSynthetic record: H2-SYN-1102\nDate of service: 2026-10-09\nSetting: Hospital outpatient department (POS 22)\nEndoscopist: Ottoline Valdivia-Moss, MD (fictional)\nSedation: propofol given and monitored by the hospital anesthesia department (fictional), which reports its own service\nIndication\nSix weeks of intermittent bright red blood with stools and a change to looser, more frequent bowel movements. He was booked for a complete colonoscopy and finished the split-dose bowel preparation as instructed. A flexible sigmoidoscopy elsewhere on 2024-05-14 showed only internal hemorrhoids.\nDescription of the procedure\nThe colonoscope was introduced through the anus and advanced under direct vision. The sigmoid colon was long and fixed, and the transverse colon was very redundant with repeated looping. Further advancement was not possible despite abdominal pressure by the nurse, turning the patient supine and then onto the right side, scope stiffening, and repeated loop reduction. Further pushing would have risked injury, so advancement was stopped.\nExtent of examination: hepatic flexure (about 95 cm).\nThe ascending colon, the cecum and the ileocecal valve were not examined.\nBowel preparation in the segments seen was good.\nFindings\nOn withdrawal, a 7 mm sessile polyp in the descending colon at about 45 cm was removed in one piece with a cold snare and retrieved for histology. The resection site was clean with no bleeding.\nModerate left-sided diverticulosis.\nInternal hemorrhoids, not bleeding, seen on retroflexion in the rectum.\nNo other source of bleeding in the examined colon.\nComplications\nNone.\nImpression\nColonoscopy reached the hepatic flexure only, limited by looping in a long, redundant colon. Cold snare polypectomy of one descending colon polyp. Left-sided diverticulosis. Internal hemorrhoids.\nRecommendations\nCT colonography of the unexamined right colon has been requested for 2026-10-30.\nAwait polyp histology; the timing of the next colonoscopy will depend on the histology and the CT colonography.\nHigh-fiber diet.\nSigned: Ottoline Valdivia-Moss, MD (fictional), 2026-10-09 14:06\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    },
+    "not_today": [
+     "gi.flex_sig"
+    ]
+   },
+   "review": "Only the labelled field names where the colonoscope stopped: the hepatic flexure; the cecum was not examined. Label written \"Extent of examination:\". Control: read at head."
+  },
+  {
+   "id": "F2-07-label-maximal-insertion",
+   "family": "F2-label",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaint Aurelio Community Hospital (fictional)\nOutpatient Endoscopy Unit - Colonoscopy Report\nPatient: Desmond Okonkwo-Pryce (fictional)\nDate of birth: 1966-12-19\nSynthetic record: H2-SYN-1102\nDate of service: 2026-10-09\nSetting: Hospital outpatient department (POS 22)\nEndoscopist: Ottoline Valdivia-Moss, MD (fictional)\nSedation: propofol given and monitored by the hospital anesthesia department (fictional), which reports its own service\nIndication\nSix weeks of intermittent bright red blood with stools and a change to looser, more frequent bowel movements. He was booked for a complete colonoscopy and finished the split-dose bowel preparation as instructed. A flexible sigmoidoscopy elsewhere on 2024-05-14 showed only internal hemorrhoids.\nDescription of the procedure\nThe colonoscope was introduced through the anus and advanced under direct vision. The sigmoid colon was long and fixed, and the transverse colon was very redundant with repeated looping. Further advancement was not possible despite abdominal pressure by the nurse, turning the patient supine and then onto the right side, scope stiffening, and repeated loop reduction. Further pushing would have risked injury, so advancement was stopped.\nMaximal insertion: hepatic flexure (about 95 cm).\nThe ascending colon, the cecum and the ileocecal valve were not examined.\nBowel preparation in the segments seen was good.\nFindings\nOn withdrawal, a 7 mm sessile polyp in the descending colon at about 45 cm was removed in one piece with a cold snare and retrieved for histology. The resection site was clean with no bleeding.\nModerate left-sided diverticulosis.\nInternal hemorrhoids, not bleeding, seen on retroflexion in the rectum.\nNo other source of bleeding in the examined colon.\nComplications\nNone.\nImpression\nColonoscopy reached the hepatic flexure only, limited by looping in a long, redundant colon. Cold snare polypectomy of one descending colon polyp. Left-sided diverticulosis. Internal hemorrhoids.\nRecommendations\nCT colonography of the unexamined right colon has been requested for 2026-10-30.\nAwait polyp histology; the timing of the next colonoscopy will depend on the histology and the CT colonography.\nHigh-fiber diet.\nSigned: Ottoline Valdivia-Moss, MD (fictional), 2026-10-09 14:06\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    },
+    "not_today": [
+     "gi.flex_sig"
+    ]
+   },
+   "review": "Only the labelled field names where the colonoscope stopped: the hepatic flexure; the cecum was not examined. Label written \"Maximal insertion:\"."
+  },
+  {
+   "id": "F2-08-label-reached",
+   "family": "F2-label",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaint Aurelio Community Hospital (fictional)\nOutpatient Endoscopy Unit - Colonoscopy Report\nPatient: Desmond Okonkwo-Pryce (fictional)\nDate of birth: 1966-12-19\nSynthetic record: H2-SYN-1102\nDate of service: 2026-10-09\nSetting: Hospital outpatient department (POS 22)\nEndoscopist: Ottoline Valdivia-Moss, MD (fictional)\nSedation: propofol given and monitored by the hospital anesthesia department (fictional), which reports its own service\nIndication\nSix weeks of intermittent bright red blood with stools and a change to looser, more frequent bowel movements. He was booked for a complete colonoscopy and finished the split-dose bowel preparation as instructed. A flexible sigmoidoscopy elsewhere on 2024-05-14 showed only internal hemorrhoids.\nDescription of the procedure\nThe colonoscope was introduced through the anus and advanced under direct vision. The sigmoid colon was long and fixed, and the transverse colon was very redundant with repeated looping. Further advancement was not possible despite abdominal pressure by the nurse, turning the patient supine and then onto the right side, scope stiffening, and repeated loop reduction. Further pushing would have risked injury, so advancement was stopped.\nReached: hepatic flexure (about 95 cm).\nThe ascending colon, the cecum and the ileocecal valve were not examined.\nBowel preparation in the segments seen was good.\nFindings\nOn withdrawal, a 7 mm sessile polyp in the descending colon at about 45 cm was removed in one piece with a cold snare and retrieved for histology. The resection site was clean with no bleeding.\nModerate left-sided diverticulosis.\nInternal hemorrhoids, not bleeding, seen on retroflexion in the rectum.\nNo other source of bleeding in the examined colon.\nComplications\nNone.\nImpression\nColonoscopy reached the hepatic flexure only, limited by looping in a long, redundant colon. Cold snare polypectomy of one descending colon polyp. Left-sided diverticulosis. Internal hemorrhoids.\nRecommendations\nCT colonography of the unexamined right colon has been requested for 2026-10-30.\nAwait polyp histology; the timing of the next colonoscopy will depend on the histology and the CT colonography.\nHigh-fiber diet.\nSigned: Ottoline Valdivia-Moss, MD (fictional), 2026-10-09 14:06\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    },
+    "not_today": [
+     "gi.flex_sig"
+    ]
+   },
+   "review": "Only the labelled field names where the colonoscope stopped: the hepatic flexure; the cecum was not examined. Label written \"Reached:\"."
+  },
+  {
+   "id": "F2-08b-label-furthest-landmark-reached",
+   "family": "F2-label",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaint Aurelio Community Hospital (fictional)\nOutpatient Endoscopy Unit - Colonoscopy Report\nPatient: Desmond Okonkwo-Pryce (fictional)\nDate of birth: 1966-12-19\nSynthetic record: H2-SYN-1102\nDate of service: 2026-10-09\nSetting: Hospital outpatient department (POS 22)\nEndoscopist: Ottoline Valdivia-Moss, MD (fictional)\nSedation: propofol given and monitored by the hospital anesthesia department (fictional), which reports its own service\nIndication\nSix weeks of intermittent bright red blood with stools and a change to looser, more frequent bowel movements. He was booked for a complete colonoscopy and finished the split-dose bowel preparation as instructed. A flexible sigmoidoscopy elsewhere on 2024-05-14 showed only internal hemorrhoids.\nDescription of the procedure\nThe colonoscope was introduced through the anus and advanced under direct vision. The sigmoid colon was long and fixed, and the transverse colon was very redundant with repeated looping. Further advancement was not possible despite abdominal pressure by the nurse, turning the patient supine and then onto the right side, scope stiffening, and repeated loop reduction. Further pushing would have risked injury, so advancement was stopped.\nFurthest landmark reached: hepatic flexure (about 95 cm).\nThe ascending colon, the cecum and the ileocecal valve were not examined.\nBowel preparation in the segments seen was good.\nFindings\nOn withdrawal, a 7 mm sessile polyp in the descending colon at about 45 cm was removed in one piece with a cold snare and retrieved for histology. The resection site was clean with no bleeding.\nModerate left-sided diverticulosis.\nInternal hemorrhoids, not bleeding, seen on retroflexion in the rectum.\nNo other source of bleeding in the examined colon.\nComplications\nNone.\nImpression\nColonoscopy reached the hepatic flexure only, limited by looping in a long, redundant colon. Cold snare polypectomy of one descending colon polyp. Left-sided diverticulosis. Internal hemorrhoids.\nRecommendations\nCT colonography of the unexamined right colon has been requested for 2026-10-30.\nAwait polyp histology; the timing of the next colonoscopy will depend on the histology and the CT colonography.\nHigh-fiber diet.\nSigned: Ottoline Valdivia-Moss, MD (fictional), 2026-10-09 14:06\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    },
+    "not_today": [
+     "gi.flex_sig"
+    ]
+   },
+   "review": "Only the labelled field names where the colonoscope stopped: the hepatic flexure; the cecum was not examined. Label written \"Furthest landmark reached:\"."
+  },
+  {
+   "id": "F2-08c-label-level-reached",
+   "family": "F2-label",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaint Aurelio Community Hospital (fictional)\nOutpatient Endoscopy Unit - Colonoscopy Report\nPatient: Desmond Okonkwo-Pryce (fictional)\nDate of birth: 1966-12-19\nSynthetic record: H2-SYN-1102\nDate of service: 2026-10-09\nSetting: Hospital outpatient department (POS 22)\nEndoscopist: Ottoline Valdivia-Moss, MD (fictional)\nSedation: propofol given and monitored by the hospital anesthesia department (fictional), which reports its own service\nIndication\nSix weeks of intermittent bright red blood with stools and a change to looser, more frequent bowel movements. He was booked for a complete colonoscopy and finished the split-dose bowel preparation as instructed. A flexible sigmoidoscopy elsewhere on 2024-05-14 showed only internal hemorrhoids.\nDescription of the procedure\nThe colonoscope was introduced through the anus and advanced under direct vision. The sigmoid colon was long and fixed, and the transverse colon was very redundant with repeated looping. Further advancement was not possible despite abdominal pressure by the nurse, turning the patient supine and then onto the right side, scope stiffening, and repeated loop reduction. Further pushing would have risked injury, so advancement was stopped.\nLevel reached: hepatic flexure (about 95 cm).\nThe ascending colon, the cecum and the ileocecal valve were not examined.\nBowel preparation in the segments seen was good.\nFindings\nOn withdrawal, a 7 mm sessile polyp in the descending colon at about 45 cm was removed in one piece with a cold snare and retrieved for histology. The resection site was clean with no bleeding.\nModerate left-sided diverticulosis.\nInternal hemorrhoids, not bleeding, seen on retroflexion in the rectum.\nNo other source of bleeding in the examined colon.\nComplications\nNone.\nImpression\nColonoscopy reached the hepatic flexure only, limited by looping in a long, redundant colon. Cold snare polypectomy of one descending colon polyp. Left-sided diverticulosis. Internal hemorrhoids.\nRecommendations\nCT colonography of the unexamined right colon has been requested for 2026-10-30.\nAwait polyp histology; the timing of the next colonoscopy will depend on the histology and the CT colonography.\nHigh-fiber diet.\nSigned: Ottoline Valdivia-Moss, MD (fictional), 2026-10-09 14:06\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    },
+    "not_today": [
+     "gi.flex_sig"
+    ]
+   },
+   "review": "Only the labelled field names where the colonoscope stopped: the hepatic flexure; the cecum was not examined. Label written \"Level reached:\"."
+  },
+  {
+   "id": "F2-08d-label-most-proximal-extent",
+   "family": "F2-label",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaint Aurelio Community Hospital (fictional)\nOutpatient Endoscopy Unit - Colonoscopy Report\nPatient: Desmond Okonkwo-Pryce (fictional)\nDate of birth: 1966-12-19\nSynthetic record: H2-SYN-1102\nDate of service: 2026-10-09\nSetting: Hospital outpatient department (POS 22)\nEndoscopist: Ottoline Valdivia-Moss, MD (fictional)\nSedation: propofol given and monitored by the hospital anesthesia department (fictional), which reports its own service\nIndication\nSix weeks of intermittent bright red blood with stools and a change to looser, more frequent bowel movements. He was booked for a complete colonoscopy and finished the split-dose bowel preparation as instructed. A flexible sigmoidoscopy elsewhere on 2024-05-14 showed only internal hemorrhoids.\nDescription of the procedure\nThe colonoscope was introduced through the anus and advanced under direct vision. The sigmoid colon was long and fixed, and the transverse colon was very redundant with repeated looping. Further advancement was not possible despite abdominal pressure by the nurse, turning the patient supine and then onto the right side, scope stiffening, and repeated loop reduction. Further pushing would have risked injury, so advancement was stopped.\nMost proximal extent: hepatic flexure (about 95 cm).\nThe ascending colon, the cecum and the ileocecal valve were not examined.\nBowel preparation in the segments seen was good.\nFindings\nOn withdrawal, a 7 mm sessile polyp in the descending colon at about 45 cm was removed in one piece with a cold snare and retrieved for histology. The resection site was clean with no bleeding.\nModerate left-sided diverticulosis.\nInternal hemorrhoids, not bleeding, seen on retroflexion in the rectum.\nNo other source of bleeding in the examined colon.\nComplications\nNone.\nImpression\nColonoscopy reached the hepatic flexure only, limited by looping in a long, redundant colon. Cold snare polypectomy of one descending colon polyp. Left-sided diverticulosis. Internal hemorrhoids.\nRecommendations\nCT colonography of the unexamined right colon has been requested for 2026-10-30.\nAwait polyp histology; the timing of the next colonoscopy will depend on the histology and the CT colonography.\nHigh-fiber diet.\nSigned: Ottoline Valdivia-Moss, MD (fictional), 2026-10-09 14:06\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    },
+    "not_today": [
+     "gi.flex_sig"
+    ]
+   },
+   "review": "Only the labelled field names where the colonoscope stopped: the hepatic flexure; the cecum was not examined. Label written \"Most proximal extent:\"."
+  },
+  {
+   "id": "F2-03b-depth-of-insertion-after-comma",
+   "family": "F2-label",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaint Aurelio Community Hospital (fictional)\nOutpatient Endoscopy Unit - Colonoscopy Report\nPatient: Desmond Okonkwo-Pryce (fictional)\nDate of birth: 1966-12-19\nSynthetic record: H2-SYN-1102\nDate of service: 2026-10-09\nSetting: Hospital outpatient department (POS 22)\nEndoscopist: Ottoline Valdivia-Moss, MD (fictional)\nSedation: propofol given and monitored by the hospital anesthesia department (fictional), which reports its own service\nIndication\nSix weeks of intermittent bright red blood with stools and a change to looser, more frequent bowel movements. He was booked for a complete colonoscopy and finished the split-dose bowel preparation as instructed. A flexible sigmoidoscopy elsewhere on 2024-05-14 showed only internal hemorrhoids.\nDescription of the procedure\nThe colonoscope was introduced through the anus and advanced under direct vision. The sigmoid colon was long and fixed, and the transverse colon was very redundant with repeated looping. Further advancement was not possible despite abdominal pressure by the nurse, turning the patient supine and then onto the right side, scope stiffening, and repeated loop reduction. Further pushing would have risked injury, so advancement was stopped.\nDeepest point reached: hepatic flexure, at about 95 cm of insertion.\nThe ascending colon, the cecum and the ileocecal valve were not examined.\nBowel preparation in the segments seen was good.\nFindings\nOn withdrawal, a 7 mm sessile polyp in the descending colon at about 45 cm was removed in one piece with a cold snare and retrieved for histology. The resection site was clean with no bleeding.\nModerate left-sided diverticulosis.\nInternal hemorrhoids, not bleeding, seen on retroflexion in the rectum.\nNo other source of bleeding in the examined colon.\nComplications\nNone.\nImpression\nColonoscopy reached the hepatic flexure only, limited by looping in a long, redundant colon. Cold snare polypectomy of one descending colon polyp. Left-sided diverticulosis. Internal hemorrhoids.\nRecommendations\nCT colonography of the unexamined right colon has been requested for 2026-10-30.\nAwait polyp histology; the timing of the next colonoscopy will depend on the histology and the CT colonography.\nHigh-fiber diet.\nSigned: Ottoline Valdivia-Moss, MD (fictional), 2026-10-09 14:06\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    },
+    "not_today": [
+     "gi.flex_sig"
+    ]
+   },
+   "review": "Only the labelled field names where the colonoscope stopped: the hepatic flexure; the cecum was not examined. The value carries its insertion depth after a comma."
+  },
+  {
+   "id": "F2-09-short-value-depth-aside",
+   "family": "F2-label",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaint Aurelio Community Hospital (fictional)\nOutpatient Endoscopy Unit - Colonoscopy Report\nPatient: Desmond Okonkwo-Pryce (fictional)\nDate of birth: 1966-12-19\nSynthetic record: H2-SYN-1102\nDate of service: 2026-10-09\nSetting: Hospital outpatient department (POS 22)\nEndoscopist: Ottoline Valdivia-Moss, MD (fictional)\nSedation: propofol given and monitored by the hospital anesthesia department (fictional), which reports its own service\nIndication\nSix weeks of intermittent bright red blood with stools and a change to looser, more frequent bowel movements. He was booked for a complete colonoscopy and finished the split-dose bowel preparation as instructed. A flexible sigmoidoscopy elsewhere on 2024-05-14 showed only internal hemorrhoids.\nDescription of the procedure\nThe colonoscope was introduced through the anus and advanced under direct vision. The sigmoid colon was long and fixed, and the transverse colon was very redundant with repeated looping. Further advancement was not possible despite abdominal pressure by the nurse, turning the patient supine and then onto the right side, scope stiffening, and repeated loop reduction. Further pushing would have risked injury, so advancement was stopped.\nDeepest point reached: hepatic flexure (about 95 cm).\nThe ascending colon, the cecum and the ileocecal valve were not examined.\nBowel preparation in the segments seen was good.\nFindings\nOn withdrawal, a 7 mm sessile polyp in the descending colon at about 45 cm was removed in one piece with a cold snare and retrieved for histology. The resection site was clean with no bleeding.\nModerate left-sided diverticulosis.\nInternal hemorrhoids, not bleeding, seen on retroflexion in the rectum.\nNo other source of bleeding in the examined colon.\nComplications\nNone.\nImpression\nColonoscopy reached the hepatic flexure only, limited by looping in a long, redundant colon. Cold snare polypectomy of one descending colon polyp. Left-sided diverticulosis. Internal hemorrhoids.\nRecommendations\nCT colonography of the unexamined right colon has been requested for 2026-10-30.\nAwait polyp histology; the timing of the next colonoscopy will depend on the histology and the CT colonography.\nHigh-fiber diet.\nSigned: Ottoline Valdivia-Moss, MD (fictional), 2026-10-09 14:06\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    },
+    "not_today": [
+     "gi.flex_sig"
+    ]
+   },
+   "review": "Only the labelled field names where the colonoscope stopped: the hepatic flexure; the cecum was not examined."
+  },
+  {
+   "id": "F2-10-keyvalue-table-row",
+   "family": "F2-label",
+   "layout": "docx(table)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaint Aurelio Community Hospital (fictional)\nOutpatient Endoscopy Unit - Colonoscopy Report\nPatient: Desmond Okonkwo-Pryce (fictional)\nDate of birth: 1966-12-19\nSynthetic record: H2-SYN-1102\nDate of service: 2026-10-09\nSetting: Hospital outpatient department (POS 22)\nEndoscopist: Ottoline Valdivia-Moss, MD (fictional)\nSedation: propofol given and monitored by the hospital anesthesia department (fictional), which reports its own service\nIndication\nSix weeks of intermittent bright red blood with stools and a change to looser, more frequent bowel movements. He was booked for a complete colonoscopy and finished the split-dose bowel preparation as instructed. A flexible sigmoidoscopy elsewhere on 2024-05-14 showed only internal hemorrhoids.\nDescription of the procedure\nThe colonoscope was introduced through the anus and advanced under direct vision. The sigmoid colon was long and fixed, and the transverse colon was very redundant with repeated looping. Further advancement was not possible despite abdominal pressure by the nurse, turning the patient supine and then onto the right side, scope stiffening, and repeated loop reduction. Further pushing would have risked injury, so advancement was stopped.\nDeepest point reached | Hepatic flexure, about 95 cm of insertion\nThe ascending colon, the cecum and the ileocecal valve were not examined.\nBowel preparation in the segments seen was good.\nFindings\nOn withdrawal, a 7 mm sessile polyp in the descending colon at about 45 cm was removed in one piece with a cold snare and retrieved for histology. The resection site was clean with no bleeding.\nModerate left-sided diverticulosis.\nInternal hemorrhoids, not bleeding, seen on retroflexion in the rectum.\nNo other source of bleeding in the examined colon.\nComplications\nNone.\nImpression\nColonoscopy reached the hepatic flexure only, limited by looping in a long, redundant colon. Cold snare polypectomy of one descending colon polyp. Left-sided diverticulosis. Internal hemorrhoids.\nRecommendations\nCT colonography of the unexamined right colon has been requested for 2026-10-30.\nAwait polyp histology; the timing of the next colonoscopy will depend on the histology and the CT colonography.\nHigh-fiber diet.\nSigned: Ottoline Valdivia-Moss, MD (fictional), 2026-10-09 14:06\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    },
+    "not_today": [
+     "gi.flex_sig"
+    ]
+   },
+   "review": "Only the labelled field names where the colonoscope stopped: the hepatic flexure; the cecum was not examined. Written as a two-cell Word table row."
+  },
+  {
+   "id": "F2-10b-keyvalue-table-row-extent",
+   "family": "F2-label",
+   "layout": "docx(table)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaint Aurelio Community Hospital (fictional)\nOutpatient Endoscopy Unit - Colonoscopy Report\nPatient: Desmond Okonkwo-Pryce (fictional)\nDate of birth: 1966-12-19\nSynthetic record: H2-SYN-1102\nDate of service: 2026-10-09\nSetting: Hospital outpatient department (POS 22)\nEndoscopist: Ottoline Valdivia-Moss, MD (fictional)\nSedation: propofol given and monitored by the hospital anesthesia department (fictional), which reports its own service\nIndication\nSix weeks of intermittent bright red blood with stools and a change to looser, more frequent bowel movements. He was booked for a complete colonoscopy and finished the split-dose bowel preparation as instructed. A flexible sigmoidoscopy elsewhere on 2024-05-14 showed only internal hemorrhoids.\nDescription of the procedure\nThe colonoscope was introduced through the anus and advanced under direct vision. The sigmoid colon was long and fixed, and the transverse colon was very redundant with repeated looping. Further advancement was not possible despite abdominal pressure by the nurse, turning the patient supine and then onto the right side, scope stiffening, and repeated loop reduction. Further pushing would have risked injury, so advancement was stopped.\nExtent | Hepatic flexure\nThe ascending colon, the cecum and the ileocecal valve were not examined.\nBowel preparation in the segments seen was good.\nFindings\nOn withdrawal, a 7 mm sessile polyp in the descending colon at about 45 cm was removed in one piece with a cold snare and retrieved for histology. The resection site was clean with no bleeding.\nModerate left-sided diverticulosis.\nInternal hemorrhoids, not bleeding, seen on retroflexion in the rectum.\nNo other source of bleeding in the examined colon.\nComplications\nNone.\nImpression\nColonoscopy reached the hepatic flexure only, limited by looping in a long, redundant colon. Cold snare polypectomy of one descending colon polyp. Left-sided diverticulosis. Internal hemorrhoids.\nRecommendations\nCT colonography of the unexamined right colon has been requested for 2026-10-30.\nAwait polyp histology; the timing of the next colonoscopy will depend on the histology and the CT colonography.\nHigh-fiber diet.\nSigned: Ottoline Valdivia-Moss, MD (fictional), 2026-10-09 14:06\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    },
+    "not_today": [
+     "gi.flex_sig"
+    ]
+   },
+   "review": "Only the labelled field names where the colonoscope stopped: the hepatic flexure; the cecum was not examined. \"Extent | Hepatic flexure\"."
+  },
+  {
+   "id": "F2-11-label-value-wrapped",
+   "family": "F2-label",
+   "layout": "pdf",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaint Aurelio Community Hospital (fictional)\nOutpatient Endoscopy Unit - Colonoscopy Report\nPatient: Desmond Okonkwo-Pryce (fictional)\nDate of birth: 1966-12-19\nSynthetic record: H2-SYN-1102\nDate of service: 2026-10-09\nSetting: Hospital outpatient department (POS 22)\nEndoscopist: Ottoline Valdivia-Moss, MD (fictional)\nSedation: propofol given and monitored by the hospital anesthesia department (fictional), which reports its own service\nIndication\nSix weeks of intermittent bright red blood with stools and a change to looser, more frequent bowel movements. He was booked for a complete colonoscopy and finished the split-dose bowel preparation as instructed. A flexible sigmoidoscopy elsewhere on 2024-05-14 showed only internal hemorrhoids.\nDescription of the procedure\nThe colonoscope was introduced through the anus and advanced under direct vision. The sigmoid colon was long and fixed, and the transverse colon was very redundant with repeated looping. Further advancement was not possible despite abdominal pressure by the nurse, turning the patient supine and then onto the right side, scope stiffening, and repeated loop reduction. Further pushing would have risked injury, so advancement was stopped.\nDeepest point reached:\nhepatic flexure, at about 95 cm of insertion.\nThe ascending colon, the cecum and the ileocecal valve were not examined.\nBowel preparation in the segments seen was good.\nFindings\nOn withdrawal, a 7 mm sessile polyp in the descending colon at about 45 cm was removed in one piece with a cold snare and retrieved for histology. The resection site was clean with no bleeding.\nModerate left-sided diverticulosis.\nInternal hemorrhoids, not bleeding, seen on retroflexion in the rectum.\nNo other source of bleeding in the examined colon.\nComplications\nNone.\nImpression\nColonoscopy reached the hepatic flexure only, limited by looping in a long, redundant colon. Cold snare polypectomy of one descending colon polyp. Left-sided diverticulosis. Internal hemorrhoids.\nRecommendations\nCT colonography of the unexamined right colon has been requested for 2026-10-30.\nAwait polyp histology; the timing of the next colonoscopy will depend on the histology and the CT colonography.\nHigh-fiber diet.\nSigned: Ottoline Valdivia-Moss, MD (fictional), 2026-10-09 14:06\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    },
+    "not_today": [
+     "gi.flex_sig"
+    ]
+   },
+   "review": "Only the labelled field names where the colonoscope stopped: the hepatic flexure; the cecum was not examined. The value starts on the next line (a PDF or OCR wrap)."
+  },
+  {
+   "id": "F2-11b-ocr-hyphen-wrap",
+   "family": "F2-label",
+   "layout": "ocr",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSaint Aurelio Community Hospital (fictional)\nOutpatient Endoscopy Unit - Colonoscopy Report\nPatient: Desmond Okonkwo-Pryce (fictional)\nDate of birth: 1966-12-19\nSynthetic record: H2-SYN-1102\nDate of service: 2026-10-09\nSetting: Hospital outpatient department (POS 22)\nEndoscopist: Ottoline Valdivia-Moss, MD (fictional)\nSedation: propofol given and monitored by the hospital anesthesia department (fictional), which reports its own service\nIndication\nSix weeks of intermittent bright red blood with stools and a change to looser, more frequent bowel movements. He was booked for a complete colonoscopy and finished the split-dose bowel preparation as instructed. A flexible sigmoidoscopy elsewhere on 2024-05-14 showed only internal hemorrhoids.\nDescription of the procedure\nThe colonoscope was introduced through the anus and advanced under direct vision. The sigmoid colon was long and fixed, and the transverse colon was very redundant with repeated looping. Further advancement was not possible despite abdominal pressure by the nurse, turning the patient supine and then onto the right side, scope stiffening, and repeated loop reduction. Further pushing would have risked injury, so advancement was stopped.\nDeepest point reached: hep-\natic flexure, at about 95 cm of insertion.\nThe ascending colon, the cecum and the ileocecal valve were not examined.\nBowel preparation in the segments seen was good.\nFindings\nOn withdrawal, a 7 mm sessile polyp in the descending colon at about 45 cm was removed in one piece with a cold snare and retrieved for histology. The resection site was clean with no bleeding.\nModerate left-sided diverticulosis.\nInternal hemorrhoids, not bleeding, seen on retroflexion in the rectum.\nNo other source of bleeding in the examined colon.\nComplications\nNone.\nImpression\nColonoscopy reached the hepatic flexure only, limited by looping in a long, redundant colon. Cold snare polypectomy of one descending colon polyp. Left-sided diverticulosis. Internal hemorrhoids.\nRecommendations\nCT colonography of the unexamined right colon has been requested for 2026-10-30.\nAwait polyp histology; the timing of the next colonoscopy will depend on the histology and the CT colonography.\nHigh-fiber diet.\nSigned: Ottoline Valdivia-Moss, MD (fictional), 2026-10-09 14:06\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    },
+    "not_today": [
+     "gi.flex_sig"
+    ]
+   },
+   "review": "Only the labelled field names where the colonoscope stopped: the hepatic flexure; the cecum was not examined. OCR hyphenated the landmark across a line (\"hep-\" / \"atic flexure\").",
+   "hint": "uncertain"
+  },
+  {
+   "id": "F2-12-past-splenic-failed",
+   "family": "F2-past",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nCedar Point Endoscopy (fictional)\nColonoscopy Report\nDate of service: 2026-10-14\nPlace of service: ambulatory surgery center (POS 24)\n\nIndication\nPositive fecal immunochemical test.\n\nDescription of the procedure\nThe colonoscope was advanced through a tortuous sigmoid colon but could not be advanced past the splenic flexure despite position changes. The transverse colon, ascending colon and cecum were not examined. A 6 mm descending colon polyp was removed with a cold snare.\n\nImpression\nIncomplete colonoscopy to the splenic flexure. One polyp removed.\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: splenic flexure"
+    }
+   },
+   "review": "The colonoscope reached the splenic flexure and could not pass it; the cecum was not examined."
+  },
+  {
+   "id": "F2-13-past-hepatic-to-cecum",
+   "family": "F2-past",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nCedar Point Endoscopy (fictional)\nColonoscopy Report\nDate of service: 2026-10-14\nPlace of service: ambulatory surgery center (POS 24)\n\nIndication\nPositive fecal immunochemical test.\n\nDescription of the procedure\nThe colonoscope was advanced past the hepatic flexure to the cecum, confirmed by the appendiceal orifice. A 6 mm ascending colon polyp was removed with a cold snare.\n\nImpression\nComplete colonoscopy. One polyp removed.\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "cecum"
+    }
+   },
+   "review": "Control: complete to the cecum."
+  },
+  {
+   "id": "F2-13b-past-the-stricture",
+   "family": "F2-past",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nCedar Point Endoscopy (fictional)\nColonoscopy Report\nDate of service: 2026-10-14\nPlace of service: ambulatory surgery center (POS 24)\n\nIndication\nPositive fecal immunochemical test.\n\nDescription of the procedure\nThe colonoscope could not be advanced past the sigmoid colon because of a fixed angulated segment; the descending colon and more proximal colon were not examined.\n\nImpression\nIncomplete colonoscopy; sigmoid colon only.\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: sigmoid colon"
+    }
+   },
+   "review": "The colonoscope reached the sigmoid colon and could not pass it."
+  },
+  {
+   "id": "F2-14-past-temporal-control",
+   "family": "F2-past",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nCedar Point Endoscopy (fictional)\nColonoscopy Report\nDate of service: 2026-10-14\nPlace of service: ambulatory surgery center (POS 24)\n\nIndication\nPositive fecal immunochemical test.\n\nDescription of the procedure\nIn the past year she had a flexible sigmoidoscopy elsewhere. Her past colonoscopy, in 2019, was normal. Today the colonoscope was advanced to the cecum and the terminal ileum was intubated. No polyps.\n\nImpression\nNormal colonoscopy.\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "terminal ileum"
+    },
+    "not_today": [
+     "gi.flex_sig"
+    ]
+   },
+   "review": "Control: \"in the past year\" and \"her past colonoscopy\" are earlier occasions; today's colonoscopy reached the TI."
+  },
+  {
+   "id": "F2-15-aim-label-control",
+   "family": "F2-label",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nCedar Point Endoscopy (fictional)\nColonoscopy Report\nDate of service: 2026-10-14\nPlace of service: ambulatory surgery center (POS 24)\n\nIndication\nPositive fecal immunochemical test.\n\nDescription of the procedure\nIntended extent: cecum.\nThe colonoscope was advanced to the hepatic flexure; looping prevented further advancement and the cecum was not reached.\n\nImpression\nIncomplete colonoscopy.\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    }
+   },
+   "review": "Control: the intended extent is an aim; the colonoscope reached the hepatic flexure."
+  },
+  {
+   "id": "F2-16-denied-label-control",
+   "family": "F2-label",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nCedar Point Endoscopy (fictional)\nColonoscopy Report\nDate of service: 2026-10-14\nPlace of service: ambulatory surgery center (POS 24)\n\nIndication\nPositive fecal immunochemical test.\n\nDescription of the procedure\nExtent: cecum (not reached).\nThe colonoscope was advanced to the transverse colon, where an obstructing mass prevented further passage.\n\nImpression\nObstructing transverse colon mass.\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: transverse colon"
+    }
+   },
+   "review": "Control: the label denies the cecum; the colonoscope reached the transverse colon."
+  },
+  {
+   "id": "F2-17-two-services-deepest-point",
+   "family": "F4-two-services",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nNorthgate Endoscopy (fictional)\nBidirectional Endoscopy Report\nDate of procedure: 2026-10-20\nPlace of service: ambulatory surgery center (POS 24)\nProcedures: Esophagogastroduodenoscopy with biopsies; colonoscopy.\n\nIndications\nIron deficiency anemia, referred for upper and lower endoscopic evaluation.\n\nUpper Endoscopy\nThe gastroscope was introduced without difficulty. Deepest point reached: second portion of the duodenum. Cold forceps biopsies were taken from the duodenum.\n\nColonoscopy\nThe colonoscope was introduced and advanced under direct vision. Deepest point reached: cecum, confirmed by the appendiceal orifice. No polyps.\n\nImpression\nSee above.\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "second part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "cecum"
+    }
+   },
+   "review": "Each service part states its own deepest point: the second portion of the duodenum and the cecum."
+  },
+  {
+   "id": "F2-18-flexsig-deepest-cm",
+   "family": "F5-depth",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nHollis Creek Gastroenterology (fictional)\nFlexible Sigmoidoscopy Note\nDate of service: 2026-10-13\nPlace of service: office (POS 11)\n\nProcedure\nThe flexible sigmoidoscope was inserted after two enemas. Deepest point reached: 35 cm.\nThe rectum and sigmoid colon were normal.\n\nPlan\nColonoscopy in 5 years.\n",
+   "expected": {
+    "gi.flex_sig": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "35 cm"
+    },
+    "not_today": [
+     "gi.colonoscopy"
+    ]
+   },
+   "review": "The sigmoidoscope reached 35 cm."
+  },
+  {
+   "id": "F5-01-flexsig-depth-of-insertion",
+   "family": "F5-depth",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nHollis Creek Gastroenterology (fictional)\nFlexible Sigmoidoscopy Note\nDate of service: 2026-10-13\nPlace of service: office (POS 11)\n\nProcedure\nThe flexible sigmoidoscope was inserted after two enemas. Depth of insertion: 35 cm.\nThe rectum and sigmoid colon were normal.\n\nPlan\nColonoscopy in 5 years.\n",
+   "expected": {
+    "gi.flex_sig": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "35 cm"
+    },
+    "not_today": [
+     "gi.colonoscopy"
+    ]
+   },
+   "review": "Control: read at head."
+  },
+  {
+   "id": "F5-02-flexsig-insertion-depth",
+   "family": "F5-depth",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nHollis Creek Gastroenterology (fictional)\nFlexible Sigmoidoscopy Note\nDate of service: 2026-10-13\nPlace of service: office (POS 11)\n\nProcedure\nThe flexible sigmoidoscope was inserted after two enemas. Insertion depth: 35 cm.\nThe rectum and sigmoid colon were normal.\n\nPlan\nColonoscopy in 5 years.\n",
+   "expected": {
+    "gi.flex_sig": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "35 cm"
+    },
+    "not_today": [
+     "gi.colonoscopy"
+    ]
+   },
+   "review": "\"Insertion depth\" is \"depth of insertion\" reordered."
+  },
+  {
+   "id": "F5-03-flexsig-maximal-insertion",
+   "family": "F5-depth",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nHollis Creek Gastroenterology (fictional)\nFlexible Sigmoidoscopy Note\nDate of service: 2026-10-13\nPlace of service: office (POS 11)\n\nProcedure\nThe flexible sigmoidoscope was inserted after two enemas. Maximal insertion: 35 cm.\nThe rectum and sigmoid colon were normal.\n\nPlan\nColonoscopy in 5 years.\n",
+   "expected": {
+    "gi.flex_sig": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "35 cm"
+    },
+    "not_today": [
+     "gi.colonoscopy"
+    ]
+   },
+   "review": "Maximal insertion is the depth reached."
+  },
+  {
+   "id": "F5-04-flexsig-insertion-time-control",
+   "family": "F5-depth",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nHollis Creek Gastroenterology (fictional)\nFlexible Sigmoidoscopy Note\nDate of service: 2026-10-13\nPlace of service: office (POS 11)\n\nProcedure\nThe flexible sigmoidoscope was inserted after two enemas. Insertion time: 3 minutes. The scope was advanced to 40 cm.\nThe rectum and sigmoid colon were normal.\n\nPlan\nColonoscopy in 5 years.\n",
+   "expected": {
+    "gi.flex_sig": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "40 cm"
+    },
+    "not_today": [
+     "gi.colonoscopy"
+    ]
+   },
+   "review": "Control: an insertion time is no depth; the scope reached 40 cm."
+  },
+  {
+   "id": "F5-05-colon-sigmoid-at-28cm",
+   "family": "F5-depth",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nCedar Point Endoscopy (fictional)\nColonoscopy Report\nDate of service: 2026-10-14\nPlace of service: ambulatory surgery center (POS 24)\n\nIndication\nPositive fecal immunochemical test.\n\nDescription of the procedure\nThe pediatric colonoscope was advanced to 28 cm from the anal verge in the sigmoid colon, where an impassable stricture was biopsied. Extent reached: sigmoid colon at 28 cm.\n\nImpression\nIncomplete colonoscopy; sigmoid stricture.\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: sigmoid colon"
+    }
+   },
+   "review": "Control (round 2, ho-03 shape): stopped in the sigmoid colon at 28 cm."
+  },
+  {
+   "id": "F3-01-h204-live-ocr",
+   "family": "F3-pyloric",
+   "layout": "ocr(live)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nQuillan Bend Surgical Center (fictional)\nUpper Endoscopy Report\n\nPatient name: Leopold Nwachukwu-Berg (fictional)\n\nBorn: 1949-07-11\n\nSynthetic record: H2-SYN-1104\n\nDate of procedure: 2026-10-07\n\nFacility type: freestanding ambulatory surgical center (POS 24)\n\nEndoscopist: Clementine Oduya, DO (fictional)\n\nAnesthesia: general endotracheal anesthesia for airway protection because of retained gastric contents, given by the\ncenter's anesthesia staff (fictional) and reported separately\n\nIndications\nThree weeks of early satiety and vomiting of undigested food after meals, with a 6 kg weight loss. Long-term naproxen\nuse for knee pain. An outside upper GI series on 2026-09-30 suggested narrowing at the gastric outlet.\n\nProcedure and findings\n\nThe gastroscope was advanced through a normal esophagus into the stomach. A large amount of retained food and\nfluid was present despite an overnight fast; it was partly suctioned, but the view of the fundus stayed limited. The\npyloric channel was deformed and edematous, with a 12 mm clean-based ulcer on its lesser curvature side narrowing\nthe lumen to about 5 mm. The gastroscope could not be passed through the channel, and the duodenum was not\nexamined.\n\nFurthest extent: pyloric channel.\n\nThe ulcer margin was sampled with cold forceps (six pieces) to exclude malignancy; separate cold forceps samples\ncame from the antrum and the gastric body (two pieces each) for Helicobacter pylori.\n\nBalloon dilation of the channel was not attempted because the ulcer is active. There were no stigmata of bleeding and\nno hemostatic treatment was needed.\n\nImpression\n\nGastric outlet obstruction from an active pyloric channel ulcer, probably related to naproxen. Biopsies taken. The\nduodenum was not examined because the gastroscope could not pass the narrowing.\n\nPlan\n\nStop naproxen. High-dose proton pump inhibitor. Liquid diet. Await pathology.\n\nRepeat upper endoscopy in about 8 weeks to check healing and, if the narrowing persists, to perform balloon dilation\nand complete the examination of the duodenum.\n\nPathology: Silverbirch Diagnostic Laboratory (fictional), reported separately.\nSigned: Clementine Oduya, DO (fictional), 2026-10-07 11:30\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: stomach",
+     "interventions_excludes": [
+      "dilation"
+     ]
+    }
+   },
+   "review": "The gastroscope reached the pyloric channel (the stomach's outlet) and could not pass it; the duodenum was not examined. Balloon dilation was NOT attempted (planned for the repeat EGD)."
+  },
+  {
+   "id": "F3-02-h204-text",
+   "family": "F3-pyloric",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nQuillan Bend Surgical Center (fictional)\nUpper Endoscopy Report\n\nPatient name: Leopold Nwachukwu-Berg (fictional)\nBorn: 1949-07-11\nSynthetic record: H2-SYN-1104\nDate of procedure: 2026-10-07\nFacility type: freestanding ambulatory surgical center (POS 24)\nEndoscopist: Clementine Oduya, DO (fictional)\nAnesthesia: general endotracheal anesthesia for airway protection because of retained gastric contents, given by the center's anesthesia staff (fictional) and reported separately\n\nIndications\nThree weeks of early satiety and vomiting of undigested food after meals, with a 6 kg weight loss. Long-term naproxen use for knee pain. An outside upper GI series on 2026-09-30 suggested narrowing at the gastric outlet.\n\nProcedure and findings\nThe gastroscope was advanced through a normal esophagus into the stomach. A large amount of retained food and fluid was present despite an overnight fast; it was partly suctioned, but the view of the fundus stayed limited. The pyloric channel was deformed and edematous, with a 12 mm clean-based ulcer on its lesser curvature side narrowing the lumen to about 5 mm. The gastroscope could not be passed through the channel, and the duodenum was not examined.\nFurthest extent: pyloric channel.\nThe ulcer margin was sampled with cold forceps (six pieces) to exclude malignancy; separate cold forceps samples came from the antrum and the gastric body (two pieces each) for Helicobacter pylori.\nBalloon dilation of the channel was not attempted because the ulcer is active. There were no stigmata of bleeding and no hemostatic treatment was needed.\n\nImpression\nGastric outlet obstruction from an active pyloric channel ulcer, probably related to naproxen. Biopsies taken. The duodenum was not examined because the gastroscope could not pass the narrowing.\n\nPlan\nStop naproxen. High-dose proton pump inhibitor. Liquid diet. Await pathology.\nRepeat upper endoscopy in about 8 weeks to check healing and, if the narrowing persists, to perform balloon dilation and complete the examination of the duodenum.\n\nPathology: Silverbirch Diagnostic Laboratory (fictional), reported separately.\nSigned: Clementine Oduya, DO (fictional), 2026-10-07 11:30\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: stomach",
+     "interventions_excludes": [
+      "dilation"
+     ]
+    }
+   },
+   "review": "The gastroscope reached the pyloric channel (the stomach's outlet) and could not pass it; the duodenum was not examined. Balloon dilation was NOT attempted (planned for the repeat EGD)."
+  },
+  {
+   "id": "F3-02b-h204-docx",
+   "family": "F3-pyloric",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nQuillan Bend Surgical Center (fictional)\nUpper Endoscopy Report\nPatient name: Leopold Nwachukwu-Berg (fictional)\nBorn: 1949-07-11\nSynthetic record: H2-SYN-1104\nDate of procedure: 2026-10-07\nFacility type: freestanding ambulatory surgical center (POS 24)\nEndoscopist: Clementine Oduya, DO (fictional)\nAnesthesia: general endotracheal anesthesia for airway protection because of retained gastric contents, given by the center's anesthesia staff (fictional) and reported separately\nIndications\nThree weeks of early satiety and vomiting of undigested food after meals, with a 6 kg weight loss. Long-term naproxen use for knee pain. An outside upper GI series on 2026-09-30 suggested narrowing at the gastric outlet.\nProcedure and findings\nThe gastroscope was advanced through a normal esophagus into the stomach. A large amount of retained food and fluid was present despite an overnight fast; it was partly suctioned, but the view of the fundus stayed limited. The pyloric channel was deformed and edematous, with a 12 mm clean-based ulcer on its lesser curvature side narrowing the lumen to about 5 mm. The gastroscope could not be passed through the channel, and the duodenum was not examined.\nFurthest extent: pyloric channel.\nThe ulcer margin was sampled with cold forceps (six pieces) to exclude malignancy; separate cold forceps samples came from the antrum and the gastric body (two pieces each) for Helicobacter pylori.\nBalloon dilation of the channel was not attempted because the ulcer is active. There were no stigmata of bleeding and no hemostatic treatment was needed.\nImpression\nGastric outlet obstruction from an active pyloric channel ulcer, probably related to naproxen. Biopsies taken. The duodenum was not examined because the gastroscope could not pass the narrowing.\nPlan\nStop naproxen. High-dose proton pump inhibitor. Liquid diet. Await pathology.\nRepeat upper endoscopy in about 8 weeks to check healing and, if the narrowing persists, to perform balloon dilation and complete the examination of the duodenum.\nPathology: Silverbirch Diagnostic Laboratory (fictional), reported separately.\nSigned: Clementine Oduya, DO (fictional), 2026-10-07 11:30\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: stomach",
+     "interventions_excludes": [
+      "dilation"
+     ]
+    }
+   },
+   "review": "The gastroscope reached the pyloric channel (the stomach's outlet) and could not pass it; the duodenum was not examined. Balloon dilation was NOT attempted (planned for the repeat EGD)."
+  },
+  {
+   "id": "F3-03-heading-procedure-slash-findings",
+   "family": "F3-pyloric",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nQuillan Bend Surgical Center (fictional)\nUpper Endoscopy Report\nPatient name: Leopold Nwachukwu-Berg (fictional)\nBorn: 1949-07-11\nSynthetic record: H2-SYN-1104\nDate of procedure: 2026-10-07\nFacility type: freestanding ambulatory surgical center (POS 24)\nEndoscopist: Clementine Oduya, DO (fictional)\nAnesthesia: general endotracheal anesthesia for airway protection because of retained gastric contents, given by the center's anesthesia staff (fictional) and reported separately\nIndications\nThree weeks of early satiety and vomiting of undigested food after meals, with a 6 kg weight loss. Long-term naproxen use for knee pain. An outside upper GI series on 2026-09-30 suggested narrowing at the gastric outlet.\nProcedure/Findings\nThe gastroscope was advanced through a normal esophagus into the stomach. A large amount of retained food and fluid was present despite an overnight fast; it was partly suctioned, but the view of the fundus stayed limited. The pyloric channel was deformed and edematous, with a 12 mm clean-based ulcer on its lesser curvature side narrowing the lumen to about 5 mm. The gastroscope could not be passed through the channel, and the duodenum was not examined.\nFurthest extent: pyloric channel.\nThe ulcer margin was sampled with cold forceps (six pieces) to exclude malignancy; separate cold forceps samples came from the antrum and the gastric body (two pieces each) for Helicobacter pylori.\nBalloon dilation of the channel was not attempted because the ulcer is active. There were no stigmata of bleeding and no hemostatic treatment was needed.\nImpression\nGastric outlet obstruction from an active pyloric channel ulcer, probably related to naproxen. Biopsies taken. The duodenum was not examined because the gastroscope could not pass the narrowing.\nPlan\nStop naproxen. High-dose proton pump inhibitor. Liquid diet. Await pathology.\nRepeat upper endoscopy in about 8 weeks to check healing and, if the narrowing persists, to perform balloon dilation and complete the examination of the duodenum.\nPathology: Silverbirch Diagnostic Laboratory (fictional), reported separately.\nSigned: Clementine Oduya, DO (fictional), 2026-10-07 11:30\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: stomach",
+     "interventions_excludes": [
+      "dilation"
+     ]
+    }
+   },
+   "review": "The gastroscope reached the pyloric channel (the stomach's outlet) and could not pass it; the duodenum was not examined. Balloon dilation was NOT attempted (planned for the repeat EGD)."
+  },
+  {
+   "id": "F3-04-heading-technique-and-findings",
+   "family": "F3-pyloric",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nQuillan Bend Surgical Center (fictional)\nUpper Endoscopy Report\nPatient name: Leopold Nwachukwu-Berg (fictional)\nBorn: 1949-07-11\nSynthetic record: H2-SYN-1104\nDate of procedure: 2026-10-07\nFacility type: freestanding ambulatory surgical center (POS 24)\nEndoscopist: Clementine Oduya, DO (fictional)\nAnesthesia: general endotracheal anesthesia for airway protection because of retained gastric contents, given by the center's anesthesia staff (fictional) and reported separately\nIndications\nThree weeks of early satiety and vomiting of undigested food after meals, with a 6 kg weight loss. Long-term naproxen use for knee pain. An outside upper GI series on 2026-09-30 suggested narrowing at the gastric outlet.\nTechnique and findings\nThe gastroscope was advanced through a normal esophagus into the stomach. A large amount of retained food and fluid was present despite an overnight fast; it was partly suctioned, but the view of the fundus stayed limited. The pyloric channel was deformed and edematous, with a 12 mm clean-based ulcer on its lesser curvature side narrowing the lumen to about 5 mm. The gastroscope could not be passed through the channel, and the duodenum was not examined.\nFurthest extent: pyloric channel.\nThe ulcer margin was sampled with cold forceps (six pieces) to exclude malignancy; separate cold forceps samples came from the antrum and the gastric body (two pieces each) for Helicobacter pylori.\nBalloon dilation of the channel was not attempted because the ulcer is active. There were no stigmata of bleeding and no hemostatic treatment was needed.\nImpression\nGastric outlet obstruction from an active pyloric channel ulcer, probably related to naproxen. Biopsies taken. The duodenum was not examined because the gastroscope could not pass the narrowing.\nPlan\nStop naproxen. High-dose proton pump inhibitor. Liquid diet. Await pathology.\nRepeat upper endoscopy in about 8 weeks to check healing and, if the narrowing persists, to perform balloon dilation and complete the examination of the duodenum.\nPathology: Silverbirch Diagnostic Laboratory (fictional), reported separately.\nSigned: Clementine Oduya, DO (fictional), 2026-10-07 11:30\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: stomach",
+     "interventions_excludes": [
+      "dilation"
+     ]
+    }
+   },
+   "review": "The gastroscope reached the pyloric channel (the stomach's outlet) and could not pass it; the duodenum was not examined. Balloon dilation was NOT attempted (planned for the repeat EGD)."
+  },
+  {
+   "id": "F3-04b-no-dilation-sentence",
+   "family": "F3-pyloric",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nQuillan Bend Surgical Center (fictional)\nUpper Endoscopy Report\nPatient name: Leopold Nwachukwu-Berg (fictional)\nBorn: 1949-07-11\nSynthetic record: H2-SYN-1104\nDate of procedure: 2026-10-07\nFacility type: freestanding ambulatory surgical center (POS 24)\nEndoscopist: Clementine Oduya, DO (fictional)\nAnesthesia: general endotracheal anesthesia for airway protection because of retained gastric contents, given by the center's anesthesia staff (fictional) and reported separately\nIndications\nThree weeks of early satiety and vomiting of undigested food after meals, with a 6 kg weight loss. Long-term naproxen use for knee pain. An outside upper GI series on 2026-09-30 suggested narrowing at the gastric outlet.\nProcedure and findings\nThe gastroscope was advanced through a normal esophagus into the stomach. A large amount of retained food and fluid was present despite an overnight fast; it was partly suctioned, but the view of the fundus stayed limited. The pyloric channel was deformed and edematous, with a 12 mm clean-based ulcer on its lesser curvature side narrowing the lumen to about 5 mm. The gastroscope could not be passed through the channel, and the duodenum was not examined.\nFurthest extent: pyloric channel.\nThe ulcer margin was sampled with cold forceps (six pieces) to exclude malignancy; separate cold forceps samples came from the antrum and the gastric body (two pieces each) for Helicobacter pylori.\nThere were no stigmata of bleeding and no hemostatic treatment was needed.\nImpression\nGastric outlet obstruction from an active pyloric channel ulcer, probably related to naproxen. Biopsies taken. The duodenum was not examined because the gastroscope could not pass the narrowing.\nPlan\nStop naproxen. High-dose proton pump inhibitor. Liquid diet. Await pathology.\nRepeat upper endoscopy in about 8 weeks to check healing and, if the narrowing persists, to perform balloon dilation and complete the examination of the duodenum.\nPathology: Silverbirch Diagnostic Laboratory (fictional), reported separately.\nSigned: Clementine Oduya, DO (fictional), 2026-10-07 11:30\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: stomach"
+    }
+   },
+   "review": "The gastroscope reached the pyloric channel (the stomach's outlet) and could not pass it; the duodenum was not examined. Balloon dilation was NOT attempted (planned for the repeat EGD). (dilation sentence removed: isolates the extent from the negation gap)."
+  },
+  {
+   "id": "F3-05-label-pyloric-channel",
+   "family": "F3-pyloric",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nQuillan Bend Surgical Center (fictional)\nUpper Endoscopy Report\nDate of service: 2026-10-07\nPlace of service: ambulatory surgery center (POS 24)\n\nIndications\nEarly satiety and vomiting.\n\nFindings\nA large amount of retained food was present despite an overnight fast. The pyloric channel was narrowed by a clean-based ulcer and the gastroscope could not be passed through it; the duodenum was not examined.\nFurthest extent: pyloric channel.\n\nImpression\nGastric outlet obstruction.\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: stomach"
+    }
+   },
+   "review": "Only the label names where the gastroscope stopped: the pyloric channel, in the stomach; the duodenum was not examined."
+  },
+  {
+   "id": "F3-06-label-pylorus",
+   "family": "F3-pyloric",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nQuillan Bend Surgical Center (fictional)\nUpper Endoscopy Report\nDate of service: 2026-10-07\nPlace of service: ambulatory surgery center (POS 24)\n\nIndications\nEarly satiety and vomiting.\n\nFindings\nA large amount of retained food was present despite an overnight fast. The pyloric channel was narrowed by a clean-based ulcer and the gastroscope could not be passed through it; the duodenum was not examined.\nFurthest extent: pylorus.\n\nImpression\nGastric outlet obstruction.\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: stomach"
+    }
+   },
+   "review": "Only the label names where the gastroscope stopped: the pylorus, in the stomach; the duodenum was not examined. Control: pylorus is read at head."
+  },
+  {
+   "id": "F3-07-label-gastric-antrum",
+   "family": "F3-pyloric",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nQuillan Bend Surgical Center (fictional)\nUpper Endoscopy Report\nDate of service: 2026-10-07\nPlace of service: ambulatory surgery center (POS 24)\n\nIndications\nEarly satiety and vomiting.\n\nFindings\nA large amount of retained food was present despite an overnight fast. The pyloric channel was narrowed by a clean-based ulcer and the gastroscope could not be passed through it; the duodenum was not examined.\nFurthest extent: gastric antrum.\n\nImpression\nGastric outlet obstruction.\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: stomach"
+    }
+   },
+   "review": "Only the label names where the gastroscope stopped: the gastric antrum, in the stomach; the duodenum was not examined."
+  },
+  {
+   "id": "F3-08-label-prepyloric-antrum",
+   "family": "F3-pyloric",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nQuillan Bend Surgical Center (fictional)\nUpper Endoscopy Report\nDate of service: 2026-10-07\nPlace of service: ambulatory surgery center (POS 24)\n\nIndications\nEarly satiety and vomiting.\n\nFindings\nA large amount of retained food was present despite an overnight fast. The pyloric channel was narrowed by a clean-based ulcer and the gastroscope could not be passed through it; the duodenum was not examined.\nFurthest extent: prepyloric antrum.\n\nImpression\nGastric outlet obstruction.\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: stomach"
+    }
+   },
+   "review": "Only the label names where the gastroscope stopped: the prepyloric antrum, in the stomach; the duodenum was not examined."
+  },
+  {
+   "id": "F3-09-label-ocr-wrap",
+   "family": "F3-pyloric",
+   "layout": "ocr",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nQuillan Bend Surgical Center (fictional)\nUpper Endoscopy Report\nDate of service: 2026-10-07\nPlace of service: ambulatory surgery center (POS 24)\n\nIndications\nEarly satiety and vomiting.\n\nFindings\nA large amount of retained food was present despite an overnight fast. The pyloric channel was narrowed by a clean-based ulcer and the gastroscope could not be passed through it; the duodenum was not examined.\nFurthest extent: pyloric\nchannel.\n\nImpression\nGastric outlet obstruction.\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: stomach"
+    }
+   },
+   "review": "As F3-05 with the value wrapped over a line."
+  },
+  {
+   "id": "F3-10-complete-egd-control",
+   "family": "F3-pyloric",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nQuillan Bend Surgical Center (fictional)\nUpper Endoscopy Report\nDate of service: 2026-10-07\nPlace of service: ambulatory surgery center (POS 24)\n\nIndications\nEarly satiety and vomiting.\n\nFindings\nThe gastroscope was advanced to the second portion of the duodenum.\nFurthest extent: second portion of the duodenum.\n\nImpression\nNormal EGD.\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "second part of duodenum"
+    }
+   },
+   "review": "Control: complete EGD."
+  },
+  {
+   "id": "F3-11-keyvalue-pyloric",
+   "family": "F3-pyloric",
+   "layout": "docx(table)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nQuillan Bend Surgical Center (fictional)\nUpper Endoscopy Report\nDate of service: 2026-10-07\nPlace of service: ambulatory surgery center (POS 24)\nIndications\nEarly satiety and vomiting.\nFindings\nA large amount of retained food was present despite an overnight fast. The pyloric channel was narrowed by a clean-based ulcer and the gastroscope could not be passed through it; the duodenum was not examined.\nFurthest extent | Pyloric channel\nImpression\nGastric outlet obstruction.\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: stomach"
+    }
+   },
+   "review": "As F3-05 as a two-cell table row."
+  },
+  {
+   "id": "F4-01-two-services-extent-labels",
+   "family": "F4-two-services",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nNorthgate Endoscopy (fictional)\nBidirectional Endoscopy Report\nDate of procedure: 2026-10-20\nPlace of service: ambulatory surgery center (POS 24)\nProcedures: Esophagogastroduodenoscopy with biopsies; colonoscopy.\n\nIndications\nIron deficiency anemia, referred for upper and lower endoscopic evaluation.\n\nUpper Endoscopy\nThe gastroscope was introduced without difficulty. Extent: second portion of the duodenum. Cold forceps biopsies were taken from the duodenum.\n\nColonoscopy\nThe colonoscope was introduced and advanced under direct vision. Extent: hepatic flexure; looping prevented further advancement and the cecum was not reached.\n\nImpression\nSee above.\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "second part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    }
+   },
+   "review": "Control-ish: each part has an \"Extent:\" field; the colonoscopy stopped at the hepatic flexure."
+  },
+  {
+   "id": "F4-02-two-services-one-line",
+   "family": "F4-two-services",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nNorthgate Endoscopy (fictional)\nBidirectional Endoscopy Report\nDate of procedure: 2026-10-20\nPlace of service: ambulatory surgery center (POS 24)\nProcedures: Esophagogastroduodenoscopy with biopsies; colonoscopy.\n\nIndications\nIron deficiency anemia, referred for upper and lower endoscopic evaluation.\n\nUpper Endoscopy\nEGD to D2; cold forceps biopsies of the duodenum.\n\nColonoscopy\nColonoscopy to the cecum. No polyps.\n\nImpression\nSee above.\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "second part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "cecum"
+    }
+   },
+   "review": "Control: the shorthand \"EGD to D2\", \"Colonoscopy to the cecum\"."
+  },
+  {
+   "id": "F4-03-table-under-known-heading",
+   "family": "F4-two-services",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Endoscopy (fictional)\nBidirectional Endoscopy Report\nDate of procedure: 2026-10-20\nPlace of service: ambulatory surgery center (POS 24)\nIndications\nIron deficiency anemia.\nProcedures performed\nProcedure | Extent | Biopsies\nEGD | Second portion of the duodenum | Yes\nColonoscopy | Cecum | No\nFindings\nGastric antral erythema, biopsied. Normal colon.\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "second part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "cecum"
+    }
+   },
+   "review": "A table under \"Procedures performed\": EGD to the second portion of the duodenum, colonoscopy to the cecum, no colon biopsies."
+  },
+  {
+   "id": "F4-03b-table-under-known-heading-text",
+   "family": "F4-two-services",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nNorthgate Endoscopy (fictional)\nBidirectional Endoscopy Report\nDate of procedure: 2026-10-20\nPlace of service: ambulatory surgery center (POS 24)\n\nIndications\nIron deficiency anemia.\n\nProcedures performed\nProcedure | Extent | Biopsies\nEGD | Second portion of the duodenum | Yes\nColonoscopy | Cecum | No\n\nFindings\nGastric antral erythema, biopsied. Normal colon.\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "second part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "cecum"
+    }
+   },
+   "review": "As F4-03."
+  },
+  {
+   "id": "F4-03c-table-ocr",
+   "family": "F4-two-services",
+   "layout": "ocr",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR\nCLINICAL USE\n\nNorthgate Endoscopy (fictional)\nBidirectional Endoscopy Report\nDate of procedure: 2026-10-20\nPlace of service: ambulatory surgery center (POS 24)\n\nIndications\nIron deficiency anemia.\n\nProcedures performed\nProcedure   Extent   Biopsies\nEGD   Second portion of the duodenum   Yes\nColonoscopy   Cecum   No\n\nFindings\nGastric antral erythema, biopsied. Normal colon.\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "second part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "cecum"
+    }
+   },
+   "review": "As F4-03, OCR columns as spaces.",
+   "hint": "uncertain"
+  },
+  {
+   "id": "F4-04-table-colon-short",
+   "family": "F4-two-services",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Endoscopy (fictional)\nBidirectional Endoscopy Report\nDate of procedure: 2026-10-20\nPlace of service: ambulatory surgery center (POS 24)\nIndications\nIron deficiency anemia.\nProcedures performed\nProcedure | Extent | Biopsies\nEGD | Second portion of the duodenum | Yes\nColonoscopy | Hepatic flexure (looping) | No\nFindings\nGastric antral erythema, biopsied. Normal colon to the hepatic flexure; the cecum was not reached.\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "second part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    }
+   },
+   "review": "The colonoscopy row stops at the hepatic flexure and the findings say the cecum was not reached."
+  },
+  {
+   "id": "F6-01-failed-reach-label",
+   "family": "F6-failed",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nCedar Point Endoscopy (fictional)\nColonoscopy Report\nDate of service: 2026-10-14\nPlace of service: ambulatory surgery center (POS 24)\n\nIndication\nPositive fecal immunochemical test.\n\nDescription of the procedure\nFailed to reach the cecum because of a fixed sigmoid. Furthest point reached: descending colon.\n\nImpression\nIncomplete colonoscopy.\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: descending colon"
+    }
+   },
+   "review": "The cecum was not reached; the deepest point was the descending colon."
+  },
+  {
+   "id": "F6-02-not-reached-beyond",
+   "family": "F6-failed",
+   "layout": "text",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nCedar Point Endoscopy (fictional)\nColonoscopy Report\nDate of service: 2026-10-14\nPlace of service: ambulatory surgery center (POS 24)\n\nIndication\nPositive fecal immunochemical test.\n\nDescription of the procedure\nThe cecum was not reached; the colonoscope could not be advanced beyond the splenic flexure.\n\nImpression\nIncomplete colonoscopy.\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: splenic flexure"
+    }
+   },
+   "review": "Control-ish: stopped at the splenic flexure."
+  },
+  {
+   "id": "F6-03-landmark-field-yes-no-table",
+   "family": "F6-failed",
+   "layout": "docx(table)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nCedar Point Endoscopy (fictional)\nColonoscopy Report\nDate of service: 2026-10-14\nPlace of service: ambulatory surgery center (POS 24)\nIndication\nPositive fecal immunochemical test.\nDescription of the procedure\nCecum reached | No\nFurthest point reached | Transverse colon\nThe colonoscope was advanced under direct vision; a fixed angulation prevented further passage.\nImpression\nIncomplete colonoscopy.\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: transverse colon"
+    }
+   },
+   "review": "Table rows: the cecum was not reached; the deepest point was the transverse colon."
+  },
+  {
+   "id": "F7-ho01",
+   "family": "F7-known",
+   "layout": "docx(live)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nBidirectional Endoscopy Report\nFacility: Larkspur Valley Endoscopy Center (fictional)\nPlace of service: Ambulatory surgery center (ASC), POS 24\nDate of procedure: 2026-10-20\nPatient: Odalys Brennecke-Farrow (fictional), 69-year-old woman\nEndoscopist: Ravi Castellano-Moore, MD (fictional)\nAnesthesia: Monitored anesthesia care with propofol, given and documented by Wren Takahashi, CRNA (fictional), of Larkspur Anesthesia Associates (fictional), which reports the anesthesia services.\nProcedures: Esophagogastroduodenoscopy with biopsies; colonoscopy with cold snare polypectomy, biopsies of a separate lesion and submucosal tattoo.\nIndications\nIron deficiency anemia (hemoglobin 9.8 g/dL, ferritin 6 ng/mL) without overt bleeding, referred by her primary care clinician for upper and lower endoscopic evaluation.\nConsent and Preparation\nThe risks of bleeding, perforation, infection, missed lesions and sedation reactions were explained, and written consent was obtained. A time-out confirmed the patient, the planned procedures and allergies. Split-dose polyethylene glycol preparation; Boston Bowel Preparation Scale 3-3-2 (total 8).\nUpper Endoscopy\nThe gastroscope was passed through the mouth under direct vision and advanced to the second portion of the duodenum. The esophagus was normal and the squamocolumnar junction was regular at 39 cm. The gastric antrum had patchy erythema without ulcers. Cold forceps biopsies were taken from the antrum and the body for Helicobacter pylori (container 1). The duodenal bulb and second portion looked normal; biopsies were taken from both to evaluate for celiac disease (container 2). Retroflexion showed a normal cardia.\nColonoscopy\nWith the patient in the left lateral position, a digital rectal examination was normal. The adult colonoscope was advanced to the cecum, confirmed by the appendiceal orifice and the ileocecal valve, and the terminal ileum was intubated for 5 cm and was normal. Insertion time 7 minutes; withdrawal time 15 minutes.\n1. Transverse colon: a 12 mm sessile polyp (Paris 0-Is) was removed en bloc with a cold snare and retrieved (container 3). The resection margin was clean, with no residual tissue.\n2. Sigmoid colon at 24 cm: a separate 25 mm firm, ulcerated lesion involving about one third of the circumference, suspicious for malignancy. It was not resected. Cold forceps biopsies were taken from its edge (container 4). A submucosal tattoo of carbon particle suspension was then injected 3 cm distal to the lesion in three quadrants, 1 mL each, to mark the site for surgery.\n3. Small internal hemorrhoids on retroflexion in the rectum.\nNursing Intraprocedure Checklist\nEntries recorded by the procedure nurse, Imogen Ferraro-Quist, RN (fictional), at 14:52:\nChecklist item | Nursing entry\nTime-out completed | Yes\nUpper endoscopy biopsies | Yes, 2 containers\nSnare polypectomy | Yes, transverse colon\nColon biopsies | Yes, sigmoid colon\nTattoo or marking agent injected | No - none used\nSpecimen containers sent | 4\nEstimated blood loss | Minimal\nImpression\n1. Patchy antral erythema; gastric biopsies for Helicobacter pylori.\n2. Normal duodenum; duodenal biopsies for celiac disease.\n3. 12 mm transverse colon polyp, removed with a cold snare.\n4. 25 mm sigmoid lesion suspicious for malignancy, biopsied and tattooed distally.\n5. Small internal hemorrhoids.\nComplications\nNone. Estimated blood loss minimal.\nPlan\nSpecimens go to Larkspur Pathology Laboratory (fictional), which reports the pathology. CT of the chest, abdomen and pelvis and a CEA level. Colorectal surgery referral once pathology returns. Continue oral iron. The surveillance interval will be set after pathology.\nElectronically signed: Ravi Castellano-Moore, MD (fictional), 2026-10-20 15:41",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "second part of duodenum"
+    },
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "terminal ileum"
+    },
+    "not_today": [
+     "gi.office_em"
+    ]
+   },
+   "review": "ho-01 (manifest: duodenum; cecum or ileum). Head passes."
+  },
+  {
+   "id": "F7-ho02",
+   "family": "F7-known",
+   "layout": "pdf(live)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy Report\nHospital: Saltmarsh General Hospital (fictional), Outpatient Endoscopy Unit\nPlace of service: Hospital outpatient department, on campus (POS 22)\nDate of procedure: 10/19/2026\nPatient: Thaddeus Quennell-Ruiz (fictional), 63-year-old man\nEndoscopist: Priya Haldane-Sorensen, MD (fictional)\nAnesthesia: Propofol sedation by the anesthesia service, Ilse Marchetti, MD (fictional), anesthesiologist; see the\nseparate anesthesia record.\nProcedure: Diagnostic colonoscopy.\nIndication\nFour months of looser, more frequent stools with intermittent dark red blood mixed into the stool. Hemoglobin 11.9\ng/dL.\nDescription\nAfter informed consent and a time-out, the colonoscope was inserted and advanced without difficulty to the\ncecum. The appendiceal orifice and the ileocecal valve were identified and photographed. The terminal ileum was\nnot entered. The preparation was good, Boston Bowel Preparation Scale 7 (2-3-2). Withdrawal time was 13\nminutes.\nFindings\nAscending colon, about 5 cm above the ileocecal valve: a 35 mm granular laterally spreading tumor with\nhomogeneous nodules, no depressed component and no features of deep submucosal invasion. Because of its\nsize and position it was not removed today and will be resected at a dedicated endoscopic mucosal resection\n(EMR) session. No biopsies were taken, to avoid submucosal fibrosis that would make the later resection harder.\nNo tattoo was placed, because the lesion lies next to the ileocecal valve and is easy to find again.\nSigmoid colon: scattered small-mouthed diverticula.\nThe remaining colon and the rectum, including a retroflexed view, were normal.\nExtent and completeness\nExtent of examination: cecum. Examination complete, not aborted.\nImpression\n1. 35 mm granular laterally spreading tumor of the ascending colon, left in place for a planned EMR; the likely\nsource of bleeding.\n2. Sigmoid diverticulosis.\nPlan\nRefer to Bastien Achterberg, MD (fictional), Advanced Endoscopy at Saltmarsh General Hospital (fictional), for\nEMR of the ascending colon lesion in 4 to 6 weeks. Hold aspirin for 5 days before that procedure. CBC and iron\nstudies today. Return precautions reviewed.\nComplications: None.\nElectronically signed: Priya Haldane-Sorensen, MD (fictional), 2026-10-20 08:12\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "cecum"
+    }
+   },
+   "review": "ho-02 (manifest: cecum)."
+  },
+  {
+   "id": "F7-ho03",
+   "family": "F7-known",
+   "layout": "ocr(live)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nColonoscopy Procedure Note\n\nFacility: Cedar Hollow Surgery Center (fictional)\n\nPlace of service: Ambulatory surgical center (POS 24)\n\nDate of procedure: 2026-10-08\n\nPatient: Wilhelmina Sato-Barrett (fictional), 71-year-old woman\n\nEndoscopist: Gideon Afolabi-Strand, MD (fictional)\n\nAnesthesia: Monitored anesthesia care by Cedar Hollow Anesthesia Group (fictional), documented and billed\nseparately.\n\nIndication\nThree months of worsening constipation, thin stools and a 6 kg weight loss. She was scheduled for a total\ncolonoscopy and completed the full bowel preparation.\n\nProcedure\n\nThe pediatric colonoscope was advanced to 28 cm from the anal verge in the sigmoid colon, where a circumferential,\nulcerated, friable stricture with a pinhole lumen was found. The colonoscope could not be passed through the\nstricture, and an ultraslim gastroscope also failed to traverse it. No further force was used. Cold forceps biopsies of the\nstricture were taken (8 pieces) and sent to Cedar Hollow Pathology (fictional). The rectum and distal sigmoid colon\nwere otherwise normal on withdrawal and on retroflexion.\n\nExtent reached: sigmoid colon at 28 cm. The cecum was not reached and the colon above the stricture was not\nexamined. The colonoscopy was incomplete.\n\nImpression\n1. Near-obstructing sigmoid stricture at 28 cm, suspicious for cancer; biopsied.\n2. Incomplete colonoscopy because the stricture could not be passed.\n\nPlan\nCT colonography to evaluate the proximal colon, and CT of the chest, abdomen and pelvis. Colorectal surgery\nconsultation after pathology. Low-residue diet and daily polyethylene glycol in the meantime.\n\nElectronically signed: Gideon Afolabi-Strand, MD (fictional), 2026-10-08\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: sigmoid colon"
+    },
+    "not_today": [
+     "gi.flex_sig"
+    ]
+   },
+   "review": "ho-03 (manifest: incomplete, sigmoid / 28 cm)."
+  },
+  {
+   "id": "F7-ho04",
+   "family": "F7-known",
+   "layout": "text(live)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nGastroenterology Office Visit\nPractice: Bramblewood Digestive Health (fictional)\nPlace of service: Office (POS 11)\nDate of service: 2026-10-22\nPatient: Cornelius Abernathy-Iwu (fictional), 58-year-old man\nVisit type: Established patient, return visit. Previous office visit: 2026-08-27.\nClinician: Lucinda Farrant-Oyelaran, MD (fictional)\n\nChief Complaint\nFood sticking in the lower chest, more often since the last visit.\n\nHistory of Present Illness\nHe has had heartburn for years. At the 2026-08-27 visit he started omeprazole 20 mg daily and a barium esophagram was ordered. His heartburn is better, but solid food, mostly bread and meat, now sticks behind the lower sternum two or three times a week, compared with about once a month in August. He clears it by drinking water. No food impaction needing emergency care, no odynophagia, no vomiting and no black stools. Weight stable at 84 kg.\n\nData Reviewed\nBarium esophagram of 2026-09-30 from Bramblewood Imaging (fictional): images and report reviewed today, showing a smooth distal esophageal ring with brief hold-up of the 13 mm barium tablet. CBC of 2026-09-30: hemoglobin 14.1 g/dL. Records from his previous gastroenterologist at Ostrander Brook GI (fictional) reviewed.\n\nExamination\nBlood pressure 128/78, pulse 72, BMI 27.4. Well appearing. Oropharynx normal. Abdomen soft and nontender without masses.\n\nAssessment\n1. Progressive solid-food dysphagia with a distal esophageal (Schatzki) ring on the esophagram.\n2. Gastroesophageal reflux disease, improved on omeprazole.\n\nPlan\n1. EGD with possible balloon dilation is scheduled for 2026-11-18 at Bramblewood Endoscopy Suite (fictional). Risks, benefits and alternatives were discussed and he wishes to proceed.\n2. Increase omeprazole to 40 mg daily before breakfast.\n3. Cut food small and chew well; go to the emergency department if food will not pass.\n4. Return office visit 4 weeks after the EGD.\n\nMedical decision making: Moderate. One chronic illness with progression; review of the esophagram, the CBC and outside records; prescription drug management.\nTotal time on the date of service: 34 minutes, including record review, history, examination, counseling and documentation.\n\nElectronically signed: Lucinda Farrant-Oyelaran, MD (fictional), 2026-10-22 17:05\n",
+   "expected": {
+    "gi.office_em": {
+     "status_in": [
+      "performed"
+     ]
+    },
+    "not_today": [
+     "gi.egd",
+     "gi.colonoscopy"
+    ]
+   },
+   "review": "ho-04: office visit; the EGD is scheduled."
+  },
+  {
+   "id": "F7-h203",
+   "family": "F7-known",
+   "layout": "docx(live)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHollis Creek Gastroenterology (fictional)\nFlexible Sigmoidoscopy Note\nPatient: Benedikt Saarinen-Lowe (fictional)\nDOB: 08/30/1971\nChart number (synthetic): H2-SYN-1103\nDOS: 10/13/2026\nLocation: office procedure suite, place of service 11\nPerforming physician: Imani Brightling-Voss, MD (fictional)\nPreparation: two sodium phosphate enemas at home. No sedation.\nReason for the examination\nFor two months he has seen fresh blood when wiping, with mild urgency. His last colonoscopy, at age 47 in\n03/2018 at another practice, was reported as normal.\nProcedure\nDigital rectal examination found no mass and normal sphincter tone. The flexible sigmoidoscope was inserted and\nadvanced with gentle insufflation into the distal descending colon.\nDepth of insertion: 55 cm.\nThe rectum and sigmoid colon were seen well after a little residual enema fluid was suctioned.\nFindings\nRectum: a 25 mm flat, granular laterally spreading lesion on the posterior wall, 6 to 9 cm from the anal verge, with\na regular surface pattern on near-focus imaging and no depressed area. It was photographed and sized against\nan open snare. It was not removed today; it will be resected by endoscopic mucosal resection at a separate\nsession after a full bowel preparation. I intentionally did not biopsy it, because forceps sampling can scar the\nsubmucosa and complicate the later resection. Because the lesion lies in the rectum, I did not tattoo it.\nSigmoid colon and distal descending colon: normal mucosa, no diverticula.\nAnal canal: small grade 1 internal hemorrhoids with a stigma of recent bleeding; not treated.\nAssessment\n1. Rectal laterally spreading lesion, 25 mm, granular type; probable bleeding source together with the\nhemorrhoids.\n2. Grade 1 internal hemorrhoids.\nPlan\nColonoscopy with endoscopic mucosal resection of the rectal lesion at Wrenfield General Hospital (fictional). EMR\nscheduled for 11/05/2026, with a full split-dose preparation so that the whole colon can be examined at that\nsession.\nFiber supplement; avoid straining.\nElectronically signed by Imani Brightling-Voss, MD (fictional) on 10/13/2026 at 16:22\n",
+   "expected": {
+    "gi.flex_sig": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "55 cm"
+    },
+    "not_today": [
+     "gi.colonoscopy"
+    ]
+   },
+   "review": "h2-03: flexible sigmoidoscopy to 55 cm (distal descending colon); the 2018 colonoscopy is history, the 11/05 colonoscopy with EMR is planned."
+  },
+  {
+   "id": "F7-h205",
+   "family": "F7-known",
+   "layout": "docx(live)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nMarlowe Bay Endoscopy Suites (fictional)\nPre-procedure note - procedure cancelled\n\nPatient: Ingrid Tolliver-Haas (fictional)\nDate of birth: 1952-01-25\nSynthetic record: H2-SYN-1105\nDate of service: 2026-10-20\nPhysician: Cyrus Delacroix-Amadi, MD, Gastroenterology (fictional)\nLocation: ambulatory surgery center, POS 24\nScheduled procedure: surveillance colonoscopy\n\nBackground\nThree tubular adenomas, the largest 12 mm, were removed at colonoscopy on 2023-06-02, and surveillance was advised at three years. Atrial fibrillation treated with apixaban 5 mg twice daily. She had been told to stop apixaban two days before today.\n\nPre-procedure assessment\nIn the admission area she said she took her usual morning dose of apixaban at 07:00 today. Blood pressure 138/82, pulse 76 and irregular. She reported finishing the bowel preparation with clear output.\n\nDecision\nBecause removal of polyps is likely at this examination, I cancelled the colonoscopy before any sedation was given. The colonoscope was not inserted, and no part of the procedure was performed. I explained the reason to the patient and her daughter, and they agreed.\n\nPlan\nColonoscopy rescheduled for 2026-11-12. Apixaban to be held for two days before that date, as agreed with her cardiologist, Selma Ravenscroft, MD (fictional); no bridging is needed.\nDischarged home from the admission area in stable condition.\n\nSigned: Cyrus Delacroix-Amadi, MD (fictional), 2026-10-20 08:15\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "cancelled"
+     ],
+     "extent": null
+    }
+   },
+   "review": "h2-05: the colonoscopy was cancelled before sedation; nothing was performed."
+  },
+  {
+   "id": "F7-h209",
+   "family": "F7-known",
+   "layout": "pdf(live)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nAshgrove Regional Medical Center (fictional)\nEndoscopic Ultrasound Report\nPatient: Rafaela Quintanilla-Hart (fictional)\nDate of birth: 1970-11-30\nSynthetic record: H2-SYN-1109\nDate of examination: 2026-10-22\nSetting: hospital outpatient endoscopy (POS 22)\nEndosonographer: Emeka Dragomir-Holt, MD (fictional)\nCytology: on-site adequacy assessment and the final cytology report by Northmoor Cytology Group (fictional),\nwhich bills for its own work\nSedation: monitored anesthesia care by the hospital anesthesia department (fictional), billed by that department\nIndication\nA 2 cm subepithelial bulge in the gastric body with normal overlying mucosa, seen at upper endoscopy on\n2026-09-15 at an outside facility. CT of the abdomen on 2026-09-29 showed a 2.3 cm exophytic lesion of the\ngastric wall and no metastases.\nTechnique\nThe linear-array echoendoscope was introduced and advanced via the esophagus into the stomach. The\nendosonographic examination was limited to the esophagus, the stomach and the structures next to the stomach;\nthe echoendoscope was not advanced through the pylorus, because the duodenum was not relevant to this\nquestion.\nFindings\nGastric body, greater curvature: a 24 x 19 mm round, hypoechoic, homogeneous lesion arising from the fourth\nlayer (muscularis propria), with smooth borders and no cystic spaces. Doppler showed no large vessel in the\nplanned needle path.\nPerigastric region: two lymph nodes smaller than 6 mm with benign features; they were not sampled.\nLeft lobe of the liver, as seen from the stomach: no focal lesion. No ascites.\nEsophagus: normal wall layers.\nSampling\nUnder endosonographic guidance the gastric lesion was sampled through the gastric wall using a fork-tip biopsy\nneedle (22 gauge): three passes, fanning between passes. The on-site assessment found adequate spindle cells.\nFurther cores went into formalin for immunostaining.\nImpression\nSubepithelial lesion of the gastric muscularis propria, 24 x 19 mm, most consistent with a gastrointestinal stromal\ntumor; fine-needle biopsy obtained. Benign-appearing perigastric lymph nodes.\nRecommendations\nAwait immunostains (CD117 and DOG1). Surgical oncology consultation is booked for 2026-11-03 to discuss\nlaparoscopic wedge resection.\nSigned: Emeka Dragomir-Holt, MD (fictional), 2026-10-22 15:31\n",
+   "expected": {},
+   "review": "h2-09: EUS (extent not profiled); recorded for its routing only.",
+   "hint": "uncertain"
+  },
+  {
+   "id": "F7-h210",
+   "family": "F7-known",
+   "layout": "docx(live)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nKestrel Ridge University Hospital (fictional)\nERCP Procedure Note\n\nPatient: Wendell Achebe-Lunde (fictional)\nDate of birth: 1975-05-17\nSynthetic record: H2-SYN-1110\nDate of service: 2026-10-23\nLocation: hospital outpatient endoscopy, fluoroscopy room (POS 22)\nEndoscopist: Margarethe Oyelowo-Brandt, MD (fictional)\nAnesthesia: general anesthesia by the hospital anesthesia department (fictional), reported separately\nFluoroscopy: supervision and interpretation reported separately by the hospital radiology department (fictional)\n\nIndication\nPlanned exchange of a plastic biliary stent for a benign common hepatic duct stricture after laparoscopic cholecystectomy. The stent, 10 French by 9 cm, was placed at ERCP on 2026-07-21, when a biliary sphincterotomy was also done. No symptoms; liver tests are normal.\n\nProcedure\nThe duodenoscope was advanced to the major papilla. The existing stent was in position and draining. It was grasped with a snare and withdrawn through the working channel. The bile duct was then cannulated over a 0.035-inch guidewire without difficulty, and the wire was passed above the stricture into the right intrahepatic ducts. The cholangiogram showed a 1 cm stricture of the common hepatic duct, improved since July, with mild dilation above it and no filling defects. A new 10 French by 9 cm plastic biliary stent was placed across the stricture, with good drainage of bile and contrast.\nNo sphincterotomy was performed today, and no balloon sweep or stone extraction was done. The pancreatic duct was neither entered nor opacified.\n\nImpression\nBenign common hepatic duct stricture, improving. Biliary stent exchanged: one plastic stent removed and one new plastic stent placed.\n\nPlan\nClear liquids today, then a regular diet. Next stent exchange in about three months, probably placing two stents side by side if the stricture persists.\n\nElectronically signed: Margarethe Oyelowo-Brandt, MD (fictional), 2026-10-24 07:52\n",
+   "expected": {},
+   "review": "h2-10: ERCP; recorded for its routing only.",
+   "hint": "uncertain"
+  },
+  {
+   "id": "F9-A1-office-prior-table-extent",
+   "family": "F9-adversarial",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor View Gastroenterology (fictional)\nOffice Visit - progress note\nDate of service: 2026-10-21\nPlace of service: office (POS 11)\nVisit type: established patient\nReason for visit\nSurveillance discussion.\nProcedure | Date | Extent | Findings\nColonoscopy | 2019-05-02 | Cecum | Two adenomas\nEGD | 2021-03-01 | Second portion of the duodenum | Gastritis\nColonoscopy discussed; she agrees to proceed.\nAssessment and plan\nSurveillance colonoscopy to be scheduled. Medical decision making: low.\n",
+   "expected": {
+    "gi.office_em": {
+     "status_in": [
+      "performed"
+     ]
+    },
+    "not_today": [
+     "gi.colonoscopy",
+     "gi.egd"
+    ]
+   },
+   "review": "An office note: the table lists 2019 and 2021 procedures; the colonoscopy is only discussed today."
+  },
+  {
+   "id": "F9-A2-office-prior-table-extent-nodates",
+   "family": "F9-adversarial",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nHarbor View Gastroenterology (fictional)\nOffice Visit - progress note\nDate of service: 2026-10-21\nPlace of service: office (POS 11)\nVisit type: established patient\nReason for visit\nReview of outside records.\nExamination | Instrument | Furthest point reached\nColonoscopy | Adult colonoscope | Cecum\nThe outside colonoscopy above was reviewed with the patient.\nAssessment and plan\nRepeat in 3 years. Medical decision making: low.\n",
+   "expected": {
+    "gi.office_em": {
+     "status_in": [
+      "performed"
+     ]
+    },
+    "not_today": [
+     "gi.colonoscopy"
+    ]
+   },
+   "review": "An office note: the undated table is an outside colonoscopy that \"was reviewed\"; nothing was performed today."
+  },
+  {
+   "id": "F9-A3-findings-table-in-findings",
+   "family": "F9-adversarial",
+   "layout": "docx",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy Report\nDate of service: 2026-10-20\nProcedure: Colonoscopy\nFindings\nExamination | Extent | Polyps\nColonoscopy | Hepatic flexure | None\nThe cecum was not reached because of looping.\nImpression\nIncomplete colonoscopy.\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    }
+   },
+   "review": "The table row stops at the hepatic flexure and the cecum was not reached."
+  },
+  {
+   "id": "F9-gate-ce1438d28c35",
+   "family": "F9-gate",
+   "layout": "text(gate)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\nProcedure: Colonoscopy\nThe colonoscope was advanced to the transverse colon.\nExtent: cecum; unable to advance past the hepatic flexure\nFindings: Normal.\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    }
+   },
+   "review": "\"advanced to the transverse colon\" and \"unable to advance past the hepatic flexure\": the scope reached the hepatic flexure; the label \"cecum\" is contradicted on its own line.",
+   "hint": "uncertain"
+  },
+  {
+   "id": "F9-gate-6f1349625e90",
+   "family": "F9-gate",
+   "layout": "text(gate)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\nProcedure: Colonoscopy\nTechnique: The colonoscope was inserted into the rectum and advanced.\nExtent: cecum | Prep quality: Good\nFindings: Biopsies of the cecum were not obtained. The colon was otherwise normal.\nImpression: Normal colonoscopy.\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "performed"
+     ],
+     "extent": "cecum",
+     "interventions_excludes": [
+      "biopsy"
+     ]
+    }
+   },
+   "review": "\"Biopsies of the cecum were not obtained.\": no biopsy; the extent label reads the cecum."
+  },
+  {
+   "id": "F9-gate-a1187ffa1a33",
+   "family": "F9-gate",
+   "layout": "text(gate)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\nProcedure: EGD with biopsy\nTechnique: The gastroscope was passed into the esophagus and advanced.\nExtent: D2; could not be advanced past the pylorus\nFindings: Gastritis. Biopsies were taken from the antrum.\n",
+   "expected": {
+    "gi.egd": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: stomach"
+    }
+   },
+   "review": "\"could not be advanced past the pylorus\": the gastroscope reached the pylorus (stomach); the label D2 is contradicted on its own line.",
+   "hint": "uncertain"
+  },
+  {
+   "id": "F9-gate-63455761bdf2",
+   "family": "F9-gate",
+   "layout": "text(gate)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\nProcedure: Colonoscopy with cold snare polypectomy\nIndication: Surveillance.\nTechnique: The colonoscope was inserted into the rectum and advanced without difficulty.\nExtent: cecum; unable to advance past the hepatic flexure\nFindings: A 6 mm sigmoid polyp was removed with a cold snare.\nImpression: Sigmoid polyp.\n",
+   "expected": {
+    "gi.colonoscopy": {
+     "status_in": [
+      "incomplete"
+     ],
+     "extent": "incomplete: hepatic flexure"
+    }
+   },
+   "review": "\"unable to advance past the hepatic flexure\": reached the hepatic flexure, not the cecum the label names.",
+   "hint": "uncertain"
+  }
+ ]
+}

@@ -1,0 +1,31 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Quillan Bend Surgical Center (fictional)
+Upper Endoscopy Report
+
+Patient name: Leopold Nwachukwu-Berg (fictional)
+Born: 1949-07-11
+Synthetic record: H2-SYN-1104
+Date of procedure: 2026-10-07
+Facility type: freestanding ambulatory surgical center (POS 24)
+Endoscopist: Clementine Oduya, DO (fictional)
+Anesthesia: general endotracheal anesthesia for airway protection because of retained gastric contents, given by the center's anesthesia staff (fictional) and reported separately
+
+Indications
+Three weeks of early satiety and vomiting of undigested food after meals, with a 6 kg weight loss. Long-term naproxen use for knee pain. An outside upper GI series on 2026-09-30 suggested narrowing at the gastric outlet.
+
+Procedure and findings
+The gastroscope was advanced through a normal esophagus into the stomach. A large amount of retained food and fluid was present despite an overnight fast; it was partly suctioned, but the view of the fundus stayed limited. The pyloric channel was deformed and edematous, with a 12 mm clean-based ulcer on its lesser curvature side narrowing the lumen to about 5 mm. The gastroscope could not be passed through the channel, and the duodenum was not examined.
+Furthest extent: pyloric channel.
+The ulcer margin was sampled with cold forceps (six pieces) to exclude malignancy; separate cold forceps samples came from the antrum and the gastric body (two pieces each) for Helicobacter pylori.
+Balloon dilation of the channel was not attempted because the ulcer is active. There were no stigmata of bleeding and no hemostatic treatment was needed.
+
+Impression
+Gastric outlet obstruction from an active pyloric channel ulcer, probably related to naproxen. Biopsies taken. The duodenum was not examined because the gastroscope could not pass the narrowing.
+
+Plan
+Stop naproxen. High-dose proton pump inhibitor. Liquid diet. Await pathology.
+Repeat upper endoscopy in about 8 weeks to check healing and, if the narrowing persists, to perform balloon dilation and complete the examination of the duodenum.
+
+Pathology: Silverbirch Diagnostic Laboratory (fictional), reported separately.
+Signed: Clementine Oduya, DO (fictional), 2026-10-07 11:30

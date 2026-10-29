@@ -1,0 +1,51 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Bidirectional Endoscopy Report
+Facility: Larkspur Valley Endoscopy Center (fictional)
+Place of service: Ambulatory surgery center (ASC), POS 24
+Date of procedure: 2026-10-20
+Patient: Odalys Brennecke-Farrow (fictional), 69-year-old woman
+Endoscopist: Ravi Castellano-Moore, MD (fictional)
+Anesthesia: Monitored anesthesia care with propofol, given and documented by Wren Takahashi, CRNA (fictional), of Larkspur Anesthesia Associates (fictional), which reports the anesthesia services.
+Procedures: Esophagogastroduodenoscopy with biopsies; colonoscopy with cold snare polypectomy, biopsies of a separate lesion and submucosal tattoo.
+
+Indications
+Iron deficiency anemia (hemoglobin 9.8 g/dL, ferritin 6 ng/mL) without overt bleeding, referred by her primary care clinician for upper and lower endoscopic evaluation.
+
+Consent and Preparation
+The risks of bleeding, perforation, infection, missed lesions and sedation reactions were explained, and written consent was obtained. A time-out confirmed the patient, the planned procedures and allergies. Split-dose polyethylene glycol preparation; Boston Bowel Preparation Scale 3-3-2 (total 8).
+
+Upper Endoscopy
+The gastroscope was passed through the mouth under direct vision and advanced to the second portion of the duodenum. The esophagus was normal and the squamocolumnar junction was regular at 39 cm. The gastric antrum had patchy erythema without ulcers. Cold forceps biopsies were taken from the antrum and the body for Helicobacter pylori (container 1). The duodenal bulb and second portion looked normal; biopsies were taken from both to evaluate for celiac disease (container 2). Retroflexion showed a normal cardia.
+
+Colonoscopy
+With the patient in the left lateral position, a digital rectal examination was normal. The adult colonoscope was advanced to the cecum, confirmed by the appendiceal orifice and the ileocecal valve, and the terminal ileum was intubated for 5 cm and was normal. Insertion time 7 minutes; withdrawal time 15 minutes.
+1. Transverse colon: a 12 mm sessile polyp (Paris 0-Is) was removed en bloc with a cold snare and retrieved (container 3). The resection margin was clean, with no residual tissue.
+2. Sigmoid colon at 24 cm: a separate 25 mm firm, ulcerated lesion involving about one third of the circumference, suspicious for malignancy. It was not resected. Cold forceps biopsies were taken from its edge (container 4). A submucosal tattoo of carbon particle suspension was then injected 3 cm distal to the lesion in three quadrants, 1 mL each, to mark the site for surgery.
+3. Small internal hemorrhoids on retroflexion in the rectum.
+
+Nursing Intraprocedure Checklist
+Entries recorded by the procedure nurse, Imogen Ferraro-Quist, RN (fictional), at 14:52:
+Checklist item | Nursing entry
+Time-out completed | Yes
+Upper endoscopy biopsies | Yes, 2 containers
+Snare polypectomy | Yes, transverse colon
+Colon biopsies | Yes, sigmoid colon
+Tattoo or marking agent injected | No - none used
+Specimen containers sent | 4
+Estimated blood loss | Minimal
+
+Impression
+1. Patchy antral erythema; gastric biopsies for Helicobacter pylori.
+2. Normal duodenum; duodenal biopsies for celiac disease.
+3. 12 mm transverse colon polyp, removed with a cold snare.
+4. 25 mm sigmoid lesion suspicious for malignancy, biopsied and tattooed distally.
+5. Small internal hemorrhoids.
+
+Complications
+None. Estimated blood loss minimal.
+
+Plan
+Specimens go to Larkspur Pathology Laboratory (fictional), which reports the pathology. CT of the chest, abdomen and pelvis and a CEA level. Colorectal surgery referral once pathology returns. Continue oral iron. The surveillance interval will be set after pathology.
+
+Electronically signed: Ravi Castellano-Moore, MD (fictional), 2026-10-20 15:41

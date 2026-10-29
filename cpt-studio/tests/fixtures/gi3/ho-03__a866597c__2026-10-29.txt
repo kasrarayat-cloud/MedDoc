@@ -1,0 +1,41 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Colonoscopy Procedure Note
+
+Facility: Cedar Hollow Surgery Center (fictional)
+
+Place of service: Ambulatory surgical center (POS 24)
+
+Date of procedure: 2026-10-08
+
+Patient: Wilhelmina Sato-Barrett (fictional), 71-year-old woman
+
+Endoscopist: Gideon Afolabi-Strand, MD (fictional)
+
+Anesthesia: Monitored anesthesia care by Cedar Hollow Anesthesia Group (fictional), documented and billed
+separately.
+
+Indication
+Three months of worsening constipation, thin stools and a 6 kg weight loss. She was scheduled for a total
+colonoscopy and completed the full bowel preparation.
+
+Procedure
+
+The pediatric colonoscope was advanced to 28 cm from the anal verge in the sigmoid colon, where a circumferential,
+ulcerated, friable stricture with a pinhole lumen was found. The colonoscope could not be passed through the
+stricture, and an ultraslim gastroscope also failed to traverse it. No further force was used. Cold forceps biopsies of the
+stricture were taken (8 pieces) and sent to Cedar Hollow Pathology (fictional). The rectum and distal sigmoid colon
+were otherwise normal on withdrawal and on retroflexion.
+
+Extent reached: sigmoid colon at 28 cm. The cecum was not reached and the colon above the stricture was not
+examined. The colonoscopy was incomplete.
+
+Impression
+1. Near-obstructing sigmoid stricture at 28 cm, suspicious for cancer; biopsied.
+2. Incomplete colonoscopy because the stricture could not be passed.
+
+Plan
+CT colonography to evaluate the proximal colon, and CT of the chest, abdomen and pelvis. Colorectal surgery
+consultation after pathology. Low-residue diet and daily polyethylene glycol in the meantime.
+
+Electronically signed: Gideon Afolabi-Strand, MD (fictional), 2026-10-08

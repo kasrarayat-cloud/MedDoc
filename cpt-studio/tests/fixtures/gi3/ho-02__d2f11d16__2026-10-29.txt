@@ -1,0 +1,38 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Colonoscopy Report
+Hospital: Saltmarsh General Hospital (fictional), Outpatient Endoscopy Unit
+Place of service: Hospital outpatient department, on campus (POS 22)
+Date of procedure: 10/19/2026
+Patient: Thaddeus Quennell-Ruiz (fictional), 63-year-old man
+Endoscopist: Priya Haldane-Sorensen, MD (fictional)
+Anesthesia: Propofol sedation by the anesthesia service, Ilse Marchetti, MD (fictional), anesthesiologist; see the
+separate anesthesia record.
+Procedure: Diagnostic colonoscopy.
+Indication
+Four months of looser, more frequent stools with intermittent dark red blood mixed into the stool. Hemoglobin 11.9
+g/dL.
+Description
+After informed consent and a time-out, the colonoscope was inserted and advanced without difficulty to the
+cecum. The appendiceal orifice and the ileocecal valve were identified and photographed. The terminal ileum was
+not entered. The preparation was good, Boston Bowel Preparation Scale 7 (2-3-2). Withdrawal time was 13
+minutes.
+Findings
+Ascending colon, about 5 cm above the ileocecal valve: a 35 mm granular laterally spreading tumor with
+homogeneous nodules, no depressed component and no features of deep submucosal invasion. Because of its
+size and position it was not removed today and will be resected at a dedicated endoscopic mucosal resection
+(EMR) session. No biopsies were taken, to avoid submucosal fibrosis that would make the later resection harder.
+No tattoo was placed, because the lesion lies next to the ileocecal valve and is easy to find again.
+Sigmoid colon: scattered small-mouthed diverticula.
+The remaining colon and the rectum, including a retroflexed view, were normal.
+Extent and completeness
+Extent of examination: cecum. Examination complete, not aborted.
+Impression
+1. 35 mm granular laterally spreading tumor of the ascending colon, left in place for a planned EMR; the likely
+source of bleeding.
+2. Sigmoid diverticulosis.
+Plan
+Refer to Bastien Achterberg, MD (fictional), Advanced Endoscopy at Saltmarsh General Hospital (fictional), for
+EMR of the ascending colon lesion in 4 to 6 weeks. Hold aspirin for 5 days before that procedure. CBC and iron
+studies today. Return precautions reviewed.
+Complications: None.
+Electronically signed: Priya Haldane-Sorensen, MD (fictional), 2026-10-20 08:12

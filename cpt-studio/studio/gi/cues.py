@@ -104,11 +104,23 @@ _NOT_DONE = (r'performed|completed|undertaken|carried\s+out|attempted|obtained|t
              r'biopsied|sampled|dilated|injected|treated|indicated|needed|required|necessary|recommended|warranted|'
              r'pursued|clipped|tattooed|deployed|inserted|retrieved|used|applied|ligated|banded|cauterized|'
              r'scheduled|ordered')
+# gi3 extent (N1): a short prepositional post-modifier of the act may stand between it and its post-negation ("Balloon
+# dilation of the channel was not attempted", "Biopsies of the cecum were not obtained", "EGD at the bedside was not
+# performed"): a preposition of this closed class, an optional determiner and at most three words, then an auxiliary.
+# At 90377ec6f413 such an act read as performed under any procedure, findings or technique heading (h2-04's balloon
+# dilation, once its "Procedure and findings" heading is read).
+# A word that opens a clause of its own is no part of the post-modifier (a closed class: relative and subordinating
+# words), so a denial inside a relative clause never reaches the act ("Biopsy of the polyp that was not removed").
+_POST_MODIFIER_WORD = (r'(?!(?:that|which|who|whom|whose|where|when|while|because|since|if|unless|although|though|'
+                       r'until)\b)[\w-]+')
+_POST_MODIFIER = (r'^(?:\s+(?:of|at|in|on|across|through)\s+(?:(?:the|a|an|this|that|these|those)\s+)?'
+                  r'(?:' + _POST_MODIFIER_WORD + r'\s+){0,2}?' + _POST_MODIFIER_WORD
+                  + r'(?=\s+(?:was|were|is|are|has|have|had)\s))?')
 NEGATED_POST = (
     # "Colonoscopy was not performed", "ERCP not indicated", "EUS has never been performed"
-    ('was not performed', rx(r'^[\s,]*(?:(?:was|were|is|are|has\s+been|have\s+been|had\s+been|will\s+be|would\s+be|'
-                             r'could\s+be|can\s+be|to\s+be)\s+)?(?:not|never)\s+(?:(?:been|be|yet|further|ever|'
-                             r'successfully)\s+){0,2}(?!completed\b)(?:' + _NOT_DONE + r')\b')),
+    ('was not performed', rx(_POST_MODIFIER + r'[\s,]*(?:(?:was|were|is|are|has\s+been|have\s+been|had\s+been|will\s+be|'
+                             r'would\s+be|could\s+be|can\s+be|to\s+be)\s+)?(?:not|never)\s+(?:(?:been|be|yet|further|'
+                             r'ever|successfully)\s+){0,2}(?!completed\b)(?:' + _NOT_DONE + r')\b')),
     ('was declined', rx(r'^[\s,]*(?:(?:was|were|is|are|has\s+been|have\s+been)\s+)?(?:declined|refused)\b')),
     # elliptical: "EGD was performed; EUS was not." / "colonoscopy wasn't"
     ('was not', rx(r"^[\s,]*(?:was|were|is|are|has\s+been|have\s+been|had\s+been|did|does|do|could|can|will)"
@@ -227,7 +239,12 @@ OTHER_ACT_DENIED = rx(r'\b' + _OTHER_ACT + r"\s*(?:[:=\u2013-]\s*)?(?:(?:was|wer
 # reads the same words anywhere: before a reach to a depth in its clause, they put the reach at an earlier occasion
 # too ("At the previous attempt the colonoscope was advanced to 60 cm"; detect._depth_reach_today, GI round 2 fix
 # round, extent). One string, so the two never drift.
-_EARLIER = r'prior|previous|previously|last|most\s+recent|recent|recently|remote|earlier|past|index|outside'
+# gi3 extent (R5): "past" with an article after it opens a place, never an earlier occasion: "could not be advanced past
+# the hepatic flexure" reaches the flexure, as its synonym "beyond the" already did (h2-02 read the flexure historical and
+# no extent). Every time use keeps its reading: "past colonoscopy", "the past year", "in the past" (HISTORICAL_CLAUSE),
+# and "past," before a comma.
+_EARLIER = (r'prior|previous|previously|last|most\s+recent|recent|recently|remote|earlier|past(?!\s+(?:the|a|an)\b)|'
+            r'index|outside')
 EARLIER = rx(r'\b(?:' + _EARLIER + r')\b')
 HISTORICAL_PRE = (
     ('history of', _pre(r'history\s+of|hx\s+of|h/o|s/p|status\s+post|personal\s+history\s+of',
@@ -751,7 +768,10 @@ MDM_BODY_LEVEL = rx(r'[ \t]*:?\s*(?:(?:level|complexity)[ \t]*[:\-][ \t]*)?(?P<l
 
 UPPER_LANDMARKS = (
     ('esophagus', 1, rx(r'\besophagus\b|\b(?:upper|middle|mid|lower|distal|proximal)\s+esophagus\b')),
-    ('stomach', 2, rx(r'\bstomach\b|\bgastric\s+(?:body|antrum|fundus|cardia)\b|\bantrum\b|\bpylorus\b')),
+    # gi3 extent (R7): the pyloric outlet is the stomach's, as the pylorus is (h2-04: "Furthest extent: pyloric channel."
+    # named no landmark): the pyloric channel, canal, ring or sphincter, the prepyloric antrum or area, the gastric outlet
+    ('stomach', 2, rx(r'\bstomach\b|\bgastric\s+(?:body|antrum|fundus|cardia|outlet)\b|\bantrum\b|\bpylorus\b'
+                      r'|\bpyloric\s+(?:channel|canal|ring|sphincter)\b|\bprepyloric(?:\s+(?:antrum|area|region))?\b')),
     ('duodenal bulb', 3, rx(r'\bduodenal\s+bulb\b')),
     ('duodenum', 4, rx(r'\bduodenum\b(?!\s*,?\s*(?:second|third|fourth))')),
     ('second part of duodenum', 5, rx(r'\b(?:second|2nd)\s+(?:part|portion)\s+of\s+the\s+duodenum\b|\bD2\b'
@@ -842,15 +862,37 @@ REACHED_DEPTH_DENIED = rx(r'\b(?:(?:unable\s+to|could\s+not|cannot|can\s*not|fai
 # The blank runs are possessive: with two plain runs around an optional comma or bracket, a run of blanks before no
 # depth was tried at every split, quadratic per label (refutation gi2 ops cost: 1,289 labels padded with blanks routed
 # 56.8-57.6 s against the installed 44 s and the analyze stage's 60 s). Every match is the same span.
+# gi3 extent (R8): the depth may also say how it was measured: "of insertion" ("hepatic flexure, at about 95 cm of
+# insertion"), or from, beyond or past a fixed anatomical anchor, a closed class ("Terminal ileum, about 6 cm beyond the
+# ileocecal valve": h2-01's table cell). The runs before the anchor are read once too.
 EXTENT_VALUE_DEPTH = rx(r'[ \t]*+[,(\[\u2013\u2014-]?[ \t]*+(?:(?:at|to)\s+)?(?:approximately\s+|about\s+|~\s*)?\d{1,3}\s*cm\b'
-                        r'(?:\s+from\s+(?:the\s+)?(?:anal\s+verge|anus|incisors|teeth|dentate\s+line))?')
+                        r'(?:\s++(?:of\s++)?insertion\b|\s++(?:from|beyond|past)\s++(?:the\s++)?(?:anal\s+verge|anus|'
+                        r'incisors|teeth|dentate\s+line|ileo-?c(?:a)?ecal\s+valve|pylorus|ligament\s+of\s+treitz)\b)?')
 CENTIMETERS = rx(r'\b(?:to|at|of)\s+(?:approximately\s+|about\s+|~\s*)?(?P<cm>\d{1,3})\s*cm\b')
 # Shorthand extents: an extent label line ("Extent: cecum", "Extent reached: terminal ileum", "The furthest
 # extent reached was the cecum", "Depth of insertion: 30 cm"), and "to (the) <landmark | N cm>" straight after
 # the service name ("Colonoscopy to cecum", "EGD to D2", "Flexible sigmoidoscopy to 30 cm").
-_EXTENT_LABEL = (r'\b(?:(?:furthest|maximal|maximum|deepest)\s+)?(?:extent|depth)(?:\s+(?:reached|of\s+(?:the\s+)?'
-                 r'(?:exam(?:ination)?|insertion|intubation)))?\s*(?:[:=\u2013\u2014-]\s*|\s+(?:was|is)\s+)'
-                 r'(?:to\s+)?(?:the\s+)?(?:approximately\s+|about\s+)?')
+# gi3 extent (R4): the extent-label words are ONE closed class, read by every extent-label reader (the labels here, a
+# table's column headers through EXTENT_HEADER, and sections._S2_REPORT_FIELD): a maximality word and a position noun
+# ("Deepest point reached", "Furthest landmark", "Maximal insertion", "Most proximal extent"; h2-02's "Deepest point
+# reached:" was no label), a position noun and "reached" ("Point reached", "Level reached"), "Insertion depth", and the
+# extent and depth forms as before ("Extent", "Furthest extent reached", "Depth of insertion"). Their separator is a
+# colon, "=", a dash, "was" or "is", or a table cell's " | " (a two-cell row "Extent | Cecum"). A bare "Reached" is a
+# label only before a colon or a cell separator. A verb phrase ("Advanced to:", "Examined to:") is no label of the class,
+# and neither is a time ("Insertion time"). The blank runs around the separator are read once (possessive): read with
+# plain runs, one label word before a long run of blanks was tried at every split of the run, quadratic per label (at
+# 90377ec6f413, "Depth of insertion", 40,000 blanks and "30 cm" in a flexible sigmoidoscopy report routed in 17 s).
+_MAXIMAL = r'(?:furthest|farthest|maximal|maximum|deepest|most\s+(?:proximal|distal))'
+_REACHED_OF = r'(?:\s+(?:reached|of\s+(?:the\s+)?(?:exam(?:ination)?|insertion|intubation)))'
+EXTENT_LABEL_WORDS = (r'(?:(?:' + _MAXIMAL + r'\s+)?(?:extent|depth)' + _REACHED_OF + r'?'
+                      r'|' + _MAXIMAL + r'\s+(?:point|landmark|level|insertion)' + _REACHED_OF + r'?'
+                      r'|(?:point|landmark|level)\s+reached|insertion\s+(?:depth|extent))')
+_EXTENT_LABEL = (r'(?:\b' + EXTENT_LABEL_WORDS + r'\s*+(?:[:=\u2013\u2014-]\s*+|(?<=[ \t])\|[ \t]++|(?<=\s)(?:was|is)\s++)'
+                 r'|(?<![\w-])reached[ \t]*+(?::[ \t]*+|(?<=[ \t])\|[ \t]++))'
+                 r'(?:to\s++)?(?:the\s++)?(?:approximately\s++|about\s++)?')
+# A table column whose header is an extent label of the class ("Furthest point reached", "Extent", "Depth of insertion";
+# sections.Layout.columns): the cell a landmark opens is that row's extent label value (detect._extent_column).
+EXTENT_HEADER = re.compile(r'[ \t]*(?:(?:the|actual|final)[ \t]+)?(?:' + EXTENT_LABEL_WORDS + r'|reached)[ \t]*', FLAGS)
 EXTENT_LABEL_BEFORE = rx(_EXTENT_LABEL + r'$')
 EXTENT_CM = rx(_EXTENT_LABEL + r'(?P<cm>\d{1,3})\s*cm\b')
 # What may lead an extent label for it to name the extent reached: nothing (the label opens its clause or follows
