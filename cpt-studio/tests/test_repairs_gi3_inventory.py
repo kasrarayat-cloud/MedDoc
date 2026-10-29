@@ -443,8 +443,8 @@ class LesionTests(SimpleTestCase):
 
     def test_two_lesions_of_one_size_and_site_stay_two(self):
         """"A 5 mm polyp" introduces a lesion: the second one is biopsied, never the first one's removal, so its biopsy is
-        not bundled as a biopsy of a removed lesion (the prototype's restatement rule merged them outside a report
-        part, and is left out)."""
+        not bundled as a biopsy of a removed lesion (a rule reading a sized restatement outside a report part as the
+        recorded lesion merged them, and is left out)."""
         text = (HEAD + 'Date of service: 2026-10-16\nProcedure note\nFindings: The colonoscope was advanced to the '
                 'cecum. A 5 mm polyp in the sigmoid colon was removed with a cold snare. A 5 mm polyp in the sigmoid '
                 'colon was biopsied with cold forceps.\n')
