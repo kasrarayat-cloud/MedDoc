@@ -880,3 +880,31 @@ before the repairs that depend on them.
     summary (document shapes and some headings) before the code was frozen; the repair agents never saw it. A second
     sealed set, h4, was commissioned from a separate author whose only return is counts and hashes. h4 is the primary
     unseen acceptance set; h3 is reported as exposed to the integration owner, never as unseen.
+
+### Session interpretation, 2026-10-29 (7c8d38da, third round, at integration) — recorded, not owner-ruled
+
+Made by the integration owner on merging the four repairs and measuring the merged tree, before the independent
+adversarial review. Each refines 42, 45 or 46 where an owner reported a residual for this decision, or where the merged
+tree's own live replay showed one.
+
+48. **Integration refinements.**
+    (a) *A billing date of service under a kind-of-service heading (refines 42).* In a plan section, the encounter's own
+        date-of-service label (date of service, DOS, service date, encounter date) under a block heading that names its
+        block only as a kind of service - a service's name, or a visit, encounter, procedure, examination, consultation,
+        session or review noun, with no plan, history, other-occurrence, status, other-document, return or recall word
+        ("Office visit", "Clinic visit", "Coding review", "Colonoscopy") - speaks against the note's own labelled date
+        (a conflict, asked). A heading naming another occurrence ("Next appointment", "Prior visit", "Return visit",
+        "Recall", "Results", "Labs", "Referral") still governs, and so does a table's column label. Visit and procedure
+        date fields keep 42's item rule.
+    (b) *No planned date as the only answer (refines 42).* Where the note labels no date of its own, a plan's visit or
+        procedure date field that no later-occurrence item governs stays dropped as the installed reading dropped it,
+        so a member may answer any date; where the note labels its own date, the field still speaks (a conflict).
+        Neither (a) nor (b) ever sends a date: each only asks, or reads as installed.
+    (c) *An office note's summary table (refines 45).* A procedure-summary label opens nothing in a document whose own
+        head titles it an office or clinic encounter's note (the visit-title marker of 44): such a table is a pasted
+        report's unless something says otherwise, so its services are asked, as installed.
+    (d) *One table model in one place (45).* The inventory reads the shared table model; its private copy, built to the
+        same rule so the repairs could land in parallel, is removed after measured agreement on every corpus.
+    (e) *An act's instrument (46).* An act never takes the technique of the instrument its own kind rules out: a forceps
+        biopsy or hot forceps removal is never "(cold snare)", a snare removal never "(forceps)" - the instrument is what
+        tells 45380 and 45384 from 45385, and the rationale must not misstate it.
