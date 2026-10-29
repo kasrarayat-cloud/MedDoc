@@ -799,3 +799,44 @@ What it changes, so a later session does not re-derive it:
     own label - interpretation 28's open family, which the owner ruled only for headings, titles and row fields - so they
     are listed for the owner (ACCURACY-RESIDUALS, gi2 dates-F1-n1). In the other 131, every other date is stated as
     another occurrence's on its own line or under its heading.
+
+## Owner directive, 2026-10-29 — reliable shared GI interpretation (third round)
+
+Received directly from the owner in session 7c8d38da on 29 October 2026 (about 18:05Z), as pasted instruction text,
+after the install of revision 90377ec6f413 (PR #1445) and its report (PR #1447). Recorded by the receiving session in
+its first commit, before the work that depends on it. Verbatim:
+
+> Continue from installed CPT Studio revision 90377ec6f413 and reports #1445/#1447.
+>
+> The objective remains reliable shared GI interpretation. Successful installation and unchanged behavior versus an older revision are insufficient acceptance criteria.
+>
+> Prioritize h2-08: trace the original document, section boundaries, both service-date fields and the outbound request. A conflicting applicable service date must not be silently discarded because an unfamiliar heading inherits the Plan section. Repair the shared date/section binding, preserving genuine historical and planned dates.
+>
+> Then repair the shared extent/table interpretation and current-visit versus future-follow-up scope. Inspect the existing service inventory and repair its fact binding; do not assume a wholesale rewrite or add document-specific exceptions.
+>
+> Use source-reviewed expected facts and varied layouts/paraphrases. Known cases become regression tests. Keep a small independently written unseen set for acceptance. Require an independent adversarial review of correctness before freezing, rather than only comparison with the previous version.
+>
+> Keep Corti’s EUS omission separate. Do not invent codes, promote unsupported candidates or repeat unchanged requests indefinitely.
+>
+> Preserve original evidence, decisions, review safeguards and duplicate protection. Use parallel independent agents with one integration/deployment owner.
+>
+> After offline verification, perform minimal justified live synthetic checks, including the demo-reviewer login, clarification/recovery, persisted decisions, reload and actual reviewed downloads. Label synthetic approvals accurately.
+>
+> Report what is correct, what remains uncertain, provider omissions and demo readiness separately. Do not declare reliable coding while a known contradicted service date is still sent.
+
+### Session interpretation, 2026-10-29 (7c8d38da, third round) — recorded, not owner-ruled
+
+38. **The acceptance bar moves from "no worse than installed" to "right by the source".** The second round converged on a
+    differential (never worse than the installed revision); the owner rules that insufficient. This round's repairs are
+    judged against source-reviewed expected facts written per document, its adversarial review is told to find inputs
+    the head reads WRONG by the source (not only differently from 2b82889f or 90377ec6f413), and the differential checks
+    remain a safety net only.
+39. **Known cases and the unseen set.** The fresh set h2-01..h2-10 and ho-01..ho-04 are known cases from this round on:
+    they become regression tests with source-reviewed expected facts. A new, small, independently written set (h3) is the
+    acceptance set: its author reads neither the application code nor the repairs, and this session reads it only after
+    the code is frozen.
+40. **Synthetic approvals and the demo account.** Every live approval is made by the agent account and labelled as agent
+    review. The demo-reviewer account is a human account: the live check logs it in and reads its session, and makes no
+    decision with it, so no synthetic approval is ever attributed to a human account.
+41. **A contradicted service date is a blocker for any claim of reliable coding.** While any known source sends a date
+    the document contradicts (h2-08 at 90377ec6f413), the report says so first and declares no reliable coding.
