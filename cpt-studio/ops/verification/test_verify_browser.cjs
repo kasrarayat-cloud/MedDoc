@@ -842,8 +842,10 @@ test('planProblems: refuses a malformed context_edit, approve_codes, upload date
   assert.deepEqual(vb.planProblems(doc({ reject: null }, { service_date: null }), notes), []);
   assert.deepEqual(vb.planProblems(doc({ context_edit: { service_date: DOCUMENTED } }), notes), []);
   assert.deepEqual(vb.planProblems(doc({ context_edit: { clear_member_date: true }, approve_codes: ['43276'] }), notes), []);
+  // round gi3: without a member date entered at upload, a date answers the encounter's open date question
+  assert.deepEqual(vb.planProblems(doc({ context_edit: { service_date: DOCUMENTED } }, { service_date: null }), notes), []);
   const bad = [
-    doc({ context_edit: { service_date: DOCUMENTED } }, { service_date: null }),  // nothing for the edit to settle
+    doc({ context_edit: { clear_member_date: true } }, { service_date: null }),  // no member date to clear
     doc({ context_edit: { service_date: DOCUMENTED, clear_member_date: true } }),
     doc({ context_edit: {} }),
     doc({ context_edit: { clear_member_date: false } }),
@@ -1223,5 +1225,438 @@ test('verifyDocument refuses an attached encounter the gate rejects before it ed
   for (const act of ['await editContext(', 'await askSecondReview(', 'await decide(']) {
     const at = body.indexOf(act);
     assert.ok(at > refusal, `${act} comes before the attach refusal`);
+  }
+});
+
+// --- round gi3 (ops): the documented date question ------------------------------------------------------------------
+//
+// A document with NO upload.service_date whose review_plan.context_edit is {"service_date": ...} answers the
+// encounter's open date question: its own dates conflict (or it states none the reader reads), so its primary request
+// went without a "Date of service" line. The fixture is gi-08 with a second labelled date in its header, which the
+// server's reader reads as a document-internal conflict ("Conflicting documented values: 2026-10-07, 2026-10-08.").
+// Its request hashes were computed by studio.providers.corti.build_coding_request over QUESTION_TEXT (the builder that
+// gives GI08_REQUEST's), and the encounter shapes below are the ones the server served for this text in a contract run
+// of the real API (disposable database, in-process provider): the dateless request before; after the member's answer,
+// one new primary run for the answered date and no date question; the same save made again adding no run.
+const QUESTION_TEXT = TEXT.replace('Date of procedure: 2026-10-07\n', 'Date of procedure: 2026-10-07\nDate of service: 2026-10-08\n');
+const QUESTION_REQUEST = {
+  none: '603ebb17c53dc971b6e7a9eb4eccfb9f188dac2eb9665bacbddfeb66a7a246de',
+  '2026-10-07': 'ca2f62e386788b20b503e81e6a5fe233ed79dfbd489a4cff11cf70844e19d620',
+  '2026-10-08': '22360f3669b3064dc456a198262e2890baa21ba2f9f9bdc75a24b8d191fcfd84',
+  '2026-10-09': '4f82b73078745bd4a6591fcf815dc2f692c5fdc69bc738910ad9d20505ddf2b7',
+};
+const ANSWER = '2026-10-08';
+const QUESTION_PLAN = { clear_member_date: false, service_date: ANSWER, answers_question: true };
+// studio/validation/checks.py service_date_clarification, as the server served it for QUESTION_TEXT
+const DATE_QUESTION = { id: 'c-date', scope: 'encounter', proposal_id: null, family: '', fact: 'service_date', state: 'open',
+  question: 'Confirm the date of service for this encounter.',
+  reason: 'Conflicting dates of service are documented (“Date of procedure: 2026-10-07”, “Date of service: 2026-10-08”); '
+    + 'every service and every dated reference check depends on it.' };
+const USER_NOTE = 'Supplied by a workspace member as encounter metadata; not clinical documentation.';
+const ANSWER_EDIT = { http_status: 201, error: null, posted: { service_date: ANSWER, setting: '', billing_context: '' },
+  identical: { via: 'api', form_posted: false, form_toast: 'No context change to save.', http_status: 201, error: null } };
+const QUESTION_HARD = ['context_edit.question_open', 'context_edit.date_unestablished', 'context_edit.dateless_before',
+  'context_edit.request', 'context_edit.date_after', 'context_edit.one_request', 'context_edit.sent_at_most_once',
+  'context_edit.earlier_runs_kept', 'context_edit.question_closed', 'context_edit.identical_save'];
+
+function inQuestion(passage) {
+  const start = QUESTION_TEXT.indexOf(passage);
+  assert.ok(start >= 0, `fixture passage not in the document: ${passage}`);
+  return { start, end: start + passage.length, text: passage };
+}
+
+// The encounter once processing finished: the document's own dates conflict, the date is asked at the encounter, and
+// its one primary request was made, and answered, without a date line. A pasted revision, as the walk attaches one.
+function questionEncounter() {
+  const enc = encounter({ state: 'needs_clarification', provider_runs: [run('run-dateless', { request_sha256: QUESTION_REQUEST.none })],
+    clarifications: [clone(DATE_QUESTION)], readiness: { draft: false, reviewed: false, blockers: [] } });
+  enc.revision = { ...enc.revision, kind: 'paste', source_file: null, text: QUESTION_TEXT, text_sha256: sha(QUESTION_TEXT),
+    pages: [{ page: 1, start: 0, end: QUESTION_TEXT.length }], extraction: { ...enc.revision.extraction, method: 'paste' } };
+  enc.context = { facts: {
+    service_date: { name: 'service_date', value: null, origin: 'conflict', member_conflict: false,
+      note: 'Conflicting documented values: 2026-10-07, 2026-10-08.',
+      evidence: [inQuestion('Date of procedure: 2026-10-07'), inQuestion('Date of service: 2026-10-08')] },
+    setting: { name: 'setting', value: 'office', origin: 'document', member_conflict: false, note: '',
+      evidence: [inQuestion('Place of service: Office')] } }, user_values: {} };
+  enc.routing = { ...enc.routing, families: [] };  // encounter()'s routing spans are at the plain gi-08 text's offsets
+  enc.assessment = { ...enc.assessment, id: 'asm-question', proposals: [] };
+  return enc;
+}
+
+// The encounter once the member's answer was saved and its processing settled: the context states ``date`` (with
+// ``origin``) and the member value ``userValue``; the one new run carries the request for ``sent``; ``questions`` are
+// the new assessment's questions (none: the question closed).
+function answeredEncounter(before, { date = ANSWER, origin = 'user', userValue = ANSWER, sent = date, runs = null, questions = [] } = {}) {
+  const enc = clone(before);
+  enc.state = 'no_codes';
+  enc.provider_runs = runs || [...clone(before.provider_runs), run('run-answer', { request_sha256: QUESTION_REQUEST[sent || 'none'] })];
+  enc.context.facts.service_date = { name: 'service_date', value: date, origin, member_conflict: false, note: USER_NOTE, evidence: [] };
+  enc.context.user_values = userValue ? { service_date: userValue } : {};
+  enc.clarifications = questions;
+  enc.assessment = { ...enc.assessment, id: 'asm-answered' };
+  return enc;
+}
+
+test('planProblems and contextEditPlan: without upload.service_date a date answers the open date question; clear_member_date needs a member date', () => {
+  const notes = { approve: 'Agent-executed synthetic verification review' };
+  const doc = (edit, upload) => ({ id: 'q', upload, review_plan: { context_edit: edit } });
+  for (const upload of [{ service_date: null }, { service_date: '' }, {}, undefined]) {
+    assert.deepEqual(vb.planProblems(doc({ service_date: ANSWER }, upload), notes), [], JSON.stringify(upload));
+    assert.deepEqual(vb.contextEditPlan(doc({ service_date: ANSWER }, upload)), QUESTION_PLAN, JSON.stringify(upload));
+  }
+  // a member date entered at upload: the member-conflict plans, exactly as before
+  assert.deepEqual(vb.contextEditPlan(doc({ service_date: DOCUMENTED }, { service_date: MEMBER })), { clear_member_date: false, service_date: DOCUMENTED });
+  assert.deepEqual(vb.contextEditPlan(doc({ clear_member_date: true }, { service_date: MEMBER })),
+    { clear_member_date: true, service_date: '', documented_date: null });
+  for (const edit of [{ clear_member_date: true }, { clear_member_date: true, documented_date: DOCUMENTED },
+    { service_date: ANSWER, documented_date: ANSWER }, { service_date: '2026-02-30' }, { service_date: '10/08/2026' },
+    { service_date: ANSWER, clear_member_date: true }, {}, { answer: ANSWER }]) {
+    const problems = vb.planProblems(doc(edit, { service_date: null }), notes);
+    assert.equal(problems.length, 1, JSON.stringify([edit, problems]));
+  }
+  assert.match(vb.planProblems(doc({ clear_member_date: true }, { service_date: null }), notes)[0],
+    /clear_member_date clears the member's date entered at upload, but upload\.service_date gives none/);
+});
+
+test('the documented date question: the answer makes one request for the answered date, closes the question, and the same save sends nothing', () => {
+  const before = questionEncounter();
+  const after = answeredEncounter(before);
+  const results = vb.checkContextEdit(before, after, clone(after), QUESTION_PLAN, ANSWER_EDIT, null);
+  assert.deepEqual(results.filter(r => r.status !== 'pass').map(r => `${r.id}:${r.status}`), []);
+  assert.deepEqual(results.filter(r => r.severity === 'hard').map(r => r.id), QUESTION_HARD);
+  assert.match(results.find(r => r.id === 'context_edit.one_request').reason,
+    /1 new run\(s\): primary\/succeeded; one request sent; its request is the request for the revision text and 2026-10-08/);
+  assert.match(results.find(r => r.id === 'context_edit.dateless_before').reason, /each the request for the revision text with no date/);
+  // the walk's gate is the same three preconditions
+  assert.deepEqual(vb.contextEditPreconditions(before, null, QUESTION_PLAN).map(r => `${r.id}:${r.status}`),
+    ['context_edit.question_open:pass', 'context_edit.date_unestablished:pass', 'context_edit.dateless_before:pass']);
+  // a retained identical answer reused for the answered date: nothing sent, and it passes
+  const reused = answeredEncounter(before, { runs: [...clone(before.provider_runs),
+    run('run-answer', { request_sha256: QUESTION_REQUEST[ANSWER], reused_from: 'run-elsewhere', usage: {}, http_status: null })] });
+  const reuse = vb.checkContextEdit(before, reused, clone(reused), QUESTION_PLAN, ANSWER_EDIT, null);
+  assert.deepEqual(hardFailures(reuse), []);
+  assert.match(reuse.find(r => r.id === 'context_edit.one_request').reason, /a retained answer was reused \(nothing sent\)/);
+  // ... and where the dateless request itself was a reuse of a retained answer
+  const reusedBefore = questionEncounter();
+  reusedBefore.provider_runs = [run('run-dateless', { request_sha256: QUESTION_REQUEST.none, reused_from: 'run-first', usage: {} })];
+  const afterReuse = answeredEncounter(reusedBefore);
+  assert.deepEqual(hardFailures(vb.checkContextEdit(reusedBefore, afterReuse, clone(afterReuse), QUESTION_PLAN, ANSWER_EDIT, null)), []);
+  // the shape the server serves for a document that states no date at all: missing, with nothing quoted
+  const undated = questionEncounter();
+  undated.context.facts.service_date = { name: 'service_date', value: null, origin: 'missing', member_conflict: false,
+    note: 'No labelled date of service is documented.', evidence: [] };
+  undated.clarifications[0].reason = 'No date of service is documented; every service and every dated reference check depends on it.';
+  const afterUndated = answeredEncounter(undated);
+  assert.deepEqual(hardFailures(vb.checkContextEdit(undated, afterUndated, clone(afterUndated), QUESTION_PLAN, ANSWER_EDIT, null)), []);
+});
+
+test('the documented date question: the edit is made only on an open question, an unestablished date and a dateless request', () => {
+  const pre = enc => vb.contextEditPreconditions(enc, null, QUESTION_PLAN).filter(r => r.status === 'fail').map(r => r.id);
+  const changed = change => {
+    const enc = questionEncounter();
+    change(enc);
+    return enc;
+  };
+  assert.deepEqual(pre(questionEncounter()), []);
+  // no open encounter question: none, answered, withdrawn, about another fact, or asked only of a proposal or service
+  for (const [label, change] of [
+    ['none', enc => { enc.clarifications = []; }],
+    ['answered', enc => { enc.clarifications[0].state = 'answered'; }],
+    ['withdrawn', enc => { enc.clarifications[0].state = 'withdrawn'; }],
+    ['another fact', enc => { enc.clarifications[0].fact = 'setting'; }],
+    ['a proposal\'s', enc => { Object.assign(enc.clarifications[0], { scope: 'proposal', proposal_id: 'p-1' }); }],
+    ['an encounter question held by a proposal', enc => { enc.clarifications[0].proposal_id = 'p-1'; }],
+    ['a service\'s', enc => { enc.clarifications[0].scope = 'service'; }],
+  ]) assert.deepEqual(pre(changed(change)), ['context_edit.question_open'], label);
+  assert.match(vb.contextEditPreconditions(changed(enc => { enc.clarifications[0].scope = 'service'; }), null, QUESTION_PLAN)[0].reason,
+    /no open encounter-scope service_date question.*open elsewhere: service "Confirm the date of service/);
+  // a service date established: documented, in use as a member's, a member value stored, or a member conflict
+  for (const [label, change] of [
+    ['documented', enc => { enc.context.facts.service_date = { name: 'service_date', value: DOCUMENTED, origin: 'document',
+      member_conflict: false, note: '', evidence: [inQuestion('Date of procedure: 2026-10-07')] }; }],
+    ['a member\'s date in use', enc => { enc.context.facts.service_date = { name: 'service_date', value: MEMBER, origin: 'user',
+      member_conflict: false, note: USER_NOTE, evidence: [] }; enc.context.user_values = { service_date: MEMBER }; }],
+    ['a member value stored', enc => { enc.context.user_values = { service_date: ANSWER }; }],
+    ['a member conflict', enc => { Object.assign(enc.context.facts.service_date, { member_conflict: true,
+      note: CONFLICT_NOTE(MEMBER, '2026-10-07 or 2026-10-08') }); enc.context.user_values = { service_date: MEMBER }; }],
+  ]) assert.deepEqual(pre(changed(change)), ['context_edit.date_unestablished'], label);
+  // a primary request carried a date (or another text), or none was answered: proven from the request hashes
+  const dated = changed(enc => { enc.provider_runs[0].request_sha256 = QUESTION_REQUEST['2026-10-07']; });
+  assert.deepEqual(pre(dated), ['context_edit.dateless_before']);
+  assert.match(vb.contextEditPreconditions(dated, null, QUESTION_PLAN)[2].reason, /carries the request for 2026-10-07/);
+  assert.deepEqual(pre(changed(enc => { enc.provider_runs.push(run('run-dated', { request_sha256: QUESTION_REQUEST[ANSWER] })); })),
+    ['context_edit.dateless_before']);
+  const otherText = changed(enc => { enc.provider_runs[0].request_sha256 = GI08_REQUEST.none; });
+  assert.match(vb.contextEditPreconditions(otherText, null, QUESTION_PLAN)[2].reason,
+    /carries none of the requests for no date, 2026-10-07, 2026-10-08/);
+  for (const [label, runs] of [
+    ['no run', []],
+    ['only a hold', [hold()]],
+    ['not sent', [run('run-x', { state: 'not_sent', usage: {}, http_status: null, request_sha256: QUESTION_REQUEST.none,
+      error: 'Corti refused the token request; nothing was sent.' })]],
+    ['cancelled', [run('run-x', { state: 'cancelled', usage: {}, http_status: null, request_sha256: QUESTION_REQUEST.none,
+      error: 'Stopped before sending; nothing was sent.' })]],
+    ['a second review only', [run('run-2', { purpose: 'second_review', request_sha256: 'e'.repeat(64) })]],
+  ]) assert.deepEqual(pre(changed(enc => { enc.provider_runs = runs; })), ['context_edit.dateless_before'], label);
+  // judged without an edit (the walk's refusal), nothing after the gate is judged and the request it did not make fails
+  const notMade = vb.checkContextEdit(changed(enc => { enc.clarifications = []; }), null, null, QUESTION_PLAN,
+    { http_status: null, error: 'not made: context_edit.question_open failed, so the edit has nothing verified to answer' }, null);
+  assert.deepEqual(notMade.map(r => `${r.id}:${r.status}`), ['context_edit.question_open:fail', 'context_edit.date_unestablished:pass',
+    'context_edit.dateless_before:pass', 'context_edit.request:fail']);
+});
+
+test('the documented date question: each check after the edit fails on the broken server shape it exists for', () => {
+  const before = questionEncounter();
+  const after = answeredEncounter(before);
+  const judge = (shape, settled = clone(shape), edit = ANSWER_EDIT) => hardFailures(vb.checkContextEdit(before, shape, settled, QUESTION_PLAN, edit, null));
+  const wrongRequest = ['context_edit.one_request', 'context_edit.sent_at_most_once'];
+  assert.deepEqual(judge(after), []);
+  // the answer was not taken: held as a member conflict, re-checked with the dateless run, the question still open
+  const held = answeredEncounter(before, { runs: clone(before.provider_runs), questions: [{ ...clone(DATE_QUESTION),
+    reason: `The date of service is in conflict. ${CONFLICT_NOTE(ANSWER, '2026-10-07 or 2026-10-08')}` }] });
+  held.context.facts.service_date = { name: 'service_date', value: null, origin: 'conflict', member_conflict: true,
+    evidence: clone(before.context.facts.service_date.evidence), note: CONFLICT_NOTE(ANSWER, '2026-10-07 or 2026-10-08') };
+  assert.deepEqual(judge(held), ['context_edit.date_after', 'context_edit.one_request', 'context_edit.question_closed']);
+  // the context states the answer but not as the member's, another member value is stored, or another date is stated
+  assert.deepEqual(judge(answeredEncounter(before, { origin: 'document' })), ['context_edit.date_after']);
+  assert.deepEqual(judge(answeredEncounter(before, { userValue: '2026-10-07' })), ['context_edit.date_after']);
+  assert.deepEqual(judge(answeredEncounter(before, { date: '2026-10-07', userValue: '2026-10-07', sent: ANSWER })), ['context_edit.date_after']);
+  // nothing requested for the answer; the dateless request sent again; a request for another date; two requests
+  assert.deepEqual(judge(answeredEncounter(before, { runs: clone(before.provider_runs) })), ['context_edit.one_request']);
+  const resent = answeredEncounter(before, { sent: null });
+  assert.deepEqual(judge(resent), wrongRequest);
+  assert.match(vb.checkContextEdit(before, resent, clone(resent), QUESTION_PLAN, ANSWER_EDIT, null)
+    .find(r => r.id === 'context_edit.one_request').reason, /its request is the request for no date, not the one for 2026-10-08/);
+  assert.deepEqual(judge(answeredEncounter(before, { sent: '2026-10-07' })), wrongRequest);
+  assert.deepEqual(judge(answeredEncounter(before, { sent: '2026-10-09' })), wrongRequest);
+  assert.deepEqual(judge(answeredEncounter(before, { runs: [...clone(before.provider_runs), run('run-a', { request_sha256: QUESTION_REQUEST[ANSWER] }),
+    run('run-b', { request_sha256: QUESTION_REQUEST[ANSWER] })] })), wrongRequest);
+  // a hold, a request not sent, a cancelled one, or a second review in place of the primary request
+  for (const [label, extra] of [
+    ['a hold', hold('run-hold-q')],
+    ['not sent', run('run-x', { state: 'not_sent', usage: {}, http_status: null, request_sha256: QUESTION_REQUEST[ANSWER],
+      error: 'Corti refused the token request; nothing was sent.' })],
+    ['cancelled', run('run-x', { state: 'cancelled', usage: {}, http_status: null, request_sha256: QUESTION_REQUEST[ANSWER],
+      error: 'Stopped before sending; nothing was sent.' })],
+    ['a second review', run('run-x', { purpose: 'second_review', request_sha256: QUESTION_REQUEST[ANSWER] })],
+  ]) assert.deepEqual(judge(answeredEncounter(before, { runs: [...clone(before.provider_runs), extra] })), ['context_edit.one_request'], label);
+  // an earlier run changed, or went missing
+  const rewritten = clone(after);
+  rewritten.provider_runs[0].usage = {};
+  assert.deepEqual(judge(rewritten), ['context_edit.earlier_runs_kept']);
+  assert.deepEqual(judge(answeredEncounter(before, { runs: [run('run-answer', { request_sha256: QUESTION_REQUEST[ANSWER] })] })),
+    ['context_edit.earlier_runs_kept']);
+  // the date question still open after the save (at any scope), or open again after the same save made again
+  assert.deepEqual(judge(answeredEncounter(before, { questions: [clone(DATE_QUESTION)] })), ['context_edit.question_closed']);
+  assert.deepEqual(judge(answeredEncounter(before, { questions: [{ ...clone(DATE_QUESTION), scope: 'proposal', proposal_id: 'p-1' }] })),
+    ['context_edit.question_closed']);
+  assert.deepEqual(judge(after, answeredEncounter(before, { questions: [clone(DATE_QUESTION)] })), ['context_edit.question_closed']);
+  // the same save made again sent the request again, held, changed a run, was refused, or was never made
+  const resentAgain = clone(after);
+  resentAgain.provider_runs.push(run('run-again', { request_sha256: QUESTION_REQUEST[ANSWER] }));
+  assert.deepEqual(judge(after, resentAgain), ['context_edit.identical_save']);
+  const heldAgain = clone(after);
+  heldAgain.provider_runs.push(hold('run-hold-again'));
+  assert.deepEqual(judge(after, heldAgain), ['context_edit.identical_save']);
+  const changedAgain = clone(after);
+  changedAgain.provider_runs[1].usage = {};
+  assert.deepEqual(judge(after, changedAgain), ['context_edit.identical_save']);
+  assert.deepEqual(judge(after, null), ['context_edit.identical_save']);
+  assert.deepEqual(judge(after, clone(after), { ...ANSWER_EDIT, identical: { ...ANSWER_EDIT.identical, http_status: 409, error: 'Wait for processing to finish' } }),
+    ['context_edit.identical_save']);
+  // the save was refused: nothing after it is judged
+  const refused = vb.checkContextEdit(before, null, null, QUESTION_PLAN, { ...ANSWER_EDIT, http_status: 409, error: 'Wait for processing to finish' }, null);
+  assert.deepEqual(refused.map(r => `${r.id}:${r.status}`), ['context_edit.question_open:pass', 'context_edit.date_unestablished:pass',
+    'context_edit.dateless_before:pass', 'context_edit.request:fail']);
+  // an unknown outcome is the operator's to reconcile: soft, as for a member conflict's request
+  const unknown = answeredEncounter(before, { runs: [...clone(before.provider_runs), run('run-u', { state: 'unknown', http_status: null,
+    usage: {}, response_sha256: '', request_sha256: QUESTION_REQUEST[ANSWER] })] });
+  const outcome = vb.checkContextEdit(before, unknown, clone(unknown), QUESTION_PLAN, ANSWER_EDIT, null);
+  assert.deepEqual(hardFailures(outcome), []);
+  assert.deepEqual(statuses(outcome, 'context_edit.outcome'), ['warn']);
+});
+
+test('the date question, the dateless request and the answer the walk reads are the server\'s own', () => {
+  const read = (...parts) => fs.readFileSync(path.join(ROOT, ...parts), 'utf8');
+  const corti = read('studio', 'providers', 'corti.py');
+  assert.ok(corti.includes("    contexts = (text,) if service_date is None else (text, f'Date of service: {service_date.isoformat()}')"),
+    'the dateless request (no date context line) changed');
+  for (const [date, want] of Object.entries(QUESTION_REQUEST)) {
+    assert.equal(vb.primaryRequestSha256(QUESTION_TEXT, date === 'none' ? null : date), want, date);
+  }
+  assert.ok(read('studio', 'validation', 'checks.py').includes("    return ClarificationSpec(scope='encounter', fact='service_date',\n"
+    + "                             question='Confirm the date of service for this encounter.',"), 'the date question changed');
+  const serializers = read('studio', 'serializers.py');
+  assert.ok(serializers.includes("    return {'id': str(clarification.pk), 'scope': clarification.scope,\n"
+    + "            'proposal_id': str(clarification.proposal_id) if clarification.proposal_id else None,\n"
+    + "            'family': clarification.family, 'fact': clarification.fact, 'question': clarification.question,\n"
+    + "            'reason': clarification.reason, 'state': clarification.state}"), 'the served clarification changed');
+  // only the current assessment's questions are served, so an answered question is not open after the save
+  assert.ok(serializers.includes('    clarifications = list(assessment.clarifications.all())'));
+  // a member date that settles the question is stated as the member's (origin 'user')
+  assert.ok(read('studio', 'gi', 'context.py').includes("        merged[name] = Fact(name, value, 'user', (), USER_NOTE)\n    return merged"));
+  // the save makes a request unless the run in use answers the answered context's request; a re-check never queues the
+  // second review
+  const jobs = read('studio', 'jobs.py');
+  assert.ok(jobs.includes('        if _run_answers(last_run, revision, context) and not owed:'));
+  assert.ok(jobs.includes('    # The bounded second review is never queued here: a workspace owner or reviewer asks for it'));
+});
+
+// A scripted page for verifyDocument's attached walk (--encounter): GET /api/encounters/<id> serves the encounter of
+// the stage reached; the context form behaves as app.js's openContext and submitContext do (prefilled from the
+// member's values; a save that changes nothing closes with a toast and sends nothing); page.evaluate is the page's
+// api() client. Every act is recorded; anything else the walk asks of it is not a function, so a step the walk was not
+// expected to take ends it with an error.
+function walkPage(id, states) {
+  const base = 'https://cpt.example';
+  const target = `/api/encounters/${id}/context`;
+  const acts = [];
+  const posts = [];
+  let current = states[0];
+  let url = 'about:blank';
+  let dialog = null;
+  let toast = '';
+  let pendingRequest = null;
+  let pendingResponse = null;
+  const serve = body => {
+    posts.push(body);
+    current = states[Math.min(posts.length, states.length - 1)];
+    return { status: () => 201, json: async () => ({ context_id: `ctx-${posts.length}` }) };
+  };
+  const answered = response => ({ status: () => response.status(), json: response.json, url: () => `${base}${target}`,
+    request: () => ({ method: () => 'POST' }) });
+  const deferred = () => {
+    let resolve;
+    const promise = new Promise(done => { resolve = done; });
+    return { promise, resolve };
+  };
+  const locator = selector => {
+    const self = {
+      first: () => self,
+      count: async () => (selector === 'button[data-action="edit-context"]' || selector === '#exportDialog[open]' ? 1 : 0),
+      click: async () => {
+        if (selector !== 'button[data-action="edit-context"]') throw new Error(`unexpected click on ${selector}`);
+        acts.push('open the context form');
+        dialog = { value: current.context.user_values.service_date || '', closed: deferred() };
+      },
+      waitFor: async ({ state } = {}) => {
+        if (selector !== '#contextDialog') throw new Error(`unexpected wait for ${selector}`);
+        if (state === 'visible' && !dialog) throw new Error('the context dialog is not open');
+        if (state === 'hidden' && dialog) await dialog.closed.promise;
+      },
+      textContent: async () => (selector === '#toast' ? toast : ''),
+    };
+    return self;
+  };
+  const page = {
+    acts, posts,
+    goto: async next => { url = next; },
+    url: () => url,
+    waitForURL: async predicate => { if (!predicate(new URL(url))) throw new Error(`not at ${url}`); },
+    request: { get: async address => {
+      const where = new URL(address).pathname;
+      if (where === `/api/encounters/${id}`) return { ok: () => true, status: () => 200, json: async () => clone(current) };
+      if (where === `/api/encounters/${id}/original`) return { ok: () => false, status: () => 404, body: async () => Buffer.alloc(0) };
+      throw new Error(`unexpected GET ${where}`);
+    } },
+    waitForFunction: async () => true,
+    $$eval: async () => [],
+    locator,
+    inputValue: async selector => (selector === '#contextServiceDate' ? dialog.value : ''),
+    fill: async (selector, value) => {
+      if (selector !== '#contextServiceDate') throw new Error(`unexpected fill of ${selector}`);
+      acts.push(`fill the service date with ${JSON.stringify(value)}`);
+      dialog.value = value;
+    },
+    waitForRequest: () => { pendingRequest = deferred(); return pendingRequest.promise; },
+    waitForResponse: () => { pendingResponse = deferred(); return pendingResponse.promise; },
+    click: async selector => {
+      if (selector !== '#saveContext') throw new Error(`unexpected click on ${selector}`);
+      const values = current.context.user_values;
+      const body = { service_date: dialog.value, setting: values.setting || '', billing_context: values.billing_context || '' };
+      const closing = dialog.closed;
+      dialog = null;
+      if (Object.keys(body).every(name => body[name] === (values[name] || ''))) {  // app.js submitContext
+        acts.push('the form refused an identical save');
+        toast = 'No context change to save.';
+        closing.resolve();
+        return;
+      }
+      acts.push('the form posted');
+      const response = serve(body);
+      pendingRequest?.resolve({ method: () => 'POST', url: () => `${base}${target}`, postDataJSON: () => body, response: async () => response });
+      pendingResponse?.resolve(answered(response));
+      setTimeout(() => closing.resolve(), 5);
+    },
+    evaluate: async (fn, [encounterId, json]) => {
+      assert.equal(encounterId, id);
+      acts.push('the page api() posted');
+      pendingResponse?.resolve(answered(serve(json)));
+      return null;
+    },
+    reload: async () => { acts.push('reload'); dialog = null; },
+    keyboard: { press: async () => {} },
+    setViewportSize: async () => {},
+    waitForTimeout: async () => {},
+    screenshot: async () => {},
+  };
+  return page;
+}
+
+async function walkQuestion(states, expectedClarifications = []) {
+  const id = '0b9e3f7a-1c2d-4e5f-8a9b-0c1d2e3f4a5b';
+  const out = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'cpt-verify-question-'));
+  try {
+    const doc = { id: 'gi3-question', title: 'documented date question', source: 'documents/gi3-question.txt',
+      delivery: { format: 'paste', file: 'gi3-question.paste.txt' }, upload: { service_date: null }, expected_extraction: {},
+      expected_context: {}, expected_routing: {}, expected_clarifications: expectedClarifications, must_not_code: [],
+      incomplete_services: [], review_plan: { reject: null, context_edit: { service_date: ANSWER } } };
+    const item = { doc, sourceText: QUESTION_TEXT,
+      delivery: { format: 'paste', file: doc.delivery.file, sha256: sha(QUESTION_TEXT), size: Buffer.byteLength(QUESTION_TEXT) } };
+    const page = walkPage(id, states.map(state => ({ ...clone(state), id })));
+    const opts = { out, baseUrl: 'https://cpt.example', encounter: id, deadlineSeconds: 60, noAutoApprove: false };
+    const record = await vb.verifyDocument(page, opts, { review_notes: { approve: 'Agent-executed synthetic verification review' } }, item, []);
+    return { record, acts: page.acts, posts: page.posts };
+  } finally {
+    fs.rmSync(out, { recursive: true, force: true });
+  }
+}
+
+test('the walk answers an open date question through the form once, repeats it through api(), and judges both', async () => {
+  const before = questionEncounter();
+  const after = answeredEncounter(before);
+  const { record, acts, posts } = await walkQuestion([before, after, clone(after)], [{ fact: 'service_date', scope_in: ['encounter'] }]);
+  assert.equal(record.error, null);
+  assert.deepEqual(acts, ['open the context form', 'fill the service date with "2026-10-08"', 'the form posted', 'reload',
+    'open the context form', 'fill the service date with "2026-10-08"', 'the form refused an identical save', 'the page api() posted', 'reload',
+    'reload']);
+  assert.deepEqual(posts, [ANSWER_EDIT.posted, ANSWER_EDIT.posted]);
+  assert.deepEqual(record.assertions.filter(a => a.status === 'fail').map(a => a.id), []);
+  assert.deepEqual(record.assertions.filter(a => a.id.startsWith('context_edit.') && a.severity === 'hard').map(a => `${a.id}:${a.status}`),
+    QUESTION_HARD.map(id => `${id}:pass`));
+  assert.equal(record.result, 'pass');
+  assert.deepEqual([record.context_edit.answers_question, record.context_edit.http_status, record.context_edit.request_date,
+    record.context_edit.expected_request_sha256, record.context_edit.identical.via, record.context_edit.identical.form_toast],
+  [true, 201, ANSWER, QUESTION_REQUEST[ANSWER], 'api', 'No context change to save.']);
+});
+
+test('the walk makes no edit when the date question is not open: nothing is posted, and the run fails saying why', async () => {
+  for (const [label, change] of [
+    ['no question', enc => { enc.clarifications = []; }],
+    ['a dated request already sent', enc => { enc.provider_runs[0].request_sha256 = QUESTION_REQUEST['2026-10-07']; }],
+    ['a service date established', enc => { enc.context.facts.service_date = { name: 'service_date', value: DOCUMENTED, origin: 'document',
+      member_conflict: false, note: '', evidence: [inQuestion('Date of procedure: 2026-10-07')] }; }],
+  ]) {
+    const before = questionEncounter();
+    change(before);
+    const { record, acts, posts } = await walkQuestion([before, answeredEncounter(before)]);
+    assert.equal(record.error, null, label);
+    assert.deepEqual([acts.filter(act => act !== 'reload'), posts], [[], []], label);
+    assert.equal(record.context_edit.http_status, null, label);
+    assert.match(record.context_edit.error, /^not made: context_edit\.\w+ failed, so the edit has nothing verified to answer$/, label);
+    const failed = record.assertions.filter(a => a.status === 'fail').map(a => a.id);
+    assert.equal(failed.includes('context_edit.request'), true, label);
+    assert.equal(failed.filter(id => ['context_edit.question_open', 'context_edit.date_unestablished', 'context_edit.dateless_before'].includes(id)).length, 1, label);
+    assert.equal(record.result, 'fail', label);
   }
 });
