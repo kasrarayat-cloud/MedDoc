@@ -14,14 +14,15 @@ Three questions, kept apart on purpose:
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, replace
 from typing import Optional, Sequence
 
 from studio.gi import catalogue
 from studio.gi.context import is_member_conflict
-from studio.gi.services import (INSTRUMENT_FAMILY, INSTRUMENTS, LUMEN, ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE,
-                                 SERVICES, Act, Conflict, DocumentedService, ServiceInventory, act_regions,
-                                 examined_regions)
+from studio.gi.services import (ACTS, FAMILY_REGIONS, INSTRUMENT_FAMILY, INSTRUMENTS, LUMEN, ROUTING_CONTRARY_CUE,
+                                 ROUTING_DOUBT_CUE, SERVICES, Act, Conflict, DocumentedService, ServiceInventory,
+                                 act_regions, examined_regions)
 from studio.types import Check, ClarificationSpec, EvidenceSpan, Span
 from studio.validation import checks
 
@@ -275,37 +276,84 @@ def support_check(s: Support) -> Check:
 
 def elsewhere(code: str, inventory: ServiceInventory) -> Optional[Match]:
     """For a code whose family the inventory documents no service of (match is None): the acts the code accounts for
-    (catalogue.code_acts) that the inventory documents as done in another family's service, as a Match its passages are
-    verified against (support) - never the code's status, which its own passages still decide (engine._select), and
-    never the service it is matched to. None when no such act is established or documented done (refutation gi2 RC5,
-    ho-09: 46221 was ready on "Sedation: None." and the sigmoidoscope's advance, unchecked, beside "band ligation of two
-    columns through the flexible sigmoidoscope")."""
+    (catalogue.code_acts) that the inventory documents as done in another family's service at the code's own site
+    (_code_regions), as a Match its passages are verified against (support) - never the code's status, which its own
+    passages still decide (engine._select), and never the service it is matched to. None when no such act is
+    established or documented done there (refutation gi2 RC5, ho-09: 46221 was ready on "Sedation: None." and the
+    sigmoidoscope's advance, unchecked, beside "band ligation of two columns through the flexible sigmoidoscope")."""
     kinds = catalogue.code_acts(code)
-    acts = tuple(a for s in inventory.services for a in s.acts if a.kind in kinds and a.status == 'performed')
+    regions = _code_regions(code)
+    # only at the code's own site: where the act's own passage or lesion names one, else its service's tract - never an
+    # esophageal variceal ligation for a hemorrhoid banding code, or a gastric polypectomy for a colonoscopy code
+    # (refutation gi2 attr-F5); a code with no site established is checked against no act of another family
+    acts = tuple(a for s in inventory.services for a in s.acts if a.kind in kinds and a.status == 'performed'
+                 and (act_regions(s, a) or FAMILY_REGIONS.get(s.family, frozenset())) & regions)
     if not acts:
         return None
     return Match('performed', inventory.service(acts[0].service), acts, 'elsewhere', '')
 
 
-def _names_service(service: DocumentedService, passage: str) -> bool:
-    """Whether a passage names ``service``: its family's name, or an instrument of its family ("through the flexible
-    sigmoidoscope")."""
-    if any(family == service.family and pattern.search(passage) for family, _, pattern in SERVICES):
-        return True
-    return any(next((family for name, family in INSTRUMENT_FAMILY if name in m.group(0).lower()), '') == service.family
-               for m in INSTRUMENTS.finditer(passage))
+def _code_regions(code: str) -> frozenset:
+    """Where the act ``code`` accounts for is done (studio.gi.services.ANATOMY regions): its profile's family's tract
+    (FAMILY_REGIONS), or catalogue.UNRECONCILED_REGIONS for a code of a family never reconciled. Empty when not
+    established."""
+    profile = catalogue.code_profile(code)
+    if profile is not None:
+        return FAMILY_REGIONS.get(profile.family, frozenset())
+    return frozenset(catalogue.UNRECONCILED_REGIONS.get(code, ()))
+
+
+# A passage states its act done through or with a service where, after the act's own mention, an instrumental
+# preposition (a closed class) governs the service's or its instrument's name, with at most two words of the name's
+# own between them ("band ligation ... through the flexible sigmoidoscope", "banded today with the colonoscope in
+# retroflexion", "performed via flexible sigmoidoscopy") - none of them a conjunction, a negation or another
+# preposition, which would make the name another phrase's ("with an anoscope after withdrawal of the colonoscope") - and
+# no negation or replacement governs the preposition ("with the anoscope, not through the flexible sigmoidoscope", "via
+# anoscopy instead of through the colonoscope"). A name before the act's mention heads another phrase ("With the
+# colonoscope withdrawn, two internal hemorrhoids were banded using an anoscope").
+DONE_THROUGH = re.compile(r'\b(?:through|with|via|using)\s+(?:(?!(?:and|or|but|nor|not|no|never|after|before|of|than|'
+                          r'then|instead|rather|without|following|once|until|while|when|from|to|into|at|in|on|by|for|'
+                          r'during)\b)[a-z-]+\s+){0,2}$', re.I | re.A)
+NOT_DONE_THROUGH = re.compile(r'\b(?:not|never|no|rather\s+than|instead\s+of|in\s+lieu\s+of|as\s+opposed\s+to)\s+$',
+                              re.I | re.A)
+
+
+ACT_PATTERNS = dict(ACTS)  # the reader's own act mentions, by kind
+
+
+def _done_through(service: DocumentedService, passage: str, kind: str) -> bool:
+    """Whether a passage states its act (of ``kind``) done through or with ``service``: after the act's own mention,
+    its family's name or an instrument of its family, governed by an instrumental preposition no negation or replacement
+    governs (DONE_THROUGH: "band ligation of two columns through the flexible sigmoidoscope"). A passage that only names
+    the service - to say the act was not done through it, or was done after it - places nothing in it (refutation gi2
+    attr-F4)."""
+    act = ACT_PATTERNS[kind].search(passage) if kind in ACT_PATTERNS else None
+    if act is None:
+        return False
+    names = [m.start() for family, _, pattern in SERVICES if family == service.family
+             for m in pattern.finditer(passage, act.end())]
+    names += [m.start() for m in INSTRUMENTS.finditer(passage, act.end())
+              if next((family for name, family in INSTRUMENT_FAMILY if name in m.group(0).lower()), '') == service.family]
+    for start in names:
+        lead = passage[max(act.end(), start - 120):start]
+        prep = DONE_THROUGH.search(lead)
+        if prep is not None and not NOT_DONE_THROUGH.search(lead, 0, prep.start()):
+            return True
+    return False
 
 
 def placed_check(m: Match, inventory: ServiceInventory, family_label: str) -> Optional[Check]:
     """Where the document places the act a code accounts for when no service of the code's family is documented
-    (elsewhere): in another documented service, said only where the act's own passage names that service or its
-    instrument ("band ligation of two columns through the flexible sigmoidoscope") - an act the reader merely gave to
-    the one service a document names is not said to be in it. A warning for the reviewer, who decides which code accounts
-    for the act: nothing is added and no alternative is promoted. None when no passage names the service."""
+    (elsewhere): in another documented service, said only where the act's own passage states it done through or with
+    that service or its instrument ("band ligation of two columns through the flexible sigmoidoscope": _done_through) -
+    an act the reader merely gave to the one service a document names, or whose passage names the service only to say
+    it was not used ("not through the flexible sigmoidoscope", "after withdrawal of the colonoscope"), is not said to be
+    in it. A warning for the reviewer, who decides which code accounts for the act: nothing is added and no alternative
+    is promoted. None when no passage states the act done through or with the service."""
     places, seen = [], set()
     for act in m.acts:
         service = inventory.service(act.service)
-        span = next((ev for ev in act.evidence if _names_service(service, ev.text)), None) if service else None
+        span = next((ev for ev in act.evidence if _done_through(service, ev.text, act.kind)), None) if service else None
         if span is not None and service.id not in seen:
             seen.add(service.id)
             places.append(f'the {act_label(act.kind)} in the documented {service_label(service)} ({service.status}): '

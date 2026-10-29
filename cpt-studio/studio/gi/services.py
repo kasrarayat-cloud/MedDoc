@@ -152,6 +152,14 @@ def site_covers(name: str, written: str = '') -> frozenset:
     region = REGION_OF.get(name, '')
     return frozenset((region,)) if region else frozenset()
 
+
+# The regions each endoscopic family's examination reaches, as the reader gives an act to a family by its site
+# (_family_for_act_in): the upper tract for an upper endoscopy, the lower tract for a colonoscopy (and the small bowel
+# beyond its valve) or a sigmoidoscopy, the small bowel for an enteroscopy. Read where an act names no site of its own
+# (validation.reconcile.elsewhere); a family not listed reaches no region established here.
+FAMILY_REGIONS = {'gi.egd': UPPER, 'gi.colonoscopy': LOWER | {'small_bowel'}, 'gi.flex_sig': LOWER,
+                  'gi.enteroscopy': frozenset(('small_bowel',))}
+
 # --- vocabulary: services --------------------------------------------------------------------------------------
 # (family, kind, pattern). A family is an internal profile (studio.gi.profiles); kind is the documented service.
 SERVICES: tuple[tuple[str, str, re.Pattern], ...] = tuple((family, kind, _rx(pattern)) for family, kind, pattern in (
@@ -166,8 +174,7 @@ SERVICES: tuple[tuple[str, str, re.Pattern], ...] = tuple((family, kind, _rx(pat
     ('gi.anorectal', 'anorectal_testing', r'\banorectal\s+manometry\b|\bARM\b|\bballoon\s+expulsion\s+test\b'
                                           r'|\brectal\s+(?:sensation|compliance)\s+(?:test|testing|study)\b'
                                           r'|\banorectal\s+(?:physiology|function)\s+(?:test|testing|study)\b'),
-    ('gi.motility', 'manometry', r'\b(?:high[- ]resolution\s+)?esophageal\s+(?:high[- ]resolution\s+)?'
-                                 r'(?:manometry|motility\s+(?:study|testing))\b'
+    ('gi.motility', 'manometry', r'\b(?:high[- ]resolution\s+)?esophageal\s+(?:manometry|motility\s+(?:study|testing))\b'
                                  r'|\bHRM\b|\bantroduodenal\s+manometry\b|\b(?:gastric|duodenal|colonic|colon)\s+'
                                  r'(?:manometry|motility\s+(?:study|testing))\b'),
     # A feeding-tube service of its own: a tube changed, replaced or repositioned, or placed with imaging. A PEG placed
@@ -189,6 +196,17 @@ SERVICES: tuple[tuple[str, str, re.Pattern], ...] = tuple((family, kind, _rx(pat
     ('gi.flex_sig', 'flex_sig', r'\b(?<!rigid\s)(?:flexible\s+)?sigmoidoscop(?:y|ies|ic)\b|\bflex(?:ible|\.)?\s+sig\b'),
 ))
 FAMILY_KINDS = {family: kind for family, kind, _ in reversed(SERVICES)}
+# Names read only as the title of a service's own report (parts(): a report title naming it, with no plan or history
+# word; _build: its own report part, on a line that gives no other time) - never in prose, a field, a heading or a
+# procedure line, where SERVICES never read them. The esophageal manometry name with its modifier after the organ
+# ("Esophageal High-Resolution Manometry Report", refutation gi2 RC4, ho-08): read in prose it had made the study of an
+# earlier occurrence ("achalasia diagnosed on esophageal high-resolution manometry in March 2025") a performed service
+# through the one act a clinic note documented, an anoscopic banding, offered it for a second review and lost the office
+# visit (refutation gi2 attr-F1). Such a title reads as SERVICES' own title does.
+TITLE_SERVICES: tuple[tuple[str, str, re.Pattern], ...] = (
+    ('gi.motility', 'manometry',
+     _rx(r'\besophageal\s+high[- ]resolution\s+(?:manometry|motility\s+(?:study|testing))\b')),
+)
 INSTRUMENTS = _rx(r'\b(?:colonoscope|sigmoidoscope|gastroscope|upper\s+endoscope|duodenoscope|echoendoscope|enteroscope'
                   r'|endoscope)\b')
 INSTRUMENT_FAMILY = (('colonoscope', 'gi.colonoscopy'), ('sigmoidoscope', 'gi.flex_sig'), ('gastroscope', 'gi.egd'),
@@ -781,8 +799,10 @@ def _lines(text: str) -> list[tuple[int, int]]:
     return out
 
 
-def _family_named(line: str) -> tuple[str, str]:
-    for family, kind, pattern in SERVICES:
+def _family_named(line: str, title: bool = True) -> tuple[str, str]:
+    """The first service ``line`` names; read as a report title (``title``), a name only a title carries
+    (TITLE_SERVICES) too."""
+    for family, kind, pattern in SERVICES + (TITLE_SERVICES if title else ()):
         if pattern.search(line):
             return family, kind
     return '', ''
@@ -2582,14 +2602,58 @@ def passage_readings(text: str, start: int, end: int, service_date: Optional[dat
     return out
 
 
-def report_family_at(text: str, start: int, end: int, service_date: Optional[date], pages: Sequence = ()) -> str:
+def report_family_at(text: str, start: int, end: int, service_date: Optional[date], pages: Sequence = (),
+                     sections: Sequence[str] = ()) -> str:
     """The family whose report part holds the passage [start, end) as build() cuts the document - a part about one
     service, from its title to the next title, less the history sections in it (parts, _time_parts) - or '' outside a
     report part or across its end. Read on the frame build() reads (_act_frame, computed once per document, date and
-    pages): one bisection per passage."""
-    _flow, _dates, plist, starts, _cut = _act_frame(text, service_date, tuple(pages or ()))
+    pages): one bisection per passage.
+
+    For a physiology study's own report (REPORTED_STUDIES) read with ``sections`` - the section kinds in which a report
+    states what was done, found or concluded - the report speaks for its study only where the document reports that
+    study alone and the passage states nothing else (refutation gi2 attr-F3): '' when a report title or a line of those
+    sections names another such study, or an act only another study performs (_studies_reported: a combined manometry
+    and pH-impedance report, whose results are not read as whose), and when the passage itself states an act its study
+    does not perform or names another service ("biopsies of the distal esophagus were taken" after the study) - or is
+    longer than the reader reads one sentence for acts (SENTENCE_READ_CHARS: not read through; bounds the work per
+    passage)."""
+    flow, _dates, plist, starts, _cut = _act_frame(text, service_date, tuple(pages or ()))
     part = _part_at(plist, starts, start)
-    return part.family if part.kind == 'report' and part.start <= start and end <= part.end else ''
+    if part.kind != 'report' or not (part.start <= start and end <= part.end):
+        return ''
+    if not sections or part.family not in REPORTED_STUDIES:
+        return part.family
+    if end - start > SENTENCE_READ_CHARS:
+        return ''  # longer than the reader reads one sentence for acts: not read through, so it shows nothing by place
+    named, kinds = _studies_reported(text, service_date, tuple(pages or ()), tuple(sections))
+    if named - {part.family} or any(part.family not in KIND_FAMILIES[kind] for kind in kinds):
+        return ''
+    if any(part.family not in KIND_FAMILIES.get(kind, ()) for kind, _, _ in _acts_in(flow, start, end)) \
+            or INSTRUMENTS.search(flow, start, end) \
+            or any(family != part.family and pattern.search(flow, start, end) for family, _, pattern in SERVICES):
+        return ''
+    return part.family
+
+
+# The physiology studies whose own report speaks for them (report_family_at): a manometry, a pH or impedance study, an
+# anorectal study, and a capsule endoscopy.
+REPORTED_STUDIES = frozenset(('gi.motility', 'gi.reflux', 'gi.anorectal', 'gi.capsule'))
+
+
+@functools.lru_cache(maxsize=4)
+def _studies_reported(text: str, service_date: Optional[date], pages: tuple, sections: tuple) -> tuple:
+    """(the physiology studies the document's report titles or ``sections`` lines name, the study act kinds those lines
+    state - STUDY_KINDS, as build() reads acts): read once per document, on the frame build() reads. Bounded: one pass of
+    each pattern over the titles and the sections' text."""
+    flow, _dates, plist, _starts, _cut = _act_frame(text, service_date, pages)
+    spans = [(p.title.start, p.title.end) for p in plist if p.title is not None and p.role == 'physician']
+    spans += [(s.start, s.end) for s in _sections.layout(text).sections if s.kind in sections]
+    named, kinds = set(), set()
+    for lo, hi in spans:
+        named.update(family for family, _, pattern in SERVICES + TITLE_SERVICES
+                     if family in REPORTED_STUDIES and pattern.search(flow, lo, hi))
+        kinds.update(kind for kind, pattern in ACTS if kind in STUDY_KINDS and pattern.search(flow, lo, hi))
+    return frozenset(named), frozenset(kinds)
 
 
 def states_an_act_done(text: str, start: int, end: int, service_date: Optional[date],
@@ -2675,11 +2739,12 @@ def _family_for_act(kind: str, region: str, part_family: str, present: Sequence[
 KIND_FAMILIES = {'ph_monitoring': ('gi.reflux',), 'capsule_study': ('gi.capsule',), 'rectal_sensation': ('gi.anorectal',),
                  'manometry': ('gi.anorectal', 'gi.motility'), 'tube_replacement': ('gi.feeding_tube',)}
 # The physiology studies no endoscope performs, and the acts only they perform (manometry, pH or impedance monitoring,
-# rectal sensation testing): such an act belongs to a service of its own study family or to none - never to the report
-# part's service or to the one procedure a document names (refutation gi2 RC4, ho-08: a manometry report whose only
-# endoscopy was "An EGD on 2026-09-08 showed ..." in its indication read "Upper GI endoscopy - performed (manometry)",
-# asked how far that EGD's instrument was advanced, and listed it as a performed service without a proposal). A capsule
-# and a tube change are no such study: an endoscope can place a capsule or change a tube.
+# rectal sensation testing): such an act belongs to a service of its own study family or to none - never to another
+# family's service, whether the report part's or the one procedure a document names (refutation gi2 RC4, ho-08: a
+# manometry report whose only endoscopy was "An EGD on 2026-09-08 showed ..." in its indication read "Upper GI
+# endoscopy - performed (manometry)", asked how far that EGD's instrument was advanced, and listed it as a performed
+# service without a proposal). A capsule and a tube change are no such study: an endoscope can place a capsule or change
+# a tube.
 STUDY_FAMILIES = frozenset(('gi.motility', 'gi.reflux', 'gi.anorectal'))
 STUDY_KINDS = frozenset(kind for kind, families in KIND_FAMILIES.items() if set(families) <= STUDY_FAMILIES)
 
@@ -2692,7 +2757,11 @@ def _family_for_act_in(kind: str, region: str, part_family: str, present: Sequen
         if len(options) == 1:
             return options[0]
         if kind in STUDY_KINDS:
-            return ''  # its own study is not documented: no other service performs it
+            # Its own study is documented as performed nowhere: the study its report part, its sentence or the document's
+            # one procedure names is still its own, as before, though that study is also named as planned or earlier
+            # ("Esophageal manometry in 2024 was normal." under History above today's technique; refutation gi2
+            # attr-F2) - and no other service ever performs it.
+            return part_family if part_family in KIND_FAMILIES[kind] else ''
     if part_family:
         lower = part_family in ('gi.colonoscopy', 'gi.flex_sig')
         upper = part_family in ('gi.egd',)
@@ -3138,7 +3207,8 @@ def _title_wrapped(prev: str, nxt: str) -> bool:
     joined = prev.rstrip() + ' ' + nxt.strip()
     if _report_title(joined) and not _report_title(prev) and not _report_title(nxt):
         return True
-    return bool(_family_named(joined)[0]) and not _family_named(prev)[0] and not _family_named(nxt)[0]
+    return bool(_family_named(joined, title=False)[0]) and not _family_named(prev, title=False)[0] \
+        and not _family_named(nxt, title=False)[0]
 
 
 EDGE_LINES = 3  # lines read at a page's head and foot for its running header or footer (bounded work per page)
@@ -3257,6 +3327,7 @@ def _restore_spans(obj, text: str):
 def _build(text: str, *, service_date: Optional[date], routing=None, context_facts=None) -> ServiceInventory:
     problems: list[str] = []
     dates = gi_context.find_dates(text)
+    date_starts = [d.start for d in dates]
     plist = parts(text, service_date=service_date, dates=dates)
     starts = [p.start for p in plist]
     sentences = _sentences(text)
@@ -3309,6 +3380,22 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     continue
                 here.append((m.start(), m.end()))
                 named.append((family, kind, m.start(), m.end(), ss, se))
+        title = part.title
+        lo, hi = (max(ss, title.start), min(se, ss + SENTENCE_READ_CHARS, title.end)) if title is not None else (0, 0)
+        if lo < hi and part.kind == 'report' \
+                and _heading_time(text, title.start, title.end, service_date, dates, date_starts) in ('', 'today') \
+                and all(service_date is not None and d.precision == 'day'
+                        and gi_context.compare_to_service(d, service_date) == 0
+                        for d in dates[bisect.bisect_left(date_starts, title.start):bisect.bisect_left(date_starts,
+                                                                                                        title.end)]):
+            # a name only a title carries (TITLE_SERVICES): read as this report part's own title alone, on a line that
+            # gives no other time and carries no date but the service date's - never in prose, a field or a heading
+            # (refutation gi2 attr-F1)
+            for family, kind, pattern in TITLE_SERVICES:
+                for m in pattern.finditer(text, lo, hi):
+                    if family == part.family and not any(a < m.end() and m.start() < b for a, b in here):
+                        here.append((m.start(), m.end()))
+                        named.append((family, kind, m.start(), m.end(), ss, se))
         for role, pattern in OTHER_PROVIDER:
             if pattern.search(text, ss, min(se, ss + SENTENCE_READ_CHARS)) \
                     and not OTHER_PROVIDER_DENIED.search(text, ss, min(se, ss + SENTENCE_READ_CHARS)):

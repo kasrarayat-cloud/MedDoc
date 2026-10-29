@@ -313,8 +313,10 @@ CATALOGUE: dict[str, FamilyEntry] = {e.family: e for e in (
         documentation=(), acts=(),
         notes=('Recognised and listed for review; no service profile reconciles them in this release.',
                'A hemorrhoid band ligation code (46221) is never reconciled either. Where no service of its family is '
-               'documented and the document places a band ligation in another documented service, its passages are '
-               'checked against that act and that service is named; nothing is added or promoted.')),
+               'documented and the document records a band ligation at the rectum or anus in another documented '
+               'service (or one of no stated site in a sigmoidoscopy or colonoscopy), its passages are checked against '
+               'that act, and that service is named where the act\'s own passage states it done through or with that '
+               'service or its instrument; nothing is added or promoted.')),
 )}
 
 UNSUPPORTED_SERVICES = (
@@ -352,6 +354,10 @@ def code_profile(code: str):
 # (validation.engine._select). Never reconciled, never proposed, never a coverage claim; a code missing here is "act not
 # established", never "wrong". Act kinds only (studio.gi.services.ACTS), never phrases.
 UNRECONCILED_ACTS: dict[str, tuple[str, ...]] = {'46221': ('band_ligation',)}
+# Where that act is done (studio.gi.services.ANATOMY regions): an act documented in another family's service is checked
+# against such a code only there - by the regions its own passage or lesion names, else by its service's tract - never an
+# esophageal variceal ligation for a hemorrhoid banding (validation.reconcile.elsewhere; refutation gi2 attr-F5).
+UNRECONCILED_REGIONS: dict[str, tuple[str, ...]] = {'46221': ('rectum', 'anus')}
 
 
 def code_acts(code: str) -> tuple[str, ...]:

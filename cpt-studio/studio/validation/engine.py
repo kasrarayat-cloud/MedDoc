@@ -569,12 +569,14 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
 
     def report_family(span):
         # the study's own report speaks for the study only where a report states what was done, found or concluded:
-        # never its header, its signature or another line no such section heads (OWN_REPORT_SECTIONS)
+        # never its header, its signature or another line no such section heads (OWN_REPORT_SECTIONS); and only where
+        # the document reports that study alone and the passage states nothing else (attr-F3: never another study's
+        # result in a combined report, never a biopsy taken after the study)
         layout = gi_sections.layout(text)
         if any(layout.section_at(pos).kind not in OWN_REPORT_SECTIONS for pos in (span.start, max(span.start,
                                                                                                     span.end - 1))):
             return ''
-        return gi_services.report_family_at(text, span.start, span.end, day, pages)
+        return gi_services.report_family_at(text, span.start, span.end, day, pages, sections=OWN_REPORT_SECTIONS)
 
     if found is not None:
         # For an office visit a passage shows the visit when it is a statement of this visit: neither the clause reader
