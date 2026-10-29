@@ -840,3 +840,43 @@ its first commit, before the work that depends on it. Verbatim:
     decision with it, so no synthetic approval is ever attributed to a human account.
 41. **A contradicted service date is a blocker for any claim of reliable coding.** While any known source sends a date
     the document contradicts (h2-08 at 90377ec6f413), the report says so first and declares no reliable coding.
+
+### Session interpretation, 2026-10-29 (7c8d38da, third round, after the investigations) — recorded, not owner-ruled
+
+Made by the integration owner on reading four independent investigations (date/section binding, extent/tables, visit
+scope, inventory fact binding), each with source-reviewed expected facts over varied layouts and paraphrases. Recorded
+before the repairs that depend on them.
+
+42. **The date binding.** A plan or history section governs a date label only while its reach lasts. A colon-less heading
+    the section reader cannot place (a "neutral" heading: "Charge information", "Billing", "Visit details") ends that
+    reach unless its words name a plan, a history, another occurrence, a service, an act or another document. A label
+    no section governs speaks: it is read as a candidate that can only be ASKED, never sent by itself (so a heading
+    vocabulary that misses a plan word over-asks rather than sends a planned date). Where such a label is the document's
+    only date-of-service label, it is asked and a member's answer equal to it is taken (an accepted over-ask). Inside a
+    plan with no block heading, the encounter's own date-of-service field speaks, and a visit or procedure date field
+    is asked unless the plan item right before it names a later occurrence and its date is later than the visit's.
+    A plan or history section opened by the document's own title governs no label. The setting and patient-status
+    readers share this binding. The section boundaries themselves are not moved for dates (routing, extent and the
+    inventory read them). Version labels stay as installed (the second round's precedent): encounters already read keep
+    their recorded contexts; new uploads and member changes read under the new rules.
+43. **E/M time basis.** A clinician's time on the date of service that its sentence frames as visit time, or that stands
+    beside the document's own visit marker ("Face-to-face time: 24 minutes", "Physician time on the service date: 44
+    minutes"), documents the time basis. It is a lower bound of the total time on the date, so it never over-levels; the
+    level stays the reviewer's decision. A procedure's, sedation or interpretation time never counts.
+44. **Today's visit and future follow-up.** Today's visit is established only by the document's own markers (a title in
+    its head naming no other occurrence, a visit statement outside plan and history, a chief complaint, reason or MDM
+    heading, MDM, or the visit's own time). A future occurrence (a return visit, labs, imaging, a repeat procedure) never
+    establishes today's visit and is never presented as doubt about it. Planned-only documents and notes with no marker
+    stay held: known limits, never ready.
+45. **Tables.** There is one table model. A cell that holds only an answer answers its own column; a value bound to an
+    extent column ends at its cell. A procedure-summary label over a summary table opens a procedure section; a table
+    alone is never evidence that a service was done today.
+46. **Inventory binding.** A past-tense denial in an act's own segment binds that act; a table answer binds to its own
+    row's service. A table "Yes" states the act done only for a service already documented as performed (interpretation
+    24); otherwise it holds. A stent placement or removal that is part of a documented exchange is held for the reviewer
+    with the exchange named, never ready and never excluded. The ruled annotation behaviour (a white-out annotation
+    names the page partial) is unchanged.
+47. **Acceptance-set exposure.** A workflow journal preview showed the integration owner part of the sealed h3 author's
+    summary (document shapes and some headings) before the code was frozen; the repair agents never saw it. A second
+    sealed set, h4, was commissioned from a separate author whose only return is counts and hashes. h4 is the primary
+    unseen acceptance set; h3 is reported as exposed to the integration owner, never as unseen.
