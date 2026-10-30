@@ -11,7 +11,8 @@ list exempts anything from the hold (51(f)).
 - rev2-scope-02: an occasion word inside an activity's object before the minutes ("reviewing prior visit notes") refused
   the time while the same words after them did not; the SOAP note was then excluded.
 - rev2-scope-03: a telephone call titled "Follow-up visit - telephone" (a dash, a parenthesis, a header field) read as
-  today's office visit, and its physician time made 99212 ready.
+  today's office visit, and its physician time made 99212 ready; and (this fix's self-attack) a count after the word
+  ("Follow-up visit - telephone #2") or a field's answer ("Telephone visit: yes") read as a contact field's.
 - rev2-scope-04: a plan's "Return visit - three months" outside a plan section read as the document's title.
 - rev2-scope-05: a visit statement naming a planned service ("to follow", "afterwards", "the biopsies from") released
   routing's hold in an appointment letter.
@@ -250,14 +251,35 @@ class AnotherModalityInTheHeadTests(unittest.TestCase):
                 'telephone today about her biopsy results.\nTotal time: 10 minutes.\n')
         self.assertNotEqual(status_of(text, '99212', ['Total time: 10 minutes.']).status, 'ready')
 
+    def test_a_count_a_date_or_a_fields_answer_after_the_word_is_no_contact(self):
+        # gi3 fix round 2 (self-attack beside rev2-scope-03; interpretation 51(f): an exemption from the hold needs
+        # positive evidence): only a telephone number, an e-mail or a web address makes the word a contact field's. A
+        # count after it ("#2" made the call's 12 minutes ready, as b6997c39d), a date or any other answer names the
+        # encounter's modality: held, never ready on the call's time. "Patient portal: enrolled" is held with them - an
+        # over-hold accepted, since no closed list may tell "enrolled" from "yes".
+        call = ('Reason for call\nPost-colonoscopy check.\nCall summary\nI called the patient. No bleeding.\nPhysician '
+                'time: 12 minutes.\n')
+        for head in ('Follow-up visit - telephone #2', 'Follow-up visit - telephone no. 2',
+                     'Follow-up visit - telephone 2026-10-21', 'Follow-up visit\nTelephone visit: yes',
+                     'Follow-up visit\nTelephone | yes', 'Follow-up visit\nTelephone: patient called with questions',
+                     'Follow-up visit\nPatient portal: enrolled'):
+            text = PRACTICE + head + '\nDate of service: 2026-10-21\n' + OFFICE + call
+            with self.subTest(head=head):
+                self.assertEqual(em_status(text), 'uncertain')
+                held(self, status_of(text, '99212', ['Follow-up visit']), ['performed_status', 'em_basis'])
+
     def test_controls_contact_fields_and_a_video_visit_name_no_other_modality(self):
         note = ('Interval history\nStable.\nPhysical examination\nAbdomen soft.\nAssessment\nGERD.\nFace-to-face time: 20 '
                 'minutes.\n')
         for head in ('Phone: (555) 010-0100 | Fax: (555) 010-0101\nClinic note - return visit',
-                     'Clinic note - return visit\nPatient portal: enrolled', 'Practice phone: 555-0100\nClinic note - '
+                     'Practice phone: 555-0100\nClinic note - '
                      'return visit', 'Saltmarsh Valley Gastroenterology | Tel: 555-0100 | E-mail: clinic@example.org\n'
                      'Clinic note - return visit', 'Clinic note - return visit\nPhone 555-0100',
-                     'Clinic note - return visit\nTelephone | 555-0100'):
+                     'Clinic note - return visit\nTelephone | 555-0100',
+                     'Clinic note - return visit\nPhone (mobile): 555-0100 ext. 2',
+                     'Clinic note - return visit\nPhone no.: 555 010 0100',
+                     'Clinic note - return visit\nTelephone: +44 20 7946 0958',
+                     'Clinic note - return visit\nPatient portal: www.example.org/portal | portal@example.org'):
             text = PRACTICE + head + '\nDate of service: 2026-10-21\n' + OFFICE + note
             with self.subTest(head=head):
                 self.assertEqual(em_status(text), 'performed')

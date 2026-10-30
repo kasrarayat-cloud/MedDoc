@@ -182,13 +182,39 @@ def _em_head_lines(text: str) -> list[tuple[int, int, bool]]:
 # telephone call", "Visit mode: Telephone", "Results discussion by telephone", "Appointment letter"). Round 1 refused a
 # remote word before a visit statement or as its means ("by", "via"), so after a dash or in a parenthesis, or on its own
 # header line, the call read as today's office visit and its physician time made 99212 ready. Never a contact field:
-# the word as a field's label ("Practice phone: 555-0100", "E-mail:") or before a number or an address ("Phone
-# 555-0100"); never a sentence of the head (_em_head_lines: "Consent obtained by telephone from her daughter.").
+# the word whose own value is a contact - a telephone number, an e-mail or a web address - right after it ("Phone
+# 555-0100", "Practice phone: 555-0100", "E-mail: office@example.org"), after its label's colon ("Phone (mobile):
+# 555-0100") or in the next cell of its row ("Telephone | 555-0100"); never a sentence of the head (_em_head_lines:
+# "Consent obtained by telephone from her daughter."). gi3 fix round 2 (self-attack beside rev2-scope-03;
+# interpretation 51(f): an exemption from the hold needs positive evidence): any other value is no contact, so the word
+# names the encounter's modality and holds - a count or an ordinal ("Follow-up visit - telephone #2", "Follow-up visit
+# - telephone no. 2"), a field's answer ("Telephone visit: yes", "Telephone | yes", "Patient portal: enrolled"). The
+# draft before this read any digit after the word, and any field or first cell it labelled, as a contact, so "#2" made
+# the call's physician time ready. A number is a telephone number only in a telephone number's shape (3-3-4 or 3-4
+# digits with separators, or international after "+"), so a date ("telephone 2026-10-21") is none. A word inside an
+# address is the address's ("www.example.org/portal", "portal@example.org": its unbroken run of characters holds "@",
+# "://" or "www.", read within _EM_ADDRESS_REACH characters on either side). The blank runs around a label are read
+# possessively, and each field's value once per line: the draft's two blank runs around an optional label were
+# quadratic in a long blank run after the word (51 s for 40,000 blanks).
 _EM_MODALITY = re.compile(cues.EM_REMOTE.pattern + r'|\b(?:infus\w*|letters?)\b', re.A | re.I)
-_EM_CONTACT_AFTER = re.compile(r'[ \t]*(?:[:#=]|no\.?|number)?[ \t]*(?:[(+]?\d|[^\s@|]{0,64}@|https?://|www\.)',
-                               re.A | re.I)
-_EM_FIELD_VALUE = re.compile(r'[ \t]*:[ \t]*\S', re.A)
+_EM_CONTACT = (r'\+\d[\d \t().-]{5,}\d|\(?\d{3}\)?[ \t.-]?\d{3}[ \t.-]\d{4}|\d{3}[ \t.-]\d{4}'
+               r'|[^\s@|]{0,64}@|https?://|www\.')
+_EM_CONTACT_AFTER = re.compile(r'[ \t]*+(?:(?:[:#=]|no\.?|number)[ \t]*+)?(?:' + _EM_CONTACT + r')', re.A | re.I)
+_EM_CONTACT_VALUE = re.compile(r'[ \t]*+(?:' + _EM_CONTACT + r')', re.A | re.I)
+_EM_ADDRESS = re.compile(r'@|://|\bwww\.', re.A | re.I)
+_EM_TOKEN_END = re.compile(r'[ \t|]', re.A)
+_EM_ADDRESS_REACH = 64
 _EM_LABEL_REACH = 40  # how far after the word its field's colon may stand for the word to be in its label
+
+
+def _em_in_address(text: str, m: re.Match, ls: int, le: int) -> bool:
+    """Whether the modality word ``m`` stands inside an e-mail or web address (see above)."""
+    lo = max(ls, m.start() - _EM_ADDRESS_REACH)
+    lo = max(lo, text.rfind(' ', lo, m.start()) + 1, text.rfind('\t', lo, m.start()) + 1,
+             text.rfind('|', lo, m.start()) + 1)
+    hi = min(le, m.end() + _EM_ADDRESS_REACH)
+    end = _EM_TOKEN_END.search(text, m.end(), hi)
+    return _EM_ADDRESS.search(text, lo, end.start() if end else hi) is not None
 
 
 def _em_head_modality(text: str, head: list[tuple[int, int, bool]]) -> Optional[tuple[int, int]]:
@@ -202,19 +228,24 @@ def _em_head_modality(text: str, head: list[tuple[int, int, bool]]) -> Optional[
                 return ls, le
             continue
         pipes = None
+        labels = {}  # a field's colon -> whether its value is a contact (read once per field)
         for m in _EM_MODALITY.finditer(text, ls, le):
-            if _EM_CONTACT_AFTER.match(text, m.end(), le):
+            if _EM_CONTACT_AFTER.match(text, m.end(), le) or _em_in_address(text, m, ls, le):
                 continue  # "Phone 555-0100", "Practice phone: 555-0100", "E-mail: office@example.org"
             if pipes is None:
                 pipes = [p.start() for p in re.finditer(r'\|', text[ls:le])]
+                labels[-1] = pipes and _EM_CONTACT_VALUE.match(
+                    text, ls + pipes[0] + 1, ls + pipes[1] if len(pipes) > 1 else le) is not None
             at = bisect.bisect_left(pipes, m.start() - ls)
-            first_cell = at == 0
             cell_end = ls + pipes[at] if at < len(pipes) else le
             colon = text.find(':', m.end(), min(cell_end, m.end() + _EM_LABEL_REACH))
-            if colon >= 0 and _EM_FIELD_VALUE.match(text, colon, cell_end):
-                continue  # the word is its field's label ("Patient portal: enrolled")
-            if first_cell and at < len(pipes) and colon < 0:
-                continue  # the first cell of a row is its label ("Telephone | 555-0100")
+            if colon >= 0:
+                if colon not in labels:
+                    labels[colon] = _EM_CONTACT_VALUE.match(text, colon + 1, cell_end) is not None
+                if labels[colon]:
+                    continue  # the word labels a contact ("Phone (mobile): 555-0100")
+            elif at == 0 and labels[-1]:
+                continue  # the first cell of a row labels the contact in the next ("Telephone | 555-0100")
             return ls, le
     return None
 
