@@ -190,14 +190,15 @@ def _em_head_lines(text: str) -> list[tuple[int, int, bool]]:
 # names the encounter's modality and holds - a count or an ordinal ("Follow-up visit - telephone #2", "Follow-up visit
 # - telephone no. 2"), a field's answer ("Telephone visit: yes", "Telephone | yes", "Patient portal: enrolled"). The
 # draft before this read any digit after the word, and any field or first cell it labelled, as a contact, so "#2" made
-# the call's physician time ready. A number is a telephone number only in a telephone number's shape (3-3-4 or 3-4
-# digits with separators, or international after "+"), so a date ("telephone 2026-10-21") is none. A word inside an
+# the call's physician time ready. A number is a telephone number only in a telephone number's shape (3-3-4 digits,
+# after an optional "1", or 3-4 digits with separators, or international after "+"), so a date ("telephone
+# 2026-10-21") is none. A word inside an
 # address is the address's ("www.example.org/portal", "portal@example.org": its unbroken run of characters holds "@",
 # "://" or "www.", read within _EM_ADDRESS_REACH characters on either side). The blank runs around a label are read
 # possessively, and each field's value once per line: the draft's two blank runs around an optional label were
 # quadratic in a long blank run after the word (51 s for 40,000 blanks).
 _EM_MODALITY = re.compile(cues.EM_REMOTE.pattern + r'|\b(?:infus\w*|letters?)\b', re.A | re.I)
-_EM_CONTACT = (r'\+\d[\d \t().-]{5,}\d|\(?\d{3}\)?[ \t.-]?\d{3}[ \t.-]\d{4}|\d{3}[ \t.-]\d{4}'
+_EM_CONTACT = (r'\+\d[\d \t().-]{5,}\d|(?:1[ \t.-]?)?\(?\d{3}\)?[ \t.-]?\d{3}[ \t.-]\d{4}|\d{3}[ \t.-]\d{4}'
                r'|[^\s@|]{0,64}@|https?://|www\.')
 _EM_CONTACT_AFTER = re.compile(r'[ \t]*+(?:(?:[:#=]|no\.?|number)[ \t]*+)?(?:' + _EM_CONTACT + r')', re.A | re.I)
 _EM_CONTACT_VALUE = re.compile(r'[ \t]*+(?:' + _EM_CONTACT + r')', re.A | re.I)
