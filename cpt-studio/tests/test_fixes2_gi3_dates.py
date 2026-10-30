@@ -302,6 +302,21 @@ class VisitNoteTests(CaseAsserts, SimpleTestCase):
         self.assert_cases('s6-progress-sedation', 's6-consent-dateofproc', 's6-meds-visit', 's6-header-proc-date',
                           's6-ctrl-documented', 's6-ctrl-own-dos')
 
+    def test_a_visit_is_named_by_its_title_or_its_own_record(self):
+        # 51(c)(2) needs positive evidence that the note is a visit's: a visit title, or a section only a visit's own
+        # record carries ("Reason for visit", "Interval history", "Medical decision making"); a fragment naming no visit
+        # ("Findings" / "Colonoscopy on 2026-10-21.") reads as the installed reading read it (its date answers)
+        for record in ('Reason for visit\nFollow-up of iron deficiency anemia.\n',
+                       'Interval history:\nDoing well on mesalamine.\n',
+                       'Medical decision making: Low.\n'):
+            text = (BANNER + 'Synthetic GI clinic (fictional)\nPatient: Synthetic Patient (fictional)\n' + record
+                    + 'Assessment:\nStable.\nProcedure date: 2026-10-06\n')
+            with self.subTest(record=record.split('\n')[0]):
+                self.assertIsNone(sent(text))  # the installed revision sent it
+                self.assertEqual(answers(text, ('2026-10-06', STRANGER)), {'2026-10-06': 'held', STRANGER: 'held'})
+        fragment = BANNER + 'Findings\nColonoscopy on 2026-10-21.\n'
+        self.assertEqual(answers(fragment, ('2026-10-21', STRANGER)), {'2026-10-21': 'taken', STRANGER: 'held'})
+
     def test_a_documented_procedure_or_a_report_keeps_its_procedure_date(self):
         self.assertFalse(context._visit_note(cases()['s6-ctrl-documented']['text']))
         report = BANNER + 'Colonoscopy report\n' + PATIENT + 'Procedure date: 10/14/2026\nFindings: Normal colon.\n'

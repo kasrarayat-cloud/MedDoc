@@ -2442,10 +2442,10 @@ def _title_line(text: str) -> Optional[tuple[int, int]]:
 def _visit_note(text: str) -> bool:
     """gi3 fix round 2 (dates2-6; interpretation 51(c)(2): a procedure date is never an office or clinic note's own date):
     whether the document is an office or clinic visit's note that documents no procedure. A visit's note by positive
-    evidence only: one of its first TITLE_LINES non-empty lines is a visit title or names an office, clinic or
-    outpatient visit, as routing reads them (cues.EM_TITLE: "Gastroenterology clinic note", "Hepatology follow-up note";
-    cues.EM_VISIT: "GI office visit", "Progress note") - a fragment naming no visit ("Findings" / "Colonoscopy on
-    2026-10-21.") is no visit's note, and reads as the installed reading read it. And no procedure documented: its own
+    evidence only (_names_a_visit): a visit title in its first lines (cues.EM_TITLE: "Gastroenterology clinic note",
+    "Hepatology follow-up note"; cues.EM_VISIT: "GI office visit", "Progress note") or a section of the visit's own record
+    ("Reason for visit", "Interval history") - a fragment naming no visit ("Findings" / "Colonoscopy on 2026-10-21.") is
+    no visit's note, and reads as the installed reading read it. And no procedure documented: its own
     title names no procedure's report (sections._report_titled: "Colonoscopy report", "Flexible Sigmoidoscopy Note"),
     and no technique, findings or impression section the section reader knows states what was done (part 3's account
     cues: cues.PERFORMED_CLAUSE, cues.COURSE - "The colonoscope was advanced to the cecum"). "Clinic note" / ... /
@@ -2453,22 +2453,41 @@ def _visit_note(text: str) -> bool:
     details" over "Colonoscopy under monitored anesthesia care.") / "Procedure date: 11/04/2026" sent the planned
     colonoscopy's date - the heading the section reader knows had ended the plan, and the date read as the note's own.
     Read once per text."""
+    if not _names_a_visit(text):
+        return False
+    if _sections._report_titled(text):
+        return False
+    return not any(s.kind in _REPORT_BODY and s.label in HEADINGS
+                   and any(p.search(text, s.start, s.end) for p in _PART_ACCOUNT_CUES) for s in layout(text).sections)
+
+
+# gi3 fix round 2 (dates2-6; 51(f): a closed list may add positive evidence): the section headings the section reader
+# knows that only a visit's own record carries - its reason, history of the present illness or interval, review of
+# systems, decision making and time; a procedure's report writes its own as indications and a pre-procedure history.
+# Never "cc", which a letter's carbon-copy line writes too ("cc: Dr. Jordan B." over "Re: Colonoscopy 10/14/2026").
+_VISIT_RECORD = frozenset(('reason for visit', 'chief complaint', 'history of present illness', 'hpi',
+                           'interval history', 'review of systems', 'ros', 'medical decision making', 'mdm',
+                           'decision making', 'medical decision-making', 'visit time'))
+
+
+def _names_a_visit(text: str) -> bool:
+    """Positive evidence that the document is a visit's note (_visit_note): one of its first TITLE_LINES non-empty lines is
+    a visit title or names an office, clinic or outpatient visit, as routing reads them (cues.EM_TITLE, cues.EM_VISIT),
+    or a section the section reader knows records the visit itself (_VISIT_RECORD: "Reason for visit", "Interval
+    history")."""
+    if any(s.label in _VISIT_RECORD for s in layout(text).sections):
+        return True
     seen = 0
     for m in re.finditer(r'[^\n]+', text):  # the first TITLE_LINES non-empty lines, as the title reader reads them
         ls, le = _strip_span(text, m.start(), m.end())  # a CRLF line's carriage return is no part of its title
         if ls >= le:
             continue
         if cues.EM_TITLE.match(text, ls, le) or cues.EM_VISIT.search(text, ls, le):
-            break
+            return True
         seen += 1
         if seen == TITLE_LINES:
             return False
-    else:
-        return False
-    if _sections._report_titled(text):
-        return False
-    return not any(s.kind in _REPORT_BODY and s.label in HEADINGS
-                   and any(p.search(text, s.start, s.end) for p in _PART_ACCOUNT_CUES) for s in layout(text).sections)
+    return False
 
 
 def _qualified_by_its_words(text: str, start: int, end: int) -> bool:
