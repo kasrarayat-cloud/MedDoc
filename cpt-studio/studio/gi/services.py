@@ -726,14 +726,23 @@ LESION_WORD = (r'(?!(?:a|an|the|and|or|nor|but|with|without|in|of|at|on|from|to|
 # mass", "two 4 mm granular polyps"). A measure no lead opens may be a position, whatever word comes between it and
 # the locative ("at approximately 32 cm linear erosions", "at approx. 32 cm", "from 30 to 32 cm", "at 32 and 34 cm":
 # fix round 1's one-word lookbehind had read each as a 32 or 34 cm lesion, and the rationale named it); without a lead
-# only the closed descriptive words read, as the installed revision read them.
-LESION = _rx(r'(?P<lead>\b(?:an?|one|two|three|four|five|six|several|multiple|\d+|the|this|that|a\s+separate|another)\s+)?'
+# only the closed descriptive words read, as the installed revision read them. Nor does a measure that opens its own
+# phrase need one (the opens group: the start of a line or of a list item, or right after a table cell's divider, a
+# tab, a colon, a semicolon, a bracket or a check box, a space or tab apart at most): no word stands before it that
+# could make it a position - "L3 | Mid jejunum | 8 mm smooth submucosal-appearing nodule | Cold forceps biopsies x 4"
+# (gi3 fix round 2, the gate's detail reading: without it the nodule went unrecorded and its biopsy read as one of the
+# 3 mm angioectasia the row above names).
+PHRASE_MARK = r'[|:;(\[\]\u2610-\u2612\u2713\u2714\u2717\u2718]'
+LESION = _rx(r'(?:(?P<lead>\b(?:an?|one|two|three|four|five|six|several|multiple|\d+|the|this|that|a\s+separate|another)\s+)'
+             r'|(?P<opens>(?<![^\n])|(?<=\t)|(?<=' + PHRASE_MARK + r')|(?<=' + PHRASE_MARK + r'[ \t])|(?<=\n[ \t])'
+             r'|(?<=[-*\u2022][ \t])(?<![^\n][-*\u2022][ \t])|(?<=\d[.)][ \t])(?<![^\n]\d[.)][ \t])'
+             r'|(?<=\d\d[.)][ \t])(?<![^\n]\d\d[.)][ \t])))?'
              r'(?P<sep>separate\s+)?(?P<size>(?<![\w.])(?<!\bat\s)'
              r'(?:\d+(?:\.\d+)?\s*(?:x\s*\d+(?:\.\d+)?\s*)?(?:mm|cm)|\d+[- ](?:mm|cm))'
              r'(?:\s+and\s+\d+(?:\.\d+)?\s*(?:mm|cm))?\s+)?(?P<morph>(?:(?:sessile|pedunculated|flat|depressed|'
              r'raised|pale|nonbleeding|non-bleeding|bleeding|hypoechoic|irregular|ulcerated|clean-based|semi-?pedunculated|'
              r'serrated|small|large|diminutive|lateral\s+spreading|laterally\s+spreading|polypoid|submucosal|'
-             r'subepithelial|carpet-?like|(?(lead)(?(size)' + LESION_WORD + r'|(?!))|(?!)))[\s,]+){0,4})'
+             r'subepithelial|carpet-?like|(?(lead)(?(size)' + LESION_WORD + r'|(?!))|(?(opens)(?(size)' + LESION_WORD + r'|(?!))|(?!))))[\s,]+){0,4})'
              r'(?P<noun>\b' + LESION_NOUN + r')\b')
 # gi3 fix round 1 (INV-8): what joins an act to the lesion right after it that is its own object - a preposition of the
 # act's object, or nothing ("polypectomy of a 6 mm polyp", "biopsied the polyp"). gi3 fix round 2 (INV2-12): with the
@@ -1566,7 +1575,8 @@ NAMED_BIOPSY = re.compile(r'\bbiops|\bforceps\b', re.I)
 # - a negation doubts the rows only where it governs the line's own thing: "not" and "never" anywhere (the line's own
 #   predicate: "Procedures not performed", "Colonoscopy (not done)"); "no", "none" and "without" govern the noun after
 #   them, so only right before the service or record the line names ("No colonoscopy"), as its whole answer after it
-#   ("Colonoscopy: none", "Colonoscopy (no)") or alone on the line - never "Procedure summary (no complications)" or
+#   ("Colonoscopy: none", "Colonoscopy (no)"), alone on the line, or before a predicate ("Colonoscopy (none
+#   performed)", "No biopsies done") - never "Procedure summary (no complications)" or
 #   "Colonoscopy (no sedation)", which fix round 1 had read as doubt and held today's biopsies on (the installed
 #   revision read them ready);
 # - a word of a later time naming the service as the document's own report title names it restates that title, today's
@@ -1577,7 +1587,9 @@ NAMED_BIOPSY = re.compile(r'\bbiops|\bforceps\b', re.I)
 TABLE_DOUBT = _rx(r'\?|\b(?:' + _DOUBT_WORDS + r')\b|' + _DOUBT_SPAN)
 TABLE_DENIED_NAMED = _rx(r'\b(?:' + _DENIAL_NOUN_WORDS + r')\b(?:[ \t]+[\w-]+){0,2}?[ \t]+' + _NAMED
                          + r'|' + _NAMED + r'[ \t,:(\-\u2013]+(?:no|none)[ \t]*(?:[).:;]|$)'
-                         + r'|^[\s\-*#(]*(?:no|none)[ \t]*[.:)]?[ \t]*$')
+                         + r'|^[\s\-*#(]*(?:no|none)[ \t]*[.:)]?[ \t]*$'
+                         # a predicate after it is the line's own ("Colonoscopy (none performed)", "No biopsies done")
+                         + r'|\b(?:no|none)\b(?:[ \t]+[\w-]+)?[ \t]+(?:(?:was|were)[ \t]+)?' + DENIED_PARTICIPLES + r'\b')
 _DASHES = re.compile('[-\u2013\u2014]+')
 TABLE_HEADING_LINES = 3  # non-blank lines read above a table's header for its heading (bounded work per table)
 
@@ -1682,6 +1694,9 @@ def _table_heading_time(text: str, table: _sections.Table, line_starts: Sequence
 # holds the row's acts. A date under a column whose header names another occurrence or record ("Last prior
 # examination | 2019, normal", "Next surveillance | 2031") is that occurrence's: it cannot date the row, so it holds the
 # row's acts too, never dates them (fix round 1 had dated today's row by it and excluded its biopsies as historical).
+# Only the label cell and a column that times the row (TIME_COLUMN, positive evidence: "Date", "When", "Year", "Timing",
+# "Due") date it; a date in any other column ("Pathology expected | 2026-10-23") is that column's and holds the row.
+TIME_COLUMN = _rx(r'\b(?:dates?|dated|when|years?|months?|time|timing|due|interval)\b')
 ROW_TIME_PHRASE = _rx(_DOUBT_SPAN + r'|' + EARLIER_SPAN.pattern
                       + r'|\b\d{1,3}[ \t]+(?:years?|months?|weeks?|days?)[ \t]+(?:ago|from[ \t]+now|later)\b'
                       r'|\b(?:next|last|coming)[ \t]+(?:week|month|year|visit|session)\b')
@@ -1696,21 +1711,27 @@ def _other_occasion_column(text: str, cs: int, ce: int, service_date: Optional[d
 
 
 def _row_time(text: str, cells, label: int, service_date: Optional[date], dates, date_starts,
-              answers: frozenset = frozenset(), others: frozenset = frozenset(), titles: Sequence[str] = ()) -> str:
+              answers: frozenset = frozenset(), others: frozenset = frozenset(), titles: Sequence[str] = (),
+              timed: Optional[frozenset] = None) -> str:
     """The status of another occurrence a table row gives its answers, '' for today's: a date of another day, month or
     year ('historical' before the service date, 'planned' after it), or one that cannot be placed ('uncertain': no
     service date, or a month or year of the service date's own, or a date under a column of another occasion,
     ``others``); else the time its label cell names its service with (_table_time: "Previous upper endoscopy", "Next
     colonoscopy"); else 'uncertain' for a time another cell states (ROW_TIME_PHRASE, or a short cell's plan or history
-    word) outside the acts' answer cells (``answers``) and the columns of another occasion."""
+    word) outside the acts' answer cells (``answers``) and the columns of another occasion. ``timed``: the label column
+    and the columns that time the row (TIME_COLUMN); None reads every column's date as the row's (the default)."""
+    if timed is None:
+        timed = frozenset(range(len(cells)))
     for j, (cs, ce) in enumerate(cells):
         for d in _dates_in(dates, cs, ce):
-            if j in others or service_date is None \
-                    or d.precision != 'day' and gi_context.compare_to_service(d, service_date) == 0:
-                return 'uncertain'
+            if service_date is None or j in others:
+                return 'uncertain'  # no day to place it by, or another occurrence's date
             rel = gi_context.compare_to_service(d, service_date)
-            if rel:
-                return 'historical' if rel < 0 else 'planned'
+            if not rel and d.precision == 'day':
+                continue  # the service date itself: today's
+            if not rel or j not in timed:
+                return 'uncertain'  # a month or year of its own, or a date of a column that does not time the row
+            return 'historical' if rel < 0 else 'planned'
     if label < len(cells):
         when = TIME_STATUS.get(_table_time(text, *_trimmed(text, cells[label]), service_date, dates, date_starts,
                                            titles), '')
@@ -3349,7 +3370,10 @@ def _technique(text: str, start: int, end: int, near: Optional[int] = None, kind
     return best
 
 
-INSTRUMENT_LEAD = _rx(r'\b(?:with|using|by|via)\s+(?:(?:a|an|the)\s+)?(?:[\w-]+\s+){0,2}$')  # "with a 22-gauge ..."
+# gi3 fix round 2 (INV2-8): with the instrument's own measure as well ("with a 15 mm stiff snare", "with a 54 Fr
+# Maloney bougie": the gate's detail reading, where a piecemeal resection had lost its own snare).
+INSTRUMENT_LEAD = _rx(r'\b(?:with|using|by|via)\s+(?:(?:a|an|the)\s+)?(?:\d+(?:\.\d+)?\s*(?:mm|cm|fr|french)\s+)?'
+                      r'(?:[\w-]+\s+){0,2}$')  # "with a 22-gauge ..."
 
 
 def _in_another_mention(text: str, mentions: Sequence[tuple[str, int, int]], starts: Sequence[int], a: int, b: int,
@@ -4681,10 +4705,11 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             answers = frozenset(j for j, _, _ in columns)
             others = frozenset(j for j, (cs, ce) in enumerate(header_cells) if j != label and _other_occasion_column(
                 text, cs, ce, service_date, dates, date_starts))
+            timed = frozenset(j for j, (cs, ce) in enumerate(header_cells) if j == label or TIME_COLUMN.search(text, cs, ce))
             for cells in table.rows:
                 rs, rend = _trimmed(text, (cells[0][0], cells[-1][1]))
                 row_time = table_time or _row_time(text, cells, label, service_date, dates, date_starts,
-                                                   answers=answers, others=others - answers, titles=titles)
+                                                   answers=answers, others=others - answers, titles=titles, timed=timed)
                 cell_acts = [_cell_acts(text, *_trimmed(text, cell)) for cell in cells]
                 row_denied = frozenset().union(*(denied for _, denied in cell_acts))  # (INV2-2): denied in any cell
                 named_row = {f for f, _, pattern in SERVICES if pattern.search(text, *cells[label])} & set(drafts)

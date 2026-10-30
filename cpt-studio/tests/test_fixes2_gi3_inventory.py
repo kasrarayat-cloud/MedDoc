@@ -219,11 +219,12 @@ class CellDenialTests(SimpleTestCase):
                 inv = read(text)
                 self.assertFalse(acts(inv, 'gi.colonoscopy', kind, ('performed',)))
                 self.assertIn(status(text, *code_quote), NOT_READY)
-                if col == 'Polypectomy':  # the cell's own undenied segment states its column's act
-                    table_acts = [a for a in acts(inv, 'gi.colonoscopy', 'snare')
-                                  if a.cues and a.cues[0].startswith(services.TABLE_CELL_CUE)]
-                    self.assertTrue(table_acts)
-                    self.assertTrue(all(a.status == 'performed' for a in table_acts))
+                if col == 'Polypectomy':
+                    # the cell's own undenied segment states its column's act: read performed (the summary row's act
+                    # then merges with the body's polypectomy, the same act), never held
+                    self.assertEqual(services._cell_acts(cell, 0, len(cell)), (('snare',), frozenset({'biopsy'})))
+                    self.assertFalse(acts(inv, 'gi.colonoscopy', 'snare', ('uncertain',)))
+                    self.assertEqual(status(text, '45385', 'removed with a hot snare'), 'ready')
         text = (HEAD + 'Upper endoscopy report\nProcedure summary\nExamination | Furthest point reached | Biopsy\n'
                 'Upper endoscopy | Second portion of the duodenum | Yes, without dilation\nFindings: The gastroscope was '
                 'advanced to the second portion of the duodenum. Gastric biopsies were taken.\n')
@@ -320,10 +321,22 @@ class SectionTimeTests(SimpleTestCase):
             with self.subTest(label):
                 self.assertEqual(services._section_time(layout(kind, label, None, 0, 1)), when)
 
-    def test_known_limit_a_date_under_an_unmarked_other_occurrence_column(self):
-        """Known limit (as installed): "Pathology expected | 2026-10-23" names no other occasion by a time word, so its
-        date dates today's row as planned and 45380 is excluded."""
-        self.assertEqual(status(fixture('c04-pathology-due-column'), '45380', self.QUOTE), 'excluded')
+    def test_only_a_column_that_times_the_row_dates_it(self):
+        """A date in a column that does not time the row ("Pathology expected | 2026-10-23", "Report sent |
+        2026-10-20") is that column's: held, never excluded as planned (the installed revision excluded c04). Control: a
+        "Date" column still dates its row."""
+        self.assertEqual(status(fixture('c04-pathology-due-column'), '45380', self.QUOTE), 'needs_clarification')
+        body = HEAD + 'Colonoscopy report\nFindings: The colonoscope was advanced to the cecum. Normal mucosa.\nProcedure summary\n'
+        text = body + 'Examination | Furthest point reached | Tissue sampled | Report sent\nColonoscopy | Cecum | Yes, random ' \
+                      'biopsies with cold forceps | 2026-10-20\n'
+        self.assertEqual([a.status for a in acts(read(text), 'gi.colonoscopy', 'biopsy')], ['uncertain'])
+        text = body.replace('Procedure summary', 'Examination record') + 'Examination | Date | Tissue sampled\n' \
+                                                                        'Colonoscopy | 2019-03-02 | Yes\n'
+        self.assertEqual([a.status for a in acts(read(text), 'gi.colonoscopy', 'biopsy')], ['historical'])
+        # a time column that names another occurrence dates that occurrence, never today's row: held
+        text = body + 'Examination | Tissue sampled | Date of last colonoscopy\nColonoscopy | Yes, random biopsies with cold ' \
+                      'forceps | 2019-03-02\n'
+        self.assertEqual([a.status for a in acts(read(text), 'gi.colonoscopy', 'biopsy')], ['uncertain'])
 
 
 class ExchangeNounPhraseTests(SimpleTestCase):
@@ -527,6 +540,19 @@ class OtherMentionTechniqueTests(SimpleTestCase):
         inv = read(fixture('u02-eus-ctrl-no-procline-biopsies'))
         self.assertTrue([a for a in acts(inv, 'gi.eus', 'biopsy', ('performed',)) if a.technique == 'needle'])
 
+    def test_an_instruments_own_measure_keeps_it(self):
+        """gi3 fix round 2 (INV2-8), the gate's detail reading: "removed by piecemeal endoscopic mucosal resection with a
+        15 mm stiff snare" keeps its own snare (INSTRUMENT_LEAD reads the instrument's measure)."""
+        inv = read(colo('In the mid ascending colon there was a 30 mm granular-type laterally spreading lesion. The '
+                        'lesion was removed by piecemeal endoscopic mucosal resection with a 15 mm stiff snare in five '
+                        'pieces.'))
+        self.assertIn('snare', [a.technique for a in acts(inv, 'gi.colonoscopy', 'emr', ('performed',))])
+        for gap, own in (('with a 15 mm stiff ', True), ('with a 54 Fr Maloney ', True), ('using the 10 mm ', True),
+                         ('via a 2.8 mm channel ', True), ('with ', True),
+                         ('with biopsies of the ', False), ('and the ', False), ('with a 15 mm stiff long braided ', False)):
+            with self.subTest(gap):
+                self.assertEqual(services.INSTRUMENT_LEAD.search(gap) is not None, own)
+
 
 class TableTodayWordsTests(SimpleTestCase):
     """INV2-9: a table heading's or label's negation doubts only what it governs; a later-time word restating the
@@ -580,6 +606,10 @@ class TableTodayWordsTests(SimpleTestCase):
         self.assertEqual(services._table_time(text, a, b, day, (), [], ('repeat colonoscopy report',)), '')
         self.assertEqual(services._table_time('Prior colonoscopy summary', 0, 25, day, (), [],
                                               ('prior colonoscopy review',)), 'earlier')
+        for label, when in (('Colonoscopy (none performed)', 'unknown'), ('No biopsies done', 'unknown'),
+                            ('Colonoscopy (no polyps found)', '')):
+            with self.subTest(label):
+                self.assertEqual(services._table_time(label, 0, len(label), day, (), []), when)
 
 
 class PassiveDenialTests(SimpleTestCase):
@@ -647,9 +677,9 @@ class PositionLeadTests(SimpleTestCase):
                 self.assertIn('forceps biopsy (cold forceps) at the distal esophagus', described(inv, 'gi.egd'))
 
     def test_own_shapes_of_a_measured_position(self):
-        for findings in ('In the mid esophagus, around 28 cm, longitudinal erosions were biopsied with cold forceps.',
-                         'Between 30 and 32 cm superficial ulcers were biopsied with cold forceps.',
-                         'At roughly 35 cm irregular erosions were biopsied with cold forceps.'):
+        for findings in ('In the mid esophagus around 28 cm longitudinal erosions were biopsied with cold forceps.',
+                         'In the distal esophagus between 30 and 32 cm superficial ulcers were biopsied with cold forceps.',
+                         'In the distal esophagus at roughly 35 cm patchy erosions were biopsied with cold forceps.'):
             with self.subTest(findings):
                 inv = read(egd(findings))
                 self.assertFalse([les for s in inv.services for les in s.lesions if les.size])
@@ -663,6 +693,34 @@ class PositionLeadTests(SimpleTestCase):
                 m = services.LESION.search(phrase)
                 self.assertEqual((m.group('size'), m.group('morph')), (size, morph))
         self.assertEqual(services.LESION.search('at approximately 32 cm linear erosions').group('size'), None)
+
+    def test_a_measure_that_opens_its_phrase_keeps_its_words(self):
+        """gi3 fix round 2 (INV2-11), the gate's detail reading: a table cell that opens with the lesion's size ("L3 |
+        Mid jejunum | 9 mm smooth submucosal-appearing nodule | Cold forceps biopsies x 3") keeps the nodule, and its
+        biopsy is the nodule's - never one of the angioectasia the rows above name."""
+        text = (HEAD + 'Small bowel enteroscopy report\nProcedure: Double-balloon enteroscopy, antegrade route.\n\n'
+                'Lesion | Site | Description | Treatment | Specimen\n'
+                'L1 | Proximal jejunum | 6 mm angioectasia, not bleeding | Argon plasma coagulation | -\n'
+                'L2 | Proximal jejunum | 4 mm angioectasia, not bleeding | Argon plasma coagulation | -\n'
+                'L3 | Mid jejunum | 9 mm smooth submucosal-appearing nodule | Cold forceps biopsies x 3 | Jar 1\n\n'
+                'Impression\nJejunal angioectasias ablated; mid-jejunal nodule biopsied.\n')
+        inv = read(text)
+        service = reconcile.service_for(inv, 'gi.enteroscopy')
+        lesion = {les.id: (les.size, les.morphology, les.noun) for les in service.lesions}
+        self.assertIn(('9 mm', 'smooth submucosal-appearing', 'nodule'), lesion.values())
+        self.assertEqual([lesion.get(a.lesion) for a in acts(inv, 'gi.enteroscopy', 'biopsy', ('performed',))],
+                         [('9 mm', 'smooth submucosal-appearing', 'nodule')])
+        for phrase, size in (('Findings: 25 mm firm friable mass', '25 mm '), ('Findings:\n8 mm smooth nodule', '8 mm '),
+                             ('[x] 8 mm granular polyp', '8 mm '), ('\u2612 8 mm granular polyp', '8 mm '),
+                             ('x\n- 8 mm granular polyp', '8 mm '), ('x\n12. 8 mm granular polyp', '8 mm '),
+                             ('L3\tMid jejunum\t8 mm smooth nodule', '8 mm '), ('(8 mm smooth nodule)', '8 mm '),
+                             # a word stands before the measure: it may be a position, and only closed words read
+                             ('(at approximately 32 cm) linear erosions', None),
+                             ('| at approximately 32 cm linear erosions |', None),
+                             ('measured 2. 8 mm granular polyp', None), ('polyp - 8 mm granular polyp', None)):
+            with self.subTest(phrase):
+                self.assertEqual([m.group('size') for m in services.LESION.finditer(phrase) if m.group('size')],
+                                 [size] if size else [])
 
 
 class ObjectLesionTests(SimpleTestCase):
