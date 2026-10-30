@@ -655,8 +655,12 @@ class TheOfferRefusesAContextReadUnderEarlierRulesTests(LensSteps):
     nothing for such a context, so the offer refuses it too, with what reads it again under the current rules."""
 
     def bump(self):
-        self.enterContext(mock.patch.object(jobs, 'CONTEXT_VERSION', 'gi-context@3'))
-        self.enterContext(mock.patch.object(jobs, 'EARLIER_CONTEXT_VERSIONS', ('gi-context@1', 'gi-context@2')))
+        # the next install's bump, whatever the current label is (the third round itself bumped gi-context@2 to @3)
+        current = jobs.CONTEXT_VERSION
+        self.next_version = f'gi-context@{int(current.rsplit("@", 1)[1]) + 1}'
+        self.enterContext(mock.patch.object(jobs, 'CONTEXT_VERSION', self.next_version))
+        self.enterContext(mock.patch.object(jobs, 'EARLIER_CONTEXT_VERSIONS',
+                                            jobs.EARLIER_CONTEXT_VERSIONS + (current,)))
 
     def assessed(self):
         self.provider.outcomes = ['succeeded']
@@ -703,7 +707,7 @@ class TheOfferRefusesAContextReadUnderEarlierRulesTests(LensSteps):
         self.assert_refused_with_the_remake(encounter_id)
         self.context(encounter_id, billing_context='')  # an API save of an unchanged value: remade, nothing sent
         self.assertEqual(len(self.provider.log), 1)
-        self.assertEqual(self.encounter(encounter_id).current_context.version, 'gi-context@3')
+        self.assertEqual(self.encounter(encounter_id).current_context.version, self.next_version)
         self.assert_one_ask_sends_once(encounter_id, 1)
 
     def test_the_context_dialogs_save_of_a_change_reads_it_again_too(self):
@@ -713,7 +717,7 @@ class TheOfferRefusesAContextReadUnderEarlierRulesTests(LensSteps):
         self.assert_refused_with_the_remake(encounter_id)
         self.context(encounter_id, service_date='', setting='', billing_context='professional')
         self.assertEqual(len(self.provider.log), 1)
-        self.assertEqual(self.encounter(encounter_id).current_context.version, 'gi-context@3')
+        self.assertEqual(self.encounter(encounter_id).current_context.version, self.next_version)
         self.assert_one_ask_sends_once(encounter_id, 1)
 
     def test_an_ask_queued_before_the_bump_is_skipped_and_the_offer_says_why(self):

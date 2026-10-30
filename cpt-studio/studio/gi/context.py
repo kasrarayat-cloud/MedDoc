@@ -1683,15 +1683,81 @@ def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int
     return start, _field_end(text, start, row[1]), False
 
 
+# GI round 3, the narrow release (the owner's decision of 2026-10-30; h2-08). The installed reading skips every date
+# label a plan or history section holds (rule A), so h2-08's charge block - "Charge information" / "Date of service:
+# 2026-10-06" at the end of its "Assessment and plan" - was dropped, and the header's contradicted 2026-10-05 was sent.
+# Now the encounter's own date-of-service label (date of service, DOS, service or encounter date; never a visit or
+# procedure date, which a plan may book) in a block that a charge or billing heading of this closed class heads speaks
+# against the note's own labelled date: where they differ the date is a conflict, asked, with no date sent. It speaks
+# only beside an own date that differs, so nothing is ever newly sent: with no own date it stays dropped, as installed.
+CHARGE_HEADINGS = frozenset((
+    'charge', 'charges', 'charge information', 'charge info', 'charge details', 'charge capture', 'charge entry',
+    'charge summary', 'charges and coding', 'coding and charges', 'billing', 'billing information', 'billing info',
+    'billing details', 'billing summary', 'billing and coding', 'coding and billing', 'billing codes', 'coding',
+    'coding information', 'coding summary', 'superbill', 'encounter charges', 'visit charges', 'professional charges',
+    'professional billing', 'encounter billing'))
+_CHARGE_DATE_LABEL = cues.rx(r'date\b[^\n]{0,24}?\bof[ \t]++(?:service|encounter)\b|DOS\b|(?:service|encounter)[ \t]++date\b')
+_HEADING_MARKS = re.compile(r'\A[\s#*>•\-–—\d.)(]*+')
+_HEADING_TAIL = re.compile(r'[\s:.\-–—]*+\Z')
+CHARGE_REACH_LINES = 6  # the lines above a label read for its block's heading (a charge block is short)
+CHARGE_HEADING_REACH = 120  # a longer line is never a heading (each line read is bounded)
+
+
+def _heading_words(line: str) -> str:
+    """A heading line's words, lower case, without its numbering, marks or closing colon ("5. Charge information:")."""
+    words = _HEADING_MARKS.sub('', line)
+    words = _HEADING_TAIL.sub('', words).replace('&', ' and ')
+    return ' '.join(words.lower().split())
+
+
+def _heading_like(line: str) -> bool:
+    """A short line that may head a block: no field colon inside it and no sentence's full stop at its end."""
+    stripped = line.strip()
+    head = stripped[:-1] if stripped.endswith(':') else stripped
+    return 2 <= len(stripped) <= 60 and ':' not in head and not stripped.endswith('.') and any(
+        ch.isalpha() for ch in head)
+
+
+def _in_charge_block(text: str, rows: '_Rows', label_start: int) -> bool:
+    """Whether a charge or billing heading of CHARGE_HEADINGS heads the block the label at ``label_start`` stands in:
+    joined to it on its line ("Charge information: Date of service: ..."), or the nearest heading above it within
+    CHARGE_REACH_LINES lines and no blank line. Any other heading-like line above it heads its block instead."""
+    ls, _ = rows.line(label_start)
+    prefix = text[ls:label_start]
+    if len(prefix) > CHARGE_HEADING_REACH:
+        return False
+    words = _heading_words(prefix)
+    if words:
+        return words in CHARGE_HEADINGS
+    pos = ls
+    for _ in range(CHARGE_REACH_LINES):
+        if pos == 0:
+            return False
+        ps, pe = rows.line(pos - 1)
+        line = text[ps:pe]
+        if not line.strip():
+            return False  # a blank line ends the block
+        if pe - ps <= CHARGE_HEADING_REACH:
+            if _heading_words(line) in CHARGE_HEADINGS:
+                return True
+            if _heading_like(line):
+                return False  # another heading heads this block
+        pos = ps
+    return False
+
+
 def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
     """Every date candidate outside a plan or history section (refutation round 2, rule A): the labelled dates of
     service, whatever their reading or form, and the dated titles near the top (_title_candidates)."""
     found = []
     read = set()
     rows = _Rows(text)
+    charged = []  # GI round 3, the narrow release: a charge block's own date of service (CHARGE_HEADINGS)
     for m in SERVICE_DATE.finditer(text):
         read.add(m.start())
         if lay.section_at(m.start()).kind in NOT_CURRENT_SECTIONS:
+            if _CHARGE_DATE_LABEL.match(m.group('label')) and _in_charge_block(text, rows, m.start('label')):
+                charged.append(m)
             continue
         joined = _joined(text, rows, m.start('label'), m.end('label'))
         if joined is not None:  # P2DN's fix round, issue 3: a birth label joined to the label
@@ -1752,6 +1818,21 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
         else:
             span, extra = _span(text, start, value_end), ()
         found.append(_Candidate(span, None, 'label', _READING[kind], 'unread', extra))
+    if charged:
+        # GI round 3, the narrow release: beside the note's own labelled date, a charge block's differing date of service
+        # speaks against it (a conflict, asked); with no own date it stays dropped, as installed, so nothing is newly sent
+        own = {c.value for c in found if c.source == 'label' and c.reading == 'own' and c.form == 'read' and c.alone
+               and c.installed and c.value}
+        for m in charged if own else ():
+            value = date_from_match(m)
+            if value is None or value.isoformat() in own:
+                continue
+            # read as any label is: one its own words place in another occurrence ("Next date of service") reads
+            # 'aside', which never speaks (_date_fact)
+            kind, start = _labelled_kind(text, m.start('label'), m.end('label'), m.start('date'), m.end(), value)
+            found.append(_Candidate(_span(text, start, m.end()), value.isoformat(), 'label', _READING[kind], 'read',
+                                    alone=_alone_in_field(text, m.end(), rows.line(m.start())[1]),
+                                    installed=_installed_form(text, m)))
     return _own_dates_in_doubt(text, lay, _after_another_header(text, lay, tuple(found) + _title_candidates(text, lay)))
 
 

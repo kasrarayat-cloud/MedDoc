@@ -25,6 +25,8 @@ from .gi import context as gi_context
 from .gi import detect as gi_detect
 from .ingest import Limits, extract_document, extract_paste
 from .providers import get_provider, normalizer_for
+from .providers.corti import CortiProvider, build_coding_request
+from .providers.replay import ReplayProvider
 from .providers.base import ProviderUnavailable
 from .reference.store import prefetched_lookup, selected_codes
 from .storage import read_original
@@ -34,10 +36,15 @@ from .validation.engine import assess as run_assessment
 
 log = logging.getLogger(__name__)
 
-CONTEXT_VERSION = 'gi-context@2'
-# Context versions recorded under other merge rules (gi-context@1, the installed revision 057a7d39, kept a member's value
-# as plain metadata): a stage remakes such a context before it sends or assesses anything (_remade_context).
-EARLIER_CONTEXT_VERSIONS = ('gi-context@1',)
+CONTEXT_VERSION = 'gi-context@3'
+# Context versions recorded under other rules: a stage remakes such a context before it sends or assesses anything
+# (_remade_context), and no second review is offered or sent on one (_second_review_bounds, stage_review2).
+# - gi-context@1 (the installed revision 057a7d39) kept a member's value as plain metadata;
+# - gi-context@2 (2b82889f and 90377ec6f413) read a date label a plan or history section held as dropped, so h2-08's
+#   recorded context says 2026-10-05 where the third round's binding reads a conflict with its charge block's
+#   2026-10-06. Kept current, it was re-sent by a predict queued or stopped at the install, a reconciliation or a second
+#   review, and assessed as documented (refutation of the integrated third round, STATE-1 and STATE-2).
+EARLIER_CONTEXT_VERSIONS = ('gi-context@1', 'gi-context@2')
 MEMBER_DATE_CONFLICT_MESSAGE = ('Nothing was sent: the service date entered as encounter metadata differs from the '
                                 'documented one. Correct or clear the metadata (or add an addendum), and the request is '
                                 'made for the agreed date.')
@@ -447,9 +454,10 @@ def _remade_context(job):
     else:
         # Refutation r1, migrate-5 (ec5): this stage never sends - an assess the earlier revision queued or a member
         # resumed, or the stale-stage sweep's settlement of its predict - so neither does the predict it queues for the
-        # remade context. That predict runs as any other (a disabled provider, a request that cannot be built, a
-        # retained answer, an unknown outcome to reconcile: each recorded and shown as itself) and stops only where it
-        # would send, for a member's Resume (stage_predict; ec5 skeptic: a stop recorded here for every request the
+        # remade context. That predict runs as any other (a request that cannot be built, a retained answer, an
+        # unknown outcome to reconcile: each recorded and shown as itself) and stops only where it would send - or, with
+        # sending disabled, where it would assess with no answer (gi3 fix round 2, STATE2-1) - for a member's Resume
+        # (stage_predict; ec5 skeptic: a stop recorded here for every request the
         # run in use does not answer said "differs from the one sent before. Resume to send it." where nothing had
         # been sent, where nothing could be built, and while an unknown outcome blocked every send).
         _queue_predict(encounter, revision, fresh, key=_upgrade_predict_key(fresh), requested_by=job.requested_by)
@@ -461,6 +469,9 @@ REMADE_REQUEST_MESSAGE = ('Nothing was sent: after an upgrade this document was 
 REMADE_UNANSWERED_MESSAGE = ('Nothing was sent: after an upgrade this document was read again under the current '
                              'rules, and no provider answer is recorded for the request they make for it. Resume to '
                              'send it.')
+REMADE_DISABLED_MESSAGE = ('Nothing was sent: after an upgrade this document was read again under the current rules, '
+                           'and sending is disabled. The recorded assessment and its decisions are kept; once sending '
+                           'is enabled, Resume to send the request the current rules make.')
 
 
 def _upgrade_predict_key(context):
@@ -499,6 +510,13 @@ def stage_predict(job):
         enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=run,
                 key=f'{assess_key}:{run.pk if run else "no-provider"}', requested_by=job.requested_by)
 
+    if provider is None and job.idempotency_key == _upgrade_predict_key(context) and _answered_in_use(revision):
+        # gi3 fix round 2 (STATE2-1): with sending disabled, the predict an upgrade's remake queued never replaces a
+        # recorded answer with none - that dropped every proposal of a reviewed encounter and invalidated its decisions.
+        # It stops as it stops where it would send, and the recorded assessment and its decisions stay until a member's
+        # Resume. Where no answer is recorded (the installed pair ran with sending disabled too) it runs as before and
+        # nothing is stopped (ec5 skeptic:1): assessing with no answer loses nothing there.
+        raise StageCancelled(REMADE_DISABLED_MESSAGE)
     if provider is None:
         next_assess(None)
         return {'provider': 'disabled'}
@@ -1238,13 +1256,40 @@ def _run_answers(run, revision, context):
     if run is None or not run.request_sha256:
         return False
     try:
-        provider = get_provider()
-        if provider is None or (provider.name, provider.adapter_version) != (run.provider, run.adapter_version):
-            return False
-        request = provider.build_request(revision.text, context_service_date(context))
+        request = _request_for(run, revision, context)
     except ProviderUnavailable:
         return False
-    return request.canonical_sha256 == run.request_sha256
+    return request is not None and request.canonical_sha256 == run.request_sha256
+
+
+# gi3 fix round 2 (STATE2-1): an adapter's request is a pure function of the text and the date
+# (providers.corti.build_coding_request), so with sending disabled - an install's or an incident's provider-mode switch -
+# the request a recorded run answers is still known. A context remade or saved with its request unchanged is then
+# re-assessed with the recorded answer, never with none: with none, every proposal of a reviewed encounter was dropped
+# and the reviewer's decisions on it invalidated ("99214 is no longer proposed").
+_BUILT_ADAPTERS = frozenset(((CortiProvider.name, CortiProvider.adapter_version),
+                             (ReplayProvider.name, ReplayProvider.adapter_version)))
+
+
+def _request_for(run, revision, context):
+    """The request ``run``'s provider and adapter would build for ``context`` now: the configured provider's, or, with
+    sending disabled, the adapter's own builder for a provider and adapter this revision builds (_BUILT_ADAPTERS). None
+    when neither can build it. Nothing is sent either way."""
+    provider = get_provider()
+    if provider is not None:
+        if (provider.name, provider.adapter_version) != (run.provider, run.adapter_version):
+            return None
+        return provider.build_request(revision.text, context_service_date(context))
+    if (run.provider, run.adapter_version) not in _BUILT_ADAPTERS:
+        return None
+    return build_coding_request(run.provider, run.adapter_version, revision.text, context_service_date(context),
+                                settings.PROVIDER_MAX_REQUEST_BYTES)
+
+
+def _answered_in_use(revision):
+    """gi3 fix round 2 (STATE2-1): whether the run in use (_run_in_use) is a recorded answer - a succeeded run."""
+    run = _run_in_use(revision)
+    return run is not None and run.state == models.ProviderRun.SUCCEEDED
 
 
 def _run_in_use(revision):
