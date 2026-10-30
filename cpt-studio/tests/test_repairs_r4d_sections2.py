@@ -794,7 +794,13 @@ class S2R2Regression3ActOrFindingAtTheLandmarkTests(unittest.TestCase):
             text = r3r2_note(R3R2_CELLS[0], line)
             with self.subTest(line=line, engine=True):
                 proposal = run_engine(text, [('45378', 'Procedure: Colonoscopy')])['45378']
-                self.assertTrue(ready(proposal), (proposal.bucket, proposal.status, clarified(proposal)))
+                if line == 'The cecum was not clipped after polypectomy.':
+                    # gi3 fix round 1 (INV-6): "after polypectomy" names the time of the clips' denial and presupposes a
+                    # polypectomy done that day - the "not" is the clips', never the polypectomy's, which 45378 alone
+                    # then leaves uncovered: held (base_included), never ready, never excluded
+                    self.assertEqual((proposal.status, clarified(proposal)), ('needs_clarification', ['base_included']))
+                else:
+                    self.assertTrue(ready(proposal), (proposal.bucket, proposal.status, clarified(proposal)))
                 self.assertNotIn('service.incomplete', checks(proposal))
 
     def test_a_finding_at_the_labels_landmark_never_withholds(self):

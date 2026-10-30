@@ -1,0 +1,19 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Brightwater Valley Endoscopy Center (fictional)
+Combined upper and lower endoscopy report
+Patient: Marisol Testcase (fictional)
+Procedure date: 2026-10-16
+Indications
+Iron deficiency anemia.
+Procedure summary
+Examination | Instrument | Furthest point reached | Tissue sampled
+Upper endoscopy (EGD) | Standard gastroscope | Second portion of the duodenum | No
+Colonoscopy | Adult colonoscope | Cecum | Yes, cold snare (one polyp)
+Upper endoscopy
+The gastroscope crossed the upper esophageal sphincter and reached the second portion of the duodenum. Normal mucosa throughout.
+Colonoscopy
+The adult colonoscope passed easily to the cecum. A 7 mm sessile polyp in the transverse colon was removed with a cold snare.
+Impression
+1. Normal upper endoscopy.
+2. Transverse colon polyp, removed.
+Electronically signed: Kwabena Testwood, MD (fictional), 2026-10-16 10:47

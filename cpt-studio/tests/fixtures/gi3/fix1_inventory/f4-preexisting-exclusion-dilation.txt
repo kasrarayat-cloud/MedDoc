@@ -1,0 +1,6 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Patient: Wren Fictional
+Date of service: 2026-10-16
+Upper endoscopy report
+Findings: The gastroscope was advanced to the second portion of the duodenum. A Schatzki ring was seen at 38 cm. Biopsies were not taken after the balloon dilation to 18 mm.
+Impression: Schatzki ring.

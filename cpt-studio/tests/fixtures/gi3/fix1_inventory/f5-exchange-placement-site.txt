@@ -1,0 +1,28 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Kestrel Ridge University Hospital (fictional)
+ERCP Procedure Note
+
+Patient: Wendell Achebe-Lunde (fictional)
+Date of birth: 1975-05-17
+Synthetic record: H2-SYN-1110
+Date of service: 2026-10-23
+Location: hospital outpatient endoscopy, fluoroscopy room (POS 22)
+Endoscopist: Margarethe Oyelowo-Brandt, MD (fictional)
+Anesthesia: general anesthesia by the hospital anesthesia department (fictional), reported separately
+Fluoroscopy: supervision and interpretation reported separately by the hospital radiology department (fictional)
+
+Indication
+Planned exchange of a plastic biliary stent for a benign common hepatic duct stricture after laparoscopic cholecystectomy. The stent, 10 French by 9 cm, was placed at ERCP on 2026-07-21, when a biliary sphincterotomy was also done. No symptoms; liver tests are normal.
+
+Procedure
+The duodenoscope was advanced to the major papilla. The existing stent was in position and draining. It was grasped with a snare and withdrawn through the working channel. The bile duct was then cannulated over a 0.035-inch guidewire without difficulty, and the wire was passed above the stricture into the right intrahepatic ducts. The cholangiogram showed a 1 cm stricture of the common hepatic duct, improved since July, with mild dilation above it and no filling defects. A new 10 French by 9 cm plastic stent was placed in the common bile duct across the stricture, with good drainage of bile and contrast.
+No sphincterotomy was performed today, and no balloon sweep or stone extraction was done. The pancreatic duct was neither entered nor opacified.
+
+Impression
+Benign common hepatic duct stricture, improving. Biliary stent exchanged: one plastic stent removed and one new plastic stent placed.
+
+Plan
+Clear liquids today, then a regular diet. Next stent exchange in about three months, probably placing two stents side by side if the stricture persists.
+
+Electronically signed: Margarethe Oyelowo-Brandt, MD (fictional), 2026-10-24 07:52

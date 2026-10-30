@@ -14,6 +14,7 @@ Three questions, kept apart on purpose:
 """
 from __future__ import annotations
 
+import functools
 import re
 from dataclasses import dataclass, replace
 from typing import Optional, Sequence
@@ -22,7 +23,7 @@ from studio.gi import catalogue
 from studio.gi.context import is_member_conflict
 from studio.gi.services import (ACTS, FAMILY_REGIONS, INSTRUMENT_FAMILY, INSTRUMENTS, LUMEN, ROUTING_CONTRARY_CUE,
                                  ROUTING_DOUBT_CUE, SERVICES, Act, Conflict, DocumentedService, ServiceInventory,
-                                 act_regions, examined_regions)
+                                 act_regions, examined_regions, site_covers)
 from studio.types import Check, ClarificationSpec, EvidenceSpan, Span
 from studio.validation import checks
 
@@ -407,15 +408,48 @@ EXCHANGE_PART = 'exchange_part'
 EXCHANGE_BUNDLED = 'Part of the stent exchange the document records; the exchange code accounts for it.'
 
 
+# gi3 fix round 1 (INV-5): the duct system an exchange names by its adjective alone, where its passage names no site
+# ("Biliary stent exchanged", "pancreatic stent exchange"): a closed class, the two duct systems a stent is exchanged in
+# at ERCP, by the anatomy vocabulary's own regions (studio.gi.services.ANATOMY: 'biliary', 'pancreas').
+EXCHANGE_SYSTEMS = (('biliary', re.compile(r'\b(?:biliary|bile|choledoch\w*|CBD)\b', re.I | re.A)),
+                    ('pancreas', re.compile(r'\bpancrea\w*', re.I | re.A)))
+
+
+def _places(names: Sequence[str]) -> frozenset:
+    """What the sites ``names`` (ANATOMY canonical names) may cover, together (services.site_covers)."""
+    return frozenset().union(*(site_covers(name) for name in names)) if names else frozenset()
+
+
+@functools.lru_cache(maxsize=4096)
+def _exchange_places(exchange: Act) -> frozenset:
+    """Where a stent exchange is: what its own sites may cover, else the duct systems its passage names
+    (EXCHANGE_SYSTEMS); empty when it names neither. Read once per exchange act, however many parts ask (exchange_of
+    is read for every stent act, by match and by _bundled)."""
+    return _places(exchange.anatomy) or frozenset(region for region, pattern in EXCHANGE_SYSTEMS
+                                                  if any(pattern.search(ev.text) for ev in exchange.evidence))
+
+
 def exchange_of(service: DocumentedService, act: Act) -> Optional[Act]:
     """The stent exchange ``service`` documents as done that ``act`` - a stent placement or removal - is part of: one
-    whose sites take in the act's own, or any one when the act names no site. A placement that names a site of its own
+    whose place takes in the act's own, or any one when the act names no site. A placement that names a site of its own
     the exchange does not ("a pancreatic duct stent placed" beside the biliary stent's exchange) is no part of it
-    (R5b). None for any other act."""
+    (R5b). Places are compared by what they may cover (site_covers: the common bile duct is in the biliary tree an
+    exchange's "bile duct" names), and an exchange that names no site is where its own words put it ("Biliary stent
+    exchanged") - or, naming no place at all, anywhere its parts are (gi3 fix round 1, INV-5: a part that named its duct
+    beside "Biliary stent exchanged" was read as no part of it, so 43274 read ready on the exchange's own placement).
+    None for any other act."""
     if act.kind not in ('stent', 'stent_removal'):
         return None
-    return next((a for a in service.acts if a.kind == 'stent_exchange' and a.status == 'performed'
-                 and (not act.anatomy or (a.anatomy and set(act.anatomy) & set(a.anatomy)))), None)
+    own = _places(act.anatomy)
+    for exchange in service.acts:
+        if exchange.kind != 'stent_exchange' or exchange.status != 'performed':
+            continue
+        if not own:
+            return exchange
+        places = _exchange_places(exchange)
+        if not places or own & places:
+            return exchange
+    return None
 
 
 def _bundled(service: DocumentedService, act: Act) -> Optional[str]:

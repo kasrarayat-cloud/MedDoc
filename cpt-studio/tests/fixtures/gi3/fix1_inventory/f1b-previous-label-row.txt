@@ -1,0 +1,14 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Harrowgate Digestive Clinic (fictional)
+Upper endoscopy report
+Patient: Orla Testfield (fictional)
+Date of service: 2026-10-16
+Indication: Follow-up of erosive esophagitis on proton pump inhibitor therapy.
+Findings
+The gastroscope was advanced to the second portion of the duodenum. The esophagitis has healed. The stomach and duodenum were normal.
+Comparison
+Examination | Esophagitis grade | Biopsies
+Previous upper endoscopy | LA grade C | Yes, distal esophagus
+Impression
+Healed esophagitis.
+Electronically signed: Ivo Placeholder, MD (fictional), 2026-10-16 09:12
