@@ -76,10 +76,10 @@ class ChargeBlockTests(SimpleTestCase):
         self.assertIn(charge, {d for d in quoted_dates(problem.split("other than the document's own", 1)[0])})
         self.assertEqual(quoted_dates(problem.split("other than the document's own", 1)[1]), {own})
         self.assertEqual(reason_of(text), problem + '; every service and every dated reference check depends on it.')
+        self.assertEqual(context.charge_date_own(fact), own)
         self.assertEqual(member(text, own), 'taken')
-        for value in (charge, STRANGER):
-            self.assertEqual(member(text, value), 'held', value)
-            self.assertEqual(quoted_dates(merged(text, value).note), {own}, value)  # the document's own date only
+        for value in (charge, STRANGER):  # held with the installed note: the document gives its own date
+            self.assertEqual(merged(text, value).note, context.USER_CONFLICT_NOTE.format(user=value, document=own), value)
 
     def assert_never_answered(self, text, other, own='2026-10-05'):
         """Another occurrence's date in a closing charge block the guards may miss: asked or read as installed, never
@@ -121,7 +121,12 @@ class ChargeBlockTests(SimpleTestCase):
                       # the second refutation's dates-n2-8: the heading joined to its first field by a dash
                       'Charge Information — Date of Service: 2026-10-06\nDiagnosis: anemia\n',
                       'Charge Information – Date of Service: 2026-10-06\nDiagnosis: anemia\n',
-                      'CHARGE INFORMATION - Date of Service: 2026-10-06\nDiagnosis: anemia\n'):
+                      'CHARGE INFORMATION - Date of Service: 2026-10-06\nDiagnosis: anemia\n',
+                      # the fourth refutation's dates-n4-3: an underscore bold heading, a dash with no blanks
+                      '__Charge information__\nDate of service: 2026-10-06\n',
+                      '__Charges:__\nDate of service: 2026-10-06\n',
+                      'Charge information—Date of service: 2026-10-06\nDiagnosis: anemia\n',
+                      'Charge Information–Date of Service: 2026-10-06\nDiagnosis: anemia\n'):
             with self.subTest(block=block):
                 self.assert_asked(HEADER + PLAN + block)
 
@@ -257,9 +262,42 @@ class ChargeBlockTests(SimpleTestCase):
         for text in (H208, HEADER + PLAN + 'Charges\nPatient: Another Synthetic Patient (fictional)\n'
                                           'Date of service: 2026-10-06\nCPT: 99213\n'):
             with self.subTest(text=text[-60:]):
-                note = merged(text, '2026-10-15').note
-                self.assertTrue(context.is_member_conflict(merged(text, '2026-10-15')))
-                self.assertEqual(quoted_dates(note), {'2026-10-05'}, note)
+                self.assertEqual(merged(text, '2026-10-15').note,
+                                 context.USER_CONFLICT_NOTE.format(user='2026-10-15', document='2026-10-05'))
+
+    def test_a_hyphen_joined_own_date_is_still_the_answer_it_takes(self):
+        """The fourth refutation's dates-n4-1: the installed reading reads and sends a date hyphen-joined to its label
+        ("DOS-10/05/2026"), which a re-read of the evidence does not read. The question its charge block asks takes and
+        holds a member's date exactly as that sent fact does: the document's own date taken, any other held."""
+        for own_line in ('DOS-10/05/2026', 'Date of Service-10/05/2026', 'Date of service -2026-10-05'):
+            with self.subTest(own_line=own_line):
+                text = (HEADER.replace('Date of service: 2026-10-05', own_line) + PLAN
+                        + 'Charge information\nDate of service: 2026-10-06\n')
+                fact = date_fact(text)
+                self.assertEqual((fact.origin, context.charge_date_own(fact)), ('conflict', '2026-10-05'))
+                self.assertEqual(date_lines(text), [])
+                self.assertEqual((merged(text, '2026-10-05').origin, merged(text, '2026-10-05').value), ('user', '2026-10-05'))
+                self.assertEqual(merged(text, '2026-10-06').note,
+                                 context.USER_CONFLICT_NOTE.format(user='2026-10-06', document='2026-10-05'))
+
+    def test_a_block_that_states_the_documents_own_date_or_an_entry_after_the_signature_asks_nothing(self):
+        """The fourth refutation's dates-n4-2: the block ends at its first signature line, and a block that states the
+        document's own date does not contradict it - a later entry's date (a telephone call, an appointment, a lab draw)
+        is never named as the block's."""
+        signed = 'Electronically signed: Synthetic Doctor, MD (fictional), 2026-10-05 17:02\n'
+        for tail in ('Charge information\nDate of service: 2026-10-05\nCPT: 99214\n' + signed
+                     + 'Telephone encounter (DOS: 10/07/2026): labs reviewed with the patient. No charge.\n',
+                     'Charge information\nDate of service: 2026-10-05\nCPT: 99214\n' + signed
+                     + 'Telephone call: labs reviewed, no charge\nDate of service: 2026-10-07\n',
+                     'Charge information\nDate of service: 2026-10-05\nDate of service: 2026-10-06\nCPT: 99214\n'):
+            with self.subTest(tail=tail[-50:]):
+                self.assert_installed(HEADER + PLAN + tail)
+        # the block's own date still asks, and only it is named
+        text = (HEADER + PLAN + 'Charge information\nDate of service: 2026-10-06\n' + signed
+                + 'Follow-up appointment: DOS 11/04/2026 at 09:00 with Synthetic Doctor (fictional).\n')
+        self.assert_asked(text)
+        problem = context.charge_date_problem(date_fact(text))
+        self.assertEqual(quoted_dates(problem.split("other than the document's own", 1)[0]), {'2026-10-06'})
 
     def test_an_equal_date_changes_nothing(self):
         self.assert_installed(HEADER + PLAN + 'Charge information\nDate of service: 2026-10-05\n')

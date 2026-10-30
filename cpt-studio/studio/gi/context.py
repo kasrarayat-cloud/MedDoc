@@ -1711,9 +1711,11 @@ _CHARGE_ELSEWHERE = cues.rx(r'\b(?:prior|previous(?:ly)?+|last|late|earlier|inde
                             r'|authori[sz]ation|pending|planned|next|upcoming|future|recall|referral|pathology)\b')
 # A closing block's line that is no field, code or cell: the note's signature ("Electronically signed: ...", "Signed by")
 _SIGNATURE_LINE = cues.rx(r'(?:electronically[ \t]++|e-)?+(?:signed|co-?signed|dictated|transcribed|attest(?:ed|ation))\b')
-_HEADING_MARKS = re.compile(r'\A[\s#*>•\-–—\d.)(]*+')
-_HEADING_TAIL = re.compile(r'[\s:.*\-–—]*+\Z')
-_JOINED_DASH = re.compile(r'[ \t]+[—–-][ \t]+')  # a heading joined to its first field by a dash ("Charges — Date of ...")
+_HEADING_MARKS = re.compile(r'\A[\s#*_>•\-–—\d.)(]*+')
+_HEADING_TAIL = re.compile(r'[\s:.*_\-–—]*+\Z')
+# A heading joined to its first field by a dash: an em or en dash, with or without blanks ("Charges — Date of ...",
+# "Charges—Date of ..."), or a hyphen between blanks - never one inside a word ("Follow-up")
+_JOINED_DASH = re.compile(r'[ \t]*+[—–][ \t]*+|[ \t]++-[ \t]++')
 CLOSING_REACH_LINES = 30  # non-empty lines read back from the document's end for its closing charge block
 CHARGE_HEADING_REACH = 120  # a longer line is never a heading, and never read for one
 
@@ -1760,15 +1762,17 @@ def _block_in_another_note(text: str, rows: '_Rows', reach_start: int, block_sta
 
 
 def _closing_charge_block(text: str, rows: '_Rows') -> Optional[tuple[int, int]]:
-    """(the start of its heading's line, the document's end) of the note's own closing charge block, or None. Read back
-    from the end over at most CLOSING_REACH_LINES non-empty lines, each a field ("Diagnosis: ..."), a code or cell line (a
-    digit or a cell bar in it: "CPT 99214", "99214 | Office visit | 1") or a signature line, until a line headed by a
-    charge heading of CHARGE_HEADINGS (alone, or joined before a field on its line by a colon or a dash: "Charge
-    information: Date of service: ...", "Charge information — Date of service: ..."). Any other line - prose, another heading, a descriptor - ends the search with None, and so does a word placing
-    the block in another occurrence (_CHARGE_ELSEWHERE) on any of its lines, or a line longer than CHARGE_HEADING_REACH
-    (never read: the heading reader's tail pattern is quadratic in a line's run of marks or spaces). Read once per
-    document."""
-    pos, seen = len(text), 0
+    """(the start of its heading's line, the start of its first signature line or the document's end) of the note's own
+    closing charge block, or None. Read back from the end over at most CLOSING_REACH_LINES non-empty lines, each a field
+    ("Diagnosis: ..."), a code or cell line (a digit or a cell bar in it: "CPT 99214", "99214 | Office visit | 1") or a
+    signature line, until a line headed by a charge heading of CHARGE_HEADINGS (alone, or joined before a field on its line
+    by a colon or a dash: "Charge information: Date of service: ...", "Charge information — Date of service: ..."). Any
+    other line - prose, another heading, a descriptor - ends the search with None, and so does a word placing the block in
+    another occurrence (_CHARGE_ELSEWHERE) on any of its lines, or a line longer than CHARGE_HEADING_REACH (never read: the
+    heading reader's tail pattern is quadratic in a line's run of marks or spaces). The block ends at its first signature
+    line: a line after it is another entry ("Telephone encounter (DOS: 10/07/2026): ...", the fourth refutation's
+    dates-n4-2), never the block's. Read once per document."""
+    pos, seen, end = len(text), 0, len(text)
     while pos > 0 and seen < CLOSING_REACH_LINES:
         ls, le = rows.line(pos - 1)
         pos = ls
@@ -1779,22 +1783,25 @@ def _closing_charge_block(text: str, rows: '_Rows') -> Optional[tuple[int, int]]
         if le - ls > CHARGE_HEADING_REACH or _CHARGE_ELSEWHERE.search(line):
             return None
         if _heading_words(line) in CHARGE_HEADINGS:
-            return ls, len(text)
+            return ls, end
         colon = line.find(':')
         if colon > 0 and (_heading_words(line[:colon]) in CHARGE_HEADINGS
                           or _heading_words(_JOINED_DASH.split(line[:colon], 1)[0]) in CHARGE_HEADINGS):
-            return ls, len(text)  # the heading joined to its first field, by a colon or a dash
-        if not (0 < colon <= 60 or '|' in line or any(ch.isdigit() for ch in line)
-                or _SIGNATURE_LINE.match(line.strip())):
+            return ls, end  # the heading joined to its first field, by a colon or a dash
+        signature = _SIGNATURE_LINE.match(line.strip())
+        if signature:
+            end = ls  # read back, the last signature line met is the block's first
+        if not (0 < colon <= 60 or '|' in line or any(ch.isdigit() for ch in line) or signature):
             return None
     return None
 
 
 CHARGE_DATE_NOTE = ('The charge or billing block that ends the document states {block}, a date of service other than the '
-                    "document's own ({own}). The block may record this encounter or another occurrence, so the date is "
-                    "asked; a member's answer is taken only when it is the document's own date.")
+                    "document's own, {value} ({own}). The block may record this encounter or another occurrence, so the "
+                    "date is asked; a member's answer is taken only when it is the document's own date.")
 _CHARGE_NOTE_HEAD = CHARGE_DATE_NOTE.split('{', 1)[0]
 _CHARGE_NOTE_REST = '). The block may record this encounter or another occurrence'
+_CHARGE_NOTE_OWN = re.compile(r"a date of service other than the document's own, (\d{4}-\d{2}-\d{2}) \(")
 
 
 def charge_date_problem(fact) -> Optional[str]:
@@ -1807,6 +1814,15 @@ def charge_date_problem(fact) -> Optional[str]:
     if get('origin') != 'conflict' or not note.startswith(_CHARGE_NOTE_HEAD) or _CHARGE_NOTE_REST not in note:
         return None
     return note[:note.rindex(_CHARGE_NOTE_REST) + 1]
+
+
+def charge_date_own(fact) -> Optional[str]:
+    """The document's own date (ISO) that a date question the note's closing charge block asks keeps in its note - the
+    date the installed reading sends, the only member's answer it takes (merge_user_values) - or None for any other fact.
+    The last match is the note's own, whatever a quote before it holds."""
+    problem = charge_date_problem(fact)
+    found = list(_CHARGE_NOTE_OWN.finditer(problem)) if problem else []
+    return found[-1].group(1) if found else None
 
 
 def _charge_block_asks(text: str, lay: Layout, fact: Fact) -> Fact:
@@ -1827,25 +1843,28 @@ def _charge_block_asks(text: str, lay: Layout, fact: Fact) -> Fact:
     # rule N2: a date of birth is never a service date, the charge block's own field included (a DOB auto-filled there)
     births = {mention.value for mention in find_dates(text)
               if mention.precision == 'day' and _is_birth(text, mention.start)}
-    stated = []
+    stated, agrees = [], False
     for m in SERVICE_DATE.finditer(text):
-        if m.start() < block[0] or lay.section_at(m.start()).kind != 'plan' or not _CHARGE_DATE_LABEL.match(
+        if not block[0] <= m.start() < block[1] or lay.section_at(m.start()).kind != 'plan' or not _CHARGE_DATE_LABEL.match(
                 m.group('label')):
             continue  # inside the closing block, in a plan's reach, the encounter's own date-of-service label only
         value = date_from_match(m)
-        if value is None or value.isoformat() == fact.value or value in births:
-            continue  # no calendar date, the date the fact sends, or a date of birth
+        if value is None or value in births:
+            continue  # no calendar date, or a date of birth
         kind, start = _labelled_kind(text, m.start('label'), m.end('label'), m.start('date'), m.end(), value)
         if _READING[kind] == 'aside':
             continue  # its own words place it in another occurrence ("Next date of service")
-        stated.append(_span(text, start, m.end()))
-    if not stated:
+        if value.isoformat() == fact.value:
+            agrees = True  # the block states the document's own date: it does not contradict it (dates-n4-2)
+        else:
+            stated.append(_span(text, start, m.end()))
+    if agrees or not stated:
         return fact
 
     def quoted(spans):
         return ', '.join('\u201c' + ' '.join(s.text.split())[:80] + '\u201d' for s in spans[:3])
     return Fact('service_date', None, 'conflict', fact.evidence,
-                CHARGE_DATE_NOTE.format(block=quoted(stated), own=quoted(fact.evidence)))
+                CHARGE_DATE_NOTE.format(block=quoted(stated), value=fact.value, own=quoted(fact.evidence)))
 
 
 def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
@@ -2763,6 +2782,17 @@ def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> di
                 and str(documented.value) != value:
             merged[name] = Fact(name, None, 'conflict', documented.evidence,
                                 USER_CONFLICT_NOTE.format(user=value, document=documented.value))
+            continue
+        own = charge_date_own(documented) if name == 'service_date' else None
+        if own is not None:
+            # GI round 3, the narrow release: the question the note's closing charge block asks (_charge_block_asks) takes
+            # and holds a member's date exactly as the installed reading's document fact - the date it sends - does: that
+            # date taken, any other held with the installed note. Read from the date the note keeps, never from the
+            # evidence again: a hyphen-joined own date ("DOS-10/05/2026") reads no date there, and the document's own
+            # answer was held (the fourth refutation, dates-n4-1)
+            merged[name] = (Fact(name, value, 'user', (), USER_NOTE) if value == own else
+                            Fact(name, None, 'conflict', documented.evidence,
+                                 USER_CONFLICT_NOTE.format(user=value, document=own)))
             continue
         listed = documented_values(documented)
         if listed and value not in listed:

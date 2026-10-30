@@ -1093,3 +1093,17 @@ What it means for this change (recorded by the receiving session, before buildin
     (`context._charge_block_asks`, `CHARGE_DATE_NOTE`, read by `charge_date_problem`). Every other fact is returned
     exactly as the installed reading made it, its texts and the answers it takes included. The principle of 53(b)
     stands: the block's date is never this encounter's date of service.
+
+### Session interpretation, 2026-10-30 (7c8d38da, the narrow release, after its fourth refutation) — recorded, not owner-ruled
+
+55. **The question answers as the installed fact would, and names only the block's own lines (54, refined).** The
+    fourth refutation found no send. It found two texts or holds that misstated the source, and one limit:
+    - an own date hyphen-joined to its label ("DOS-10/05/2026"), which the installed reading reads and sends, could not
+      answer the question, because the answer was checked by re-reading the evidence, which misses that form
+      (dates-n4-1);
+    - the closing block's region took in an entry written after the signature, such as a no-charge telephone call or
+      an appointment, and named that entry's date as the block's (dates-n4-2).
+    So the note keeps the date the installed fact sends, and a member's answer to the question is taken or held exactly
+    as that fact takes or holds it, with the installed note. The block ends at its first signature line, and a block
+    that also states the document's own date does not ask. The limit, an underscore-bold heading and a dash with no
+    blanks (dates-n4-3), is now read.
