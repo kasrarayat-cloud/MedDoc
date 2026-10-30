@@ -627,3 +627,54 @@ So the 527 wrong or uncertain sends are asked, never sent, and the sentence now 
 integrator accepted by decision (row gi2 dates-F1; the owner may overrule), two of them wrong by the source and
 listed for the owner. The ruling file keeps interpretation 28 as written; this is its measured correction
 (interpretation 37 corrects interpretation 31's figures the same way).
+
+## GI round 3 (2026-10-29/30): the narrow release
+
+The owner's directive of 2026-10-29 (ruling file, "Owner directive, 2026-10-29") asked for repairs to four things:
+- the shared date and section binding, h2-08 first;
+- the extent and table interpretation;
+- the current-visit versus future-follow-up scope;
+- the inventory's fact binding.
+
+Session 7c8d38da ran four investigations, four repairs and two fix rounds on branch
+`fix/cpt-studio-gi-binding-20261029`. Six independent lenses refuted each round, finding 45, 46 and 46 findings. The
+third was a differential round, with 41 findings blocking. Each fix round fixed the previous round's findings and
+introduced new ones: new date sends, a member's correct answer refused, quadratic shapes, and decisions lost. On
+2026-10-30 the owner decided to ship a narrow release instead (ruling file, "Owner decision, 2026-10-30").
+
+That branch, with its refutations' findings (session scratch, summarised in the ruling file), is kept as the next
+round's starting record. None of its rules ship. Nothing here is an accuracy measure: every expectation is a source
+review of synthetic text, and the reviewer decides every code.
+
+### What ships (`fix/cpt-studio-gi3-narrow-20261030`, built on 90377ec6f413)
+
+| id | the defect (input) | before (90377ec6f413) → after | how |
+|---|---|---|---|
+| gi3 h2-08 | h2-08: the header's "Date of service: 2026-10-05"; at the end of its "Assessment and plan", "Charge information" / "Date of service: 2026-10-06" | 2026-10-06 dropped (rule A skips every plan-section date label) and 2026-10-05 sent → a conflict: the date is asked, the request is sent with no date line, and either date is a member's answer | the note's own closing charge block speaks against the note's own labelled date where they differ (`context._closing_charge_block`, read once per document). The block must:<br>- close the document;<br>- sit in a plan section's reach;<br>- be headed by a heading of the closed class `CHARGE_HEADINGS`, alone or joined to its first field;<br>- hold only fields, code or cell lines and signature lines;<br>- name no other occurrence on any of its lines (`_CHARGE_ELSEWHERE`);<br>- not belong to a copied note (`_block_in_another_note`);<br>- carry no date of birth.<br>Only the encounter's own date-of-service label counts (date of service, DOS, service or encounter date). With no own date it stays dropped, so nothing is newly sent |
+| gi3 h2-08's layouts | the charge block with a CPT or ICD line, field lines, a cell table, a bold heading, the heading joined on one line ("Charge Information — Date of Service: ...", "Charges: 99214, date of service ...") or a signature line after it (the second refutation's F7 and the narrow refutation's dates-n1 shapes) | 2026-10-05 sent → a conflict | the same rule |
+| gi3 context re-read | a context 90377ec6f413 recorded (gi-context@2), such as the live e084b793 (the earlier h2-08), which says 2026-10-05 as documented | kept current, so a predict queued or stopped at the install, a reconciliation or a second review would send 2026-10-05 again → remade under the current rules before any stage sends or assesses on it, and no second review is offered on it | `jobs.CONTEXT_VERSION` gi-context@3, with @1 and @2 earlier (interpretation 49) |
+| gi3 STATE2-1 | sending disabled; a pre-install encounter whose context is remade by a resumed assess, or by the stale-stage sweep with no member action | assessed with no provider answer: every proposal dropped, the reviewer's decisions invalidated, and an unknown or failed outcome shown as "provider not run" → an unchanged request re-assesses with the recorded answer. When the request changed, an unknown outcome blocks the upgrade's predict (the encounter reads provider unknown), and any other recorded request stops it, keeping what is recorded. With no request recorded it runs as before | `jobs._request_for` (the adapter's own request builder) and `jobs._recorded_in_use` |
+
+### Measured against the installed revision (offline, synthetic; never an accuracy figure)
+- Reading gate: reader 0 changes in 8,446 texts; engine 0 changes in 6,397 stored assessments.
+- The 36 live encounters' stored responses, replayed: one changes, h2-08, whose date is now asked.
+- Date stress over 227,700 constructed texts:
+  - 0 newly sent, 0 changed sent dates, 0 settings or statuses newly documented;
+  - 3,456 move from sent to asked: each has a differing date of service in a plan section's charge block.
+- Cost: the context stage is linear to the 400,000-character cap over four adversarial shapes, at most 1.42 s.
+- Refutation of the narrow diff (three lenses): <filled in below at the freeze>.
+
+### Known limits (each reads exactly as the installed revision reads it)
+
+| id | input | output | why not repaired in this release |
+|---|---|---|---|
+| gi3 h2-08 family outside the class | a charge block under "Today's appointment", "Billing and scheduling", "Taper schedule", "Follow-up visit, level 4", "Next steps", "Future plan" or "Follow-up"; a charge table with no heading or space-aligned columns; a descriptor line between the heading and the date ("Office visit, established patient"), or a PDF-wrapped field tail; a charge date with words after it ("2026-10-06 (follow-up visit)"); a charge block that does not close the document | the header's own date sent and the other dropped, as installed | the release reads only the closed charge-heading class (owner decision 2026-10-30); widening the binding is what three refutation rounds could not make converge |
+| gi3 charge blocks of another occurrence | a copied report's or note's charge block, a booking ("Colonoscopy scheduled ...", "Prior authorization: ..."), a prior visit's late charge, a pathology charge, or a date of birth auto-filled into the charge date (the narrow refutation's dates-n3 and dates-n4) | read as installed: the header's own date is sent, and that block's date is never offered as an answer | asking would offer another occurrence's date as a member's answer |
+| gi3 history charge block | a billing block in a history section's reach ("Prior procedures:" / "Billing" / "Date of service: ...") | read as installed (dropped) | it may bill a prior occurrence, and asking would offer that occurrence's date as a member's answer (the third refutation's STATE3-1) |
+| gi3 unread separators | "Date of service........ 10/05/2026", or a non-breaking space after the colon | not read, as installed | a reader change outside the release |
+| gi3 other contradicted dates | the refutation rounds' other class-1 shapes: a later or earlier visit's date near a follow-up title; a planned procedure's date in a clinic note | as installed | interpretation 41: no reliable-coding claim while any is known |
+| gi3 STATE-3 | a pre-install encounter on reload (all 36 live encounters are gi-context@2) | shows its recorded reading until a member's action or a stage reads it again; e084b793 still shows 2026-10-05 as documented | a reload runs no stage; nothing sends that date again (the re-read above) |
+| gi3 STATE3-5 | sending disabled, and a member explicitly resumes the stopped upgrade predict | assessed with no answer, as installed assesses any predict while sending is disabled | a member's explicit action: enable sending before resuming |
+| gi3 h2-08 99215 | h2-08 after the date is answered | 99215 held (performed_status, em_basis), as installed | installed routing does not read h2-08's visit, and the scope repair did not ship |
+| gi3 extent, scope and inventory | the full round's targets: h2-01, h2-02 and h2-04's extents from tables; h2-07's 99213; the h2-10 stent exchange | as installed | not in the narrow release. The parked branch's repairs measured better on curated corpora, but every refutation found regressions against installed |
+

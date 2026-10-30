@@ -1687,10 +1687,14 @@ def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int
 # label a plan or history section holds (rule A), so h2-08's charge block - "Charge information" / "Date of service:
 # 2026-10-06" at the end of its "Assessment and plan" - was dropped, and the header's contradicted 2026-10-05 was sent.
 # Now the encounter's own date-of-service label (date of service, DOS, service or encounter date; never a visit or
-# procedure date, which a plan may book) in a plan section's block that a charge or billing heading of this closed class
-# heads (never a history section's, which may bill a prior occurrence) speaks
-# against the note's own labelled date: where they differ the date is a conflict, asked, with no date sent. It speaks
-# only beside an own date that differs, so nothing is ever newly sent: with no own date it stays dropped, as installed.
+# procedure date, which a plan may book) in the note's own closing charge block speaks against the note's own labelled
+# date: where they differ the date is a conflict, asked, with no date sent. It speaks only beside an own date that
+# differs, so nothing is ever newly sent: with no own date it stays dropped, as installed. The closing charge block is
+# read on positive evidence only (_closing_charge_block), because a charge or billing block may belong to another
+# occurrence - a copied report's, a booking's, a prior visit's late charge - and asking would offer that occurrence's
+# date as a member's answer (the narrow release's refutation, dates-n3): the block closes the document, is headed by a
+# heading of this closed class, holds only fields, codes, cells and signature lines, names no other occurrence, and its
+# date is no date of birth (rule N2).
 CHARGE_HEADINGS = frozenset((
     'charge', 'charges', 'charge information', 'charge info', 'charge details', 'charge capture', 'charge entry',
     'charge summary', 'charges and coding', 'coding and charges', 'billing', 'billing information', 'billing info',
@@ -1698,14 +1702,19 @@ CHARGE_HEADINGS = frozenset((
     'coding information', 'coding summary', 'superbill', 'encounter charges', 'visit charges', 'professional charges',
     'professional billing', 'encounter billing'))
 _CHARGE_DATE_LABEL = cues.rx(r'date\b[^\n]{0,24}?\bof[ \t]++(?:service|encounter)\b|DOS\b|(?:service|encounter)[ \t]++date\b')
+# A word that places a block in another occurrence: a copied or prior report, a booking, a late or pending charge
+_CHARGE_ELSEWHERE = cues.rx(r'\b(?:prior|previous(?:ly)?+|last|late|earlier|index|outside|copied|scheduled?+|booked|booking'
+                            r'|authori[sz]ation|pending|planned|next|upcoming|future|recall|referral|pathology)\b')
+# A closing block's line that is no field, code or cell: the note's signature ("Electronically signed: ...", "Signed by")
+_SIGNATURE_LINE = cues.rx(r'(?:electronically[ \t]++|e-)?+(?:signed|co-?signed|dictated|transcribed|attest(?:ed|ation))\b')
 _HEADING_MARKS = re.compile(r'\A[\s#*>•\-–—\d.)(]*+')
-_HEADING_TAIL = re.compile(r'[\s:.\-–—]*+\Z')
-CHARGE_REACH_LINES = 6  # the lines above a label read for its block's heading (a charge block is short)
-CHARGE_HEADING_REACH = 120  # a longer line is never a heading (each line read is bounded)
+_HEADING_TAIL = re.compile(r'[\s:.*\-–—]*+\Z')
+CLOSING_REACH_LINES = 30  # non-empty lines read back from the document's end for its closing charge block
+CHARGE_HEADING_REACH = 120  # a longer line is never a heading, and never read for one
 
 
 def _heading_words(line: str) -> str:
-    """A heading line's words, lower case, without its numbering, marks or closing colon ("5. Charge information:")."""
+    """A heading line's words, lower case, without its numbering, marks or closing colon ("5. **Charge information**:")."""
     words = _HEADING_MARKS.sub('', line)
     words = _HEADING_TAIL.sub('', words).replace('&', ' and ')
     return ' '.join(words.lower().split())
@@ -1719,31 +1728,60 @@ def _heading_like(line: str) -> bool:
         ch.isalpha() for ch in head)
 
 
-def _in_charge_block(text: str, rows: '_Rows', label_start: int) -> bool:
-    """Whether a charge or billing heading of CHARGE_HEADINGS heads the block the label at ``label_start`` stands in:
-    joined to it on its line ("Charge information: Date of service: ..."), or the nearest heading above it within
-    CHARGE_REACH_LINES lines and no blank line. Any other heading-like line above it heads its block instead."""
-    ls, _ = rows.line(label_start)
-    if label_start - ls > CHARGE_HEADING_REACH:  # measured before any slice: many labels may share one long line
-        return False
-    words = _heading_words(text[ls:label_start])
-    if words:
-        return words in CHARGE_HEADINGS
-    pos = ls
-    for _ in range(CHARGE_REACH_LINES):
-        if pos == 0:
-            return False
-        ps, pe = rows.line(pos - 1)
-        if pe - ps <= CHARGE_HEADING_REACH:  # a longer line is neither blank nor a heading, and is never read
-            line = text[ps:pe]
-            if not line.strip():
-                return False  # a blank line ends the block
-            if _heading_words(line) in CHARGE_HEADINGS:
-                return True
-            if _heading_like(line):
-                return False  # another heading heads this block
-        pos = ps
+def _block_in_another_note(text: str, rows: '_Rows', reach_start: int, block_start: int) -> bool:
+    """Whether the closing charge block belongs to a note copied into this one: a heading-like line (_heading_like) that
+    names another occurrence (_CHARGE_ELSEWHERE) between the block and ``reach_start`` - the start of the document's
+    first plan section, or of the block's own section where that comes first - the nearest non-empty line above it
+    included. A note copied in after the note's own plan brings its own plan and charge block with its title above them
+    ("Previous visit note (copied for reference)", then perhaps its date and history, then its own "Assessment and plan"
+    and charge block: the narrow release's refutation, dates-n3, f1b). Only heading-like lines are read - a plan's own
+    sentences name later occurrences all the time - and each line at most once (bisected; a longer line is skipped)."""
+    pos = block_start
+    while pos > 0:
+        ls, le = rows.line(pos - 1)
+        pos = ls
+        if le - ls > CHARGE_HEADING_REACH:
+            if ls < reach_start:
+                return False  # a long line above the reach ends the look above it
+            continue
+        line = text[ls:le]
+        if not line.strip():
+            continue
+        if _heading_like(line) and _CHARGE_ELSEWHERE.search(line):
+            return True
+        if ls < reach_start:
+            return False  # only the nearest non-empty line above the reach
     return False
+
+
+def _closing_charge_block(text: str, rows: '_Rows') -> Optional[tuple[int, int]]:
+    """(the start of its heading's line, the document's end) of the note's own closing charge block, or None. Read back
+    from the end over at most CLOSING_REACH_LINES non-empty lines, each a field ("Diagnosis: ..."), a code or cell line (a
+    digit or a cell bar in it: "CPT 99214", "99214 | Office visit | 1") or a signature line, until a line headed by a
+    charge heading of CHARGE_HEADINGS (alone, or joined before a field on its line: "Charge information: Date of service:
+    ..."). Any other line - prose, another heading, a descriptor - ends the search with None, and so does a word placing
+    the block in another occurrence (_CHARGE_ELSEWHERE) on any of its lines, or a line longer than CHARGE_HEADING_REACH
+    (never read: the heading reader's tail pattern is quadratic in a line's run of marks or spaces). Read once per
+    document."""
+    pos, seen = len(text), 0
+    while pos > 0 and seen < CLOSING_REACH_LINES:
+        ls, le = rows.line(pos - 1)
+        pos = ls
+        line = text[ls:le]
+        if not line.strip():
+            continue
+        seen += 1
+        if le - ls > CHARGE_HEADING_REACH or _CHARGE_ELSEWHERE.search(line):
+            return None
+        if _heading_words(line) in CHARGE_HEADINGS:
+            return ls, len(text)
+        colon = line.find(':')
+        if colon > 0 and _heading_words(line[:colon]) in CHARGE_HEADINGS:
+            return ls, len(text)  # the heading joined to its first field
+        if not (0 < colon <= 60 or '|' in line or any(ch.isdigit() for ch in line)
+                or _SIGNATURE_LINE.match(line.strip())):
+            return None
+    return None
 
 
 def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
@@ -1759,8 +1797,7 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
         if kind in NOT_CURRENT_SECTIONS:
             # a plan's reach only: a history section's charge block may bill a prior occurrence ("Prior procedures:" /
             # "Billing" / "Date of service: ..."), and asking would offer that occurrence's date as an answer
-            if kind == 'plan' and _CHARGE_DATE_LABEL.match(m.group('label')) and _in_charge_block(
-                    text, rows, m.start('label')):
+            if kind == 'plan' and _CHARGE_DATE_LABEL.match(m.group('label')):
                 charged.append(m)
             continue
         joined = _joined(text, rows, m.start('label'), m.end('label'))
@@ -1827,10 +1864,19 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
         # speaks against it (a conflict, asked); with no own date it stays dropped, as installed, so nothing is newly sent
         own = {c.value for c in found if c.source == 'label' and c.reading == 'own' and c.form == 'read' and c.alone
                and c.installed and c.value}
-        for m in charged if own else ():
+        block = _closing_charge_block(text, rows) if own else None
+        if block and _block_in_another_note(text, rows, min([lay.section_at(block[0]).start] + [
+                section.start for section in lay.sections if section.kind == 'plan']), block[0]):
+            block = None  # a copied note's: its title is read back to the document's first plan section
+        # rule N2: a date of birth is never a service date - nor a member's answer a conflict offers - wherever it is
+        # written, the charge block's own field included (a DOB auto-filled into it: the refutation's dates-n4)
+        births = {mention.value for mention in find_dates(text)
+                  if mention.precision == 'day' and _is_birth(text, mention.start)} if block else set()
+        for m in charged if block else ():
             value = date_from_match(m)
-            if value is None or value.isoformat() in own:
-                continue
+            if (value is None or value.isoformat() in own or not block[0] <= m.start() < block[1]
+                    or value in births):
+                continue  # beside an own date it agrees with, outside the closing charge block, or a date of birth
             # read as any label is: one its own words place in another occurrence ("Next date of service") reads
             # 'aside', which never speaks (_date_fact)
             kind, start = _labelled_kind(text, m.start('label'), m.end('label'), m.start('date'), m.end(), value)

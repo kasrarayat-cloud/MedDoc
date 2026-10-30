@@ -2953,6 +2953,36 @@ rule, never a sentence patch). The rules this added, by module:
   sections print is re-checked against the revision text; each provider run is "used by this assessment" only when
   its own provider check did not fail; `ops/verify_downloads.py` reads a wrapped source passage as one entry.
 
+### 5.13 GI round 3: the narrow release (2026-10-30)
+
+The owner's decision of 2026-10-30 (ruling file) shipped two changes on the installed revision 90377ec6f413. Every other
+reader is unchanged, so routing stays `gi-routing@4`, the inventory `gi-services@1` and the engine
+`cpt-studio-validation@4`.
+
+- **The note's own closing charge block** (`studio/gi/context.py`). Rule A skips every date label a plan or history
+  section holds. The exception is the encounter's own date-of-service label (date of service, DOS, service or encounter
+  date) in the note's own closing charge block, which `_closing_charge_block` reads once per document by reading back
+  from the end. The block must:
+  - close the document;
+  - sit in a plan section's reach;
+  - be headed by a heading of the closed class `CHARGE_HEADINGS`, alone or joined to its first field;
+  - hold only fields, code or cell lines and signature lines;
+  - name no other occurrence on any of its lines (`_CHARGE_ELSEWHERE`);
+  - not belong to a copied note (`_block_in_another_note`: a heading-like title naming another occurrence above it);
+  - carry no date of birth (rule N2).
+
+  The label is then added back as an own-read candidate, but only beside an own labelled date it differs from. The date
+  fact becomes a conflict: asked, no date line sent, either date a member's answer. With no own date the label stays
+  dropped, so nothing is newly sent. Line lookups are bisected and read lines are bounded, so the reader is linear.
+- **The context re-read and the disabled-provider safeguards** (`studio/jobs.py`):
+  - `CONTEXT_VERSION` gi-context@3, with @1 and @2 earlier: a stage remakes such a context before it sends or assesses,
+    and no second review is offered on it;
+  - with sending disabled, `_request_for` rebuilds a run's request with the adapter's own builder, so an unchanged
+    request re-assesses with the recorded answer;
+  - with sending disabled, the upgrade's predict never replaces a recorded request (`_recorded_in_use`) with "provider
+    not run". An unknown outcome blocks it, and the encounter reads provider unknown; any other recorded request stops
+    it (`REMADE_DISABLED_MESSAGE`). With no request recorded it runs as before (ec5 skeptic:1).
+
 ## 6. Security
 
 Login required for everything except `/health/` and `/login/`. No public

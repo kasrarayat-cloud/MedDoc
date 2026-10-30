@@ -68,7 +68,16 @@ class ChargeBlockTests(SimpleTestCase):
                       'Charge information: Date of service: 2026-10-06\n',
                       'Billing & coding\nCPT: 99214\nDate of service: 2026-10-06\n',
                       'Superbill\nDiagnosis: anemia\nDate of encounter: 2026-10-06\n',
-                      '## Coding\nEncounter date: 2026-10-06\n'):
+                      '## Coding\nEncounter date: 2026-10-06\n',
+                      'Charge information\n\nDate of service: 2026-10-06\n',  # a blank line inside the closing block
+                      # the narrow refutation's dates-n1: a code, a cell row or a bold heading inside the block
+                      'Charge information\nCPT 99214\nDate of service: 2026-10-06\nDiagnosis: anemia\n',
+                      'Charge information\nCPT | Description | Units\n99214 | Office visit, established patient | 1\n'
+                      'Date of service: 2026-10-06\n',
+                      '**Charge information**\nDate of service: 2026-10-06\n',
+                      'Charge information\nDate of service: 2026-10-06\n\n'
+                      'Electronically signed: Synthetic Doctor, MD (fictional), 2026-10-06 09:12\n',
+                      'Charge information\nDate of service: 2026-10-06\nSigned by Synthetic Doctor, MD (fictional)\n'):
             with self.subTest(block=block):
                 self.assert_conflict(HEADER + PLAN + block, '2026-10-05', '2026-10-06')
 
@@ -78,13 +87,65 @@ class ChargeBlockTests(SimpleTestCase):
                       'Labs\nDate of service: 2026-10-06\n',
                       'Prior visit charges\nDate of service: 2026-09-01\n',
                       'Charges for the next visit\nDate of service: 2026-11-18\n',
-                      'Charge information\n\nDate of service: 2026-10-06\n',  # a blank line ends the block
                       'Charge information\nOffice visit, established patient\nDate of service: 2026-10-06\n',
                       'Charge information\nVisit date: 2026-10-06\n',  # a visit date: a plan may book it
                       'Charge information\nProcedure date: 2026-10-06\n',
-                      'Charge information\nNext date of service: 2026-11-18\n'):  # its own words: another occurrence
+                      'Charge information\nNext date of service: 2026-11-18\n',  # its own words: another occurrence
+                      # a line longer than CHARGE_HEADING_REACH is never read (a cost bound), so its block reads as
+                      # installed
+                      'Charge information\nDate of service: 2026-10-06\nComment: ' + 'reviewed with the patient ' * 5
+                      + '\n'):
             with self.subTest(block=block):
                 self.assert_installed(HEADER + PLAN + block)
+
+    def test_controls_a_charge_block_of_another_occurrence_reads_as_installed(self):
+        """The narrow refutation's dates-n3 and dates-n4: a charge or billing block that is not the note's own closing
+        charge block - a copied report's in the middle of the note, a booking, a prior visit's late charge, a date of
+        birth auto-filled into its field - is never offered as an answer: it reads as installed."""
+        for block in (
+                'Charge information\nDate of service: 2026-04-02\nCPT: 45385\nToday\'s visit\nDoing well.\n',
+                'Billing information\nColonoscopy scheduled at Synthetic Endoscopy Center.\nPrior authorization: '
+                'submitted\nDate of service: 2026-11-04\n',
+                'Billing\nCPT: 45378\nDate of service: 2026-11-04\nScheduled procedure; prior authorization pending.\n',
+                'Charges\nLate charge for the previous visit, which was not entered at the time.\nCPT: 99213\n'
+                'Date of service: 2026-09-28\n',
+                'Charges\nPathology: specimen read\nDate of service: 2026-10-08\n'):
+            with self.subTest(block=block):
+                self.assert_installed(HEADER + PLAN + block)
+        # a copied charge block in the middle of the plan, beside the note's own closing one: only the closing block speaks
+        copied = (HEADER + PLAN + 'Charges\nDate of service: 2026-04-02\nCPT: 45385\nThe copied note ends here.\n'
+                  'Assessment and plan\nStable.\nCharge information\nDate of service: 2026-10-05\n')
+        self.assert_installed(copied)
+        # a copied note at the end, with its own plan and charge block (the refutation's f1b), or its title inside the plan
+        for note in ('Previous visit note (copied for reference)\nAssessment and plan\nStart iron.\n'
+                     'Charge information\nDate of service: 2026-09-01\nDiagnosis: anemia\n',
+                     'Previous visit note (copied for reference)\nCharge information\nDate of service: 2026-09-01\n',
+                     # its title further up, over its own date and history (read back to the first plan section)
+                     'Previous visit note (copied for reference)\nDate of service: 2026-09-01\nHPI\n'
+                     'Anemia follow-up.\n\nAssessment and plan\nStart iron.\nCharge information\n'
+                     'Date of service: 2026-09-01\nDiagnosis: anemia\n'):
+            with self.subTest(note=note):
+                self.assert_installed(HEADER + PLAN + '\n' + note)
+        with_birth = HEADER.replace('Patient: Synthetic Patient (fictional)\n',
+                                    'Patient: Synthetic Patient (fictional)\nDate of birth: 1959-06-02\n')
+        text = with_birth + PLAN + 'Charge information\nVisit type: Follow-up\nDate of service: 06/02/1959\n'
+        self.assert_installed(text)
+        self.assertEqual(member(text, '1959-06-02'), 'held')
+
+    def test_a_history_heading_above_the_plan_leaves_the_closing_block_speaking(self):
+        # a copied note's title is read back to the document's first plan section only: the note's own history above
+        # its plan ("Prior procedures", "Previous colonoscopy") is no copied note's title
+        for history in ('Prior procedures\nColonoscopy in 2023.\n\n',
+                        'Previous colonoscopy\nTwo small polyps removed.\n\n'):
+            with self.subTest(history=history):
+                self.assert_conflict(HEADER + history + PLAN + 'Charge information\nDate of service: 2026-10-06\n',
+                                     '2026-10-05', '2026-10-06')
+
+    def test_a_plan_sentence_naming_another_occurrence_leaves_the_closing_block_speaking(self):
+        # only a heading-like line is read for a copied note's title: a plan's own sentences name later occurrences
+        plan = 'Assessment and plan\nRepeat colonoscopy is scheduled for next year.\nPathology is pending.\n'
+        self.assert_conflict(HEADER + plan + 'Charge information\nDate of service: 2026-10-06\n',
+                             '2026-10-05', '2026-10-06')
 
     def test_an_equal_date_changes_nothing(self):
         self.assert_installed(HEADER + PLAN + 'Charge information\nDate of service: 2026-10-05\n')

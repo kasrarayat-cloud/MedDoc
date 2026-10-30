@@ -456,10 +456,10 @@ def _remade_context(job):
         # resumed, or the stale-stage sweep's settlement of its predict - so neither does the predict it queues for the
         # remade context. That predict runs as any other (a request that cannot be built, a retained answer, an
         # unknown outcome to reconcile: each recorded and shown as itself) and stops only where it would send - or, with
-        # sending disabled, where it would assess with no answer (gi3 fix round 2, STATE2-1) - for a member's Resume
-        # (stage_predict; ec5 skeptic: a stop recorded here for every request the
-        # run in use does not answer said "differs from the one sent before. Resume to send it." where nothing had
-        # been sent, where nothing could be built, and while an unknown outcome blocked every send).
+        # sending disabled, where an assessment with no answer would replace a recorded request (STATE2-1) - for a
+        # member's Resume (stage_predict; ec5 skeptic: a stop recorded here for every request the run in use does not
+        # answer said "differs from the one sent before. Resume to send it." where nothing had been sent, where nothing
+        # could be built, and while an unknown outcome blocked every send).
         _queue_predict(encounter, revision, fresh, key=_upgrade_predict_key(fresh), requested_by=job.requested_by)
     return {'skipped': remade}
 
@@ -470,8 +470,8 @@ REMADE_UNANSWERED_MESSAGE = ('Nothing was sent: after an upgrade this document w
                              'rules, and no provider answer is recorded for the request they make for it. Resume to '
                              'send it.')
 REMADE_DISABLED_MESSAGE = ('Nothing was sent: after an upgrade this document was read again under the current rules, '
-                           'and sending is disabled. The recorded assessment and its decisions are kept; once sending '
-                           'is enabled, Resume to send the request the current rules make.')
+                           'and sending is disabled. What is recorded for it stays as it is; once sending is enabled, '
+                           'Resume to send the request the current rules make.')
 
 
 def _upgrade_predict_key(context):
@@ -510,12 +510,14 @@ def stage_predict(job):
         enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=run,
                 key=f'{assess_key}:{run.pk if run else "no-provider"}', requested_by=job.requested_by)
 
-    if provider is None and job.idempotency_key == _upgrade_predict_key(context) and _answered_in_use(revision):
-        # gi3 fix round 2 (STATE2-1): with sending disabled, the predict an upgrade's remake queued never replaces a
-        # recorded answer with none - that dropped every proposal of a reviewed encounter and invalidated its decisions.
-        # It stops as it stops where it would send, and the recorded assessment and its decisions stay until a member's
-        # Resume. Where no answer is recorded (the installed pair ran with sending disabled too) it runs as before and
-        # nothing is stopped (ec5 skeptic:1): assessing with no answer loses nothing there.
+    if provider is None and job.idempotency_key == _upgrade_predict_key(context) and _recorded_in_use(revision):
+        # gi3 (STATE2-1; the narrow release's refutation, STATE-N1 and STATE-N2): with sending disabled, the predict an
+        # upgrade's remake queued never replaces what is recorded for this revision with 'provider not run'. An outcome
+        # still unknown blocks it, as it blocks every send, and the encounter reads 'provider_unknown'; any other
+        # recorded request (succeeded or failed) stops it, and that record stays as it is until a member's Resume once
+        # sending is enabled. With no request recorded it runs as before (ec5 skeptic:1).
+        if _unreconciled_unknown(encounter):
+            return {'blocked': 'a previous request has an unknown outcome; reconcile it before sending again'}
         raise StageCancelled(REMADE_DISABLED_MESSAGE)
     if provider is None:
         next_assess(None)
@@ -1286,10 +1288,13 @@ def _request_for(run, revision, context):
                                 settings.PROVIDER_MAX_REQUEST_BYTES)
 
 
-def _answered_in_use(revision):
-    """gi3 fix round 2 (STATE2-1): whether the run in use (_run_in_use) is a recorded answer - a succeeded run."""
+def _recorded_in_use(revision):
+    """gi3 (STATE2-1, as the narrow release's refutation refined it: STATE-N1, STATE-N2): whether the run in use
+    (_run_in_use) records a request made for this revision - succeeded, failed or with an outcome still unknown - which
+    an assessment with no answer would replace with 'provider not run'. A run that carries no request (none could be
+    built) is no such record (ec5 skeptic:1)."""
     run = _run_in_use(revision)
-    return run is not None and run.state == models.ProviderRun.SUCCEEDED
+    return run is not None and bool(run.request_sha256)
 
 
 def _run_in_use(revision):

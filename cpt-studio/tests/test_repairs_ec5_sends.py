@@ -755,16 +755,32 @@ class UpgradeStopsOnlyWhereItWouldSendTests(Base):
         self.assertEqual(encounter.state, 'provider_not_run')
         self.assertFalse(review.can_resume(encounter))
 
-    def test_with_the_provider_disabled_and_only_a_failed_request_recorded_nothing_is_stopped(self):
-        """gi3 fix round 2 (STATE2-1): with sending disabled the upgrade's predict stops only over a recorded answer it
-        would replace with none (a succeeded run, and the decisions on it); a failed request is no answer, so the predict
-        runs as before and nothing is stopped (skeptic:1)."""
+    def test_with_the_provider_disabled_a_recorded_failed_request_stays_and_the_predict_stops(self):
+        """gi3 (STATE2-1, refined by the narrow release's refutation STATE-N1): with sending disabled the upgrade's
+        predict never replaces a recorded request with 'provider not run' - a failed request stays recorded, and the
+        predict stops saying so (REMADE_DISABLED_MESSAGE). Nothing is sent."""
         encounter_id, context = self.installed_upload(REPORT_NEWLY_DATED, read_date=False)
         run = self.installed_run(encounter_id, None, state=models.ProviderRun.FAILED)
         self.installed_job(encounter_id, models.Job.ASSESS, context, run=run)
+        sent = self.sent()
+        with mock.patch('studio.jobs.get_provider', return_value=None):
+            drain()
+        self.assertEqual([stage['error'] for stage in self.upgrade_stages(encounter_id)], [jobs.REMADE_DISABLED_MESSAGE])
+        self.assertEqual(self.encounter(encounter_id).state, 'stopped')
+        self.assertEqual(self.sent(), sent)
+
+    def test_with_the_provider_disabled_an_unknown_outcome_blocks_and_reads_unknown(self):
+        """... and an outcome still unknown blocks it, as it blocks every send: the encounter reads 'provider_unknown'
+        (installed read that), never 'provider_not_run', and no stop hides it (skeptic:1)."""
+        encounter_id, context = self.installed_upload(REPORT_NEWLY_DATED, read_date=False)
+        run = self.installed_run(encounter_id, None, state=models.ProviderRun.UNKNOWN)
+        self.installed_job(encounter_id, models.Job.ASSESS, context, run=run)
+        sent = self.sent()
         with mock.patch('studio.jobs.get_provider', return_value=None):
             drain()
         self.assertEqual(self.upgrade_stages(encounter_id), [])
+        self.assertEqual(self.encounter(encounter_id).state, 'provider_unknown')
+        self.assertEqual(self.sent(), sent)
 
     def test_an_unknown_outcome_reads_as_unknown_and_no_resume_is_offered(self):
         encounter_id, context = self.installed_upload(REPORT_NEWLY_DATED, read_date=False)
