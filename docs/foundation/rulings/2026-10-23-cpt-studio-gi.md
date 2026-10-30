@@ -1107,3 +1107,38 @@ What it means for this change (recorded by the receiving session, before buildin
     as that fact takes or holds it, with the installed note. The block ends at its first signature line, and a block
     that also states the document's own date does not ask. The limit, an underscore-bold heading and a dash with no
     blanks (dates-n4-3), is now read.
+
+### Session interpretation, 2026-10-30 (1bf3b49c, the narrow release, after its fifth refutation) — recorded, not owner-ruled
+
+56. **Its text is true by construction, and routing stays the installed reading (55, refined).** The fifth refutation
+    found no send and no answer wrongly taken. It found one misstatement, one regression against installed and two
+    limits:
+    - dates-n5-1: ending the block at its first signature line was one more word list. Seven signature forms it does
+      not read left an entry written after the signature in the block, and the question said the charge or billing block
+      states that entry's date;
+    - dates-n5-3: a field that opens with a signature word ("Signed ABN on file: no") cut the block before its own date;
+    - dates-n5-2: a dash bullet before a dash-joined heading hid the heading;
+    - dates-n5-4: routing's only way to the document's date, `context.service_date_of`, returned None on the question.
+      Read with no date, unanswered or with a member's answer held, a dated service went from performed to "service date
+      not established", against the owner's "Routing, inventory and engine readers stay as installed".
+
+    (a) *The block has no signature end.* No word list tells a signature line from a field, so the list is removed
+        rather than extended. The block runs to the document's end, and the question names what "the lines from the
+        document's last charge or billing heading to its end" state, as theirs. That sentence is true of any line it can
+        name. The cost is an extra question on a dated entry after the signature, a known limit with its own row.
+    (b) *Routing reads the date the installed reading sends*, which the question's note keeps. Session 7c8d38da's last
+        thought was to record n5-4 as a limit. Session 1bf3b49c repaired it instead: it is two lines, it can reach no
+        request (`jobs._service_date_of` reads the stored facts), and it turns the owner's sentence from nearly true into a
+        property a mechanical differential can check. A version label kept over changed readings is the trap the context
+        re-read (49) exists to close.
+    (c) *What "stay as installed" means for the inventory and the engine.* They are handed the stored date, which is None
+        while the question stands, so they cannot read the document as installed reads it with a sent date. What holds is
+        narrower and exact: an open question reads as installed reads a held member's answer, so it is no new state, and
+        the engine holds every proposal on it. The ruling's sentence is about readers, and those are unchanged.
+
+    **Takeover.** The host rebooted at 2026-10-30 22:00:21Z, after session 7c8d38da stopped at 21:14Z mid-repair. `/tmp`
+    was wiped, and with it the session's scratch, including both sealed acceptance sets. Session 1bf3b49c continues as
+    the single integration and deployment owner (the owner said "Continue"), and rebuilt the harness from the session
+    transcripts. h4, the primary set, was rebuilt from its author's own tool calls without being read: its manifest
+    matches its pin (f8985709...) and all six of its renders are byte-identical to the hashes its author's run printed.
+    h3, already exposed, could not be rebuilt or checked against its pin, so no claim rests on it.

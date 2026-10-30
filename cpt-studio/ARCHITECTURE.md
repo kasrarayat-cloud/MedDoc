@@ -2970,8 +2970,7 @@ reader is unchanged, so routing stays `gi-routing@4`, the inventory `gi-services
   - be headed by a heading of the closed class `CHARGE_HEADINGS`, alone or joined to its first field by a colon or a
     dash;
   - hold only fields, code or cell lines and signature lines, none over 120 characters (`CHARGE_HEADING_REACH`: the
-    heading reader's tail pattern is quadratic in a long run of marks or spaces, so a longer line is never read), and end
-    at its first signature line - a line after it is another entry, never the block's;
+    heading reader's tail pattern is quadratic in a long run of marks or spaces, so a longer line is never read);
   - name no other occurrence on any of its lines (`_CHARGE_ELSEWHERE`);
   - not belong to a copied note (`_block_in_another_note`: a heading-like line naming another occurrence between the
     block and the document's first plan section, or on the nearest non-empty line above it - a note copied in after
@@ -2983,8 +2982,20 @@ reader is unchanged, so routing stays `gi-routing@4`, the inventory `gi-services
   member's answer to it exactly as it does for that sent fact: that date taken, any other held with the installed note
   (`charge_date_own`). The answer is never re-read from the evidence, whose re-read can miss a form the label reader
   reads ("DOS-10/05/2026"). The block's date appears only in the note. The question's and check's wording read the
-  note's first sentence through `charge_date_problem` (`checks._date_problem`), naming the block's date as the
-  block's.
+  note's first sentence through `charge_date_problem` (`checks._date_problem`).
+
+  The block runs from its heading to the document's end, so an entry written after the note's signature is inside it.
+  Ending it at a signature line was one more word list: no such list tells a signature line from a field ("Electronic
+  signature: ..." was missed; "Signed ABN on file: no" was taken for one). So the text is true by construction instead:
+  the note names what the lines from the document's last charge or billing heading to its end state, as theirs, never
+  as "the block's" date (the fifth refutation, dates-n5-1 and n5-3).
+
+  Routing's only way to the document's date is `context.service_date_of`, which keeps the date the question's note
+  keeps, so `detect.route` reads such a document exactly as installed in every state (dates-n5-4: read with no date, a
+  dated service went from performed to "service date not established"). A request's date never comes from there:
+  `jobs._service_date_of` reads the stored facts. The inventory and the engine are handed the stored date, None while
+  the question stands, so an open question is the state installed reaches when it holds a member's answer: no new
+  state, and `engine` holds every proposal on it (`day is None`), so no code is ready while it stands.
 
   Every other fact - no own date, or a question the installed reading already asks - is returned exactly as that
   reading made it, its texts and the answers it takes included. The release's refutations showed why: a block may
