@@ -782,82 +782,139 @@ EM_VISIT = rx(r'\b(?:(?:in-person\s+|outpatient\s+|ambulatory\s+)?(?:office|clin
 # E/M time is framed (EM_TIME_FRAME), or beside a marker of today's visit outside today's procedure text
 # (detect._visit_clinician_times): never a procedure's or an interpretation's time ("Physician time: 25 minutes." in an
 # EGD report). A procedure's time is still refused sentence by sentence (NOT_EM_TIME).
+# gi3 fix round 2 (self-attack beside rev2-scope-05/-06): "Visit time" and "Encounter time" name the visit's length,
+# which may be the booked one as often as the spent one ("Office visit next month." / "Visit time: 30 minutes." - a
+# planned visit and its slot - made 99214 ready, where 90377ec6f413 read no such subject), so they are read as a
+# clinician's time is: the visit's only where the sentence frames them, or beside a marker of today's visit.
 EM_TIME = rx(r'\b(?:total\s+(?:\w+\s+){0,2}?time|time\s+spent|(?:i|we)\s+spent|spent\s+a\s+total\s+of'
-             r'|(?:visit|encounter)\s+time|time\s+on\s+the\s+(?:date|day)\s+of'
-             r'|(?P<clinician>(?:face[- ]to[- ]face|physician|clinician|provider|practitioner)\s+time'
+             r'|time\s+on\s+the\s+(?:date|day)\s+of'
+             r'|(?P<clinician>(?:face[- ]to[- ]face|physician|clinician|provider|practitioner|visit|encounter)\s+time'
              r'|(?:i|we)\s+personally\s+spent))\b[^.;\n]{0,140}?'
              r'\b(?P<minutes>\d{1,3})\s*(?:minutes|mins?)\b')
 # The words that frame a clinician's time as E/M time, AMA's own: the date of the encounter or of service, today, and
 # counselling or coordination of care (a closed class). The date words are one string with EM_TIME_DAY (gi3 fix round
 # 1), so the two never drift.
 _EM_TIME_DAY = (r'today|on\s+the\s+(?:date|day)\s+of|(?:service|encounter|visit)\s+date'
-                r'|date\s+of\s+(?:service|the\s+(?:encounter|visit))')
+                r'|date\s+of\s+(?:service|the\s+(?:encounter|visit))'
+                # gi3 fix round 2 (rev2-scope-06): the encounter named as this one ("Face-to-face time at this visit")
+                r'|this\s+(?:(?:office|clinic|outpatient|follow[- ]?up|return)\s+)*(?:visit|encounter|appointment'
+                r'|consult(?:ation)?)(?![\w-])')
 EM_TIME_FRAME = rx(r'\b(?:' + _EM_TIME_DAY + r'|counsel(?:l)?(?:ing|ed)?|coordinat\w*\s+(?:of\s+)?care'
                    r'|care\s+coordination)\b')
 EM_TIME_DAY = rx(r'\b(?:' + _EM_TIME_DAY + r')\b')
 # gi3 fix round 1 (SCOPE-3, SCOPE-5, SCOPE-7): what gives an E/M time statement to something other than the time spent
-# on the date of the encounter - AMA's E/M time, so never the visit's, framed by counselling or not. Read only in the
+# on the date of the encounter - AMA's E/M time, so never the visit's, framed by counselling or not. Read in the
 # statement's own words (detect._em_time_elsewhere: its line before the subject, the words up to its minutes, and the
-# phrase right after them), never in the rest of its sentence ("Total time today: 30 minutes, including review of the
-# labs since the last visit." is today's).
-# Another occasion (a closed class): an earlier or a later visit, appointment, encounter, session, call or consultation
-# ("at the previous visit", "at the August visit", "for the 10/15 visit", "since the last visit", "over two visits"),
-# and a period that is no single date - a week, a month, a calendar month, a quarter or a year ("this calendar month",
-# "last week", "per month"), a number of days before ("the past 30 days", "3 days ago"), and the day before or after. A
-# statement whose own words also say the date of the encounter (EM_TIME_DAY) is that date's ("Total time on the date of
-# service, including review of the previous visit's notes: 40 minutes").
-_EM_MONTH = r'(?:january|february|march|april|may|june|july|august|september|october|november|december)'
-_EM_OTHER_VISIT = (r'(?:previous|prior|last|earlier|preceding|recent|most\s+recent|index|next|upcoming|future'
-                   r'|following|subsequent|later|' + _EM_MONTH + r'|(?:mon|tues|wednes|thurs|fri|satur|sun)day'
-                   r'|\d{1,2}/\d{1,2}(?:/\d{2,4})?)\s+'
-                   r'(?:(?:office|clinic|telephone|phone|video|telehealth|virtual|in-person|follow[- ]?up|return'
-                   r'|new[- ]patient|established[- ]patient)\s+)?(?:visits?|appointments?|encounters?|sessions?|calls?'
-                   r'|consult(?:ation)?s?)|(?:two|three|four|both|several|multiple|all|\d{1,2})\s+'
-                   r'(?:visits|appointments|encounters|sessions)')
-_EM_OTHER_PERIOD = (r'(?:this|last|past|previous|prior|preceding|next|coming|current|each|every|per)\s+'
-                    r'(?:calendar\s+)?(?:weeks?|months?|quarters?|years?)|calendar\s+(?:week|month|quarter|year)'
-                    r'|(?:past|last|previous|preceding|next)\s+\d{1,3}\s+(?:days|weeks|months)'
-                    r'|\d{1,3}\s+(?:days?|weeks?|months?)\s+ago|weekly|monthly|quarterly|yearly|annually|yesterday'
-                    r'|tomorrow|last\s+night|since\s+(?:the\s+|her\s+|his\s+|their\s+)?(?:last|previous|prior|'
-                    + _EM_MONTH + r')')
-EM_TIME_ELSEWHEN = rx(r'\b(?:' + _EM_OTHER_VISIT + r'|' + _EM_OTHER_PERIOD + r')\b')
-# ... and right after the minutes only as the phrase that places them ("40 minutes at the previous visit", "45 minutes
-# this week coordinating care", "40 minutes, at the previous visit"), never as an object further on ("40 minutes
-# reviewing the notes of the previous visit") nor as an item after a comma ("20 minutes, next visit in 6 months").
-_EM_PLACING = r'(?:at|during|in|on|over|for|from|within|throughout|since)'
-EM_TIME_ELSEWHEN_AFTER = rx(r'[ \t]*(?:,[ \t]*(?=' + _EM_PLACING + r'[ \t]))?(?:(?:in[ \t]+)?total[ \t]+)?(?:'
-                            + _EM_PLACING + r'[ \t]+)?(?:(?:the|her|his|their|a|an)[ \t]+)?(?:' + _EM_OTHER_VISIT + r'|'
-                            + _EM_OTHER_PERIOD + r')\b')
-# A booking (a closed class): a time the visit was booked, allotted, expected or planned to take - its qualifier right
-# before or after the time noun, or a slot - never time spent ("Expected visit time: 30 minutes.", "Encounter time
-# allotted: 30 minutes.", "Visit time: 30 minutes (return visit slot)." in a note started before the visit). "Time spent
-# discussing the planned colonoscopy" is time spent.
+# rest of its clause after them), never in another sentence. A statement whose own words also say the date of the
+# encounter (EM_TIME_DAY) is that date's ("Total time on the date of service, including review of the previous visit's
+# notes: 40 minutes").
+# gi3 fix round 2 (rev2-scope-02, rev2-scope-06; interpretation 51(d): a time whose occasion is uncertain holds the
+# code): round 1's classes were combinations - a lead word directly before a visit noun ("previous visit", "August
+# visit"), a few period phrases - and each leaked in a form it did not list ("the August 27 visit", "her visit in
+# August", "the initial consultation", "the hospital admission", "the e-visit last Tuesday", "on 8/27"), while an
+# occasion word that stands only in an object before the minutes ("reviewing prior visit notes") refused the time and
+# the same words after them did not. These are word CLASSES now, read wherever they stand in the statement's own words,
+# so the word order changes nothing; the reader cannot tell an occasion that places the time ("coordinating care since
+# the last visit") from one inside an activity's object ("reviewing the labs drawn since her last visit"), so either is
+# uncertain and the time is not read (em_basis asked, the code held - never excluded on it:
+# engine._visit_only_elsewhen). A closed class adds evidence for the hold; nothing exempts a statement from it but the
+# date of the encounter.
+# - another occasion (EM_TIME_ELSEWHEN): a period - a week, a month, a quarter, a year, a night, a weekend or days with
+#   any determiner, number or quantifier ("this calendar month", "the past 2 weeks", "three months", "per day"), a
+#   season with one ("next spring"), a frequency ("weekly", "monthly"), a relative day or time ("yesterday", "ago",
+#   "since", "earlier", "previously"), a month or a weekday named, a day of a month ("the 27th") or a month and a day
+#   with no year ("8/27": a dated statement with its year is the date reader's), and a visit, appointment, encounter,
+#   session, call or consultation that is not this one (detect._another_visit): any in the plural, an admission, a
+#   hospital or a stay, an e-visit, and one any other word qualifies.
+_EM_MONTH = r'(?:january|february|march|april|june|july|august|september|october|november|december)'
+_EM_WEEKDAY = r'(?:mon|tues|wednes|thurs|fri|satur|sun)day'
+_EM_COUNT = (r'(?:\d{1,3}|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|several|few|many|both'
+             r'|multiple|this|last|past|previous|prior|preceding|next|coming|current|each|every|per|the|that)')
+EM_TIME_ELSEWHEN = rx(r'\b(?:' + _EM_COUNT + r'\s+(?:(?:calendar|few|several|full|whole|entire)\s+)?'
+                      r'(?:days?|weeks?|months?|quarters?|years?|nights?|weekends?)'
+                      r'|calendar\s+(?:weeks?|months?|quarters?|years?)'
+                      r'|(?:this|last|next|past|coming|previous|prior)\s+(?:spring|summer|fall|autumn|winter)'
+                      r'|yesterday|tomorrow|tonight|overnight|ago|since|earlier|later|previously|recently'
+                      r'|(?:bi)?(?:daily|weekly|monthly|quarterly|yearly)|annually|nightly|fortnightly'
+                      r'|' + _EM_MONTH + r'|' + _EM_WEEKDAY + r'|may(?=\s+\d)|(?<=\bin\s)may'
+                      r'|admissions?|hospitali[sz]ations?|hospitals?|inpatient|stays?|e-?visits?|televisits?'
+                      r'|\d{1,2}(?:st|nd|rd|th))\b'
+                      r'|\b(?:jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec)\.?(?=[ \t]*\d)'
+                      r'|(?<![\d/.-])\d{1,2}/\d{1,2}(?![\d/])')
+# ... the nouns of a visit, a call or an assessment, read by detect._another_visit: in the plural always another occasion
+# ("over two visits", "between appointments"), in the singular another one unless only a determiner or a preposition of
+# this one, and the names of this kind of visit, stand before it ("this visit", "the follow-up visit", "during the
+# visit", "her visit"; "the last visit", "the August 27 visit", "the initial consultation", "the colonoscopy
+# pre-assessment" are others)
+EM_TIME_VISIT_NOUN = rx(r'\b(?:(?P<plural>visits|appointments|encounters|sessions|calls|consults|consultations'
+                        r'|(?:pre-?)?assessments)|visit|appointment|encounter|session|call|consult|consultation'
+                        r'|(?:pre-?)?assessment)\b(?!-)')
+EM_TIME_VISIT_KIND = rx(r'(?:office|clinic|outpatient|follow[- ]?up|return|in-person|established[- ]patient'
+                        r'|new[- ]patient|gi|gastroenterology|hepatology)')
+EM_TIME_THIS_VISIT_LEAD = frozenset(('this', 'the', 'her', 'his', 'their', "today's", 'today\u2019s', 'todays',
+                                     'current', 'present', 'at', 'during', 'for', 'of', 'in', 'on', 'with', 'per', 'from',
+                                     'over', 'throughout', 'within', 'by', 'to', 'after', 'before'))
+# - a booking (EM_TIME_BOOKED): a time the visit was booked, allotted, expected or planned to take - a booking word and
+#   a time noun in either order ("Expected visit time", "Encounter time allotted"), a slot, an allotment, the schedule
+#   ("per schedule", "as scheduled", "Visit time: 30 minutes, standard return slot.") - never time spent; and in a
+#   parenthesis right after the minutes any booking word ("30 minutes (booked)": EM_TIME_BOOKING_WORD).
 _EM_BOOKING = r'allotted|allocated|expected|scheduled|booked|estimated|anticipated|reserved|planned|budgeted'
-EM_TIME_BOOKED = rx(r'\b(?:(?:' + _EM_BOOKING + r')\s+(?:(?:visit|encounter|appointment)\s+)?(?:time|length|duration)'
-                    r'|(?:time|length|duration)\s+(?:' + _EM_BOOKING + r')|slots?|allotment)\b')
-# ... and in a parenthesis right after the minutes, any booking word qualifies them ("30 minutes (booked)")
-EM_TIME_BOOKING_WORD = rx(r'\b(?:' + _EM_BOOKING + r'|slots?|allotment)\b')
-# ... and any time in a note that says it was written before its visit (a closed class of statements about the note
-# itself: "Note started in advance of the visit; to be completed on the day.", "Draft prepared for the upcoming
-# appointment", "Pre-visit planning note", "the visit has not yet taken place"): no time can have been spent at a visit
-# still to come, so its "Visit time: 30 minutes." is the booked length (the known limit S2 holds such a note, never
-# ready). Never what else was done before the visit ("Labs were drawn in advance of the visit.") or a pre-charting
-# credit ("Pre-charted by the medical assistant"), which completed notes carry. Read once per document.
-EM_PRECHARTED = rx(r'\b(?:note|draft|chart|documentation|record)\s+(?:was\s+|is\s+)?(?:started|opened|begun|prepared'
-                   r'|written|created)\s+(?:(?:in\s+advance\s+of|ahead\s+of|before)\s+(?:the|this|today\W?s|her|his)'
+EM_TIME_BOOKED = rx(r'\b(?:(?:' + _EM_BOOKING + r')\s+(?:(?:visit|encounter|appointment|office|clinic|return'
+                    r'|follow[- ]?up)\s+)*(?:time|length|duration)'
+                    r'|(?:time|length|duration)\s+(?:' + _EM_BOOKING + r')|slots?|allotment|schedule'
+                    r'|as\s+(?:' + _EM_BOOKING + r'))\b')
+EM_TIME_BOOKING_WORD = rx(r'\b(?:' + _EM_BOOKING + r'|slots?|allotment|schedule)\b')
+# ... and any time in a note that says it was written before its visit: a closed class of statements whose subject is
+# the note itself or this visit - "Note started in advance of the visit; to be completed on the day.", "Draft prepared
+# for the upcoming appointment", "Pre-visit planning note", "Pre-charting note", "This visit has not yet taken place",
+# "Visit not yet occurred": no time can have been spent at a visit still to come, so its "Visit time: 30 minutes." is
+# the booked length (the known limit S2 holds such a note, never ready). Never what else was done before the visit
+# ("Labs were drawn in advance of the visit.") or a pre-charting credit ("Pre-charted by the medical assistant"), which
+# completed notes carry. Read once per document.
+# gi3 fix round 2 (rev2-scope-01): round 1's class also read any subject - "Labs to be completed after the visit.",
+# "Bowel preparation to be completed on the day before the procedure.", "Her pelvic floor physiotherapy appointment has
+# not yet taken place.", "A referral note was written for her upcoming appointment with surgery." - so one plan item or
+# another service's appointment dropped every time statement of a completed note, and a SOAP note whose time was its
+# only visit marker was then excluded on its plan's return visit. Each statement here is about the note itself (its
+# noun opens its clause or its table cell, after "this" or "the" at most) or about this visit (a determiner and this
+# kind of visit's names only, nothing naming another service).
+_EM_NOTE_SUBJECT = (r'(?:^|[.;:!?|])[ \t]*(?:(?:this|the)[ \t]+)?(?:note|draft|chart|documentation|record)\s+')
+EM_PRECHARTED = rx(_EM_NOTE_SUBJECT + r'(?:was\s+|is\s+)?(?:started|opened|begun|prepared|written|created)\s+'
+                   r'(?:(?:in\s+advance\s+of|ahead\s+of|before)\s+(?:the|this|today\W?s|her|his)'
                    r'|for\s+(?:the|her|his)\s+(?:upcoming|scheduled|next|planned))\s+(?:visit|appointment|encounter)\b'
-                   r'|\bpre-?visit\s+planning\s+note\b'
-                   r'|\bto\s+be\s+completed\s+(?:on|at|after|during)\s+(?:the\s+)?(?:day\s+of\s+the\s+)?'
-                   r'(?:visit|appointment|encounter)\b|\bto\s+be\s+completed\s+on\s+the\s+day\b(?!\s+of\b)'
-                   r'|\b(?:visit|appointment|encounter)\s+(?:has\s+)?not\s+(?:yet\s+)?(?:occurred|taken\s+place'
-                   r'|happened)\b')
-# Another service's time: a drug or blood administration's (an infusion, a transfusion, an injection, a hydration, a
-# chemotherapy administration), as the time's own subject ("Total infusion time: 120 minutes.", "Time spent on the
-# infusion", "Total time for the infliximab administration"), as a procedure's is (NOT_EM_TIME; interpretation 43).
-# Time spent discussing an infusion is the visit's.
-_EM_ADMINISTRATION = r'infusions?|transfusions?|injections?|hydration|chemotherapy|administrations?'
-EM_TIME_ADMINISTERED = rx(r'\b(?:(?:' + _EM_ADMINISTRATION + r')\s+(?:time|duration)|(?:time|duration)\s+(?:spent\s+)?'
-                          r'(?:on|for|of|during)\s+(?:(?:the|an?)\s+)?(?:[a-z]+\s+)?(?:' + _EM_ADMINISTRATION + r'))\b')
+                   r'|\bpre-?visit\s+planning\s+note\b|\bpre-?chart(?:ing|ed)\s+note\b'
+                   r'|' + _EM_NOTE_SUBJECT + r'(?:is\s+|will\s+be\s+)?to\s+be\s+(?:completed|finished|finali[sz]ed)\s+'
+                   r'(?:on|at|after|during)\s+(?:the\s+)?(?:day\b(?:\s+of\s+the\s+(?:visit|appointment|encounter)\b)?'
+                   r'|(?:visit|appointment|encounter)\b)'
+                   r"|(?:\b(?:this|today['\u2019]?s|the)\s+|(?:^|[.;:!?|])[ \t]*)"
+                   r'(?:(?:office|clinic|follow[- ]?up|return)\s+)?(?:visit|appointment|encounter)\s+(?:has\s+)?not\s+'
+                   r'(?:yet\s+)?(?:occurred|taken\s+place|happened)\b', FLAGS | re.M)
+# - a drug or blood administration (EM_TIME_ADMINISTERED): its own time is that service's (an infusion, a transfusion,
+#   an injection, a hydration, a chemotherapy, an administration), as a procedure's is (NOT_EM_TIME; interpretation
+#   43). gi3 fix round 2 (rev2-scope-10): round 1 read only "<administration> time" or "time spent on the
+#   <administration>" before the minutes, so "Total time spent administering the infusion", "Total time: 120 minutes
+#   (infusion).", "Total time in the infusion chair" and "Total time from start to end of infusion" were E/M time beside
+#   "Infliximab 5 mg/kg IV was infused without reaction."; any word of the class in the statement's own words (an
+#   administration's stems and its routes: "IV", "intravenous", "a drip") now makes its occasion uncertain - the reader
+#   cannot tell time spent discussing an infusion from time spent giving one.
+EM_TIME_ADMINISTERED = rx(r'\b(?:infus\w*|inject\w*|transfus\w*|administ\w*|hydrat\w*|chemo\w*|drips?\b|iv\b'
+                          r'|intravenous\w*|subcutaneous\w*|intramuscular\w*)')
+# - a procedure (EM_TIME_SERVICE), for a clinician's time only: one whose own words name a routed service or a
+#   procedure ("Physician time at the colonoscopy: 30 minutes.", "Face-to-face time during the procedure", "Physician
+#   time for the banding") may be that procedure's - interpretation 43 never counts a procedure's time, and
+#   90377ec6f413 counted no clinician time at all - so beside a visit marker it is no basis (gi3 fix round 2, self-attack
+#   beside rev2-scope-06). Total time and time spent read as before ("Total time spent discussing the procedure").
+EM_TIME_SERVICE = rx(_ANY_SERVICE + r'|\b(?:procedures?|procedural|endoscop\w*|anoscop\w*|proctoscop\w*|band(?:ing|ed)'
+                     r'|ligation|paracentes[ie]s|elastograph\w*|fibroscan|polypectom\w*|biops\w*|dilat(?:ion|ation|ed)'
+                     r'|manometr\w*|capsule)\b')
+# gi3 fix round 2 (self-attack beside rev2-scope-05): the words that, after a visit statement in its own clause, place
+# the visit after or upon another occasion with no date ("Office visit afterwards.", "Office visit to follow.", "Office
+# visit later.", "Office visit once the pathology is back.", "Office visit after that."): such a statement is no marker
+# of today's visit (detect._em_base_reading holds it). A closed class of English's sequencing adverbs and future
+# subordinators; "after" and "before" with an object are read with the service they name
+# (engine._visit_timed_by_service), and a clause that says today is today's.
+EM_VISIT_SEQUENCED = rx(r'\b(?:afterwards?|thereafter|later|subsequently|eventually|to\s+follow|once|when|whenever'
+                        r'|until|till|as\s+soon\s+as|(?:after|before)\s+(?:that|this|it|which|these|those))\b')
 EM_TIME_LINE = rx(r'^[ \t]*(?:total\s+)?time(?:\s+spent)?[ \t]*[:\-][ \t]*(?P<minutes>\d{1,3})\s*(?:minutes|mins?)\b')
 # gi3 scope (interpretation 44): the document's own visit marker on a line of its own - a title naming an office, clinic,
 # outpatient, follow-up or return note or visit ("Clinic note - return visit", "Hepatology follow-up note", "GI clinic

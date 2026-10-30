@@ -127,12 +127,17 @@ class TitlesNamingNoOfficeVisitTests(unittest.TestCase):
         self.assertIsNone(em_status(text))
 
     def test_controls_a_specialty_or_clinic_title_and_a_phone_field_still_mark_the_visit(self):
-        for title in ('Hepatology follow-up note', 'IBD clinic note', 'IBD clinic note - infusion review',
-                      'Office follow-up visit', 'Clinic note - return visit'):
+        for title in ('Hepatology follow-up note', 'IBD clinic note', 'Office follow-up visit', 'Clinic note - return visit'):
             with self.subTest(title=title):
                 text = clinic(title, 'Return in one year.', 'Face-to-face time: 24 minutes.')
                 self.assertEqual(em_status(text), 'performed')
                 self.assertEqual(fact_value(text, 'gi.office_em', 'time_minutes'), '24')
+        # gi3 fix round 2 (rev2-scope-03; interpretation 51(d): an infusion in the head holds the office E/M): the title
+        # names an infusion, so the visit is held, never ready on the face-to-face time and never excluded
+        text = clinic('IBD clinic note - infusion review', 'Return in one year.', 'Face-to-face time: 24 minutes.')
+        self.assertEqual(em_status(text), 'uncertain')
+        proposals, _ = run_engine(text, [('99213', ['IBD clinic note - infusion review'])])
+        held(self, proposals['99213'], ['performed_status', 'em_basis'])
         field = (PRACTICE + 'Practice phone: 555-0100 | Office visit\nDate of service: 2026-10-21\n' + OFFICE
                  + 'Assessment\nGERD.\nPlan\nContinue.\nFace-to-face time: 20 minutes.\n')
         proposals, _ = run_engine(field, [('99213', ['Office visit'])])
@@ -161,7 +166,10 @@ class PlanLineIsNoTitleTests(unittest.TestCase):
         letter = B_RESULTS_LETTER + 'Follow-up visit, six weeks\n'
         self.assertEqual(em_status(letter), 'planned')
         proposals, _ = run_engine(letter, [('99213', ['Follow-up visit, six weeks'])])
-        self.assertEqual(proposals['99213'].status, 'excluded')  # as installed: the letter documents no visit today
+        # gi3 fix round 2 (interpretation 51(d)): a later visit's mention never excludes the office E/M; the letter is
+        # held for the reviewer (round 1 excluded it, as installed)
+        self.assertEqual(proposals['99213'].status, 'needs_clarification')
+        self.assertIn('performed_status', clarified(proposals['99213']))
         self.assertNotIn('documented as performed', status_detail(proposals['99213']))
         later = B_RESULTS_LETTER + 'Return visit - three months\n'
         self.assertIsNone(em_status(later))
@@ -175,10 +183,16 @@ class PlanLineIsNoTitleTests(unittest.TestCase):
 
     def test_controls_a_title_that_opens_its_own_plan_section_is_the_visits(self):
         # interpretation 42: a section opened by the document's own title governs nothing
-        text = (PRACTICE + 'GI clinic follow-up\nDate of service: 2026-10-21\n' + OFFICE + 'Assessment\nGERD.\nPlan\n'
-                'Continue omeprazole.\nFace-to-face time: 20 minutes.\n')
+        text = (PRACTICE + 'GI clinic follow-up\nDate of service: 2026-10-21\n' + OFFICE + 'Interval history\nStable.\n'
+                'Assessment\nGERD.\nPlan\nContinue omeprazole.\nFace-to-face time: 20 minutes.\n')
         self.assertEqual(em_status(text), 'performed')
         self.assertEqual(fact_value(text, 'gi.office_em', 'time_minutes'), '20')
+        # gi3 fix round 2 (interpretation 50(c), with 51's uncertain-reading rule): with an "Assessment" heading alone
+        # the title makes no clinician time the visit's - a study's interpretation is written under one as often - so
+        # the visit is read (its title) and its basis asked
+        bare = text.replace('Interval history\nStable.\n', '')
+        self.assertEqual(em_status(bare), 'performed')
+        self.assertIsNone(fact_value(bare, 'gi.office_em', 'time_minutes'))
 
     def test_controls_a_title_under_the_documents_own_follow_up_title_is_the_visits(self):
         # the dates binding's RC5: "Gastroenterology follow-up" opens a plan section over the head, and the visit title
@@ -242,13 +256,26 @@ class TimeOfAnotherOccasionTests(unittest.TestCase):
                               ('Face-to-face time: 24 minutes, more than half of it spent counseling about diet, fluids '
                                'and the expected course.', '24'),
                               ('Next visit in 3 months; total time 25 minutes.', '25'),
-                              ('Total time today: 30 minutes; return visit next month.', '30'),
-                              ('Total time: 30 minutes (previous visit 45 minutes).', '30')):
+                              ('Total time today: 30 minutes; return visit next month.', '30')):
             text = clinic('Clinic note - return visit', 'Return in one year.', line)
             with self.subTest(line=line):
                 self.assertEqual(fact_value(text, 'gi.office_em', 'time_minutes'), minutes)
                 proposals, _ = run_engine(text, [('99213', ['Clinic note - return visit'])])
                 self.assertEqual(proposals['99213'].status, 'ready')
+
+    def test_another_occasion_named_in_the_statements_own_clause_holds_its_time(self):
+        # gi3 fix round 2 (rev2-scope-02; interpretation 51(d)): the rest of the statement's clause is its own words too,
+        # so "(previous visit 45 minutes)" right after today's minutes makes their occasion uncertain - the basis is
+        # asked (held, never ready on it and never excluded); a separate sentence or a semicolon keeps it apart
+        text = clinic('Clinic note - return visit', 'Return in one year.', 'Total time: 30 minutes (previous visit 45 minutes).')
+        self.assertIsNone(fact_value(text, 'gi.office_em', 'time_minutes'))
+        proposals, _ = run_engine(text, [('99213', ['Clinic note - return visit'])])
+        held(self, proposals['99213'], ['em_basis'])
+        for line in ('Total time: 30 minutes. The previous visit took 45 minutes.',
+                     'Total time: 30 minutes; previous visit 45 minutes.'):
+            with self.subTest(line=line):
+                self.assertEqual(fact_value(clinic('Clinic note - return visit', 'Return in one year.', line),
+                                            'gi.office_em', 'time_minutes'), '30')
 
     def test_controls_a_dated_time_still_reads_by_its_date(self):
         text = clinic('Clinic note - return visit', 'Continue.', 'Face-to-face time on 2026-08-27: 40 minutes.')
@@ -275,15 +302,17 @@ class ProcedureTimeAfterItsReportTests(unittest.TestCase):
         held(self, proposals['99213'], ['performed_status', 'em_basis'])
 
     def test_an_egds_time_never_keeps_the_title_on_the_procedure_day(self):
-        # the EGD day's later visit stays the plan's (planned, the code excluded), as the module's F05 test reads it
+        # the EGD day's later visit stays the plan's (planned), as the module's F05 test reads it; gi3 fix round 2
+        # (interpretation 51(d)): that later visit never excludes the E/M code - held for the reviewer, never ready
         text = D_F05 + 'Physician time: 25 minutes.\n'
         self.assertEqual(em_status(text), 'planned')
         self.assertIsNone(fact_value(text, 'gi.office_em', 'time_minutes'))
         proposals, _ = run_engine(text, [('43235', [EGD_LINE]), ('99213', ['Endoscopy follow-up note'])])
         self.assertEqual(proposals['43235'].status, 'ready')
-        self.assertEqual(proposals['99213'].status, 'excluded')
+        self.assertEqual(proposals['99213'].status, 'needs_clarification')
+        self.assertIn('performed_status', clarified(proposals['99213']))
         control, _ = run_engine(D_F05, [('43235', [EGD_LINE]), ('99213', ['Endoscopy follow-up note'])])
-        self.assertEqual(control['99213'].status, 'excluded')
+        self.assertEqual(control['99213'].status, 'needs_clarification')
 
     def test_controls_a_clinic_note_that_examines_and_assesses_keeps_its_time(self):
         # the corpus's F07: a visit with a same-day banding, its face-to-face time the visit's; held for the separate
@@ -392,14 +421,19 @@ class NoMarkerNoteIsHeldTests(unittest.TestCase):
         held(self, proposals['99213'], ['performed_status', 'em_basis'])
         self.assertIn('an earlier visit', status_detail(proposals['99213']))
 
-    def test_controls_a_document_with_no_encounter_or_a_procedure_day_keeps_the_exclusion(self):
+    def test_a_letter_or_a_procedure_day_is_held_and_a_cancelled_visit_excluded(self):
+        # gi3 fix round 2 (rev2-scope-09; interpretation 51(d)): an office E/M is excluded only where the document
+        # positively shows that no visit took place today. A later visit's mention never does - in a letter or on a
+        # procedure day either (round 1 kept both exclusions, as installed) - so both are held; a cancellation does
         letter = BANNER + 'Appointment confirmation\nYour follow-up office visit is scheduled for 2026-11-18.\n'
         proposals, _ = run_engine(letter, [('99213', ['Your follow-up office visit is scheduled for 2026-11-18.'])])
-        self.assertEqual(proposals['99213'].status, 'excluded')
+        self.assertEqual(proposals['99213'].status, 'needs_clarification')
+        self.assertIn('performed_status', clarified(proposals['99213']))
         banding = G_NOTE.format(plan='Return office visit in 6 months.').replace(
             'Plan\n', 'Procedure\nAnoscopy was performed and two internal hemorrhoids were banded.\nPlan\n')
         proposals, _ = run_engine(banding, [('99213', ['Return office visit in 6 months.'])])
-        self.assertEqual(proposals['99213'].status, 'excluded')
+        self.assertEqual(proposals['99213'].status, 'needs_clarification')
+        self.assertIn('performed_status', clarified(proposals['99213']))
         cancelled = G_NOTE.format(plan='Continue.').replace('Interval history\n', 'Office visit cancelled.\n'
                                                             'Interval history\n')
         proposals, _ = run_engine(cancelled, [('99213', ['Office visit cancelled.'])])
@@ -428,11 +462,19 @@ class InfusionTimeTests(unittest.TestCase):
                 proposals, _ = run_engine(text, [('99215', ['IBD clinic note'])])
                 held(self, proposals['99215'], ['em_basis'])
 
-    def test_controls_time_spent_discussing_an_infusion_is_the_visits(self):
+    def test_a_time_naming_an_infusion_anywhere_holds_its_basis(self):
+        # gi3 fix round 2 (rev2-scope-10; interpretation 51(d) and (f)): any word of an administration in the statement's
+        # own words makes its occasion uncertain - the reader cannot tell time spent discussing an infusion from time
+        # spent giving one, and no exempting list ("counseling about ...") is added - so the basis is asked, never
+        # ready on it and never excluded; the same counselling with no administration named is the visit's
         text = clinic('IBD clinic note', 'Return in 8 weeks.',
                       'Total time spent counseling about starting infliximab infusions: 40 minutes.')
-        self.assertEqual(fact_value(text, 'gi.office_em', 'time_minutes'), '40')
+        self.assertIsNone(fact_value(text, 'gi.office_em', 'time_minutes'))
         proposals, _ = run_engine(text, [('99214', ['IBD clinic note'])])
+        held(self, proposals['99214'], ['em_basis'])
+        control = clinic('IBD clinic note', 'Return in 8 weeks.', 'Total time spent counseling about starting therapy: 40 minutes.')
+        self.assertEqual(fact_value(control, 'gi.office_em', 'time_minutes'), '40')
+        proposals, _ = run_engine(control, [('99214', ['IBD clinic note'])])
         self.assertEqual(proposals['99214'].status, 'ready')
 
 
@@ -454,13 +496,15 @@ class VisitPlacedByTheServiceItNamesTests(unittest.TestCase):
             with self.subTest(visit=visit):
                 proposals, _ = run_engine(LETTER + visit + '\n', [('99213', [visit])])
                 held(self, proposals['99213'], ['performed_status', 'em_basis'])
+                # gi3 fix round 2 (rev2-scope-03/-05; interpretation 51(d)): a letter in the head holds every marker, so
+                # the later visit's "Visit time" is no basis either
                 timed, _ = run_engine(LETTER + visit + '\nVisit time: 30 minutes.\n', [('99213', [visit])])
-                held(self, timed['99213'], ['performed_status'])
+                held(self, timed['99213'], ['performed_status', 'em_basis'])
 
     def test_a_visit_before_a_past_service_stays_held(self):
         visit = 'Office visit before the colonoscopy done last week.'
         proposals, _ = run_engine(LETTER + visit + '\nVisit time: 30 minutes.\n', [('99213', [visit])])
-        held(self, proposals['99213'], ['performed_status'])
+        held(self, proposals['99213'], ['performed_status', 'em_basis'])  # gi3 fix round 2: the letter holds its time
 
     def test_controls_a_visit_about_or_after_a_past_service_is_todays(self):
         for visit in ('Office visit to discuss the colonoscopy scheduled for 2026-11-18.',
