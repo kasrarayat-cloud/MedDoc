@@ -226,10 +226,15 @@ class FindingColumnTests(unittest.TestCase):
                 self.assertEqual(finding(text, 'gi.egd'), ('performed', 'second part of duodenum'))
 
     def test_control_the_rows_own_reach_status_or_extent_still_speaks_for_it(self):
-        for label in ('cecum reached', 'terminal ileum intubated', 'terminal ileum', 'furthest point reached', 'extent',
-                      'performed', 'procedure completed', 'colonoscopy performed', 'status', 'seen', 'done today'):
+        for label in ('furthest point reached', 'extent', 'performed', 'procedure completed', 'colonoscopy performed',
+                      'status', 'seen', 'done today'):
             with self.subTest(label=label):
                 self.assertEqual(sections._column_sense(label), sections.COLUMN_ROW)
+        # gi3 fix round 2 (X6): a landmark's reach is that landmark's (COLUMN_LANDMARK); it holds the row only where it
+        # leaves unaffirmed a reach the row's own extent covers (the "Cecum reached | No" check below)
+        for label in ('cecum reached', 'terminal ileum intubated', 'terminal ileum'):
+            with self.subTest(label=label):
+                self.assertEqual(sections._column_sense(label), sections.COLUMN_LANDMARK)
         for label in ('tissue sampled', 'complications', 'biopsies', 'instrument', 'comments', 'planned date'):
             with self.subTest(label=label):
                 self.assertEqual(sections._column_sense(label), sections.COLUMN_OWN)
@@ -346,7 +351,8 @@ class NotDoneColumnTests(unittest.TestCase):
         self.assertNotIn(finding(text, 'gi.colonoscopy')[0], ('performed', 'incomplete'))
 
     def test_ext7_a_negation_turns_the_sense_and_a_two_valued_status_speaks_as_written(self):
-        for label, sense in (('not performed', sections.COLUMN_NOT_DONE), ('cecum not reached', sections.COLUMN_NOT_DONE),
+        # gi3 fix round 2 (X3): a negated reach is the landmark's (COLUMN_LANDMARK), never a not-done status of the service
+        for label, sense in (('not performed', sections.COLUMN_NOT_DONE), ('cecum not reached', sections.COLUMN_LANDMARK),
                              ('never performed', sections.COLUMN_NOT_DONE), ('not cancelled', sections.COLUMN_ROW),
                              ('status (completed/cancelled)', sections.COLUMN_ROW), ('completed (y/n)', sections.COLUMN_ROW),
                              ('biopsy (yes/no)', sections.COLUMN_OWN), ('no', sections.COLUMN_OWN), ('#', sections.COLUMN_OWN)):

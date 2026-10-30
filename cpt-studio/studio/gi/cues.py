@@ -120,13 +120,25 @@ _NOT_DONE = (r'performed|completed|undertaken|carried\s+out|attempted|obtained|t
 # in the last ten years was not performed" deny another occasion's service, which the historical and time readers read
 # (HISTORICAL_CLAUSE, OTHER_TIME), never today's: N1 read each as today's colonoscopy denied, so routing's family read
 # negated where 90377ec6f413 read the mention historical.
-_POST_MODIFIER_OCCASION = (r'prior|previous|previously|last|recent|recently|remote|earlier|past(?![ \t]+(?:the|a|an)\b)|'
-                           r'index|outside|another|other|elsewhere|former|next|upcoming|future|following|subsequent|'
-                           r'later|ago|before|after|age|(?:day|week|wk|month|mo|year|yr|decade|hour)s?|'
-                           r'january|february|march|april|may|june|july|august|september|october|november|december|'
-                           r'monday|tuesday|wednesday|thursday|friday|saturday|sunday|\w*\d\w*')
-_POST_MODIFIER_WORD = (r'(?!(?:that|which|who|whom|whose|where|when|while|because|since|if|unless|although|though|'
-                       r'until|' + _POST_MODIFIER_OCCASION + r')\b)[\w-]+')
+# gi3 fix round 2 (X7): a class of what ends the post-modifier failed open in every occasion it did not list ("at that
+# time", "on admission", "in the hospital", "at diagnosis", "in the ICU", "at the referring hospital", a place's name):
+# each carried the denial to today's service, and the colonoscopy done to the cecum read negated. Interpretation 51(e),
+# (f): the post-modifier now needs positive evidence that it names the act's own object or place today - every word
+# after its preposition and determiner is of _POST_MODIFIER_PLACE: a landmark's or the lumen's words, the lesion or
+# structure the act treats, the words that size or place it, and "bedside" ("of the channel", "of the cecum", "across
+# the narrowed pyloric channel", "through the stenosis", "of the polyp", "at the bedside"). Any other word (an occasion,
+# a time, a place's name, a digit) leaves N1 unread, so the denial reads as at 90377ec6f413: held where a section reads
+# the act performed, silent elsewhere - never a denial of today's service.
+_POST_MODIFIER_PLACE = (r'esophagus|esophageal|stomach|gastric|antrum|antral|pylorus|pyloric|prepyloric|channel|canal|'
+                        r'outlet|fundus|cardia|body|incisura|duodenum|duodenal|bulb|jejunum|jejunal|ileum|ileal|terminal|'
+                        r'colon|colonic|rectum|rectal|sigmoid|rectosigmoid|descending|transverse|ascending|splenic|'
+                        r'hepatic|flexure|cecum|cecal|appendiceal|orifice|ileocecal|valve|anastomosis|anastomotic|'
+                        r'papilla|ampulla|ampullary|bile|biliary|pancreatic|common|main|duct|ducts|lumen|wall|mucosa|'
+                        r'gastroesophageal|junction|z-line|polyp|polyps|lesion|lesions|mass|nodule|ulcer|ulcers|stricture|'
+                        r'strictures|stenosis|narrowing|varix|varices|fistula|diverticulum|tumor|cyst|site|base|edge|'
+                        r'margin|part|portion|segment|narrowed|large|small|sessile|pedunculated|flat|ulcerated|friable|'
+                        r'nodular|distal|proximal|mid|upper|lower|first|second|third|fourth|residual|remaining|bedside')
+_POST_MODIFIER_WORD = r'(?:' + _POST_MODIFIER_PLACE + r')(?![\w-])'
 _POST_MODIFIER = (r'^(?:\s+(?:of|at|in|on|across|through)\s+(?:(?:the|a|an|this|that|these|those)\s+)?'
                   r'(?:' + _POST_MODIFIER_WORD + r'\s+){0,2}?' + _POST_MODIFIER_WORD
                   + r'(?=\s+(?:was|were|is|are|has|have|had)\s))?')

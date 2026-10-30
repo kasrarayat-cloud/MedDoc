@@ -1,0 +1,14 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Larkspur Digestive Health (fictional)
+Endoscopy note (post-procedure call)
+Patient: Odalys Fenwick-Marr (fictional)
+Date of birth: 1961-02-14
+Date of service: 2026-10-28
+Called Ms. Fenwick-Marr by telephone with her pathology results; she understood them.
+Procedure summary
+Examination | Instrument | Furthest point reached | Polyps
+Colonoscopy | Adult colonoscope | Cecum | Two, sigmoid colon
+Both 5 mm sigmoid polyps were removed with a cold snare; pathology showed tubular adenomas.
+Plan:
+Surveillance colonoscopy in 7 years.
+Electronically signed: Rosalind Achterberg, MD (fictional), 2026-10-28
