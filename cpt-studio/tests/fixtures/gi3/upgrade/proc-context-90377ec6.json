@@ -1,0 +1,42 @@
+{
+ "billing_context": {
+  "evidence": [],
+  "name": "billing_context",
+  "note": "No explicit professional or facility billing statement is documented.",
+  "origin": "missing",
+  "value": "not_documented"
+ },
+ "patient_status": {
+  "evidence": [],
+  "name": "patient_status",
+  "note": "New or established patient status is not documented.",
+  "origin": "missing",
+  "value": null
+ },
+ "service_date": {
+  "evidence": [
+   {
+    "end": 195,
+    "start": 168,
+    "text": "Date of service: 2026-10-05"
+   }
+  ],
+  "name": "service_date",
+  "note": "",
+  "origin": "document",
+  "value": "2026-10-05"
+ },
+ "setting": {
+  "evidence": [
+   {
+    "end": 239,
+    "start": 196,
+    "text": "Place of service: Ambulatory surgery center"
+   }
+  ],
+  "name": "setting",
+  "note": "",
+  "origin": "document",
+  "value": "asc"
+ }
+}

@@ -34,10 +34,15 @@ from .validation.engine import assess as run_assessment
 
 log = logging.getLogger(__name__)
 
-CONTEXT_VERSION = 'gi-context@2'
-# Context versions recorded under other merge rules (gi-context@1, the installed revision 057a7d39, kept a member's value
-# as plain metadata): a stage remakes such a context before it sends or assesses anything (_remade_context).
-EARLIER_CONTEXT_VERSIONS = ('gi-context@1',)
+CONTEXT_VERSION = 'gi-context@3'
+# Context versions recorded under other rules: a stage remakes such a context before it sends or assesses anything
+# (_remade_context), and no second review is offered or sent on one (_second_review_bounds, stage_review2).
+# - gi-context@1 (the installed revision 057a7d39) kept a member's value as plain metadata;
+# - gi-context@2 (2b82889f and 90377ec6f413) read a date label a plan or history section held as dropped, so h2-08's
+#   recorded context says 2026-10-05 where the third round's binding reads a conflict with its charge block's
+#   2026-10-06. Kept current, it was re-sent by a predict queued or stopped at the install, a reconciliation or a second
+#   review, and assessed as documented (refutation of the integrated third round, STATE-1 and STATE-2).
+EARLIER_CONTEXT_VERSIONS = ('gi-context@1', 'gi-context@2')
 MEMBER_DATE_CONFLICT_MESSAGE = ('Nothing was sent: the service date entered as encounter metadata differs from the '
                                 'documented one. Correct or clear the metadata (or add an addendum), and the request is '
                                 'made for the agreed date.')
