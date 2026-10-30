@@ -279,6 +279,7 @@ class AnotherModalityInTheHeadTests(unittest.TestCase):
                      'Clinic note - return visit\nPhone (mobile): 555-0100 ext. 2',
                      'Clinic note - return visit\nPhone no.: 555 010 0100',
                      'Clinic note - return visit\nPhone: 1-800-555-0100',
+                     'Clinic note - return visit\nWeb: www.example.org/portal',
                      'Clinic note - return visit\nTelephone: +44 20 7946 0958',
                      'Clinic note - return visit\nPatient portal: www.example.org/portal | https://portal.example.org'
                      ' | E-mail: info@portal.example.org'):
