@@ -113,37 +113,6 @@
    },
    "reason": "A planned-only document read as a visit (known limit RC6, as at the installed revision): the appointment reminder's row 'Visit type | Established patient office visit' has no planning word in its own clause, so routing reads that visit statement performed; the appointment date is in another row. The E/M code is held by its basis and date questions, never ready."
   },
-  "P05-ev-plan": {
-   "wrong": [
-    "office E/M read as performed today"
-   ],
-   "output": {
-    "service_date": [
-     "missing",
-     null
-    ],
-    "office_em": "performed",
-    "em_facts": {
-     "patient_status": "new"
-    },
-    "families": {},
-    "inventory_em": [
-     "performed"
-    ],
-    "proposal": {
-     "code": "99203",
-     "status": "needs_clarification",
-     "questions": [
-      "setting",
-      "em_basis"
-     ]
-    },
-    "encounter_questions": [
-     "service_date"
-    ]
-   },
-   "reason": "A planned-only document read as a visit (known limit RC6, as at the installed revision): the referral letter's 'for a new patient consultation' is a visit statement with no planning word in its own clause, read performed. The E/M code is held by its setting, basis and date questions, never ready."
-  },
   "P07-ev-title": {
    "wrong": [
     "office E/M read as performed though the note says the visit is in the future"

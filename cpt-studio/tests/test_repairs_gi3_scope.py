@@ -187,13 +187,13 @@ class TodaysVisitByItsOwnMarkersTests(unittest.TestCase):
 
     def test_a_title_beside_a_later_visit_on_a_procedure_day_is_no_em_of_today(self):
         # "Endoscopy follow-up note" over an EGD whose plan names a later visit (variant F05): the title is no E/M of today,
-        # so the document reads as before titles were read - the visit planned, and a code citing the title excluded as
-        # at the installed revision (both readers read the visit as the plan's)
+        # so the document reads as before titles were read - the visit planned. gi3 fix round 2 (interpretation 51(d)):
+        # a later visit's mention never excludes the code citing the title (the installed revision excluded it): held
         text = (HEADER + 'Endoscopy follow-up note\nIndication\nDysphagia.\nProcedure\nEGD: the gastroscope was advanced '
                 'to the second portion of the duodenum.\nPlan\nAwait pathology. Follow-up visit in 2 weeks.\n')
         self.assertEqual(family(text, 'gi.office_em'), 'planned')
         proposals, _ = run_engine(text, [('99213', ['Endoscopy follow-up note'])])
-        self.assertEqual(proposals['99213'].status, 'excluded')
+        self.assertEqual(proposals['99213'].status, 'needs_clarification')
 
     def test_a_procedure_reports_follow_up_visit_stays_planned(self):
         text = HEADER + 'Procedure: EGD\nRecommendations\nFollow-up office visit in 4 weeks.'
