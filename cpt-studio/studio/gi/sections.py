@@ -719,6 +719,9 @@ class Layout:
     reporting_parts: frozenset = frozenset()
     # gi3 fix round 1 (EXT-5): the answer cells that answer their own column, each a clause of its own, in text order
     answer_cells: tuple[tuple[int, int], ...] = ()
+    # gi3 fix round 2 (X4): the header lines that name no service: labels only, so their words state nothing (a header
+    # row that names a service may be a table's first data row, read as before)
+    label_headers: frozenset = frozenset()
 
     def section_at(self, pos: int) -> Section:
         index = bisect.bisect_right(self.section_starts, pos) - 1
@@ -735,6 +738,13 @@ class Layout:
         """Whether ``pos`` lies on a table's header line: its cells are column labels, never statements."""
         index = bisect.bisect_right(self.tables, pos, key=lambda table: table.header[0]) - 1
         return index >= 0 and self.tables[index].header[0] <= pos < self.tables[index].header[1]
+
+    def in_label_header(self, pos: int) -> bool:
+        """Whether ``pos`` lies on a table's header line that names no service (gi3 fix round 2, X4): its cells are
+        column labels and nothing else, so none of its words is a cue, a reference or a doubt."""
+        index = bisect.bisect_right(self.tables, pos, key=lambda table: table.header[0]) - 1
+        return index >= 0 and self.tables[index].header[0] <= pos < self.tables[index].header[1] \
+            and self.tables[index].header[0] in self.label_headers
 
     def row_at(self, pos: int) -> Optional[tuple['Table', tuple]]:
         """(table, row) of the table data row that holds ``pos``, else None (gi3 fix round 2, X8)."""
@@ -1924,8 +1934,9 @@ def layout(text: str) -> Layout:
     # gi3 extent (R9): the parts the reporting service lines opened (detect._answers_silently reads a label there)
     part_starts = {lines[i][0] for i in reporting_lines}
     reporting_parts = frozenset(section.start for section in sections if section.start in part_starts)
+    label_headers = frozenset(table.header[0] for table in found_tables if not _service_named(text[slice(*table.header)]))
     return Layout(text, tuple(sections), tuple(sentences), tuple(clauses), tuple(s.start for s in sections),
-                  found_tables, tuple(sorted(columns)), reporting_parts, tuple(sorted(answer_cells)))
+                  found_tables, tuple(sorted(columns)), reporting_parts, tuple(sorted(answer_cells)), label_headers)
 
 
 def _segments(text: str, cuts: list[int]) -> list[tuple[int, int]]:

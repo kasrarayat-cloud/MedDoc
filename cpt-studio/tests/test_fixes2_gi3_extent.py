@@ -353,6 +353,20 @@ class HeaderWordTests(unittest.TestCase):
                 self.assertEqual(finding(text, 'gi.egd'), ('performed', 'second part of duodenum'))
                 self.assertEqual(outcome(text, [('43235', [PASSED])], '43235'), ('ready', []))
 
+    def test_control_a_first_data_row_read_as_a_header_still_speaks(self):
+        # a table with no header row: its first row's cells are bare labels, so the table model takes it for the header;
+        # it names a service, so its words are read as before ("Aborted", "Cancelled" never lost)
+        for row, status in (('Colonoscopy | Aborted | Poor preparation', 'uncertain'),
+                            ('Colonoscopy | Adult colonoscope | Cancelled', 'cancelled')):
+            with self.subTest(row=row):
+                text = (BANNER + 'Harrowgate Endoscopy Unit (fictional)\nCombined upper and lower endoscopy report\n'
+                        'Date of procedure: 2026-10-20\nIndications\nAnemia.\nProcedures\n' + row + '\nUpper endoscopy '
+                        '(EGD) | Gastroscope | Second portion of the duodenum\nImpression\nSee above.\n')
+                self.assertTrue(sections.layout(text).in_table_header(text.index(row)))
+                self.assertFalse(sections.layout(text).in_label_header(text.index(row)))
+                self.assertEqual(finding(text, 'gi.colonoscopy')[0], status)
+                self.assertIn(outcome(text, [('45378', [row])], '45378')[0], NOT_READY)
+
     def test_control_a_statement_outside_the_table_still_reads(self):
         text = colon_report('Examination | Instrument | Furthest point reached\nColonoscopy | Adult colonoscope | Hepatic '
                             'flexure', findings='The procedure was terminated early at the hepatic flexure because of looping.')
@@ -388,6 +402,17 @@ class SubjectColumnTests(unittest.TestCase):
                 self.assertEqual(outcome(text, [('45378', [ADV])], '45378'), ('ready', []))
                 self.assertEqual(outcome(text, [('45378', [row])], '45378'), ('ready', []))
 
+    def test_x5_the_reviewers_cited_rows(self):
+        # a provider cites the whole row: no cue of a cell that answers its own column is the row's ("Not done" under
+        # "Biopsy" is the biopsy's), as no doubt of one is (first fix round, EXT-5)
+        base = fixture('b1-header-acts', ROUND1)
+        for row in ('Colonoscopy | Cecum | Not done | Not performed | None', 'Colonoscopy | Cecum | Deferred | Not indicated | No',
+                    'Colonoscopy | Cecum | No | Cancelled | No', 'Colonoscopy | Cecum | Not taken | Not performed | Not placed'):
+            with self.subTest(row=row):
+                text = base.replace('Colonoscopy | Cecum | No | No | No', row)
+                self.assertEqual(finding(text, 'gi.colonoscopy'), ('performed', 'cecum'))
+                self.assertEqual(outcome(text, [('45378', [row])], '45378'), ('ready', []))
+
     def test_x5_our_own_shapes(self):
         egd = egd_report('Examination | Instrument | Furthest point reached | Biopsies\nUpper endoscopy (EGD) | Standard '
                          'gastroscope | Second portion of the duodenum | None obtained')
@@ -415,6 +440,11 @@ class SubjectColumnTests(unittest.TestCase):
                    'Upper endoscopy (EGD) | Gastroscope | Second portion of the duodenum\nColonoscopy | Colonoscope | None\n'
                    'Impression\nSee above.\n')
         self.assertNotIn(finding(nothing, 'gi.colonoscopy')[0], ('performed', 'incomplete'))
+        stated = (BANNER + 'Harrowgate Endoscopy Unit (fictional)\nCombined upper and lower endoscopy report\nDate of '
+                  'procedure: 2026-10-20\nIndications\nAnemia.\nProcedure summary\nExamination | Instrument | Performed | '
+                  'Furthest point reached\nUpper endoscopy (EGD) | Gastroscope | Yes | Second portion of the duodenum\n'
+                  'Colonoscopy | Adult colonoscope | No | Cecum\nImpression\nSee above.\n')  # the extent stated, yet "No"
+        self.assertNotIn(finding(stated, 'gi.colonoscopy')[0], ('performed', 'incomplete'))
         comment = colon_report('Examination | Instrument | Furthest point reached | Comments\nColonoscopy | Adult colonoscope '
                                '| Cecum | Not performed')
         self.assertEqual(outcome(comment, [('45378', [ADV])], '45378')[0], 'needs_clarification')
@@ -503,6 +533,16 @@ class UnstatedRowTests(unittest.TestCase):
                     'Colonoscopy | Adult colonoscope | - | Yes', f'Colonoscopy | Adult colonoscope | - | {colon}')
                 self.assertNotIn(finding(text, 'gi.colonoscopy')[0], ('performed', 'incomplete'))
                 self.assertEqual(finding(text, 'gi.egd'), ('performed', 'second part of duodenum'))
+
+    def test_x8_a_status_with_another_word_speaks_where_the_row_states_its_extent(self):
+        # the extent column was filled, yet the status column says the service was not done this time: never performed
+        for label, answer in (('Performed this session', 'No'), ('Completed per protocol', 'No'),
+                              ('Cancelled by patient', 'Yes'), ('Aborted early', 'Yes')):
+            with self.subTest(label=label):
+                text = colon_report(f'Examination | Furthest point reached | {label}\nColonoscopy | Cecum | {answer}')
+                self.assertNotEqual(span_status(text, 'Colonoscopy | Cecum')[0], 'performed')
+                self.assertEqual(outcome(text, [('45378', [f'Colonoscopy | Cecum | {answer}'])], '45378')[0],
+                                 'needs_clarification')
 
     def test_x8_our_own_shapes(self):
         for label, answer in (('Outcome', 'Rebooked'), ('Comments', 'Patient chose to reschedule'), ('Declined', 'Yes')):

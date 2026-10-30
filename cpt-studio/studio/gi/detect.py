@@ -908,7 +908,7 @@ def _doubt(an: Analysis, ts: int, te: int) -> Optional[str]:
     if key not in an.memo:
         an.memo[key] = None
         for clause in an.lay.clauses_for(ts, te):
-            if an.lay.tables and an.lay.in_table_header(clause[0]):
+            if an.lay.label_headers and an.lay.in_label_header(clause[0]):
                 continue  # gi3 fix round 2 (X4): a header row's labels ("Not cancelled", "Not performed") state nothing
             if an.lay.answer_cells and an.lay.answers_its_column(*clause) and not (clause[0] <= ts and te <= clause[1]):
                 # gi3 fix round 1 (EXT-5): a passage that spans a table row (a provider cites whole rows) takes no
@@ -5759,7 +5759,7 @@ def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, 
                 continue
             for status, pattern in _REFERENCE_PATTERNS:
                 for m in pattern.finditer(text, cs, ce):
-                    if an.lay.tables and an.lay.in_table_header(m.start()):
+                    if an.lay.label_headers and an.lay.in_label_header(m.start()):
                         continue  # gi3 fix round 2 (X4): a column's name ("| Terminated", "| Aborted") is no statement
                     context = _generic_reading(an, m.start(), m.end())
                     if context.status in ('historical', 'planned'):
@@ -7599,8 +7599,9 @@ def _route(an: Analysis) -> RoutingResult:
 # for every row under it: "Examination | Instrument | Furthest point reached | Terminated" over "Colonoscopy | Adult
 # colonoscope | Cecum | No" read the colonoscopy incomplete, "| Aborted" held it as an abort, and a provider's cited
 # header "| Cancelled" read the EGD done with its biopsies as cancelled. No clause cue, reference or doubt is read on a
-# header line (Layout.in_table_header, as for its landmarks and interventions); what each row's cell answers is the
-# column model's (sections._column_sense).
+# header line that names no service (Layout.in_label_header; a header line that names one may be a table's first data
+# row, "Colonoscopy | Aborted | Poor preparation", and is read as before); what each row's cell answers is the column
+# model's (sections._column_sense).
 @functools.lru_cache(maxsize=16)
 def _analysis(text: str, service_date: Optional[date] = None) -> tuple[Analysis, RoutingResult]:
     lay = layout(text)
@@ -7609,8 +7610,8 @@ def _analysis(text: str, service_date: Optional[date] = None) -> tuple[Analysis,
     effective = service_date if service_date is not None else ctx.service_date_of(text)
     em, clinician_times = _em_mentions(text, lay)
     clause_cues = _clause_cues(text)
-    if lay.tables:  # gi3 fix round 2 (X4): a table's header row names its columns and states nothing
-        clause_cues = tuple(c for c in clause_cues if not lay.in_table_header(c.start))
+    if lay.label_headers:  # gi3 fix round 2 (X4): a table's header row names its columns and states nothing
+        clause_cues = tuple(c for c in clause_cues if not lay.in_label_header(c.start))
     an = Analysis(text, lay, _service_mentions(text), em, clause_cues, ctx.find_dates(text), effective,
                   interventions, clinician_times=clinician_times)
     return an, _route(an)
