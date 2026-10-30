@@ -1,0 +1,14 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Harrowgate Digestive Clinic (fictional)
+Colonoscopy report
+Patient: Orla Testfield (fictional)
+Date of service: 2026-10-16
+Indication: Positive fecal immunochemical test.
+Findings
+The colonoscope was advanced to the cecum. A 7 mm sessile polyp in the descending colon was removed with a cold snare.
+Earlier examinations
+Examination | When | Polypectomy
+Colonoscopy | 2019 | No
+Impression
+Descending colon polyp, removed.
+Electronically signed: Ivo Placeholder, MD (fictional), 2026-10-16 09:12

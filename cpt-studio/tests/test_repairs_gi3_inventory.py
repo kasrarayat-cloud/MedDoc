@@ -349,9 +349,10 @@ class TableBindingTests(SimpleTestCase):
     def test_a_table_answer_states_an_act_done_only_in_a_documented_service(self):
         """Interpretation 24: the table's "Yes" is the only word that the flexible sigmoidoscopy sampled tissue, and
         nothing documents that service as performed: its biopsy holds. The colonoscopy, documented by its own
-        statement, takes its "Yes"."""
+        statement, takes its "Yes". (gi3 fix round 1: the table's heading names no other occurrence - under "Results
+        reviewed", routing's records-reviewed cue, its rows are another occurrence's: test_fixes_gi3_inventory.)"""
         text = (HEAD + 'Date of service: 2026-10-16\nColonoscopy report\nThe colonoscope was advanced to the cecum and '
-                'the cecum was photographed.\nResults reviewed\nExamination | Instrument | Tissue sampled\n'
+                'the cecum was photographed.\nExamination record\nExamination | Instrument | Tissue sampled\n'
                 'Flexible sigmoidoscopy | Sigmoidoscope | Yes\nColonoscopy | Adult colonoscope | Yes, ascending colon\n')
         inv = read(text)
         self.assertFalse(acts(inv, 'gi.flex_sig', 'biopsy', ('performed',)))
