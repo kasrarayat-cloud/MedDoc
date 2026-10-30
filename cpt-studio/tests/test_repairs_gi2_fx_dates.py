@@ -150,8 +150,14 @@ class WrongOrUncertainDatesAreAskedTests(DateAssertions, SimpleTestCase):
                 with self.subTest(text=shape(text)):
                     self.assert_never(text, value)
                     self.assertIn(context.PART_DATE_NOTE, date_fact(text).note)
-                    # asked: the part's own date answers it (a member's choice), another date does not
-                    self.assert_question(text, value)
+                    if 'Procedure date' in text:
+                        # gi3 fix round 2 (interpretation 51(c)(2), dates2-6): a procedure date is never an office note's
+                        # own date - asked, and no member's answer (context._Candidate.asked)
+                        self.assert_never(text, value)
+                        self.assert_member_conflict(text, value)
+                    else:
+                        # asked: the part's own date answers it (a member's choice), another date does not
+                        self.assert_question(text, value)
 
     def test_a_procedure_part_that_documents_its_procedure_is_sent(self):
         for base, value in PART_DOCUMENTED:

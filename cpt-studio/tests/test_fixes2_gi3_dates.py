@@ -320,9 +320,9 @@ class VisitNoteTests(CaseAsserts, SimpleTestCase):
                         # outside the plan section it speaks against the header's date: asked, as the installed
                         # revision asked - never dropped so that the header's date is sent (51(c)(1))
                         self.assertEqual(date_fact(text).origin, 'conflict')
-                    else:  # never the only answer
-                        self.assertEqual(answers(text, ('2026-11-16', '2026-10-05')),
-                                         {'2026-11-16': 'taken', '2026-10-05': 'taken'})
+                    else:  # never the only answer, and every other answer held as the installed revision held it
+                        self.assertEqual(answers(text, ('2026-11-16', '2026-10-05', STRANGER)),
+                                         {'2026-11-16': 'held', '2026-10-05': 'held', STRANGER: 'held'})
         # a neutral block heading ends the plan's reach (interpretation 42): the report's own billing block still speaks
         report = cases()['s7-report-biopsy-hcpcs']['text']
         self.assertEqual(date_fact(report).origin, 'conflict')
@@ -337,7 +337,9 @@ class VisitNoteTests(CaseAsserts, SimpleTestCase):
             text = BANNER + 'Colonoscopy report\n' + PATIENT + body + heading + '\nVisit date: 11/16/2026\n'
             with self.subTest(heading=heading):
                 self.assertIsNone(sent(text))
-                self.assertEqual(answers(text, ('2026-11-16', STRANGER)), {'2026-11-16': 'taken', STRANGER: 'taken'})
+                # with no date of the report's own the booked visit's date is quoted as another occurrence's: never an
+                # answer, and no other answer taken (the installed revision held them beside its date, _ASKED)
+                self.assertEqual(answers(text, ('2026-11-16', STRANGER)), {'2026-11-16': 'held', STRANGER: 'held'})
                 own = text.replace(PATIENT, PATIENT + 'Date of service: 10/14/2026\n')
                 self.assertEqual(date_fact(own).origin, 'conflict')  # beside the report's own date: asked, as installed
 
@@ -368,6 +370,33 @@ class VisitNoteTests(CaseAsserts, SimpleTestCase):
         text = BANNER + LETTERHEAD + PATIENT + own + 'Findings:\nRepeat EGD in 3 months.\nVisit date: 10/05/2026\n'
         self.assertEqual(sent(text), '2026-10-05')  # an equal date agrees, as installed
 
+    def test_evidence_the_installed_reading_held_answers_with_stays(self):
+        # full suite (tests.test_repairs_7c8_dfd): outside a plan only a date read as the note's own or unplaced speaks
+        # against it (_ASKED); a label its words read as another occurrence's, one beside a date of birth, or an unread
+        # one was evidence that held every member's answer, and dropped with no own date it let the planned procedure's
+        # date be taken and sent - the installed revision held them, and so does this one
+        # 51(c)(2): an office visit's own procedure date ("Procedure date: 11/04/2026" under "GI office visit", sent by the
+        # installed revision) is never its own date - asked, every answer held; a CRLF note is a visit's note too (its
+        # title line's carriage return is no part of the title)
+        for eol in ('\n', '\r\n'):
+            text = (BANNER + 'GI office visit\nProcedure date: 11/04/2026\nAssessment and plan: colonoscopy will be '
+                    'scheduled.\n').replace('\n', eol)
+            with self.subTest(eol=repr(eol)):
+                self.assertIsNone(sent(text))
+                self.assertEqual(answers(text, ('2026-11-04', STRANGER)), {'2026-11-04': 'held', STRANGER: 'held'})
+                self.assertIn(context.ASKED_DATE_NOTE, date_fact(text).note)
+        head = BANNER + 'GI office visit\n'
+        for line in ('Repeat colonoscopy for Synthetic, Alex (DOB 01/01/1998) Procedure date: 11/04/2026',
+                     'Next procedure date: 11/04/2026', 'Procedure date: 11/04/2026 (scheduled)',
+                     'Procedure date: 11-04-26'):
+            text = head + line + '\nAssessment and plan: colonoscopy will be scheduled.\n'
+            with self.subTest(line=line):
+                self.assertIsNone(sent(text))
+                self.assertEqual(answers(text, ('2026-11-04', '2026-10-05', STRANGER)),
+                                 {'2026-11-04': 'held', '2026-10-05': 'held', STRANGER: 'held'})
+                with binding_disabled():
+                    self.assertEqual(member(text, '2026-11-04'), 'held')
+
     def test_a_dated_procedure_line_speaks_only_against_the_notes_own_date(self):
         # self-attack: dropped outright, a letter's subject line beside the header's date ("Re: Colonoscopy on
         # 11/04/2026") left the header's date sent where the installed reading asked; it is kept beside a labelled own
@@ -382,10 +411,10 @@ class VisitNoteTests(CaseAsserts, SimpleTestCase):
                         self.assertEqual(date_fact(text).origin, beside)
                         with binding_disabled():
                             self.assertEqual(date_fact(text).origin, beside)
-                    else:
+                    else:  # quoted as the procedure's own (_elsewhere): never an answer, every other answer held
                         self.assertIsNone(sent(text))
-                        self.assertEqual(answers(text, ('2026-11-04', '2026-10-05')),
-                                         {'2026-11-04': 'taken', '2026-10-05': 'taken'})
+                        self.assertEqual(answers(text, ('2026-11-04', '2026-10-05', STRANGER)),
+                                         {'2026-11-04': 'held', '2026-10-05': 'held', STRANGER: 'held'})
 
     def test_a_plan_statement_heads_the_fields_after_it(self):
         # self-attack: the booking's other fields between the statement and the visit date ("Appointment: 01/05/2027
@@ -401,7 +430,7 @@ class VisitNoteTests(CaseAsserts, SimpleTestCase):
             text = BANNER + LETTERHEAD + 'Clinic note\n' + PATIENT + HISTORY + block
             with self.subTest(block=block):
                 self.assertIsNone(sent(text))
-                self.assertEqual(answers(text, (booked, STRANGER)), {booked: 'taken', STRANGER: 'taken'})
+                self.assertEqual(answers(text, (booked, STRANGER)), {booked: 'held', STRANGER: 'held'})  # _ASKED
         # a statement naming no later occurrence ends the block: the footer's visit date reads as before
         for block in ('Continue mesalamine.\nProvider: Priya Halvorsen-Mbeki, MD (fictional)\nVisit date: 10/05/2026\n',
                       'Date of birth: 1961-03-14\nVisit date: 10/05/2026\n'):
@@ -415,7 +444,9 @@ class VisitNoteTests(CaseAsserts, SimpleTestCase):
             text = BANNER + LETTERHEAD + 'Clinic note\n' + PATIENT + statement + '\nVisit date: 01/05/2027\n' + HISTORY
             with self.subTest(statement=statement):
                 self.assertIsNone(sent(text))
-                self.assertEqual(member(text, STRANGER), 'taken')
+                # the installed revision sent the booked visit's date and held every other answer: now none is sent,
+                # the booked date is no answer, and every other answer is still held (_ASKED)
+                self.assertEqual(answers(text, ('2027-01-05', STRANGER)), {'2027-01-05': 'held', STRANGER: 'held'})
         for field in ('Next visit: 01/05/2027', 'Visit type: Follow-up'):  # a field is no statement of the plan
             text = BANNER + LETTERHEAD + 'Clinic note\n' + PATIENT + field + '\nVisit date: 10/05/2026\n' + HISTORY
             with self.subTest(field=field):

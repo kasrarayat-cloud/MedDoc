@@ -429,7 +429,12 @@ class LabelSOwnFieldTests(DateAssertions, SimpleTestCase):
                     self.assert_member_conflict(text, value)
                 else:
                     self.assertIn(context.FIELD_DATE_NOTE, fact.note)
-                    self.assert_member_date(text, value)  # its date is evidence the member's answer agrees with
+                    if 'GI office visit' in text:
+                        # gi3 fix round 2 (interpretation 51(c)(2), dates2-6): a procedure date is never an office
+                        # note's own date - asked, and no member's answer (context._Candidate.asked)
+                        self.assert_member_conflict(text, value)
+                    else:
+                        self.assert_member_date(text, value)  # its date is evidence the member's answer agrees with
                 self.assert_member_conflict(text, ELENA_DATE)
 
     def test_controls_the_date_alone_in_its_field(self):

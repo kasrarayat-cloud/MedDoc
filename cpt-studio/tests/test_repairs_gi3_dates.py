@@ -458,14 +458,15 @@ class PlannedProcedureTests(DateAsserts, SimpleTestCase):
 
     def test_its_date_is_asked_never_sent(self):
         # gi3 fix round 2 (interpretation 51(c)(2), dates2-6): a clinic note that documents no procedure has no procedure
-        # date of its own, so the planned colonoscopy's date speaks only against the note's own date - with none it is
-        # dropped as the installed reading dropped plan labels, and never the only answer (part 3 had asked it with its
-        # 'plan' doubt, the planned date the only answer a member could give)
+        # date of its own, so the planned colonoscopy's date (its "Procedure:" field opens a procedure section, outside
+        # the plan) speaks only against the note's own date - with none it is quoted as another occurrence's (_ASKED):
+        # never the only answer (part 3 had asked it with its 'plan' doubt, the planned date the only answer a member
+        # could give), and the stranger's date held as part 3 held it - never taken
         fact = date_fact(self.PLANNED)
         self.assertEqual(fact.origin, 'missing')
         self.assertIsNone(context.service_date_of(self.PLANNED))
-        self.assertEqual(member(self.PLANNED, '2026-11-04'), 'taken')
-        self.assertEqual(member(self.PLANNED, STRANGER), 'taken')
+        self.assertEqual(member(self.PLANNED, '2026-11-04'), 'held')
+        self.assertEqual(member(self.PLANNED, STRANGER), 'held')
         self.assertIn(context.PLAN_PROC_DATE_NOTE, date_fact(self.PLANNED.replace(
             'Clinic note\n', 'Colonoscopy report\n')).note)  # in a procedure's report, part 3 still asks it
 

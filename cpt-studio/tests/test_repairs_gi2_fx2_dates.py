@@ -309,13 +309,23 @@ class DoubtedDateIsAnsweredOnlyAsBeforeTests(DateAssertions, SimpleTestCase):
             with self.subTest(text=text.splitlines()[1:4]):
                 fact = date_fact(text)
                 self.assertEqual((fact.origin, fact.value), ('missing', None))  # asked: the doubt rules stand
-                self.assert_member_date(text, doubted)  # the doubted label's own value answers, as installed takes it
+                if 'Procedure date' in text:
+                    # gi3 fix round 2 (interpretation 51(c)(2), dates2-6): a procedure date is never an office note's own
+                    # date - with the doubt or without it, no member's answer (context._Candidate.asked)
+                    self.assert_member_conflict(text, doubted)
+                else:
+                    self.assert_member_date(text, doubted)  # the doubted label's own value answers, as installed takes it
                 held = merged_date(text, line_date)
                 self.assertTrue(context.is_member_conflict(held), held.note)
                 # said with the installed note: the request then goes without a date (no ISO date is named as the
                 # document's), and every reader knows a member conflict by its prefix, also as stored
                 self.assertTrue(held.note.startswith(context.USER_CONFLICT_NOTE.split('{', 1)[0]))
-                self.assertIn('the document gives “', held.note)
+                if 'Procedure date' in text:
+                    # gi3 fix round 2 (51(c)(2)): in an office visit's note the dated line naming only a procedure may
+                    # date another occurrence, and the member's note says so (the line is quoted as one, _ElsewhereSpan)
+                    self.assertIn("as another occurrence's or another document's date, or as possibly one", held.note)
+                else:
+                    self.assertIn('the document gives “', held.note)
                 self.assertTrue(context.is_member_conflict(to_jsonable(held)))
                 self.assert_member_conflict(text, ELENA_DATE)
 

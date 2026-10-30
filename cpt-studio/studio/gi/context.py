@@ -429,6 +429,10 @@ class _Candidate:
     # its own separator character, then no date it reads (_read_in_part): it kept the value as unread date text, which
     # spoke against the note's own date, so the date read there now speaks against it even where it agrees with it
     partial: bool = False
+    # gi3 fix round 2 (dates2-4, dates2-6; 51(c)(2)): a date that may be another occurrence's, kept with no date of the
+    # note's own (_ASKED, _title_candidates): never the date, never the question's lead, and never a member's answer
+    # (quoted as _ElsewhereSpan) - its reading, form and doubt still say why it is asked
+    asked: bool = False
     # Fix round (dates lens, F1): why an own labelled date is asked though nothing qualifies it (_own_dates_in_doubt):
     # 'birth' - its date is the date the document gives as the patient's date of birth ('beside': never a member's
     # answer); 'part' - it stands in a later numbered part that documents no procedure ('unplaced'); 'order' - it is
@@ -1882,14 +1886,24 @@ def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int
 #   "Bowel preparation" / "Visit date: 11/16/2026"; never past a block heading, which ends or holds the plan's reach
 #   itself). Outside a plan or history section such a date - and, in a visit's note, one right after a statement naming
 #   a later occurrence ("Return to clinic in 3 months.") or stated after the plan - speaks only against the note's own
-#   date, never B4's drop: the installed reading read it there, so dropping it would send the note's own date where the
-#   installed reading asked. A procedure date in a document that documents no procedure - neither titled a procedure's
-#   report nor stating what was done in a technique, findings or impression section - is never that document's own
-#   date by itself, and a dated line there naming only a procedure speaks only against the note's own date too
+#   date, and with none it is quoted as another occurrence's, never an answer (_ASKED): never B4's drop, as the installed
+#   reading read it there - dropped, it sent the note's own date where the installed reading asked, or let any member's
+#   date be taken where the installed reading held it. A procedure date in a document that documents no procedure -
+#   neither titled a procedure's report nor stating what was done in a technique, findings or impression section - is
+#   never that document's own date by itself, and a dated line there naming only a procedure is read the same way
 #   (_visit_note, _title_candidates);
 # - dates2-9 (51(c)(3)): see _SEPARATOR_CHAR.
 _READ, _GOVERNED, _SPEAKS, _LATER, _AGAINST_OWN = 'read', 'governed', 'speaks', 'later', 'against-own'
 _TITLE = 'title'  # gi3 fix round 1 (dates-2): read where its reading is the note's own ('own'), else _AGAINST_OWN
+# gi3 fix round 2 (dates2-4, dates2-6): a label outside any plan or history section whose date may be another
+# occurrence's. The installed reading read it - as the note's own date, or as evidence a member's answer must agree with -
+# so it is never dropped (dropped, any member's date was taken: the "Elena" date 1998-01-01 a member entered, the planned
+# procedure's too, where the installed revision held them): where it reads a date as the note's own or as one it cannot
+# place (form 'read', reading 'own' or 'unplaced') it speaks against the note's own date (settled, _later_settled), and
+# with no date of the note's own it is evidence no member's answer agrees with ('aside': _ElsewhereSpan) - never sent,
+# never the only answer, and every other answer held as the installed revision held it. Any other reading (another
+# occurrence's, beside a date of birth, unread, empty) stays read as the installed reading read it.
+_ASKED = 'asked'
 # The encounter's own date-of-service labels: _DATE_LABEL less the visit and procedure date labels ("Visit date:",
 # "Date of procedure:"), which a plan item may own.
 _ENCOUNTER_LABEL = cues.rx(r'date' + _DATE_TIME + _HSPACE + r'++of' + _HSPACE + r'++(?:service|encounter)|DOS' + _DATE_TIME
@@ -2427,15 +2441,30 @@ def _title_line(text: str) -> Optional[tuple[int, int]]:
 @functools.lru_cache(maxsize=16)
 def _visit_note(text: str) -> bool:
     """gi3 fix round 2 (dates2-6; interpretation 51(c)(2): a procedure date is never an office or clinic note's own date):
-    whether a procedure date may not be this document's own because the document documents no procedure - positive
-    evidence of one is the document's own title naming a procedure's report (sections._report_titled: "Colonoscopy
-    report", "Flexible Sigmoidoscopy Note"), or a technique, findings or impression section the section reader knows
-    stating what was done (part 3's account cues: cues.PERFORMED_CLAUSE, cues.COURSE - "The colonoscope was advanced to
-    the cecum"). Without it the document is a visit's note, whatever its title says ("Gastroenterology clinic note",
-    "Progress note", an untitled one): "Plan:" / "Colonoscopy with possible polypectomy." / "Bowel preparation" (or
-    "Sedation", "Consent", "Procedure details" over "Colonoscopy under monitored anesthesia care.") / "Procedure date:
-    11/04/2026" sent the planned colonoscopy's date - the heading the section reader knows had ended the plan, and the
-    date read as the note's own. Read once per text."""
+    whether the document is an office or clinic visit's note that documents no procedure. A visit's note by positive
+    evidence only: one of its first TITLE_LINES non-empty lines is a visit title or names an office, clinic or
+    outpatient visit, as routing reads them (cues.EM_TITLE: "Gastroenterology clinic note", "Hepatology follow-up note";
+    cues.EM_VISIT: "GI office visit", "Progress note") - a fragment naming no visit ("Findings" / "Colonoscopy on
+    2026-10-21.") is no visit's note, and reads as the installed reading read it. And no procedure documented: its own
+    title names no procedure's report (sections._report_titled: "Colonoscopy report", "Flexible Sigmoidoscopy Note"),
+    and no technique, findings or impression section the section reader knows states what was done (part 3's account
+    cues: cues.PERFORMED_CLAUSE, cues.COURSE - "The colonoscope was advanced to the cecum"). "Clinic note" / ... /
+    "Plan:" / "Colonoscopy with possible polypectomy." / "Bowel preparation" (or "Sedation", "Consent", "Procedure
+    details" over "Colonoscopy under monitored anesthesia care.") / "Procedure date: 11/04/2026" sent the planned
+    colonoscopy's date - the heading the section reader knows had ended the plan, and the date read as the note's own.
+    Read once per text."""
+    seen = 0
+    for m in re.finditer(r'[^\n]+', text):  # the first TITLE_LINES non-empty lines, as the title reader reads them
+        ls, le = _strip_span(text, m.start(), m.end())  # a CRLF line's carriage return is no part of its title
+        if ls >= le:
+            continue
+        if cues.EM_TITLE.match(text, ls, le) or cues.EM_VISIT.search(text, ls, le):
+            break
+        seen += 1
+        if seen == TITLE_LINES:
+            return False
+    else:
+        return False
     if _sections._report_titled(text):
         return False
     return not any(s.kind in _REPORT_BODY and s.label in HEADINGS
@@ -2512,8 +2541,9 @@ def _binding(text: str, lay: Layout, start: int, end: int, label: str = '') -> s
             # B4's drop (_LATER) here: B4 drops what the installed reading dropped inside a plan section, but outside one
             # the installed reading read the label, so dropping a later date would send the note's own date where the
             # installed reading asked ("Findings:" / "Repeat EGD in 3 months." / "Visit date: 2026-10-06" under a
-            # "Date of service: 2026-10-05" header is a conflict, as installed)
-            return _AGAINST_OWN
+            # "Date of service: 2026-10-05" header is a conflict, as installed) - and with no date of the note's own it is
+            # quoted as another occurrence's, never dropped so that any member's date is taken (_ASKED)
+            return _ASKED
         return _READ
     title = sec.start == _title_start(text)
     if title and gov.in_head(start):
@@ -2567,22 +2597,27 @@ def _settled(c: Optional[_Candidate]) -> Optional[_Candidate]:
     return replace(c, reading='unplaced') if c.reading == 'own' else c
 
 
-def _later_settled(found: list, later: dict, against: dict) -> list:
+def _later_settled(found: list, later: dict, against: dict, asked: dict, titled_own: bool = False) -> list:
     """B4: each candidate of a label governed only when later (_LATER) is dropped when its date is later than every date
     the note labels as its own - as the installed reading dropped it, also where the note labels none - and is otherwise
     settled (_settled): an earlier, equal or unread date cannot be the later occurrence's. Each candidate of a label that
     speaks only against the note's own dates (_AGAINST_OWN) is settled where the note labels a date of its own, and is
-    otherwise dropped as the installed reading dropped it."""
-    if not later and not against:
+    otherwise dropped as the installed reading dropped it. gi3 fix round 2: each candidate the installed reading read
+    outside a plan or history section whose date may be another occurrence's (_ASKED) is settled where the note labels or
+    titles a date of its own (``titled_own``), and is otherwise kept as one that may be another occurrence's (``asked``):
+    never the date and never an answer, as no answer is taken that the installed reading held."""
+    if not later and not against and not asked:
         return found
-    own = [c.value for c in found if id(c) not in later and id(c) not in against and c.source == 'label'
-           and c.reading == 'own' and c.form == 'read' and c.value]
+    own = [c.value for c in found if id(c) not in later and id(c) not in against and id(c) not in asked
+           and c.source == 'label' and c.reading == 'own' and c.form == 'read' and c.value]
     out = []
     for c in found:
         if id(c) in later:
             c = None if c.value and all(value < c.value for value in own) else _settled(c)
         elif id(c) in against:
             c = _settled(c) if own else None
+        elif id(c) in asked:
+            c = _settled(c) if own or titled_own else replace(c, asked=True)
         if c is not None:
             out.append(c)
     return out
@@ -2594,7 +2629,8 @@ def _time_directed(text: str, lay: Layout, governed: list, found: list) -> list:
     every one (a prior occurrence is never after the visit, a planned one never before it). Unqualified on its line
     (its own reading 'own'), it is asked ('unplaced'), never sent and never dropped: "Plan:" / "Date of service:
     2026-09-01" under a visit of 2026-10-05."""
-    own = [c.value for c in found if c.source == 'label' and c.reading == 'own' and c.form == 'read' and c.value]
+    own = [c.value for c in found if c.source == 'label' and c.reading == 'own' and c.form == 'read' and c.value
+           and not c.asked]  # gi3 fix round 2: a date kept only to be asked is no own date (_Candidate.asked)
     if not own:
         return []
     latest, earliest = max(own), min(own)
@@ -2693,11 +2729,15 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
     read = set()
     rows = _Rows(text)
     # the read labels a plan or history section governs (part 4); B4's pending candidates; H1's and H2's
-    governed, later, against = [], {}, {}
+    governed, later, against, asked = [], {}, {}, {}
 
     def bind(candidate: Optional[_Candidate], binding: str) -> None:
         if binding == _TITLE:  # gi3 fix round 1 (dates-2): the title's header field is read only as the note's own
             binding = _READ if candidate is None or candidate.reading == 'own' else _AGAINST_OWN
+        elif binding == _ASKED:  # gi3 fix round 2: only a date read as the note's own or unplaced is settled
+            if candidate is not None and candidate.form == 'read' and candidate.reading in ('own', 'unplaced'):
+                asked[id(candidate)] = candidate
+            binding = _READ
         if binding == _SPEAKS:
             candidate = _settled(candidate)
         elif binding == _LATER and candidate is not None:
@@ -2731,9 +2771,14 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
         binding = _binding(text, lay, m.start('label'), m.end('label'), _label_kind(text, m))
         if binding != _GOVERNED:
             bind(_unread_label(text, rows, m), binding)
-    found = _later_settled(found, later, against)
+    # gi3 fix round 2: a date the note titles as its own ("GI office visit - 10/20/2026") is its own for _ASKED's
+    # settlement too - beside it the asked label speaks (a conflict, both dates answers), as the installed reading read it
+    titled_own = bool(asked) and any(c.reading == 'own' and c.form == 'read' and c.value  # (it matters with no labelled
+                                     for c in _title_candidates(text, lay, False))         # own date: a head's title none)
+    found = _later_settled(found, later, against, asked, titled_own)
     found += _time_directed(text, lay, governed, found)
-    labelled_own = any(c.source == 'label' and c.reading == 'own' and c.form == 'read' and c.value for c in found)
+    labelled_own = any(c.source == 'label' and c.reading == 'own' and c.form == 'read' and c.value and not c.asked
+                       for c in found)
     return _own_dates_in_doubt(text, lay, _after_another_header(
         text, lay, tuple(found) + _title_candidates(text, lay, labelled_own)))
 
@@ -2902,7 +2947,7 @@ def _after_another_header(text: str, lay: Layout, found: tuple[_Candidate, ...])
     10/22/2026" under "Last visit date: 07/14/2026") is the note's own, as at the installed revision. The app's own
     addendum is its header (sections.ADDENDUM_HEADER), never an authored "Addendum:" heading of the same label."""
     aside = [c for c in found if c.source == 'label' and c.reading == 'aside' and c.form == 'read']
-    own = [c for c in found if c.source == 'label' and c.reading == 'own' and c.form == 'read']
+    own = [c for c in found if c.source == 'label' and c.reading == 'own' and c.form == 'read' and not c.asked]
     if not aside or not own:
         return found
     first = min(aside, key=lambda c: c.span.start)
@@ -3018,8 +3063,9 @@ def _title_candidates(text: str, lay: Layout, labelled_own: bool) -> tuple[_Cand
     gi3 fix round 2 (dates2-6; 51(c)(1) and (2)): in a note that documents no procedure (_visit_note), a dated line naming
     only a procedure ("Re: Colonoscopy on 11/04/2026", "Procedure: Colonoscopy    Procedure date: 11/04/2026") may date
     that procedure, never this visit: it speaks only against the note's own date - kept where the note labels a date of
-    its own (``labelled_own``) or titles one, as the installed reading kept it, and dropped where it gives none, so its
-    date is never the only answer a member may give. gi3 fix round 2 (dates2-1; 51(c)(2) and (3)): so does every title,
+    its own (``labelled_own``) or titles one, as the installed reading kept it, and where it gives none kept as one that
+    may be another occurrence's (_Candidate.asked), so its date is never the only answer a member may give and every
+    other answer is held as the installed reading held it. gi3 fix round 2 (dates2-1; 51(c)(2) and (3)): so does every title,
     "Date:" or "Re:" line in the head of the section the document's own follow-up title opens: beside the head's own
     labelled date it agrees or speaks against it as an untitled header's does, and without one it is dropped - the
     installed reading read none of that section - so a stacked "Return visit: 01/05/2027" or "Follow-up visit -
@@ -3031,7 +3077,9 @@ def _title_candidates(text: str, lay: Layout, labelled_own: bool) -> tuple[_Cand
             if len(lines) == TITLE_LINES:
                 break
     out, heading, title = [], None, _title_start(text)
-    against = set()  # the lines that speak only against the note's own date (gi3 fix round 2, dates2-1, dates2-6)
+    # gi3 fix round 2: the head's titles, dropped without a labelled own date (dates2-1: the installed reading read none of
+    # that section), and the procedure's dated lines, quoted as its own without one (dates2-6)
+    against, elsewhere = set(), set()
     for index, (ls, le) in enumerate(lines):
         sec = lay.section_at(ls)
         # gi3 dates, RC5: the title's section reads as any; gi3 fix round 2 (dates2-1): only its head - a field naming
@@ -3054,8 +3102,11 @@ def _title_candidates(text: str, lay: Layout, labelled_own: bool) -> tuple[_Cand
             if head is None or index + 1 == len(lines) or not DATE_LINE.match(text, *lines[index + 1]):
                 dated = None if in_title else _dated_service_line(text, ls, le)
                 if dated is not None:
-                    if _visit_note(text) and not any(p.search(text, ls, le) for p in _VISIT_NAMES):
-                        against.add(len(out))  # it names only a procedure the note does not document
+                    if dated.form == 'read' and _visit_note(text) and not any(p.search(text, ls, le)
+                                                                             for p in _VISIT_NAMES):
+                        # it names only a procedure the note does not document (its date read: an unread one held
+                        # every member's answer, as the installed reading held them, and still does)
+                        elsewhere.add(len(out))
                     out.append(_line_under_another(text, dated, ls))
                 continue
             day, form, end, words, keyword, field = None, 'unread', lines[index + 1][1], head.group('words'), \
@@ -3075,9 +3126,10 @@ def _title_candidates(text: str, lay: Layout, labelled_own: bool) -> tuple[_Cand
         else:
             reading, source = ('aside' if qualified else 'own' if heading else 'unplaced'), 'title'
         out.append(_Candidate(span, value, source, reading, form))
-    if against and not labelled_own and not any(n not in against and c.reading == 'own' and c.form == 'read' and c.value
-                                                 for n, c in enumerate(out)):
-        return tuple(c for n, c in enumerate(out) if n not in against)
+    if (against or elsewhere) and not labelled_own and not any(
+            n not in against and n not in elsewhere and c.reading == 'own' and c.form == 'read' and c.value
+            for n, c in enumerate(out)):
+        return tuple(replace(c, asked=True) if n in elsewhere else c for n, c in enumerate(out) if n not in against)
     return tuple(out)
 
 
@@ -3394,6 +3446,11 @@ BIRTH_DATE_NOTE = ("A labelled date of service states the date the document give
 PLAN_PROC_DATE_NOTE = ('A date of service is labelled under a procedure heading that follows the plan and documents no '
                        'procedure (no technique, findings or impression), so it may date the planned procedure and is '
                        'not taken as the date of service by itself.')
+# gi3 fix round 2 (dates2-4, dates2-6; 51(c)(2)): a date kept with no date of the note's own as one that may be another
+# occurrence's (_Candidate.asked)
+ASKED_DATE_NOTE = ('A procedure date in an office or clinic visit\'s note that documents no procedure, or a visit date the '
+                   'note states after its plan or right after a statement booking a later visit, may date another '
+                   'occurrence, so it is not taken as the date of service, nor as a member\'s answer.')
 PART_DATE_NOTE = ('A date of service is labelled in a later numbered part of the document that documents no procedure '
                   '(no technique, findings or impression), so it may date another service than the one the note '
                   'documents and is not taken as the date of service by itself.')
@@ -3451,13 +3508,13 @@ def _date_fact(found: tuple[_Candidate, ...], answers: Optional[set] = None) -> 
       bracket or words there ("Procedure date: 11/04/2026 (pending authorization)", dates:8) is asked and speaks against
       an own date, its date kept as evidence a member's answer may agree with."""
     labels = [c for c in found if c.source == 'label']
-    own = [c for c in labels if c.reading == 'own' and c.form == 'read' and c.alone and c.installed]
+    own = [c for c in labels if c.reading == 'own' and c.form == 'read' and c.alone and c.installed and not c.asked]
     # rule N7 (P2DN's fix round, issue 8): with no own date written as the installed revision reads one, the labelled
     # dates that would be the note's own but for their form lead the question as an own date leads the fact - never sent
     # (asked), but every speaking candidate is measured against them and the member's answer must agree with them (asked
     # by its table row, svc-18's "Date of service | 2026-10-05" had left a history line's 2021-08-17 - a prior colonoscopy
     # - a date the member's answer agreed with)
-    withheld = [] if own else [c for c in labels if c.reading == 'own' and c.form == 'read' and c.alone]
+    withheld = [] if own else [c for c in labels if c.reading == 'own' and c.form == 'read' and c.alone and not c.asked]
     lead = own or withheld
     own_ids = {id(c) for c in lead}
     # rule N3 (P2DN's fix round, issue 6): a field that states no date never speaks against the note's own date (a
@@ -3482,6 +3539,7 @@ def _date_fact(found: tuple[_Candidate, ...], answers: Optional[set] = None) -> 
         (partial or not own and any(c.source == 'label' and c.form == 'read' and c.reading == 'own' and c.alone
                                     and not c.installed for c in found), FORM_DATE_NOTE),
         (not own and any(c.source != 'label' and c.form == 'read' for c in found), EVIDENCE_DATE_NOTE),
+        (not own and any(c.asked for c in found), ASKED_DATE_NOTE),  # gi3 fix round 2 (dates2-4, dates2-6)
         (any(c.reading == 'beside' and not c.doubt for c in unusable)
          or not own and any(c.form == 'read' and c.reading in ('aside', 'other', 'unplaced') and not c.doubt
                             for c in found),
@@ -3560,7 +3618,7 @@ def _evidence_spans(c: _Candidate, answers: Optional[set] = None) -> tuple[Span,
     2, F-1: the dates the reading without the doubt answers with): _DoubtSideSpan for a span stating any other date."""
     if c.doubt == 'birth':
         return tuple(_BirthSpan(s.start, s.end, s.text) for s in c.spans)
-    if c.source in ('label', 'title') and c.reading in ('aside', 'other', 'beside'):
+    if c.asked or c.source in ('label', 'title') and c.reading in ('aside', 'other', 'beside'):
         return tuple(_ElsewhereSpan(s.start, s.end, s.text) for s in c.spans)
     if answers is not None:
         return tuple(s if _span_dates(s) <= answers else _DoubtSideSpan(s.start, s.end, s.text) for s in c.spans)

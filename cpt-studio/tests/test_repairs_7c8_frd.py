@@ -279,6 +279,7 @@ class DateAfterAFieldSValueEndedRequestTests(EndToEnd):
 
 OPENERS = ('rescheduled to {D}', 'corrected to {D}', '(rescheduled) {D}', '[{D}]', 'approx. {D}', 'on {D}', '"{D}"',
            'actual {D}', 'performed {D}', 'amended to {D}', '(corrected) {D}', '~{D}', '*{D}*')
+PUNCTUATION_OPENERS = ('[{D}]', '"{D}"', '~{D}', '*{D}*')  # gi3 fix round 2 (51(c)(3)): punctuation only, a separator
 STATED_LAYOUTS = {  # A: another labelled date above; A2: below; B: an addendum's corrected field
     'A': 'Colonoscopy report\nProcedure date: 10/07/2026\nDate of service: {F}\n',
     'A2': 'Colonoscopy report\nDate of service: {F}\nProcedure date: 10/07/2026\n',
@@ -324,7 +325,14 @@ class FieldStatingADateItCannotPlaceTests(DateAssertions, SimpleTestCase):
                     self.assert_never(text, '2026-10-07', '2026-10-14')
                     self.assertIn(date_fact(text).origin, ('conflict', 'missing'))
                     self.assert_member_conflict(text, ELENA_DATE)
-                    self.assertFalse(any('10/14/2026' in quoted for quoted in evidence_text(text)), evidence_text(text))
+                    if opener in PUNCTUATION_OPENERS:
+                        # gi3 fix round 2 (interpretation 51(c)(3), dates2-9): a label's separator is any short run of
+                        # punctuation and spaces, so ": [", ': "', ": ~", ": *" separate the label from its own date - read,
+                        # quoted, and asked (never sent by itself: no installed separator), the stranger's date held
+                        self.assertTrue(any('10/14/2026' in quoted for quoted in evidence_text(text)), evidence_text(text))
+                    else:
+                        self.assertFalse(any('10/14/2026' in quoted for quoted in evidence_text(text)),
+                                         evidence_text(text))
         for opener in OPENERS:  # the verifier's smallest M1: two DOS lines
             text = HEAD + 'DOS: 10/07/2026\nDOS: ' + opener.format(D='10/14/2026') + '\n'
             with self.subTest(smallest=opener):

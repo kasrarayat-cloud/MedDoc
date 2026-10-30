@@ -338,7 +338,12 @@ class NextFieldSLabelIsALabelTests(DateAssertions, SimpleTestCase):
                     self.assert_member_conflict(text, '2026-11-04')
                 else:
                     self.assertIn(context.FIELD_DATE_NOTE, fact.note)
-                    self.assert_member_date(text, '2026-11-04')
+                    if 'GI office visit' in text:
+                        # gi3 fix round 2 (interpretation 51(c)(2), dates2-6): a procedure date is never an office
+                        # note's own date - asked, and no member's answer (context._Candidate.asked)
+                        self.assert_member_conflict(text, '2026-11-04')
+                    else:
+                        self.assert_member_date(text, '2026-11-04')
 
     def test_a_sentence_or_a_list_before_a_lower_case_label(self):
         # what only the sentence-end rule asks: a full stop or a comma ends a word before a label written in lower case
