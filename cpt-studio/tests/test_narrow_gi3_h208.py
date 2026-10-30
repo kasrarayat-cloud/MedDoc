@@ -126,6 +126,10 @@ class ChargeBlockTests(SimpleTestCase):
                      'Date of service: 2026-09-01\nDiagnosis: anemia\n'):
             with self.subTest(note=note):
                 self.assert_installed(HEADER + PLAN + '\n' + note)
+        # the note's own part with no plan section, then a copied note: its title stands right above its plan, the
+        # document's first plan section (the nearest non-empty line above the reach is read)
+        self.assert_installed(HEADER + 'Objective\nAbdomen soft.\n\nPrevious visit note (copied for reference)\n'
+                              'Assessment and plan\nStart iron.\nCharge information\nDate of service: 2026-09-01\n')
         with_birth = HEADER.replace('Patient: Synthetic Patient (fictional)\n',
                                     'Patient: Synthetic Patient (fictional)\nDate of birth: 1959-06-02\n')
         text = with_birth + PLAN + 'Charge information\nVisit type: Follow-up\nDate of service: 06/02/1959\n'

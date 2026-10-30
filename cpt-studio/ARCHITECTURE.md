@@ -2966,9 +2966,12 @@ reader is unchanged, so routing stays `gi-routing@4`, the inventory `gi-services
   - close the document;
   - sit in a plan section's reach;
   - be headed by a heading of the closed class `CHARGE_HEADINGS`, alone or joined to its first field;
-  - hold only fields, code or cell lines and signature lines;
+  - hold only fields, code or cell lines and signature lines, none over 120 characters (`CHARGE_HEADING_REACH`: the
+    heading reader's tail pattern is quadratic in a long run of marks or spaces, so a longer line is never read);
   - name no other occurrence on any of its lines (`_CHARGE_ELSEWHERE`);
-  - not belong to a copied note (`_block_in_another_note`: a heading-like title naming another occurrence above it);
+  - not belong to a copied note (`_block_in_another_note`: a heading-like line naming another occurrence between the
+    block and the document's first plan section, or on the nearest non-empty line above it - a note copied in after
+    the note's own plan brings its own plan and charge block, its title above them);
   - carry no date of birth (rule N2).
 
   The label is then added back as an own-read candidate, but only beside an own labelled date it differs from. The date
