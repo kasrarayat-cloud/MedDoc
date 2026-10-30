@@ -908,3 +908,16 @@ tree's own live replay showed one.
     (e) *An act's instrument (46).* An act never takes the technique of the instrument its own kind rules out: a forceps
         biopsy or hot forceps removal is never "(cold snare)", a snare removal never "(forceps)" - the instrument is what
         tells 45380 and 45384 from 45385, and the rationale must not misstate it.
+
+### Session interpretation, 2026-10-30 (7c8d38da, third round, after the independent refutation) — recorded, not owner-ruled
+
+49. **Correction to 42's version clause (recorded, not rewritten).** Interpretation 42 kept the version labels as
+    installed so that "encounters already read keep their recorded contexts". The independent refutation of the
+    integrated round (state lens, STATE-1 and STATE-2) showed that this keeps a context the new rules contradict CURRENT:
+    h2-08's live context (gi-context@2) says 2026-10-05 as documented, and a predict queued or stopped at the install, a
+    reconciliation or a reviewer-asked second review would send that date again, while an assess resumed after the
+    install read 99215 ready on it. On today's 36 live encounters this was latent (h2-08's last stage is a succeeded
+    assess), but nothing prevented it. So CONTEXT_VERSION becomes gi-context@3 and gi-context@2 an earlier version: the
+    machinery the gi-context@1 upgrade built remakes an earlier context under the current rules before any stage sends or
+    assesses on it, and refuses a second review on one. What 42 meant still holds for display: a reload runs no stage,
+    so a pre-install encounter keeps showing its recorded reading until a member's action or a stage reads it again.
