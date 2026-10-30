@@ -321,7 +321,7 @@ class BookedVisitTimeTests(unittest.TestCase):
         # input says so, and that statement alone refuses its times: the next test)
         for line in ('Visit time: 30 minutes (return visit slot).', 'Expected visit time: 30 minutes.',
                      'Encounter time allotted: 30 minutes.', 'Scheduled visit time: 30 minutes.',
-                     'Visit time: 30 minutes (booked).'):
+                     'Visit time: 30 minutes (booked).', 'Visit time: 30 minutes (allotted).'):
             text = clinic('Clinic note - return visit', 'Return in one year.', line)
             with self.subTest(line=line):
                 self.assertIsNone(fact_value(text, 'gi.office_em', 'time_minutes'))
