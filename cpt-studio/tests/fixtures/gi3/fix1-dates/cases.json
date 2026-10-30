@@ -1,0 +1,845 @@
+{
+ "schema": "cpt-studio-gi3-fix1-dates-cases@1",
+ "note": "SYNTHETIC text only. The gi3 fix round 1 dates cases: the independent dates reviewer's inputs (texts copied from rev/dates/inputs; one synthetic copy marked so), each with its source-reviewed expectation and one-line review. No output of any revision is stored here.",
+ "cases": [
+  {
+   "id": "d1-phone-provider",
+   "finding": "dates-1",
+   "source_input": "findings:F1a:rc5b-phone-provider",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nTelephone encounter\nPatient: Ivo Brandmere (fictional)\nSpoke with the patient about the colonoscopy pathology: tubular adenoma. Questions answered.\nFollow-up appointment\nProvider: Priya Halvorsen-Mbeki, MD (fictional)\nVisit date: 11/16/2026\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-11-16",
+     "2026-10-16",
+     "2026-10-01"
+    ],
+    "setting": "missing",
+    "patient_status": "missing"
+   },
+   "review": "The heading is no title of the document (it follows a field or prose, or names an appointment, procedures, care, a pending or recalled follow-up): its date is the planned or recalled occurrence's, never this encounter's. asked: no date line; the planned or other date is never the only answer, and a member date is taken; the setting it lists is not documented."
+  },
+  {
+   "id": "d1-phone-location-proc",
+   "finding": "dates-1",
+   "source_input": "findings:F1a:rc5b-phone-location-proc",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nTelephone encounter\nPatient: Ivo Brandmere (fictional)\nSpoke with the patient about the colonoscopy pathology: tubular adenoma. Questions answered.\nFollow-up procedures\nLocation: Northgate Endoscopy Center (fictional)\nProcedure date: 11/16/2026\nPlace of service: ASC (POS 24)\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-11-16",
+     "2026-10-16",
+     "2026-10-01"
+    ],
+    "setting": "missing",
+    "patient_status": "missing"
+   },
+   "review": "The heading is no title of the document (it follows a field or prose, or names an appointment, procedures, care, a pending or recalled follow-up): its date is the planned or recalled occurrence's, never this encounter's. asked: no date line; the planned or other date is never the only answer, and a member date is taken; the setting it lists is not documented."
+  },
+  {
+   "id": "d1-preproc-fu",
+   "finding": "dates-1",
+   "source_input": "findings:F1a:rc5-preproc-fu",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Endoscopy Center (fictional)\nPre-procedure follow-up\nPatient: Ivo Brandmere (fictional)\nProcedure date: 11/04/2026\nReviewed bowel preparation by phone.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-11-04",
+     "2026-10-16",
+     "2026-10-01"
+    ],
+    "setting": "missing",
+    "patient_status": "missing"
+   },
+   "review": "The heading is no title of the document (it follows a field or prose, or names an appointment, procedures, care, a pending or recalled follow-up): its date is the planned or recalled occurrence's, never this encounter's. asked: no date line; the planned or other date is never the only answer, and a member date is taken; the setting it lists is not documented."
+  },
+  {
+   "id": "d1-recall-fu",
+   "finding": "dates-1",
+   "source_input": "findings:F1a:rc5-recall-fu",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Endoscopy Center (fictional)\nRecall follow-up\nPatient: Ivo Brandmere (fictional)\nProcedure date: 10/14/2029\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2029-10-14",
+     "2026-10-16",
+     "2026-10-01"
+    ],
+    "setting": "missing",
+    "patient_status": "missing"
+   },
+   "review": "The heading is no title of the document (it follows a field or prose, or names an appointment, procedures, care, a pending or recalled follow-up): its date is the planned or recalled occurrence's, never this encounter's. asked: no date line; the planned or other date is never the only answer, and a member date is taken; the setting it lists is not documented."
+  },
+  {
+   "id": "d1-fu-appointment",
+   "finding": "dates-1",
+   "source_input": "batch4:rc5-fu-appointment",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nFollow-up appointment\nPatient: Synthetic Patient (fictional)\nVisit date: 11/16/2026\nPlace of service: office (POS 11)\nPatient status: established\nPlease arrive 15 minutes early.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-11-16",
+     "2026-10-05",
+     "2026-10-01"
+    ],
+    "setting": "missing",
+    "patient_status": "missing"
+   },
+   "review": "The heading is no title of the document (it follows a field or prose, or names an appointment, procedures, care, a pending or recalled follow-up): its date is the planned or recalled occurrence's, never this encounter's. asked: no date line; the planned or other date is never the only answer, and a member date is taken; the setting it lists is not documented."
+  },
+  {
+   "id": "d1-pending-fu",
+   "finding": "dates-1",
+   "source_input": "batch4:rc5-pending-fu",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nPending follow-up\nPatient: Synthetic Patient (fictional)\nVisit date: 11/16/2026\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-11-16",
+     "2026-10-05",
+     "2026-10-01"
+    ],
+    "setting": "missing",
+    "patient_status": "missing"
+   },
+   "review": "The heading is no title of the document (it follows a field or prose, or names an appointment, procedures, care, a pending or recalled follow-up): its date is the planned or recalled occurrence's, never this encounter's. asked: no date line; the planned or other date is never the only answer, and a member date is taken; the setting it lists is not documented."
+  },
+  {
+   "id": "d1-fu-procedures",
+   "finding": "dates-1",
+   "source_input": "batch4:rc5-fu-procedures",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nFollow-up procedures\nPatient: Synthetic Patient (fictional)\nProcedure date: 11/16/2026\nPlace of service: ASC (POS 24)\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-11-16",
+     "2026-10-05",
+     "2026-10-01"
+    ],
+    "setting": "missing",
+    "patient_status": "missing"
+   },
+   "review": "The heading is no title of the document (it follows a field or prose, or names an appointment, procedures, care, a pending or recalled follow-up): its date is the planned or recalled occurrence's, never this encounter's. asked: no date line; the planned or other date is never the only answer, and a member date is taken; the setting it lists is not documented."
+  },
+  {
+   "id": "d1-fu-care",
+   "finding": "dates-1",
+   "source_input": "batch4:rc5-fu-care",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nFollow-up care\nPatient: Synthetic Patient (fictional)\nVisit date: 11/16/2026\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-11-16",
+     "2026-10-05",
+     "2026-10-01"
+    ],
+    "setting": "missing",
+    "patient_status": "missing"
+   },
+   "review": "The heading is no title of the document (it follows a field or prose, or names an appointment, procedures, care, a pending or recalled follow-up): its date is the planned or recalled occurrence's, never this encounter's. asked: no date line; the planned or other date is never the only answer, and a member date is taken; the setting it lists is not documented."
+  },
+  {
+   "id": "d1-fu-appointments",
+   "finding": "dates-1",
+   "source_input": "batch4:rc5-fu-appointments",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nFollow-up appointments\nPatient: Synthetic Patient (fictional)\nVisit date: 11/16/2026\nPlace of service: telehealth (POS 10)\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-11-16",
+     "2026-10-05",
+     "2026-10-01"
+    ],
+    "setting": "missing",
+    "patient_status": "missing"
+   },
+   "review": "The heading is no title of the document (it follows a field or prose, or names an appointment, procedures, care, a pending or recalled follow-up): its date is the planned or recalled occurrence's, never this encounter's. asked: no date line; the planned or other date is never the only answer, and a member date is taken; the setting it lists is not documented."
+  },
+  {
+   "id": "d1-portal-msg",
+   "finding": "dates-1",
+   "source_input": "batch8:rc5-portal-msg",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nPatient portal message (fictional)\nPatient: Ivo Brandmere (fictional)\nYour biopsy results were normal.\nFollow-up appointment\nVisit date: 11/16/2026\nPlace of service: telehealth (POS 10)\nPatient status: established\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-11-16",
+     "2026-10-16",
+     "2026-10-01"
+    ],
+    "setting": "missing",
+    "patient_status": "missing"
+   },
+   "review": "The heading is no title of the document (it follows a field or prose, or names an appointment, procedures, care, a pending or recalled follow-up): its date is the planned or recalled occurrence's, never this encounter's. asked: no date line; the planned or other date is never the only answer, and a member date is taken; the setting it lists is not documented."
+  },
+  {
+   "id": "d1-phone-nodate",
+   "finding": "dates-1",
+   "source_input": "batch8:rc5-phone-nodate",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nTelephone encounter\nPatient: Ivo Brandmere (fictional)\nSpoke with the patient about the colonoscopy pathology: tubular adenoma.\nFollow-up appointment\nVisit date: 11/16/2026\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-11-16",
+     "2026-10-16",
+     "2026-10-01"
+    ],
+    "setting": "missing",
+    "patient_status": "missing"
+   },
+   "review": "The heading is no title of the document (it follows a field or prose, or names an appointment, procedures, care, a pending or recalled follow-up): its date is the planned or recalled occurrence's, never this encounter's. asked: no date line; the planned or other date is never the only answer, and a member date is taken; the setting it lists is not documented."
+  },
+  {
+   "id": "d1-phone-provider-own",
+   "finding": "dates-1",
+   "source_input": "findings:F1a:rc5b-phone-provider-own",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nTelephone encounter\nPatient: Ivo Brandmere (fictional)\nDate of service: 10/16/2026\nSpoke with the patient about the colonoscopy pathology: tubular adenoma. Questions answered.\nFollow-up appointment\nProvider: Priya Halvorsen-Mbeki, MD (fictional)\nVisit date: 11/16/2026\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-16",
+    "held": [
+     "2026-11-16"
+    ]
+   },
+   "review": "The call's own date of service is 10/16; the follow-up appointment's visit date 11/16 is a later occurrence's."
+  },
+  {
+   "id": "d1-ctrl-telephone-fu",
+   "finding": "dates-1 control",
+   "source_input": "batch4:rc5-telephone-fu",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nTelephone follow-up\nPatient: Synthetic Patient (fictional)\nDate of service: 10/05/2026\nSpoke with patient about results.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "A telephone follow-up titled so over its own date of service: the title is the document's own (RC5 as ruled)."
+  },
+  {
+   "id": "d1-ctrl-body-plan",
+   "finding": "dates-1 control",
+   "source_input": "batch4:rc5-body-plan",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nGI clinic follow-up\nPatient: Synthetic Patient (fictional)\nVisit date: 10/05/2026\nPlace of service: office (POS 11)\nDoing well on mesalamine.\nColonoscopy to be scheduled at the surgery center.\nScheduled procedure\nProcedure date: 11/16/2026\nPlace of service: ASC (POS 24)\nPatient status: new\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05",
+    "setting": "document:office"
+   },
+   "review": "A GI clinic follow-up over its header's visit date and POS 11; the scheduled procedure's block is another occurrence's (RC5 as ruled)."
+  },
+  {
+   "id": "d1-ctrl-next-appointment",
+   "finding": "dates-1 control",
+   "source_input": "findings:F1a:rc5b-phone-provider-ctrl-next",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nTelephone encounter\nPatient: Ivo Brandmere (fictional)\nSpoke with the patient about the colonoscopy pathology: tubular adenoma. Questions answered.\nNext appointment\nProvider: Priya Halvorsen-Mbeki, MD (fictional)\nVisit date: 11/16/2026\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-11-16",
+     "2026-10-16",
+     "2026-10-01"
+    ]
+   },
+   "review": "\"Next appointment\" heads the next visit: asked as the installed revision asks it."
+  },
+  {
+   "id": "d2-surveillance-block",
+   "finding": "dates-2",
+   "source_input": "findings:F1b:rc5-surveillance-block",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nSurveillance follow-up\nPatient: Synthetic Patient (fictional)\nIndex colonoscopy: two tubular adenomas.\nProvider: Priya Halvorsen-Mbeki, MD (fictional)\nProcedure date: 05/01/2019\nInterval history:\nDoing well.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05",
+     "2026-09-30",
+     "2019-05-01"
+    ]
+   },
+   "review": "A follow-up visit note whose visit date is not labelled: the procedure date dates another service (an index, scheduled or past procedure), the return visit date a later visit, the table's dates lab results. asked: no date line; the planned or other date is never the only answer, and a member date is taken."
+  },
+  {
+   "id": "d2-proc-only",
+   "finding": "dates-2",
+   "source_input": "findings:F1b:rc5i-proc-only",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nGI clinic follow-up\nPatient: Synthetic Patient (fictional)\nProcedure date: 11/04/2026\nInterval history:\nDoing well on mesalamine.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05",
+     "2027-01-05",
+     "2026-11-04"
+    ]
+   },
+   "review": "A follow-up visit note whose visit date is not labelled: the procedure date dates another service (an index, scheduled or past procedure), the return visit date a later visit, the table's dates lab results. asked: no date line; the planned or other date is never the only answer, and a member date is taken."
+  },
+  {
+   "id": "d2-return-only",
+   "finding": "dates-2",
+   "source_input": "findings:F1b:rc5i-return-only",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nGI clinic follow-up\nPatient: Synthetic Patient (fictional)\nReturn visit date: 01/05/2027\nInterval history:\nDoing well on mesalamine.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05",
+     "2027-01-05",
+     "2026-11-04"
+    ]
+   },
+   "review": "A follow-up visit note whose visit date is not labelled: the procedure date dates another service (an index, scheduled or past procedure), the return visit date a later visit, the table's dates lab results. asked: no date line; the planned or other date is never the only answer, and a member date is taken."
+  },
+  {
+   "id": "d2-labs-table",
+   "finding": "dates-2",
+   "source_input": "findings:F1b:rc5-labs-table",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nHepatology follow-up\nPatient: Synthetic Patient (fictional)\nTest | Date of service | Result\nALT | 2026-09-30 | 41 U/L\nAST | 2026-09-30 | 38 U/L\nInterval history:\nDoing well.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05",
+     "2026-09-30",
+     "2019-05-01"
+    ]
+   },
+   "review": "A follow-up visit note whose visit date is not labelled: the procedure date dates another service (an index, scheduled or past procedure), the return visit date a later visit, the table's dates lab results. asked: no date line; the planned or other date is never the only answer, and a member date is taken."
+  },
+  {
+   "id": "d2-last-colo",
+   "finding": "dates-2",
+   "source_input": "batch11:rc5-last-colo",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nGI clinic follow-up\nPatient: Synthetic Patient (fictional)\nLast colonoscopy\nProcedure date: 05/01/2019\nFindings then: two tubular adenomas.\nInterval history:\nDoing well.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05",
+     "2026-09-30",
+     "2019-05-01"
+    ]
+   },
+   "review": "A follow-up visit note whose visit date is not labelled: the procedure date dates another service (an index, scheduled or past procedure), the return visit date a later visit, the table's dates lab results. asked: no date line; the planned or other date is never the only answer, and a member date is taken."
+  },
+  {
+   "id": "d2-hx-block",
+   "finding": "dates-2",
+   "source_input": "batch11:rc5-hx-block",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nIBD follow-up\nPatient: Synthetic Patient (fictional)\nDiagnosed with ulcerative colitis in 2019.\nProcedure date: 05/01/2019\nInterval history:\nDoing well.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05",
+     "2026-09-30",
+     "2019-05-01"
+    ]
+   },
+   "review": "A follow-up visit note whose visit date is not labelled: the procedure date dates another service (an index, scheduled or past procedure), the return visit date a later visit, the table's dates lab results. asked: no date line; the planned or other date is never the only answer, and a member date is taken."
+  },
+  {
+   "id": "d2-proc-sched",
+   "finding": "dates-2",
+   "source_input": "batch12:rc5i-proc-sched",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nGI clinic follow-up\nPatient: Synthetic Patient (fictional)\nProcedure date: 11/04/2026 (scheduled)\nInterval history:\nDoing well on mesalamine.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05",
+     "2027-01-05",
+     "2026-11-04"
+    ]
+   },
+   "review": "A follow-up visit note whose visit date is not labelled: the procedure date dates another service (an index, scheduled or past procedure), the return visit date a later visit, the table's dates lab results. asked: no date line; the planned or other date is never the only answer, and a member date is taken."
+  },
+  {
+   "id": "d2-last-colo-dos",
+   "finding": "dates-2",
+   "source_input": "synthetic copy of batch11:rc5-last-colo with the encounter label",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nGI clinic follow-up\nPatient: Synthetic Patient (fictional)\nLast colonoscopy\nDate of service: 05/01/2019\nFindings then: two tubular adenomas.\nInterval history:\nDoing well.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05",
+     "2019-05-01",
+     "2026-10-01"
+    ]
+   },
+   "review": "A \"Last colonoscopy\" block in the title's header dates the last colonoscopy, whatever its label: asked: no date line; the planned or other date is never the only answer, and a member date is taken."
+  },
+  {
+   "id": "d2-block-heading-dos",
+   "finding": "dates-2",
+   "source_input": "synthetic: a block heading naming another occurrence over a header field",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nGI clinic follow-up\nPatient: Synthetic Patient (fictional)\nLast colonoscopy\nEndoscopist: Synthetic Physician (fictional)\nDate of service: 05/01/2019\nInterval history:\nDoing well.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05",
+     "2019-05-01",
+     "2026-10-01"
+    ]
+   },
+   "review": "A \"Last colonoscopy\" block heading over its own fields dates the last colonoscopy, though no word on the label's line qualifies it: asked: no date line; the planned or other date is never the only answer, and a member date is taken."
+  },
+  {
+   "id": "d2-ctrl-intended",
+   "finding": "dates-2 control",
+   "source_input": "findings:F1b:rc5i-intended",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nGI clinic follow-up\nPatient: Synthetic Patient (fictional)\nVisit date: 10/05/2026\nInterval history:\nDoing well on mesalamine.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The follow-up title's header visit date is this visit's (RC5 as ruled)."
+  },
+  {
+   "id": "d5-noown-scheduling",
+   "finding": "dates-5",
+   "source_input": "findings:F4:h2-noown-scheduling",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nGastroenterology clinic note\nPatient: Mira Quellbrook (fictional)\nDate of birth: 1958-02-11\nAttending: Tobin Archer-Vale, MD (fictional)\nChief complaint: iron deficiency anemia\nHistory of present illness:\nFatigue for three months. No melena.\nPlan:\nColonoscopy with possible polypectomy.\nScheduling\nProcedure date: 11/04/2026\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-11-04",
+     "2026-10-05",
+     "2026-10-01"
+    ]
+   },
+   "review": "The booked colonoscopy's (or return visit's) date; the clinic visit's date is not documented. asked: no date line; the planned or other date is never the only answer, and a member date is taken."
+  },
+  {
+   "id": "d5-noown-sched-details",
+   "finding": "dates-5",
+   "source_input": "batch3:h2-noown-sched-details",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nGastroenterology clinic note\nPatient: Mira Quellbrook (fictional)\nDate of birth: 1958-02-11\nAttending: Tobin Archer-Vale, MD (fictional)\nChief complaint: iron deficiency anemia\nHistory of present illness:\nFatigue for three months. No melena.\nPlan:\nColonoscopy and EGD in 4 weeks.\nScheduling details\nProcedure date: 11/04/2026\nLocation: Synthetic Endoscopy Unit\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-11-04",
+     "2026-10-05",
+     "2026-10-01"
+    ]
+   },
+   "review": "The booked colonoscopy's (or return visit's) date; the clinic visit's date is not documented. asked: no date line; the planned or other date is never the only answer, and a member date is taken."
+  },
+  {
+   "id": "d5-noown-appt-details",
+   "finding": "dates-5",
+   "source_input": "batch3:h2-noown-appt-details",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nGastroenterology clinic note\nPatient: Mira Quellbrook (fictional)\nDate of birth: 1958-02-11\nAttending: Tobin Archer-Vale, MD (fictional)\nChief complaint: iron deficiency anemia\nHistory of present illness:\nFatigue for three months. No melena.\nAssessment and plan\nIron deficiency anemia. Bidirectional endoscopy.\nAppointment details\nProcedure date: 11/04/2026\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-11-04",
+     "2026-10-05",
+     "2026-10-01"
+    ]
+   },
+   "review": "The booked colonoscopy's (or return visit's) date; the clinic visit's date is not documented. asked: no date line; the planned or other date is never the only answer, and a member date is taken."
+  },
+  {
+   "id": "d5-noown-visit-sched",
+   "finding": "dates-5",
+   "source_input": "findings:F4:h2-noown-visit-sched",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nGastroenterology clinic note\nPatient: Mira Quellbrook (fictional)\nDate of birth: 1958-02-11\nAttending: Tobin Archer-Vale, MD (fictional)\nChief complaint: iron deficiency anemia\nHistory of present illness:\nFatigue for three months. No melena.\nPlan:\nReturn to clinic in 6 weeks.\nScheduling\nVisit date: 11/16/2026\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-11-16",
+     "2026-10-05",
+     "2026-10-01"
+    ]
+   },
+   "review": "The booked colonoscopy's (or return visit's) date; the clinic visit's date is not documented. asked: no date line; the planned or other date is never the only answer, and a member date is taken."
+  },
+  {
+   "id": "d5-own-scheduling",
+   "finding": "dates-5",
+   "source_input": "batch3:h2-own-scheduling",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nGastroenterology clinic note\nPatient: Mira Quellbrook (fictional)\nDate of birth: 1958-02-11\nDate of service: 2026-10-05\nAttending: Tobin Archer-Vale, MD (fictional)\nChief complaint: iron deficiency anemia\nHistory of present illness:\nFatigue for three months. No melena.\nPlan:\nColonoscopy with possible polypectomy.\nScheduling\nProcedure date: 11/04/2026\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05",
+    "held": [
+     "2026-11-04"
+    ]
+   },
+   "review": "The note's own date of service 10/05; the booked occurrence's date never speaks against it."
+  },
+  {
+   "id": "d5-own-appt-details",
+   "finding": "dates-5",
+   "source_input": "batch3:h2-own-appt-details",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nGastroenterology clinic note\nPatient: Mira Quellbrook (fictional)\nDate of birth: 1958-02-11\nDate of service: 2026-10-05\nAttending: Tobin Archer-Vale, MD (fictional)\nChief complaint: iron deficiency anemia\nHistory of present illness:\nFatigue for three months. No melena.\nAssessment and plan\nIron deficiency anemia. Bidirectional endoscopy.\nAppointment details\nProcedure date: 11/04/2026\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05",
+    "held": [
+     "2026-11-04"
+    ]
+   },
+   "review": "The note's own date of service 10/05; the booked occurrence's date never speaks against it."
+  },
+  {
+   "id": "d5-own-visit-sched",
+   "finding": "dates-5",
+   "source_input": "batch3:h2-own-visit-sched",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nGastroenterology clinic note\nPatient: Mira Quellbrook (fictional)\nDate of birth: 1958-02-11\nDate of service: 2026-10-05\nAttending: Tobin Archer-Vale, MD (fictional)\nChief complaint: iron deficiency anemia\nHistory of present illness:\nFatigue for three months. No melena.\nPlan:\nReturn to clinic in 6 weeks.\nScheduling\nVisit date: 11/16/2026\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05",
+    "held": [
+     "2026-11-16"
+    ]
+   },
+   "review": "The note's own date of service 10/05; the booked occurrence's date never speaks against it."
+  },
+  {
+   "id": "d6-colo-biopsy",
+   "finding": "dates-6",
+   "source_input": "findings:F6:p-colo-billing-biopsy",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Endoscopy Center (fictional)\nColonoscopy report\nPatient: Ivo Brandmere (fictional)\nDate of birth: 1964-07-30\nDate of service: 10/14/2026\nEndoscopist: Priya Halvorsen-Mbeki, MD (fictional)\nIndication: surveillance, history of adenomatous polyps.\nTechnique: The colonoscope was advanced to the cecum; the appendiceal orifice and ileocecal valve were photographed. Withdrawal time 9 minutes.\nFindings: A 6 mm sigmoid polyp was biopsied with cold forceps. Otherwise normal to the cecum.\nImpression: one sigmoid polyp sampled.\nRecommendations:\nAwait pathology. Repeat colonoscopy in 3 years if the polyp is an adenoma.\nBilling\nColonoscopy with biopsy\nCPT: 45380\nDate of service: 10/15/2026\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-14",
+     "2026-10-15"
+    ]
+   },
+   "review": "The billing block's unqualified date of service for the same procedure contradicts the header's: a conflict."
+  },
+  {
+   "id": "d6-colo-biopsy-desc",
+   "finding": "dates-6",
+   "source_input": "batch2:p-colo-billing-biopsy-desc",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Endoscopy Center (fictional)\nColonoscopy report\nPatient: Ivo Brandmere (fictional)\nDate of birth: 1964-07-30\nDate of service: 10/14/2026\nEndoscopist: Priya Halvorsen-Mbeki, MD (fictional)\nIndication: surveillance, history of adenomatous polyps.\nTechnique: The colonoscope was advanced to the cecum; the appendiceal orifice and ileocecal valve were photographed. Withdrawal time 9 minutes.\nFindings: A 6 mm sigmoid polyp was biopsied with cold forceps. Otherwise normal to the cecum.\nImpression: one sigmoid polyp sampled.\nRecommendations:\nAwait pathology. Repeat colonoscopy in 3 years if the polyp is an adenoma.\nCharges\nColonoscopy with biopsy, single or multiple\nCPT: 45380\nDate of service: 10/15/2026\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-14",
+     "2026-10-15"
+    ]
+   },
+   "review": "The billing block's unqualified date of service for the same procedure contradicts the header's: a conflict."
+  },
+  {
+   "id": "d6-egd-biopsy",
+   "finding": "dates-6",
+   "source_input": "findings:F6:p-egd-biopsy",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Endoscopy Center (fictional)\nUpper endoscopy report\nPatient: Ivo Brandmere (fictional)\nDate of birth: 1964-07-30\nDate of service: 10/14/2026\nEndoscopist: Priya Halvorsen-Mbeki, MD (fictional)\nIndication: dyspepsia.\nTechnique: The endoscope was advanced to the second part of the duodenum.\nFindings: Mild antral erythema. Biopsies were taken from the antrum and body with cold forceps.\nImpression: mild gastritis, biopsied.\nRecommendations:\nAwait pathology. Treat H. pylori if present.\nProfessional charges\nEGD with biopsy\nCPT: 43239\nDate of service: 10/15/2026\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-14",
+     "2026-10-15"
+    ]
+   },
+   "review": "The billing block's unqualified date of service for the same procedure contradicts the header's: a conflict."
+  },
+  {
+   "id": "d6-egd-biopsies",
+   "finding": "dates-6",
+   "source_input": "batch2:p-egd-biopsies",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Endoscopy Center (fictional)\nUpper endoscopy report\nPatient: Ivo Brandmere (fictional)\nDate of birth: 1964-07-30\nDate of service: 10/14/2026\nEndoscopist: Priya Halvorsen-Mbeki, MD (fictional)\nIndication: dyspepsia.\nTechnique: The endoscope was advanced to the second part of the duodenum.\nFindings: Mild antral erythema. Biopsies were taken from the antrum and body with cold forceps.\nImpression: mild gastritis, biopsied.\nRecommendations:\nAwait pathology. Treat H. pylori if present.\nCharges\nUpper endoscopy with biopsies\nCPT: 43239\nDate of service: 10/15/2026\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-14",
+     "2026-10-15"
+    ]
+   },
+   "review": "The billing block's unqualified date of service for the same procedure contradicts the header's: a conflict."
+  },
+  {
+   "id": "d6-eus-bare",
+   "finding": "dates-6",
+   "source_input": "findings:F6:p-eus-bare",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Endoscopy Center (fictional)\nEndoscopic ultrasound report\nPatient: Ivo Brandmere (fictional)\nDate of birth: 1964-07-30\nDate of service: 10/14/2026\nEndoscopist: Priya Halvorsen-Mbeki, MD (fictional)\nIndication: pancreatic cyst.\nTechnique: The linear echoendoscope was advanced to the duodenum.\nFindings: A 2 cm cyst in the pancreatic body; fine needle aspiration was performed with a 22 gauge needle.\nImpression: pancreatic body cyst, aspirated.\nRecommendations:\nAwait cytology and cyst fluid CEA.\nCharges\nEndoscopic ultrasound\nCPT: 43259\nDate of service: 10/15/2026\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-14",
+     "2026-10-15"
+    ]
+   },
+   "review": "The billing block's unqualified date of service for the same procedure contradicts the header's: a conflict."
+  },
+  {
+   "id": "d6-eus-fna",
+   "finding": "dates-6",
+   "source_input": "batch2:p-eus",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Endoscopy Center (fictional)\nEndoscopic ultrasound report\nPatient: Ivo Brandmere (fictional)\nDate of birth: 1964-07-30\nDate of service: 10/14/2026\nEndoscopist: Priya Halvorsen-Mbeki, MD (fictional)\nIndication: pancreatic cyst.\nTechnique: The linear echoendoscope was advanced to the duodenum.\nFindings: A 2 cm cyst in the pancreatic body; fine needle aspiration was performed with a 22 gauge needle.\nImpression: pancreatic body cyst, aspirated.\nRecommendations:\nAwait cytology and cyst fluid CEA.\nCharges\nEndoscopic ultrasound with FNA\nCPT: 43242\nDate of service: 10/15/2026\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-14",
+     "2026-10-15"
+    ]
+   },
+   "review": "The billing block's unqualified date of service for the same procedure contradicts the header's: a conflict."
+  },
+  {
+   "id": "d6-flex-sig-biopsy",
+   "finding": "dates-6",
+   "source_input": "batch14:h1-09 Flexible sigmoidoscopy with biopsy",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Endoscopy Center (fictional)\nProcedure report\nPatient: Ivo Brandmere (fictional)\nDate of birth: 1964-07-30\nDate of service: 10/14/2026\nEndoscopist: Priya Halvorsen-Mbeki, MD (fictional)\nIndication: surveillance.\nTechnique: The scope was advanced to the cecum.\nFindings: see below.\nImpression: as above.\nRecommendations:\nAwait pathology.\nCharges\nFlexible sigmoidoscopy with biopsy\nCPT: 45380\nDate of service: 10/15/2026\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-14",
+     "2026-10-15"
+    ]
+   },
+   "review": "The billing block's unqualified date of service for the same procedure contradicts the header's: a conflict."
+  },
+  {
+   "id": "d6-specimen-collection",
+   "finding": "dates-6",
+   "source_input": "batch14:h1-10 Colonoscopy, specimen collection",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Endoscopy Center (fictional)\nProcedure report\nPatient: Ivo Brandmere (fictional)\nDate of birth: 1964-07-30\nDate of service: 10/14/2026\nEndoscopist: Priya Halvorsen-Mbeki, MD (fictional)\nIndication: surveillance.\nTechnique: The scope was advanced to the cecum.\nFindings: see below.\nImpression: as above.\nRecommendations:\nAwait pathology.\nCharges\nColonoscopy, specimen collection\nCPT: 45380\nDate of service: 10/15/2026\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-14",
+     "2026-10-15"
+    ]
+   },
+   "review": "The billing block's unqualified date of service for the same procedure contradicts the header's: a conflict."
+  },
+  {
+   "id": "d6-cytology-brushing",
+   "finding": "dates-6",
+   "source_input": "batch14:h1-11 Colonoscopy with cytology brushing",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Endoscopy Center (fictional)\nProcedure report\nPatient: Ivo Brandmere (fictional)\nDate of birth: 1964-07-30\nDate of service: 10/14/2026\nEndoscopist: Priya Halvorsen-Mbeki, MD (fictional)\nIndication: surveillance.\nTechnique: The scope was advanced to the cecum.\nFindings: see below.\nImpression: as above.\nRecommendations:\nAwait pathology.\nCharges\nColonoscopy with cytology brushing\nCPT: 45380\nDate of service: 10/15/2026\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-14",
+     "2026-10-15"
+    ]
+   },
+   "review": "The billing block's unqualified date of service for the same procedure contradicts the header's: a conflict."
+  },
+  {
+   "id": "d6-anoscopy-biopsy",
+   "finding": "dates-6",
+   "source_input": "batch14:h1-13 Anoscopy with biopsy",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Endoscopy Center (fictional)\nProcedure report\nPatient: Ivo Brandmere (fictional)\nDate of birth: 1964-07-30\nDate of service: 10/14/2026\nEndoscopist: Priya Halvorsen-Mbeki, MD (fictional)\nIndication: surveillance.\nTechnique: The scope was advanced to the cecum.\nFindings: see below.\nImpression: as above.\nRecommendations:\nAwait pathology.\nCharges\nAnoscopy with biopsy\nCPT: 45380\nDate of service: 10/15/2026\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-14",
+     "2026-10-15"
+    ]
+   },
+   "review": "The billing block's unqualified date of service for the same procedure contradicts the header's: a conflict."
+  },
+  {
+   "id": "d6-em-level",
+   "finding": "dates-6",
+   "source_input": "findings:F6:o-em",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nGastroenterology follow-up note\nPatient: Mira Quellbrook (fictional)\nDate of birth: 1958-02-11\nDate of service: 2026-10-05\nAttending: Tobin Archer-Vale, MD (fictional)\nChief complaint: follow-up of iron deficiency anemia\nHistory of present illness:\nShe feels better on oral iron. No melena.\nAssessment and plan\nIron deficiency anemia, improving. Continue ferrous sulfate. Recheck CBC in 8 weeks.\nCharges\nEvaluation and management, level 4\nCPT: 99214\nDate of service: 2026-10-06\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The E/M charge line's date of service contradicts the header's: a conflict."
+  },
+  {
+   "id": "d6-em-visit",
+   "finding": "dates-6",
+   "source_input": "batch2:o-em2",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nGastroenterology follow-up note\nPatient: Mira Quellbrook (fictional)\nDate of birth: 1958-02-11\nDate of service: 2026-10-05\nAttending: Tobin Archer-Vale, MD (fictional)\nChief complaint: follow-up of iron deficiency anemia\nHistory of present illness:\nShe feels better on oral iron. No melena.\nAssessment and plan\nIron deficiency anemia, improving. Continue ferrous sulfate. Recheck CBC in 8 weeks.\nCharges\nEvaluation and management visit\nCPT: 99214\nDate of service: 2026-10-06\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The E/M charge line's date of service contradicts the header's: a conflict."
+  },
+  {
+   "id": "d7-nohead-own",
+   "finding": "dates-7",
+   "source_input": "findings:F5:plan-tab-nohead-own",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nDate of service: 10/05/2026\nChief complaint: cirrhosis follow-up\nAssessment and plan\nCirrhosis, compensated. Continue current care.\nTest | Date of service | Result\nALT | 2026-09-30 | 41 U/L\nAST | 2026-09-30 | 38 U/L\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05",
+    "held": [
+     "2026-09-30"
+    ]
+   },
+   "review": "The column dates the lab results, never the visit: the header's 10/05 is sent."
+  },
+  {
+   "id": "d7-nohead-noown",
+   "finding": "dates-7",
+   "source_input": "findings:F5:plan-tab-nohead-noown",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\nChief complaint: cirrhosis follow-up\nAssessment and plan\nCirrhosis, compensated. Continue current care.\nTest | Date of service | Result\nALT | 2026-09-30 | 41 U/L\nAST | 2026-09-30 | 38 U/L\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05",
+     "2026-09-30",
+     "2026-10-01"
+    ]
+   },
+   "review": "The results' date is no visit date: asked: no date line; the planned or other date is never the only answer, and a member date is taken."
+  },
+  {
+   "id": "d8-sameline-title",
+   "finding": "dates-8",
+   "source_input": "findings:F7:o-sameline-title",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nGastroenterology clinic note\nPatient: Mira Quellbrook (fictional)\nDate of birth: 1958-02-11\nDate of service: 2026-10-05\nAttending: Tobin Archer-Vale, MD (fictional)\nChief complaint: follow-up of iron deficiency anemia\nHistory of present illness:\nShe feels better on oral iron. No melena.\nAssessment and plan\nIron deficiency anemia, improving. Continue ferrous sulfate. Recheck CBC in 8 weeks.\nCharge Information Date of Service: 2026-10-06\nCPT: 99214\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The charge block's date of service, joined to its heading on one line, contradicts the header's: a conflict."
+  },
+  {
+   "id": "d8-sameline-caps",
+   "finding": "dates-8",
+   "source_input": "findings:F7:o-sameline-caps",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nGastroenterology clinic note\nPatient: Mira Quellbrook (fictional)\nDate of birth: 1958-02-11\nDate of service: 2026-10-05\nAttending: Tobin Archer-Vale, MD (fictional)\nChief complaint: follow-up of iron deficiency anemia\nHistory of present illness:\nShe feels better on oral iron. No melena.\nAssessment and plan\nIron deficiency anemia, improving. Continue ferrous sulfate. Recheck CBC in 8 weeks.\nCHARGE INFORMATION Date of Service: 2026-10-06\nCPT: 99214\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The charge block's date of service, joined to its heading on one line, contradicts the header's: a conflict."
+  },
+  {
+   "id": "d8-sameline-billing",
+   "finding": "dates-8",
+   "source_input": "batch6:o-sameline-billing",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nGastroenterology clinic note\nPatient: Mira Quellbrook (fictional)\nDate of birth: 1958-02-11\nDate of service: 2026-10-05\nAttending: Tobin Archer-Vale, MD (fictional)\nChief complaint: follow-up of iron deficiency anemia\nHistory of present illness:\nShe feels better on oral iron. No melena.\nAssessment and plan\nIron deficiency anemia, improving. Continue ferrous sulfate. Recheck CBC in 8 weeks.\nBilling Date of Service: 10/06/2026\nCPT: 99214\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The charge block's date of service, joined to its heading on one line, contradicts the header's: a conflict."
+  },
+  {
+   "id": "d8-ctrl-sameline-lower",
+   "finding": "dates-8",
+   "source_input": "findings:F7:o-sameline-lower",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nGastroenterology clinic note\nPatient: Mira Quellbrook (fictional)\nDate of birth: 1958-02-11\nDate of service: 2026-10-05\nAttending: Tobin Archer-Vale, MD (fictional)\nChief complaint: follow-up of iron deficiency anemia\nHistory of present illness:\nShe feels better on oral iron. No melena.\nAssessment and plan\nIron deficiency anemia, improving. Continue ferrous sulfate. Recheck CBC in 8 weeks.\nCharge information Date of service: 2026-10-06\nCPT: 99214\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The charge block's date of service, joined to its heading on one line, contradicts the header's: a conflict."
+  },
+  {
+   "id": "d9-emdash-only",
+   "finding": "dates-9",
+   "source_input": "findings:F8:emdash-only",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nPatient: Mira Quellbrook (fictional)\nDate of service — 10/05/2026\nChief complaint: anemia\nAssessment: iron deficiency anemia.\n",
+   "expected": {
+    "kind": "asked",
+    "only": "2026-10-05",
+    "held": [
+     "2026-10-06",
+     "1998-01-01"
+    ]
+   },
+   "review": "The document labels 10/05/2026 as the date of service: never \"no date documented\"; a member date that differs is held, and asked, the labelled date is taken."
+  },
+  {
+   "id": "d9-emdash-nospace",
+   "finding": "dates-9",
+   "source_input": "batch10:emdash-only-nospace",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nPatient: Mira Quellbrook (fictional)\nDate of service—10/05/2026\nChief complaint: anemia\nAssessment: iron deficiency anemia.\n",
+   "expected": {
+    "kind": "asked",
+    "only": "2026-10-05",
+    "held": [
+     "2026-10-06",
+     "1998-01-01"
+    ]
+   },
+   "review": "The document labels 10/05/2026 as the date of service: never \"no date documented\"; a member date that differs is held, and asked, the labelled date is taken."
+  },
+  {
+   "id": "d9-dot-only",
+   "finding": "dates-9",
+   "source_input": "batch10:dot-only",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nPatient: Mira Quellbrook (fictional)\nDate of service. 10/05/2026\nChief complaint: anemia\nAssessment: iron deficiency anemia.\n",
+   "expected": {
+    "kind": "asked",
+    "only": "2026-10-05",
+    "held": [
+     "2026-10-06",
+     "1998-01-01"
+    ]
+   },
+   "review": "The document labels 10/05/2026 as the date of service: never \"no date documented\"; a member date that differs is held, and asked, the labelled date is taken."
+  },
+  {
+   "id": "d9-fullwidth-colon",
+   "finding": "dates-9",
+   "source_input": "batch10:fullwidth-colon",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nPatient: Mira Quellbrook (fictional)\nDate of service： 10/05/2026\nChief complaint: anemia\nAssessment: iron deficiency anemia.\n",
+   "expected": {
+    "kind": "asked",
+    "only": "2026-10-05",
+    "held": [
+     "2026-10-06",
+     "1998-01-01"
+    ]
+   },
+   "review": "The document labels 10/05/2026 as the date of service: never \"no date documented\"; a member date that differs is held, and asked, the labelled date is taken."
+  },
+  {
+   "id": "d9-emdash-noplan",
+   "finding": "dates-9",
+   "source_input": "batch7:emdash-noplan",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nGastroenterology clinic note\nPatient: Mira Quellbrook (fictional)\nDate of birth: 1958-02-11\nDate of service: 2026-10-05\nAttending: Tobin Archer-Vale, MD (fictional)\nChief complaint: follow-up of iron deficiency anemia\nHistory of present illness:\nShe feels better on oral iron. No melena.\nCharge information:\nDate of service — 2026-10-06\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The charge block's date of service written with an em dash contradicts the header's: a conflict."
+  },
+  {
+   "id": "d9-emdash-plan",
+   "finding": "dates-9",
+   "source_input": "batch6:o-emdash",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nGastroenterology clinic note\nPatient: Mira Quellbrook (fictional)\nDate of birth: 1958-02-11\nDate of service: 2026-10-05\nAttending: Tobin Archer-Vale, MD (fictional)\nChief complaint: follow-up of iron deficiency anemia\nHistory of present illness:\nShe feels better on oral iron. No melena.\nAssessment and plan\nIron deficiency anemia, improving. Continue ferrous sulfate. Recheck CBC in 8 weeks.\nCharge information\nDate of service — 2026-10-06\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The charge block's date of service written with an em dash contradicts the header's: a conflict."
+  },
+  {
+   "id": "d9-ctrl-endash",
+   "finding": "dates-9 control",
+   "source_input": "findings:F8:endash-only",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nPatient: Mira Quellbrook (fictional)\nDate of service – 10/05/2026\nChief complaint: anemia\nAssessment: iron deficiency anemia.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "An en dash is a separator the installed revision reads: the date is sent as before."
+  }
+ ]
+}
