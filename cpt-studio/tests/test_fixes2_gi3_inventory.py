@@ -146,6 +146,14 @@ class RelativeClauseHeadTests(SimpleTestCase):
                  'The colonoscope was advanced to the cecum.', colo)):
             with self.subTest(findings):
                 self.assertIn(status(maker(findings), code, quote), NOT_READY)
+        # another predicate's clause, coordinated before the act, is no predicate of the act's own
+        for findings, code, quote, maker in (
+                ('A 7 mm polyp was removed with a cold snare and biopsies, which were not taken because of bleeding, are '
+                 'planned.', '45380', 'A 7 mm polyp was removed', colo),
+                ('The gastroscope was passed into the stomach, and dilation, which was not performed, is recommended.',
+                 '43249', 'The gastroscope was passed', egd)):
+            with self.subTest(findings):
+                self.assertIn(status(maker(findings), code, quote), NOT_READY)
 
     def test_another_head_nouns_relative_clause_never_denies_the_act(self):
         """Controls: the reviewer's a14 and a11, and the act's own predicate before the relative pronoun, before the act
@@ -211,6 +219,11 @@ class CellDenialTests(SimpleTestCase):
                 inv = read(text)
                 self.assertFalse(acts(inv, 'gi.colonoscopy', kind, ('performed',)))
                 self.assertIn(status(text, *code_quote), NOT_READY)
+                if col == 'Polypectomy':  # the cell's own undenied segment states its column's act
+                    table_acts = [a for a in acts(inv, 'gi.colonoscopy', 'snare')
+                                  if a.cues and a.cues[0].startswith(services.TABLE_CELL_CUE)]
+                    self.assertTrue(table_acts)
+                    self.assertTrue(all(a.status == 'performed' for a in table_acts))
         text = (HEAD + 'Upper endoscopy report\nProcedure summary\nExamination | Furthest point reached | Biopsy\n'
                 'Upper endoscopy | Second portion of the duodenum | Yes, without dilation\nFindings: The gastroscope was '
                 'advanced to the second portion of the duodenum. Gastric biopsies were taken.\n')
@@ -364,6 +377,16 @@ class ExchangeNounPhraseTests(SimpleTestCase):
                 'new 5 French stent. The bile duct was cannulated. A 10 French plastic stent was placed in the common bile '
                 'duct for the stricture.\nImpression\nPancreatic duct stent exchanged; biliary stent placed.\n')
         self.assertEqual(status(text, '43274', 'A 10 French plastic stent was placed in the common bile duct'), 'ready')
+        # another act's object on the procedure line is no site of the exchange's: its own biliary parts stay its parts
+        for line, imp in (('Procedures: ERCP with stent exchange and biopsies of the duodenum.', 'Stent exchanged.'),
+                          ('Procedures: ERCP with stent exchange and placement of a stent in the pancreatic duct.',
+                           'Stent exchanged.')):
+            with self.subTest(line):
+                text = ercp.format(line=line, extra='Biopsies of the second portion of the duodenum were taken.', imp=imp)
+                self.assertFalse([a for a in acts(read(text), 'gi.ercp', 'stent_exchange') if a.anatomy])
+                self.assertEqual(statuses(text, [('43275', 'The existing plastic stent was removed'),
+                                                 ('43274', 'A new 10 French plastic stent was placed')]),
+                                 {'43275': 'needs_clarification', '43274': 'needs_clarification'})
 
     def test_an_exchanges_noun_phrase(self):
         for passage, systems in (('Biliary stent exchanged: one plastic stent removed.', {'biliary'}),
@@ -393,7 +416,8 @@ class HeadingLinesTests(SimpleTestCase):
         for name in ('h01-prior-reviewed-caption', 'h02-prior-reviewed-sentence'):
             with self.subTest(name):
                 text = fixture(name)
-                self.assertFalse(acts(read(text), 'gi.colonoscopy', 'snare', ('performed',)))
+                # a heading beyond the first line cannot be placed for certain: held, never dated
+                self.assertEqual([a.status for a in acts(read(text), 'gi.colonoscopy', 'snare')], ['uncertain'])
                 self.assertIn(status(text, '45385', 'Yes, cold snare'), NOT_READY)
         self.assertEqual([a.status for a in acts(read(fixture('h03-ctrl-prior-reviewed')), 'gi.colonoscopy', 'snare')],
                          ['historical'])

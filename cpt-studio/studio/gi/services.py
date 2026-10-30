@@ -4265,6 +4265,16 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 if k < len(mention_starts) and _ADJACENT.fullmatch(text, x[3], mention_starts[k]) \
                         and not text.endswith('ed', 0, mentions[k][2]):
                     premodified[x[2]] = mentions[k][0]
+            # ... and a site an act mention takes as its object (POINT_OBJECT, and the sites chained to it: "... stent
+            # exchange and biopsies of the duodenum") is that act's: by its start, that act's kind (the exchange had taken
+            # the biopsies' duodenum from its clause, and its own biliary parts read as no part of it)
+            object_sites: dict[int, str] = {}
+            for kind_m, _, b in mentions:
+                k, at, chained = bisect.bisect_left(site_starts, b), b, False
+                while k < len(anatomy_all) and (CHAINED_SITE if chained else POINT_OBJECT).fullmatch(
+                        text, at, anatomy_all[k][2]):
+                    object_sites.setdefault(anatomy_all[k][2], kind_m)
+                    at, chained, k = anatomy_all[k][3], True, k + 1
             # gi3 fix round 2 (INV2-7): the sites written as a service's own extent right after its name ("EGD with
             # biopsies and colonoscopy to the cecum with cold snare polypectomy": the cecum is the colonoscopy's, and had
             # been the EGD biopsies' own site, which made them a colonoscopy biopsy and 45380 ready)
@@ -4439,6 +4449,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                         continue  # a table's header cell names a column ("Tissue sampled"), never an act done (R2)
                 clause = clause_at(ms)
                 anat = [x for x in sites_in(*clause) if premodified.get(x[2], kind) == kind
+                        and object_sites.get(x[2], kind) == kind
                         and x[2] not in extent_sites] or borrowable  # gi3 fix round 2 (INV2-5, INV2-7)
                 region = anat[0][1] if anat else ''
                 # R6: the act's lesion (its clause's, else its sentence's when its clause names no site), its own sites,
