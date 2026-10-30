@@ -510,10 +510,12 @@ def stage_predict(job):
         enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=run,
                 key=f'{assess_key}:{run.pk if run else "no-provider"}', requested_by=job.requested_by)
 
-    if provider is None and job.idempotency_key == _upgrade_predict_key(context):
-        # gi3 fix round 2 (STATE2-1): with sending disabled, the predict an upgrade's remake queued assesses nothing with
-        # no answer either - that dropped every proposal of a reviewed encounter and invalidated its decisions. It stops
-        # as it stops where it would send, and the recorded assessment and its decisions stay until a member's Resume.
+    if provider is None and job.idempotency_key == _upgrade_predict_key(context) and _answered_in_use(revision):
+        # gi3 fix round 2 (STATE2-1): with sending disabled, the predict an upgrade's remake queued never replaces a
+        # recorded answer with none - that dropped every proposal of a reviewed encounter and invalidated its decisions.
+        # It stops as it stops where it would send, and the recorded assessment and its decisions stay until a member's
+        # Resume. Where no answer is recorded (the installed pair ran with sending disabled too) it runs as before and
+        # nothing is stopped (ec5 skeptic:1): assessing with no answer loses nothing there.
         raise StageCancelled(REMADE_DISABLED_MESSAGE)
     if provider is None:
         next_assess(None)
@@ -1282,6 +1284,12 @@ def _request_for(run, revision, context):
         return None
     return build_coding_request(run.provider, run.adapter_version, revision.text, context_service_date(context),
                                 settings.PROVIDER_MAX_REQUEST_BYTES)
+
+
+def _answered_in_use(revision):
+    """gi3 fix round 2 (STATE2-1): whether the run in use (_run_in_use) is a recorded answer - a succeeded run."""
+    run = _run_in_use(revision)
+    return run is not None and run.state == models.ProviderRun.SUCCEEDED
 
 
 def _run_in_use(revision):
