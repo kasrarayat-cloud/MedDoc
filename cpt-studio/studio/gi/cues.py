@@ -775,15 +775,15 @@ EM_TIME_DAY = rx(r'\b(?:' + _EM_TIME_DAY + r')\b')
 # phrase right after them), never in the rest of its sentence ("Total time today: 30 minutes, including review of the
 # labs since the last visit." is today's).
 # Another occasion (a closed class): an earlier or a later visit, appointment, encounter, session, call or consultation
-# ("at the previous visit", "at the August visit", "since the last visit", "over two visits"), and a period that is no
-# single date - a
-# week, a month, a calendar month, a quarter or a year ("this calendar month", "last week", "per month"), a number of
-# days before ("the past 30 days", "3 days ago"), and the day before or after. A statement whose own words also say the
-# date of the encounter (EM_TIME_DAY) is that date's ("Total time on the date of service, including review of the
-# previous visit's notes: 40 minutes").
+# ("at the previous visit", "at the August visit", "for the 10/15 visit", "since the last visit", "over two visits"),
+# and a period that is no single date - a week, a month, a calendar month, a quarter or a year ("this calendar month",
+# "last week", "per month"), a number of days before ("the past 30 days", "3 days ago"), and the day before or after. A
+# statement whose own words also say the date of the encounter (EM_TIME_DAY) is that date's ("Total time on the date of
+# service, including review of the previous visit's notes: 40 minutes").
 _EM_MONTH = r'(?:january|february|march|april|may|june|july|august|september|october|november|december)'
 _EM_OTHER_VISIT = (r'(?:previous|prior|last|earlier|preceding|recent|most\s+recent|index|next|upcoming|future'
-                   r'|following|subsequent|later|' + _EM_MONTH + r'|(?:mon|tues|wednes|thurs|fri|satur|sun)day)\s+'
+                   r'|following|subsequent|later|' + _EM_MONTH + r'|(?:mon|tues|wednes|thurs|fri|satur|sun)day'
+                   r'|\d{1,2}/\d{1,2}(?:/\d{2,4})?)\s+'
                    r'(?:(?:office|clinic|telephone|phone|video|telehealth|virtual|in-person|follow[- ]?up|return'
                    r'|new[- ]patient|established[- ]patient)\s+)?(?:visits?|appointments?|encounters?|sessions?|calls?'
                    r'|consult(?:ation)?s?)|(?:two|three|four|both|several|multiple|all|\d{1,2})\s+'
@@ -796,10 +796,11 @@ _EM_OTHER_PERIOD = (r'(?:this|last|past|previous|prior|preceding|next|coming|cur
                     + _EM_MONTH + r')')
 EM_TIME_ELSEWHEN = rx(r'\b(?:' + _EM_OTHER_VISIT + r'|' + _EM_OTHER_PERIOD + r')\b')
 # ... and right after the minutes only as the phrase that places them ("40 minutes at the previous visit", "45 minutes
-# this week coordinating care"), never as an object further on ("40 minutes reviewing the notes of the previous visit")
-# nor as an item after a comma ("20 minutes, next visit in 6 months").
-EM_TIME_ELSEWHEN_AFTER = rx(r'[ \t]*(?:(?:in[ \t]+)?total[ \t]+)?(?:(?:at|during|in|on|over|for|from|within|throughout'
-                            r'|since)[ \t]+)?(?:(?:the|her|his|their|a|an)[ \t]+)?(?:' + _EM_OTHER_VISIT + r'|'
+# this week coordinating care", "40 minutes, at the previous visit"), never as an object further on ("40 minutes
+# reviewing the notes of the previous visit") nor as an item after a comma ("20 minutes, next visit in 6 months").
+_EM_PLACING = r'(?:at|during|in|on|over|for|from|within|throughout|since)'
+EM_TIME_ELSEWHEN_AFTER = rx(r'[ \t]*(?:,[ \t]*(?=' + _EM_PLACING + r'[ \t]))?(?:(?:in[ \t]+)?total[ \t]+)?(?:'
+                            + _EM_PLACING + r'[ \t]+)?(?:(?:the|her|his|their|a|an)[ \t]+)?(?:' + _EM_OTHER_VISIT + r'|'
                             + _EM_OTHER_PERIOD + r')\b')
 # A booking (a closed class): a time the visit was booked, allotted, expected or planned to take - its qualifier right
 # before or after the time noun, or a slot - never time spent ("Expected visit time: 30 minutes.", "Encounter time
@@ -811,14 +812,15 @@ EM_TIME_BOOKED = rx(r'\b(?:(?:' + _EM_BOOKING + r')\s+(?:(?:visit|encounter|appo
 # ... and in a parenthesis right after the minutes, any booking word qualifies them ("30 minutes (booked)")
 EM_TIME_BOOKING_WORD = rx(r'\b(?:' + _EM_BOOKING + r'|slots?|allotment)\b')
 # ... and any time in a note that says it was written before its visit (a closed class of statements about the note
-# itself: "Note started in advance of the visit; to be completed on the day.", "Pre-visit planning note", "the visit
-# has not yet taken place"): no time can have been spent at a visit still to come, so its "Visit time: 30 minutes." is
-# the booked length (the known limit S2 holds such a note, never ready). Never what else was done before the visit
-# ("Labs were drawn in advance of the visit.") or a pre-charting credit ("Pre-charted by the medical assistant"), which
-# completed notes carry. Read once per document.
-EM_PRECHARTED = rx(r'\b(?:note|chart|documentation|record)\s+(?:was\s+|is\s+)?(?:started|opened|begun|prepared|written'
-                   r'|created)\s+(?:in\s+advance\s+of|ahead\s+of|before)\s+(?:the|this|today\W?s|her|his)\s+'
-                   r'(?:visit|appointment|encounter)\b|\bpre-?visit\s+planning\s+note\b'
+# itself: "Note started in advance of the visit; to be completed on the day.", "Draft prepared for the upcoming
+# appointment", "Pre-visit planning note", "the visit has not yet taken place"): no time can have been spent at a visit
+# still to come, so its "Visit time: 30 minutes." is the booked length (the known limit S2 holds such a note, never
+# ready). Never what else was done before the visit ("Labs were drawn in advance of the visit.") or a pre-charting
+# credit ("Pre-charted by the medical assistant"), which completed notes carry. Read once per document.
+EM_PRECHARTED = rx(r'\b(?:note|draft|chart|documentation|record)\s+(?:was\s+|is\s+)?(?:started|opened|begun|prepared'
+                   r'|written|created)\s+(?:(?:in\s+advance\s+of|ahead\s+of|before)\s+(?:the|this|today\W?s|her|his)'
+                   r'|for\s+(?:the|her|his)\s+(?:upcoming|scheduled|next|planned))\s+(?:visit|appointment|encounter)\b'
+                   r'|\bpre-?visit\s+planning\s+note\b'
                    r'|\bto\s+be\s+completed\s+(?:on|at|after|during)\s+(?:the\s+)?(?:day\s+of\s+the\s+)?'
                    r'(?:visit|appointment|encounter)\b|\bto\s+be\s+completed\s+on\s+the\s+day\b(?!\s+of\b)'
                    r'|\b(?:visit|appointment|encounter)\s+(?:has\s+)?not\s+(?:yet\s+)?(?:occurred|taken\s+place'

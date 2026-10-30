@@ -224,7 +224,8 @@ class TimeOfAnotherOccasionTests(unittest.TestCase):
                      'Face-to-face time: 40 minutes at the previous visit.',
                      'At the previous visit, face-to-face time: 40 minutes.',
                      'Clinician time over the past 30 days: 60 minutes.', 'Physician time yesterday: 20 minutes.',
-                     'Total time over two visits: 60 minutes.'):
+                     'Total time over two visits: 60 minutes.', 'Face-to-face time for the 10/15 visit: 40 minutes.',
+                     'Face-to-face time: 40 minutes, at the previous visit.'):
             text = clinic('Clinic note - return visit', 'Continue omeprazole.', line)
             with self.subTest(line=line):
                 self.assertIsNone(fact_value(text, 'gi.office_em', 'time_minutes'))
@@ -331,8 +332,11 @@ class BookedVisitTimeTests(unittest.TestCase):
     def test_a_note_written_before_its_visit_documents_no_time_spent(self):
         # the same class with no booking word: in a note started in advance of the visit no time can have been spent
         # yet, so its time is the booked length - "Total time" too (ready at the installed revision)
-        for line in ('Visit time: 30 minutes.', 'Total time: 30 minutes.'):
-            text = E_PRECHARTED.format(time=line)
+        draft = E_PRECHARTED.replace('Note started in advance of the visit; to be completed on the day.',
+                                     'Draft prepared for the upcoming appointment.')
+        for line, note in (('Visit time: 30 minutes.', E_PRECHARTED), ('Total time: 30 minutes.', E_PRECHARTED),
+                           ('Visit time: 30 minutes.', draft)):
+            text = note.format(time=line)
             with self.subTest(line=line):
                 self.assertIsNone(fact_value(text, 'gi.office_em', 'time_minutes'))
                 proposals, _ = run_engine(text, [('99213', ['Clinic note - return visit',
