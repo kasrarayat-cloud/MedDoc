@@ -178,6 +178,16 @@ class PlanLineIsNoTitleTests(unittest.TestCase):
         self.assertEqual(em_status(text), 'performed')
         self.assertEqual(fact_value(text, 'gi.office_em', 'time_minutes'), '20')
 
+    def test_controls_a_title_under_the_documents_own_follow_up_title_is_the_visits(self):
+        # the dates binding's RC5: "Gastroenterology follow-up" opens a plan section over the head, and the visit title
+        # stacked under it is still the document's own (context._title_start)
+        for top in ('Gastroenterology follow-up\nClinic note - return visit', 'Hepatology follow-up\nReturn visit note'):
+            text = clinic(top, 'Continue omeprazole.', 'Face-to-face time: 20 minutes.')
+            with self.subTest(top=top):
+                self.assertEqual(em_status(text), 'performed')
+                proposals, _ = run_engine(text, [('99213', [top.split('\n')[1]])])
+                self.assertEqual(proposals['99213'].status, 'ready')
+
 
 # --- SCOPE-3: a clinician time of another occasion ------------------------------------------------------------------
 

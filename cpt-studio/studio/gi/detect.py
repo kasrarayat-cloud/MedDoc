@@ -243,11 +243,13 @@ def _em_mentions(text: str, lay: Layout) -> tuple[tuple[Mention, ...], tuple[Men
         if not heading:
             # gi3 fix round 1 (SCOPE-2): a title line in a plan or a history section is that section's content - a later
             # visit ("Plan" / "Return visit - three months" in a short note's head), or a label's value ("Plan: Return
-            # visit") - unless the line is itself the section's heading ("GI clinic follow-up" opens a plan section;
-            # interpretation 42: a section opened by the document's own title governs nothing)
+            # visit") - unless the line is itself the section's heading ("GI clinic follow-up"), or the section is the
+            # one the document's own follow-up title opens ("Gastroenterology follow-up" / "Clinic note - return
+            # visit"; context._title_start, the dates binding's RC5: interpretation 42, such a section governs nothing)
             section = lay.section_at(m.start())
             if section.kind in ELSEWHERE_SECTIONS and (section.heading is None or section.heading.start < m.start()
-                                                       or section.heading.end < m.end('title')):
+                                                       or section.heading.end < m.end('title')) \
+                    and section.start != ctx._title_start(text):
                 continue
         found.append(Mention('gi.office_em', m.start('title'), m.end('title'), 'em-visit',
                              'visit heading' if heading else 'visit title', 'title'))
