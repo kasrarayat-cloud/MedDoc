@@ -279,7 +279,8 @@ class AnotherModalityInTheHeadTests(unittest.TestCase):
                      'Clinic note - return visit\nPhone (mobile): 555-0100 ext. 2',
                      'Clinic note - return visit\nPhone no.: 555 010 0100',
                      'Clinic note - return visit\nTelephone: +44 20 7946 0958',
-                     'Clinic note - return visit\nPatient portal: www.example.org/portal | portal@example.org'):
+                     'Clinic note - return visit\nPatient portal: www.example.org/portal | https://portal.example.org'
+                     ' | E-mail: info@portal.example.org'):
             text = PRACTICE + head + '\nDate of service: 2026-10-21\n' + OFFICE + note
             with self.subTest(head=head):
                 self.assertEqual(em_status(text), 'performed')
@@ -520,6 +521,9 @@ class CostTests(unittest.TestCase):
         self.assertRoutedWithin(BANNER + 'Office visit afterwards, ' * 6000 + '\n', 15.0)
         self.assertRoutedWithin(BANNER + 'Visit mode: phone ' * 8000 + '\n', 15.0)
         self.assertRoutedWithin(BANNER + ('Return visit - three months\n' * 4000), 15.0)
+        # a modality word before a long blank run (the draft's contact pattern took 12.8 s at 20,000 blanks)
+        self.assertRoutedWithin(BANNER + 'Follow-up visit - phone' + ' ' * 20000 + 'x\nPhysician time: 12 minutes.\n',
+                                2.0)
 
     def test_the_new_classes_are_linear(self):
         for pattern, unit in ((cues.EM_TIME_ELSEWHEN, 'the previous ' * 1000), (cues.EM_PRECHARTED, 'note ' * 1000),
