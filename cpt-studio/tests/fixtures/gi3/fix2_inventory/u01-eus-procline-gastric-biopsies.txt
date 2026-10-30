@@ -1,0 +1,32 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Endoscopic Ultrasound Report
+Hospital: Northgate Lakes Medical Center (fictional), Endoscopy Unit
+Place of service: Hospital outpatient department (POS 22)
+Date of procedure: October 15, 2026
+Patient: Augustin Pelletier-Nwosu (fictional), 66-year-old man
+Endosonographer: Henrietta Osei-Lundgren, MD (fictional)
+Anesthesia: Monitored anesthesia care by Bartholomew Quist, MD (fictional), Department of Anesthesiology, documented and billed separately.
+Cytopathology: Rapid on-site evaluation by Soraya Elmendorf, MD (fictional), of Northgate Lakes Pathology (fictional), reported separately.
+Procedure: Upper endoscopic ultrasound with EUS-guided fine-needle biopsy and gastric biopsies.
+
+Indication
+New-onset diabetes with a 2.2 cm hypoenhancing lesion of the pancreatic tail on a contrast CT of 2026-09-29. Tissue diagnosis was requested by the pancreas multidisciplinary conference.
+
+Technique
+After informed consent and a time-out, a linear echoendoscope was passed through the mouth and advanced to the second portion of the duodenum. An endosonographic survey of the esophagus, stomach and duodenum was completed, imaging the pancreatic head, uncinate process, neck, body and tail, the common bile duct, the gallbladder, the left adrenal gland, the celiac axis and the left lobe of the liver.
+
+Findings
+Pancreatic tail: a 22 x 19 mm hypoechoic, irregular solid mass abutting the splenic vein with a preserved interface. The upstream pancreatic duct was not dilated. Pancreatic head, neck and body: normal parenchyma, main duct 2 mm. Common bile duct 4 mm without stones. No celiac, peripancreatic or perigastric lymphadenopathy. No ascites. The left adrenal gland and the imaged liver were normal. Patchy antral erythema; biopsies of the gastric antrum were taken for Helicobacter pylori. No other mucosal abnormality in the esophagus, stomach or duodenum.
+
+Fine-needle biopsy
+Under real-time endosonographic guidance, with color Doppler to avoid intervening vessels, the tail mass was sampled from the gastric body (transgastric) with a 22-gauge fork-tip biopsy needle in 4 passes. On-site evaluation reported adequate cellularity with atypical epithelial cells. Additional cores were placed in formalin for histology.
+
+Impression
+1. 22 mm solid mass of the pancreatic tail, sampled by EUS-guided fine-needle biopsy (4 passes, transgastric).
+2. No lymphadenopathy and no evident vascular invasion on EUS.
+
+Plan
+Await final cytology and histology. Review at the pancreas conference on 2026-10-27. Surgical oncology referral for distal pancreatectomy if malignancy is confirmed. Clear liquids for 2 hours, then a regular diet.
+
+Electronically signed: Henrietta Osei-Lundgren, MD (fictional), 2026-10-15 13:20

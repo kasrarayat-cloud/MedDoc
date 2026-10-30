@@ -1,0 +1,14 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Harrowgate Digestive Clinic (fictional)
+Colonoscopy report
+Patient: Orla Testfield (fictional)
+Date of service: 2026-10-16
+Indication: Surveillance after prior adenoma.
+Findings
+The colonoscope was advanced to the cecum. A 15 mm flat lesion in the ascending colon was seen; it was not removed today and was left for a dedicated session.
+Impression
+Ascending colon flat lesion, 15 mm.
+Disposition
+Examination | Timing | Polypectomy | Tattoo
+Colonoscopy | Within 8 weeks | Yes, EMR | Yes
+Electronically signed: Ivo Placeholder, MD (fictional), 2026-10-16 09:12

@@ -1,0 +1,18 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Brightwater Valley Endoscopy Center (fictional)
+Colonoscopy report
+Patient: Marisol Testcase (fictional)
+Procedure date: 2026-10-16
+Endoscopist: Kwabena Testwood, MD (fictional)
+
+Findings
+The adult colonoscope was advanced to the cecum; the appendiceal orifice and ileocecal valve were photographed. Scattered diverticula in the sigmoid colon. The mucosa was otherwise normal.
+
+Procedure summary
+Examination | Furthest point reached | Tissue sampled
+Colonoscopy | Cecum | Yes, random colon biopsies with cold forceps
+
+Impression
+Sigmoid diverticulosis.
+
+Electronically signed: Kwabena Testwood, MD (fictional), 2026-10-16 10:47

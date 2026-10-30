@@ -1,0 +1,16 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Bidirectional Endoscopy Report
+Date of procedure: 2026-10-20
+Place of service: Ambulatory surgery center (ASC), POS 24
+Endoscopist: Test Physician, MD (fictional)
+Procedures: EGD with cold forceps biopsies taken from the gastric antrum and colonoscopy with cold snare polypectomy in the sigmoid colon.
+Indications
+Iron deficiency anemia.
+Upper Endoscopy
+The gastroscope was advanced to the second portion of the duodenum. Mild antral erythema.
+Colonoscopy
+The colonoscope was advanced to the cecum. One 5 mm sessile polyp in the sigmoid colon.
+Impression
+Mild gastritis; one sigmoid polyp.
+Plan
+Await pathology.

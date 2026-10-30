@@ -1,0 +1,6 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Patient: Wren Fictional
+Date of service: 2026-10-16
+Colonoscopy report
+Findings: The colonoscope was advanced to the cecum. Cold forceps biopsies were taken from the 25 mm mass in the sigmoid colon that was not removed.
+Impression: Sigmoid mass, biopsied.

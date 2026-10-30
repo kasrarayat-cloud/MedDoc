@@ -1,0 +1,18 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Harrowgate Digestive Clinic (fictional)
+Upper endoscopy report
+Patient: Wren Testcase (fictional)
+Date of service: 2026-10-16
+Endoscopist: Kwabena Testwood, MD (fictional)
+
+Procedure summary
+Examination | Furthest point reached | Dilation
+Upper endoscopy | Second portion of the duodenum | Yes, 18 mm balloon (no biopsies)
+
+Findings
+The gastroscope was advanced to the second portion of the duodenum. A benign-appearing distal esophageal stricture was dilated with an 18 mm through-the-scope balloon. The stomach and duodenum were normal.
+
+Impression
+Distal esophageal stricture, dilated.
+
+Electronically signed: Kwabena Testwood, MD (fictional), 2026-10-16 10:47
