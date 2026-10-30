@@ -908,6 +908,7 @@ tree's own live replay showed one.
     (e) *An act's instrument (46).* An act never takes the technique of the instrument its own kind rules out: a forceps
         biopsy or hot forceps removal is never "(cold snare)", a snare removal never "(forceps)" - the instrument is what
         tells 45380 and 45384 from 45385, and the rationale must not misstate it.
+    (f) *Added 2026-10-30, after the independent refutation - see 50(a). The code cites it as 48(f).*
 
 ### Session interpretation, 2026-10-30 (7c8d38da, third round, after the independent refutation) — recorded, not owner-ruled
 
@@ -921,3 +922,30 @@ tree's own live replay showed one.
     machinery the gi-context@1 upgrade built remakes an earlier context under the current rules before any stage sends or
     assesses on it, and refuses a second review on one. What 42 meant still holds for display: a reload runs no stage,
     so a pre-install encounter keeps showing its recorded reading until a member's action or a stage reads it again.
+50. **Integration refinements after fix round 1, and two decisions before the freeze.**
+    (a) *A charge line's date (refines 48(a); cited in the code as 48(f)).* In a plan section, the encounter's own
+        date-of-service label in a block that carries a CPT code between its heading and the label ("CPT: 99214",
+        "CPT code 45380", "CPT 43239-59") is this encounter's charge. Its date speaks against the note's own labelled
+        date (a conflict, asked) whatever words the block's heading uses ("Evaluation and management", "Colonoscopy
+        with biopsy"), unless the heading explicitly names another occurrence ("Prior visit", "Next appointment").
+        Like 48(a) and (b) it never sends a date: it only asks, or reads as installed.
+    (b) *A visit title stacked under the document's own follow-up title (refines 44).* A visit title in the head, directly
+        under the document's own follow-up title ("Gastroenterology follow-up" / "Clinic note - return visit"), is this
+        visit's title and never a block heading naming another occurrence. A title led by an other-occurrence word
+        ("Prior clinic note", "Previous clinic note", "Scheduled office visit") still governs and documents nothing of
+        today's visit.
+    (c) *No visit time from a title alone where the note documents nothing of the visit (refines 43 and 44; the scope
+        residual S-R1, decided must-fix).* After fix round 1, a "Hepatology clinic note" whose only clinical content is
+        "Transient elastography today: ..." and "Physician time: 20 minutes." read 99213 ready; the installed revision
+        held it. A ready E/M on a note that documents only another service's result is an unsupported promotion
+        (must-fix class 4), and that time is most plausibly the elastography's interpretation, which 43 never counts.
+        Rule: a visit title makes an unframed clinician time the visit's only where the note records part of the visit
+        itself - a history, an examination or an assessment of its own. Otherwise the E/M is held, never ready and
+        never excluded. Whether routing codes the procedure's family makes no difference.
+    (d) *Version labels for the other readers (extends 49).* Routing, the documented-service inventory and the validation
+        engine all read differently in this round, so their labels change at the freeze: gi-routing@5, gi-services@2
+        (with the inventory's check source) and cpt-studio-validation@5. Otherwise a download made before the install
+        and one made after it would name the same rules for different readings. The change affects provenance only:
+        proposal fingerprints do not include the labels (engine._fingerprint), so no decision is invalidated by a label
+        alone. The engine label's only other reader is the re-assessment's stated reasons (review._what_changed and
+        _what_differs), which then name the engine change truthfully.
