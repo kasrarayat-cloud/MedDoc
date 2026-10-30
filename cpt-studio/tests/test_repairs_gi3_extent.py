@@ -269,6 +269,12 @@ KNOWN_LIMITS = {
     'F1-06-no-summary-heading': ({'gi.office_em': ('planned', None, None), 'gi.egd': ('uncertain', None, None),
                                   'gi.colonoscopy': ('uncertain', None, None)},
                                  'a table with no summary label is no evidence of today: it stays the indication\'s'),
+    # gi3 fix round 1 (EXT-1, EXT-3): the summary label needs a procedure report's title in the document's head; this
+    # note is titled "Pre-procedure note", so its table stays the indication's and the EGD is asked, as at 90377ec6f413
+    # (the colonoscopy reads negated from the plan's "not done today")
+    'F1-19-performed-column-no': ({'gi.egd': ('uncertain', None, None), 'gi.colonoscopy': ('negated', None, None)},
+                                  'a pre-procedure note is no procedure report by its title: the summary label opens '
+                                  'nothing, so the EGD is asked'),
     'F2-03-deepest-point-label-only': ({'gi.colonoscopy': ('incomplete', None, None),
                                         'gi.flex_sig': ('historical', None, None)},
                                        'an open identification clause after the value (", identified by ...") leaves '

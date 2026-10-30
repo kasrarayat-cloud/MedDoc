@@ -1,0 +1,27 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Larkspur Digestive Health (fictional)
+Gastroenterology Consultation
+Patient: Odalys Fenwick-Marr (fictional)
+Date of birth: 1961-02-14
+Date of service: 2026-10-21
+Place of service: office (POS 11)
+New patient
+Referring physician: Tobias Wrenfield, MD (fictional)
+
+Reason for referral
+A 30 mm ascending colon polyp that was not removed; referred to discuss endoscopic resection.
+
+Procedure summary
+Examination | Instrument | Furthest point reached | Tissue sampled
+Colonoscopy | Adult colonoscope | Cecum | No
+
+History of present illness
+Ms. Fenwick-Marr is a 65-year-old woman with no GI symptoms. Her screening examination found a flat 30 mm polyp in
+the ascending colon. She has no rectal bleeding and no weight loss.
+
+Assessment and plan
+Large laterally spreading ascending colon polyp. We discussed endoscopic mucosal resection, its risks and benefits.
+She would like to proceed; EMR will be scheduled at our endoscopy unit.
+
+Total time on the date of service: 45 minutes.
+Electronically signed: Rosalind Achterberg, MD (fictional), 2026-10-21

@@ -1,0 +1,27 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Larkspur Digestive Health (fictional)
+Progress Note
+Patient: Odalys Fenwick-Marr (fictional)
+Date of birth: 1961-02-14
+Date of service: 2026-10-21
+Place of service: office (POS 11)
+Established patient
+
+Subjective:
+Ms. Fenwick-Marr returns to review her recent screening colonoscopy. She feels well.
+
+Procedure summary
+Examination | Instrument | Furthest point reached | Polyps
+Colonoscopy | Adult colonoscope | Cecum | None
+
+Objective:
+Abdomen soft and non-tender.
+
+Assessment:
+Normal screening colonoscopy.
+
+Plan:
+Repeat screening colonoscopy in 10 years.
+
+Total time on the date of service: 25 minutes.
+Electronically signed: Rosalind Achterberg, MD (fictional), 2026-10-21
