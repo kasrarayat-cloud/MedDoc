@@ -552,6 +552,16 @@ class OtherMentionTechniqueTests(SimpleTestCase):
                    'with a 54 Fr Maloney bougie.\n')
         techniques = {a.kind: a.technique for s in inv.services for a in s.acts if a.kind in ('manometry', 'dilation')}
         self.assertEqual(techniques, {'manometry': '', 'dilation': 'guidewire'})
+
+    def test_a_mention_of_the_acts_own_kind_is_the_same_act(self):
+        """gi3 fix round 2 (INV2-8), the live replay's ho-10: "Biopsies: cold forceps biopsies were taken from the
+        proximal esophagus ..." names one biopsy twice, and its cold forceps are its own."""
+        inv = read(HEAD + 'Upper endoscopy report\nProcedure: EGD with through-the-scope balloon dilation and cold '
+                   'forceps biopsies.\nFindings: The gastroscope was advanced to the second portion of the duodenum.\n'
+                   'Biopsies: cold forceps biopsies were taken from the proximal esophagus at 25 cm and the mid '
+                   'esophagus at 30 cm (container 1).\n')
+        self.assertEqual([a.technique for a in acts(inv, 'gi.egd', 'biopsy', ('performed',))], ['cold forceps'])
+        self.assertEqual([a.technique for a in acts(inv, 'gi.egd', 'dilation', ('performed',))], ['balloon'])
         for gap, own in (('with a 15 mm stiff ', True), ('with a 54 Fr Maloney ', True), ('using the 10 mm ', True),
                          ('via a 2.8 mm channel ', True), ('with ', True),
                          ('with biopsies of the ', False), ('and the ', False), ('with a 15 mm stiff long braided ', False)):

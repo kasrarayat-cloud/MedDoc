@@ -3360,7 +3360,7 @@ def _technique(text: str, start: int, end: int, near: Optional[int] = None, kind
         if name in ruled_out:
             continue
         for m in pattern.finditer(text, start, end):
-            if mentions and _in_another_mention(text, mentions, starts, m.start(), m.end(), near, own_end):
+            if mentions and _in_another_mention(text, mentions, starts, m.start(), m.end(), near, own_end, kind):
                 continue
             if near is None:
                 return name
@@ -3379,16 +3379,17 @@ INSTRUMENT_LEAD = _rx(r'\b(?:with|using|by|via)\s+(?:(?:a|an|the)\s+)?(?:\d+(?:\
 
 
 def _in_another_mention(text: str, mentions: Sequence[tuple[str, int, int]], starts: Sequence[int], a: int, b: int,
-                        own: Optional[int], own_end: int) -> bool:
+                        own: Optional[int], own_end: int, kind: str = '') -> bool:
     """Whether [a, b) lies in an act mention of ``mentions`` (sorted by start, with their ``starts``) other than this
-    act's own at [``own``, ``own_end``) and other than this act's own instrument phrase (a mention after it, led by an
-    instrument preposition: INSTRUMENT_LEAD). The last mention starting at or before ``a`` is read, and the first one
-    starting inside [a, b): two bisections."""
+    act's own at [``own``, ``own_end``), other than a mention of this act's own ``kind`` (the same act named again:
+    "Biopsies: cold forceps biopsies were taken", the live replay's ho-10) and other than this act's own instrument
+    phrase (a mention after it, led by an instrument preposition: INSTRUMENT_LEAD, with no other act named between).
+    The last mention starting at or before ``a`` is read, and the first one starting inside [a, b): two bisections."""
     i = bisect.bisect_right(starts, a) - 1
     j = bisect.bisect_left(starts, a + 1)
     other = mentions[i] if i >= 0 and a < mentions[i][2] and mentions[i][1] != own else \
         mentions[j] if j < len(starts) and starts[j] < b and starts[j] != own else None
-    if other is None:
+    if other is None or (kind and other[0] == kind):
         return False
     if own_end < 0 or other[1] < own_end:
         return True
