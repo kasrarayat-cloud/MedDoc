@@ -21,7 +21,7 @@ from studio.reference.store import PFS, applied_sources
 from studio.types import (CONTEXT_FACTS, AssessmentResult, Check, ClarificationSpec, CodeReference, EvidenceSpan, Fact,
                           FamilyFinding, NormalizedResponse, PageSpan, ProposalAssessment, ProviderCode,
                           ReferenceLookup, ReferenceSourceInfo, RoutingResult, ServiceMention, sha256_json)
-from studio.gi.detect import DOUBT_PREFIX, UNESTABLISHED, VISIT_NAMES_OTHER
+from studio.gi.detect import DOUBT_PREFIX, UNESTABLISHED, VISIT_NAMES_OTHER, records_encounter
 from studio.validation import checks, rationale, reconcile
 
 ENGINE_VERSION = 'cpt-studio-validation@4'
@@ -563,6 +563,8 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
             # documents no act the code accounts for as done or in conflict - it has nothing to add, and the exclusion
             # stands. A code whose act the inventory reads as done, or a base or E/M code, stays held.
             found = None
+        if found is not None and legacy in checks.EM_FAMILIES and _visit_only_elsewhen(found, routing, text):
+            found = _visit_elsewhen_held(found)  # gi3 fix round 1 (SCOPE-6): held, never excluded
 
     def today(span):
         return _today_passage(text, span, day)
@@ -600,6 +602,36 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
             placed = reconcile.placed_check(elsewhere, inventory, PROFILES[selection.family].label)
     return replace(selection, evaluation=_Evaluation(finding, outcome, reference.lookup(code, day), own, speaks_for,
                                                      found, supported, note, placed))
+
+
+def _visit_only_elsewhen(found: reconcile.Match, routing: RoutingResult, text: str) -> bool:
+    """gi3 fix round 1 (SCOPE-6, interpretation 44): whether the documented office visit is excluded only because the
+    document names it as another occasion's - planned or historical ("Return office visit in 6 months." under Plan) -
+    in a note that records an encounter of its own (detect.records_encounter: "Examination", "Assessment") on a day with
+    no procedure done. A later or an earlier visit never decides whether today's visit was performed, and a note with no
+    marker of today's visit is held, never excluded (A21's shape, as the note with "Follow up in 6 months." is). A
+    document that records no encounter (an appointment letter, a results letter) and a procedure day (the plan's visit
+    beside today's EGD) keep the exclusion, and so do a cancelled or a denied visit."""
+    if found.state != 'not_performed' or found.reason != 'service_negative' \
+            or found.service.status not in ('planned', 'historical'):
+        return False
+    if any(f.status in checks.POSITIVE for f in routing.findings if f.family not in checks.EM_FAMILIES):
+        return False
+    return records_encounter(gi_sections.layout(text))
+
+
+def _visit_elsewhen_held(found: reconcile.Match) -> reconcile.Match:
+    """The hold of _visit_only_elsewhen: uncertain, asking whether the visit was performed on the date of service, with
+    what was read - never as doubt about today's visit."""
+    name = reconcile.service_label(found.service)
+    ev = found.service.evidence[0] if found.service.evidence else None
+    when = 'a later' if found.service.status == 'planned' else 'an earlier'
+    return replace(found, state='uncertain', reason='service_uncertain', detail=(
+        f'The document gives the {name} as {found.service.status}'
+        + (f' ({reconcile.quote(ev)})' if ev else '')
+        + f": {when} visit, which never decides whether today's visit was performed. The note records an examination "
+          'or an assessment, so the code is held for the reviewer, never excluded.'),
+        question=f'Confirm whether the {name} was performed on the date of service.')
 
 
 def _today_passage(text: str, span, day: Optional[date]) -> bool:
@@ -837,11 +869,14 @@ def _held_unless_agreed(outcome: checks.StatusOutcome, text: str, day: Optional[
     cue = f'uncertain: the routing-era reading reads it as {decisive.status}, but the documented-service reader {why}'
     if legacy in checks.EM_FAMILIES and decisive.status in ('planned', 'historical'):
         # gi3 scope (interpretation 44): a later or an earlier occurrence ("Return in one year.", "Surveillance ultrasound
-        # in six months.") is never doubt about today's visit. The code is held because no passage it cites documents
-        # today's visit (a not-performed outcome decided by its own passage has no positive one), never excluded.
-        when = 'a later' if decisive.status == 'planned' else 'an earlier'
-        cue = (f"uncertain: it speaks of {when} visit or service (read {decisive.status}), never of today's visit, and no "
-               "passage the code cites documents today's visit")
+        # in six months.") is never doubt about today's visit; the code is held, never excluded. gi3 fix round 1
+        # (SCOPE-9): the hold states only what the two readers read in this passage. Never that no passage the code
+        # cites documents today's visit - the others are not read for it ("She returns today for follow-up of
+        # constipation." cited beside "Return in one year.") - and never that the passage speaks of another occasion
+        # where only the routing-era reading places it there ("Results reviewed with the patient by phone.", today's
+        # call, is read historical by its "reviewed").
+        cue = (f'uncertain: the routing-era reading reads it as {decisive.status}, which never decides today\'s visit, '
+               f'and the documented-service reader {why}')
     held = checks.Reading('uncertain', (cue,), 'evidence', decisive.passage, decisive.start, decisive.end)
     return checks.StatusOutcome('uncertain', held)
 
@@ -1183,24 +1218,74 @@ def _performed_visits(routing: RoutingResult):
     return overlapping
 
 
-def _visit_statement_own(reading: checks.Reading, performed_visit) -> checks.Reading:
+# gi3 fix round 1 (SCOPE-8): the words that place a visit in time beside the service its statement names (closed
+# classes). After it - after, following, post, subsequent to, once, upon, when or until it - or before it - before,
+# prior to, ahead of, preceding, pending or awaiting it. A visit after a PLANNED service is a later visit still ("Office
+# visit after the colonoscopy scheduled for 2026-11-18."), and one before it is not placed today either; a visit before
+# a HISTORICAL service is an earlier one. Routing's hold then stands. A visit after a historical service ("Office visit
+# after the colonoscopy done last week") may be today's and reads as the visit's own. So do the words that review a
+# service's outcome - its results, findings, pathology or report - beside a planned service: only a later visit can
+# review them ("Office visit to review the results of the colonoscopy scheduled for 2026-11-18."). Read in the words
+# between the visit statement and the service it names, and in the _VISIT_TIMED_LEAD characters that lead a service
+# named before it.
+_VISIT_AFTER_SERVICE = re.compile(r'\b(?:after(?:wards?)?|following|post|subsequent(?:ly)?|once|upon|when|until)\b',
+                                  re.A | re.I)
+_VISIT_BEFORE_SERVICE = re.compile(r'\b(?:before|prior|ahead|preceding|pending|awaiting)\b', re.A | re.I)
+_VISIT_AFTER_ITS_OUTCOME = re.compile(r'\b(?:results?|findings|pathology|reports?)\b', re.A | re.I)
+_VISIT_TIMED_LEAD = 40
+
+
+def _visit_statement_own(reading: checks.Reading, performed_visit, text: str = '',
+                         others: tuple[Sequence[tuple[int, int]], Sequence[int]] = ((), ())) -> checks.Reading:
     """gi3 scope (interpretation 44): for an E/M code, a linked passage routing holds only because the visit statement in
     it names another service read at another time ("Office visit to discuss the colonoscopy scheduled for 2026-11-18";
     routing's hold, detect.VISIT_NAMES_OTHER, read by that constant) is the visit's own statement: the named service's
     time is that service's, never doubt about today's visit. It reads as routing reads the visit statement it holds,
     when routing reads that statement as performed (``performed_visit``: _performed_visits). Any other reading stands:
     a cancellation or a denial (it may be the visit's own), and a visit statement routing reads otherwise (a plan's
-    later visit)."""
+    later visit). gi3 fix round 1 (SCOPE-8): so does a statement that places the visit in time beside the service it
+    names (_visit_timed_by_service; ``others``: the sorted spans of routing's mentions of the other families, and their
+    starts)."""
     if reading.status != 'uncertain' or not reading.cues or reading.start is None or reading.end is None:
         return reading
     named = reading.cues[0][len(VISIT_NAMES_OTHER):] if reading.cues[0].startswith(VISIT_NAMES_OTHER) else ''
     if named not in ('planned', 'historical'):
         return reading
     visit = performed_visit(reading.start, reading.end)
-    if visit is None:
+    if visit is None or _visit_timed_by_service(text, others, reading, visit, named):
         return reading
     return replace(reading, status='performed', cues=tuple(visit.cues) + (
         f'performed: office E/M documentation (the visit statement names another service, read {named})',))
+
+
+# A clause boundary: words beyond it are no part of the visit statement ("Chief complaint: follow-up." / "Next office
+# visit after the colonoscopy in 3 months." - the "after" is the next visit's, never today's).
+_VISIT_CLAUSE_END = re.compile(r'[.;!?\n]')
+
+
+def _visit_timed_by_service(text: str, others: tuple[Sequence[tuple[int, int]], Sequence[int]],
+                            reading: checks.Reading, visit, named: str) -> bool:
+    """gi3 fix round 1 (SCOPE-8): whether the passage ``reading`` places its visit statement ``visit`` in time beside
+    the service it names, read ``named`` (see _VISIT_AFTER_SERVICE): in the words between the statement and the nearest
+    mention of another family in the passage, after it or before it (with the words leading a service named first),
+    within the statement's own clause (_VISIT_CLAUSE_END). Two bisections and bounded reads."""
+    spans, starts = others
+    gaps = []
+    at = bisect.bisect_left(starts, visit.span.end)
+    if at < len(spans) and spans[at][0] < reading.end and not _VISIT_CLAUSE_END.search(text, visit.span.end,
+                                                                                         spans[at][0]):
+        gaps.append((visit.span.end, spans[at][0]))
+    at = bisect.bisect_left(starts, visit.span.start) - 1
+    if at >= 0 and reading.start < spans[at][1] <= visit.span.start \
+            and not _VISIT_CLAUSE_END.search(text, spans[at][1], visit.span.start):
+        lead = max(reading.start, spans[at][0] - _VISIT_TIMED_LEAD)
+        ends = [m.end() for m in _VISIT_CLAUSE_END.finditer(text, lead, spans[at][0])]
+        gaps.append((ends[-1] if ends else lead, visit.span.start))
+    if named == 'planned':
+        words = (_VISIT_AFTER_SERVICE, _VISIT_BEFORE_SERVICE, _VISIT_AFTER_ITS_OUTCOME)
+    else:
+        words = (_VISIT_BEFORE_SERVICE,)
+    return any(pattern.search(text, lo, hi) for lo, hi in gaps for pattern in words)
 
 
 def _undated_visit(own: tuple[checks.Reading, ...], routing: RoutingResult, text: str,
@@ -1225,9 +1310,12 @@ def _undated_visit(own: tuple[checks.Reading, ...], routing: RoutingResult, text
     others = _VAL_overlap_test([(m.span.start, m.span.end) for f in routing.findings
                                 if f.family not in checks.EM_FAMILIES for m in f.mentions])
     performed_visit = _performed_visits(routing)
+    spans = sorted((m.span.start, m.span.end) for f in routing.findings if f.family not in checks.EM_FAMILIES
+                   for m in f.mentions)
+    other_spans = (spans, [start for start, _ in spans])  # gi3 fix round 1 (SCOPE-8): indexed once per code
     kept = []
     for reading in own:
-        reading = _visit_statement_own(reading, performed_visit)  # gi3 scope: a visit naming another time's service
+        reading = _visit_statement_own(reading, performed_visit, text, other_spans)  # gi3 scope: another time's service
         if reading.status not in checks.POSITIVE and not visits(reading.start, reading.end):
             if checks.section_default(reading):
                 continue

@@ -762,10 +762,66 @@ EM_TIME = rx(r'\b(?:total\s+(?:\w+\s+){0,2}?time|time\s+spent|(?:i|we)\s+spent|s
              r'|(?:i|we)\s+personally\s+spent))\b[^.;\n]{0,140}?'
              r'\b(?P<minutes>\d{1,3})\s*(?:minutes|mins?)\b')
 # The words that frame a clinician's time as E/M time, AMA's own: the date of the encounter or of service, today, and
-# counselling or coordination of care (a closed class).
-EM_TIME_FRAME = rx(r'\b(?:today|on\s+the\s+(?:date|day)\s+of|(?:service|encounter|visit)\s+date'
-                   r'|date\s+of\s+(?:service|the\s+(?:encounter|visit))|counsel(?:l)?(?:ing|ed)?'
-                   r'|coordinat\w*\s+(?:of\s+)?care|care\s+coordination)\b')
+# counselling or coordination of care (a closed class). The date words are one string with EM_TIME_DAY (gi3 fix round
+# 1), so the two never drift.
+_EM_TIME_DAY = (r'today|on\s+the\s+(?:date|day)\s+of|(?:service|encounter|visit)\s+date'
+                r'|date\s+of\s+(?:service|the\s+(?:encounter|visit))')
+EM_TIME_FRAME = rx(r'\b(?:' + _EM_TIME_DAY + r'|counsel(?:l)?(?:ing|ed)?|coordinat\w*\s+(?:of\s+)?care'
+                   r'|care\s+coordination)\b')
+EM_TIME_DAY = rx(r'\b(?:' + _EM_TIME_DAY + r')\b')
+# gi3 fix round 1 (SCOPE-3, SCOPE-5, SCOPE-7): what gives an E/M time statement to something other than the time spent
+# on the date of the encounter - AMA's E/M time, so never the visit's, framed by counselling or not. Read only in the
+# statement's own words (detect._em_time_elsewhere: its line before the subject, the words up to its minutes, and the
+# phrase right after them), never in the rest of its sentence ("Total time today: 30 minutes, including review of the
+# labs since the last visit." is today's).
+# Another occasion (a closed class): an earlier or a later visit, appointment, encounter, session, call or consultation
+# ("at the previous visit", "at the August visit", "since the last visit"), and a period that is no single date - a
+# week, a month, a calendar month, a quarter or a year ("this calendar month", "last week", "per month"), a number of
+# days before ("the past 30 days", "3 days ago"), and the day before or after. A statement whose own words also say the
+# date of the encounter (EM_TIME_DAY) is that date's ("Total time on the date of service, including review of the
+# previous visit's notes: 40 minutes").
+_EM_MONTH = r'(?:january|february|march|april|may|june|july|august|september|october|november|december)'
+_EM_OTHER_VISIT = (r'(?:previous|prior|last|earlier|preceding|recent|most\s+recent|index|next|upcoming|future'
+                   r'|following|subsequent|later|' + _EM_MONTH + r'|(?:mon|tues|wednes|thurs|fri|satur|sun)day)\s+'
+                   r'(?:(?:office|clinic|telephone|phone|video|telehealth|virtual|in-person|follow[- ]?up|return'
+                   r'|new[- ]patient|established[- ]patient)\s+)?(?:visits?|appointments?|encounters?|sessions?|calls?'
+                   r'|consult(?:ation)?s?)')
+_EM_OTHER_PERIOD = (r'(?:this|last|past|previous|prior|preceding|next|coming|current|each|every|per)\s+'
+                    r'(?:calendar\s+)?(?:weeks?|months?|quarters?|years?)|calendar\s+(?:week|month|quarter|year)'
+                    r'|(?:past|last|previous|preceding|next)\s+\d{1,3}\s+(?:days|weeks|months)'
+                    r'|\d{1,3}\s+(?:days?|weeks?|months?)\s+ago|weekly|monthly|quarterly|yearly|annually|yesterday'
+                    r'|tomorrow|last\s+night|since\s+(?:the\s+|her\s+|his\s+|their\s+)?(?:last|previous|prior|'
+                    + _EM_MONTH + r')')
+EM_TIME_ELSEWHEN = rx(r'\b(?:' + _EM_OTHER_VISIT + r'|' + _EM_OTHER_PERIOD + r')\b')
+# ... and right after the minutes only as the phrase that places them ("40 minutes at the previous visit", "45 minutes
+# this week coordinating care"), never as an object further on ("40 minutes reviewing the notes of the previous visit")
+# nor as an item after a comma ("20 minutes, next visit in 6 months").
+EM_TIME_ELSEWHEN_AFTER = rx(r'[ \t]*(?:(?:in[ \t]+)?total[ \t]+)?(?:(?:at|during|in|on|over|for|from|within|throughout'
+                            r'|since)[ \t]+)?(?:(?:the|her|his|their|a|an)[ \t]+)?(?:' + _EM_OTHER_VISIT + r'|'
+                            + _EM_OTHER_PERIOD + r')\b')
+# A booking (a closed class): a time the visit was booked, allotted, expected or planned to take - its qualifier right
+# before or after the time noun, or a slot - never time spent ("Expected visit time: 30 minutes.", "Encounter time
+# allotted: 30 minutes.", "Visit time: 30 minutes (return visit slot)." in a note started before the visit). "Time spent
+# discussing the planned colonoscopy" is time spent.
+_EM_BOOKING = r'allotted|allocated|expected|scheduled|booked|estimated|anticipated|reserved|planned|budgeted'
+EM_TIME_BOOKED = rx(r'\b(?:(?:' + _EM_BOOKING + r')\s+(?:(?:visit|encounter|appointment)\s+)?(?:time|length|duration)'
+                    r'|(?:time|length|duration)\s+(?:' + _EM_BOOKING + r')|slots?|allotment)\b')
+# ... and any time in a note that says it was written before its visit (a closed class of pre-charting statements: "Note
+# started in advance of the visit; to be completed on the day.", "Pre-charted", "Pre-visit planning note", "the visit
+# has not yet taken place"): no time can have been spent at a visit still to come, so its "Visit time: 30 minutes." is
+# the booked length (the known limit S2 holds such a note, never ready). Read once per document.
+EM_PRECHARTED = rx(r'\b(?:in\s+advance\s+of|ahead\s+of)\s+(?:the|this|today\W?s|her|his)\s+'
+                   r'(?:visit|appointment|encounter)\b|\bpre-?chart(?:ed|ing)?\b'
+                   r'|\bpre-?visit\s+(?:planning|note|summary|preparation)\b'
+                   r'|\bto\s+be\s+completed\s+(?:on|at|after|during)\s+(?:the\s+)?(?:day|visit|appointment|encounter)\b'
+                   r'|\b(?:visit|appointment|encounter)\s+(?:has\s+)?not\s+(?:yet\s+)?(?:occurred|taken\s+place'
+                   r'|happened)\b')
+# Another service's time: a drug or blood administration's (an infusion, a transfusion, an injection, a hydration, a
+# chemotherapy administration), as the time's own subject ("Total infusion time: 120 minutes.", "Time spent on the
+# infusion"), as a procedure's is (NOT_EM_TIME; interpretation 43). Time spent discussing an infusion is the visit's.
+_EM_ADMINISTRATION = r'infusions?|transfusions?|injections?|hydration|chemotherapy'
+EM_TIME_ADMINISTERED = rx(r'\b(?:(?:' + _EM_ADMINISTRATION + r')\s+(?:time|duration)|(?:time|duration)\s+(?:spent\s+)?'
+                          r'(?:on|for|of|during)\s+(?:(?:the|an?)\s+)?(?:[a-z]+\s+)?(?:' + _EM_ADMINISTRATION + r'))\b')
 EM_TIME_LINE = rx(r'^[ \t]*(?:total\s+)?time(?:\s+spent)?[ \t]*[:\-][ \t]*(?P<minutes>\d{1,3})\s*(?:minutes|mins?)\b')
 # gi3 scope (interpretation 44): the document's own visit marker on a line of its own - a title naming an office, clinic,
 # outpatient, follow-up or return note or visit ("Clinic note - return visit", "Hepatology follow-up note", "GI clinic
@@ -780,6 +836,18 @@ _EM_TITLE_NOUN = (r'(?:office|clinic|outpatient)[ \t]+(?:follow[- ]?up(?:[ \t]+(
 EM_TITLE = rx(r'^[ \t]*(?:[A-Za-z][A-Za-z /]{0,30}?[ \t]*[:|\u2013-][ \t]*)?'
               r"(?:[A-Za-z][\w&/,()'\u2019.-]*[ \t]+){0,4}?(?P<title>" + _EM_TITLE_NOUN + r')\b'
               r"(?:[ \t]*[-:\u2013\u2014,|][ \t]*[A-Za-z][\w ,/&()'\u2019-]{0,60})?[ \t]*$", FLAGS | re.M)
+# gi3 fix round 1 (SCOPE-1, SCOPE-7): the words that, leading a visit title, make it name no office or outpatient visit
+# (closed classes). A communication that is no visit - a telephone or phone call, an e-mail, a portal message
+# (EM_REMOTE: EM_VISIT names video and telehealth visits, never these; "Telephone follow-up note" over "Called the
+# patient two days after her colonoscopy"): it leads no visit statement either ("Telephone follow-up visit"). A drug or
+# blood administration's own occasion - an infusion, an injection, a transfusion ("Infusion clinic note") - and the
+# follow-up of another service - "Post-procedure", "Post-op", "Postoperative", "Post-discharge" (a procedure's own
+# follow-up, a call or a visit inside its global period, a transitional care visit): a title they lead names no office
+# visit by itself, while a statement that names a visit ("Post-op follow-up visit") is read as before.
+_EM_REMOTE = r'\b(?:tele-?phon\w*|phone[sd]?|e-?mails?|portal)\b'
+EM_REMOTE = rx(_EM_REMOTE)
+EM_NOT_OFFICE = rx(_EM_REMOTE + r'|\b(?:infus\w*|inject\w*|transfus\w*)\b'
+                   r'|\bpost(?:-[a-z]+|[ \t]*(?:op(?:erative)?|procedur(?:e|al))\b)')
 # Times that belong to a procedure, never to an E/M visit. gi3 scope (interpretation 43: an interpretation's time never
 # counts): a time whose sentence names an interpretation ("Physician time on the date of service for the interpretation:
 # 20 minutes." in a manometry report) is that study's; a visit's time that names one is asked, never read.
