@@ -161,6 +161,16 @@ class BookingHeadingTests(CaseAsserts, SimpleTestCase):
         self.assertEqual(member(text, STRANGER), 'held')
         text = clinic('Encounter summary\nVisit date: 2026-10-06\n')
         self.assertEqual(date_fact(text).origin, 'conflict')
+        # a surgery named in a heading may be this encounter's own place: the facility block's date still speaks
+        report = (BANNER + 'Northgate Endoscopy Center (fictional)\nColonoscopy report\nPatient: Ivo Brandmere '
+                  '(fictional)\nDate of service: 10/14/2026\nIndication: surveillance.\nTechnique: The colonoscope was '
+                  'advanced to the cecum.\nFindings: Normal to the cecum.\nImpression: normal colonoscopy.\n'
+                  'Recommendations:\nRepeat colonoscopy in 5 years.\nAmbulatory surgery center\n'
+                  'Date of service: 10/15/2026\n')
+        self.assertEqual(date_fact(report).origin, 'conflict')
+        for heading in ('Recall details', 'Referral information'):  # a booking's block governs its fields
+            with self.subTest(heading=heading):
+                self.assertEqual(sent(report.replace('Ambulatory surgery center', heading)), '2026-10-14')
 
 
 class DescriptorHeadingTests(CaseAsserts, SimpleTestCase):

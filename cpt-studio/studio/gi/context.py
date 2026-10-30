@@ -1805,15 +1805,14 @@ _OWN_KIND_HEAD = cues.rx(r'\b(?:visits?|encounters?|procedures?|exams?|examinati
 # H1: the words that make a visit or a procedure another occurrence's in a heading that carries no date qualifier: a
 # return, a recall, a pending one, or a follow up written with a space ("Return visit", "Pending procedures").
 _H1_OTHER = cues.rx(r'\b(?:return(?:ing)?|recalls?|pending|follow[ \t]+up)\b')
-# gi3 fix round 1 (dates-5): the words of a block heading that name another occurrence wherever they stand in it, not
-# only as its head noun - the occurrence nouns this note's own encounter is never named by (_OCCURRENCE_NOUNS less
-# _OWN_KIND_HEAD's: "a later booking, another discipline's or another day's work", H1's own reading) and the verb that
-# books one (schedule, scheduling: its participles "scheduled" and "rescheduled" are already the readers' words). After
-# a plan item, "Scheduling" / "Procedure date: 11/04/2026" and "Appointment details" / ... date the booked occurrence:
-# such a heading governs, as the installed reading governed it, so the planned date is never the only answer. A
-# neutral heading of this encounter's own block ("Billing", "Encounter summary") still ends the plan's reach.
-_BOOKING = cues.rx(r'\b(?:appointments?|referrals?|recalls?|surger(?:y|ies)|scans?|labs?|bloodwork|results?'
-                   r'|schedul(?:e|es|ing))\b')
+# gi3 fix round 1 (dates-5): the words of a block heading that name a booking wherever they stand in it, not only as its
+# head noun - an appointment, a referral or a recall (the occurrence nouns H1 reads as "a later booking") and the verb
+# that books one (schedule, scheduling: its participles "scheduled" and "rescheduled" are already the readers' words).
+# After a plan item, "Scheduling" / "Procedure date: 11/04/2026" and "Appointment details" / ... date the booked
+# occurrence: such a heading governs, as the installed reading governed it, so the planned date is never the only
+# answer. A neutral heading of this encounter's own block ("Billing", "Encounter summary", "Ambulatory surgery center")
+# still ends the plan's reach: a surgery, a lab or a result named inside a heading may be this encounter's own.
+_BOOKING = cues.rx(r'\b(?:appointments?|referrals?|recalls?|schedul(?:e|es|ing))\b')
 # A plan section whose own heading names an occurrence ("Next appointment", "Scheduled procedure", "Follow-up:",
 # "Pending procedures", "Referral:"): the fields right under it date that occurrence, so part 2 and B4 never read them.
 _SECTION_NAMES_OCCURRENCE = cues.rx(r'\b' + _OCCURRENCE_NOUNS + r'[ \t*#:]*+$')
