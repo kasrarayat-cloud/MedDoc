@@ -1,0 +1,21 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Brightwater Valley Endoscopy Center (fictional)
+Upper endoscopy report
+Patient: Marisol Vandermeer (fictional)
+Date of birth: 1957-04-03
+Procedure date: 2026-10-16
+Endoscopist: Kwabena Thistlewood, MD, Gastroenterology (fictional)
+Site of care: freestanding ambulatory surgical center, POS 24
+Indications
+Dysphagia to solids.
+Procedure summary
+Examination | Instrument | Furthest point reached | Antrum biopsy
+Upper endoscopy (EGD) | Standard gastroscope | Second portion of the duodenum | No
+Findings
+The gastroscope was passed under direct vision to the second portion of the duodenum. A Schatzki ring at 38 cm.
+Normal stomach and duodenum. No biopsies were taken.
+Impression
+Schatzki ring.
+Plan
+Consider dilation at a later date if dysphagia persists.
+Electronically signed: Kwabena Thistlewood, MD (fictional), 2026-10-16 10:47

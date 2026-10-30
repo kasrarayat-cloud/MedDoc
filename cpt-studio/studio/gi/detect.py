@@ -610,7 +610,8 @@ def _named_before(an: Analysis, pos: int, cs: int) -> bool:
 def _memberless_negations(an: Analysis, cs: int, ce: int) -> list[tuple[str, tuple[int, int]]]:
     """Explicit negations in the window [cs, ce) that name no service or intervention ("No
     polypectomy was performed", "The stricture was not dilated"): (label, span). They deny the
-    act their own words describe."""
+    act their own words describe. A relative clause's denial is its head noun's (_relative_denials), never one of
+    these."""
     key = ('memberless', cs, ce)
     if key not in an.memo:
         found = []
@@ -619,10 +620,37 @@ def _memberless_negations(an: Analysis, cs: int, ce: int) -> list[tuple[str, tup
                 if not an.services_in(m.start('body'), m.end('body')) and not an.interventions_in(m.start('body'), m.end()):
                     found.append((f'negated: {m.group(0).strip()}', (m.start(), m.end())))
             for m in cues.NOT_DONE_CLAUSE.finditer(an.text, cs, ce):
-                if not _named_before(an, m.start(), cs):
+                if not _named_before(an, m.start(), cs) and not _relative_denial(an, m.start()):
                     found.append((f'negated: {m.group(0).strip()}', (m.start(), m.end())))
         an.memo[key] = found
     return an.memo[key]
+
+
+# gi3 fix round 1 (EXT-2, routing's half): a denial whose subject is a relative pronoun is its head noun's. Where that
+# noun is no service or intervention ("the polyp that was not removed"), it denies the act its own words describe on that
+# noun, never the act the passage states ("Biopsies were taken with cold forceps from the polyp that was not removed":
+# the biopsy was taken, the polyp was left). So it is no memberless negation of the passage (routing's linked-passage
+# reading read the sentence "negated: was not removed" and the engine excluded the documented biopsy, 45380); like a
+# denied finding it explains its negation word only for a passage that names or states an act of its own
+# (_token_explanations' outside_only), and a passage that is nothing but the noun and its denial keeps the word
+# unresolved: a doubt, never a negation. Where the noun is a service or an intervention named right before the pronoun
+# ("the colonoscopy, which was not performed"), the denial is that mention's own, a memberless negation as before; and a
+# denied participle that is itself an act ("which was not biopsied") is that act's anchored negation, as before. The
+# relative pronouns are a closed class (that, which, who), as cues._POST_MODIFIER_WORD reads them.
+_RELATIVE_BEFORE = re.compile(r'\b(?:that|which|who)[ \t]+$', re.A | re.I)
+_HEAD_REACH = 80  # how far before the pronoun its head's name may start (a service's longest name and a comma)
+
+
+def _relative_denial(an: Analysis, start: int) -> bool:
+    """Whether the denial at ``start`` (a NOT_DONE_CLAUSE match) has a relative pronoun for its subject, and that
+    pronoun's head is no service or intervention named right before it (see above)."""
+    pronoun = _RELATIVE_BEFORE.search(an.text, max(0, start - 12), start)
+    return pronoun is not None and not _named_before(an, pronoun.start(), max(0, pronoun.start() - _HEAD_REACH))
+
+
+def _relative_denials(an: Analysis, lo: int, hi: int) -> list[tuple[int, int]]:
+    """The spans of the denials in [lo, hi) that are a relative clause's head noun's own (see above)."""
+    return [(m.start(), m.end()) for m in cues.NOT_DONE_CLAUSE.finditer(an.text, lo, hi) if _relative_denial(an, m.start())]
 
 
 def _anchored_explains(an: Analysis, cs: int, ce: int, token: tuple[int, int], served: Optional[int] = None) -> bool:
@@ -702,6 +730,8 @@ def _token_explanations(an: Analysis, clause: tuple[int, int], token: tuple[int,
         # read: "No polyps were seen" quoted as the evidence for a polypectomy is not "performed".
         outside_only = [(where[m.start()], where[m.end()]) for pattern in (*cues.FINDING_NEGATION, cues.OTHER_ACT_NEGATION)
                         for m in pattern.finditer(masked)]
+        # gi3 fix round 1 (EXT-2): a relative clause's denial is its head noun's (_relative_denials)
+        outside_only += _relative_denials(an, max(cs, token[0] - 40), min(ce, token[1] + 400))
         an.memo[key] = (explains, outside_only)
     return an.memo[key]
 
@@ -760,6 +790,12 @@ def _doubt(an: Analysis, ts: int, te: int) -> Optional[str]:
     if key not in an.memo:
         an.memo[key] = None
         for clause in an.lay.clauses_for(ts, te):
+            if an.lay.answer_cells and an.lay.answers_its_column(*clause) and not (clause[0] <= ts and te <= clause[1]):
+                # gi3 fix round 1 (EXT-5): a passage that spans a table row (a provider cites whole rows) takes no
+                # answer cell that answers its own column ("Colonoscopy | Cecum | No | No | No" under "Biopsy |
+                # Polypectomy | Tattoo"): each such "No" denies its column's act, which the inventory binds, never the
+                # row's service (interpretation 45)
+                continue
             cs, ce = an.lay.window(clause, ts, te, CLAUSE_REACH)
             if not _has_negation(an, cs, ce):
                 continue
@@ -2275,6 +2311,9 @@ def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Option
 
 
 HELD_AFTER_A_CUT = 'uncertain: the line before it is cut after a plan, cancellation or denial verb'
+# gi3 fix round 1 (EXT-7): sections holds such a row (TABLE_ROW_HELD_LABEL); its own cells cannot say whether it was done
+HELD_BY_A_NOT_DONE_COLUMN = ("uncertain: its table row answers a not-done status column ('Cancelled', 'Aborted', 'Not "
+                             "performed') with something other than no, so it may not have been done")
 EM_DOCUMENTATION = ': E/M documentation of this encounter'
 SILENT = 'uncertain: no performance evidence in its sentence or section'  # validation reads this prefix as silence
 
@@ -2308,6 +2347,9 @@ def _default_reading(an: Analysis, start: int, end: int) -> Reading:
     if section.kind == 'other' and section.label == gi_sections._SEC_HELD_LABEL:
         # a service line after a line cut on a plan, cancellation or denial verb (sections, round 4 structure:11)
         return Reading('uncertain', (HELD_AFTER_A_CUT,), 'cue', doubt=True)
+    if section.kind == 'other' and section.label == gi_sections.TABLE_ROW_HELD_LABEL:
+        # gi3 fix round 1 (EXT-7): a table row whose not-done status column answers anything but no ("Cancelled | Yes")
+        return Reading('uncertain', (HELD_BY_A_NOT_DONE_COLUMN,), 'cue', doubt=True)
     hold = _SEC_hold_cue(an, section)
     if hold:
         # under a colon-less phrase line inside findings (sections, round 4 structure:4): it may tell another time or

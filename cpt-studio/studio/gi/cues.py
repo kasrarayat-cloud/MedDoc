@@ -111,8 +111,22 @@ _NOT_DONE = (r'performed|completed|undertaken|carried\s+out|attempted|obtained|t
 # dilation, once its "Procedure and findings" heading is read).
 # A word that opens a clause of its own is no part of the post-modifier (a closed class: relative and subordinating
 # words), so a denial inside a relative clause never reaches the act ("Biopsy of the polyp that was not removed").
+# gi3 fix round 1 (EXT-6): nor is a word that places the act at another occasion or time - a closed class: the earlier-
+# occasion words of _EARLIER ("prior", "previous", "last", "recent", "outside", "index", "past"), another place's
+# ("another", "other", "elsewhere", "former"), a later occasion's ("next", "upcoming", "future", "following",
+# "subsequent", "later"), a time's ("ago", "before", "after", "age", a unit of time, a month or a weekday) and any word
+# with a digit (a year, an age, a count or a depth: the reading reverts to 90377ec6f413's, which can only hold):
+# "Colonoscopy at the outside hospital was not performed", "Colonoscopy at age 50 was never performed" and "Colonoscopy
+# in the last ten years was not performed" deny another occasion's service, which the historical and time readers read
+# (HISTORICAL_CLAUSE, OTHER_TIME), never today's: N1 read each as today's colonoscopy denied, so routing's family read
+# negated where 90377ec6f413 read the mention historical.
+_POST_MODIFIER_OCCASION = (r'prior|previous|previously|last|recent|recently|remote|earlier|past(?![ \t]+(?:the|a|an)\b)|'
+                           r'index|outside|another|other|elsewhere|former|next|upcoming|future|following|subsequent|'
+                           r'later|ago|before|after|age|(?:day|week|wk|month|mo|year|yr|decade|hour)s?|'
+                           r'january|february|march|april|may|june|july|august|september|october|november|december|'
+                           r'monday|tuesday|wednesday|thursday|friday|saturday|sunday|\w*\d\w*')
 _POST_MODIFIER_WORD = (r'(?!(?:that|which|who|whom|whose|where|when|while|because|since|if|unless|although|though|'
-                       r'until)\b)[\w-]+')
+                       r'until|' + _POST_MODIFIER_OCCASION + r')\b)[\w-]+')
 _POST_MODIFIER = (r'^(?:\s+(?:of|at|in|on|across|through)\s+(?:(?:the|a|an|this|that|these|those)\s+)?'
                   r'(?:' + _POST_MODIFIER_WORD + r'\s+){0,2}?' + _POST_MODIFIER_WORD
                   + r'(?=\s+(?:was|were|is|are|has|have|had)\s))?')
@@ -968,7 +982,11 @@ INTERVENTIONS = (
     ('polypectomy', rx(r'\bpolypectom(?:y|ies)\b'), _LOWER),
     ('cold snare', rx(r'\bcold[- ]snare\b'), _LUMINAL),
     ('hot snare', rx(r'\bhot[- ]snare\b|\bsnare\s+(?:electro)?cautery\b|\belectrocautery\s+snare\b'), _LUMINAL),
-    ('cold forceps', rx(r'\bcold\s+forceps\s+polypectomy\b|\b(?:removed|resected|excised)\s+(?:\w+\s+){0,3}?with\s+'
+    # gi3 fix round 1 (EXT-2): no auxiliary stands between the removal and its forceps - one would open another clause's
+    # predicate ("Biopsy of the polyp that was not removed was performed with cold forceps": the polyp was left, the
+    # biopsy took the forceps), so the removal never reaches across it for another act's instrument
+    ('cold forceps', rx(r'\bcold\s+forceps\s+polypectomy\b|\b(?:removed|resected|excised)\s+'
+                        r'(?:(?!(?:was|were|is|are|be|been|being|has|have|had)\b)\w+\s+){0,3}?with\s+'
                         r'(?:a\s+|the\s+)?(?:jumbo\s+)?cold\s+forceps\b'), _LOWER),
     ('EMR', rx(r'\bEMR\b|\bendoscopic\s+mucosal\s+resection\b'), _LOWER),
     ('injection/tattoo', rx(r'\btattoo(?:ed|ing)?\b|\binject(?:ed|ion)\b'), _LOWER),

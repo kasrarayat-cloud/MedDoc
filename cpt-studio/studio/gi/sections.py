@@ -74,10 +74,13 @@ or more " | " cells, each a bare label, over rows of as many cells. A
 procedure-summary label ("Procedure summary") straight over a summary table
 (an examination column, an extent column with an extent written in it, no
 dated row, no line naming its service with an earlier occasion before the next
-heading) opens a procedure section; a table alone opens nothing. In a table's data row, a cell that only
-answers ("No") a column that speaks neither for the row's performance or
-status, nor of a landmark or an extent ("Tissue sampled"), is a clause of its
-own. ``Layout.columns`` gives each data cell its column's label.
+heading) opens a procedure section in a document whose own title is a
+procedure's report and names no visit; a table alone opens nothing. In a
+table's data row, a cell that only answers ("No") a column whose subject is
+not the row's own service ("Tissue sampled", "Polyps seen", "Antrum biopsy")
+is a clause of its own; under a not-done status column ("Cancelled") a "No"
+is one too, and any other answer holds the row. ``Layout.columns`` gives each
+data cell its column's label, ``Layout.answer_cells`` the answer cells.
 """
 from __future__ import annotations
 
@@ -173,8 +176,11 @@ _SEC_FIELD_PLAN_LABELS = frozenset(('pending procedures', 'pending procedure', '
                                     'procedure to be performed', 'procedures to be performed',
                                     'procedures that will be performed'))
 # A field's whole value when it answers nothing: "none", "N/A", "not applicable", "no", "nil" (optionally with a
-# period).
-_SEC_NO_ANSWER = re.compile(r'[ \t]*(?:none|n/?a|not[ \t]+applicable|no|nil)[ \t]*\.?[ \t]*', re.A | re.I)
+# period). gi3 fix round 1 (cost-1, the same shape found beside it): its blank runs are read once (possessive). With
+# plain runs, a value that answers and goes on after a long run of blanks ("Orders: no" + 20,000 blanks + "x") was tried
+# at every split of the run between the runs around the optional stop, quadratic in the run (2.0 s at 20,000 blanks,
+# at 90377ec6f413 too). Every match is the same span.
+_SEC_NO_ANSWER = re.compile(r'[ \t]*+(?:none|n/?a|not[ \t]++applicable|no|nil)[ \t]*+\.?+[ \t]*+', re.A | re.I)
 # Round 3b's performed-today procedure labels (e7bc88a). Round 4 structure:9: answered with no answer ("Procedures
 # performed today: none", or the bare label with "None" on the next line) they open no procedure section, so the
 # plan items after them keep the section in force, as at R3B-BASE.
@@ -707,6 +713,8 @@ class Layout:
     tables: tuple['Table', ...] = ()
     columns: tuple[tuple[int, int, str], ...] = ()
     reporting_parts: frozenset = frozenset()
+    # gi3 fix round 1 (EXT-5): the answer cells that answer their own column, each a clause of its own, in text order
+    answer_cells: tuple[tuple[int, int], ...] = ()
 
     def section_at(self, pos: int) -> Section:
         index = bisect.bisect_right(self.section_starts, pos) - 1
@@ -723,6 +731,12 @@ class Layout:
         """Whether ``pos`` lies on a table's header line: its cells are column labels, never statements."""
         index = bisect.bisect_right(self.tables, pos, key=lambda table: table.header[0]) - 1
         return index >= 0 and self.tables[index].header[0] <= pos < self.tables[index].header[1]
+
+    def answers_its_column(self, start: int, end: int) -> bool:
+        """Whether [start, end) lies inside a table data cell that only answers its own column (gi3 fix round 1, EXT-5:
+        such a clause says nothing of the row's service, so a passage that spans the row never takes its answer)."""
+        index = bisect.bisect_right(self.answer_cells, (start, _BIG)) - 1
+        return index >= 0 and self.answer_cells[index][0] <= start and end <= self.answer_cells[index][1]
 
     def sentence_for(self, start: int, end: int) -> tuple[int, int]:
         return _first_overlap(self.sentences, start, end)
@@ -1079,9 +1093,13 @@ _TABLE_LABEL = re.compile(r'[A-Za-z][^0-9.,;:!?]*', re.A)
 _TABLE_LABEL_WORDS = 5
 # A cell that is only an answer (a closed class: yes, no, none, nil, n/a, not applicable, y, n; and, as a data cell, a
 # dash): no header cell is one, and a data cell that holds one answers its own column (layout's answer cells).
-_TABLE_ANSWER = r'(?:yes|no|none|nil|n/?a|not[ \t]+applicable|y|n)'
+# gi3 fix round 1 (cost-1): the blank runs are read once (possessive). With plain runs, a cell that answers and then goes
+# on after a long run of blanks ("no" + 100,000 blanks + "x") was tried at every split of the run between the two runs
+# around the optional stop, quadratic in the run: at a quarter of the paste cap the context stage took 48 s, so a
+# member's date answer (15 s) was refused. Every match is the same span.
+_TABLE_ANSWER = r'(?:yes|no|none|nil|n/?a|not[ \t]++applicable|y|n)'
 _TABLE_ANSWER_WORD = re.compile(_TABLE_ANSWER, re.A | re.I)
-_TABLE_ANSWER_CELL = re.compile(r'[ \t]*(?:' + _TABLE_ANSWER + r'|[-\u2013\u2014]+)[ \t]*\.?[ \t]*', re.A | re.I)
+_TABLE_ANSWER_CELL = re.compile(r'[ \t]*+(?:' + _TABLE_ANSWER + r'|[-\u2013\u2014]++)[ \t]*+\.?+[ \t]*+', re.A | re.I)
 # The first cell of a numbering column, as written (any case) and as normalize_label gives it.
 _TABLE_NUMBERING = frozenset(('#', 'no.', 'no', 'item', ''))
 _TABLE_NUMBERING_LABELS = frozenset(normalize_label(cell) for cell in _TABLE_NUMBERING)
@@ -1153,20 +1171,78 @@ def _tables(text: str, lines: list[tuple[int, int]]) -> tuple[Table, ...]:
 
 
 # gi3 extent (R2): a data cell that holds only an answer ("No", "None", "-") answers its own column's header, never the
-# row: under a column whose label names neither the row's performance or status (_SPEAKS_FOR_THE_ROW), nor a landmark,
-# nor an extent ("Tissue sampled", "Complications", "Biopsies"), it is a clause of its own (layout), so it never denies or
+# row: under a column whose label names neither the row's performance or status, nor a landmark, nor an extent
+# (_column_sense: "Tissue sampled", "Complications", "Biopsies"), it is a clause of its own (layout), so it never denies or
 # doubts the service or a landmark in another cell (h2-01: the "No" that answers "Tissue sampled" doubted the colonoscopy
 # row). Every other cell reads with its row as before: a status answer ("Performed | No"), a date ("Planned date |
 # 2026-11-12"), a comment ("Comments | Cancelled before insertion") still speaks for the row's service.
-_SPEAKS_FOR_THE_ROW = re.compile(r'\b(?:status|state|perform\w*|done|complet\w*|outcome|cancel\w*|attempt\w*|undertaken|'
-                                 r'carried|today|abort\w*|reach\w*|intubat\w*|seen|visuali[sz]\w*|examined|result)\b',
-                                 re.A | re.I)
+# gi3 fix round 1 (EXT-4, EXT-7): a column speaks for the row only when the row's own service is its subject: its label
+# names nothing but the service's performance or status (_ROW_STATUS), the reach of a landmark (_ROW_REACH, a landmark of
+# cues' tables: "Cecum reached", "Terminal ileum intubated", "Terminal ileum"), an extent (cues.EXTENT_HEADER), the
+# service itself or its examination (cues.SERVICE_PATTERNS, _ROW_SERVICE_NOUN), and function words. A label that names
+# anything else names a subject of its own - a finding ("Polyps seen", "Lesions visualized", "Bleeding seen"), an act or
+# the place of one ("Antrum biopsy", "Retroflexion in rectum", "Biopsy performed") - and an answer under it answers that
+# subject alone: the built rule read a finding's "seen", or a landmark word inside an act's label, as the row's, so the
+# "No" that said no polyps were seen, or no antral biopsy was taken, doubted the examination itself (45378 and 43235
+# held). The not-done statuses (_ROW_NOT_DONE: "Cancelled", "Aborted", "Not performed", "Incomplete", "Cecum not reached")
+# speak for the row with the opposite sense: a negative answer under one ("Cancelled | No") says the service was not
+# called off, so it is a clause of its own and never doubts the service; any other answer ("Cancelled | Yes", a dash, an
+# empty cell) states, or may state, that it did not happen, which no word of the row's own says, so the row is held
+# (layout): its services are asked, never read performed (n1: "Cancelled | No" doubted the EGD done with its biopsies, and
+# "Cancelled | Yes" left the cancelled colonoscopy performed). All three are closed classes of the words such a header
+# writes; a word outside them makes the column its own subject's, the reading before this round's tables for any other
+# cell.
+_ROW_WORD = re.compile(r"[A-Za-z][A-Za-z'-]*", re.A)
+_ROW_STATUS = re.compile(r'status|state|perform\w*|done|complet\w*|outcome|attempt\w*|undertaken|carried|out|today|'
+                         r'results?', re.A | re.I)
+_ROW_NOT_DONE = re.compile(r'cancel\w*|abort\w*|postpon\w*|defer\w*|terminat\w*|discontinu\w*|halt\w*|stopped|'
+                           r'interrupt\w*|abandon\w*|called|off|incomplete|fail\w*|unsuccessful|no-show', re.A | re.I)
+# A negation turns a status or a reach to the not-done sense ("Not performed", "Cecum not reached") and a not-done status
+# back ("Not cancelled"). A status that names both senses ("Status (completed/cancelled)") is a two-valued status
+# column: its cell names the status itself, so it speaks for the row as written. The answer options a header may print
+# beside its label ("Completed (Y/N)") are no subject of their own.
+_ROW_NEGATION = frozenset(('not', 'never'))
+_ROW_OPTION = frozenset(('y', 'n', 'yes', 'no'))
+_ROW_REACH = re.compile(r'reach\w*|intubat\w*|seen|visuali[sz]\w*|examined|entered|identified|inspected|confirmed|'
+                        r'photographed|photodocumented|documented', re.A | re.I)
+_ROW_SERVICE_NOUN = frozenset(('procedure', 'procedures', 'examination', 'examinations', 'exam', 'study', 'service',
+                               'endoscopy'))
+_ROW_FUNCTION = frozenset(('the', 'a', 'an', 'of', 'to', 'in', 'on', 'at', 'and', 'or', 'was', 'were', 'is', 'been'))
+_ROW_IGNORED = _ROW_SERVICE_NOUN | _ROW_FUNCTION | _ROW_OPTION
+COLUMN_OWN, COLUMN_ROW, COLUMN_NOT_DONE = 'own', 'row', 'not done'
+# A negative answer alone in a cell ("No", "None", "N/A"): under a not-done column it says the service was not called
+# off. Its blank runs are read once, as _TABLE_ANSWER_CELL's are.
+_TABLE_NEGATIVE_CELL = re.compile(r'[ \t]*+(?:no|none|nil|n/?a|not[ \t]++applicable|n)[ \t]*+\.?+[ \t]*+', re.A | re.I)
+# The 'other' section of a table row held for its not-done status column (layout; detect reads it as a hold).
+TABLE_ROW_HELD_LABEL = 'table row answering a not-done status column'
 
 
-def _answers_its_column(label: str) -> bool:
-    """Whether an answer-only data cell under the column ``label`` answers that column alone (see above)."""
-    return not (_SPEAKS_FOR_THE_ROW.search(label) or cues.EXTENT_HEADER.fullmatch(label)
-                or any(pattern.search(label) for _, _, pattern in cues.UPPER_LANDMARKS + cues.LOWER_LANDMARKS))
+def _column_sense(label: str) -> str:
+    """COLUMN_OWN when an answer-only data cell under the column ``label`` answers that column alone, COLUMN_ROW when it
+    speaks for the row's service, COLUMN_NOT_DONE when it speaks for the row with the opposite sense (see above)."""
+    if cues.EXTENT_HEADER.fullmatch(label):
+        return COLUMN_ROW
+    rest = label
+    for _, _, pattern in cues.UPPER_LANDMARKS + cues.LOWER_LANDMARKS:
+        rest = pattern.sub(' ', rest)
+    landmark = rest != label
+    for _, pattern in cues.SERVICE_PATTERNS:
+        rest = pattern.sub(' ', rest)
+    status = stopped = negated = False
+    for word in _ROW_WORD.findall(rest):
+        if word.lower() in _ROW_NEGATION:
+            negated = True
+        elif _ROW_NOT_DONE.fullmatch(word):
+            stopped = True
+        elif _ROW_STATUS.fullmatch(word) or _ROW_REACH.fullmatch(word):
+            status = True
+        elif word.lower() not in _ROW_IGNORED:
+            return COLUMN_OWN  # a subject of its own: a finding, an act, an instrument, a date
+    if stopped and status:
+        return COLUMN_ROW  # a two-valued status: "Status (completed/cancelled)"
+    if stopped != negated and (stopped or status or landmark):
+        return COLUMN_NOT_DONE  # "Cancelled", "Not performed", "Cecum not reached"
+    return COLUMN_ROW if status or landmark or stopped else COLUMN_OWN
 
 
 # gi3 extent (R1): a procedure-summary label (a closed list) straight over a summary table opens a procedure section (h2-01:
@@ -1257,11 +1333,86 @@ def _office_titled(text: str) -> bool:
     return False
 
 
+# gi3 fix round 1 (EXT-1, EXT-3): refusing office titles alone failed open. cues.EM_TITLE's class (an office, clinic,
+# follow-up or return note or visit) holds none of "Progress Note", "Office progress note", "Gastroenterology
+# Consultation", "New Patient Visit", "Telehealth Visit" or "Established patient visit", so under each of them a pasted
+# colonoscopy's summary table opened a procedure section: the colonoscopy read performed today and 45385 went ready, or
+# the visit's 99213 and 99204 were asked about a same-day procedure. The class of visit titles is open; a miss in it
+# reads a pasted report as today's. So the label now needs positive evidence too: the document's own title - the first
+# line of its head (context.TITLE_LINES non-blank lines; its markup and a closing aside set apart, no cell or tab in it)
+# that is shaped as a title, ending with a document noun (_TITLE_NOUN_END) or opening with a report noun and its
+# separator (_REPORT_HEAD) - is a procedure's report: a service's or an endoscopy's report or note ("Colonoscopy report",
+# "Combined upper and lower endoscopy report", "ERCP Procedure Note", "Colonoscopy Report - Surveillance"), a procedure
+# or operative report or note, or a report heading over its service ("Procedure report - flexible sigmoidoscopy",
+# "PROCEDURE NOTE: EGD WITH BAND LIGATION"). A title that names another occurrence (_head_terms, _TITLE_QUALIFIER), a visit (_NOT_REPORT_TITLE's first
+# part: "Colonoscopy consultation note"), another kind of report (pathology, imaging, discharge) or a note before or after
+# a procedure ("Pre-procedure note", "Post-procedure note") is none. A document whose title is anything else, or that has
+# none, keeps the table in the section in force, so its services are asked, as at 90377ec6f413: a miss in this class can
+# only over-ask. The office-title refusal above stays (interpretation 48(c)). The line above the label is not read for an
+# earlier occasion: a procedure report's indication names earlier examinations as a matter of course ("prior
+# colonoscopy 2019"), and its summary is still today's; whose document it is, its title says.
+_TITLE_NOUN_END = re.compile(r'\b(?:report|note|notes|record|visit|consultation|consult|encounter|evaluation|letter|'
+                             r'summary)$', re.A | re.I)
+_REPORT_HEAD = re.compile(r"(?:[A-Za-z][\w&/,()+'.-]*[ \t]+){0,6}?(?:report|note|summary)[ \t]*[:\u2013\u2014-]",
+                          re.A | re.I)
+# A report heading that names no service before its separator, only the report's kind ("Procedure report - ..."): the
+# service is then named after it. Any other words before the separator must name the procedure themselves ("Note: ..."
+# is no title).
+_REPORT_KIND = re.compile(r'(?:procedure|operative|endoscopy|endoscopic)[ \t]+(?:report|note|summary)[ \t]*'
+                          r'[:\u2013\u2014-]', re.A | re.I)
+_REPORT_NOUN_END = re.compile(r'\b(?:report|note)$', re.A | re.I)
+_PROCEDURE_REPORT_END = re.compile(r'\b(?:procedure|operative)[ \t]+(?:report|note)$', re.A | re.I)
+_ENDOSCOPY_WORD = re.compile(r'\bendoscop\w*', re.A | re.I)
+_NOT_REPORT_TITLE = re.compile(r'\b(?:visits?|consult\w*|encounters?|progress|follow[- ]?up|return|revisit|telehealth|'
+                               r'telemedicine|pathology|histology|histopathology|cytology|radiology|imaging|laboratory|'
+                               r'lab|discharge)\b'
+                               r'|\b(?:pre|post)[- ]?(?:procedur\w*|op\w*|endoscop\w*|an(?:a)?esthe\w*|sedation)',
+                               re.A | re.I)
+_TITLE_LENGTH = 100  # a longer title is none; a head line four times longer is not read (bounds the work per line)
+_NON_BLANK = re.compile(r'\S')
+
+
+def _report_title(body: str) -> Optional[bool]:
+    """None when ``body`` (a head line without its markup and closing aside) is not shaped as a title; else whether it
+    titles the document a procedure's report (see above)."""
+    if not body or len(body) > _TITLE_LENGTH or '|' in body or '\t' in body:
+        return None
+    report_head = _REPORT_HEAD.match(body)
+    if report_head is None and not _TITLE_NOUN_END.search(body):
+        return None
+    if _head_terms()[1].search(body) or _TITLE_QUALIFIER.search(body) or _NOT_REPORT_TITLE.search(body):
+        return False
+    procedure = _service_named(body) or bool(_ENDOSCOPY_WORD.search(body))
+    if report_head is not None:
+        head = report_head.group(0)
+        return _service_named(head) or bool(_ENDOSCOPY_WORD.search(head)) \
+            or (procedure and bool(_REPORT_KIND.fullmatch(head)))
+    return bool(_REPORT_NOUN_END.search(body)) and (procedure or bool(_PROCEDURE_REPORT_END.search(body)))
+
+
+def _report_titled(text: str) -> bool:
+    """Whether the document's own title, the first title-shaped line of its head, is a procedure's report (see above)."""
+    head_lines = _head_terms()[0]
+    count = 0
+    for m in re.finditer(r'[^\n]+', text):
+        if not _NON_BLANK.search(text, m.start(), m.end()):
+            continue
+        count += 1
+        if m.end() - m.start() <= 4 * _TITLE_LENGTH:
+            body = _TRAILING_ASIDE.sub('', text[m.start():m.end()].strip().strip('*#').strip())
+            titled = _report_title(body.strip().strip('*#').strip())  # "**Colonoscopy report** (amended)"
+            if titled is not None:
+                return titled
+        if count == head_lines:
+            return False
+    return False
+
+
 def _summary_opens(text: str, lines: list[tuple[int, int]], headings: dict,
                    found: tuple[Table, ...]) -> dict[int, tuple[str, str, Span]]:
     """For each procedure-summary label line over a summary table (see above), the procedure section it opens."""
     opens, line_starts = {}, [ls for ls, _ in lines]
-    if found and _office_titled(text):
+    if not found or _office_titled(text) or not _report_titled(text):  # gi3 fix round 1 (EXT-1, EXT-3)
         return opens
     for n, table in enumerate(found):
         column = 1 if table.labels[0] in _TABLE_NUMBERING_LABELS else 0  # the examination column
@@ -1354,6 +1505,32 @@ def layout(text: str) -> Layout:
     # field that states the landmark reached or seen, and (second round) none that names a procedure by its form
     # (_S2_PROCEDURE_WORD: "Extent: cecum, right hemicolectomy with Dr. B. Synthetic"). Inside a plan or history section
     # nothing is held: that section reads every line (see the gate below).
+    # gi3 extent (R2, R3) and gi3 fix round 1 (EXT-4, EXT-5, EXT-7): every data cell of every table, with its column's
+    # label; the clause cuts around each answer cell that answers its own column (_column_sense), on both sides, so it is
+    # a clause of its own, and those cells (Layout.answer_cells); and the rows held for a not-done status column, which
+    # are held like a line after an unfinished clause, each in an 'other' section of its own (TABLE_ROW_HELD_LABEL).
+    found_tables = tables(text)
+    line_starts = [ls for ls, _ in lines]
+    columns, cell_cuts, answer_cells, held_labels = [], [], [], {i: _SEC_HELD_LABEL for i in held}
+    for table in found_tables:
+        senses = [_column_sense(label) for label in table.labels]  # each column's label is read once
+        for row in table.rows:
+            hold = False
+            for k, (a, b) in enumerate(row):
+                columns.append((a, b, table.labels[k]))
+                if senses[k] == COLUMN_NOT_DONE and not _TABLE_NEGATIVE_CELL.fullmatch(text, a, b):
+                    hold = True  # "Cancelled | Yes": the row may say its service did not happen
+                elif k and (senses[k] == COLUMN_OWN and _TABLE_ANSWER_CELL.fullmatch(text, a, b)
+                            or senses[k] == COLUMN_NOT_DONE):
+                    cell_cuts.extend((row[k - 1][1], a))
+                    if k + 1 < len(row):
+                        cell_cuts.extend((b, row[k + 1][0]))
+                    cell = _trimmed(text, a, b)
+                    if cell:
+                        answer_cells.append(cell)
+            if hold:
+                held_labels.setdefault(bisect.bisect_right(line_starts, row[0][0]) - 1, TABLE_ROW_HELD_LABEL)
+    held = sorted(held_labels)
     line_ends, plan_runs, taken = [], [], set(held)
     for label_line in field_labels:
         end = next((j for j in range(label_line + 1, len(lines)) if headings[j]), len(lines))
@@ -1399,13 +1576,12 @@ def layout(text: str) -> Layout:
         declared = _declared_services(text, lines, headings, candidates, runs)
         service_lines = {i: (head[0] in declared[i], ('other', head[1], head[2])) for i, head in candidates.items()}
         reporting = _reporting_heads(text, lines, headings, candidates, joins, runs)
-    line_starts, firsts = [ls for ls, _ in lines], {}
-    found_tables = tables(text)
+    firsts = {}
     summaries = _summary_opens(text, lines, headings, found_tables)  # a label with its colon is a heading line already
     marks = sorted([(i, heading, h) for i, h in headings.items() if h]
                    + [(i, summary_open, h) for i, h in summaries.items() if not headings[i]]
                    + [(i, service_line, i) for i in service_lines]
-                   + [(i, held_open, ('other', _SEC_HELD_LABEL, None)) for i in held]
+                   + [(i, held_open, ('other', held_labels[i], None)) for i in held]
                    + [(i + 1, line_end, i) for i in held if i + 1 < len(lines)]
                    + [(first, held_open, ('other', _SEC_PLAN_HELD_LABEL, None)) for first, _ in plan_runs]
                    + [(last + 1, line_end, first) for first, last in plan_runs if last + 1 < len(lines)]
@@ -1494,18 +1670,7 @@ def layout(text: str) -> Layout:
         if not joins[i]:
             breaks.add(le)
     sentences = _segments(text, sorted(breaks | {0, len(text)}))
-    # gi3 extent (R2, R3): every data cell of every table, with its column's label; and the clause cuts around each
-    # answer cell that answers its own column (_answers_its_column), on both sides, so it is a clause of its own
-    columns, cell_cuts = [], []
-    for table in found_tables:
-        own = [_answers_its_column(label) for label in table.labels]  # each column's label is read once
-        for row in table.rows:
-            for k, (a, b) in enumerate(row):
-                columns.append((a, b, table.labels[k]))
-                if k and own[k] and _TABLE_ANSWER_CELL.fullmatch(text, a, b):
-                    cell_cuts.extend((row[k - 1][1], a))
-                    if k + 1 < len(row):
-                        cell_cuts.extend((b, row[k + 1][0]))
+    # gi3 extent (R2, R3): the clause cuts around each answer cell that answers its own column (found above)
     cell_cuts.sort()
     clauses = []
     for s, e in sentences:
@@ -1520,7 +1685,7 @@ def layout(text: str) -> Layout:
     part_starts = {lines[i][0] for i in reporting_lines}
     reporting_parts = frozenset(section.start for section in sections if section.start in part_starts)
     return Layout(text, tuple(sections), tuple(sentences), tuple(clauses), tuple(s.start for s in sections),
-                  found_tables, tuple(sorted(columns)), reporting_parts)
+                  found_tables, tuple(sorted(columns)), reporting_parts, tuple(sorted(answer_cells)))
 
 
 def _segments(text: str, cuts: list[int]) -> list[tuple[int, int]]:
