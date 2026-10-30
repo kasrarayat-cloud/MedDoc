@@ -322,11 +322,21 @@ class ChargeBlockTests(SimpleTestCase):
             with self.subTest(block=block):
                 self.assert_asked(HEADER + PLAN + block)
 
+    def test_a_plan_date_above_the_closing_block_is_not_the_blocks(self):
+        """A date label above the last charge heading, still in the plan's reach, is no line of the block: a block with no
+        date of its own asks nothing, and one that states another date names its own line only."""
+        plan = PLAN + 'Date of service: 2026-10-07\n\n'
+        self.assert_installed(HEADER + plan + 'Charge information\nCPT: 99214\n')
+        text = HEADER + plan + 'Charge information\nDate of service: 2026-10-06\nCPT: 99214\n'
+        self.assert_asked(text)
+        self.assertEqual(quoted_dates(context.charge_date_problem(date_fact(text)).split("other than the document's own", 1)[0]),
+                         {'2026-10-06'})
+
     def test_routing_reads_what_the_installed_reading_sends_asked_or_held(self):
         """The fifth refutation's dates-n5-4: routing's only way to the document's date is context.service_date_of, and a
         question there read the document with no date - held or unanswered, a dated service went from performed to "service
-        date not established". Routing, and the inventory and the engine that read it, stay the installed reading's: only
-        the date fact changes, and no date is sent while the question stands."""
+        date not established". Routing stays the installed reading's in every state, and no date is sent while the question
+        stands."""
         proc = (FIXTURES / 'upgrade' / 'proc-charge-block.txt').read_text(encoding='utf-8')
         dated = proc.replace('removed with a cold snare and retrieved.\n',
                              'removed with a cold snare and retrieved.\n'
