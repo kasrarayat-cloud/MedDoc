@@ -96,6 +96,17 @@ class TitlesNamingNoOfficeVisitTests(unittest.TestCase):
         proposals, _ = run_engine(text, [('99212', ['Telephone follow-up visit', 'Physician time: 8 minutes.'])])
         held(self, proposals['99212'], ['performed_status', 'em_basis'])
 
+    def test_a_remote_word_after_the_title_noun_or_as_the_visits_means(self):
+        # the same call, its modality written after the title noun or the visit words, or before them after a label
+        for title in ('Follow-up note - telephone', 'Clinic note - telephone encounter',
+                      'Follow-up office visit by telephone', 'Office visit via telephone',
+                      'Follow-up visit conducted by telephone', 'Telephone encounter: follow-up visit'):
+            text = A_TELEPHONE.replace('Telephone follow-up note', title)
+            with self.subTest(title=title):
+                self.assertIsNone(em_status(text))
+                proposals, _ = run_engine(text, [('99212', [title, 'Physician time: 8 minutes.'])])
+                held(self, proposals['99212'], ['performed_status', 'em_basis'])
+
     def test_a_post_procedure_visit_statement_marks_no_clinician_time(self):
         # a statement that names a visit is read as installed (performed, held for its basis), but a word naming
         # another service's follow-up never lets it make the call's unframed time the office visit's

@@ -839,7 +839,8 @@ EM_TITLE = rx(r'^[ \t]*(?:[A-Za-z][A-Za-z /]{0,30}?[ \t]*[:|\u2013-][ \t]*)?'
 # gi3 fix round 1 (SCOPE-1, SCOPE-7): the words that, leading a visit title, make it name no office or outpatient visit
 # (closed classes). A communication that is no visit - a telephone or phone call, an e-mail, a portal message
 # (EM_REMOTE: EM_VISIT names video and telehealth visits, never these; "Telephone follow-up note" over "Called the
-# patient two days after her colonoscopy"): it leads no visit statement either ("Telephone follow-up visit"). A drug or
+# patient two days after her colonoscopy"): anywhere in a title line ("Follow-up note - telephone"), and leading a visit
+# statement or as its means ("Telephone follow-up visit", "Office visit via telephone"), it names none. A drug or
 # blood administration's own occasion - an infusion, an injection, a transfusion ("Infusion clinic note") - and the
 # follow-up of another service - "Post-procedure", "Post-op", "Postoperative", "Post-discharge" (a procedure's own
 # follow-up, a call or a visit inside its global period, a transitional care visit): a title they lead names no office

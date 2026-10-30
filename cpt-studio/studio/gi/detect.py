@@ -156,14 +156,18 @@ def _em_head_end(text: str) -> int:
 
 
 # gi3 fix round 1 (SCOPE-1): a visit statement led by a word of cues.EM_REMOTE - itself, or with at most two words
-# between it and the visit words ("Telephone follow-up visit", "Telephone GI follow-up visit") - names no office or
-# outpatient visit. Read in the _EM_VISIT_LEAD characters before the statement only, so a field elsewhere on its line
-# ("Practice phone: 555-0100 | Office visit") never leads it.
-_EM_REMOTE_LEAD = re.compile(r'(?:' + cues.EM_REMOTE.pattern + r')(?:[ \t]+[A-Za-z][\w-]*){0,2}[ \t]+\Z', re.A | re.I)
+# between it and the visit words, and a label's colon or dash ("Telephone follow-up visit", "Telephone GI follow-up
+# visit", "Telephone encounter: follow-up visit") - or followed by one as its means ("Follow-up office visit by
+# telephone", "Follow-up visit conducted by telephone") names no office or outpatient visit. Read in the _EM_VISIT_LEAD
+# characters around the statement only, so a field elsewhere on its line ("Practice phone: 555-0100 | Office visit")
+# never leads it.
+_EM_LEAD_WORDS = r'(?:[ \t]+[A-Za-z][\w-]*){0,2}[ \t]*[:\u2013-]?[ \t]+\Z'
+_EM_REMOTE_LEAD = re.compile(r'(?:' + cues.EM_REMOTE.pattern + r')' + _EM_LEAD_WORDS, re.A | re.I)
+_EM_REMOTE_MEANS = re.compile(r'[ \t]*(?:[A-Za-z][\w-]*[ \t]+){0,2}?(?:by|via|over|through|using|on)[ \t]+'
+                              r'(?:(?:the|a)[ \t]+)?(?:' + cues.EM_REMOTE.pattern + r')', re.A | re.I)
 # ... and one led by any word of cues.EM_NOT_OFFICE ("Post-op follow-up visit", "Infusion clinic visit") is read as
 # before, but marks no clinician time as the office visit's (_visit_clinician_times)
-_EM_NOT_OFFICE_LEAD = re.compile(r'(?:' + cues.EM_NOT_OFFICE.pattern + r')(?:[ \t]+[A-Za-z][\w-]*){0,2}[ \t]+\Z',
-                                 re.A | re.I)
+_EM_NOT_OFFICE_LEAD = re.compile(r'(?:' + cues.EM_NOT_OFFICE.pattern + r')' + _EM_LEAD_WORDS, re.A | re.I)
 _EM_VISIT_LEAD = 40
 # gi3 fix round 1 (SCOPE-3, SCOPE-5, SCOPE-7): how far a time statement's own words are read before its subject (on
 # its line, after its clause's last semicolon and in its sentence: a label, "Expected visit time", "At the previous
@@ -230,8 +234,9 @@ def _em_mentions(text: str, lay: Layout) -> tuple[tuple[Mention, ...], tuple[Men
     for m in cues.EM_TITLE.finditer(text):
         if _EM_OTHER_OCCURRENCE.search(text, m.start(), m.start('title')):
             continue  # "Next follow-up visit", "Scheduled visit: return visit": another occurrence's
-        if cues.EM_NOT_OFFICE.search(text, m.start(), m.start('title')):
-            continue  # gi3 fix round 1 (SCOPE-1, SCOPE-7): "Telephone follow-up note", "Infusion clinic note"
+        if cues.EM_NOT_OFFICE.search(text, m.start(), m.start('title')) or cues.EM_REMOTE.search(text, m.end('title'),
+                                                                                                m.end()):
+            continue  # gi3 fix round 1 (SCOPE-1, SCOPE-7): "Telephone follow-up note", "Follow-up note - telephone"
         heading = m.group('heading') is not None
         if m.start() >= head_end and not (heading and cues.TODAY.search(m.group('title'))):
             continue  # a title below the head names no document's own encounter
@@ -247,8 +252,9 @@ def _em_mentions(text: str, lay: Layout) -> tuple[tuple[Mention, ...], tuple[Men
         found.append(Mention('gi.office_em', m.start('title'), m.end('title'), 'em-visit',
                              'visit heading' if heading else 'visit title', 'title'))
     for m in cues.EM_VISIT.finditer(text):
-        if _EM_REMOTE_LEAD.search(text, max(0, m.start() - _EM_VISIT_LEAD), m.start()):
-            continue  # gi3 fix round 1 (SCOPE-1): "Telephone follow-up visit", "Phone GI follow-up visit"
+        if _EM_REMOTE_LEAD.search(text, max(0, m.start() - _EM_VISIT_LEAD), m.start()) \
+                or _EM_REMOTE_MEANS.match(text, m.end(), m.end() + _EM_VISIT_LEAD):
+            continue  # gi3 fix round 1 (SCOPE-1): "Telephone follow-up visit", "Office visit via telephone"
         found.append(Mention('gi.office_em', m.start(), m.end(), 'em-visit', m.group(0)))
     # Whether a sentence says its time is not E/M time is read once per sentence (gi2 integration, cost: one pasted line
     # of 7,500 time statements made one sentence that every statement rescanned, 60.1 s at 2b82889f), and so is whether it
