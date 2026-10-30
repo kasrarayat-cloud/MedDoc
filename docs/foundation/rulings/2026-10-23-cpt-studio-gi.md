@@ -949,3 +949,45 @@ tree's own live replay showed one.
         proposal fingerprints do not include the labels (engine._fingerprint), so no decision is invalidated by a label
         alone. The engine label's only other reader is the re-assessment's stated reasons (review._what_changed and
         _what_differs), which then name the engine change truthfully.
+
+### Session interpretation, 2026-10-30 (7c8d38da, third round, after the second refutation) — recorded, not owner-ruled
+
+The second refutation (six lenses over b6997c39d) reported 46 findings: nine requests that should not be sent (each
+reproduced by the integration owner; two newly sent by this round's own code), a regression of the installed reading in
+most of the code-status findings, two quadratic shapes in the integration owner's own 48(f) and 50(b) code, and one
+data-loss path behind 49's version bump. Fix round 1's repairs were where most of them were, as in every round before.
+
+51. **What blocks, and the fail-closed rules the second fix round follows (refines 41-46 and 48-50).**
+    (a) *Class 4 (a correction, recorded not rewritten).* This round's refutation briefs graded "a code made ready or
+        excluded wrongly" as must-fix class 4, while its repair and fix briefs kept the earlier rounds' wording, "a code
+        approved or removed without a reviewer". The directive forbids promoting unsupported candidates, and a ready code
+        is a promoted one, so the refutation's wording governs this round: a code made ready that the source does not
+        support, or excluded where the source supports it, is must-fix.
+    (b) *What blocks the freeze.* Every must-fix finding that regresses the installed revision 90377ec6f413's reading
+        or comes from this round's own code; and every request that should not be sent - a contradicted, planned or
+        historical date sent, or a conflicting applicable date dropped so that another is sent - whether or not the
+        installed revision sends it too (41, and the directive's first priority). A must-fix finding the installed
+        revision shares outside those is repaired where a general, measured rule exists; otherwise it is a known limit
+        with its input and output, named among the report's uncertain readings.
+    (c) *Dates: an uncertain binding asks.* (1) The encounter's own-date labels (date of service, DOS, service date,
+        encounter date) are never dropped by their surroundings. In a plan or history section, under any block heading
+        or in a table, such a label speaks against the note's own date (a conflict, asked), unless the label itself, or
+        a heading of a closed class that explicitly names another occurrence ("Next appointment", "Prior visit"), names
+        the occurrence it dates. (2) A label is the note's own only where the document allows it: a procedure date is
+        never an office or clinic note's own date, and in the title's section a field after its first clinical sentence,
+        or under a stacked heading that does not positively name this visit, follows the plan and history rules, not the
+        header's. (3) The head is read as the head whatever a title above it says, and a label's separator is any short
+        run of punctuation and spaces, so the visit's own header date is never lost. None of these sends a date the
+        installed revision does not send, except the head's own date read under the document's own follow-up title.
+    (d) *Scope: today's visit needs positive evidence both ways.* An office E/M is excluded only where the document
+        positively shows that no visit took place today. A planned or earlier visit's mention, or a word of another
+        occasion inside today's time statement, is never evidence against today's visit. It is ready only where the
+        document's own markers establish both today's visit and its basis; another modality (telephone, portal,
+        infusion, a letter) in the head, or a time whose occasion is uncertain, holds it.
+    (e) *Inventory and extent: an act needs its own affirmation.* An act or a status read from a table cell, a relative
+        clause or a summary is performed only where that cell or clause affirms it with no denial, plan or
+        other-occasion word of its own. Otherwise it reads as the installed revision reads it. A procedure section opens
+        only on positive evidence (a procedure report's own title or heading), never by default under an office or
+        follow-up note.
+    (f) *Word lists.* A closed list may add positive evidence. A list that exempts something from asking or holding
+        fails open by construction, so none is added.
