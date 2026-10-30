@@ -94,8 +94,10 @@ HEADER = (BANNER + 'Synthetic GI clinic (fictional)\nClinic note\nPatient: Synth
 OWN = 'Date of service: 2026-10-05\n'
 
 
-def billing(heading, label='Date of service: 2026-10-06', own=OWN):
-    return HEADER.format(own=own) + heading + '\nCPT: 99214\n' + label + '\nElectronically signed: Synthetic MD (fictional)\n'
+def billing(heading, label='Date of service: 2026-10-06', own=OWN, cpt=False):
+    # a charge line's CPT code is 48(f)'s own signal, tested apart (ChargeLineTests); H1 is read without one
+    return (HEADER.format(own=own) + heading + ('\nCPT: 99214' if cpt else '') + '\n' + label
+            + '\nElectronically signed: Synthetic MD (fictional)\n')
 
 
 def date_of(text):
@@ -141,6 +143,35 @@ class HeadingKindTests(SimpleTestCase):
                     self.assertEqual(member(text, answer), 'taken', answer)
 
 
+class ChargeLineTests(SimpleTestCase):
+    """48(f): a charge line's date of service (a CPT code in its block) speaks against the note's own date whatever its
+    heading's words, so an E/M charge named as a follow-up visit no longer drops a differing date (refutation dates-6's
+    E/M rows). It only ever asks."""
+
+    def test_an_em_charge_lines_date_speaks(self):
+        for heading in ('Follow-up visit, level 4', 'Established patient follow-up visit', 'Return visit, level 3',
+                        'Evaluation and management, level 4'):
+            with self.subTest(heading=heading):
+                text = HEADER.format(own=OWN) + 'Charges\n' + heading + '\nCPT: 99214\nDate of service: 2026-10-06\n'
+                self.assertEqual(date_of(text), ('conflict', None))
+
+    def test_a_heading_naming_another_occurrence_explicitly_still_governs_a_charge(self):
+        for heading in ('Prior visit', 'Next appointment', 'Scheduled procedure', 'Outside records'):
+            with self.subTest(heading=heading):
+                self.assertEqual(date_of(billing(heading, cpt=True)), ('document', '2026-10-05'))
+
+    def test_without_a_code_the_heading_still_decides(self):
+        for heading in ('Follow-up visit', 'Return visit'):
+            with self.subTest(heading=heading):
+                text = HEADER.format(own=OWN) + heading + '\nDate of service: 2026-11-16\n'
+                self.assertEqual(date_of(text), ('document', '2026-10-05'))
+
+    def test_with_no_own_date_it_stays_dropped(self):
+        text = HEADER.format(own='') + 'Follow-up visit, level 4\nCPT: 99214\nDate of service: 2026-10-06\n'
+        self.assertEqual(date_of(text)[0], 'missing')
+        self.assertEqual(member(text, '2026-10-01'), 'taken')
+
+
 class NoOwnDateTests(SimpleTestCase):
     PLANNED = 'Plan:\nColonoscopy with possible polypectomy.\nProcedure date: 11/04/2026\n'
 
@@ -160,6 +191,33 @@ class NoOwnDateTests(SimpleTestCase):
         self.assertEqual(date_of(self.note(OWN, b4)), ('conflict', None))
         self.assertEqual(date_of(self.note(OWN, 'Plan:\nReturn to clinic in 6 weeks.\nVisit date: 2026-11-16\n')),
                          ('document', '2026-10-05'))
+
+
+class StackedTitleTests(SimpleTestCase):
+    """After fix round 1: the document's own visit title stacked under its own follow-up title (RC5's section) is this
+    visit's title, never a block heading naming another occurrence (context._Governance.visit_title), so the header
+    under it reads as an untitled header does; a title led by a word naming another occurrence still governs."""
+
+    def note(self, second):
+        return (BANNER + 'Saltmarsh Valley Gastroenterology (fictional)\nGastroenterology follow-up\n' + second
+                + '\nDate of service: 2026-10-21\nPlace of service: office (POS 11)\nPatient status: established\n'
+                'Interval history\nStable.\nAssessment\nChronic constipation, controlled.\nPlan\nContinue.\n')
+
+    def test_the_visit_title_under_the_follow_up_title_is_this_visits(self):
+        for second in ('Clinic note - return visit', 'Return visit note', 'Office follow-up visit'):
+            with self.subTest(second=second):
+                found = facts(self.note(second))
+                self.assertEqual((found['service_date'].origin, found['service_date'].value), ('document', '2026-10-21'))
+                self.assertEqual((found['setting'].origin, found['setting'].value), ('document', 'office'))
+
+    def test_a_title_naming_another_occurrence_still_governs(self):
+        # the date's own label reading refuses these too; the header's setting and status rest on the title rule alone
+        for second in ('Prior clinic note - return visit', 'Scheduled office visit', 'Previous clinic note'):
+            with self.subTest(second=second):
+                found = facts(self.note(second))
+                self.assertNotEqual(found['service_date'].origin, 'document')
+                self.assertNotEqual(found['patient_status'].origin, 'document')
+                self.assertNotEqual(found['setting'].origin, 'document')
 
 
 class ActTechniqueTests(SimpleTestCase):

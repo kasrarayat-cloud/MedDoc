@@ -190,12 +190,16 @@ class DescriptorHeadingTests(CaseAsserts, SimpleTestCase):
                 self.assertEqual(sent(clinic(heading + '\nDate of service: 2026-10-16\n')), '2026-10-05')
 
     def test_another_occurrence_still_governs_inside_a_service_name(self):
-        """Interpretation 48(a): a follow-up names another occurrence, as "Return visit" does - reported to the
-        integration owner for a charge line ("Follow-up visit, level 4" / "CPT: 99214"), and read as ruled."""
+        """Interpretation 48(a): a follow-up names another occurrence, as "Return visit" does, where nothing marks the
+        block as this encounter's charge. The integration owner's 48(f) (a CPT code in the block) decides the charge
+        line this owner reported ("Follow-up visit, level 4" / "CPT: 99214"): a conflict, asked, never the header's date
+        sent (tests.test_repairs_gi3_integration.ChargeLineTests)."""
         for heading in ('Follow-up visit, level 4', 'Established patient follow-up visit'):
             with self.subTest(heading=heading):
-                self.assertEqual(sent(clinic('Charges\n' + heading + '\nCPT: 99214\nDate of service: 2026-10-06\n')),
-                                 '2026-10-05')
+                self.assertEqual(sent(clinic('Charges\n' + heading + '\nDate of service: 2026-10-06\n')), '2026-10-05')
+                charge = clinic('Charges\n' + heading + '\nCPT: 99214\nDate of service: 2026-10-06\n')
+                self.assertIsNone(sent(charge))
+                self.assertEqual(date_fact(charge).origin, 'conflict')
 
 
 class TableColumnTests(CaseAsserts, SimpleTestCase):

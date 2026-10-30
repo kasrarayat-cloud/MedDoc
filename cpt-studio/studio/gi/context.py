@@ -711,6 +711,9 @@ _HEADING_OCCURRENCE = cues.rx(r'(?:outside|prior|previous(?:ly)?|earlier|index|c
                               r'|rescheduled|scheduled|planned|next|upcoming|future|proposed|anticipated|tentative'
                               r'|not\s+done|called\s+off|not\s+(?:started|begun)|no[- ]show(?:ed)?'
                               r'|did\s+not\s+(?:show|arrive|present\s+for)|history\s+of|hx\s+of|h/o|s/p|status\s+post)')
+# gi3 integration, after fix round 1: the words that lead a visit title naming another occurrence ("Next follow-up
+# visit"), as routing reads them (detect._EM_OTHER_OCCURRENCE is built from the same pattern)
+_TITLE_OTHER_LEAD = re.compile(r'\b(?:' + _HEADING_OCCURRENCE.pattern + r')\b', re.A | re.I)
 # Fix round, F2: a status word answered as not having happened ("Cancelled: No", "Cancellation reason: N/A",
 # "Cancelled? no."): the rest of its field label, then the answer alone in its field.
 _STATUS_LABEL_REST = re.compile(r"[A-Za-z0-9 '’/()-]{0,40}?[ \t]*+[:=?](?!\d)")
@@ -1805,6 +1808,11 @@ _OWN_KIND_HEAD = cues.rx(r'\b(?:visits?|encounters?|procedures?|exams?|examinati
 # H1: the words that make a visit or a procedure another occurrence's in a heading that carries no date qualifier: a
 # return, a recall, a pending one, or a follow up written with a space ("Return visit", "Pending procedures").
 _H1_OTHER = cues.rx(r'\b(?:return(?:ing)?|recalls?|pending|follow[ \t]+up)\b')
+# gi3 integration, 48(f): a CPT code in a charge block ("CPT: 99214", "CPT code 45380", "CPT 43239-59"): the block is
+# this encounter's own billing record, so its date of service speaks against the note's own date whatever its heading's
+# kind-of-service, plan or follow-up words ("Follow-up visit, level 4" / "CPT: 99214" / "Date of service: 2026-10-06"),
+# unless the heading names another occurrence explicitly (_Governance.charges). It only ever asks.
+_CPT_CODE = re.compile(r'\bCPT(?:[ \t]+codes?)?[ \t]*[:#-]?[ \t]*\d{4}[0-9FTU]\b', re.A | re.I)
 # gi3 fix round 1 (dates-5): the words of a block heading that name a booking wherever they stand in it, not only as its
 # head noun - an appointment, a referral or a recall (the occurrence nouns H1 reads as "a later booking") and the verb
 # that books one (schedule, scheduling: its participles "scheduled" and "rescheduled" are already the readers' words).
@@ -1991,6 +1999,8 @@ class _Governance:
         # item sentence's, read once (a long soft-wrapped item, or labels on one line under a long blank run, made every
         # label rescan it: 100 s at 80,000 characters)
         self.kinds, self.later, self.items = {}, {}, {}
+        self.head_end = None  # gi3 integration, after fix round 1: where the document's head ends (visit_title)
+        self.cpt = None  # gi3 integration, 48(f): every CPT code's start (charges)
         sentence_starts = [s for s, _ in lay.sentences]
         for n, ls in enumerate(self.lines):
             s0, e0 = _strip_span(text, ls, self.end(n))
@@ -2036,6 +2046,19 @@ class _Governance:
             self.names[k] = _names_another_block(self.bodies[k])
         return self.names[k]
 
+    def charges(self, sec, line_start: int) -> bool:
+        """48(f): whether the block under the nearest block heading above the line starting at ``line_start`` carries a
+        CPT code (_CPT_CODE) before that line - a charge line, this encounter's own billing record - under a heading
+        that names no other occurrence explicitly (_TITLE_OTHER_LEAD's owner-ruled words: "Prior visit", "Next
+        appointment", "Scheduled procedure" head another encounter's charge). Every code's start is found once per
+        text, and a label bisects them."""
+        k = bisect.bisect_left(self.starts, line_start) - 1
+        if k < 0 or self.starts[k] < sec.start or _TITLE_OTHER_LEAD.search(self.bodies[k]):
+            return False
+        if self.cpt is None:
+            self.cpt = [m.start() for m in _CPT_CODE.finditer(self.text)]
+        return bisect.bisect_left(self.cpt, self.starts[k]) < bisect.bisect_left(self.cpt, line_start)
+
     def names_a_kind(self, sec, line_start: int) -> bool:
         """H1: whether the nearest block heading above the line starting at ``line_start`` inside its section names its
         block only as a kind of service: no word of _BLOCK_WORDS or _H1_OTHER (a plan, a history, another occurrence, a
@@ -2049,6 +2072,29 @@ class _Governance:
         if k not in self.kinds:
             self.kinds[k] = _names_a_kind(self.bodies[k])
         return self.kinds[k]
+
+    def visit_title(self, sec, line_start: int) -> bool:
+        """gi3 integration, after fix round 1: whether the nearest block heading above the line starting at
+        ``line_start`` inside its section is the document's own visit title in its head - a cues.EM_TITLE line among the
+        first TITLE_LINES non-empty lines, led by no word naming another occurrence (_TITLE_OTHER_LEAD), the title
+        routing reads as today's visit (detect._em_mentions). Stacked under the document's own follow-up title
+        ("Gastroenterology follow-up" / "Clinic note - return visit"), it names this visit, never another block."""
+        k = bisect.bisect_left(self.starts, line_start) - 1
+        if k < 0 or self.starts[k] < sec.start:
+            return False
+        ls = self.starts[k]
+        if self.head_end is None:
+            count, self.head_end = 0, len(self.text)
+            for m in re.finditer(r'^[^\S\n]*+\S[^\n]*+', self.text, re.M):  # anchored and possessive: linear
+                count += 1
+                if count == TITLE_LINES:
+                    self.head_end = m.end()
+                    break
+        if ls >= self.head_end:
+            return False
+        le = self.text.find('\n', ls)
+        title = cues.EM_TITLE.match(self.text, ls, len(self.text) if le < 0 else le)
+        return title is not None and _TITLE_OTHER_LEAD.search(self.text, ls, title.start('title')) is None
 
     def item_names_later(self, sec, line_start: int) -> bool:
         """B4: whether the plan item right before the line starting at ``line_start`` - the last sentence of the previous
@@ -2108,6 +2154,8 @@ def _binding(text: str, lay: Layout, start: int, end: int, label: str = '') -> s
     line_start = gov.line_start(start)
     block = gov.block_heading(sec, line_start)
     if sec.start == _title_start(text):
+        if block and gov.visit_title(sec, line_start):
+            block = False  # gi3 integration, after fix round 1: the document's own visit title stacked under its title
         # gi3 fix round 1 (dates-2): only the header's own field dating this visit reads as an untitled header's
         if block or (label and (lay.in_table_header(start)
                                 or (label == 'visit' and _VISIT_LABEL.fullmatch(text, start, end) is None))):
@@ -2115,8 +2163,9 @@ def _binding(text: str, lay: Layout, start: int, end: int, label: str = '') -> s
         return _TITLE if label else _READ
     plan = sec.kind == 'plan'
     if block:
-        if plan and label == 'encounter' and gov.names_a_kind(sec, line_start) and not lay.in_table_header(start):
-            return _AGAINST_OWN  # gi3 integration, H1
+        if plan and label == 'encounter' and not lay.in_table_header(start) and (
+                gov.names_a_kind(sec, line_start) or gov.charges(sec, line_start)):
+            return _AGAINST_OWN  # gi3 integration, H1; 48(f), a charge line
         return _GOVERNED
     if block is None:
         if not (plan and label) or _plan_names_occurrence(sec.heading):
