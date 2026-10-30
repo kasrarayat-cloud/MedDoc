@@ -149,7 +149,10 @@ class ElapsedTimeIsNoDateTests(DateAssertions, SimpleTestCase):
         for field in ('Date of service: 34 minutes\n', 'Date of service: 1 hour 5 minutes\n', 'DOS: 2 hrs.\n',
                       'Date of service: 34 minutes. Visit type: X\n'):
             with self.subTest(field=field):
-                self.assert_document(office(field + 'Procedure date: 2026-10-22\n', ''), '2026-10-22')
+                # gi3 fix round 2 (interpretation 51(c)(2)): the office visit's own date is its visit date (its procedure
+                # date is never its own date, asked as context._Candidate.asked reads it)
+                self.assert_document(office(field + 'Visit date: 2026-10-22\n', ''), '2026-10-22')
+                self.assert_never(office(field + 'Procedure date: 2026-10-22\n', ''), '2026-10-22')
                 alone = date_fact(office(field, ''))
                 self.assertEqual((alone.origin, alone.value), ('missing', None))
                 self.assertTrue(alone.evidence)
@@ -223,8 +226,13 @@ class DateLabelsStayDateLabelsTests(DateAssertions, SimpleTestCase):
                 self.assert_question(text)
 
     def test_a_relative_date_of_service_is_still_asked(self):
-        text = office('Date of service: 48 hours after the index procedure\nProcedure date: 2026-10-14\n', '')
+        # gi3 fix round 2 (interpretation 51(c)(2)): the office visit's own date is its visit date - its procedure date is
+        # never its own date (asked, and no member's answer: context._Candidate.asked)
+        text = office('Date of service: 48 hours after the index procedure\nVisit date: 2026-10-14\n', '')
         self.assert_question(text, '2026-10-14')
+        text = office('Date of service: 48 hours after the index procedure\nProcedure date: 2026-10-14\n', '')
+        self.assert_never(text, '2026-10-14')
+        self.assert_member_conflict(text, '2026-10-14')
 
 
 class ElapsedTimeKnownLimitTests(DateAssertions, SimpleTestCase):

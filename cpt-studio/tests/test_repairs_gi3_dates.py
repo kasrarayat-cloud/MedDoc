@@ -86,7 +86,9 @@ def fact_text(fact) -> str:
 
 
 def _clear_caches():
-    for cached in (context._context, context._governance, context._title_start):
+    # gi3 fix round 2: and the title's line and the visit-note reading, cached per text the same way
+    for cached in (context._context, context._governance, context._title_start, context._title_line,
+                   context._visit_note):
         cached.cache_clear()
 
 
@@ -107,8 +109,8 @@ def binding_disabled():
         try:
             yield
         finally:
-            context._context.cache_clear()
-            context._governance.cache_clear()
+            for cached in (context._context, context._governance, context._title_line, context._visit_note):
+                cached.cache_clear()  # (_title_start is the patch here)
     _clear_caches()
 
 
@@ -455,11 +457,18 @@ class PlannedProcedureTests(DateAsserts, SimpleTestCase):
     PLANNED = UNDATED + 'Plan:\nColonoscopy with possible polypectomy.\nProcedure: Colonoscopy    Procedure date: 11/04/2026\n'
 
     def test_its_date_is_asked_never_sent(self):
+        # gi3 fix round 2 (interpretation 51(c)(2), dates2-6): a clinic note that documents no procedure has no procedure
+        # date of its own, so the planned colonoscopy's date (its "Procedure:" field opens a procedure section, outside
+        # the plan) speaks only against the note's own date - with none it is quoted as another occurrence's (_ASKED):
+        # never the only answer (part 3 had asked it with its 'plan' doubt, the planned date the only answer a member
+        # could give), and the stranger's date held as part 3 held it - never taken
         fact = date_fact(self.PLANNED)
         self.assertEqual(fact.origin, 'missing')
-        self.assertIn(context.PLAN_PROC_DATE_NOTE, fact.note)
-        self.assertEqual(member(self.PLANNED, '2026-11-04'), 'taken')  # interpretation 37's bound, as PART
+        self.assertIsNone(context.service_date_of(self.PLANNED))
+        self.assertEqual(member(self.PLANNED, '2026-11-04'), 'held')
         self.assertEqual(member(self.PLANNED, STRANGER), 'held')
+        self.assertIn(context.PLAN_PROC_DATE_NOTE, date_fact(self.PLANNED.replace(
+            'Clinic note\n', 'Colonoscopy report\n')).note)  # in a procedure's report, part 3 still asks it
 
     def test_a_documented_procedure_keeps_its_date(self):
         self.assert_document(UNDATED + 'Plan: proceed.\n\nProcedure: Colonoscopy\nDate of procedure: 2026-10-14\n'

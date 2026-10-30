@@ -5,9 +5,10 @@
   with its 44 minutes (the scope repair), and 99215 is never ready while the date is open (the scope repair alone made
   it ready on the contradicted 2026-10-05). A member's answer naming one of the two dates is taken, builds one dated
   request, and closes the question; any other date is held.
-- HeadingKindTests (H1, context._Governance.names_a_kind): the encounter's own date-of-service label under a plan's
-  block heading that names only a kind of service speaks against the note's own date; a heading naming another
-  occurrence, and a table's column label, still govern.
+- HeadingKindTests (H1; gi3 fix round 2, interpretation 51(c)(1)): the encounter's own date-of-service label under a
+  plan's block heading speaks against the note's own date - a kind of service, and since fix round 2 every heading
+  but one of the closed class naming another occurrence explicitly ("Next appointment", "Prior visit"), and a table's
+  column label too.
 - NoOwnDateTests (H2): B4's visit or procedure field in a note that labels no date of its own stays dropped as the
   installed reading dropped it, so a planned date is never the only answer a member may give.
 - ActTechniqueTests (services._OTHER_INSTRUMENT): an act never takes the technique of the instrument its own kind rules
@@ -109,9 +110,15 @@ class HeadingKindTests(SimpleTestCase):
     # each heading stays a block heading of the plan section ("Procedure" alone opens a procedure section of its own)
     KINDS = ('Office visit', 'Clinic visit', 'Coding review', 'Visit', 'Colonoscopy', 'Upper endoscopy',
              'Office visit charge', 'Consultation')
-    OTHERS = ('Next appointment', 'Prior visit', 'Return visit', 'Recall', 'Results', 'Labs', 'Follow-up appointment',
-              'Follow up appointment', 'Pending procedures', 'Transplant evaluation', 'Scheduled procedure',
-              'Outside records', 'Last colonoscopy', 'Referral')
+    # gi3 fix round 2 (51(c)(1)): only a heading of the closed class that names another occurrence explicitly governs
+    # the label (context._names_occurrence_explicitly); 48(a)'s other headings ("Return visit", "Recall", "Results",
+    # "Labs", "Transplant evaluation", "Last colonoscopy") name no occurrence explicitly, so the label under them speaks
+    # against the note's own date - asked, never sent, never dropped ("Today's appointment" and "Taper schedule" were
+    # the same class: dates2-2). A heading the section reader opens a plan section with ("Follow-up appointment",
+    # "Pending procedures", "Referral") is the section's own heading, and its fields read as before (governed).
+    OTHERS = ('Next appointment', 'Prior visit', 'Follow-up appointment', 'Follow up appointment', 'Pending procedures',
+              'Scheduled procedure', 'Outside records', 'Referral')
+    SPEAKING = ('Return visit', 'Recall', 'Results', 'Labs', 'Transplant evaluation', 'Last colonoscopy')
 
     def test_a_kind_of_service_heading_lets_the_billing_date_speak(self):
         for heading in self.KINDS:
@@ -124,15 +131,27 @@ class HeadingKindTests(SimpleTestCase):
             with self.subTest(heading=heading):
                 self.assertEqual(date_of(billing(heading)), ('document', '2026-10-05'))
 
+    def test_any_other_heading_lets_the_date_speak(self):
+        # gi3 fix round 2 (51(c)(1)): a conflict - asked, each date a member's answer, never dropped
+        for heading in self.SPEAKING:
+            with self.subTest(heading=heading):
+                self.assertEqual(date_of(billing(heading)), ('conflict', None))
+                self.assertEqual(member(billing(heading), '2026-10-06'), 'taken')
+                self.assertEqual(date_of(billing(heading, own='')), ('missing', None))
+
     def test_only_the_encounters_own_label(self):
         # a visit or procedure date under such a heading keeps B4's reading (the heading governs it)
         self.assertEqual(date_of(billing('Office visit', 'Visit date: 2026-10-06')), ('document', '2026-10-05'))
 
-    def test_a_tables_column_label_dates_its_rows(self):
+    def test_a_tables_column_label_speaks_against_the_notes_own_date(self):
+        # gi3 fix round 2 (51(c)(1), dates2-3): a table's column label speaks too - a charge table and a results table
+        # cannot be told apart by structure ("CPT | Description | Date of service" right after the plan was dropped and
+        # the header's contradicted date sent), so a results table is asked (an over-ask, never a send)
         table = 'Test | Date of service | Result\nFerritin | 2026-09-30 | 41 ng/mL'
         for heading in ('Office visit', 'Colonoscopy'):
             with self.subTest(heading=heading):
-                self.assertEqual(date_of(billing(heading, table)), ('document', '2026-10-05'))
+                self.assertEqual(date_of(billing(heading, table)), ('conflict', None))
+                self.assertIsNone(context.service_date_of(billing(heading, table)))
 
     def test_with_no_own_date_it_stays_dropped_as_installed(self):
         for heading in ('Office visit', 'Colonoscopy'):
@@ -160,11 +179,19 @@ class ChargeLineTests(SimpleTestCase):
             with self.subTest(heading=heading):
                 self.assertEqual(date_of(billing(heading, cpt=True)), ('document', '2026-10-05'))
 
-    def test_without_a_code_the_heading_still_decides(self):
+    def test_without_a_code_the_date_speaks_too(self):
+        # gi3 fix round 2 (51(c)(1), dates2-7): the label speaks wherever it stands, so no CPT code needs finding (the
+        # code after the date, "CPT Code(s):", "CPT/HCPCS", "Procedure code" or a HCPCS code was no charge to 48(f))
         for heading in ('Follow-up visit', 'Return visit'):
             with self.subTest(heading=heading):
                 text = HEADER.format(own=OWN) + heading + '\nDate of service: 2026-11-16\n'
-                self.assertEqual(date_of(text), ('document', '2026-10-05'))
+                self.assertEqual(date_of(text), ('conflict', None))
+        for code_line in ('CPT Code(s): 99214', 'CPT\u00ae: 99214', 'CPT/HCPCS: 99214', 'Procedure code: 99214',
+                          'HCPCS: G0121'):
+            with self.subTest(code=code_line):
+                text = (HEADER.format(own=OWN) + 'Follow-up visit, level 4\nDate of service: 2026-10-06\n' + code_line
+                        + '\n')
+                self.assertEqual(date_of(text), ('conflict', None))
 
     def test_with_no_own_date_it_stays_dropped(self):
         text = HEADER.format(own='') + 'Follow-up visit, level 4\nCPT: 99214\nDate of service: 2026-10-06\n'
@@ -195,8 +222,10 @@ class NoOwnDateTests(SimpleTestCase):
 
 class StackedTitleTests(SimpleTestCase):
     """After fix round 1: the document's own visit title stacked under its own follow-up title (RC5's section) is this
-    visit's title, never a block heading naming another occurrence (context._Governance.visit_title), so the header
-    under it reads as an untitled header does; a title led by a word naming another occurrence still governs."""
+    visit's title, never a block heading naming another occurrence, so the header under it reads as an untitled header
+    does; a title led by a word naming another occurrence still governs. gi3 fix round 2 (dates2-5, cost-r2-1): read by
+    the title's head (context._Governance.in_head, _head_line) - a stacked title naming this visit positively continues
+    the head, any other ends it."""
 
     def note(self, second):
         return (BANNER + 'Saltmarsh Valley Gastroenterology (fictional)\nGastroenterology follow-up\n' + second

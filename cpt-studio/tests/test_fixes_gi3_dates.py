@@ -83,12 +83,20 @@ class CaseAsserts:
                 self.assert_case(known[name])
 
 
+# gi3 fix round 2 (interpretation 51(c)(1), dates2-3): a results table's column inside a plan with no block heading speaks
+# against the note's own date like every table's (a charge table right after the plan cannot be told from it by
+# structure), so with the note's own date this case is asked - an over-ask, never a send; pinned in TableColumnTests
+FIX2_LIMITS = frozenset(('d7-nohead-own',))
+
+
 class FixtureTests(CaseAsserts, SimpleTestCase):
     def test_every_case_reads_right_by_its_source(self):
         known = cases()
         self.assertEqual(len(known), 57)
         for name, case in known.items():
             self.assertTrue(case['text'].startswith(BANNER), name)
+            if name in FIX2_LIMITS:
+                continue
             with self.subTest(case=name):
                 self.assert_case(case)
 
@@ -149,16 +157,22 @@ class BookingHeadingTests(CaseAsserts, SimpleTestCase):
         self.assert_cases('d5-noown-scheduling', 'd5-noown-sched-details', 'd5-noown-appt-details', 'd5-noown-visit-sched',
                           'd5-own-scheduling', 'd5-own-appt-details', 'd5-own-visit-sched')
 
-    def test_a_booking_heading_names_no_kind_of_service(self):
+    def test_a_booking_heading_lets_the_encounters_own_label_speak(self):
+        # gi3 fix round 2 (51(c)(1), dates2-2): a booking word names no other occurrence explicitly ("Today's
+        # appointment", "Billing and scheduling", "Taper schedule" were dropped and the header's contradicted date sent),
+        # so the encounter's own label under it speaks against the note's own date; a visit or procedure date keeps
+        # dates-5's reading (test_a_booking_heading_governs_the_planned_date)
         text = clinic('Appointment details\nDate of service: 2026-11-04\n')
-        self.assertEqual(sent(text), '2026-10-05')
-        self.assertEqual(member(text, '2026-11-04'), 'held')
+        self.assertIsNone(sent(text))
+        self.assertEqual(date_fact(text).origin, 'conflict')
 
     def test_an_administrative_block_of_this_encounter_still_speaks(self):
+        # gi3 fix round 2 (51(c)(2), dates2-6): a clinic note that documents no procedure has no procedure date of its
+        # own - its procedure date speaks only against the note's own date, so with none it is never the only answer
         text = clinic('Billing\nProcedure date: 2026-10-15\n', own='')
         self.assertEqual(date_fact(text).origin, 'missing')
         self.assertEqual(member(text, '2026-10-15'), 'taken')
-        self.assertEqual(member(text, STRANGER), 'held')
+        self.assertEqual(member(text, STRANGER), 'taken')
         text = clinic('Encounter summary\nVisit date: 2026-10-06\n')
         self.assertEqual(date_fact(text).origin, 'conflict')
         # a surgery named in a heading may be this encounter's own place: the facility block's date still speaks
@@ -168,9 +182,12 @@ class BookingHeadingTests(CaseAsserts, SimpleTestCase):
                   'Recommendations:\nRepeat colonoscopy in 5 years.\nAmbulatory surgery center\n'
                   'Date of service: 10/15/2026\n')
         self.assertEqual(date_fact(report).origin, 'conflict')
-        for heading in ('Recall details', 'Referral information'):  # a booking's block governs its fields
+        # gi3 fix round 2 (51(c)(1)): a booking's block names no other occurrence explicitly, so the encounter's own
+        # label under it speaks against the report's own date (asked); a heading of the closed class still governs it
+        for heading in ('Recall details', 'Referral information'):
             with self.subTest(heading=heading):
-                self.assertEqual(sent(report.replace('Ambulatory surgery center', heading)), '2026-10-14')
+                self.assertEqual(date_fact(report.replace('Ambulatory surgery center', heading)).origin, 'conflict')
+        self.assertEqual(sent(report.replace('Ambulatory surgery center', 'Next appointment')), '2026-10-14')
 
 
 class DescriptorHeadingTests(CaseAsserts, SimpleTestCase):
@@ -184,29 +201,38 @@ class DescriptorHeadingTests(CaseAsserts, SimpleTestCase):
     def test_the_em_services_name_is_its_own(self):
         self.assert_cases('d6-em-level', 'd6-em-visit')
 
-    def test_a_sample_or_document_alone_still_governs(self):
+    def test_a_sample_or_document_heading_lets_the_date_speak(self):
+        # gi3 fix round 2 (51(c)(1)): another discipline's document or a sample names no other occurrence explicitly -
+        # the block's date of service may be the procedure's own - so it speaks against the note's own date (asked)
         for heading in ('Biopsy', 'Biopsies', 'Colonoscopy pathology', 'Surveillance ultrasound', 'Pathology'):
             with self.subTest(heading=heading):
-                self.assertEqual(sent(clinic(heading + '\nDate of service: 2026-10-16\n')), '2026-10-05')
+                text = clinic(heading + '\nDate of service: 2026-10-16\n')
+                self.assertIsNone(sent(text))
+                self.assertEqual(date_fact(text).origin, 'conflict')
 
-    def test_another_occurrence_still_governs_inside_a_service_name(self):
-        """Interpretation 48(a): a follow-up names another occurrence, as "Return visit" does, where nothing marks the
-        block as this encounter's charge. The integration owner's 48(f) (a CPT code in the block) decides the charge
-        line this owner reported ("Follow-up visit, level 4" / "CPT: 99214"): a conflict, asked, never the header's date
-        sent (tests.test_repairs_gi3_integration.ChargeLineTests)."""
+    def test_a_follow_up_charge_line_speaks_with_or_without_its_code(self):
+        """gi3 fix round 2 (51(c)(1), dates2-7): a follow-up names no other occurrence explicitly, so the encounter's
+        own label under "Follow-up visit, level 4" speaks against the note's own date whether or not a CPT code stands
+        before it (fix round 1 reported this case; 48(f) needed the code first, dates2-7 found it after the date)."""
         for heading in ('Follow-up visit, level 4', 'Established patient follow-up visit'):
-            with self.subTest(heading=heading):
-                self.assertEqual(sent(clinic('Charges\n' + heading + '\nDate of service: 2026-10-06\n')), '2026-10-05')
-                charge = clinic('Charges\n' + heading + '\nCPT: 99214\nDate of service: 2026-10-06\n')
-                self.assertIsNone(sent(charge))
-                self.assertEqual(date_fact(charge).origin, 'conflict')
+            for block in (heading + '\nDate of service: 2026-10-06\n', heading + '\nCPT: 99214\nDate of service: 2026-10-06\n',
+                          heading + '\nDate of service: 2026-10-06\nCPT: 99214\n'):
+                with self.subTest(block=block):
+                    charge = clinic('Charges\n' + block)
+                    self.assertIsNone(sent(charge))
+                    self.assertEqual(date_fact(charge).origin, 'conflict')
 
 
 class TableColumnTests(CaseAsserts, SimpleTestCase):
     """dates-7: a table's column label inside a plan with no block heading dates its rows; the plan governs it."""
 
     def test_the_results_column_is_governed(self):
-        self.assert_cases('d7-nohead-own', 'd7-nohead-noown')
+        # gi3 fix round 2 (51(c)(1)): with no own date the column is dropped as installed (never the only answer);
+        # with one it speaks against it - the over-ask FIX2_LIMITS names, pinned here by its exact output
+        self.assert_cases('d7-nohead-noown')
+        text = cases()['d7-nohead-own']['text']
+        self.assertEqual((date_fact(text).origin, sent(text)), ('conflict', None))
+        self.assertEqual(member(text, '2026-10-05'), 'taken')
 
     def test_past_a_neutral_heading_a_charge_table_still_speaks(self):
         text = clinic('Charge information\nDate of service | Diagnosis | CPT\n2026-10-06 | anemia | 99214\n')
@@ -220,10 +246,13 @@ class JoinedHeadingTests(CaseAsserts, SimpleTestCase):
         self.assert_cases('d8-sameline-title', 'd8-sameline-caps', 'd8-sameline-billing', 'd8-ctrl-sameline-lower')
 
     def test_a_joined_heading_naming_another_block_still_governs(self):
-        for line in ('Follow Up Date of Service: 11/16/2026', 'Next Appointment Date of Service: 11/16/2026',
-                     'Labs Date of Service: 09/30/2026'):
+        # gi3 fix round 2 (51(c)(1)): only a joined heading of the closed class naming another occurrence explicitly
+        # governs ("Next Appointment"); "Follow Up" and "Labs" name none, so the field speaks against the note's own
+        self.assertEqual(sent(clinic('Next Appointment Date of Service: 11/16/2026\n')), '2026-10-05')
+        for line in ('Follow Up Date of Service: 11/16/2026', 'Labs Date of Service: 09/30/2026'):
             with self.subTest(line=line):
-                self.assertEqual(sent(clinic(line + '\n')), '2026-10-05')
+                self.assertIsNone(sent(clinic(line + '\n')))
+                self.assertEqual(date_fact(clinic(line + '\n')).origin, 'conflict')
 
     def test_with_no_own_date_it_is_never_the_only_answer(self):
         """A joined heading cannot be told from a word qualifying the date, so the field speaks only against the note's
@@ -273,22 +302,23 @@ class KnownLimitTests(SimpleTestCase):
         return f'{fact.origin}:{fact.value}', {p: member(text, p) for p in probes}
 
     def test_a_logistics_heading_names_no_occurrence(self):
-        """dates-5 residual: "Logistics" names no occurrence by its words (interpretation 42's vocabulary), so the
-        planned date after it is asked as interpretation 42 asks a label under a neutral heading - the only answer
-        with no own date."""
+        """dates-5 residual, fixed in gi3 fix round 2 (51(c)(2), dates2-6): "Logistics" names no occurrence by its words,
+        but the note documents no procedure, so the planned procedure date after it is never its own date and never the
+        only answer (fix round 1 pinned it as the only answer with no own date)."""
         known = cases()
         noown = known['d5-noown-scheduling']['text'].replace('Scheduling\n', 'Logistics\n')
         self.assertEqual(self.outcome(noown, ('2026-11-04', '2026-10-05', STRANGER)),
-                         ('missing:None', {'2026-11-04': 'taken', '2026-10-05': 'held', STRANGER: 'held'}))
+                         ('missing:None', {'2026-11-04': 'taken', '2026-10-05': 'taken', STRANGER: 'taken'}))
 
     def test_a_results_table_past_a_neutral_heading(self):
-        """dates-7 residual: past a neutral heading ("Data reviewed") the plan's reach has ended (interpretation 42)
-        and a table there speaks, as the corpus's charge table does (A20): its date is the only answer with no own."""
+        """dates-7 residual, fixed in gi3 fix round 2 (51(c)(1)): past a neutral heading ("Data reviewed") a table's
+        column speaks only against the note's own date, as every table's does - with no own date it is never the only
+        answer (fix round 1 pinned its date as the only answer)."""
         text = (BANNER + 'Synthetic GI clinic (fictional)\nClinic note\nPatient: Synthetic Patient (fictional)\n'
                 'Chief complaint: cirrhosis follow-up\nAssessment and plan\nCirrhosis, compensated. Continue current '
                 'care.\nData reviewed\nTest | Date of service | Result\nALT | 2026-09-30 | 41 U/L\n')
         self.assertEqual(self.outcome(text, ('2026-09-30', '2026-10-05', STRANGER)),
-                         ('missing:None', {'2026-09-30': 'taken', '2026-10-05': 'held', STRANGER: 'held'}))
+                         ('missing:None', {'2026-09-30': 'taken', '2026-10-05': 'taken', STRANGER: 'taken'}))
 
     def test_a_title_section_label_that_speaks_against_the_header(self):
         """dates-2 residual: a return visit or procedure date in a follow-up title's header speaks against the
@@ -299,11 +329,12 @@ class KnownLimitTests(SimpleTestCase):
                          ('conflict:None', {'2026-10-05': 'taken', '2027-01-05': 'taken', STRANGER: 'held'}))
 
     def test_a_visit_date_right_under_the_title(self):
-        """dates-2 residual: a visit date on the line right under the title reads the title's follow-up as its own
-        qualifier ('unplaced'), so it is asked as installed (every answer taken)."""
+        """dates-2 residual, fixed in gi3 fix round 2 (51(c)(3), dates2-1): the head is read as the head whatever a title
+        above it says - the title's follow-up word no longer qualifies the visit date under it, which is the head's own
+        date (read under the document's own follow-up title, as interpretation 51(c) rules)."""
         text = BANNER + 'Synthetic GI clinic (fictional)\nGI clinic follow-up\nVisit date: 2026-10-21\n'
         self.assertEqual(self.outcome(text, ('2026-10-21', STRANGER)),
-                         ('missing:None', {'2026-10-21': 'taken', STRANGER: 'taken'}))
+                         ('document:2026-10-21', {'2026-10-21': 'taken', STRANGER: 'held'}))
 
 
 class CostTests(SimpleTestCase):

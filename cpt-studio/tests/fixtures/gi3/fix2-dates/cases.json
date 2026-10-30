@@ -1,0 +1,1231 @@
+{
+ "schema": "cpt-studio-gi3-fix2-dates@1",
+ "note": "The second refutation's dates inputs (reviewer dates2) and the fix owner's own shapes beside each finding, each with its source-reviewed expectation. No revision's output is recorded here.",
+ "cases": [
+  {
+   "id": "F1a",
+   "finding": "dates2-1",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nDate of service: 10/05/2026\nPatient: Ivo Brandmere (fictional)\nDate of birth: 1961-03-14\nProvider: Priya Halvorsen-Mbeki, MD (fictional)\nNext visit: 01/05/2027\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\nPlan:\nContinue mesalamine. Return in 3 months.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05",
+    "held": [
+     "2027-01-05",
+     "1998-01-01"
+    ]
+   },
+   "review": "The header's own date of service dates this follow-up (51(c)(3)); the next visit's date is another occurrence's."
+  },
+  {
+   "id": "F1b",
+   "finding": "dates2-1",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nDate of service: 10/05/2026\nPatient: Ivo Brandmere (fictional)\nDate of birth: 1961-03-14\nProvider: Priya Halvorsen-Mbeki, MD (fictional)\nLast visit: 08/27/2026\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\nPlan:\nContinue mesalamine. Return in 3 months.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05",
+    "held": [
+     "2026-08-27",
+     "1998-01-01"
+    ]
+   },
+   "review": "The header's own date of service dates this follow-up; the last visit's date is an earlier occurrence's."
+  },
+  {
+   "id": "F1c",
+   "finding": "dates2-1",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Ivo Brandmere (fictional)\nDate of birth: 1961-03-14\nVisit type: Follow-up\nDate of service: 10/05/2026\nProvider: Priya Halvorsen-Mbeki, MD (fictional)\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\nPlan:\nContinue mesalamine. Return in 3 months.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05"
+    ],
+    "held": [
+     "1998-01-01"
+    ]
+   },
+   "review": "A field above the label qualifies it ('Visit type: Follow-up'): its date stays the evidence of the date asked."
+  },
+  {
+   "id": "F1-ctrl",
+   "finding": "dates2-1",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nClinic note\nDate of service: 10/05/2026\nPatient: Ivo Brandmere (fictional)\nDate of birth: 1961-03-14\nProvider: Priya Halvorsen-Mbeki, MD (fictional)\nNext visit: 01/05/2027\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\nPlan:\nContinue mesalamine. Return in 3 months.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05"
+    ],
+    "held": [
+     "1998-01-01"
+    ]
+   },
+   "review": "The same header under 'Clinic note': the date of service stays asked evidence, 1998-01-01 held."
+  },
+  {
+   "id": "F1d",
+   "finding": "dates2-1",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nPatient | Date of birth | Visit date | Provider\nIvo Brandmere (fictional) | 1961-03-14 | 10/05/2026 | Priya Halvorsen-Mbeki, MD (fictional)\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\nPlan:\nContinue mesalamine. Return in 3 months.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05"
+    ],
+    "held": [
+     "1998-01-01"
+    ]
+   },
+   "review": "A header table with a birth column is the patient's header: its visit date is the evidence of the date asked."
+  },
+  {
+   "id": "F1d-ctrl",
+   "finding": "dates2-1",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nClinic note\nPatient | Date of birth | Visit date | Provider\nIvo Brandmere (fictional) | 1961-03-14 | 10/05/2026 | Priya Halvorsen-Mbeki, MD (fictional)\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\nPlan:\nContinue mesalamine. Return in 3 months.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05"
+    ],
+    "held": [
+     "1998-01-01"
+    ]
+   },
+   "review": "The same header table under 'Clinic note': its visit date is asked."
+  },
+  {
+   "id": "F2a",
+   "finding": "dates2-2",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nOsprey Point Liver and Digestive Clinic (fictional)\nHepatology follow-up note\n\nPatient: Ignatius Fenwick-Obi (fictional)\nDate of birth: 1959-06-02\nSynthetic record: H2-SYN-1108\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Marguerite Szabo-Reyes, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to metabolic dysfunction-associated steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver, a small amount of ascites and no focal lesion. Laboratory results from 2026-09-28: albumin 3.1 g/dL, total bilirubin 1.6 mg/dL, INR 1.3, sodium 134 mmol/L, creatinine 0.9 mg/dL. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 112/70; weight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Diagnostic paracentesis was offered and declined today; it will be revisited if the ascites increases. Referral to transplant hepatology placed. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 44 minutes, covering review of the ultrasound and laboratory results, the examination, discussion of diuretics and sodium restriction with the patient and his wife, the referral and documentation.\n\nToday's appointment\nDate of service: 2026-10-06\nDiagnosis: cirrhosis with ascites\n\nElectronically signed: Marguerite Szabo-Reyes, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "Today's appointment block states this encounter's other date of service."
+  },
+  {
+   "id": "F2b",
+   "finding": "dates2-2",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nClinic note\nPatient: Mira Quellbrook (fictional)\nDate of service: 2026-10-05\nChief complaint: bloody diarrhea\nAssessment and plan\nUlcerative colitis flare. Start prednisone 40 mg daily with a taper. Stool studies today.\nBilling and scheduling\nProvider: Tobin Archer-Vale, MD (fictional)\nDate of service: 2026-10-06\nDiagnosis: ulcerative colitis\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The encounter's own billing-and-scheduling block states another date of service."
+  },
+  {
+   "id": "F2c",
+   "finding": "dates2-2",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nClinic note\nPatient: Mira Quellbrook (fictional)\nDate of service: 2026-10-05\nChief complaint: bloody diarrhea\nAssessment and plan\nUlcerative colitis flare. Start prednisone 40 mg daily with a taper. Stool studies today.\nTaper schedule\nWeek 1: 40 mg daily\nWeek 2: 30 mg daily\nDate of service: 2026-10-06\nDiagnosis: ulcerative colitis\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The block after a taper schedule states another date of service."
+  },
+  {
+   "id": "F2-ctrl",
+   "finding": "dates2-2",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nOsprey Point Liver and Digestive Clinic (fictional)\nHepatology follow-up note\n\nPatient: Ignatius Fenwick-Obi (fictional)\nDate of birth: 1959-06-02\nSynthetic record: H2-SYN-1108\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Marguerite Szabo-Reyes, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to metabolic dysfunction-associated steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver, a small amount of ascites and no focal lesion. Laboratory results from 2026-09-28: albumin 3.1 g/dL, total bilirubin 1.6 mg/dL, INR 1.3, sodium 134 mmol/L, creatinine 0.9 mg/dL. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 112/70; weight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Diagnostic paracentesis was offered and declined today; it will be revisited if the ascites increases. Referral to transplant hepatology placed. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 44 minutes, covering review of the ultrasound and laboratory results, the examination, discussion of diuretics and sodium restriction with the patient and his wife, the referral and documentation.\n\nToday's visit\nDate of service: 2026-10-06\nDiagnosis: cirrhosis with ascites\n\nElectronically signed: Marguerite Szabo-Reyes, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "Control: a today's visit block states this encounter's other date of service."
+  },
+  {
+   "id": "F3a",
+   "finding": "dates2-3",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nOsprey Point Liver and Digestive Clinic (fictional)\nHepatology follow-up note\n\nPatient: Ignatius Fenwick-Obi (fictional)\nDate of birth: 1959-06-02\nSynthetic record: H2-SYN-1108\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Marguerite Szabo-Reyes, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to metabolic dysfunction-associated steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver, a small amount of ascites and no focal lesion. Laboratory results from 2026-09-28: albumin 3.1 g/dL, total bilirubin 1.6 mg/dL, INR 1.3, sodium 134 mmol/L, creatinine 0.9 mg/dL. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 112/70; weight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Diagnostic paracentesis was offered and declined today; it will be revisited if the ascites increases. Referral to transplant hepatology placed. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 44 minutes, covering review of the ultrasound and laboratory results, the examination, discussion of diuretics and sodium restriction with the patient and his wife, the referral and documentation.\n\nCPT | Description | Date of service | Diagnosis\n99214 | Office visit, established patient, level 4 | 2026-10-06 | cirrhosis with ascites\n\nElectronically signed: Marguerite Szabo-Reyes, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The charge table right after the plan dates this encounter 2026-10-06."
+  },
+  {
+   "id": "F3-ctrl",
+   "finding": "dates2-3",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nOsprey Point Liver and Digestive Clinic (fictional)\nHepatology follow-up note\n\nPatient: Ignatius Fenwick-Obi (fictional)\nDate of birth: 1959-06-02\nSynthetic record: H2-SYN-1108\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Marguerite Szabo-Reyes, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to metabolic dysfunction-associated steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver, a small amount of ascites and no focal lesion. Laboratory results from 2026-09-28: albumin 3.1 g/dL, total bilirubin 1.6 mg/dL, INR 1.3, sodium 134 mmol/L, creatinine 0.9 mg/dL. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 112/70; weight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Diagnostic paracentesis was offered and declined today; it will be revisited if the ascites increases. Referral to transplant hepatology placed. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 44 minutes, covering review of the ultrasound and laboratory results, the examination, discussion of diuretics and sodium restriction with the patient and his wife, the referral and documentation.\n\nCharge information\nCPT | Description | Date of service | Diagnosis\n99214 | Office visit, established patient, level 4 | 2026-10-06 | cirrhosis with ascites\n\nElectronically signed: Marguerite Szabo-Reyes, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "Control: the same table under 'Charge information'."
+  },
+  {
+   "id": "F4a",
+   "finding": "dates2-7",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nOsprey Point Liver and Digestive Clinic (fictional)\nHepatology follow-up note\n\nPatient: Ignatius Fenwick-Obi (fictional)\nDate of birth: 1959-06-02\nSynthetic record: H2-SYN-1108\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Marguerite Szabo-Reyes, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to metabolic dysfunction-associated steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver, a small amount of ascites and no focal lesion. Laboratory results from 2026-09-28: albumin 3.1 g/dL, total bilirubin 1.6 mg/dL, INR 1.3, sodium 134 mmol/L, creatinine 0.9 mg/dL. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 112/70; weight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Diagnostic paracentesis was offered and declined today; it will be revisited if the ascites increases. Referral to transplant hepatology placed. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 44 minutes, covering review of the ultrasound and laboratory results, the examination, discussion of diuretics and sodium restriction with the patient and his wife, the referral and documentation.\n\nFollow-up visit, level 4\nDate of service: 2026-10-06\nCPT: 99214\n\nElectronically signed: Marguerite Szabo-Reyes, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "A follow-up E/M charge line, its code after the date."
+  },
+  {
+   "id": "F4b",
+   "finding": "dates2-7",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nOsprey Point Liver and Digestive Clinic (fictional)\nHepatology follow-up note\n\nPatient: Ignatius Fenwick-Obi (fictional)\nDate of birth: 1959-06-02\nSynthetic record: H2-SYN-1108\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Marguerite Szabo-Reyes, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to metabolic dysfunction-associated steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver, a small amount of ascites and no focal lesion. Laboratory results from 2026-09-28: albumin 3.1 g/dL, total bilirubin 1.6 mg/dL, INR 1.3, sodium 134 mmol/L, creatinine 0.9 mg/dL. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 112/70; weight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Diagnostic paracentesis was offered and declined today; it will be revisited if the ascites increases. Referral to transplant hepatology placed. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 44 minutes, covering review of the ultrasound and laboratory results, the examination, discussion of diuretics and sodium restriction with the patient and his wife, the referral and documentation.\n\nFollow-up visit, level 4\nCPT Code(s): 99214\nDate of service: 2026-10-06\n\nElectronically signed: Marguerite Szabo-Reyes, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The same charge line with 'CPT Code(s):' after the date."
+  },
+  {
+   "id": "F4c",
+   "finding": "dates2-7",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nOsprey Point Liver and Digestive Clinic (fictional)\nHepatology follow-up note\n\nPatient: Ignatius Fenwick-Obi (fictional)\nDate of birth: 1959-06-02\nSynthetic record: H2-SYN-1108\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Marguerite Szabo-Reyes, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to metabolic dysfunction-associated steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver, a small amount of ascites and no focal lesion. Laboratory results from 2026-09-28: albumin 3.1 g/dL, total bilirubin 1.6 mg/dL, INR 1.3, sodium 134 mmol/L, creatinine 0.9 mg/dL. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 112/70; weight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Diagnostic paracentesis was offered and declined today; it will be revisited if the ascites increases. Referral to transplant hepatology placed. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 44 minutes, covering review of the ultrasound and laboratory results, the examination, discussion of diuretics and sodium restriction with the patient and his wife, the referral and documentation.\n\nFollow-up visit, level 4\nCPT®: 99214\nDate of service: 2026-10-06\n\nElectronically signed: Marguerite Szabo-Reyes, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "The same charge line with 'CPT(R):' after the date."
+  },
+  {
+   "id": "F4-ctrl",
+   "finding": "dates2-7",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nOsprey Point Liver and Digestive Clinic (fictional)\nHepatology follow-up note\n\nPatient: Ignatius Fenwick-Obi (fictional)\nDate of birth: 1959-06-02\nSynthetic record: H2-SYN-1108\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Marguerite Szabo-Reyes, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to metabolic dysfunction-associated steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver, a small amount of ascites and no focal lesion. Laboratory results from 2026-09-28: albumin 3.1 g/dL, total bilirubin 1.6 mg/dL, INR 1.3, sodium 134 mmol/L, creatinine 0.9 mg/dL. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 112/70; weight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Diagnostic paracentesis was offered and declined today; it will be revisited if the ascites increases. Referral to transplant hepatology placed. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 44 minutes, covering review of the ultrasound and laboratory results, the examination, discussion of diuretics and sodium restriction with the patient and his wife, the referral and documentation.\n\nFollow-up visit, level 4\nCPT: 99214\nDate of service: 2026-10-06\n\nElectronically signed: Marguerite Szabo-Reyes, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "Control: the charge line's code before its date."
+  },
+  {
+   "id": "F5a",
+   "finding": "dates2-4",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nTelephone follow-up\nPatient: Ivo Brandmere (fictional)\nSpoke with the patient about the colonoscopy pathology: tubular adenoma. Questions answered. She will keep her clinic appointment.\nVisit date: 11/16/2026\nProvider: Priya Halvorsen-Mbeki, MD (fictional)\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-11-16"
+    ]
+   },
+   "review": "The visit date after 'She will keep her clinic appointment.' dates that later visit."
+  },
+  {
+   "id": "F5b",
+   "finding": "dates2-4",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Ivo Brandmere (fictional)\nDate of birth: 1961-03-14\nProvider: Priya Halvorsen-Mbeki, MD (fictional)\nDoing well on mesalamine. No bleeding. Continue mesalamine 2.4 g daily. Return to clinic in 6 months.\nVisit date: 04/05/2027\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2027-04-05"
+    ]
+   },
+   "review": "The visit date after 'Return to clinic in 6 months.' dates the return."
+  },
+  {
+   "id": "F5c",
+   "finding": "dates2-4",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Ivo Brandmere (fictional)\nProvider: Priya Halvorsen-Mbeki, MD (fictional)\nS: Doing well on mesalamine.\nO: Abdomen soft, non-tender.\nA: Ulcerative colitis in remission.\nP: Continue mesalamine. Return to clinic in 3 months.\nVisit date: 01/05/2027\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2027-01-05"
+    ]
+   },
+   "review": "The visit date after the SOAP plan line dates the return."
+  },
+  {
+   "id": "F5-ctrl",
+   "finding": "dates2-4",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of birth: 1961-03-14\nProvider: Priya Halvorsen-Mbeki, MD (fictional)\nPlan:\nDoing well on mesalamine. No bleeding. Continue mesalamine 2.4 g daily. Return to clinic in 6 months.\nVisit date: 04/05/2027\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2027-04-05"
+    ]
+   },
+   "review": "Control: the same under 'Clinic note' and 'Plan:'."
+  },
+  {
+   "id": "F6a",
+   "finding": "dates2-9",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nPatient: Mira Quellbrook (fictional)\nDate of service........ 10/05/2026\nChief complaint: anemia\nAssessment: iron deficiency anemia.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05"
+    ],
+    "held": [
+     "1998-01-01"
+    ]
+   },
+   "review": "Dot leaders after the label: the header's own date, asked."
+  },
+  {
+   "id": "F6b",
+   "finding": "dates2-9",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nPatient: Mira Quellbrook (fictional)\nDate of service........ 10/05/2026\nChief complaint: anemia\nAssessment: iron deficiency anemia.\nCharge information\nDate of service: 10/06/2026\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "Dot leaders in the header against the charge block's date of service."
+  },
+  {
+   "id": "F6c",
+   "finding": "dates2-9",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nOsprey Point Liver and Digestive Clinic (fictional)\nHepatology follow-up note\n\nPatient: Ignatius Fenwick-Obi (fictional)\nDate of birth: 1959-06-02\nSynthetic record: H2-SYN-1108\nDate of service........ 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Marguerite Szabo-Reyes, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to metabolic dysfunction-associated steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver, a small amount of ascites and no focal lesion. Laboratory results from 2026-09-28: albumin 3.1 g/dL, total bilirubin 1.6 mg/dL, INR 1.3, sodium 134 mmol/L, creatinine 0.9 mg/dL. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 112/70; weight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Diagnostic paracentesis was offered and declined today; it will be revisited if the ascites increases. Referral to transplant hepatology placed. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 44 minutes, covering review of the ultrasound and laboratory results, the examination, discussion of diuretics and sodium restriction with the patient and his wife, the referral and documentation.\n\nCharge information\nDate of service: 2026-10-06\nDiagnosis: cirrhosis with ascites\n\nElectronically signed: Marguerite Szabo-Reyes, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ],
+    "held": [
+     "1998-01-01"
+    ]
+   },
+   "review": "h2-08 with dot leaders in its header."
+  },
+  {
+   "id": "F6d",
+   "finding": "dates2-9",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nOsprey Point Liver and Digestive Clinic (fictional)\nHepatology follow-up note\n\nPatient: Ignatius Fenwick-Obi (fictional)\nDate of birth: 1959-06-02\nSynthetic record: H2-SYN-1108\nDate of service… 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Marguerite Szabo-Reyes, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to metabolic dysfunction-associated steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver, a small amount of ascites and no focal lesion. Laboratory results from 2026-09-28: albumin 3.1 g/dL, total bilirubin 1.6 mg/dL, INR 1.3, sodium 134 mmol/L, creatinine 0.9 mg/dL. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 112/70; weight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Diagnostic paracentesis was offered and declined today; it will be revisited if the ascites increases. Referral to transplant hepatology placed. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 44 minutes, covering review of the ultrasound and laboratory results, the examination, discussion of diuretics and sodium restriction with the patient and his wife, the referral and documentation.\n\nCharge information\nDate of service: 2026-10-06\nDiagnosis: cirrhosis with ascites\n\nElectronically signed: Marguerite Szabo-Reyes, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ],
+    "held": [
+     "1998-01-01"
+    ]
+   },
+   "review": "h2-08 with an ellipsis in its header."
+  },
+  {
+   "id": "F6-ctrl",
+   "finding": "dates2-9",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nOsprey Point Liver and Digestive Clinic (fictional)\nHepatology follow-up note\n\nPatient: Ignatius Fenwick-Obi (fictional)\nDate of birth: 1959-06-02\nSynthetic record: H2-SYN-1108\nDate of service — 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Marguerite Szabo-Reyes, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to metabolic dysfunction-associated steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver, a small amount of ascites and no focal lesion. Laboratory results from 2026-09-28: albumin 3.1 g/dL, total bilirubin 1.6 mg/dL, INR 1.3, sodium 134 mmol/L, creatinine 0.9 mg/dL. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 112/70; weight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Diagnostic paracentesis was offered and declined today; it will be revisited if the ascites increases. Referral to transplant hepatology placed. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 44 minutes, covering review of the ultrasound and laboratory results, the examination, discussion of diuretics and sodium restriction with the patient and his wife, the referral and documentation.\n\nCharge information\nDate of service: 2026-10-06\nDiagnosis: cirrhosis with ascites\n\nElectronically signed: Marguerite Szabo-Reyes, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ],
+    "held": [
+     "1998-01-01"
+    ]
+   },
+   "review": "Control: the em dash after the header's label, against the charge."
+  },
+  {
+   "id": "F7a",
+   "finding": "dates2-8",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nOsprey Point Liver and Digestive Clinic (fictional)\nHepatology follow-up note\n\nPatient: Ignatius Fenwick-Obi (fictional)\nDate of birth: 1959-06-02\nSynthetic record: H2-SYN-1108\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Marguerite Szabo-Reyes, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to metabolic dysfunction-associated steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver, a small amount of ascites and no focal lesion. Laboratory results from 2026-09-28: albumin 3.1 g/dL, total bilirubin 1.6 mg/dL, INR 1.3, sodium 134 mmol/L, creatinine 0.9 mg/dL. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 112/70; weight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Diagnostic paracentesis was offered and declined today; it will be revisited if the ascites increases. Referral to transplant hepatology placed. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 44 minutes, covering review of the ultrasound and laboratory results, the examination, discussion of diuretics and sodium restriction with the patient and his wife, the referral and documentation.\n\nCharge Information: Date of Service: 2026-10-06\nDiagnosis: cirrhosis with ascites\n\nElectronically signed: Marguerite Szabo-Reyes, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "A joined charge heading with a colon."
+  },
+  {
+   "id": "F7b",
+   "finding": "dates2-8",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nOsprey Point Liver and Digestive Clinic (fictional)\nHepatology follow-up note\n\nPatient: Ignatius Fenwick-Obi (fictional)\nDate of birth: 1959-06-02\nSynthetic record: H2-SYN-1108\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Marguerite Szabo-Reyes, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to metabolic dysfunction-associated steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver, a small amount of ascites and no focal lesion. Laboratory results from 2026-09-28: albumin 3.1 g/dL, total bilirubin 1.6 mg/dL, INR 1.3, sodium 134 mmol/L, creatinine 0.9 mg/dL. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 112/70; weight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Diagnostic paracentesis was offered and declined today; it will be revisited if the ascites increases. Referral to transplant hepatology placed. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 44 minutes, covering review of the ultrasound and laboratory results, the examination, discussion of diuretics and sodium restriction with the patient and his wife, the referral and documentation.\n\nCHARGE INFORMATION - Date of Service: 2026-10-06\nDiagnosis: cirrhosis with ascites\n\nElectronically signed: Marguerite Szabo-Reyes, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "A joined charge heading in capitals with a dash."
+  },
+  {
+   "id": "F7c",
+   "finding": "dates2-8",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nClinic note\nPatient: Mira Quellbrook (fictional)\nDate of service: 2026-10-05\nChief complaint: bloody diarrhea\nAssessment and plan\nUlcerative colitis flare. Start prednisone 40 mg daily with a taper. Stool studies today.\nReturn visit\nReturn in 3 months with labs.\nCharge Information Date of Service: 2026-10-06\nCPT: 99214\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "A joined charge line under an earlier 'Return visit' block heading."
+  },
+  {
+   "id": "F7-ctrl",
+   "finding": "dates2-8",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nOsprey Point Liver and Digestive Clinic (fictional)\nHepatology follow-up note\n\nPatient: Ignatius Fenwick-Obi (fictional)\nDate of birth: 1959-06-02\nSynthetic record: H2-SYN-1108\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nAttending physician: Marguerite Szabo-Reyes, MD (fictional)\n\nSubjective\nFollow-up of compensated cirrhosis due to metabolic dysfunction-associated steatohepatitis. Over two weeks he has noticed more ankle swelling and a larger abdominal girth. No confusion and no black stools. Abdominal ultrasound on 2026-09-28 showed a nodular liver, a small amount of ascites and no focal lesion. Laboratory results from 2026-09-28: albumin 3.1 g/dL, total bilirubin 1.6 mg/dL, INR 1.3, sodium 134 mmol/L, creatinine 0.9 mg/dL. Variceal screening endoscopy on 2025-03-10 showed small esophageal varices without red signs.\n\nObjective\nBlood pressure 112/70; weight 91 kg, up 3 kg. Shifting dullness present, 1+ ankle edema, no asterixis.\n\nAssessment and plan\nCirrhosis with new ascites, now decompensated. Start spironolactone 100 mg and furosemide 40 mg daily with a 2 g sodium diet; basic metabolic panel in one week. Continue carvedilol 6.25 mg twice daily. Diagnostic paracentesis was offered and declined today; it will be revisited if the ascites increases. Referral to transplant hepatology placed. Surveillance ultrasound in six months. Repeat upper endoscopy is not needed while he stays on carvedilol.\n\nPhysician time on the service date: 44 minutes, covering review of the ultrasound and laboratory results, the examination, discussion of diuretics and sodium restriction with the patient and his wife, the referral and documentation.\n\nCharge Information Date of Service: 2026-10-06\nDiagnosis: cirrhosis with ascites\n\nElectronically signed: Marguerite Szabo-Reyes, MD (fictional), 2026-10-06 09:12\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "Control: a Title Case charge heading joined to the label."
+  },
+  {
+   "id": "F8a",
+   "finding": "dates2-10",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Ivo Brandmere (fictional)\nProvider: Priya Halvorsen-Mbeki, MD (fictional)\nPatient status: established\nDate of service: 10/05/2026\nDoing well on mesalamine. Surveillance colonoscopy at the ambulatory surgery center in 2027.\nInterval history:\nNo rectal bleeding. Two formed stools a day.\nExamination:\nAbdomen soft, non-tender.\nAssessment:\nUlcerative colitis in remission.\nPlan:\nContinue mesalamine 2.4 g daily. Return in 6 months.\nTotal time on the date of service: 30 minutes.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05",
+    "setting": "missing",
+    "patient_status": "document:established"
+   },
+   "review": "The ASC is the 2027 colonoscopy's place; the visit's place of service is not documented."
+  },
+  {
+   "id": "F8b",
+   "finding": "dates2-10",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Ivo Brandmere (fictional)\nProvider: Priya Halvorsen-Mbeki, MD (fictional)\nPatient status: established\nDate of service: 10/05/2026\nDoing well on mesalamine. Next colonoscopy: Northgate Endoscopy Center (fictional), POS 24.\nInterval history:\nNo rectal bleeding. Two formed stools a day.\nExamination:\nAbdomen soft, non-tender.\nAssessment:\nUlcerative colitis in remission.\nPlan:\nContinue mesalamine 2.4 g daily. Return in 6 months.\nTotal time on the date of service: 30 minutes.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05",
+    "setting": "missing",
+    "patient_status": "document:established"
+   },
+   "review": "'Next colonoscopy: ..., POS 24' is the next colonoscopy's place, not the visit's."
+  },
+  {
+   "id": "F9a",
+   "finding": "dates2-5",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Ivo Brandmere (fictional)\nInitial office visit\nVisit date: 06/01/2026\nReason: bloody diarrhea, new diagnosis of ulcerative colitis\nProvider: Priya Halvorsen-Mbeki, MD (fictional)\nInterval history:\nDoing well on mesalamine since the first visit.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-06-01"
+    ]
+   },
+   "review": "The visit date under 'Initial office visit' dates the initial visit."
+  },
+  {
+   "id": "F9-ctrl",
+   "finding": "dates2-5",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Ivo Brandmere (fictional)\nPrior office visit\nVisit date: 06/01/2026\nReason: bloody diarrhea, new diagnosis of ulcerative colitis\nProvider: Priya Halvorsen-Mbeki, MD (fictional)\nInterval history:\nDoing well on mesalamine since the first visit.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-06-01"
+    ]
+   },
+   "review": "Control: a 'Prior office visit' heading over the earlier date."
+  },
+  {
+   "id": "F10a",
+   "finding": "dates2-6",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nGastroenterology clinic note\nPatient: Mira Quellbrook (fictional)\nDate of birth: 1958-02-11\nAttending: Tobin Archer-Vale, MD (fictional)\nChief complaint: iron deficiency anemia\nHistory of present illness:\nFatigue for three months. No melena.\nPlan:\nColonoscopy with possible polypectomy.\nBowel preparation\nSplit-dose polyethylene glycol. Clear liquids the day before.\nProcedure date: 11/04/2026\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-11-04"
+    ]
+   },
+   "review": "The procedure date after the bowel preparation block dates the planned colonoscopy."
+  },
+  {
+   "id": "F10b",
+   "finding": "dates2-6",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nGastroenterology clinic note\nPatient: Mira Quellbrook (fictional)\nDate of birth: 1958-02-11\nAttending: Tobin Archer-Vale, MD (fictional)\nChief complaint: iron deficiency anemia\nHistory of present illness:\nFatigue for three months. No melena.\nPlan:\nColonoscopy with possible polypectomy.\nSedation\nMonitored anesthesia care.\nProcedure date: 11/04/2026\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-11-04"
+    ]
+   },
+   "review": "The procedure date after the sedation block dates the planned colonoscopy."
+  },
+  {
+   "id": "F10-ctrl",
+   "finding": "dates2-6",
+   "source": "reviewer dates2 (second refutation), input copied verbatim",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLakeside Gastroenterology Associates (fictional)\nGastroenterology clinic note\nPatient: Mira Quellbrook (fictional)\nDate of birth: 1958-02-11\nAttending: Tobin Archer-Vale, MD (fictional)\nChief complaint: iron deficiency anemia\nHistory of present illness:\nFatigue for three months. No melena.\nPlan:\nColonoscopy with possible polypectomy.\nScheduling\nProcedure date: 11/04/2026\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-11-04"
+    ]
+   },
+   "review": "Control: a 'Scheduling' heading over the planned procedure date."
+  },
+  {
+   "id": "s1-hep-dos",
+   "finding": "dates2-1",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nHepatology follow-up\nDOS: 10/05/2026\nPatient: Ivo Brandmere (fictional)\nNext appointment: 01/05/2027\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "'DOS' right under 'Hepatology follow-up' is the visit's own date; 'Next appointment' dates another occurrence."
+  },
+  {
+   "id": "s1-ibd-encounter-last",
+   "finding": "dates2-1",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nIBD clinic follow-up note\nPatient: Ivo Brandmere (fictional)\nEncounter date: 10/05/2026\nLast colonoscopy: 05/01/2019\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "The header's encounter date is this follow-up's; the last colonoscopy's date is an earlier one's."
+  },
+  {
+   "id": "s1-table-dob-dos",
+   "finding": "dates2-1",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nPatient | DOB | Date of service\nIvo Brandmere (fictional) | 1961-03-14 | 10/05/2026\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05"
+    ],
+    "held": [
+     "1998-01-01"
+    ]
+   },
+   "review": "A header table with a DOB column: its date of service is the visit's, asked as a table row."
+  },
+  {
+   "id": "s1-lower-label",
+   "finding": "dates2-1",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\ndate of service: 10/05/2026\nPatient: Ivo Brandmere (fictional)\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "A lower-case label right under the title: the title's follow-up word never qualifies it."
+  },
+  {
+   "id": "s1-blank-between",
+   "finding": "dates2-1",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGastroenterology follow-up\n\nVisit date: 10/05/2026\nPatient: Ivo Brandmere (fictional)\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "A blank line between the title and the visit date: still the head's own date."
+  },
+  {
+   "id": "s1-visit-type-field",
+   "finding": "dates2-1",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Ivo Brandmere (fictional)\nEncounter type: Follow-up\nDOS: 10/05/2026\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05"
+    ],
+    "held": [
+     "1998-01-01"
+    ]
+   },
+   "review": "A 'Follow-up' encounter-type field above the DOS qualifies it: the date is asked, its value answerable."
+  },
+  {
+   "id": "s1-next-only",
+   "finding": "dates2-1",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Ivo Brandmere (fictional)\nNext visit: 01/05/2027\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2027-01-05"
+    ],
+    "taken": [
+     "2026-10-05",
+     "2027-01-05"
+    ]
+   },
+   "review": "Only a next visit's date in the head: never the only answer, never sent."
+  },
+  {
+   "id": "s2-appt-today",
+   "finding": "dates2-2",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nOsprey Point Liver and Digestive Clinic (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nFollow-up of cirrhosis.\nAssessment and plan\nCirrhosis with ascites. Start spironolactone. Return in 4 weeks.\nAppointment today\nDate of service: 2026-10-06\nDiagnosis: cirrhosis\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "'Appointment today' heads this encounter's block: its other date of service is a conflict."
+  },
+  {
+   "id": "s2-sched-billing-dos",
+   "finding": "dates2-2",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nOsprey Point Liver and Digestive Clinic (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nFollow-up of cirrhosis.\nAssessment and plan\nCirrhosis with ascites. Start spironolactone. Return in 4 weeks.\nScheduling and billing information\nDOS: 10/06/2026\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "A scheduling-and-billing block's DOS against the header's: a conflict."
+  },
+  {
+   "id": "s2-history-med-schedule",
+   "finding": "dates2-2",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service: 2026-10-05\nInterval history\nStable on iron.\nMedication schedule\nDate of service: 2026-10-06\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "A schedule heading in a history section names no other occurrence: a conflict."
+  },
+  {
+   "id": "s2-x3-broken",
+   "finding": "dates2-2",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nOsprey Point Liver and Digestive Clinic (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nFollow-up of cirrhosis.\nAssessment and plan\nCirrhosis with ascites. Start spironolactone. Return in 4 weeks.\nToday's appointment\nDate of\nservice: 2026-10-06\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "A broken label under today's appointment: a conflict."
+  },
+  {
+   "id": "s2-ctrl-next-appt",
+   "finding": "dates2-2",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nOsprey Point Liver and Digestive Clinic (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nFollow-up of cirrhosis.\nAssessment and plan\nCirrhosis with ascites. Start spironolactone. Return in 4 weeks.\nNext appointment\nDate of service: 2026-11-16\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "Control: 'Next appointment' names another occurrence explicitly; the header's date is sent."
+  },
+  {
+   "id": "s3-cpt-dos-units",
+   "finding": "dates2-3",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nOsprey Point Liver and Digestive Clinic (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nFollow-up of cirrhosis.\nAssessment and plan\nCirrhosis with ascites. Start spironolactone. Return in 4 weeks.\nCPT code | DOS | Units\n99214 | 2026-10-06 | 1\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "A charge table with a DOS column right after the plan: a conflict."
+  },
+  {
+   "id": "s3-history-table",
+   "finding": "dates2-3",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service: 2026-10-05\nSocial history:\nNon-smoker.\nDate of service | CPT\n2026-10-06 | 99214\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "A two-column charge row after a history section (no table to the table model): a conflict."
+  },
+  {
+   "id": "s3-pdf-wrapped-row",
+   "finding": "dates2-3",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nOsprey Point Liver and Digestive Clinic (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nFollow-up of cirrhosis.\nAssessment and plan\nCirrhosis with ascites. Start spironolactone. Return in 4 weeks.\nCPT | Description | Date of service | Diagnosis\n99214 | Office visit, established\npatient, level 4 | 2026-10-06 | cirrhosis\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05"
+    ]
+   },
+   "review": "A charge row wrapped by the PDF's width: its date stands where the column's would; asked."
+  },
+  {
+   "id": "s3-ctrl-results-reviewed",
+   "finding": "dates2-3",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service: 2026-10-05\nInterval history\nStable.\nResults reviewed today\nTest | Date of service | Result\nFerritin | 2026-09-30 | 41 ng/mL\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "Control: h2-07's 'Results reviewed today' table names earlier results; the visit's date is sent."
+  },
+  {
+   "id": "s4-liver-will-see",
+   "finding": "dates2-4",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nLiver clinic follow up\nPatient: Ivo Brandmere (fictional)\nLabs stable. Will see her back in 3 months.\nVisit date: 01/05/2027\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2027-01-05"
+    ]
+   },
+   "review": "A visit date after 'Will see her back in 3 months.' dates the return: never sent."
+  },
+  {
+   "id": "s4-soap-nostop",
+   "finding": "dates2-4",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Ivo Brandmere (fictional)\nS: doing well\nP: return to clinic in 3 months\nVisit date: 01/05/2027\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2027-01-05"
+    ]
+   },
+   "review": "SOAP lines without stops end the head; the visit date after the plan line is the return's."
+  },
+  {
+   "id": "s4-prose-nostop",
+   "finding": "dates2-4",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Ivo Brandmere (fictional)\nPlan discussed; recheck in 6 weeks\nVisit date: 11/16/2026\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-11-16"
+    ]
+   },
+   "review": "Prose without a stop ends the head; the visit date after 'recheck in 6 weeks' is the recheck's."
+  },
+  {
+   "id": "s4-phone-proc",
+   "finding": "dates2-4",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nTelephone follow-up\nPatient: Ivo Brandmere (fictional)\nCalled the patient. Will schedule colonoscopy.\nProcedure date: 11/04/2026\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-11-04"
+    ]
+   },
+   "review": "A procedure date after 'Will schedule colonoscopy.' in a telephone note: never sent."
+  },
+  {
+   "id": "s4-dos-after-plan",
+   "finding": "dates2-4",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Ivo Brandmere (fictional)\nReturn to clinic in 3 months.\nDate of service: 01/05/2027\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2027-01-05"
+    ]
+   },
+   "review": "A DOS right after 'Return to clinic in 3 months.' may date the return: never the only answer."
+  },
+  {
+   "id": "s5-initial-direct",
+   "finding": "dates2-5",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nInitial office visit\nVisit date: 06/01/2026\nPatient: Ivo Brandmere (fictional)\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-06-01"
+    ]
+   },
+   "review": "'Initial office visit' right under the follow-up title names the initial visit: never sent."
+  },
+  {
+   "id": "s5-first-clinic-dos",
+   "finding": "dates2-5",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGastroenterology follow-up\nPatient: Ivo Brandmere (fictional)\nFirst clinic visit\nDate of service: 06/01/2026\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-06-01"
+    ]
+   },
+   "review": "'First clinic visit' over a DOS: the first visit's date, never sent."
+  },
+  {
+   "id": "s5-consultation",
+   "finding": "dates2-5",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nHepatology follow-up\nPatient: Ivo Brandmere (fictional)\nConsultation\nVisit date: 06/01/2026\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-06-01"
+    ]
+   },
+   "review": "'Consultation' over a visit date in a follow-up note: another visit's date, never sent."
+  },
+  {
+   "id": "s5-new-patient-visit",
+   "finding": "dates2-5",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Ivo Brandmere (fictional)\nNew patient visit\nVisit date: 06/01/2026\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-06-01"
+    ]
+   },
+   "review": "'New patient visit' over a visit date in a follow-up note: the first visit's, never sent."
+  },
+  {
+   "id": "s5-ctrl-office-visit",
+   "finding": "dates2-5",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nOffice visit\nVisit date: 10/05/2026\nPatient: Ivo Brandmere (fictional)\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "Control: 'Office visit' names this visit positively; its visit date is the head's own."
+  },
+  {
+   "id": "s6-progress-sedation",
+   "finding": "dates2-6",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nProgress note\nPatient: Ivo Brandmere (fictional)\nAssessment: dysphagia.\nPlan:\nEGD with possible dilation.\nSedation\nMonitored anesthesia care.\nProcedure date: 11/04/2026\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-11-04"
+    ]
+   },
+   "review": "A progress note's procedure date after a sedation block dates the planned EGD."
+  },
+  {
+   "id": "s6-consent-dateofproc",
+   "finding": "dates2-6",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nChief complaint: anemia\nHistory of present illness:\nFatigue.\nPlan:\nColonoscopy.\nInformed consent\nRisks discussed.\nDate of procedure: 11/04/2026\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-11-04"
+    ]
+   },
+   "review": "A clinic note's procedure date after a consent block dates the planned colonoscopy."
+  },
+  {
+   "id": "s6-meds-visit",
+   "finding": "dates2-6",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nChief complaint: anemia\nHistory of present illness:\nFatigue.\nPlan:\nReturn in 6 weeks.\nMedications\nContinue iron.\nVisit date: 11/16/2026\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-11-16"
+    ]
+   },
+   "review": "A visit date after the plan and a medication block may date the return: never sent."
+  },
+  {
+   "id": "s6-header-proc-date",
+   "finding": "dates2-6",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nProcedure date: 11/04/2026\nPlan:\nColonoscopy next month.\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-11-04"
+    ]
+   },
+   "review": "A procedure date in a clinic note's header dates the planned colonoscopy, not the visit."
+  },
+  {
+   "id": "s6-ctrl-documented",
+   "finding": "dates2-6",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nChief complaint: anemia\nHistory of present illness:\nFatigue.\nPlan: proceed.\nProcedure: Colonoscopy\nDate of procedure: 2026-10-14\nTechnique:\nThe colonoscope was advanced to the cecum.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-14"
+   },
+   "review": "Control: a clinic note that documents its colonoscopy keeps the procedure date as its own."
+  },
+  {
+   "id": "s6-ctrl-own-dos",
+   "finding": "dates2-6",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service: 10/05/2026\nChief complaint: anemia\nHistory of present illness:\nFatigue.\nPlan:\nColonoscopy.\nBowel preparation\nSplit-dose PEG.\nProcedure date: 11/04/2026\n",
+   "expected": {
+    "kind": "asked",
+    "never": [
+     "2026-11-04"
+    ]
+   },
+   "review": "Control with the visit's own DOS: the planned procedure date is never sent."
+  },
+  {
+   "id": "s7-return-level3",
+   "finding": "dates2-7",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nOsprey Point Liver and Digestive Clinic (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nFollow-up of cirrhosis.\nAssessment and plan\nCirrhosis with ascites. Start spironolactone. Return in 4 weeks.\nReturn visit, level 3\nDate of service: 2026-10-06\nCPT 99213\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "A 'Return visit, level 3' charge line, its code after its date: a conflict."
+  },
+  {
+   "id": "s7-code-on-line",
+   "finding": "dates2-7",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nOsprey Point Liver and Digestive Clinic (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nFollow-up of cirrhosis.\nAssessment and plan\nCirrhosis with ascites. Start spironolactone. Return in 4 weeks.\nEstablished patient visit\n99214 - Date of service: 2026-10-06\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "A charge line with the code on the date's own line: a conflict."
+  },
+  {
+   "id": "s7-report-biopsy-hcpcs",
+   "finding": "dates2-7",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nLantern Bay Endoscopy Center (fictional)\nColonoscopy report\nPatient: Ivo Brandmere (fictional)\nDate of service: 2026-10-14\nTechnique: The colonoscope was advanced to the cecum.\nFindings: one polyp biopsied.\nRecommendations:\nAwait pathology.\nColonoscopy with biopsy\nDOS 10/15/2026\nCPT/HCPCS 45380\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-14",
+     "2026-10-15"
+    ]
+   },
+   "review": "A report's 'Colonoscopy with biopsy' charge block with a CPT/HCPCS line: a conflict."
+  },
+  {
+   "id": "s7-ctrl-prior-visit",
+   "finding": "dates2-7",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nOsprey Point Liver and Digestive Clinic (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nFollow-up of cirrhosis.\nAssessment and plan\nCirrhosis with ascites. Start spironolactone. Return in 4 weeks.\nPrior visit\nCPT: 99214\nDate of service: 2019-05-01\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2019-05-01"
+    ]
+   },
+   "review": "Control: a prior visit's charge is governed; part 4 asks its earlier date (a plan date before the visit)."
+  },
+  {
+   "id": "s7-ctrl-prior-visit-later",
+   "finding": "dates2-7",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nOsprey Point Liver and Digestive Clinic (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nFollow-up of cirrhosis.\nAssessment and plan\nCirrhosis with ascites. Start spironolactone. Return in 4 weeks.\nPrior visit\nCPT: 99214\nDate of service: 2026-11-16\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "Control: a prior visit's charge with a later date stays governed; the header's date is sent."
+  },
+  {
+   "id": "s8-emdash",
+   "finding": "dates2-8",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nOsprey Point Liver and Digestive Clinic (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nFollow-up of cirrhosis.\nAssessment and plan\nCirrhosis with ascites. Start spironolactone. Return in 4 weeks.\nCharges — Date of Service: 2026-10-06\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "A charge heading joined by an em dash: a conflict."
+  },
+  {
+   "id": "s8-bracket-dos",
+   "finding": "dates2-8",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nOsprey Point Liver and Digestive Clinic (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nFollow-up of cirrhosis.\nAssessment and plan\nCirrhosis with ascites. Start spironolactone. Return in 4 weeks.\nProfessional charges (DOS): 10/06/2026\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "'Professional charges (DOS):' joined on its line: a conflict."
+  },
+  {
+   "id": "s8-after-next-steps",
+   "finding": "dates2-8",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nOsprey Point Liver and Digestive Clinic (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nFollow-up of cirrhosis.\nAssessment and plan\nCirrhosis with ascites. Start spironolactone. Return in 4 weeks.\nNext steps\nRecheck labs.\nCharge information: Date of service: 2026-10-06\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "A joined charge line inside 'Next steps': the joined heading ends that reach; a conflict."
+  },
+  {
+   "id": "s8-ctrl-next-appt-joined",
+   "finding": "dates2-8",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nOsprey Point Liver and Digestive Clinic (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nFollow-up of cirrhosis.\nAssessment and plan\nCirrhosis with ascites. Start spironolactone. Return in 4 weeks.\nNext appointment - Date of service: 11/16/2026\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "Control: 'Next appointment - Date of service:' names another occurrence; the header's date is sent."
+  },
+  {
+   "id": "s9-dots-charge",
+   "finding": "dates2-9",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service ....... 10/05/2026\nAssessment: anemia.\nCharge information\nDate of service: 10/06/2026\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "Dot leaders with spaces in the header against a charge block's date: a conflict."
+  },
+  {
+   "id": "s9-dos-nbsp",
+   "finding": "dates2-9",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDOS : 10/05/2026\nAssessment: anemia.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05"
+    ],
+    "held": [
+     "1998-01-01"
+    ]
+   },
+   "review": "'DOS' with no-break spaces around its colon: the header's date, asked."
+  },
+  {
+   "id": "s9-double-emdash",
+   "finding": "dates2-9",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nVisit date —— 10/05/2026\nAssessment: anemia.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05"
+    ],
+    "held": [
+     "1998-01-01"
+    ]
+   },
+   "review": "A double em dash after the visit date label: the header's date, asked."
+  },
+  {
+   "id": "s9-dots-unread-form",
+   "finding": "dates2-9",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service........05-Oct-26\nAssessment: anemia.\n",
+   "expected": {
+    "kind": "asked",
+    "held": [
+     "1998-01-01"
+    ]
+   },
+   "review": "Dot leaders before an unread date form: kept as unread evidence, 1998-01-01 held."
+  },
+  {
+   "id": "s9-ctrl-prose-comma",
+   "finding": "dates2-9",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service: 10/05/2026\nAssessment: anemia.\nPlan:\nOn the date of service, she was counseled.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "Control: 'On the date of service, she was counseled.' opens no field; the header's date is sent."
+  },
+  {
+   "id": "s9-dos-bracket",
+   "finding": "dates2-9",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service (DOS): 10/05/2026\nAssessment: anemia.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05"
+   },
+   "review": "Control: the installed '(DOS)' bracket form is still the header's own date, sent."
+  },
+  {
+   "id": "s9-dos-bracket-charge",
+   "finding": "dates2-9",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nOsprey Point Liver and Digestive Clinic (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service: 2026-10-05\nPlace of service: office (POS 11)\nEstablished patient\nSubjective\nFollow-up of cirrhosis.\nAssessment and plan\nCirrhosis with ascites. Start spironolactone. Return in 4 weeks.\nCharge information\nDate of service (DOS): 2026-10-06\n",
+   "expected": {
+    "kind": "conflict",
+    "values": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "review": "A charge block's '(DOS)' bracket label against the header's date: a conflict."
+  },
+  {
+   "id": "s9-bracket-reverse",
+   "finding": "dates2-9",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDOS (Date of service): 10/05/2026\nAssessment: anemia.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05"
+    ],
+    "held": [
+     "1998-01-01"
+    ]
+   },
+   "review": "'DOS (Date of service):' - a bracket and a colon before the date: asked, never lost."
+  },
+  {
+   "id": "s9-paren-date",
+   "finding": "dates2-9",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nClinic note\nPatient: Ivo Brandmere (fictional)\nDate of service: (10/05/2026)\nAssessment: anemia.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05"
+    ],
+    "held": [
+     "1998-01-01"
+    ]
+   },
+   "review": "A date in brackets after the colon: the header's own date, asked, never lost."
+  },
+  {
+   "id": "s10-hopd-sentence",
+   "finding": "dates2-10",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nHepatology follow-up\nPatient: Ivo Brandmere (fictional)\nDate of service: 10/05/2026\nSeen at the hospital outpatient department last week for paracentesis.\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05",
+    "setting": "missing"
+   },
+   "review": "A plan sentence naming the hospital outpatient department documents no setting of this visit."
+  },
+  {
+   "id": "s10-location-next",
+   "finding": "dates2-10",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Ivo Brandmere (fictional)\nDate of service: 10/05/2026\nLocation: hospital outpatient endoscopy for the next EGD\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05",
+    "setting": "missing"
+   },
+   "review": "'Location: ... for the next EGD' is the next EGD's place, not the visit's."
+  },
+  {
+   "id": "s10-asc-planned-field",
+   "finding": "dates2-10",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Ivo Brandmere (fictional)\nDate of service: 10/05/2026\nPlanned procedure site: ambulatory surgery center\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05",
+    "setting": "missing"
+   },
+   "review": "'Planned procedure site: ambulatory surgery center' names the planned procedure's place."
+  },
+  {
+   "id": "s10-ctrl-site-pos",
+   "finding": "dates2-10",
+   "source": "fix owner dates (gi3 fix round 2), self-attack shape",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNorthgate Gastroenterology (fictional)\nGI clinic follow-up\nPatient: Ivo Brandmere (fictional)\nDate of service: 10/05/2026\nSite: office, POS 11\nInterval history:\nDoing well on mesalamine. No rectal bleeding.\nAssessment:\nUlcerative colitis in remission.\n",
+   "expected": {
+    "kind": "document",
+    "value": "2026-10-05",
+    "setting": "document:office"
+   },
+   "review": "Control: 'Site: office, POS 11' in the head is the visit's place of service."
+  }
+ ]
+}
