@@ -1,0 +1,6 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Patient: Wren Fictional
+Date of service: 2026-10-16
+Colonoscopy report
+Findings: The colonoscope was advanced to the cecum. Cold forceps biopsies of a 25 mm friable mass in the sigmoid colon and cold snare polypectomy of a small 6 mm polyp in the rectum were performed.
+Impression: Sigmoid mass, biopsied. Rectal polyp, removed.

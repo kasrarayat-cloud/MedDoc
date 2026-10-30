@@ -1,0 +1,6 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Patient: Wren Fictional
+Date of service: 2026-10-16
+Colonoscopy report
+Findings: The colonoscope was advanced to the cecum. A 6 mm sessile polyp was seen in the sigmoid colon. Biopsies, which were not taken because of her anticoagulation, will be obtained at the next examination.
+Impression: Sigmoid polyp.

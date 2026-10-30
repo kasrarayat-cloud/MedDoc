@@ -1,0 +1,18 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Brightwater Valley Endoscopy Center (fictional)
+Colonoscopy report
+Patient: Marisol Testcase (fictional)
+Procedure date: 2026-10-16
+Endoscopist: Kwabena Testwood, MD (fictional)
+
+Procedure summary
+Examination | Instrument | Furthest point reached | Polypectomy
+Colonoscopy | Adult colonoscope | Cecum | Yes, cold snare (no biopsies)
+
+Findings
+The adult colonoscope was advanced to the cecum; the appendiceal orifice and ileocecal valve were photographed. A 6 mm sessile polyp in the sigmoid colon was removed with a cold snare and retrieved.
+
+Impression
+Sigmoid polyp, removed.
+
+Electronically signed: Kwabena Testwood, MD (fictional), 2026-10-16 10:47

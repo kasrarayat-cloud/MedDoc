@@ -413,6 +413,15 @@ EXCHANGE_BUNDLED = 'Part of the stent exchange the document records; the exchang
 # at ERCP, by the anatomy vocabulary's own regions (studio.gi.services.ANATOMY: 'biliary', 'pancreas').
 EXCHANGE_SYSTEMS = (('biliary', re.compile(r'\b(?:biliary|bile|choledoch\w*|CBD)\b', re.I | re.A)),
                     ('pancreas', re.compile(r'\bpancrea\w*', re.I | re.A)))
+# gi3 fix round 2 (INV2-5): an exchange's own noun phrase - the stent noun of each of its mentions and the words joined
+# to it before it, with no mark between ("Biliary stent exchanged", "ERCP with biliary stent exchange", "exchange of the
+# biliary stent") - is where its own words name its duct system. A passage a procedure line joins names the other acts
+# of that line too ("Procedures: ERCP with biliary stent exchange and pancreatic duct stent placement"): read whole, it
+# had put the biliary exchange in the pancreas as well, and its own biliary parts beside a pancreatic duct site read as
+# no part of it.
+EXCHANGE_MENTION = dict(ACTS)['stent_exchange']
+STENT_NOUN = re.compile(r'\bstents?\b', re.I | re.A)
+NOUN_PHRASE_LEAD = re.compile(r'(?:[\w/-]+[ \t]+){0,3}$', re.A)
 
 
 def _places(names: Sequence[str]) -> frozenset:
@@ -420,13 +429,28 @@ def _places(names: Sequence[str]) -> frozenset:
     return frozenset().union(*(site_covers(name) for name in names)) if names else frozenset()
 
 
+def _named_systems(passage: str) -> set:
+    """The duct systems (EXCHANGE_SYSTEMS) the noun phrase of each stent exchange ``passage`` mentions names: the words
+    joined to the mention's stent noun before it, inside the mention or right before it (three at most). One pass of
+    the mention pattern over the passage."""
+    found = set()
+    for m in EXCHANGE_MENTION.finditer(passage):
+        noun = STENT_NOUN.search(passage, m.start(), m.end())
+        if noun is None:
+            continue
+        lead = NOUN_PHRASE_LEAD.search(passage, m.start() if noun.start() > m.start() else max(0, m.start() - 60),
+                                       noun.start())
+        phrase = passage[lead.start():noun.start()] if lead is not None else ''
+        found.update(region for region, pattern in EXCHANGE_SYSTEMS if pattern.search(phrase))
+    return found
+
+
 @functools.lru_cache(maxsize=4096)
 def _exchange_places(exchange: Act) -> frozenset:
-    """Where a stent exchange is: what its own sites may cover, else the duct systems its passage names
-    (EXCHANGE_SYSTEMS); empty when it names neither. Read once per exchange act, however many parts ask (exchange_of
-    is read for every stent act, by match and by _bundled)."""
-    return _places(exchange.anatomy) or frozenset(region for region, pattern in EXCHANGE_SYSTEMS
-                                                  if any(pattern.search(ev.text) for ev in exchange.evidence))
+    """Where a stent exchange is: the duct systems its own noun phrase names (_named_systems), else what its own sites may
+    cover; empty when it names neither. Read once per exchange act, however many parts ask (exchange_of is read for every
+    stent act, by match and by _bundled)."""
+    return frozenset().union(*(_named_systems(ev.text) for ev in exchange.evidence)) or _places(exchange.anatomy)
 
 
 def exchange_of(service: DocumentedService, act: Act) -> Optional[Act]:

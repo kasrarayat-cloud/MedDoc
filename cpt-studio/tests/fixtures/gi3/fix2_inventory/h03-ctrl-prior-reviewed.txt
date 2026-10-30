@@ -1,0 +1,16 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Harrowgate Digestive Clinic (fictional)
+Colonoscopy report
+Patient: Orla Testfield (fictional)
+Date of service: 2026-10-16
+Indication: Surveillance after prior adenomas.
+Findings
+The colonoscope was advanced to the cecum. No polyps were found. The colonic mucosa was normal.
+Prior examinations reviewed
+Examination | Findings | Polypectomy
+Colonoscopy | Three tubular adenomas | Yes, cold snare
+Impression
+Normal surveillance colonoscopy.
+Plan
+Repeat colonoscopy in 5 years.
+Electronically signed: Ivo Placeholder, MD (fictional), 2026-10-16 09:12

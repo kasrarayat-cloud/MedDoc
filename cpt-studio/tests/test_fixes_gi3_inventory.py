@@ -304,7 +304,13 @@ class TemporalObjectTests(SimpleTestCase):
                 inv = read(text)
                 self.assertEqual(inv.conflicts, ())
                 self.assertFalse(acts(inv, 'gi.colonoscopy', 'snare', ('negated', 'cancelled')))
-                self.assertTrue(acts(inv, 'gi.colonoscopy', denied, ('negated',)))
+                if name == 'f4-did-not-take-after':
+                    # gi3 fix round 2 (INV2-10): "I did not take further biopsies" denies further biopsies - another
+                    # occurrence its own words name (NEG_OTHER's class) - so R1's gate records no denied biopsy, as the
+                    # installed revision read it; no biopsy is read done either
+                    self.assertFalse(acts(inv, 'gi.colonoscopy', denied, ('performed', 'negated')))
+                else:
+                    self.assertTrue(acts(inv, 'gi.colonoscopy', denied, ('negated',)))
                 self.assertEqual(status(text, '45385', 'removed with a cold snare'), 'ready')
         text = fixture('f4-biopsies-after-dilation')
         inv = read(text)

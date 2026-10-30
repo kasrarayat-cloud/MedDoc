@@ -1,0 +1,18 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Brightwater Valley Endoscopy Center (fictional)
+Colonoscopy report
+Patient: Marisol Testcase (fictional)
+Procedure date: 2026-10-16
+Endoscopist: Kwabena Testwood, MD (fictional)
+
+Procedure summary
+Examination | Instrument | Furthest point reached | Tissue sampled
+Colonoscopy | Adult colonoscope | Cecum | Yes, cold forceps
+
+Findings
+The adult colonoscope was advanced to the cecum; the appendiceal orifice and ileocecal valve were photographed. No polyps were seen. Random colon biopsies were taken with cold forceps to evaluate for microscopic colitis.
+
+Impression
+Normal colon; random biopsies taken.
+
+Electronically signed: Kwabena Testwood, MD (fictional), 2026-10-16 10:47
