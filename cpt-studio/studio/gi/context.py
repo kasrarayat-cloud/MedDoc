@@ -76,7 +76,13 @@ _DATE_LABEL = (r'(?:date' + _DATE_TIME + r'[ \t]++of[ \t]++(?:service|procedure|
 # A clock after a title's or a dated line's date ("GI visit - 10/20/2026 09:15", "Date & Time: 10/20/2026 9:15 AM";
 # refutation round 3, sk:7). Possessive: an optional run that never backtracks into the line's trailing run.
 _CLOCK = r'(?:[ \t]++(?:at[ \t]++)?+\d{1,2}:\d{2}(?::\d{2})?+(?:[ \t]*+[ap]\.?m\.?)?+)?+'
-_DATE_LABEL_SEP = r'\b[ \t]*+(?:\([ \t]*+DOS[ \t]*+\)[ \t]*+)?+[:#=\u2013|-]?+[ \t]*+'
+# gi3 fix round 1 (dates-9): a label written with an em dash (U+2014), a full stop or a full-width colon (U+FF1A) before
+# its date ("Date of service <em dash> 10/05/2026", "Date of service. 10/05/2026"; a word processor's dash, a
+# sentence-style stop, an East Asian input's colon) left no candidate at all, so the fact said no date is documented and
+# any member date was taken and sent. Its date is read, never as the note's own date by itself (_installed_form: the
+# installed revision read none of the three) - it is asked, and a member's answer equal to it is taken.
+_UNREAD_SEPARATOR = re.compile('[\u2014\uff1a.]')
+_DATE_LABEL_SEP = r'\b[ \t]*+(?:\([ \t]*+DOS[ \t]*+\)[ \t]*+)?+[:#=\u2013\u2014\uff1a.|-]?+[ \t]*+'
 SERVICE_DATE = cues.rx(r'(?<![\w/-])(?P<label>' + _DATE_LABEL + r')' + _DATE_LABEL_SEP
                        + r'(?P<date>' + _FULL_DATE + r')(?![\w/-])')
 # gi3 dates, X3: the encounter's own date-of-service label broken by ONE line break between its words, as OCR and a
@@ -1510,8 +1516,11 @@ class _TimeRuns:
                 run_ends[k] = run_ends[k + 1]
         self.run_starts, self.run_ends = tuple(run_starts), tuple(run_ends)
         masked_starts, masked_ends = [], []
+        # gi3 fix round 1 (dates-9): the labels the installed revision read, as before - a label written with a separator
+        # it did not read (_UNREAD_SEPARATOR) is asked, so its date still makes the run state a day here
         for s, e in sorted([(m.start(), m.end()) for m in DURATION.finditer(text)]
-                           + [(m.start(), m.end()) for m in SERVICE_DATE.finditer(text)]):
+                           + [(m.start(), m.end()) for m in SERVICE_DATE.finditer(text)
+                              if _UNREAD_SEPARATOR.search(text, m.end('label'), m.start('date')) is None]):
             if masked_ends and s < masked_ends[-1]:
                 masked_ends[-1] = max(masked_ends[-1], e)
             else:
@@ -1746,11 +1755,41 @@ def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int
 #   colonoscopy's date.
 # Each speaks only against a date the note labels as its own (_AGAINST_OWN): settled (_settled: asked, never sent)
 # where the note labels one, dropped as before where it labels none - so neither ever sends a date.
+#
+# gi3 fix round 1 (the independent refutation of the integrated candidate 543bae72a; interpretations 42 and 48 as
+# ruled). Each rule below only asks, or reads as the installed revision read:
+# - dates-1: RC5 took a plan heading as the document's own follow-up title - "Follow-up appointment", "Follow-up
+#   procedures", "Pending follow-up", "Recall follow-up", or a heading standing after prose ("Telephone encounter" /
+#   "Spoke with the patient ... Questions answered." / "Follow-up appointment" / "Visit date: 11/16/2026") - and sent
+#   the planned visit's date as the call's. The title now opens the document (_title_section: every line above it a
+#   letterhead line, neither a field nor prose) and names the follow-up visit itself: the follow-up is its last words
+#   or is followed only by a visit-title noun, and no return, recall or pending word stands before it;
+# - dates-2: RC5 read its whole section as an untitled header, so a "Procedure date" (an index, scheduled or recalled
+#   procedure's: "Surveillance follow-up" / "Index colonoscopy: ..." / "Procedure date: 05/01/2019"), a "Return visit
+#   date" or a results table's "Date of service" column was sent as the follow-up visit's date, or became the only
+#   answer a member may give. In the title's section only the header's own field dating THIS visit reads as an
+#   untitled header's (_TITLE: the encounter's own label or a visit date field, read 'own' - no word qualifies it - and
+#   no table column, under no heading naming another block); every other label there speaks only against the note's
+#   own date (_AGAINST_OWN), and the setting and status read as before (RC6) unless such a heading stands over them;
+# - dates-5: a heading between the plan item and the field that books the item ("Plan:" / "Colonoscopy with possible
+#   polypectomy." / "Scheduling" / "Procedure date: 11/04/2026", "Appointment details") was read as neutral, so the
+#   planned date became the only answer a member may give. Its words name another occurrence (_BOOKING), so it governs
+#   as interpretation 42 rules such a heading to; this encounter's own administrative block ("Billing" / "Procedure
+#   date: 2026-10-15", "Encounter summary" / "Visit date: ...") still ends the plan's reach and speaks;
+# - dates-7: inside a plan with no block heading, a table's column label ("Test | Date of service | Result") dates each
+#   row's item, so it is no field of the encounter's own (part 2): the plan governs it, as interpretation 48(a) rules a
+#   column label governed and as the installed reading read it - the results' date is never the only answer, and the
+#   header's own date is sent. Past a neutral heading the plan's reach has ended, and a table there still speaks
+#   (interpretation 42; the corpus's charge table under "Charge information", A20);
+# - dates-6 and dates-8: see _names_a_kind and _joined_heading.
 _READ, _GOVERNED, _SPEAKS, _LATER, _AGAINST_OWN = 'read', 'governed', 'speaks', 'later', 'against-own'
+_TITLE = 'title'  # gi3 fix round 1 (dates-2): read where its reading is the note's own ('own'), else _AGAINST_OWN
 # The encounter's own date-of-service labels: _DATE_LABEL less the visit and procedure date labels ("Visit date:",
 # "Date of procedure:"), which a plan item may own.
 _ENCOUNTER_LABEL = cues.rx(r'date' + _DATE_TIME + r'[ \t]++of[ \t]++(?:service|encounter)|DOS' + _DATE_TIME
                            + r'|(?:service|encounter)[ \t]++date' + _DATE_TIME)
+# gi3 fix round 1 (dates-2): the visit date labels of _DATE_LABEL - a follow-up title names a visit, never a procedure
+_VISIT_LABEL = cues.rx(r'date' + _DATE_TIME + r'[ \t]++of[ \t]++visit|visit[ \t]++date' + _DATE_TIME)
 # A block heading's head noun - its last word, as the section reader reads a colon-less label by the noun it ends with -
 # naming an occurrence or an item a plan or history holds: the date reader's occurrence nouns and the section reader's
 # own section nouns (sections._SECTION_NOUN: "Transplant evaluation", "Outside records", "Supportive care").
@@ -1766,6 +1805,15 @@ _OWN_KIND_HEAD = cues.rx(r'\b(?:visits?|encounters?|procedures?|exams?|examinati
 # H1: the words that make a visit or a procedure another occurrence's in a heading that carries no date qualifier: a
 # return, a recall, a pending one, or a follow up written with a space ("Return visit", "Pending procedures").
 _H1_OTHER = cues.rx(r'\b(?:return(?:ing)?|recalls?|pending|follow[ \t]+up)\b')
+# gi3 fix round 1 (dates-5): the words of a block heading that name another occurrence wherever they stand in it, not
+# only as its head noun - the occurrence nouns this note's own encounter is never named by (_OCCURRENCE_NOUNS less
+# _OWN_KIND_HEAD's: "a later booking, another discipline's or another day's work", H1's own reading) and the verb that
+# books one (schedule, scheduling: its participles "scheduled" and "rescheduled" are already the readers' words). After
+# a plan item, "Scheduling" / "Procedure date: 11/04/2026" and "Appointment details" / ... date the booked occurrence:
+# such a heading governs, as the installed reading governed it, so the planned date is never the only answer. A
+# neutral heading of this encounter's own block ("Billing", "Encounter summary") still ends the plan's reach.
+_BOOKING = cues.rx(r'\b(?:appointments?|referrals?|recalls?|surger(?:y|ies)|scans?|labs?|bloodwork|results?'
+                   r'|schedul(?:e|es|ing))\b')
 # A plan section whose own heading names an occurrence ("Next appointment", "Scheduled procedure", "Follow-up:",
 # "Pending procedures", "Referral:"): the fields right under it date that occurrence, so part 2 and B4 never read them.
 _SECTION_NAMES_OCCURRENCE = cues.rx(r'\b' + _OCCURRENCE_NOUNS + r'[ \t*#:]*+$')
@@ -1777,6 +1825,8 @@ _BLOCK_WORDS = (_sections._PLAN_LABEL, _sections._HISTORY_LABEL, _OTHER_OCCURREN
                 _OTHER_DOCUMENT) + _NOT_CURRENT_CUES
 _FIELD_LEAD = re.compile(r'[ \t]*+(?:[-*•][ \t]++|\d{1,2}[.)][ \t]++)?', re.A)
 _FIELD_BREAK_END = re.compile(r'(?:\|[ \t]*+|\t[ \t]*+|[ ]{2,}+|[.;][ \t]++)\Z', re.A)
+# gi3 fix round 1 (dates-8): a heading's words joined to the label on its line, each capitalised (_field_start)
+_JOINED_HEADING = re.compile(r"[ \t]*+(?:[A-Z][A-Za-z'’&/-]*+[ \t]++){1,6}+", re.A)
 # A numbered line is a plan's or a history's own list item, unless its number continues the numbering of the section's
 # own heading line ("4. Assessment and plan" ... "5. Charge information"): a sibling heading of a numbered template.
 _NUMBER_MARK = re.compile(r'[ \t]*+(?P<n>\d{1,2}|[A-Za-z])[.)][ \t]++', re.A)
@@ -1784,6 +1834,50 @@ _NUMBER_MARK = re.compile(r'[ \t]*+(?P<n>\d{1,2}|[A-Za-z])[.)][ \t]++', re.A)
 # follow-up note" does. A title naming a plan's content ("Bowel prep instructions", "Management plan"), another
 # occurrence ("Next follow-up", "Scheduled follow-up") or a history heads that content, and still governs.
 _FOLLOW_UP = re.compile(r'follow[- ]?up', re.A | re.I)
+# gi3 fix round 1 (dates-1): what may follow the title's follow-up word - nothing, or the visit-title noun routing reads
+# (cues._EM_TITLE_NOUN's note, visit, visit note or encounter, after an optional office or clinic): the follow-up is then
+# what the title names. Any other word after it names what the plan holds ("Follow-up appointment", "Follow-up
+# procedures", "Follow-up care", "Follow-up testing"), never the visit the note documents.
+_TITLE_TAIL = cues.rx(r'(?:[ \t]++(?:(?:office|clinic)[ \t]++)?+(?:note|visit(?:[ \t]++note)?+|encounter))?+[ \t*#]*+')
+# ... and a line above the title that is prose: a sentence's end on it (the layout's own stops)
+_PROSE_END = re.compile(r'[.!?](?![^ \t\r])')
+# gi3 fix round 1 (dates-6): the samples a procedure takes, named after it in its billing descriptor ("Colonoscopy with
+# biopsy", "Colonoscopy, specimen collection", "Colonoscopy with cytology brushing"): the words of _OTHER_DOCUMENT that
+# name a sample, not another discipline's document (a closed class: the biopsy, the specimen, the cytology sample).
+_SAMPLE = cues.rx(r'\b(?:biops(?:y|ies)|specimens?|cytology)\b')
+# ... and the coded services' own names, whose words are the service's (the "ultrasound" of "Endoscopic ultrasound", the
+# "management" of "Evaluation and management"): routing's service patterns, the "FS" abbreviation and the E/M visit's
+_SERVICE_NAMES = tuple(p for _, p in cues.SERVICE_PATTERNS) + (cues.FS_ABBREVIATION, cues.EM_VISIT)
+
+
+def _names_a_kind(body: str) -> bool:
+    """H1 (gi3 integration; _Governance.names_a_kind): whether a block heading names its block only as a kind of service.
+
+    gi3 fix round 1 (dates-6): a charge line names its service as the billing descriptor does, and the descriptor's
+    words of the plan and other-document vocabularies are the service's own - a word a coded service's name covers
+    (_SERVICE_NAMES: "Endoscopic ultrasound", "Evaluation and management, level 4") and a sample named after a procedure
+    (_SAMPLE after a coded service or a procedure named by its form, routing's gi.other word: "Colonoscopy with biopsy",
+    "Anoscopy with biopsy"). They named no other document or plan, yet "Colonoscopy with biopsy" / "CPT: 45380" / "Date of
+    service: 10/15/2026" was dropped and the header's contradicted 10/14 sent. Every other word governs as before:
+    another occurrence, a history, a status, a return or a recall wherever it stands ("Follow-up visit, level 4" names a
+    follow-up, as interpretation 48(a)'s "Return visit" names a return), and a document named beside a service
+    ("Colonoscopy pathology")."""
+    names = [m.span() for p in _SERVICE_NAMES for m in p.finditer(body)]
+    after = min((m.end() for m in itertools.chain((n for p in _SERVICE_NAMES for n in p.finditer(body)),
+                                                   _sections._S2_PROCEDURE_WORD.finditer(body))
+                 if not _SAMPLE.fullmatch(m.group())), default=None)
+
+    def described(m: re.Match) -> bool:
+        return any(s <= m.start() and m.end() <= e for s, e in names) or (
+            after is not None and after <= m.start() and _SAMPLE.fullmatch(m.group()) is not None)
+
+    for p in _BLOCK_WORDS:
+        for m in p.finditer(body):
+            if not ((p is _sections._PLAN_LABEL or p is _OTHER_DOCUMENT) and described(m)):
+                return False
+    if _H1_OTHER.search(body) or _BOOKING.search(body):  # gi3 fix round 1 (dates-5): a booking's heading is no kind
+        return False
+    return _OCCURRENCE_HEAD.search(body) is None or _OWN_KIND_HEAD.search(body) is not None
 
 
 def _plan_names_occurrence(heading: Optional[Span]) -> bool:
@@ -1797,7 +1891,7 @@ def _names_another_block(line: str) -> bool:
     ends on an occurrence noun that is not today's ("Today's visit" names this one)."""
     if _sections._service_named(line) or _sections._act_or_place_named(line) or _sections._S2_PROCEDURE_WORD.search(line):
         return True
-    if any(p.search(line) for p in _BLOCK_WORDS):
+    if any(p.search(line) for p in _BLOCK_WORDS) or _BOOKING.search(line):  # gi3 fix round 1 (dates-5): _BOOKING
         return True
     return _OCCURRENCE_HEAD.search(line) is not None and cues.TODAY.search(line) is None
 
@@ -1810,6 +1904,23 @@ def _field_start(text: str, line_start: int, label_start: int, label_end: int) -
     if lo == line_start and _FIELD_LEAD.fullmatch(text, lo, label_start):
         return True
     return _FIELD_BREAK_END.search(text, lo, label_start) is not None or _opens_field(text, label_start, label_end)
+
+
+def _joined_heading(text: str, line_start: int, label_start: int) -> bool:
+    """gi3 fix round 1 (dates-8): whether a capitalised label follows a neutral heading joined to it on its line, as a PDF
+    line join writes a heading in Title Case or capitals ("Charge Information Date of Service: 2026-10-06", "CHARGE
+    INFORMATION Date of Service: ...", "Billing Date of Service: ..."; c2:2 read only a heading word in lower case, so
+    the label was dropped and the header's contradicted date sent): the line opens with capitalised words only, within
+    the 40 characters _field_start reads - a bare label of at most six words and no verb (the section reader's own test)
+    - naming no other block (_names_another_block: "Follow Up Date of Service:" still governs, as its heading on a line
+    of its own would). Such words cannot be told from a word qualifying the date ("Expected Date of Service:"), so the
+    field speaks only against the note's own date (_binding: _AGAINST_OWN) - never the only answer. A label in prose has
+    a word in lower case before it ("Labs on the date of service: normal.") and stays governed."""
+    if label_start - line_start > 40 or not text[label_start:label_start + 1].isupper() \
+            or _JOINED_HEADING.fullmatch(text, line_start, label_start) is None:
+        return False
+    words = text[line_start:label_start].strip()
+    return _sections._bare_label(words) and not _names_another_block(words)
 
 
 def _sibling_number(text: str, sec, number: str) -> bool:
@@ -1831,7 +1942,14 @@ def _title_section(text: str, lay: Layout) -> Optional[int]:
     heading, among its first TITLE_LINES non-empty lines, a colon-less line no heading list of the section reader holds
     ("GI clinic follow-up", "Hepatology follow-up", "Liver clinic follow up"), whose only plan word is a follow-up and
     which names no other occurrence, status or history. A bare "Follow-up" is the section reader's own plan heading, and
-    stays one."""
+    stays one.
+
+    gi3 fix round 1 (dates-1): and the title names the follow-up visit itself - its follow-up is its last words, or only
+    a visit-title noun follows it (_TITLE_TAIL), and no return, recall or pending word stands before it (H1's
+    _H1_OTHER: "Pending follow-up", "Recall follow-up") - and it opens the document: every non-empty line above it is a
+    letterhead line, neither a field (_LINE_FIELD: "Patient: ...") nor prose (_PROSE_END). "Follow-up appointment",
+    "Follow-up procedures" and a follow-up heading after "Spoke with the patient ... Questions answered." head the
+    plan's content, and their section governs as before."""
     first = next((s for s in lay.sections if s.heading is not None), None)
     if first is None or first.kind != 'plan' or first.label in HEADINGS:
         return None
@@ -1841,6 +1959,11 @@ def _title_section(text: str, lay: Layout) -> Optional[int]:
         return None
     if _HEADING_OCCURRENCE.search(words) or _STATUS.search(words) or _sections._HISTORY_LABEL.search(words):
         return None
+    follow = None
+    for follow in _FOLLOW_UP.finditer(words):
+        pass
+    if follow is None or _TITLE_TAIL.fullmatch(words, follow.end()) is None or _H1_OTHER.search(words, 0, follow.start()):
+        return None
     lines = 0
     for m in re.finditer(r'[^\n]+', text):
         if m.start() > first.heading.start:
@@ -1849,6 +1972,9 @@ def _title_section(text: str, lay: Layout) -> Optional[int]:
             lines += 1
             if lines > TITLE_LINES:
                 return None
+            if m.end() <= first.heading.start and (_LINE_FIELD.match(text, m.start(), m.end()) is not None
+                                                   or _PROSE_END.search(text, m.start(), m.end()) is not None):
+                return None  # gi3 fix round 1 (dates-1): a field or prose above it - it heads a block of the body
     return first.start
 
 
@@ -1862,6 +1988,10 @@ class _Governance:
         self.text, self.lay = text, lay
         self.lines = [0] + [m.end() for m in re.finditer('\n', text)]
         self.starts, self.bodies, self.names = [], [], {}
+        # gi3 fix round 1 (dates-6, dates-3 and cost-3): each heading's H1 verdict, each line's B4 verdict and each
+        # item sentence's, read once (a long soft-wrapped item, or labels on one line under a long blank run, made every
+        # label rescan it: 100 s at 80,000 characters)
+        self.kinds, self.later, self.items = {}, {}, {}
         sentence_starts = [s for s, _ in lay.sentences]
         for n, ls in enumerate(self.lines):
             s0, e0 = _strip_span(text, ls, self.end(n))
@@ -1912,20 +2042,28 @@ class _Governance:
         block only as a kind of service: no word of _BLOCK_WORDS or _H1_OTHER (a plan, a history, another occurrence, a
         status, another document, a return or a recall), and no head noun but one this note's own encounter may be
         (_OWN_KIND_HEAD: "Office visit", "Coding review", "Procedure") or a service's name ("Colonoscopy") - never
-        "Results", "Labs", "Appointment", "Referral" or "Transplant evaluation"."""
+        "Results", "Labs", "Appointment", "Referral" or "Transplant evaluation". A billing descriptor's own words are its
+        service's (gi3 fix round 1, dates-6: _names_a_kind)."""
         k = bisect.bisect_left(self.starts, line_start) - 1
         if k < 0 or self.starts[k] < sec.start:
             return False
-        body = self.bodies[k]
-        if any(p.search(body) for p in _BLOCK_WORDS) or _H1_OTHER.search(body):
-            return False
-        return _OCCURRENCE_HEAD.search(body) is None or _OWN_KIND_HEAD.search(body) is not None
+        if k not in self.kinds:
+            self.kinds[k] = _names_a_kind(self.bodies[k])
+        return self.kinds[k]
 
     def item_names_later(self, sec, line_start: int) -> bool:
         """B4: whether the plan item right before the line starting at ``line_start`` - the last sentence of the previous
         non-empty line in its section, never the section's own heading - names a later occurrence (_LATER_CUES) and
         holds no word routing reads as a denial or a doubt (cues.DOUBT_TOKEN: "Repeat colonoscopy is not needed." names
-        none)."""
+        none). gi3 fix round 1 (dates-3, cost-3): the verdict is read once per line and once per item sentence - labels
+        on one line shared a walk back over every blank line above it, and lines soft-wrapped into one sentence each
+        rescanned it whole (quadratic: 100 s at 80,000 characters, past the member's 15 s and analyze's 60 s)."""
+        key = (sec.start, line_start)
+        if key not in self.later:
+            self.later[key] = self._item_names_later(sec, line_start)
+        return self.later[key]
+
+    def _item_names_later(self, sec, line_start: int) -> bool:
         n = bisect.bisect_right(self.lines, line_start) - 1
         while n > 0:
             n -= 1
@@ -1938,8 +2076,10 @@ class _Governance:
             ss, se = self.lay.sentence_for(end - 1, end)
             if sec.heading is not None and ss < sec.heading.end:
                 ss = sec.heading.end  # the heading's own line: only the item after the heading
-            return ss < se and not cues.DOUBT_TOKEN.search(self.text, ss, se) \
-                and any(p.search(self.text, ss, se) for p in _LATER_CUES)
+            if (ss, se) not in self.items:
+                self.items[(ss, se)] = ss < se and not cues.DOUBT_TOKEN.search(self.text, ss, se) \
+                    and any(p.search(self.text, ss, se) for p in _LATER_CUES)
+            return self.items[(ss, se)]
         return False
 
 
@@ -1959,26 +2099,35 @@ def _binding(text: str, lay: Layout, start: int, end: int, label: str = '') -> s
     document's own title opened its section (RC5); _GOVERNED - dropped, as before; _SPEAKS - the section's reach ended at
     a neutral heading, or the plan does not govern the field (part 2, B4); _LATER - governed only if its date is later
     than every date the note labels as its own (B4); _AGAINST_OWN - it speaks only against a date the note labels as
-    its own (gi3 integration, H1 and H2). ``label``: 'encounter' (date of service, DOS, service or encounter date),
-    'visit' (a visit or procedure date), or '' (a setting or patient-status statement: RC6)."""
+    its own (gi3 integration, H1 and H2); _TITLE - in the title's section, read where its reading is the note's own and
+    otherwise _AGAINST_OWN (gi3 fix round 1, dates-2). ``label``: 'encounter' (date of service, DOS, service or encounter
+    date), 'visit' (a visit or procedure date), or '' (a setting or patient-status statement: RC6)."""
     sec = lay.section_at(start)
     if sec.kind not in NOT_CURRENT_SECTIONS:
-        return _READ
-    if sec.start == _title_start(text):
         return _READ
     gov = _governance(text)
     line_start = gov.line_start(start)
     block = gov.block_heading(sec, line_start)
+    if sec.start == _title_start(text):
+        # gi3 fix round 1 (dates-2): only the header's own field dating this visit reads as an untitled header's
+        if block or (label and (lay.in_table_header(start)
+                                or (label == 'visit' and _VISIT_LABEL.fullmatch(text, start, end) is None))):
+            return _AGAINST_OWN
+        return _TITLE if label else _READ
     plan = sec.kind == 'plan'
     if block:
         if plan and label == 'encounter' and gov.names_a_kind(sec, line_start) and not lay.in_table_header(start):
             return _AGAINST_OWN  # gi3 integration, H1
         return _GOVERNED
     if block is None:
-        if not (plan and label) or _plan_names_occurrence(sec.heading) or not _field_start(text, line_start, start, end):
+        if not (plan and label) or _plan_names_occurrence(sec.heading):
             return _GOVERNED
+        if not _field_start(text, line_start, start, end):
+            # gi3 fix round 1 (dates-8): a field joined to a neutral heading on its line speaks only against the note's own
+            return _AGAINST_OWN if _joined_heading(text, line_start, start) else _GOVERNED
         if label == 'encounter':
-            return _SPEAKS  # part 2
+            # gi3 fix round 1 (dates-7): a table's column label is no field of the encounter's own: the plan governs it
+            return _GOVERNED if lay.in_table_header(start) else _SPEAKS  # part 2
     if plan and label == 'visit' and gov.item_names_later(sec, line_start):
         return _LATER
     if plan and label == 'visit' and block is None:
@@ -2126,6 +2275,8 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
     governed, later, against = [], {}, {}
 
     def bind(candidate: Optional[_Candidate], binding: str) -> None:
+        if binding == _TITLE:  # gi3 fix round 1 (dates-2): the title's header field is read only as the note's own
+            binding = _READ if candidate is None or candidate.reading == 'own' else _AGAINST_OWN
         if binding == _SPEAKS:
             candidate = _settled(candidate)
         elif binding == _LATER and candidate is not None:
@@ -2252,8 +2403,9 @@ def _own_dates_in_doubt(text: str, lay: Layout, found: tuple[_Candidate, ...]) -
         if b < len(bodies) and bodies[b] < part_end:
             continue  # the part documents its procedure: the date is that procedure's, the note's own
         moved[id(c)] = replace(c, reading='unplaced', doubt='part')
+    read = {}  # gi3 fix round 1 (dates-4, cost-2): each procedure section's account read once, never once per label
     for c in own:  # gi3 dates, part 3
-        if id(c) not in moved and _plans_procedure(text, lay, c.span.start, bodies):
+        if id(c) not in moved and _plans_procedure(text, lay, c.span.start, bodies, read):
             moved[id(c)] = replace(c, reading='unplaced', doubt='plan')
     return tuple(moved.get(id(c), c) for c in found) if moved else found
 
@@ -2268,16 +2420,21 @@ def _own_dates_in_doubt(text: str, lay: Layout, found: tuple[_Candidate, ...]) -
 _PART_ACCOUNT_CUES = tuple(p for _, p in cues.PERFORMED_CLAUSE) + (cues.COURSE,)
 
 
-def _plans_procedure(text: str, lay: Layout, pos: int, bodies: list) -> bool:
+def _plans_procedure(text: str, lay: Layout, pos: int, bodies: list, read: Optional[dict] = None) -> bool:
     """Part 3: whether the label at ``pos`` stands in a procedure section right after a plan section that documents no
-    procedure (``bodies``: where the report's technique, findings and impression sections start, in order)."""
+    procedure (``bodies``: where the report's technique, findings and impression sections start, in order). ``read``
+    keeps each section's verdict (gi3 fix round 1, dates-4 and cost-2: every own label rescanned its whole section with
+    every cue - quadratic, 72 s at 128,000 characters, past the member's 15 s and analyze's 60 s)."""
     k = bisect.bisect_right(lay.section_starts, pos) - 1  # the layout's own index: never a list per label
     if k < 1 or lay.sections[k].kind != 'procedure' or lay.sections[k - 1].kind != 'plan':
         return False
     sec = lay.sections[k]
     if bodies and bodies[-1] >= sec.start:
         return False  # a technique, findings or impression section from here on: the procedure is documented
-    return not any(p.search(text, sec.start, sec.end) for p in _PART_ACCOUNT_CUES)
+    read = {} if read is None else read
+    if k not in read:
+        read[k] = not any(p.search(text, sec.start, sec.end) for p in _PART_ACCOUNT_CUES)
+    return read[k]
 
 
 _BODY_KINDS = ('technique', 'findings', 'impression', 'assessment', 'exam', 'mdm', 'time')
@@ -2345,9 +2502,11 @@ _TIME_WORD = cues.rx(r'\btime\b')
 def _installed_form(text: str, m: re.Match) -> bool:
     """Whether a SERVICE_DATE match is written as the installed revision 057a7d398 reads a labelled date (rule N7): its
     label names no time and stands on one line (gi3 dates, X3: a label broken over two lines, BROKEN_SERVICE_DATE, was
-    never read), its separator is no cell bar, and its date is no day-first one ("14 Oct 2026", "14-Oct-2026")."""
+    never read), its separator is no cell bar (nor, gi3 fix round 1, dates-9, an em dash, a full stop or a full-width
+    colon: _UNREAD_SEPARATOR), and its date is no day-first one ("14 Oct 2026", "14-Oct-2026")."""
     return (m.group('dd') is None and _TIME_WORD.search(text, m.start('label'), m.end('label')) is None
-            and '\n' not in text[m.start('label'):m.end('label')] and '|' not in text[m.end('label'):m.start('date')])
+            and '\n' not in text[m.start('label'):m.end('label')] and '|' not in text[m.end('label'):m.start('date')]
+            and _UNREAD_SEPARATOR.search(text, m.end('label'), m.start('date')) is None)
 
 
 def _joined_candidate(text: str, label_start: int, label_end: int, joined) -> _Candidate:
@@ -2737,9 +2896,12 @@ EVIDENCE_DATE_NOTE = ('A dated title, a "Date:" line, a dated line naming the se
                       'as evidence; it is never taken as the date of service by itself.')
 FIELD_DATE_NOTE = ('A labelled date of service has other text in its field (a bracket or words after the date), so it is '
                    'not taken as the date of service by itself.')
+# gi3 fix round 1 (dates-9): the forms named are every form _installed_form refuses - a label broken over two lines
+# (gi3 dates, X3) and the separators it did not read now among them - so the note never names forms the source lacks.
 FORM_DATE_NOTE = ('A labelled date of service is written in a form this release reads but does not send by itself (a '
-                  'day-first date such as "14 Oct 2026", a label naming the time, or a table row), so it is asked; a '
-                  "member's answer with that date is taken.")
+                  'day-first date such as "14 Oct 2026", a label naming the time or broken over two lines, an em dash, '
+                  "full stop or full-width colon after the label, or a table row), so it is asked; a member's answer "
+                  'with that date is taken.')
 EMPTY_DATE_NOTE = ('Dated text states no date of its own (an empty or non-date date-of-service field, or a line whose '
                    "dates are another field's or a date of birth), so a member's date is held until the document "
                    'states it.')
