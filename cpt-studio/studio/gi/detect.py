@@ -745,15 +745,25 @@ def _memberless_negations(an: Analysis, cs: int, ce: int) -> list[tuple[str, tup
 # ("the colonoscopy, which was not performed"), the denial is that mention's own, a memberless negation as before; and a
 # denied participle that is itself an act ("which was not biopsied") is that act's anchored negation, as before. The
 # relative pronouns are a closed class (that, which, who), as cues._POST_MODIFIER_WORD reads them.
+# gi3 fix round 2 (X9): nor where the head noun is itself an act's noun, of the class the act readers read (cues._ACT_WORD:
+# "Sampling, which was not performed ...", "Specimens, which were not obtained ...", "The specimen that was not obtained
+# today ..."): the clause then denies that act, the passage's own, so it is a memberless negation as at 90377ec6f413 and
+# 45380 is excluded again, never held. A head that names a thing the act would treat ("the polyp", "the lesion",
+# "tissue") keeps the denial its own: whether that thing's act is the code's, the inventory reads (interpretation 46).
 _RELATIVE_BEFORE = re.compile(r'\b(?:that|which|who)[ \t]+$', re.A | re.I)
 _HEAD_REACH = 80  # how far before the pronoun its head's name may start (a service's longest name and a comma)
+_HEAD_WORD = re.compile(r'([A-Za-z][\w/-]*)[ \t]*,?[ \t]*$', re.A)
+_ACT_HEAD = re.compile(r'(?:' + cues._ACT_WORD + r')', re.A | re.I)
 
 
 def _relative_denial(an: Analysis, start: int) -> bool:
     """Whether the denial at ``start`` (a NOT_DONE_CLAUSE match) has a relative pronoun for its subject, and that
-    pronoun's head is no service or intervention named right before it (see above)."""
+    pronoun's head is no service or intervention named right before it, nor an act's noun (see above)."""
     pronoun = _RELATIVE_BEFORE.search(an.text, max(0, start - 12), start)
-    return pronoun is not None and not _named_before(an, pronoun.start(), max(0, pronoun.start() - _HEAD_REACH))
+    if pronoun is None or _named_before(an, pronoun.start(), max(0, pronoun.start() - _HEAD_REACH)):
+        return False
+    head = _HEAD_WORD.search(an.text, max(0, pronoun.start() - _HEAD_REACH), pronoun.start())
+    return not (head and _ACT_HEAD.fullmatch(head.group(1)))
 
 
 def _relative_denials(an: Analysis, lo: int, hi: int) -> list[tuple[int, int]]:
@@ -898,6 +908,8 @@ def _doubt(an: Analysis, ts: int, te: int) -> Optional[str]:
     if key not in an.memo:
         an.memo[key] = None
         for clause in an.lay.clauses_for(ts, te):
+            if an.lay.tables and an.lay.in_table_header(clause[0]):
+                continue  # gi3 fix round 2 (X4): a header row's labels ("Not cancelled", "Not performed") state nothing
             if an.lay.answer_cells and an.lay.answers_its_column(*clause) and not (clause[0] <= ts and te <= clause[1]):
                 # gi3 fix round 1 (EXT-5): a passage that spans a table row (a provider cites whole rows) takes no
                 # answer cell that answers its own column ("Colonoscopy | Cecum | No | No | No" under "Biopsy |
@@ -1739,6 +1751,8 @@ def _later_denial(an: Analysis, after: int, s: int, e: int, bare: bool) -> Optio
     if label is not None:
         return label
     for cs, ce in _first_clauses_in(an, after, e, DENIAL_CLAUSES):
+        if an.lay.answer_cells and an.lay.answers_its_column(cs, ce):
+            continue  # gi3 fix round 2 (X5): a cell that answers its own column ("Specimens | Not applicable") denies it
         if an.services_in(cs, ce):
             return None
         if _denies(an, cs, ce, bare=False):
@@ -2364,6 +2378,8 @@ def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Option
     does not concern."""
     found = []
     for clause in an.lay.clauses_for(start, end):
+        if an.lay.answer_cells and an.lay.answers_its_column(*clause) and not (clause[0] <= start and end <= clause[1]):
+            continue  # gi3 fix round 2 (X5): as for _doubt, a cited row takes no cue of a cell that answers its column
         found.extend(_clause_reading_cues(an, clause, start, end, em))
     if not found:
         return None
@@ -2422,8 +2438,27 @@ HELD_AFTER_A_CUT = 'uncertain: the line before it is cut after a plan, cancellat
 # gi3 fix round 1 (EXT-7): sections holds such a row (TABLE_ROW_HELD_LABEL); its own cells cannot say whether it was done
 HELD_BY_A_NOT_DONE_COLUMN = ("uncertain: its table row answers a not-done status column ('Cancelled', 'Aborted', 'Not "
                              "performed') with something other than no, so it may not have been done")
+# gi3 fix round 2 (X3, X6): sections holds a row whose landmark reach column leaves unaffirmed a reach that the row's own
+# extent covers (TABLE_ROW_REACH_HELD_LABEL): its extent and its reach disagree
+HELD_BY_A_REACH = ("uncertain: its table row leaves unaffirmed a landmark's reach that the extent it states covers "
+                   "('Cecum reached | No'), so its extent is in doubt")
+# gi3 fix round 2 (X8): a summary-table row that states no extent (sections.row_states_an_extent)
+UNSTATED_SUMMARY_ROW = 'uncertain: its summary-table row states no extent, so the summary does not say it was done'
 EM_DOCUMENTATION = ': E/M documentation of this encounter'
 SILENT = 'uncertain: no performance evidence in its sentence or section'  # validation reads this prefix as silence
+
+
+def _unstated_summary_row(an: Analysis, pos: int) -> bool:
+    """Whether ``pos`` lies in a table data row that states no extent (sections.row_states_an_extent), read once per
+    row."""
+    found = an.lay.row_at(pos)
+    if found is None:
+        return False
+    table, row = found
+    key = ('unstated-row', row[0][0])
+    if key not in an.memo:
+        an.memo[key] = not gi_sections.row_states_an_extent(an.text, table, row)
+    return an.memo[key]
 
 
 def _default_reading(an: Analysis, start: int, end: int) -> Reading:
@@ -2458,6 +2493,10 @@ def _default_reading(an: Analysis, start: int, end: int) -> Reading:
     if section.kind == 'other' and section.label == gi_sections.TABLE_ROW_HELD_LABEL:
         # gi3 fix round 1 (EXT-7): a table row whose not-done status column answers anything but no ("Cancelled | Yes")
         return Reading('uncertain', (HELD_BY_A_NOT_DONE_COLUMN,), 'cue', doubt=True)
+    if section.kind == 'other' and section.label == gi_sections.TABLE_ROW_REACH_HELD_LABEL:
+        # gi3 fix round 2 (X3, X6): its reach column contradicts the extent it states ("Extent | Cecum reached" over
+        # "Cecum | No")
+        return Reading('uncertain', (HELD_BY_A_REACH,), 'cue', doubt=True)
     hold = _SEC_hold_cue(an, section)
     if hold:
         # under a colon-less phrase line inside findings (sections, round 4 structure:4): it may tell another time or
@@ -3638,6 +3677,13 @@ def _generic_reading(an: Analysis, start: int, end: int) -> Reading:
             hold = _B2_label_hold(an, start, end)  # round 4c-2 box2:L: "Colonoscopy: ☒ Incomplete ☐ Completed"
             if hold:
                 reading = Reading('uncertain', (hold,) + reading.cues, 'cue', doubt=True)
+        if reading.status == 'performed' and reading.basis == 'section' and an.lay.tables \
+                and an.lay.section_at(start).label in gi_sections.PROCEDURE_SUMMARY_LABELS \
+                and _unstated_summary_row(an, start):
+            # gi3 fix round 2 (X8): a summary row that states no extent, and that no cell of its own doubts or denies
+            # (read first, above: "Performed | No" still contradicts), says nothing of today's service; no doubt, so the
+            # family's other evidence decides, as when the label opened nothing (90377ec6f413)
+            reading = Reading('uncertain', (UNSTATED_SUMMARY_ROW,), 'default')
         an.memo[key] = _P2_listed_under_a_denial(an, start, reading)  # round 4c-2 plan:C
     return an.memo[key]
 
@@ -4625,12 +4671,21 @@ _LIST_MARK = re.compile(r'(?:\d{1,2}[.)]?|[A-Za-z][.)]|[^\w]+)', re.A)
 # other cell ("Colonoscopy | Extent: cecum | Reached: No") reads its tail across the next cells as before (round 4c
 # declared:11). Each cell's opening word and each column's label are read once (memoised), so the work is linear however
 # many landmarks one cell holds.
+# gi3 fix round 2 (X2): only in a procedure's report (sections.a_procedure_report: its own title says so, the evidence
+# the summary label needs), and in a table that stands in a procedure, findings or technique section opened on positive
+# evidence (sections.opened_on_evidence). The cell was read in whatever section was in force, so an office follow-up's or
+# consultation's pasted table under its own title ("Colonoscopy follow-up note", "Colonoscopy consultation note",
+# "Post-colonoscopy call note", which the old title rule opens as a procedure section) or under its "Findings:" heading
+# gave the outside colonoscopy its extent, and 45385 went ready where 90377ec6f413 asked the extent. A table alone is
+# never evidence of today (interpretation 45), and a cell's value is read only under evidence (51(e)); elsewhere the
+# cell reads as before this round's tables: no extent is read from it.
 _COLUMN_LEAD = frozenset(('the', 'a'))
 _CELL_WORD = re.compile(r'\S+')
 
 
 def _extent_cell(an: Analysis, pos: int) -> Optional[tuple[int, int, str]]:
-    """The table data cell that holds ``pos`` when its column's label is an extent label (see above), else None."""
+    """The table data cell that holds ``pos`` when its column's label is an extent label and its section was opened on
+    evidence (see above), else None."""
     if not an.lay.columns:
         return None
     cell = an.lay.column_at(pos)
@@ -4639,6 +4694,14 @@ def _extent_cell(an: Analysis, pos: int) -> Optional[tuple[int, int, str]]:
     key = ('extent-column', cell[2])
     if key not in an.memo:
         an.memo[key] = bool(cues.EXTENT_HEADER.fullmatch(cell[2]))
+    if not an.memo[key]:
+        return None
+    if ('report-document',) not in an.memo:  # gi3 fix round 2 (X2): the document is a procedure's report ...
+        an.memo[('report-document',)] = gi_sections.a_procedure_report(an.text)
+    section = an.lay.section_at(cell[0])
+    key = ('evidence-section', section.start)
+    if key not in an.memo:  # ... and the table's section was opened on evidence
+        an.memo[key] = an.memo[('report-document',)] and gi_sections.opened_on_evidence(section)
     return cell if an.memo[key] else None
 
 
@@ -5696,6 +5759,8 @@ def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, 
                 continue
             for status, pattern in _REFERENCE_PATTERNS:
                 for m in pattern.finditer(text, cs, ce):
+                    if an.lay.tables and an.lay.in_table_header(m.start()):
+                        continue  # gi3 fix round 2 (X4): a column's name ("| Terminated", "| Aborted") is no statement
                     context = _generic_reading(an, m.start(), m.end())
                     if context.status in ('historical', 'planned'):
                         continue
@@ -7529,6 +7594,13 @@ def _route(an: Analysis) -> RoutingResult:
     return RoutingResult(version=ROUTING_VERSION, document_kind=kind, findings=ordered)
 
 
+# gi3 fix round 2 (X4): a table's header row names its columns; none of its words states anything (interpretation 45).
+# Its label words were read as clause cues, as the procedure's references and as doubts, so a column's own name answered
+# for every row under it: "Examination | Instrument | Furthest point reached | Terminated" over "Colonoscopy | Adult
+# colonoscope | Cecum | No" read the colonoscopy incomplete, "| Aborted" held it as an abort, and a provider's cited
+# header "| Cancelled" read the EGD done with its biopsies as cancelled. No clause cue, reference or doubt is read on a
+# header line (Layout.in_table_header, as for its landmarks and interventions); what each row's cell answers is the
+# column model's (sections._column_sense).
 @functools.lru_cache(maxsize=16)
 def _analysis(text: str, service_date: Optional[date] = None) -> tuple[Analysis, RoutingResult]:
     lay = layout(text)
@@ -7536,7 +7608,10 @@ def _analysis(text: str, service_date: Optional[date] = None) -> tuple[Analysis,
                           for label, pattern, families in cues.INTERVENTIONS for m in pattern.finditer(text))
     effective = service_date if service_date is not None else ctx.service_date_of(text)
     em, clinician_times = _em_mentions(text, lay)
-    an = Analysis(text, lay, _service_mentions(text), em, _clause_cues(text), ctx.find_dates(text), effective,
+    clause_cues = _clause_cues(text)
+    if lay.tables:  # gi3 fix round 2 (X4): a table's header row names its columns and states nothing
+        clause_cues = tuple(c for c in clause_cues if not lay.in_table_header(c.start))
+    an = Analysis(text, lay, _service_mentions(text), em, clause_cues, ctx.find_dates(text), effective,
                   interventions, clinician_times=clinician_times)
     return an, _route(an)
 

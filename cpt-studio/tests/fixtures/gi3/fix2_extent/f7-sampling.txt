@@ -1,0 +1,20 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Harrowgate Endoscopy Unit (fictional)
+Colonoscopy report
+Patient: Ingrid Vasquez-Holm (fictional)
+Date of procedure: 2026-10-20
+Endoscopist: Teodor Blackwood, MD (fictional)
+Site of care: hospital outpatient department, POS 22
+
+Indications
+Surveillance after adenomas.
+
+Findings
+The colonoscope was advanced to the cecum, identified by the appendiceal orifice and the ileocecal valve. Bowel preparation was excellent. Sampling, which was not performed because of the bleeding risk, will follow at the repeat examination.
+
+Impression
+Surveillance colonoscopy.
+
+Plan
+Repeat colonoscopy in 3 years.
+Signed: Teodor Blackwood, MD (fictional), 2026-10-20

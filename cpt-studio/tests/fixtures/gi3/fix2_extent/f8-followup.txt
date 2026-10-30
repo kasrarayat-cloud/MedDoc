@@ -1,0 +1,19 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Larkspur Digestive Health (fictional)
+Colonoscopy follow-up note
+Patient: Odalys Fenwick-Marr (fictional)
+Date of birth: 1961-02-14
+Date of service: 2026-10-21
+Place of service: office (POS 11)
+Established patient
+Reason for consultation: surveillance planning after her outside colonoscopy.
+Her outside report is summarized below.
+Examination | Instrument | Furthest point reached | Polyps
+Colonoscopy | Adult colonoscope | Cecum | Two, sigmoid colon
+Both 5 mm sigmoid polyps were removed with a cold snare; pathology showed tubular adenomas.
+Assessment:
+Two small tubular adenomas.
+Plan:
+Surveillance colonoscopy in 7 years.
+Total time on the date of service: 45 minutes.
+Electronically signed: Rosalind Achterberg, MD (fictional), 2026-10-21

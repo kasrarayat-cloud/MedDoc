@@ -1,0 +1,26 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Harrowgate Endoscopy Unit (fictional)
+Colonoscopy report
+Patient: Ingrid Vasquez-Holm (fictional)
+Date of procedure: 2026-10-20
+Endoscopist: Teodor Blackwood, MD (fictional)
+Site of care: hospital outpatient department, POS 22
+
+Indications
+Average-risk screening. No prior colonoscopy.
+
+Procedure summary
+Examination | Instrument | Furthest point reached | TI not intubated
+Colonoscopy | Adult colonoscope | Cecum | Yes
+
+Findings
+The colonoscope was advanced to the cecum, identified by the appendiceal orifice and the ileocecal valve. Bowel
+preparation was excellent. The colonic mucosa was normal throughout; no polyps were seen. 
+
+
+Impression
+Normal screening colonoscopy.
+
+Plan
+Repeat screening colonoscopy in 10 years.
+Signed: Teodor Blackwood, MD (fictional), 2026-10-20

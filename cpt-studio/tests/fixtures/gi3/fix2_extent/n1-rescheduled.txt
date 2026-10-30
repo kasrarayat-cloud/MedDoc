@@ -1,0 +1,24 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Brightwater Valley Endoscopy Center (fictional)
+Combined upper and lower endoscopy report
+Patient: Marisol Vandermeer (fictional)
+Date of birth: 1957-04-03
+Procedure date: 2026-10-16
+Endoscopist: Kwabena Thistlewood, MD, Gastroenterology (fictional)
+Site of care: freestanding ambulatory surgical center, POS 24
+Indications
+Iron deficiency anemia and epigastric burning.
+Procedure summary
+Examination | Instrument | Furthest point reached | Rescheduled
+Upper endoscopy (EGD) | Standard gastroscope | Second portion of the duodenum | No
+Colonoscopy | Adult colonoscope | - | Yes
+Upper endoscopy
+The gastroscope was passed under direct vision to the second portion of the duodenum. Patchy antral erythema. For
+Helicobacter pylori two pieces were taken from the antrum with cold forceps.
+Complications
+None.
+Impression
+Antral erythema; gastric biopsies taken.
+Plan
+Await pathology. Reschedule the lower examination with a two-day preparation.
+Electronically signed: Kwabena Thistlewood, MD (fictional), 2026-10-16 10:47
