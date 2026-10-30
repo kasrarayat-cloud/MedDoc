@@ -269,7 +269,8 @@ def _another_visit(text: str, lo: int, hi: int) -> bool:
     return False
 
 
-def _em_time_elsewhere(text: str, sentence_start: int, start: int, minutes: int, end: int) -> bool:
+def _em_time_elsewhere(text: str, sentence_start: int, start: int, minutes: int, end: int,
+                       clinician: bool = False) -> bool:
     """gi3 fix round 1 (SCOPE-3, SCOPE-5, SCOPE-7): whether an E/M time statement - its subject at ``start``, its
     minutes at [``minutes``, ``end``) - is by its own words another occasion's time, a booking or a drug
     administration's time, never the time spent on the date of the encounter (cues.EM_TIME_ELSEWHEN, _another_visit,
@@ -285,7 +286,9 @@ def _em_time_elsewhere(text: str, sentence_start: int, start: int, minutes: int,
     Round 1 read occasion words before the minutes anywhere but after them only as a placing phrase, so "Total time
     spent reviewing the notes of the previous visit: 30 minutes." was refused and "Total time: 30 minutes reviewing the
     notes of the previous visit." was counted, and an item after a comma was never read ("Visit time: 30 minutes,
-    standard return slot."). Each read stops at a word boundary (a regex reads a cut word as whole)."""
+    standard return slot."). Each read stops at a word boundary (a regex reads a cut word as whole). A clinician's time
+    (``clinician``) whose own words name a procedure (cues.EM_TIME_SERVICE) is that procedure's possibly, never the
+    visit's ("Physician time at the colonoscopy: 30 minutes.")."""
     lo = max(sentence_start, start - _EM_TIME_LEAD, 0)
     lo = max(lo, text.rfind('\n', lo, start) + 1, text.rfind(';', lo, start) + 1)
     if lo > 0 and text[lo - 1].isalnum() and lo < start:
@@ -305,25 +308,34 @@ def _em_time_elsewhere(text: str, sentence_start: int, start: int, minutes: int,
     if cues.EM_TIME_BOOKED.search(text, lo, hi) or cues.EM_TIME_ADMINISTERED.search(text, lo, hi) \
             or cues.EM_REMOTE.search(text, lo, hi):  # gi3 fix round 2: "Physician time over the phone" is a call's
         return True
+    if clinician and cues.EM_TIME_SERVICE.search(text, lo, hi):
+        return True  # gi3 fix round 2: "Physician time at the colonoscopy: 30 minutes."
     parenthesis = _EM_TIME_PARENTHESIS.match(text, end, limit)
     return parenthesis is not None and cues.EM_TIME_BOOKING_WORD.search(text, *parenthesis.span()) is not None
 
 
-# gi3 fix round 2 (self-attack beside rev2-scope-06): the visit's or the encounter's length ("Visit time", "Encounter
-# time"; cues.EM_TIME's clinician group) is the visit's time beside its marker only when its statement says nothing
-# else - a separator or "was" before the minutes, nothing after them in its clause ("Visit time: 25 minutes."). Any
-# other word may name the length it was booked for ("Visit time: 30 minutes per template.", "Encounter time per
-# schedule"), so the statement is uncertain and no basis; one its sentence frames as today's or as counselling is read
-# as before.
+# gi3 fix round 2 (self-attack beside rev2-scope-06; interpretation 51(d): ready only on positive evidence): a
+# clinician's time that its sentence does not frame (cues.EM_TIME's clinician group, which now takes the visit's and the
+# encounter's length too) is the visit's time beside its marker only when nothing stands between its subject and its
+# minutes but a separator or "was" ("Face-to-face time: 24 minutes", "Visit time: 25 minutes"); the words after the
+# minutes are read by the refusal classes (_em_time_elsewhere). 90377ec6f413 counted no such time at all; round 3
+# counted any, so a time placed at a service or an occasion outside the classes was the visit's ("Physician time for the
+# H. pylori breath test: 15 minutes."). The visit's or the encounter's length says nothing after its minutes either: any
+# word there may name the length it was booked for ("Visit time: 30 minutes per template."). Otherwise the statement is
+# uncertain and no basis; one its sentence frames as today's or as counselling is read as before (every refusal still
+# applies).
+_EM_BARE_GAP = re.compile(r'[ \t]*(?:[:=\u2013\u2014-][ \t]*|(?:was|is)[ \t]+)?', re.A | re.I)
 _EM_LENGTH_SUBJECT = re.compile(r'(?:visit|encounter)\s', re.A | re.I)
-_EM_LENGTH_GAP = re.compile(r'[ \t]*(?:[:=\u2013\u2014-][ \t]*|(?:was|is)[ \t]+)?', re.A | re.I)
 _EM_WORD = re.compile(r'\w', re.A)
 
 
-def _em_length_bare(text: str, m: re.Match) -> bool:
-    """Whether a visit or encounter length statement (see above) says nothing but its subject and its minutes."""
-    if not _EM_LENGTH_GAP.fullmatch(text, m.end('clinician'), m.start('minutes')):
+def _em_time_bare(text: str, m: re.Match) -> bool:
+    """Whether an unframed clinician time statement says nothing between its subject and its minutes, and, for the
+    visit's or the encounter's length, nothing after them in its clause (see above)."""
+    if not _EM_BARE_GAP.fullmatch(text, m.end('clinician'), m.start('minutes')):
         return False
+    if not _EM_LENGTH_SUBJECT.match(m.group('clinician')):
+        return True
     limit = min(len(text), m.end() + _EM_TIME_TAIL)
     stop = _EM_TIME_CLAUSE_END.search(text, m.end(), limit)
     return _EM_WORD.search(text, m.end(), stop.start() if stop else limit) is None
@@ -415,14 +427,14 @@ def _em_mentions(text: str, lay: Layout) -> tuple[tuple[Mention, ...], tuple[Men
             not_em_time[sentence] = cues.NOT_EM_TIME.search(text, *sentence) is not None
         if not_em_time[sentence]:
             continue
-        if _em_time_elsewhere(text, sentence[0], m.start(), m.start('minutes'), m.end()):
+        if _em_time_elsewhere(text, sentence[0], m.start(), m.start('minutes'), m.end(), m.group('clinician') is not None):
             continue  # gi3 fix round 1 (SCOPE-3, 5, 7): another occasion's, a booking, an infusion; framed or not
         if m.group('clinician') is not None:
             if sentence not in framed:
                 framed[sentence] = cues.EM_TIME_FRAME.search(text, *sentence) is not None
             if not framed[sentence]:  # "Face-to-face time: 24 minutes." - the visit's only beside its marker
-                if _EM_LENGTH_SUBJECT.match(m.group('clinician')) and not _em_length_bare(text, m):
-                    continue  # gi3 fix round 2: "Visit time: 30 minutes per template." - a length, maybe the booked one
+                if not _em_time_bare(text, m):
+                    continue  # gi3 fix round 2: "Visit time: 30 minutes per template." - uncertain, never a basis
                 clinician.append(Mention('gi.office_em', m.start(), m.end(), 'em-time', 'E/M time',
                                          str(int(m.group('minutes')))))
                 continue

@@ -198,39 +198,6 @@
    },
    "reason": "A procedure's time read as E/M time (known limit, as at the installed revision): 'Total physician time for the procedure: 25 minutes.' matches the total-time wording and names no word of NOT_EM_TIME, so an EGD report reads an office E/M performed with a time basis. Held by its setting, status and separate-E/M questions, never ready."
   },
-  "F08-ev-time": {
-   "wrong": [
-    "office E/M read as performed today"
-   ],
-   "output": {
-    "service_date": [
-     "document",
-     "2026-10-21"
-    ],
-    "office_em": "performed",
-    "em_facts": {
-     "em_basis": "time",
-     "time_minutes": "35"
-    },
-    "families": {
-     "gi.egd": "performed"
-    },
-    "inventory_em": [
-     "performed"
-    ],
-    "proposal": {
-     "code": "99213",
-     "status": "needs_clarification",
-     "questions": [
-      "setting",
-      "patient_status",
-      "separate_em"
-     ]
-    },
-    "encounter_questions": []
-   },
-   "reason": "A framed clinician time on a procedure day read as E/M time (known limit, new with the clinician-time subjects; the class of F09): 'Physician time on the date of service: 35 minutes, including the procedure ...' is framed by 'on the date of service' and names no word of NOT_EM_TIME, so an EGD report reads an office E/M performed with a time basis. A time that includes the procedure is not the visit's (AMA E/M time excludes separately reported services); refusing it is a later NOT_EM_TIME repair. Held by its setting, status and separate-E/M questions, never ready."
-  },
   "F09-ev-time": {
    "wrong": [
     "office E/M read as performed today"

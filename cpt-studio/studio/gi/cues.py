@@ -829,12 +829,14 @@ EM_TIME_ELSEWHEN = rx(r'\b(?:' + _EM_COUNT + r'\s+(?:(?:calendar|few|several|ful
                       r'|\d{1,2}(?:st|nd|rd|th))\b'
                       r'|\b(?:jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec)\.?(?=[ \t]*\d)'
                       r'|(?<![\d/.-])\d{1,2}/\d{1,2}(?![\d/])')
-# ... the nouns of a visit or a call, read by detect._another_visit: in the plural always another occasion ("over two
-# visits", "between appointments"), in the singular another one unless only a determiner or a preposition of this one,
-# and the names of this kind of visit, stand before it ("this visit", "the follow-up visit", "during the visit", "her
-# visit"; "the last visit", "the August 27 visit", "the initial consultation", "the colonoscopy visit" are others)
-EM_TIME_VISIT_NOUN = rx(r'\b(?:(?P<plural>visits|appointments|encounters|sessions|calls|consults|consultations)'
-                        r'|visit|appointment|encounter|session|call|consult|consultation)\b(?!-)')
+# ... the nouns of a visit, a call or an assessment, read by detect._another_visit: in the plural always another occasion
+# ("over two visits", "between appointments"), in the singular another one unless only a determiner or a preposition of
+# this one, and the names of this kind of visit, stand before it ("this visit", "the follow-up visit", "during the
+# visit", "her visit"; "the last visit", "the August 27 visit", "the initial consultation", "the colonoscopy
+# pre-assessment" are others)
+EM_TIME_VISIT_NOUN = rx(r'\b(?:(?P<plural>visits|appointments|encounters|sessions|calls|consults|consultations'
+                        r'|(?:pre-?)?assessments)|visit|appointment|encounter|session|call|consult|consultation'
+                        r'|(?:pre-?)?assessment)\b(?!-)')
 EM_TIME_VISIT_KIND = rx(r'(?:office|clinic|outpatient|follow[- ]?up|return|in-person|established[- ]patient'
                         r'|new[- ]patient|gi|gastroenterology|hepatology)')
 EM_TIME_THIS_VISIT_LEAD = frozenset(('this', 'the', 'her', 'his', 'their', "today's", 'today\u2019s', 'todays',
@@ -885,6 +887,14 @@ EM_PRECHARTED = rx(_EM_NOTE_SUBJECT + r'(?:was\s+|is\s+)?(?:started|opened|begun
 #   cannot tell time spent discussing an infusion from time spent giving one.
 EM_TIME_ADMINISTERED = rx(r'\b(?:infus\w*|inject\w*|transfus\w*|administ\w*|hydrat\w*|chemo\w*|drips?\b|iv\b'
                           r'|intravenous\w*|subcutaneous\w*|intramuscular\w*)')
+# - a procedure (EM_TIME_SERVICE), for a clinician's time only: one whose own words name a routed service or a
+#   procedure ("Physician time at the colonoscopy: 30 minutes.", "Face-to-face time during the procedure", "Physician
+#   time for the banding") may be that procedure's - interpretation 43 never counts a procedure's time, and
+#   90377ec6f413 counted no clinician time at all - so beside a visit marker it is no basis (gi3 fix round 2, self-attack
+#   beside rev2-scope-06). Total time and time spent read as before ("Total time spent discussing the procedure").
+EM_TIME_SERVICE = rx(_ANY_SERVICE + r'|\b(?:procedures?|procedural|endoscop\w*|anoscop\w*|proctoscop\w*|band(?:ing|ed)'
+                     r'|ligation|paracentes[ie]s|elastograph\w*|fibroscan|polypectom\w*|biops\w*|dilat(?:ion|ation|ed)'
+                     r'|manometr\w*|capsule)\b')
 # gi3 fix round 2 (self-attack beside rev2-scope-05): the words that, after a visit statement in its own clause, place
 # the visit after or upon another occasion with no date ("Office visit afterwards.", "Office visit to follow.", "Office
 # visit later.", "Office visit once the pathology is back.", "Office visit after that."): such a statement is no marker

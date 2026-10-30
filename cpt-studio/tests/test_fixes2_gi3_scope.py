@@ -159,11 +159,27 @@ class TimeStatementOwnWordsTests(unittest.TestCase):
                      'Face-to-face time at the Oct. 1 visit: 40 minutes.', 'Face-to-face time, first consultation: 60 '
                      'minutes.', 'Physician time during her hospital stay: 60 minutes.', 'Face-to-face time on the 27th: '
                      '40 minutes.', 'Face-to-face time at the colonoscopy visit: 30 minutes.', 'Face-to-face time | 40 '
-                     'minutes | previous visit', 'Physician time over the phone: 15 minutes.'):
+                     'minutes | previous visit', 'Physician time over the phone: 15 minutes.',
+                     # a procedure's time beside the title (never counted at 90377ec6f413; 43: never a procedure's)
+                     'Physician time at the colonoscopy: 30 minutes.', 'Physician time during the EGD: 20 minutes.',
+                     'Face-to-face time for the paracentesis: 30 minutes.', 'Face-to-face time during the procedure: 20 '
+                     'minutes.', 'Physician time for the banding: 15 minutes.',
+                     # the reviewer's misc.json OCC row: another occasion named as an assessment
+                     'Physician time at the colonoscopy pre-assessment: 30 minutes.',
+                     'Total time at the colonoscopy pre-assessment: 30 minutes.',
+                     # an unframed clinician time with anything between its subject and its minutes
+                     'Physician time for the H. pylori breath test: 15 minutes.'):
             text = BANNER + IBD + line + '\n'
             with self.subTest(line=line):
                 self.assertIsNone(fact_value(text, 'gi.office_em', 'time_minutes'))
                 held(self, status_of(text, '99215', ['IBD clinic note']), ['em_basis'])
+        # a framed clinician time naming a procedure (the corpus's F08 shape): no basis, and the procedure it names asks
+        # whether a separate E/M was documented
+        framed = BANNER + IBD + 'Physician time on the date of service: 30 minutes, including the colonoscopy.\n'
+        self.assertIsNone(fact_value(framed, 'gi.office_em', 'time_minutes'))
+        proposal = status_of(framed, '99215', ['IBD clinic note'])
+        self.assertEqual(proposal.status, 'needs_clarification')
+        self.assertIn('em_basis', clarified(proposal))
         for line in ('Visit time: 30 minutes, standard return slot.', 'Encounter time per schedule: 30 minutes.',
                      'Encounter time: 30 minutes as scheduled.', 'Visit time: 30 minutes per template.',
                      'Total time: 30 minutes, per schedule.', 'Total time: 30 minutes as scheduled.'):
@@ -179,7 +195,11 @@ class TimeStatementOwnWordsTests(unittest.TestCase):
                               ('Total time on the date of the encounter, including review of the previous visit notes: '
                                '40 minutes.', '40'), ('Visit time: 25 minutes.', '25'),
                               ('Total time on the date of the encounter was 32 minutes, including review of the prior '
-                               'colonoscopy report.', '32')):
+                               'colonoscopy report.', '32'),
+                              ('Total time spent discussing the procedure, risks and alternatives: 30 minutes.', '30'),
+                              ('Face-to-face time : 24 minutes, more than half of it spent couns-\neling about diet.',
+                               '24'),
+                              ('Total time spent on the assessment and counseling: 30 minutes.', '30')):
             text = BANNER + IBD + line + '\n'
             with self.subTest(line=line):
                 self.assertEqual(fact_value(text, 'gi.office_em', 'time_minutes'), minutes)
