@@ -2257,37 +2257,53 @@ class _Governance:
         return self.plan
 
     def statement_names_later(self, line_start: int) -> bool:
-        """gi3 fix round 2 (dates2-4): whether the nearest non-empty line above the line starting at ``line_start``, past
-        the section headings between, is a statement of a plan outside any plan or history section - prose, or a SOAP
-        line ("P: ..."), never a field with a label of its own ("Next visit: 01/05/2027", "Visit type: Follow-up") - whose
-        last sentence holds a clause cue routing reads as planned (cues.PLANNED_CLAUSE: "She will keep her clinic
-        appointment.", "Return to clinic in 3 months.", "Follow-up visit to be scheduled.") and no denial or doubt. A
-        visit note's untitled section has no plan section for B4 to read, so the visit date after such a statement was
-        read as the note's own and the booked visit's date sent ("Clinic note" / ... / "Return to clinic in 3 months."
-        / "Visit date: 01/05/2027"; the installed revision sent it too). Read once per line."""
+        """gi3 fix round 2 (dates2-4): whether the line starting at ``line_start`` stands in the block a statement of a
+        plan heads, outside any plan or history section: walking up past the blank lines, the section headings and the
+        other fields of the block (a line with a label of its own: "Appointment: 01/05/2027 10:30", "Location: main
+        clinic"), the first line whose last sentence holds a clause cue routing reads as planned (cues.PLANNED_CLAUSE:
+        "She will keep her clinic appointment.", "Return to clinic in 3 months.", "Follow-up visit to be scheduled.",
+        a field's own value "Disposition: Return to clinic in 3 months.", never its label: "Next visit: 01/05/2027" names
+        the next visit, not the date below it) and no denial or doubt; any other statement - prose, or a SOAP line
+        ("P: ...") - ends the walk. A visit note's untitled section has no plan section for B4 to read, so
+        the visit date after such a statement was read as the note's own and the booked visit's date sent ("Clinic note"
+        / ... / "Return to clinic in 3 months." / "Visit date: 01/05/2027"; the installed revision sent it too), and so
+        was one after the booking's other fields. Each line is walked once: a field already walked past answers for the
+        block above it (statements)."""
         if line_start not in self.statements:
             self.statements[line_start] = self._statement_names_later(line_start)
         return self.statements[line_start]
 
     def _statement_names_later(self, line_start: int) -> bool:
         n = bisect.bisect_right(self.lines, line_start) - 1
+        walked, found = [], False
         while n > 0:
             n -= 1
             ls, le = self.lines[n], self.end(n)
             if ls in self.heading_lines or _blank_to(self.text, ls, le):
                 continue
             if self.lay.section_at(ls).kind in NOT_CURRENT_SECTIONS:
-                return False  # a plan's own item is B4's (item_names_later), a history's never names a later one
+                break  # a plan's own item is B4's (item_names_later), a history's never names a later one
             s, e = _strip_span(self.text, ls, le)
             field = _HEAD_FIELD.match(self.text, s, e)
-            if field is not None and sum(ch.isalpha() for ch in self.text[s:field.end() - 1]) >= 2:
-                return False  # a field with a label of its own
-            ss, se = self.lay.sentence_for(e - 1, e)
+            if field is not None and sum(ch.isalpha() for ch in self.text[s:field.end() - 1]) < 2:
+                field = None  # a SOAP line ("P: ...") is a statement
+            ss, se = self.lay.sentence_for(e - 1, e)  # the last sentence: of a field, only its own value's words
+            ss = ss if field is None else max(ss, field.end())
             if (ss, se) not in self.clauses:
                 self.clauses[(ss, se)] = ss < se and not cues.DOUBT_TOKEN.search(self.text, ss, se) \
                     and any(p.search(self.text, ss, se) for p in _PLANNED_CUES)
-            return self.clauses[(ss, se)]
-        return False
+            if self.clauses[(ss, se)]:
+                found = True
+                break
+            if field is None:
+                break  # a statement naming no later occurrence ends the block
+            if ls in self.statements:  # a field of the block, walked before: it answers for the block above it
+                found = self.statements[ls]
+                break
+            walked.append(ls)
+        for ls in walked:
+            self.statements[ls] = found
+        return found
 
     def column_label(self, line_start: int, start: int, end: int) -> bool:
         """gi3 fix round 2 (dates2-3): whether the label at [start, end) is a cell of its own in a row whose cells are
@@ -2506,8 +2522,11 @@ def _binding(text: str, lay: Layout, start: int, end: int, label: str = '') -> s
             # ... and a setting or status there reads only where its line names no other occurrence outside a coded
             # service's name ("Location: hospital outpatient endoscopy for the next EGD" is the next EGD's place)
             return _GOVERNED if gov.line_names_another(line_start) else _READ
-        if lay.in_table_header(start) and not gov.patient_header(line_start):
-            return _AGAINST_OWN  # a table's column dates its rows, unless the table is the patient's header
+        if (lay.in_table_header(start) or gov.column_label(line_start, start, end)) and not gov.patient_header(line_start):
+            # a table's column dates its rows, unless the table is the patient's header - the table model's, or a row of
+            # cells by its own structure (a results table whose rows blank lines separate is no table to the model, and
+            # its date was the only answer)
+            return _AGAINST_OWN
         if label == 'visit' and _VISIT_LABEL.fullmatch(text, start, end) is None:
             return _AGAINST_OWN  # gi3 fix round 1 (dates-2): a follow-up title names a visit, never a procedure
         if _qualified_by_its_words(text, start, end):

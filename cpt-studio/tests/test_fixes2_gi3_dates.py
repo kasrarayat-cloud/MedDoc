@@ -15,6 +15,9 @@ uncertain binding asks: a date is never sent, never dropped so that another is s
 - 51(c)(3), dates2-9: a label's separator is any short run of punctuation and blanks, and its words may be joined by any
   horizontal blank; only the installed revision's own forms are ever sent by themselves;
 - cost-r2-1, cost-r2-2: the head is one pass over the section's lines, and the CPT pattern is gone.
+The fix owner's self-attack (header and layout variants of every input, run against the installed revision) found six
+shapes where these rules themselves sent a date the installed revision asked, or left a planned or results date the
+only answer; each is pinned beside the rule it corrects ("self-attack" in the test's comment).
 
 The expected answers live outside the reader: tests/fixtures/gi3/fix2-dates/cases.json holds the reviewer's inputs
 (texts copied verbatim) and the fix owner's own shapes beside each finding, each with its source-reviewed expectation;
@@ -171,6 +174,24 @@ class TitleHeadTests(CaseAsserts, SimpleTestCase):
             with self.subTest(qualified=qualified):
                 self.assertEqual(sent(text), '2026-10-05')
 
+    def test_a_row_of_cells_in_the_head_is_a_table_whatever_the_table_model_reads(self):
+        # self-attack: a results table whose rows blank lines (or a PDF wrap) separate is no table to the table model,
+        # so its column label read as the head's own and the results' date was the only answer; its row's own cells say
+        # it is a column (_Governance.column_label), and only the patient's header table is read as the head's
+        for spacing in ('\n', '\n\n'):
+            text = follow_up('Hepatology follow-up', PATIENT + spacing.join(
+                ('Test | Date of service | Result', 'ALT | 2026-09-30 | 41 U/L', 'AST | 2026-09-30 | 38 U/L')) + '\n'
+                + HISTORY)
+            with self.subTest(spacing=repr(spacing)):
+                self.assertIsNone(sent(text))
+                self.assertEqual(answers(text, ('2026-09-30', STRANGER)), {'2026-09-30': 'taken', STRANGER: 'taken'})
+            header = follow_up('GI clinic follow-up', spacing.join(
+                ('Patient | Date of birth | Visit date | Provider',
+                 'Ivo Brandmere (fictional) | 1961-03-14 | 10/05/2026 | Priya Halvorsen-Mbeki, MD (fictional)')) + '\n'
+                + HISTORY)
+            with self.subTest(spacing=repr(spacing), table='patient header'):
+                self.assertEqual(answers(header, ('2026-10-05', STRANGER)), {'2026-10-05': 'taken', STRANGER: 'held'})
+
     def test_a_follow_up_title_names_a_visit_never_a_procedure(self):
         text = follow_up('GI clinic follow-up', PATIENT + 'Procedure date: 11/04/2026\n' + HISTORY)
         self.assertIsNone(sent(text))
@@ -306,6 +327,28 @@ class VisitNoteTests(CaseAsserts, SimpleTestCase):
                         self.assertIsNone(sent(text))
                         self.assertEqual(answers(text, ('2026-11-04', '2026-10-05')),
                                          {'2026-11-04': 'taken', '2026-10-05': 'taken'})
+
+    def test_a_plan_statement_heads_the_fields_after_it(self):
+        # self-attack: the booking's other fields between the statement and the visit date ("Appointment: 01/05/2027
+        # 10:30", "Location: main clinic") left the visit date read as the note's own, and the booked visit's date sent
+        # (as installed); the walk reads past the block's fields, and a field's own value may state the plan
+        for block, booked in (('Return to clinic in 3 months.\nAppointment: 01/05/2027 10:30\nVisit date: 01/05/2027\n',
+                               '2027-01-05'),
+                              ('She will keep her clinic appointment.\nLocation: main clinic\nProvider: Priya '
+                               'Halvorsen-Mbeki, MD (fictional)\nVisit date: 11/16/2026\n', '2026-11-16'),
+                              ('Disposition: Return to clinic in 3 months.\nVisit date: 01/05/2027\n', '2027-01-05'),
+                              ('Return to clinic in 3 months.\nVisit date: 01/05/2027\nVisit date: 01/05/2027\n',
+                               '2027-01-05')):
+            text = BANNER + LETTERHEAD + 'Clinic note\n' + PATIENT + HISTORY + block
+            with self.subTest(block=block):
+                self.assertIsNone(sent(text))
+                self.assertEqual(answers(text, (booked, STRANGER)), {booked: 'taken', STRANGER: 'taken'})
+        # a statement naming no later occurrence ends the block: the footer's visit date reads as before
+        for block in ('Continue mesalamine.\nProvider: Priya Halvorsen-Mbeki, MD (fictional)\nVisit date: 10/05/2026\n',
+                      'Date of birth: 1961-03-14\nVisit date: 10/05/2026\n'):
+            text = BANNER + LETTERHEAD + 'Clinic note\n' + PATIENT + HISTORY + block
+            with self.subTest(block=block):
+                self.assertEqual(sent(text), '2026-10-05')
 
     def test_a_plan_statement_in_a_visit_notes_untitled_section(self):
         for statement in ('She will keep her clinic appointment.', 'Return to clinic in 3 months.',
