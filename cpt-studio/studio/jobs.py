@@ -448,8 +448,13 @@ def _remade_context(job):
     if _run_answers(last_run, revision, fresh):
         enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=fresh, provider_run=last_run,
                 key=f'assess:{fresh.pk}:{last_run.pk}', requested_by=job.requested_by)
-    elif job.kind == Job.PREDICT or gi_context.is_member_conflict((fresh.facts or {}).get('service_date')):
-        # the request a member's action queued (an upload, a date change, a Resume, a reconciliation), or the hold
+    elif (job.kind == Job.PREDICT and job.idempotency_key != _upgrade_predict_key(context)
+          or gi_context.is_member_conflict((fresh.facts or {}).get('service_date'))):
+        # the request a member's action queued (an upload, a date change, a Resume, a reconciliation), or the hold. An
+        # upgrade's own predict, queued under an earlier revision at a stage that never sends, is no member's request:
+        # remade again, it queues the upgrade's predict for the fresh context below, which never sends either (the
+        # narrow release's second refutation, STATE2N-1: 90377ec6f413's after-upgrade predict, still queued at the
+        # swap, was remade into this ordinary predict and sent)
         _queue_predict(encounter, revision, fresh, key=f'predict:{fresh.pk}', requested_by=job.requested_by)
     else:
         # Refutation r1, migrate-5 (ec5): this stage never sends - an assess the earlier revision queued or a member

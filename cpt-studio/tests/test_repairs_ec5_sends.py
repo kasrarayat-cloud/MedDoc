@@ -744,6 +744,22 @@ class UpgradeStopsOnlyWhereItWouldSendTests(Base):
         self.assertEqual((latest.kind, latest.state, latest.error),
                          (models.Job.PREDICT, models.Job.CANCELLED, jobs.REMADE_REQUEST_MESSAGE))
 
+    def test_an_earlier_revisions_upgrade_predict_queued_at_the_swap_stays_one(self):
+        """The narrow release's second refutation, STATE2N-1: the installed revision queues its own upgrade predict
+        (predict:<context>:after-upgrade) when it remakes an earlier context at a stage that never sends. Still queued at
+        the swap, that predict was remade here into a member's ordinary predict and sent. It stays an upgrade's predict,
+        which stops where it would send."""
+        encounter_id, context = self.installed_upload(REPORT_NEWLY_DATED, read_date=False)
+        self.installed_run(encounter_id, None)  # the installed pair's request, with no date line, answered
+        encounter = self.encounter(encounter_id)
+        jobs.enqueue(models.Job.PREDICT, encounter=encounter, revision=encounter.current_revision, context=context,
+                     key=jobs._upgrade_predict_key(context), requested_by=self.reviewer)
+        drain()
+        self.assertEqual(self.sent(), 1)  # the installed revision's own request only
+        latest = review.latest_job(self.encounter(encounter_id))
+        self.assertEqual((latest.kind, latest.state, latest.error),
+                         (models.Job.PREDICT, models.Job.CANCELLED, jobs.REMADE_REQUEST_MESSAGE))
+
     def test_with_the_provider_disabled_now_nothing_is_stopped(self):
         encounter_id, context = self.installed_upload(REPORT_NEWLY_DATED, read_date=False)
         self.installed_job(encounter_id, models.Job.ASSESS, context, run=None)

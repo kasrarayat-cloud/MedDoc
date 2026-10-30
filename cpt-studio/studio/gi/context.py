@@ -376,6 +376,9 @@ class _Candidate:
     # answer); 'part' - it stands in a later numbered part that documents no procedure ('unplaced'); 'order' - it is
     # earlier than a date the note reads as an earlier occurrence's ('unplaced').
     doubt: str = ''
+    # GI round 3, the narrow release: a date of service the note's own closing charge block states (_service_dates),
+    # read 'beside' and quoted as _ChargeSpan - asked, never a member's answer: the block may record another occurrence
+    charge: bool = False
 
     @property
     def spans(self) -> tuple[Span, ...]:
@@ -1688,13 +1691,17 @@ def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int
 # 2026-10-06" at the end of its "Assessment and plan" - was dropped, and the header's contradicted 2026-10-05 was sent.
 # Now the encounter's own date-of-service label (date of service, DOS, service or encounter date; never a visit or
 # procedure date, which a plan may book) in the note's own closing charge block speaks against the note's own labelled
-# date: where they differ the date is a conflict, asked, with no date sent. It speaks only beside an own date that
-# differs, so nothing is ever newly sent: with no own date it stays dropped, as installed. The closing charge block is
-# read on positive evidence only (_closing_charge_block), because a charge or billing block may belong to another
-# occurrence - a copied report's, a booking's, a prior visit's late charge - and asking would offer that occurrence's
-# date as a member's answer (the narrow release's refutation, dates-n3): the block closes the document, is headed by a
-# heading of this closed class, holds only fields, codes, cells and signature lines, names no other occurrence, and its
-# date is no date of birth (rule N2).
+# date: where they differ the date is asked, with no date sent. It is read 'beside' (df-d:4): quoted as the question's
+# evidence, but never a value a documented conflict lists nor a member's answer (_ChargeSpan, CHARGE_DATE_NOTE). The
+# block may record this encounter or another occurrence, and only the document's own date - the date the installed
+# revision sends - is ever taken. The second refutation of the narrow release showed why no guard on the block's words
+# or layout can decide that: a copied note's or report's block, a booking, a late or pathology charge, an appended
+# telephone encounter, another patient's block and a date of birth in a form the reader does not read each passed the
+# guards below, and their dates were then taken as a member's answer and sent. The date speaks only beside an own date
+# that differs, so nothing is ever newly sent: with no own date it stays dropped, as installed. The guards stay, to ask
+# only where the block is likely the note's own (_closing_charge_block): it closes the document, is headed by a heading
+# of this closed class, holds only fields, codes, cells and signature lines, names no other occurrence, belongs to no
+# copied note, and its date is no date of birth (rule N2).
 CHARGE_HEADINGS = frozenset((
     'charge', 'charges', 'charge information', 'charge info', 'charge details', 'charge capture', 'charge entry',
     'charge summary', 'charges and coding', 'coding and charges', 'billing', 'billing information', 'billing info',
@@ -1709,6 +1716,7 @@ _CHARGE_ELSEWHERE = cues.rx(r'\b(?:prior|previous(?:ly)?+|last|late|earlier|inde
 _SIGNATURE_LINE = cues.rx(r'(?:electronically[ \t]++|e-)?+(?:signed|co-?signed|dictated|transcribed|attest(?:ed|ation))\b')
 _HEADING_MARKS = re.compile(r'\A[\s#*>•\-–—\d.)(]*+')
 _HEADING_TAIL = re.compile(r'[\s:.*\-–—]*+\Z')
+_JOINED_DASH = re.compile(r'[ \t]+[—–-][ \t]+')  # a heading joined to its first field by a dash ("Charges — Date of ...")
 CLOSING_REACH_LINES = 30  # non-empty lines read back from the document's end for its closing charge block
 CHARGE_HEADING_REACH = 120  # a longer line is never a heading, and never read for one
 
@@ -1758,8 +1766,8 @@ def _closing_charge_block(text: str, rows: '_Rows') -> Optional[tuple[int, int]]
     """(the start of its heading's line, the document's end) of the note's own closing charge block, or None. Read back
     from the end over at most CLOSING_REACH_LINES non-empty lines, each a field ("Diagnosis: ..."), a code or cell line (a
     digit or a cell bar in it: "CPT 99214", "99214 | Office visit | 1") or a signature line, until a line headed by a
-    charge heading of CHARGE_HEADINGS (alone, or joined before a field on its line: "Charge information: Date of service:
-    ..."). Any other line - prose, another heading, a descriptor - ends the search with None, and so does a word placing
+    charge heading of CHARGE_HEADINGS (alone, or joined before a field on its line by a colon or a dash: "Charge
+    information: Date of service: ...", "Charge information — Date of service: ..."). Any other line - prose, another heading, a descriptor - ends the search with None, and so does a word placing
     the block in another occurrence (_CHARGE_ELSEWHERE) on any of its lines, or a line longer than CHARGE_HEADING_REACH
     (never read: the heading reader's tail pattern is quadratic in a line's run of marks or spaces). Read once per
     document."""
@@ -1776,8 +1784,9 @@ def _closing_charge_block(text: str, rows: '_Rows') -> Optional[tuple[int, int]]
         if _heading_words(line) in CHARGE_HEADINGS:
             return ls, len(text)
         colon = line.find(':')
-        if colon > 0 and _heading_words(line[:colon]) in CHARGE_HEADINGS:
-            return ls, len(text)  # the heading joined to its first field
+        if colon > 0 and (_heading_words(line[:colon]) in CHARGE_HEADINGS
+                          or _heading_words(_JOINED_DASH.split(line[:colon], 1)[0]) in CHARGE_HEADINGS):
+            return ls, len(text)  # the heading joined to its first field, by a colon or a dash
         if not (0 < colon <= 60 or '|' in line or any(ch.isdigit() for ch in line)
                 or _SIGNATURE_LINE.match(line.strip())):
             return None
@@ -1877,12 +1886,14 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
             if (value is None or value.isoformat() in own or not block[0] <= m.start() < block[1]
                     or value in births):
                 continue  # beside an own date it agrees with, outside the closing charge block, or a date of birth
-            # read as any label is: one its own words place in another occurrence ("Next date of service") reads
-            # 'aside', which never speaks (_date_fact)
+            # 'beside' (df-d:4): it speaks - the date is asked - and is quoted, but is never a value a documented conflict
+            # lists nor a member's answer (_ChargeSpan): the block may record another occurrence. One its own words place
+            # in another occurrence ("Next date of service") reads 'aside', which never speaks (_date_fact)
             kind, start = _labelled_kind(text, m.start('label'), m.end('label'), m.start('date'), m.end(), value)
-            found.append(_Candidate(_span(text, start, m.end()), value.isoformat(), 'label', _READING[kind], 'read',
+            found.append(_Candidate(_span(text, start, m.end()), value.isoformat(), 'label',
+                                    'aside' if _READING[kind] == 'aside' else 'beside', 'read',
                                     alone=_alone_in_field(text, m.end(), rows.line(m.start())[1]),
-                                    installed=_installed_form(text, m)))
+                                    installed=_installed_form(text, m), charge=True))
     return _own_dates_in_doubt(text, lay, _after_another_header(text, lay, tuple(found) + _title_candidates(text, lay)))
 
 
@@ -2436,6 +2447,10 @@ PART_DATE_NOTE = ('A date of service is labelled in a later numbered part of the
 ORDER_DATE_NOTE = ('A labelled date of service is earlier than a date the document gives for an earlier occurrence (a '
                    'prior, last, recent or index one), so the two cannot both be right and it is not taken as '
                    'the date of service by itself.')
+# GI round 3, the narrow release: why the date is asked when the note's closing charge block states another date
+CHARGE_DATE_NOTE = ("The charge or billing block that ends the document states a date of service other than the "
+                    "document's own, and the block may record this encounter or another occurrence, so the date is "
+                    "asked; the block's date is never taken as a member's answer.")
 
 
 def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
@@ -2515,13 +2530,14 @@ def _date_fact(found: tuple[_Candidate, ...], answers: Optional[set] = None) -> 
         (not own and any(c.source == 'label' and c.form == 'read' and c.reading == 'own' and c.alone and not c.installed
                          for c in found), FORM_DATE_NOTE),
         (not own and any(c.source != 'label' and c.form == 'read' for c in found), EVIDENCE_DATE_NOTE),
-        (any(c.reading == 'beside' and not c.doubt for c in unusable)
+        (any(c.reading == 'beside' and not c.doubt and not c.charge for c in unusable)
          or not own and any(c.form == 'read' and c.reading in ('aside', 'other', 'unplaced') and not c.doubt
                             for c in found),
          UNPLACED_DATE_NOTE),
         (any(c.doubt == 'birth' for c in (speaks if lead else found)), BIRTH_DATE_NOTE),
         (any(c.doubt == 'part' for c in (speaks if lead else found)), PART_DATE_NOTE),
-        (any(c.doubt == 'order' for c in (speaks if lead else found)), ORDER_DATE_NOTE)) if present)
+        (any(c.doubt == 'order' for c in (speaks if lead else found)), ORDER_DATE_NOTE),
+        (any(c.charge for c in unusable), CHARGE_DATE_NOTE)) if present)
     if lead and len(values) == 1 and all(c.form == 'read' and c.value in values for c in speaks):
         fact = _fact('service_date', [(c.value, s) for c in lead + support for s in c.spans])
         return fact if own else Fact('service_date', None, 'missing', fact.evidence, FORM_DATE_NOTE)
@@ -2569,6 +2585,14 @@ class _BirthSpan(_ElsewhereSpan):
     round, dates lens F1): never a member's answer, as any _ElsewhereSpan; merge_user_values says why it is held."""
 
 
+class _ChargeSpan(_ElsewhereSpan):
+    """A date of service the note's own closing charge block states, differing from the document's own (GI round 3, the
+    narrow release; _service_dates): never a member's answer, as any _ElsewhereSpan, because the block may record this
+    encounter or another occurrence - the second refutation of the release found a copied note's, a booking's, a late
+    or pathology charge's, an appended telephone encounter's and another patient's block among them, and a date of birth
+    auto-filled in a form the reader does not read. merge_user_values says why it is held."""
+
+
 class _DoubtSideSpan(Span):
     """Evidence of a date asked because the own-dates-in-doubt rules (BIRTH, ORDER, PART) put the note's own labelled
     date in doubt and no other own date remains (fix round 2, the differential round's F-1), that states a date the
@@ -2588,10 +2612,13 @@ class _DoubtSideSpan(Span):
 def _evidence_spans(c: _Candidate, answers: Optional[set] = None) -> tuple[Span, ...]:
     """A candidate's spans as the date's evidence: _ElsewhereSpan for a label or title read as another occurrence's or
     another document's (fr-di:3), or as maybe another occurrence's (df-d:4, 'beside'); _BirthSpan for a labelled date
-    equal to the document's date of birth (fix round, F1); ``answers`` (an own date in doubt and none other, fix round
+    equal to the document's date of birth (fix round, F1); _ChargeSpan for a date of service the note's closing charge
+    block states (GI round 3, the narrow release); ``answers`` (an own date in doubt and none other, fix round
     2, F-1: the dates the reading without the doubt answers with): _DoubtSideSpan for a span stating any other date."""
     if c.doubt == 'birth':
         return tuple(_BirthSpan(s.start, s.end, s.text) for s in c.spans)
+    if c.charge:  # GI round 3, the narrow release: a date the note's closing charge block states
+        return tuple(_ChargeSpan(s.start, s.end, s.text) for s in c.spans)
     if c.source in ('label', 'title') and c.reading in ('aside', 'other', 'beside'):
         return tuple(_ElsewhereSpan(s.start, s.end, s.text) for s in c.spans)
     if answers is not None:
@@ -2665,6 +2692,12 @@ USER_BIRTH_NOTE = (_USER_CONFLICT_PREFIX + "{user}; the document gives that date
                    "this service does not read the date-of-service label stating it ({document}) as this encounter's "
                    'date of service. Both are kept and neither is used: correct the metadata, clear it, or add an '
                    'addendum to the document.')
+# GI round 3, the narrow release: a member's date equal to a date the note's closing charge block states (_ChargeSpan) -
+# held, and said to be so. Same prefix.
+USER_CHARGE_NOTE = (_USER_CONFLICT_PREFIX + "{user}; this service reads that date in the charge or billing block that "
+                    "ends the document ({document}), which may record this encounter or another occurrence, and does "
+                    "not take it as this encounter's date of service. Both are kept and neither is used: correct the "
+                    'metadata, clear it, or add an addendum to the document.')
 
 
 def is_member_conflict(fact) -> bool:
@@ -2762,11 +2795,13 @@ def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> di
             elsewhere = [ev for ev in documented.evidence if isinstance(ev, _ElsewhereSpan)
                          and value in _span_dates(ev)] if name == 'service_date' else []
             births = [ev for ev in elsewhere if isinstance(ev, _BirthSpan)]  # fix round, F1
+            charges = [ev for ev in elsewhere if isinstance(ev, _ChargeSpan)]  # GI round 3, the narrow release
             shown = ', '.join('\u201c' + ' '.join(ev.text.split())[:60] + '\u201d'
-                              for ev in (births or elsewhere or documented.evidence)[:3])
+                              for ev in (births or charges or elsewhere or documented.evidence)[:3])
             merged[name] = Fact(name, None, 'conflict', documented.evidence,
-                                (USER_BIRTH_NOTE if births else USER_ELSEWHERE_NOTE if elsewhere
-                                 else USER_CONFLICT_NOTE).format(user=value, document=shown))
+                                (USER_BIRTH_NOTE if births else USER_CHARGE_NOTE if charges
+                                 else USER_ELSEWHERE_NOTE if elsewhere else USER_CONFLICT_NOTE).format(
+                                    user=value, document=shown))
             continue
         merged[name] = Fact(name, value, 'user', (), USER_NOTE)
     return merged

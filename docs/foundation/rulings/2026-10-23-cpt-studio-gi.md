@@ -1042,3 +1042,36 @@ What it means for this change (recorded by the receiving session, before buildin
   change; interpretations 42-48 and 50-52 describe the integration branch's rules and do not ship with this release.
 - One focused refutation of the small diff, then the PR, the install and the live walk.
 - Interpretation 41 stands: other contradicted-date shapes remain known limits, and no reliable-coding claim is made.
+
+### Session interpretation, 2026-10-30 (7c8d38da, the narrow release, after its refutations) — recorded, not owner-ruled
+
+53. **The narrow release, as its two refutations refined it.**
+    (a) *Which charge block asks.* The decision's wording is "a charge or billing block's date now becomes a question".
+        The first narrow refutation showed that such a block can belong to another occurrence (dates-n3, dates-n4). Its
+        examples were a copied note's or report's block, a booking, a prior visit's late charge, a pathology charge, and
+        a date of birth auto-filled into the block. So only the note's own closing charge block asks, read on positive
+        evidence (ACCURACY-RESIDUALS.md, "GI round 3 ... the narrow release"), and a block its guards recognise as
+        another occurrence's reads exactly as installed.
+    (b) *Its date is never an answer.* The second refutation found seven more shapes that passed those guards: a copied
+        note announced in a sentence, a booking announced in a sentence, an appended telephone encounter, late and
+        pathology charges in other words, another patient's block, and a date of birth in a form the reader does not
+        read. Their dates were then taken as a member's answer and sent, which installed never did. No guard on the
+        block's words or layout can decide whose block it is. So the block's date is read 'beside' (df-d:4): it makes
+        the date a question and is quoted, but it is never a value a member's answer may choose. Only the document's
+        own date is taken, and that is the date the installed revision sends. This applies the owner's decision of
+        2026-10-28 for wrong-occurrence dates: a member cannot answer with a date that may be another occurrence's;
+        an addendum settles it. A block the guards miss therefore costs an extra question, never a date taken or sent.
+        The cost is that a member who believes h2-08's 2026-10-06 is held and must amend the document, as installed
+        requires today. The question names the block, so it says nothing the source contradicts.
+    (c) *What sending-disabled keeps.* STATE2-1 stopped the upgrade's predict only beside a succeeded run. The first
+        refutation showed an unknown or failed outcome replaced by "provider not run" (STATE-N1). Now any recorded
+        request (succeeded, failed or unknown) stops it, and an unknown outcome blocks it as it blocks every send. The
+        stop message claims nothing about an assessment (STATE-N2).
+    (d) *An upgrade's own predict stays one.* The second refutation found that 90377ec6f413's own upgrade predict,
+        still queued at the swap, was remade here into a member's ordinary predict and sent (STATE2N-1). No live row
+        can reach it at this install, but the next version bump could. Remade again, an upgrade's predict now queues
+        the upgrade's predict for the fresh context, which never sends.
+    (e) *Refutations of the finished diff.* The decision named one focused refutation. Its findings changed the diff,
+        and so did the second's. The standing rule (AGENTS.md: the adversarial pass runs over the finished diff before
+        merge) applies to each repair. So the same lenses refute the final diff again before the PR. This is not a new
+        round of the parked work.

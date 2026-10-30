@@ -2957,7 +2957,8 @@ rule, never a sentence patch). The rules this added, by module:
 
 The owner's decision of 2026-10-30 (ruling file) shipped two changes on the installed revision 90377ec6f413. Every other
 reader is unchanged, so routing stays `gi-routing@4`, the inventory `gi-services@1` and the engine
-`cpt-studio-validation@4`.
+`cpt-studio-validation@4`. The engine's only change is the wording of the date question this release's reading raises
+(`checks._date_problem`); no stored assessment reads it.
 
 - **The note's own closing charge block** (`studio/gi/context.py`). Rule A skips every date label a plan or history
   section holds. The exception is the encounter's own date-of-service label (date of service, DOS, service or encounter
@@ -2965,7 +2966,8 @@ reader is unchanged, so routing stays `gi-routing@4`, the inventory `gi-services
   from the end. The block must:
   - close the document;
   - sit in a plan section's reach;
-  - be headed by a heading of the closed class `CHARGE_HEADINGS`, alone or joined to its first field;
+  - be headed by a heading of the closed class `CHARGE_HEADINGS`, alone or joined to its first field by a colon or a
+    dash;
   - hold only fields, code or cell lines and signature lines, none over 120 characters (`CHARGE_HEADING_REACH`: the
     heading reader's tail pattern is quadratic in a long run of marks or spaces, so a longer line is never read);
   - name no other occurrence on any of its lines (`_CHARGE_ELSEWHERE`);
@@ -2974,9 +2976,16 @@ reader is unchanged, so routing stays `gi-routing@4`, the inventory `gi-services
     the note's own plan brings its own plan and charge block, its title above them);
   - carry no date of birth (rule N2).
 
-  The label is then added back as an own-read candidate, but only beside an own labelled date it differs from. The date
-  fact becomes a conflict: asked, no date line sent, either date a member's answer. With no own date the label stays
-  dropped, so nothing is newly sent. Line lookups are bisected and read lines are bounded, so the reader is linear.
+  The label is then added back as a 'beside' candidate (df-d:4), but only beside an own labelled date it differs from.
+  It speaks, so the date is asked and no date line is sent. It is quoted as `_ChargeSpan`, which no member's answer
+  agrees with, and the fact's note is `CHARGE_DATE_NOTE`, which no reader takes for a documented conflict's values. So
+  only the document's own date, the one the installed revision sends, is ever taken. A member's charge date is held
+  with `USER_CHARGE_NOTE`, and the question names the block (`checks._date_problem`).
+
+  The guards above decide only whether to ask. The second refutation of the release showed that no guard on the
+  block's words or layout can tell the note's own block from another occurrence's, so a miss costs an extra question,
+  never a date taken or sent. With no own date the label stays dropped, so nothing is newly sent. Line lookups are
+  bisected and read lines are bounded, so the reader is linear.
 - **The context re-read and the disabled-provider safeguards** (`studio/jobs.py`):
   - `CONTEXT_VERSION` gi-context@3, with @1 and @2 earlier: a stage remakes such a context before it sends or assesses,
     and no second review is offered on it;
@@ -2984,7 +2993,9 @@ reader is unchanged, so routing stays `gi-routing@4`, the inventory `gi-services
     request re-assesses with the recorded answer;
   - with sending disabled, the upgrade's predict never replaces a recorded request (`_recorded_in_use`) with "provider
     not run". An unknown outcome blocks it, and the encounter reads provider unknown; any other recorded request stops
-    it (`REMADE_DISABLED_MESSAGE`). With no request recorded it runs as before (ec5 skeptic:1).
+    it (`REMADE_DISABLED_MESSAGE`). With no request recorded it runs as before (ec5 skeptic:1);
+  - an upgrade's own predict (`_upgrade_predict_key`), queued under an earlier revision and remade again, queues the
+    upgrade's predict for the fresh context, never a member's ordinary predict (STATE2N-1).
 
 ## 6. Security
 
