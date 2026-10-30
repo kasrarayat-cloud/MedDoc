@@ -2,10 +2,11 @@
 
 The installed reading skips every date label a plan or history section holds, so h2-08's charge block - "Charge
 information" / "Date of service: 2026-10-06" at the end of its "Assessment and plan" - was dropped and the header's
-contradicted "Date of service: 2026-10-05" was sent. Now a charge or billing block's own date of service (the closed
-class context.CHARGE_HEADINGS; never a visit or procedure date) speaks against the note's own labelled date: where they
-differ it is a conflict, asked, and no date is sent. Everything else reads as the installed revision 90377ec6f413 read
-it: with no own date the charge block's date stays dropped, so nothing is ever newly sent. Synthetic text only.
+contradicted "Date of service: 2026-10-05" was sent. Now a charge or billing block's own date of service in a plan
+section (the closed class context.CHARGE_HEADINGS; never a visit or procedure date, never a history section's block)
+speaks against the note's own labelled date: where they differ it is a conflict, asked, and no date is sent. Everything
+else reads as the installed revision 90377ec6f413 read it: with no own date the charge block's date stays dropped, so
+nothing is ever newly sent. Synthetic text only.
 """
 from pathlib import Path
 
@@ -94,10 +95,13 @@ class ChargeBlockTests(SimpleTestCase):
         self.assertEqual(date_lines(text), [])
         self.assertEqual(member(text, STRANGER), 'taken')  # as installed: the label stays dropped
 
-    def test_a_history_sections_charge_block_too(self):
-        text = (HEADER.replace('Subjective\nFollow-up of anemia.\n\n', '') + 'Interval history\nDoing well.\n'
-                'Charge information\nDate of service: 2026-10-06\n')
-        self.assert_conflict(text, '2026-10-05', '2026-10-06')
+    def test_a_history_sections_charge_block_reads_as_installed(self):
+        # a history section's charge block may bill a prior occurrence: asking would offer its date as an answer
+        for history in ('Interval history\nDoing well.\n', 'Prior procedures:\nColonoscopy in 2023.\n'):
+            with self.subTest(history=history):
+                text = (HEADER.replace('Subjective\nFollow-up of anemia.\n\n', '') + history
+                        + 'Billing\nDate of service: 2026-10-06\n')
+                self.assert_installed(text)
 
     def test_the_heading_reader(self):
         for line in ('Charge information', 'CHARGE INFORMATION:', '5. Charges', '## Billing & coding', '- Superbill -'):

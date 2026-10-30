@@ -1687,7 +1687,8 @@ def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int
 # label a plan or history section holds (rule A), so h2-08's charge block - "Charge information" / "Date of service:
 # 2026-10-06" at the end of its "Assessment and plan" - was dropped, and the header's contradicted 2026-10-05 was sent.
 # Now the encounter's own date-of-service label (date of service, DOS, service or encounter date; never a visit or
-# procedure date, which a plan may book) in a block that a charge or billing heading of this closed class heads speaks
+# procedure date, which a plan may book) in a plan section's block that a charge or billing heading of this closed class
+# heads (never a history section's, which may bill a prior occurrence) speaks
 # against the note's own labelled date: where they differ the date is a conflict, asked, with no date sent. It speaks
 # only beside an own date that differs, so nothing is ever newly sent: with no own date it stays dropped, as installed.
 CHARGE_HEADINGS = frozenset((
@@ -1754,8 +1755,12 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
     charged = []  # GI round 3, the narrow release: a charge block's own date of service (CHARGE_HEADINGS)
     for m in SERVICE_DATE.finditer(text):
         read.add(m.start())
-        if lay.section_at(m.start()).kind in NOT_CURRENT_SECTIONS:
-            if _CHARGE_DATE_LABEL.match(m.group('label')) and _in_charge_block(text, rows, m.start('label')):
+        kind = lay.section_at(m.start()).kind
+        if kind in NOT_CURRENT_SECTIONS:
+            # a plan's reach only: a history section's charge block may bill a prior occurrence ("Prior procedures:" /
+            # "Billing" / "Date of service: ..."), and asking would offer that occurrence's date as an answer
+            if kind == 'plan' and _CHARGE_DATE_LABEL.match(m.group('label')) and _in_charge_block(
+                    text, rows, m.start('label')):
                 charged.append(m)
             continue
         joined = _joined(text, rows, m.start('label'), m.end('label'))
