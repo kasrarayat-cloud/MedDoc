@@ -174,6 +174,29 @@ class TitleHeadTests(CaseAsserts, SimpleTestCase):
             with self.subTest(qualified=qualified):
                 self.assertEqual(sent(text), '2026-10-05')
 
+    def test_a_qualified_stacked_title_in_the_head_is_asked_never_dropped(self):
+        # mutation proof M26: the head reads a stacked "Follow-up visit - 01/05/2027" under "GI clinic follow-up" as this
+        # visit's title, whatever its follow-up qualifier says - so beside the header's date it is asked, and with no
+        # labelled date it is dropped; skipped as another occurrence's, the header's date was sent over it
+        for line in ('Follow-up visit - 01/05/2027', 'Follow-up visit 01/05/2027'):
+            beside = follow_up('GI clinic follow-up', 'Date of service: 10/05/2026\n' + PATIENT + line + '\n' + HISTORY)
+            alone = follow_up('GI clinic follow-up', PATIENT + line + '\n' + HISTORY)
+            with self.subTest(line=line):
+                self.assertEqual(date_fact(beside).origin, 'conflict')
+                self.assertEqual(answers(beside, ('2026-10-05', '2027-01-05', STRANGER)),
+                                 {'2026-10-05': 'taken', '2027-01-05': 'taken', STRANGER: 'held'})
+                self.assertEqual(answers(alone, ('2027-01-05', STRANGER)), {'2027-01-05': 'taken', STRANGER: 'taken'})
+
+    def test_a_head_label_its_own_words_qualify_is_never_the_only_answer(self):
+        # mutation proof M27: "Next DOS", "Initial visit DOS", "Prior service date" in the head name another occurrence
+        # by their own words: with no labelled date of the note's own they are dropped, never the only answer
+        for line in ('Next DOS: 01/05/2027', 'Initial visit DOS: 06/01/2026', 'Prior service date: 06/01/2026'):
+            text = follow_up('GI clinic follow-up', PATIENT + line + '\n' + HISTORY)
+            value = '2027-01-05' if '2027' in line else '2026-06-01'
+            with self.subTest(line=line):
+                self.assertIsNone(sent(text))
+                self.assertEqual(answers(text, (value, STRANGER)), {value: 'taken', STRANGER: 'taken'})
+
     def test_a_row_of_cells_in_the_head_is_a_table_whatever_the_table_model_reads(self):
         # self-attack: a results table whose rows blank lines (or a PDF wrap) separate is no table to the table model,
         # so its column label read as the head's own and the results' date was the only answer; its row's own cells say
@@ -237,6 +260,28 @@ class EncounterLabelTests(CaseAsserts, SimpleTestCase):
                 self.assertEqual(date_fact(text).origin, 'missing')
                 self.assertEqual(member(text, STRANGER), 'taken')
 
+    def test_a_block_heading_naming_today(self):
+        # mutation proof M23: "Today's visit" names this visit's block, so the encounter's own label under it speaks - with
+        # no other date its date is the answer - and a visit date under it speaks against the header's date (asked);
+        # read as another block, the visit date was dropped and the header's contradicted date sent
+        plan = BANNER + LETTERHEAD + 'Clinic note\n' + PATIENT + '{own}Assessment and plan\nStable.\n'
+        alone = plan.format(own='') + "Today's visit\nDate of service: 10/06/2026\n"
+        self.assertEqual(answers(alone, ('2026-10-06', STRANGER)), {'2026-10-06': 'taken', STRANGER: 'held'})
+        text = plan.format(own='Date of service: 10/05/2026\n') + "Today's visit\nVisit date: 10/06/2026\n"
+        self.assertEqual(date_fact(text).origin, 'conflict')
+        self.assertEqual(answers(text, ('2026-10-05', '2026-10-06')), {'2026-10-05': 'taken', '2026-10-06': 'taken'})
+
+    def test_a_visits_own_title_heads_that_visits_block(self):
+        # mutation proof M24 (dates2-5): "Initial clinic note" as a block heading heads the initial visit's block, so the
+        # encounter's own label under it is never the only answer with no date of the note's own (read as a neutral
+        # heading, the earlier visit's date was the only answer a member could give)
+        for heading in ('Initial clinic note', 'Baseline clinic visit'):
+            text = (BANNER + LETTERHEAD + 'Clinic note\n' + PATIENT + 'Plan:\nContinue.\n' + heading
+                    + '\nDate of service: 06/01/2026\n')
+            with self.subTest(heading=heading):
+                self.assertIsNone(sent(text))
+                self.assertEqual(answers(text, ('2026-06-01', STRANGER)), {'2026-06-01': 'taken', STRANGER: 'taken'})
+
     def test_h2_08_stays_a_conflict(self):
         for name in ('live-text/h2-08__e084b793__2026-10-29.txt', 'h2/h2-08-hepatology-note.txt'):
             text = (Path(__file__).resolve().parent / 'fixtures' / 'gi3' / name).read_text(encoding='utf-8')
@@ -281,6 +326,20 @@ class VisitNoteTests(CaseAsserts, SimpleTestCase):
         # a neutral block heading ends the plan's reach (interpretation 42): the report's own billing block still speaks
         report = cases()['s7-report-biopsy-hcpcs']['text']
         self.assertEqual(date_fact(report).origin, 'conflict')
+
+    def test_b4_reads_past_a_section_heading_in_a_report_too(self):
+        # mutation proof M8 survived the visit-note shapes (there the visit date after the plan asks by itself): in a
+        # procedure's report only B4 reading past the heading keeps the booked clinic visit's date from being sent (the
+        # installed revision and the candidate sent 11/16)
+        body = ('Findings:\nThe colonoscope was advanced to the cecum. A 5 mm polyp in the sigmoid colon was removed with '
+                'a cold snare.\nRecommendations:\nReturn to clinic in 6 weeks.\n')
+        for heading in ('Bowel preparation', 'Procedure details', 'Sedation'):
+            text = BANNER + 'Colonoscopy report\n' + PATIENT + body + heading + '\nVisit date: 11/16/2026\n'
+            with self.subTest(heading=heading):
+                self.assertIsNone(sent(text))
+                self.assertEqual(answers(text, ('2026-11-16', STRANGER)), {'2026-11-16': 'taken', STRANGER: 'taken'})
+                own = text.replace(PATIENT, PATIENT + 'Date of service: 10/14/2026\n')
+                self.assertEqual(date_fact(own).origin, 'conflict')  # beside the report's own date: asked, as installed
 
     def test_outside_a_plan_a_later_date_is_never_dropped_so_the_own_date_is_sent(self):
         # B4's drop is the installed reading's own inside a plan section; outside one the installed reading read the

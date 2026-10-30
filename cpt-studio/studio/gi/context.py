@@ -1868,8 +1868,9 @@ def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int
 #   row, or a stacked visit title whose every word the document's own title or the visit-title nouns hold) - and the
 #   head is read as an untitled header reads it, the title above it never its qualifier (_title_line): the encounter's
 #   own label whatever its reading, a visit date where its reading is the note's own (_TITLE), a procedure date, a label
-#   its own words qualify ("Return visit date") and a table without the patient's birth column only against the note's
-#   own date, and a setting or a patient status only where its line names no other occurrence. Past the head - a clinical
+#   its own words qualify ("Return visit date"), a table without the patient's birth column (the table model's or a row
+#   of cells: column_label) and a dated title, "Date:" or "Re:" line (_title_candidates) only against the note's own
+#   date, and a setting or a patient status only where its line names no other occurrence. Past the head - a clinical
 #   sentence ("She will keep her clinic appointment.", "P: Continue mesalamine. Return to clinic in 3 months."), or a
 #   stacked heading that does not name this visit positively ("Initial office visit", "Last office visit") - the
 #   section follows the plan rules, its title naming no other occurrence (part 2, B4), and its statements and dated
@@ -3021,8 +3022,8 @@ def _title_candidates(text: str, lay: Layout, labelled_own: bool) -> tuple[_Cand
     date is never the only answer a member may give. gi3 fix round 2 (dates2-1; 51(c)(2) and (3)): so does every title,
     "Date:" or "Re:" line in the head of the section the document's own follow-up title opens: beside the head's own
     labelled date it agrees or speaks against it as an untitled header's does, and without one it is dropped - the
-    installed reading read none of that section - so a stacked "Return visit: 01/05/2027" (a title its words do not
-    qualify) is never the only answer either."""
+    installed reading read none of that section - so a stacked "Return visit: 01/05/2027" or "Follow-up visit -
+    01/05/2027" is never the only answer either, and never dropped so that the header's date is sent."""
     lines = []
     for m in re.finditer(r'[^\n]+', text):
         if text[m.start():m.end()].strip():
@@ -3033,11 +3034,13 @@ def _title_candidates(text: str, lay: Layout, labelled_own: bool) -> tuple[_Cand
     against = set()  # the lines that speak only against the note's own date (gi3 fix round 2, dates2-1, dates2-6)
     for index, (ls, le) in enumerate(lines):
         sec = lay.section_at(ls)
-        # gi3 dates, RC5: the title's section reads as any; gi3 fix round 2 (dates2-1): only its head, and there only a
-        # dated title naming this note, speaking only against the head's labelled own date (``against``) - a qualified one
-        # ("Next visit: 01/05/2027", "Last visit: 08/27/2026") or a dated line is read as the installed reading read the
-        # section, not at all (read, it was the only answer a member's date could take when the header's own date was
-        # not read)
+        # gi3 dates, RC5: the title's section reads as any; gi3 fix round 2 (dates2-1): only its head - a field naming
+        # another occurrence ("Next visit: 01/05/2027", "Last visit: 08/27/2026") ends it, and past it nothing is read,
+        # as the installed reading read the section (read, such a line was the only answer a member's date could take
+        # when the header's own date was not read) - and there no dated line, and every title, "Date:" or "Re:" line
+        # speaks only against the head's labelled own date (``against``): the head reads a stacked title as this
+        # visit's ("Follow-up visit - 01/05/2027" under "GI clinic follow-up"), whatever qualifier its words carry, so
+        # beside the header's date it is asked, and without one it is dropped - never the only answer
         in_title = sec.kind in NOT_CURRENT_SECTIONS
         if in_title and not (sec.start == title and _governance(text).in_head(ls)):
             continue
@@ -3061,8 +3064,6 @@ def _title_candidates(text: str, lay: Layout, labelled_own: bool) -> tuple[_Cand
         value = day.isoformat() if day else None
         qualified = _title_qualified(text, ls, le, m)
         if in_title:
-            if qualified:
-                continue  # gi3 fix round 2 (dates2-1): a qualified title in the title's head is another occurrence's
             against.add(len(out))
         if field:
             reading, source = 'unplaced', 'field'
