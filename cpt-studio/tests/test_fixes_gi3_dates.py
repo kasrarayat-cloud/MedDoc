@@ -86,7 +86,7 @@ class CaseAsserts:
 class FixtureTests(CaseAsserts, SimpleTestCase):
     def test_every_case_reads_right_by_its_source(self):
         known = cases()
-        self.assertEqual(len(known), 56)
+        self.assertEqual(len(known), 57)
         for name, case in known.items():
             self.assertTrue(case['text'].startswith(BANNER), name)
             with self.subTest(case=name):
@@ -136,7 +136,7 @@ class TitleSectionTests(CaseAsserts, SimpleTestCase):
         self.assert_cases('d2-labs-table')
 
     def test_a_heading_naming_another_block_governs_there_too(self):
-        self.assert_cases('d2-last-colo-dos')
+        self.assert_cases('d2-last-colo-dos', 'd2-block-heading-dos')
 
     def test_the_headers_own_date_still_reads(self):
         self.assert_cases('d2-ctrl-intended')

@@ -362,6 +362,21 @@
    "review": "A \"Last colonoscopy\" block in the title's header dates the last colonoscopy, whatever its label: asked: no date line; the planned or other date is never the only answer, and a member date is taken."
   },
   {
+   "id": "d2-block-heading-dos",
+   "finding": "dates-2",
+   "source_input": "synthetic: a block heading naming another occurrence over a header field",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nSynthetic GI clinic (fictional)\nGI clinic follow-up\nPatient: Synthetic Patient (fictional)\nLast colonoscopy\nEndoscopist: Synthetic Physician (fictional)\nDate of service: 05/01/2019\nInterval history:\nDoing well.\n",
+   "expected": {
+    "kind": "asked",
+    "taken": [
+     "2026-10-05",
+     "2019-05-01",
+     "2026-10-01"
+    ]
+   },
+   "review": "A \"Last colonoscopy\" block heading over its own fields dates the last colonoscopy, though no word on the label's line qualifies it: asked: no date line; the planned or other date is never the only answer, and a member date is taken."
+  },
+  {
    "id": "d2-ctrl-intended",
    "finding": "dates-2 control",
    "source_input": "findings:F1b:rc5i-intended",
