@@ -28,7 +28,7 @@ from studio.types import Check, ClarificationSpec, EvidenceSpan, Span
 from studio.validation import checks
 
 SOURCE = f'cpt-studio:{catalogue.CATALOGUE_VERSION}'
-INVENTORY_SOURCE = 'cpt-studio:gi-services@1'
+INVENTORY_SOURCE = 'cpt-studio:gi-services@2'
 REMOVAL_KINDS = ('snare', 'emr', 'hot_biopsy', 'esd')
 # Physiology studies whose coded act is the study itself (the act a code of the family accounts for is the service).
 STUDY_ACTS = {'gi.capsule': 'capsule_study', 'gi.motility': 'manometry', 'gi.reflux': 'ph_monitoring',

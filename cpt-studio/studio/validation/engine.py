@@ -24,7 +24,7 @@ from studio.types import (CONTEXT_FACTS, AssessmentResult, Check, ClarificationS
 from studio.gi.detect import DOUBT_PREFIX, UNESTABLISHED, VISIT_NAMES_OTHER, records_visit
 from studio.validation import checks, rationale, reconcile
 
-ENGINE_VERSION = 'cpt-studio-validation@4'
+ENGINE_VERSION = 'cpt-studio-validation@5'
 # The documented-service inventory decides the status of the codes it matches (5.10). Off, every code is judged by the
 # routing-era reading alone - the path the inventory falls back to when its reading is inconsistent; the routing-era
 # unit tests, whose stubbed passage readings describe no real document, run that path.

@@ -991,3 +991,15 @@ data-loss path behind 49's version bump. Fix round 1's repairs were where most o
         follow-up note.
     (f) *Word lists.* A closed list may add positive evidence. A list that exempts something from asking or holding
         fails open by construction, so none is added.
+
+### Session interpretation, 2026-10-30 (7c8d38da, third round, at the second integration) — recorded, not owner-ruled
+
+52. **Two corrections at the second integration (recorded, not rewritten).**
+    (a) *50(c)'s assessment.* 50(c) named "a history, an examination or an assessment of its own" as the note's record of
+        the visit. The scope owner's fix showed the assessment half wrong by the source: a study's interpretation is
+        written under "Assessment and plan" too ("Transient elastography today: ..." / "Assessment and plan: No advanced
+        fibrosis. Repeat in one year." / "Physician time: 20 minutes."), so the time may be the study's. A history,
+        interval history, review of systems, examination or SOAP "Subjective" with content of its own records the visit;
+        an assessment heading alone does not, and such a note is held, never ready (the installed revision held it).
+    (b) *50(d)'s timing.* The version labels change before the third refutation rather than at the freeze, so that the
+        tree the refutation reads is the tree that ships.
