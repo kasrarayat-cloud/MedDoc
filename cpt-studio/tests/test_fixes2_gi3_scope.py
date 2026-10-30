@@ -168,7 +168,10 @@ class TimeStatementOwnWordsTests(unittest.TestCase):
                      'Physician time at the colonoscopy pre-assessment: 30 minutes.',
                      'Total time at the colonoscopy pre-assessment: 30 minutes.',
                      # an unframed clinician time with anything between its subject and its minutes
-                     'Physician time for the H. pylori breath test: 15 minutes.'):
+                     'Physician time for the breath test: 15 minutes.',
+                     # the classes alone decide a total time (no clinician subject): a month, a day of a month, a call
+                     'Total time at her visit in August: 40 minutes.', 'Total time on the 27th: 40 minutes.',
+                     'Total time on the phone: 15 minutes.'):
             text = BANNER + IBD + line + '\n'
             with self.subTest(line=line):
                 self.assertIsNone(fact_value(text, 'gi.office_em', 'time_minutes'))
