@@ -345,6 +345,25 @@ class NotDoneColumnTests(unittest.TestCase):
         self.assertEqual(finding(text, 'gi.egd'), ('performed', 'second part of duodenum'))
         self.assertNotIn(finding(text, 'gi.colonoscopy')[0], ('performed', 'incomplete'))
 
+    def test_ext7_a_negation_turns_the_sense_and_a_two_valued_status_speaks_as_written(self):
+        for label, sense in (('not performed', sections.COLUMN_NOT_DONE), ('cecum not reached', sections.COLUMN_NOT_DONE),
+                             ('never performed', sections.COLUMN_NOT_DONE), ('not cancelled', sections.COLUMN_ROW),
+                             ('status (completed/cancelled)', sections.COLUMN_ROW), ('completed (y/n)', sections.COLUMN_ROW),
+                             ('biopsy (yes/no)', sections.COLUMN_OWN), ('no', sections.COLUMN_OWN), ('#', sections.COLUMN_OWN)):
+            with self.subTest(label=label):
+                self.assertEqual(sections._column_sense(label), sense)
+        base = fixture('n1-cancelled-col')
+        # "Completed (Y/N) | No": the answer stays with the row and doubts it (never cut into a clean reading)
+        text = base.replace('| Cancelled\n', '| Completed (Y/N)\n').replace('| - | Yes', '| - | No')
+        self.assertNotIn(finding(text, 'gi.colonoscopy')[0], ('performed', 'incomplete'))
+        # a two-valued status column names the status itself: "Completed" reads with its row, "Cancelled" cancels it
+        text = base.replace('| Cancelled\n', '| Status (completed/cancelled)\n').replace(
+            'Second portion of the duodenum | No', 'Second portion of the duodenum | Completed').replace('| - | Yes',
+                                                                                                    '| - | Cancelled')
+        self.assertEqual(finding(text, 'gi.egd'), ('performed', 'second part of duodenum'))
+        self.assertNotIn(finding(text, 'gi.colonoscopy')[0], ('performed', 'incomplete'))
+        self.assertNotIn(('other', sections.TABLE_ROW_HELD_LABEL), kinds(text))
+
     def test_control_a_performed_column_reads_as_before(self):
         text = fixture('n1-cancelled-col').replace('| Cancelled\n', '| Performed\n').replace(
             'Second portion of the duodenum | No', 'Second portion of the duodenum | Yes').replace('| - | Yes', '| - | No')

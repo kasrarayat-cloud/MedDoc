@@ -1196,13 +1196,19 @@ _ROW_WORD = re.compile(r"[A-Za-z][A-Za-z'-]*", re.A)
 _ROW_STATUS = re.compile(r'status|state|perform\w*|done|complet\w*|outcome|attempt\w*|undertaken|carried|out|today|'
                          r'results?', re.A | re.I)
 _ROW_NOT_DONE = re.compile(r'cancel\w*|abort\w*|postpon\w*|defer\w*|terminat\w*|discontinu\w*|halt\w*|stopped|'
-                           r'interrupt\w*|abandon\w*|called|off|incomplete|fail\w*|unsuccessful|not|never|no-show',
-                           re.A | re.I)
+                           r'interrupt\w*|abandon\w*|called|off|incomplete|fail\w*|unsuccessful|no-show', re.A | re.I)
+# A negation turns a status or a reach to the not-done sense ("Not performed", "Cecum not reached") and a not-done status
+# back ("Not cancelled"). A status that names both senses ("Status (completed/cancelled)") is a two-valued status
+# column: its cell names the status itself, so it speaks for the row as written. The answer options a header may print
+# beside its label ("Completed (Y/N)") are no subject of their own.
+_ROW_NEGATION = frozenset(('not', 'never'))
+_ROW_OPTION = frozenset(('y', 'n', 'yes', 'no'))
 _ROW_REACH = re.compile(r'reach\w*|intubat\w*|seen|visuali[sz]\w*|examined|entered|identified|inspected|confirmed|'
                         r'photographed|photodocumented|documented', re.A | re.I)
 _ROW_SERVICE_NOUN = frozenset(('procedure', 'procedures', 'examination', 'examinations', 'exam', 'study', 'service',
                                'endoscopy'))
 _ROW_FUNCTION = frozenset(('the', 'a', 'an', 'of', 'to', 'in', 'on', 'at', 'and', 'or', 'was', 'were', 'is', 'been'))
+_ROW_IGNORED = _ROW_SERVICE_NOUN | _ROW_FUNCTION | _ROW_OPTION
 COLUMN_OWN, COLUMN_ROW, COLUMN_NOT_DONE = 'own', 'row', 'not done'
 # A negative answer alone in a cell ("No", "None", "N/A"): under a not-done column it says the service was not called
 # off. Its blank runs are read once, as _TABLE_ANSWER_CELL's are.
@@ -1222,17 +1228,21 @@ def _column_sense(label: str) -> str:
     landmark = rest != label
     for _, pattern in cues.SERVICE_PATTERNS:
         rest = pattern.sub(' ', rest)
-    status = not_done = False
+    status = stopped = negated = False
     for word in _ROW_WORD.findall(rest):
-        if _ROW_NOT_DONE.fullmatch(word):
-            not_done = True
+        if word.lower() in _ROW_NEGATION:
+            negated = True
+        elif _ROW_NOT_DONE.fullmatch(word):
+            stopped = True
         elif _ROW_STATUS.fullmatch(word) or _ROW_REACH.fullmatch(word):
             status = True
-        elif word.lower() not in _ROW_SERVICE_NOUN and word.lower() not in _ROW_FUNCTION:
+        elif word.lower() not in _ROW_IGNORED:
             return COLUMN_OWN  # a subject of its own: a finding, an act, an instrument, a date
-    if not_done:
-        return COLUMN_NOT_DONE
-    return COLUMN_ROW if status or landmark else COLUMN_OWN
+    if stopped and status:
+        return COLUMN_ROW  # a two-valued status: "Status (completed/cancelled)"
+    if stopped != negated and (stopped or status or landmark):
+        return COLUMN_NOT_DONE  # "Cancelled", "Not performed", "Cecum not reached"
+    return COLUMN_ROW if status or landmark or stopped else COLUMN_OWN
 
 
 # gi3 extent (R1): a procedure-summary label (a closed list) straight over a summary table opens a procedure section (h2-01:
