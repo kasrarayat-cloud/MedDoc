@@ -547,6 +547,11 @@ class OtherMentionTechniqueTests(SimpleTestCase):
                         'lesion was removed by piecemeal endoscopic mucosal resection with a 15 mm stiff snare in five '
                         'pieces.'))
         self.assertIn('snare', [a.technique for a in acts(inv, 'gi.colonoscopy', 'emr', ('performed',))])
+        # ... and only an act's own: another act named between it and the phrase takes the instrument
+        inv = read(HEAD + 'Esophageal motility report\nProcedure: Esophageal manometry, followed by esophageal dilation '
+                   'with a 54 Fr Maloney bougie.\n')
+        techniques = {a.kind: a.technique for s in inv.services for a in s.acts if a.kind in ('manometry', 'dilation')}
+        self.assertEqual(techniques, {'manometry': '', 'dilation': 'guidewire'})
         for gap, own in (('with a 15 mm stiff ', True), ('with a 54 Fr Maloney ', True), ('using the 10 mm ', True),
                          ('via a 2.8 mm channel ', True), ('with ', True),
                          ('with biopsies of the ', False), ('and the ', False), ('with a 15 mm stiff long braided ', False)):

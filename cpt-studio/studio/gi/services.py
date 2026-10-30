@@ -3371,7 +3371,9 @@ def _technique(text: str, start: int, end: int, near: Optional[int] = None, kind
 
 
 # gi3 fix round 2 (INV2-8): with the instrument's own measure as well ("with a 15 mm stiff snare", "with a 54 Fr
-# Maloney bougie": the gate's detail reading, where a piecemeal resection had lost its own snare).
+# Maloney bougie": the gate's detail reading, where a piecemeal resection had lost its own snare) - and only where no
+# other act is named between the act and the phrase ("Esophageal manometry, followed by esophageal dilation with a
+# 54 Fr Maloney bougie": the bougie is the dilation's, never the manometry's).
 INSTRUMENT_LEAD = _rx(r'\b(?:with|using|by|via)\s+(?:(?:a|an|the)\s+)?(?:\d+(?:\.\d+)?\s*(?:mm|cm|fr|french)\s+)?'
                       r'(?:[\w-]+\s+){0,2}$')  # "with a 22-gauge ..."
 
@@ -3388,7 +3390,13 @@ def _in_another_mention(text: str, mentions: Sequence[tuple[str, int, int]], sta
         mentions[j] if j < len(starts) and starts[j] < b and starts[j] != own else None
     if other is None:
         return False
-    return not (own_end >= 0 and other[1] >= own_end and INSTRUMENT_LEAD.search(text, own_end, other[1]) is not None)
+    if own_end < 0 or other[1] < own_end:
+        return True
+    lead = INSTRUMENT_LEAD.search(text, own_end, other[1])
+    if lead is None:
+        return True
+    k = bisect.bisect_left(starts, own_end)  # the first mention after this act's own
+    return k < len(starts) and starts[k] < lead.start()  # another act named before the phrase: that act's instrument
 
 
 def _acts_in(text: str, start: int, end: int) -> list[tuple[str, int, int]]:
