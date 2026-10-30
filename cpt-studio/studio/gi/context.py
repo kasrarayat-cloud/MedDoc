@@ -1723,10 +1723,9 @@ def _in_charge_block(text: str, rows: '_Rows', label_start: int) -> bool:
     joined to it on its line ("Charge information: Date of service: ..."), or the nearest heading above it within
     CHARGE_REACH_LINES lines and no blank line. Any other heading-like line above it heads its block instead."""
     ls, _ = rows.line(label_start)
-    prefix = text[ls:label_start]
-    if len(prefix) > CHARGE_HEADING_REACH:
+    if label_start - ls > CHARGE_HEADING_REACH:  # measured before any slice: many labels may share one long line
         return False
-    words = _heading_words(prefix)
+    words = _heading_words(text[ls:label_start])
     if words:
         return words in CHARGE_HEADINGS
     pos = ls
@@ -1734,10 +1733,10 @@ def _in_charge_block(text: str, rows: '_Rows', label_start: int) -> bool:
         if pos == 0:
             return False
         ps, pe = rows.line(pos - 1)
-        line = text[ps:pe]
-        if not line.strip():
-            return False  # a blank line ends the block
-        if pe - ps <= CHARGE_HEADING_REACH:
+        if pe - ps <= CHARGE_HEADING_REACH:  # a longer line is neither blank nor a heading, and is never read
+            line = text[ps:pe]
+            if not line.strip():
+                return False  # a blank line ends the block
             if _heading_words(line) in CHARGE_HEADINGS:
                 return True
             if _heading_like(line):
