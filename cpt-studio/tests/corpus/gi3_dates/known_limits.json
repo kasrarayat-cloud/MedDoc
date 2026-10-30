@@ -39,16 +39,16 @@
     "service_date": "missing:None",
     "sent": null,
     "member": {
-     "1961-03-14": "held",
-     "2025-03-10": "held",
-     "2026-09-28": "held",
-     "2026-10-01": "held",
+     "1961-03-14": "taken",
+     "2025-03-10": "taken",
+     "2026-09-28": "taken",
+     "2026-10-01": "taken",
      "2026-10-06": "taken"
     },
     "setting": "document:office",
     "patient_status": "document:established"
    },
-   "reason": "as AN1, under another neutral heading: the only date-of-service label after the plan is asked, never sent by itself; a member's answer equal to it is taken"
+   "reason": "as AN1, under another neutral heading - but the label is a visit date, and gi3 fix round 2 (interpretation 51(c), dates2-5) has a visit date past a neutral heading speak only against the note's own date: with none it is asked and never the only answer (it may date the visit the plan booked), so every member answer is taken"
   },
   "AN4": {
    "output": {
@@ -222,6 +222,40 @@
     "patient_status": "missing"
    },
    "reason": "RC6: a setting label the plan no longer governs speaks against the note's own setting but is never the setting by itself; alone it stays unread as at the head (the setting is asked and a member's answer taken)"
+  },
+  "E7": {
+   "output": {
+    "service_date": "conflict:None",
+    "sent": null,
+    "member": {
+     "1958-11-30": "held",
+     "2026-10-01": "held",
+     "2026-10-14": "taken",
+     "2026-10-15": "held",
+     "2026-10-16": "taken"
+    },
+    "setting": "missing",
+    "patient_status": "missing"
+   },
+   "reason": "gi3 fix round 2 (interpretation 51(c)(1)): \"Pathology\" names another document, not another occurrence explicitly, so the date of service under it speaks against the report's own date - asked (an over-ask: the pathology block dates the specimen's report), never sent; a heading naming another occurrence explicitly would govern it"
+  },
+  "E12": {
+   "output": {
+    "service_date": "conflict:None",
+    "sent": null,
+    "member": {
+     "1961-03-14": "held",
+     "2025-03-10": "held",
+     "2026-09-28": "held",
+     "2026-09-30": "taken",
+     "2026-10-01": "held",
+     "2026-10-05": "taken",
+     "2026-10-06": "held"
+    },
+    "setting": "document:office",
+    "patient_status": "document:established"
+   },
+   "reason": "gi3 fix round 2 (interpretation 51(c)(1), dates2-3): a table's column label speaks against the note's own date wherever it stands - a results table under \"Results\" cannot be told from a charge table right after the plan by structure - so the results' date makes the date asked (an over-ask, never a send)"
   }
  }
 }
