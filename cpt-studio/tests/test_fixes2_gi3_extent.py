@@ -310,9 +310,19 @@ class ReachColumnTests(unittest.TestCase):
         # contradicts the report's own cecal landmark, so it is held (asked), never ready
         text = reach_report('Appendiceal orifice not seen', 'Yes')
         self.assertEqual(outcome(text, [('45378', [ADV])], '45378')[0], 'needs_clarification')
-        for label, answer in (('Cecum reached', 'Yes'), ('Cecum reached', 'Reached'), ('Terminal ileum', 'Normal')):
+        for label, answer in (('Cecum reached', 'Yes'), ('Cecum reached', 'Reached'), ('Terminal ileum', 'Normal'),
+                              ('Cecum reached', 'Yes, at 6 minutes'), ('Cecum not reached', 'No')):
             with self.subTest(label=label, answer=answer):  # an affirmed reach is consistent
                 self.assertEqual(outcome(reach_report(label, answer), [('45378', [ADV])], '45378'), ('ready', []))
+        for answer in ('No', 'No, intubated for 5 cm'):  # a negated reach answered no affirms it: the extent stands
+            with self.subTest(answer=answer):
+                text = colon_report(f'Examination | Extent | TI not intubated\nColonoscopy | Terminal ileum | {answer}',
+                                    findings='The colonoscope was advanced to the terminal ileum.')
+                self.assertEqual(finding(text, 'gi.colonoscopy'), ('performed', 'terminal ileum'))
+        for answer in ('N/A', '-', ''):  # "not applicable", a dash or nothing affirms no reach the extent covers: held
+            with self.subTest(answer=answer):
+                text = colon_report(f'Examination | Furthest point reached | Cecum reached\nColonoscopy | Cecum | {answer}')
+                self.assertIn(('other', sections.TABLE_ROW_REACH_HELD_LABEL), kinds(text))
 
     def test_the_senses(self):
         for label, sense in (('ti intubated', sections.COLUMN_LANDMARK), ('cecum not photographed', sections.COLUMN_OWN),
@@ -445,6 +455,9 @@ class SubjectColumnTests(unittest.TestCase):
                   'Furthest point reached\nUpper endoscopy (EGD) | Gastroscope | Yes | Second portion of the duodenum\n'
                   'Colonoscopy | Adult colonoscope | No | Cecum\nImpression\nSee above.\n')  # the extent stated, yet "No"
         self.assertNotIn(finding(stated, 'gi.colonoscopy')[0], ('performed', 'incomplete'))
+        findings = colon_report('Examination | Instrument | Furthest point reached | Findings\nColonoscopy | Adult '
+                                'colonoscope | Cecum | Not done')  # the examination's own findings name no other subject
+        self.assertEqual(outcome(findings, [('45378', [ADV])], '45378')[0], 'needs_clarification')
         comment = colon_report('Examination | Instrument | Furthest point reached | Comments\nColonoscopy | Adult colonoscope '
                                '| Cecum | Not performed')
         self.assertEqual(outcome(comment, [('45378', [ADV])], '45378')[0], 'needs_clarification')

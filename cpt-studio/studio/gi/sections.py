@@ -1252,9 +1252,10 @@ _ROW_REACH = re.compile(r'reach\w*|intubat\w*|seen|visuali[sz]\w*|examined|enter
                         re.A | re.I)
 # A subject of its own (gi3 fix round 2, X5): a finding, a specimen, the preparation, the sedation, a record of the
 # examination (a photograph, its documentation) or the instrument. A closed class of positive evidence: a word it misses
-# leaves the column without a subject, so only an answer-only cell under it is cut (the reading before this round).
+# leaves the column without a subject, so only an answer-only cell under it is cut (the reading before this round). A
+# column of the examination's own findings ("Findings") is none: what it says may be that the examination was not done.
 _ROW_SUBJECT = re.compile(r'complications?|adverse|events?|bleeding|perforations?|polyps?|lesions?|mass|masses|'
-                          r'findings?|specimens?|samples?|sampled|sampling|tissue|pathology|histology|cytology|jars?|'
+                          r'specimens?|samples?|sampled|sampling|tissue|pathology|histology|cytology|jars?|'
                           r'containers?|prep|preparation|bbps|sedation|an(?:a)?esthesia|retroflex\w*|withdrawal|'
                           r'instruments?|scopes?|endoscopes?|photos?|photographs?|photographed|photo-?documented|'
                           r'photodocumentation|documented|documentation|images?|imaged|pictures?', re.A | re.I)
@@ -1266,8 +1267,10 @@ COLUMN_OWN, COLUMN_ROW, COLUMN_NOT_DONE, COLUMN_LANDMARK = 'own', 'row', 'not do
 # A negative answer alone in a cell ("No", "None", "N/A"): under a not-done column it says the service was not called
 # off. Its blank runs are read once, as _TABLE_ANSWER_CELL's are.
 _TABLE_NEGATIVE_CELL = re.compile(r'[ \t]*+(?:no|none|nil|n/?a|not[ \t]++applicable|n)[ \t]*+\.?+[ \t]*+', re.A | re.I)
-# An affirmative answer alone in a cell ("Yes", "Y"), read for a landmark's reach column.
-_TABLE_YES_CELL = re.compile(r'[ \t]*+(?:yes|y)[ \t]*+\.?+[ \t]*+', re.A | re.I)
+# An affirmative answer opening a cell ("Yes", "Y", "Yes, at 6 minutes"), read for a landmark's reach column; and a
+# negative one opening it ("No", "No - not attempted"), read for a negated reach ("TI not intubated | No").
+_TABLE_YES_CELL = re.compile(r'[ \t]*+(?:yes|y)\b', re.A | re.I)
+_TABLE_NO_CELL = re.compile(r'[ \t]*+(?:no|none|nil|n)\b(?!/)', re.A | re.I)
 # The 'other' section of a table row held for its not-done status column (layout; detect reads it as a hold), and of
 # one held for a landmark's reach its cell does not affirm against the extent the row states (gi3 fix round 2, X3/X6).
 TABLE_ROW_HELD_LABEL = 'table row answering a not-done status column'
@@ -1326,9 +1329,9 @@ def _column_sense(label: str) -> str:
 # intubated" over "Cecum | No" says the colonoscopy reached the cecum and went no further: consistent, so the cell is a
 # clause of its own and never doubts the examination; "Extent | Terminal ileum" over "Terminal ileum | No" contradicts
 # itself, and "Cecum reached | No" under a cecum extent too: such a row is held (TABLE_ROW_REACH_HELD_LABEL), asked,
-# never read as a reach. A cell affirms the reach when it says so (_TABLE_YES_CELL under a label that is not negated, a
-# negative answer under a negated one, or a landmark field's value that opens by saying it was reached or seen:
-# _S2_LANDMARK_VALUE); anything else, a dash or an empty cell included, does not. A valve intubated is passed: its reach
+# never read as a reach. A cell affirms the reach when it says so (it opens with "yes" under a label that is not negated,
+# or with "no" under a negated one, or opens by saying the landmark was reached or seen: _S2_LANDMARK_VALUE); anything
+# else, "N/A", a dash or an empty cell included, does not. A valve intubated is passed: its reach
 # is the segment entered through it ("Ileocecal valve intubated" is the terminal ileum's).
 _VALVE_ENTERED = (re.compile(r'\bileo-?c(?:a)?ecal\s+valve\b', re.A | re.I), 'terminal ileum')
 _UPPER_FAMILIES = frozenset(('gi.egd', 'gi.eus', 'gi.ercp'))
@@ -1384,8 +1387,8 @@ def _reach_contradicts(text: str, cell: tuple[int, int], reach: tuple[list, bool
         if not landmarks:
             return False  # another tract's landmark: not this row's reach
     value = text[cell[0]:cell[1]]
-    affirmed = bool(_TABLE_NEGATIVE_CELL.fullmatch(value)) if negated else (
-        bool(_TABLE_YES_CELL.fullmatch(value)) or _says_reached(value))
+    affirmed = bool(_TABLE_NO_CELL.match(value)) if negated else (
+        bool(_TABLE_YES_CELL.match(value)) or _says_reached(value))
     if affirmed:
         return False
     tract, depth = min(landmarks, key=lambda landmark: landmark[1])
