@@ -322,6 +322,10 @@ class VisitNoteTests(CaseAsserts, SimpleTestCase):
         report = BANNER + 'Colonoscopy report\n' + PATIENT + 'Procedure date: 10/14/2026\nFindings: Normal colon.\n'
         self.assertFalse(context._visit_note(report))
         self.assertEqual(sent(report), '2026-10-14')
+        # mutation proof M10: a procedure's report with a history of the present illness is still its procedure's report
+        report += 'History of present illness: Screening, average risk.\n'
+        self.assertFalse(context._visit_note(report))
+        self.assertEqual(sent(report), '2026-10-14')
         self.assertTrue(context._visit_note(cases()['F10a']['text']))
 
     def test_b4_reads_past_a_section_heading_never_past_a_block_heading(self):
@@ -393,10 +397,10 @@ class VisitNoteTests(CaseAsserts, SimpleTestCase):
         # 51(c)(2): an office visit's own procedure date ("Procedure date: 11/04/2026" under "GI office visit", sent by the
         # installed revision) is never its own date - asked, every answer held; a CRLF note is a visit's note too (its
         # title line's carriage return is no part of the title)
-        for eol in ('\n', '\r\n'):
-            text = (BANNER + 'GI office visit\nProcedure date: 11/04/2026\nAssessment and plan: colonoscopy will be '
+        for eol, title in (('\n', 'GI office visit'), ('\r\n', 'GI office visit'), ('\r\n', 'Clinic note')):
+            text = (BANNER + title + '\nProcedure date: 11/04/2026\nAssessment and plan: colonoscopy will be '
                     'scheduled.\n').replace('\n', eol)
-            with self.subTest(eol=repr(eol)):
+            with self.subTest(eol=repr(eol), title=title):
                 self.assertIsNone(sent(text))
                 self.assertEqual(answers(text, ('2026-11-04', STRANGER)), {'2026-11-04': 'held', STRANGER: 'held'})
                 self.assertIn(context.ASKED_DATE_NOTE, date_fact(text).note)
