@@ -2003,6 +2003,19 @@ def _names_another_block(line: str) -> bool:
     return _OCCURRENCE_HEAD.search(line) is not None or cues.EM_TITLE.match(line) is not None
 
 
+def _names_booking_today(line: str) -> bool:
+    """gi3 integration after fix round 2 (51(c): an uncertain binding asks): whether a block heading names a booking only
+    by a booking word, beside a word of today ("Today's appointment", "Appointment today"). Today's appointment may be
+    this very visit, so a visit or procedure date under it speaks against the note's own date - a conflict where they
+    differ - and is never dropped while the note's own, contradicted date is sent (the fix owner's known limit, "needs an
+    owner decision"). A heading that names a service, an act, a block word of its own ("Results reviewed today") or
+    another occurrence explicitly governs as before (_BLOCK_WORDS holds _HEADING_OCCURRENCE: "scheduled", "next")."""
+    if _BOOKING.search(line) is None or cues.TODAY.search(line) is None:
+        return False
+    return not (_sections._service_named(line) or _sections._act_or_place_named(line)
+                or _sections._S2_PROCEDURE_WORD.search(line) or any(p.search(line) for p in _BLOCK_WORDS))
+
+
 def _field_start(text: str, line_start: int, label_start: int, label_end: int) -> bool:
     """Whether a label opens a field: nothing but blanks or a list marker before it on its line; a cell bar, a tab, a run
     of spaces or a sentence's end right before it (read in the 40 characters before it); or a capitalised label one
@@ -2175,6 +2188,7 @@ class _Governance:
         # column, and the title's head, read once too
         self.later, self.items, self.explicit, self.births, self.others, self.cells = {}, {}, {}, {}, {}, {}
         self.statements, self.clauses = {}, {}
+        self.booking_today_ = {}  # gi3 integration after fix round 2: block heading index -> _names_booking_today
         self.head = self.plan = None
         sentence_starts = [s for s, _ in lay.sentences]
         for n, ls in enumerate(self.lines):
@@ -2241,6 +2255,16 @@ class _Governance:
         if k not in self.names:
             self.names[k] = _names_another_block(self.bodies[k])
         return self.names[k]
+
+    def booking_today(self, sec, line_start: int) -> bool:
+        """Whether the nearest block heading above the line starting at ``line_start`` names a booking only by a booking
+        word beside a word of today (_names_booking_today)."""
+        k = self._nearest(sec, line_start)
+        if k < 0:
+            return False
+        if k not in self.booking_today_:
+            self.booking_today_[k] = _names_booking_today(self.bodies[k])
+        return self.booking_today_[k]
 
     def block_explicit(self, sec, line_start: int) -> bool:
         """gi3 fix round 2 (51(c)(1)): whether that heading names another occurrence explicitly (the closed class of
@@ -2587,7 +2611,9 @@ def _binding(text: str, lay: Layout, start: int, end: int, label: str = '') -> s
         return _encounter_binding(text, lay, gov, sec, start, end, line_start, block, title)
     plan = sec.kind == 'plan'
     if block:
-        return _GOVERNED
+        # gi3 integration after fix round 2: a booking heading that names today ("Today's appointment") is uncertain, so
+        # the date under it speaks only against the note's own date (_names_booking_today)
+        return _AGAINST_OWN if gov.booking_today(sec, line_start) else _GOVERNED
     if block is None:
         if not (plan and label) or (not title and _plan_names_occurrence(sec.heading)):
             return _GOVERNED
