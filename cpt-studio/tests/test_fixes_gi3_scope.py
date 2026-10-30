@@ -292,6 +292,17 @@ class BookedVisitTimeTests(unittest.TestCase):
                 self.assertEqual(proposals['99213'].status, 'needs_clarification')
                 self.assertIn('em_basis', clarified(proposals['99213']))
 
+    def test_a_booked_time_is_no_time_spent_in_any_note(self):
+        # the booking words alone decide, in a note that does not say it was started before the visit (the reviewer's
+        # input says so, and that statement alone refuses its times: the next test)
+        for line in ('Visit time: 30 minutes (return visit slot).', 'Expected visit time: 30 minutes.',
+                     'Encounter time allotted: 30 minutes.', 'Scheduled visit time: 30 minutes.'):
+            text = clinic('Clinic note - return visit', 'Return in one year.', line)
+            with self.subTest(line=line):
+                self.assertIsNone(fact_value(text, 'gi.office_em', 'time_minutes'))
+                proposals, _ = run_engine(text, [('99213', ['Clinic note - return visit'])])
+                held(self, proposals['99213'], ['em_basis'])
+
     def test_a_note_written_before_its_visit_documents_no_time_spent(self):
         # the same class with no booking word: in a note started in advance of the visit no time can have been spent
         # yet, so its time is the booked length - "Total time" too (ready at the installed revision)
