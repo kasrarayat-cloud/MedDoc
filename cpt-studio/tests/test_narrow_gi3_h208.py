@@ -2,14 +2,16 @@
 
 The installed reading skips every date label a plan or history section holds, so h2-08's charge block - "Charge
 information" / "Date of service: 2026-10-06" at the end of its "Assessment and plan" - was dropped and the header's
-contradicted "Date of service: 2026-10-05" was sent. Now a date of service in the note's own closing charge block (the
-closed class context.CHARGE_HEADINGS; never a visit or procedure date, never a history section's block) speaks against
-the note's own labelled date: where they differ the date is asked, and no date is sent. The block may record another
-occurrence, so its date is quoted but never a member's answer (context.CHARGE_DATE_NOTE, USER_CHARGE_NOTE); only the
-document's own date, which the installed revision sends, is taken. Everything else reads as the installed revision
-90377ec6f413 read it: with no own date the charge block's date stays dropped, so nothing is ever newly sent. Synthetic
-text only.
+contradicted "Date of service: 2026-10-05" was sent. Now, where the installed reading sends a date, a date of service in
+the note's own closing charge block (the closed class context.CHARGE_HEADINGS; never a visit or procedure date, never a
+history section's block) that states another date makes the date a question, and no date is sent. The question keeps
+the document's own evidence only: a member's answer is taken only when it is the document's own date, the one the
+installed revision sends, and the block's date is named only as the block's (context.CHARGE_DATE_NOTE,
+charge_date_problem) - the block may record another occurrence. Every other fact reads exactly as the installed revision
+90377ec6f413 read it, its texts and the answers it takes included: with no own date the charge block's date stays
+dropped, and where it already asks, nothing changes. Synthetic text only.
 """
+import re
 from pathlib import Path
 
 from django.test import SimpleTestCase
@@ -46,21 +48,38 @@ def member(text, value):
     return 'held' if context.is_member_conflict(merged(text, value)) else 'taken'
 
 
+def quoted_dates(note):
+    """The calendar dates the quotes in a text state (ISO strings)."""
+    return {day.isoformat() for quote in re.findall('\u201c([^\u201d]*)\u201d', note)
+            for day in (context.date_from_match(m) for m in context.FULL_DATE.finditer(quote)) if day}
+
+
+def reason_of(text):
+    state = checks.service_date_state(context.extract_context(text), None)
+    clarification = checks.service_date_clarification(state)
+    return clarification.reason if clarification else None
+
+
 class ChargeBlockTests(SimpleTestCase):
     def assert_asked(self, text, charge='2026-10-06', own='2026-10-05'):
-        """The narrow release: the date is asked, no date is sent and the question quotes both lines as the block's and
-        the document's own; the document's own date is a member's answer, the charge block's never is."""
+        """The narrow release: the date is asked and no date is sent. The question names the block's date as the block's
+        and the document's own as its own; its evidence is the document's own only, so the document's own date is a
+        member's answer and the block's never is - nor is it quoted as "the document gives" in a held answer's note."""
         fact = date_fact(text)
-        self.assertEqual((fact.origin, fact.note), ('conflict', context.CHARGE_DATE_NOTE), [e.text for e in fact.evidence])
-        self.assertEqual(context.documented_values(fact), ())  # no value a member's answer may choose from the block
+        problem = context.charge_date_problem(fact)
+        self.assertEqual(fact.origin, 'conflict', [e.text for e in fact.evidence])
+        self.assertIsNotNone(problem, fact.note)
+        self.assertEqual({d for e in fact.evidence for d in quoted_dates('\u201c' + e.text + '\u201d')}, {own})
+        self.assertEqual(context.documented_values(fact), ())  # no value a member's answer may choose
         self.assertEqual(date_lines(text), [])  # no date is sent
-        reason = checks.service_date_clarification(checks.service_date_state(context.extract_context(text), None)).reason
-        self.assertTrue(reason.startswith('The charge or billing block that ends the document states a date of service '
-                                          "other than the document's own ("), reason)
+        self.assertTrue(problem.startswith('The charge or billing block that ends the document states \u201c'), problem)
+        self.assertIn(charge, {d for d in quoted_dates(problem.split("other than the document's own", 1)[0])})
+        self.assertEqual(quoted_dates(problem.split("other than the document's own", 1)[1]), {own})
+        self.assertEqual(reason_of(text), problem + '; every service and every dated reference check depends on it.')
         self.assertEqual(member(text, own), 'taken')
-        self.assertEqual(member(text, charge), 'held')
-        self.assertIn('in the charge or billing block that ends the document', merged(text, charge).note)
-        self.assertEqual(member(text, STRANGER), 'held')
+        for value in (charge, STRANGER):
+            self.assertEqual(member(text, value), 'held', value)
+            self.assertEqual(quoted_dates(merged(text, value).note), {own}, value)  # the document's own date only
 
     def assert_never_answered(self, text, other, own='2026-10-05'):
         """Another occurrence's date in a closing charge block the guards may miss: asked or read as installed, never
@@ -68,6 +87,10 @@ class ChargeBlockTests(SimpleTestCase):
         self.assertIn(date_lines(text), ([], [f'Date of service: {own}']))
         self.assertEqual(member(text, other), 'held')
         self.assertEqual(member(text, own), 'taken')
+        self.assertLessEqual(quoted_dates(merged(text, other).note), {own})
+        problem = context.charge_date_problem(date_fact(text))
+        if problem is not None:  # asked: the other date is named as the block's only
+            self.assertEqual(quoted_dates(problem.split("other than the document's own", 1)[1]), {own})
 
     def assert_installed(self, text, value='2026-10-05'):
         """As the installed revision reads it: the header's own date, sent; a different member date held."""
@@ -123,6 +146,9 @@ class ChargeBlockTests(SimpleTestCase):
                       'Charge information\nVisit date: 2026-10-06\n',  # a visit date: a plan may book it
                       'Charge information\nProcedure date: 2026-10-06\n',
                       'Charge information\nNext date of service: 2026-11-18\n',  # its own words: another occurrence
+                      # ... in words no guard holds, which the label's own reader places in another occurrence
+                      'Charge information\nRepeat date of service: 2026-09-01\n',
+                      'Charge information\nProposed date of service: 2026-11-18\n',
                       # a line longer than CHARGE_HEADING_REACH is never read (a cost bound), so its block reads as
                       # installed
                       'Charge information\nDate of service: 2026-10-06\nComment: ' + 'reviewed with the patient ' * 5
@@ -204,6 +230,36 @@ class ChargeBlockTests(SimpleTestCase):
                 header = HEADER.replace('Patient: Synthetic Patient (fictional)\n',
                                         'Patient: Synthetic Patient (fictional)\nDOB: 06/02/59\n')
                 self.assert_never_answered(header + tail, other)
+
+    def test_where_the_installed_reading_already_asks_nothing_changes(self):
+        """The third refutation's dates-n3-2, n3-3 and STATE3N-W1: the release changes only a fact the installed reading
+        sends. Where the document's own dates already make it ask - an own date in a form it does not read, a title or a
+        second label stating another day, a title stating the block's day - the fact is exactly the installed reading's,
+        its question and the answers it takes included: the block's date is never quoted as a documented one."""
+        block = 'Charge information\nDate of service: 2026-10-06\nDiagnosis: anemia\n'
+        for header in (HEADER.replace('Clinic note\n', 'Clinic note\nDOS: 10/5/26\n'),
+                       HEADER.replace('Clinic note\n', 'Hepatology clinic visit - 10/04/2026\n'),
+                       HEADER.replace('Established patient\n', 'Established patient\nEncounter date: 2026-10-04\n'),
+                       HEADER.replace('Clinic note\n', 'Hepatology clinic visit - 10/06/2026\n')):
+            with self.subTest(header=header[len(BANNER):][:80]):
+                text, without = header + PLAN + block, header + PLAN
+                fact, installed = date_fact(text), date_fact(without)
+                self.assertNotEqual(installed.origin, 'document')
+                self.assertEqual(fact, installed)
+                self.assertEqual(reason_of(text), reason_of(without))
+                self.assertNotIn('Date of service: 2026-10-06', reason_of(text))
+                for value in ('2026-10-04', '2026-10-05', '2026-10-06', STRANGER):
+                    self.assertEqual(member(text, value), member(without, value), value)
+
+    def test_a_members_other_date_is_held_quoting_the_documents_own_date_only(self):
+        # the third refutation's dates-n3-1: a member's typo is held, and its note names only the document's own date as
+        # what "the document gives" - never the block's
+        for text in (H208, HEADER + PLAN + 'Charges\nPatient: Another Synthetic Patient (fictional)\n'
+                                          'Date of service: 2026-10-06\nCPT: 99213\n'):
+            with self.subTest(text=text[-60:]):
+                note = merged(text, '2026-10-15').note
+                self.assertTrue(context.is_member_conflict(merged(text, '2026-10-15')))
+                self.assertEqual(quoted_dates(note), {'2026-10-05'}, note)
 
     def test_an_equal_date_changes_nothing(self):
         self.assert_installed(HEADER + PLAN + 'Charge information\nDate of service: 2026-10-05\n')

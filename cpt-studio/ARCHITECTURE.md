@@ -2960,10 +2960,11 @@ reader is unchanged, so routing stays `gi-routing@4`, the inventory `gi-services
 `cpt-studio-validation@4`. The engine's only change is the wording of the date question this release's reading raises
 (`checks._date_problem`); no stored assessment reads it.
 
-- **The note's own closing charge block** (`studio/gi/context.py`). Rule A skips every date label a plan or history
-  section holds. The exception is the encounter's own date-of-service label (date of service, DOS, service or encounter
-  date) in the note's own closing charge block, which `_closing_charge_block` reads once per document by reading back
-  from the end. The block must:
+- **The note's own closing charge block** (`studio/gi/context.py`, `_charge_block_asks`). Rule A skips every date
+  label a plan or history section holds. The release acts on one fact only: one the installed reading SENDS (origin
+  'document'). There, the encounter's own date-of-service label (date of service, DOS, service or encounter date) in the
+  note's own closing charge block that states another date makes the date a question. `_closing_charge_block` reads the
+  block once per document, reading back from the end. The block must:
   - close the document;
   - sit in a plan section's reach;
   - be headed by a heading of the closed class `CHARGE_HEADINGS`, alone or joined to its first field by a colon or a
@@ -2976,16 +2977,18 @@ reader is unchanged, so routing stays `gi-routing@4`, the inventory `gi-services
     the note's own plan brings its own plan and charge block, its title above them);
   - carry no date of birth (rule N2).
 
-  The label is then added back as a 'beside' candidate (df-d:4), but only beside an own labelled date it differs from.
-  It speaks, so the date is asked and no date line is sent. It is quoted as `_ChargeSpan`, which no member's answer
-  agrees with, and the fact's note is `CHARGE_DATE_NOTE`, which no reader takes for a documented conflict's values. So
-  only the document's own date, the one the installed revision sends, is ever taken. A member's charge date is held
-  with `USER_CHARGE_NOTE`, and the question names the block (`checks._date_problem`).
+  The question keeps the installed fact's evidence and nothing else. So a member's answer is taken only when it is the
+  document's own date, the one the installed revision sends (`merge_user_values` reads the evidence), and any other
+  answer is held with the installed note, which quotes only the document's own line. The block's date appears only in
+  the fact's note (`CHARGE_DATE_NOTE`). The question's and check's wording read that note's first sentence through
+  `charge_date_problem` (`checks._date_problem`), naming the block's date as the block's.
 
-  The guards above decide only whether to ask. The second refutation of the release showed that no guard on the
-  block's words or layout can tell the note's own block from another occurrence's, so a miss costs an extra question,
-  never a date taken or sent. With no own date the label stays dropped, so nothing is newly sent. Line lookups are
-  bisected and read lines are bounded, so the reader is linear.
+  Every other fact - no own date, or a question the installed reading already asks - is returned exactly as that
+  reading made it, its texts and the answers it takes included. The release's refutations showed why: a block may
+  record another occurrence and no guard can always tell (the second), and quoting the block's date beside a question
+  the document already raised misstated it (the third). So the guards above decide only whether to ask, and a block
+  they miss costs a question, never a date taken or sent. Line lookups are bisected and read lines are bounded, so the
+  reader is linear.
 - **The context re-read and the disabled-provider safeguards** (`studio/jobs.py`):
   - `CONTEXT_VERSION` gi-context@3, with @1 and @2 earlier: a stage remakes such a context before it sends or assesses,
     and no second review is offered on it;

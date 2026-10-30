@@ -1075,3 +1075,21 @@ What it means for this change (recorded by the receiving session, before buildin
         and so did the second's. The standing rule (AGENTS.md: the adversarial pass runs over the finished diff before
         merge) applies to each repair. So the same lenses refute the final diff again before the PR. This is not a new
         round of the parked work.
+
+### Session interpretation, 2026-10-30 (7c8d38da, the narrow release, after its third refutation) — recorded, not owner-ruled
+
+54. **The release changes only a date the installed reading sends (a correction of 53(b)'s mechanism, not of its
+    principle).** 53(b) read the block's date 'beside' and kept it in the fact's evidence as a span no member's answer
+    agrees with. The third refutation found no send and no answer wrongly taken. It found that the texts misstated the
+    source in three ways (dates-n3-1 to n3-3, STATE3N-W1):
+    - beside a question the document's own dates already raised (an own date in a form the reader does not read, a
+      title or a second label stating another day), the question and check quoted the block's date as one more
+      "documented" date of service, and the note claimed the block's date was never taken where the title stated it;
+    - a member's unrelated date was held with "the document gives" followed by the block's line.
+    So the release now acts on one fact only: one the installed reading sends (origin 'document'). There, where the
+    note's own closing charge block states another date of service, the date is asked. The question keeps that fact's
+    evidence and nothing else, so only the document's own date is a member's answer, and any other answer is held with
+    the installed note. The block's date appears only in the fact's note, named as the block's
+    (`context._charge_block_asks`, `CHARGE_DATE_NOTE`, read by `charge_date_problem`). Every other fact is returned
+    exactly as the installed reading made it, its texts and the answers it takes included. The principle of 53(b)
+    stands: the block's date is never this encounter's date of service.
