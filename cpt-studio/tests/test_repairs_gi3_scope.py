@@ -317,18 +317,21 @@ class FutureFollowUpIsNeverDoubtTests(unittest.TestCase):
                                  ('needs_clarification', ['performed_status']))
 
     def test_with_no_marker_the_hold_names_no_doubt_about_today(self):
+        # gi3 fix round 1 (SCOPE-9): the hold states what the readers read in this passage, never a claim about the
+        # passages the code cites beside it
         text = clinic('Gastroenterology', 'Follow up in 3 months.')
         proposals, _ = run_engine(text, [('99213', ['Follow up in 3 months.'])])
         self.assertEqual(proposals['99213'].status, 'needs_clarification')  # held, never excluded
-        self.assertIn("speaks of a later visit or service (read planned), never of today's visit",
-                      status_detail(proposals['99213']))
+        detail = status_detail(proposals['99213'])
+        self.assertIn("the routing-era reading reads it as planned, which never decides today's visit", detail)
+        self.assertNotIn("no passage the code cites documents today's visit", detail)
 
     def test_an_earlier_visit_alone_holds_with_its_own_words(self):
         # 7c8 skeptic sk:8's shape: a reference to an earlier visit never excludes an E/M code, and never doubts today's
         text = clinic('Gastroenterology', 'Continue.') + 'Last seen by Dr. Ramos (fictional) on 2026-03-02.\n'
         proposals, _ = run_engine(text, [('99213', ['Last seen by Dr. Ramos (fictional) on 2026-03-02.'])])
         self.assertEqual(proposals['99213'].status, 'needs_clarification')
-        self.assertIn("speaks of an earlier visit or service (read historical), never of today's visit",
+        self.assertIn("the routing-era reading reads it as historical, which never decides today's visit",
                       status_detail(proposals['99213']))
 
     def test_planned_only_documents_are_never_ready(self):

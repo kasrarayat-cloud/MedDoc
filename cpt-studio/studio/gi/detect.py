@@ -155,10 +155,58 @@ def _em_head_end(text: str) -> int:
     return len(text)
 
 
+# gi3 fix round 1 (SCOPE-1): a visit statement led by a word of cues.EM_REMOTE - itself, or with at most two words
+# between it and the visit words, and a label's colon or dash ("Telephone follow-up visit", "Telephone GI follow-up
+# visit", "Telephone encounter: follow-up visit") - or followed by one as its means ("Follow-up office visit by
+# telephone", "Follow-up visit conducted by telephone") names no office or outpatient visit. Read in the _EM_VISIT_LEAD
+# characters around the statement only, so a field elsewhere on its line ("Practice phone: 555-0100 | Office visit")
+# never leads it.
+_EM_LEAD_WORDS = r'(?:[ \t]+[A-Za-z][\w-]*){0,2}[ \t]*[:\u2013-]?[ \t]+\Z'
+_EM_REMOTE_LEAD = re.compile(r'(?:' + cues.EM_REMOTE.pattern + r')' + _EM_LEAD_WORDS, re.A | re.I)
+_EM_REMOTE_MEANS = re.compile(r'[ \t]*(?:[A-Za-z][\w-]*[ \t]+){0,2}?(?:by|via|over|through|using|on)[ \t]+'
+                              r'(?:(?:the|a)[ \t]+)?(?:' + cues.EM_REMOTE.pattern + r')', re.A | re.I)
+# ... and one led by any word of cues.EM_NOT_OFFICE ("Post-op follow-up visit", "Infusion clinic visit") is read as
+# before, but marks no clinician time as the office visit's (_visit_clinician_times)
+_EM_NOT_OFFICE_LEAD = re.compile(r'(?:' + cues.EM_NOT_OFFICE.pattern + r')' + _EM_LEAD_WORDS, re.A | re.I)
+_EM_VISIT_LEAD = 40
+# gi3 fix round 1 (SCOPE-3, SCOPE-5, SCOPE-7): how far a time statement's own words are read before its subject (on
+# its line, after its clause's last semicolon and in its sentence: a label, "Expected visit time", "At the previous
+# visit, face-to-face time") and after its minutes (the phrase that places them, or a booking's parenthesis).
+_EM_TIME_LEAD = 80
+_EM_TIME_TAIL = 80
+_EM_TIME_PARENTHESIS = re.compile(r'[ \t]*\([^()\n]{0,60}\)', re.A)
+
+
+def _em_time_elsewhere(text: str, sentence_start: int, start: int, minutes: int, end: int) -> bool:
+    """gi3 fix round 1 (SCOPE-3, SCOPE-5, SCOPE-7): whether an E/M time statement - its subject at ``start``, its
+    minutes at [``minutes``, ``end``) - is by its own words another occasion's time, a booking or a drug
+    administration's time, never the time spent on the date of the encounter (cues.EM_TIME_ELSEWHEN,
+    cues.EM_TIME_BOOKED, cues.EM_TIME_ADMINISTERED): "Physician time this calendar month for care coordination: 35
+    minutes.", "Face-to-face time at the previous visit: 40 minutes.", "I personally spent 45 minutes this week ...",
+    "Visit time: 30 minutes (return visit slot).", "Expected visit time: 30 minutes.", "Total infusion time: 120
+    minutes.". Its own words are its line before the subject (after the clause's last semicolon, back to its sentence's
+    start and at most _EM_TIME_LEAD characters), the words up to its minutes, and right after them the phrase that
+    places them (cues.EM_TIME_ELSEWHEN_AFTER) or a parenthesis; never the rest of its sentence. A statement whose own
+    words also say the date of the encounter (cues.EM_TIME_DAY) is never another occasion's. Every read is bounded, so
+    the work is linear in the statements."""
+    lo = max(sentence_start, start - _EM_TIME_LEAD, 0)
+    lo = max(lo, text.rfind('\n', lo, start) + 1, text.rfind(';', lo, start) + 1)
+    hi = min(len(text), end + _EM_TIME_TAIL)
+    if not cues.EM_TIME_DAY.search(text, lo, end) and (cues.EM_TIME_ELSEWHEN.search(text, lo, minutes)
+                                                       or cues.EM_TIME_ELSEWHEN_AFTER.match(text, end, hi)):
+        return True
+    if cues.EM_TIME_BOOKED.search(text, lo, minutes) or cues.EM_TIME_ADMINISTERED.search(text, lo, minutes):
+        return True
+    parenthesis = _EM_TIME_PARENTHESIS.match(text, end, hi)
+    return parenthesis is not None and cues.EM_TIME_BOOKING_WORD.search(text, *parenthesis.span()) is not None
+
+
 def _em_mentions(text: str, lay: Layout) -> tuple[tuple[Mention, ...], tuple[Mention, ...]]:
     """The office E/M documentation mentions, and apart from them the clinician times their sentences do not frame as
-    the visit's (cues.EM_TIME's ``clinician`` group): _route reads those only beside a marker of today's visit."""
+    the visit's (cues.EM_TIME's ``clinician`` group): _route reads those only beside a marker of today's visit. gi3 fix
+    round 1 (SCOPE-5): a note that says it was written before its visit (cues.EM_PRECHARTED) documents no time spent."""
     found = []
+    precharted = cues.EM_PRECHARTED.search(text) is not None
     for section in lay.sections:
         label = EM_HEADINGS.get(section.label)
         if label and section.heading:
@@ -170,11 +218,13 @@ def _em_mentions(text: str, lay: Layout) -> tuple[tuple[Mention, ...], tuple[Men
             if body:
                 found.append(Mention('gi.office_em', body.start('level'), body.end('level'), 'em-mdm', 'MDM level',
                                      body.group('level').lower()))
-        if section.kind == 'time':
+        if section.kind == 'time' and not precharted:
             for line in re.finditer(r'[^\n]+', text[section.start:section.end]):
                 m = cues.EM_TIME_LINE.match(line.group(0))
                 if m:
                     start = section.start + line.start()
+                    if _em_time_elsewhere(text, start, start + m.start(), start + m.start('minutes'), start + m.end()):
+                        continue  # gi3 fix round 1 (SCOPE-3, 5, 7): another occasion's, a booking, an infusion
                     found.append(Mention('gi.office_em', start + m.start(), start + m.end(), 'em-time', 'E/M time',
                                          str(int(m.group('minutes')))))
     # gi3 scope (interpretation 44): the document's own visit title, or a heading naming today's visit, read before the
@@ -184,12 +234,29 @@ def _em_mentions(text: str, lay: Layout) -> tuple[tuple[Mention, ...], tuple[Men
     for m in cues.EM_TITLE.finditer(text):
         if _EM_OTHER_OCCURRENCE.search(text, m.start(), m.start('title')):
             continue  # "Next follow-up visit", "Scheduled visit: return visit": another occurrence's
+        if cues.EM_NOT_OFFICE.search(text, m.start(), m.start('title')) or cues.EM_REMOTE.search(text, m.end('title'),
+                                                                                                m.end()):
+            continue  # gi3 fix round 1 (SCOPE-1, SCOPE-7): "Telephone follow-up note", "Follow-up note - telephone"
         heading = m.group('heading') is not None
         if m.start() >= head_end and not (heading and cues.TODAY.search(m.group('title'))):
             continue  # a title below the head names no document's own encounter
+        if not heading:
+            # gi3 fix round 1 (SCOPE-2): a title line in a plan or a history section is that section's content - a later
+            # visit ("Plan" / "Return visit - three months" in a short note's head), or a label's value ("Plan: Return
+            # visit") - unless the line is itself the section's heading ("GI clinic follow-up"), or the section is the
+            # one the document's own follow-up title opens ("Gastroenterology follow-up" / "Clinic note - return
+            # visit"; context._title_start, the dates binding's RC5: interpretation 42, such a section governs nothing)
+            section = lay.section_at(m.start())
+            if section.kind in ELSEWHERE_SECTIONS and (section.heading is None or section.heading.start < m.start()
+                                                       or section.heading.end < m.end('title')) \
+                    and section.start != ctx._title_start(text):
+                continue
         found.append(Mention('gi.office_em', m.start('title'), m.end('title'), 'em-visit',
                              'visit heading' if heading else 'visit title', 'title'))
     for m in cues.EM_VISIT.finditer(text):
+        if _EM_REMOTE_LEAD.search(text, max(0, m.start() - _EM_VISIT_LEAD), m.start()) \
+                or _EM_REMOTE_MEANS.match(text, m.end(), m.end() + _EM_VISIT_LEAD):
+            continue  # gi3 fix round 1 (SCOPE-1): "Telephone follow-up visit", "Office visit via telephone"
         found.append(Mention('gi.office_em', m.start(), m.end(), 'em-visit', m.group(0)))
     # Whether a sentence says its time is not E/M time is read once per sentence (gi2 integration, cost: one pasted line
     # of 7,500 time statements made one sentence that every statement rescanned, 60.1 s at 2b82889f), and so is whether it
@@ -197,12 +264,14 @@ def _em_mentions(text: str, lay: Layout) -> tuple[tuple[Mention, ...], tuple[Men
     not_em_time: dict[tuple[int, int], bool] = {}
     framed: dict[tuple[int, int], bool] = {}
     clinician = []
-    for m in cues.EM_TIME.finditer(text):
+    for m in () if precharted else cues.EM_TIME.finditer(text):  # gi3 fix round 1 (SCOPE-5): no time spent yet
         sentence = lay.sentence_for(m.start(), m.end())
         if sentence not in not_em_time:
             not_em_time[sentence] = cues.NOT_EM_TIME.search(text, *sentence) is not None
         if not_em_time[sentence]:
             continue
+        if _em_time_elsewhere(text, sentence[0], m.start(), m.start('minutes'), m.end()):
+            continue  # gi3 fix round 1 (SCOPE-3, 5, 7): another occasion's, a booking, an infusion; framed or not
         if m.group('clinician') is not None:
             if sentence not in framed:
                 framed[sentence] = cues.EM_TIME_FRAME.search(text, *sentence) is not None
@@ -228,14 +297,53 @@ def _em_mentions(text: str, lay: Layout) -> tuple[tuple[Mention, ...], tuple[Men
     return em, tuple(kept)
 
 
-def _visit_clinician_times(an: Analysis, base: dict) -> tuple[Mention, ...]:
+def _procedure_text(an: Analysis, readings: dict) -> bool:
+    """gi3 fix round 1 (SCOPE-4): whether the document has today's procedure text - a procedure, findings or technique
+    section, or a service mention read as done today (``readings``: routing's readings of the service mentions and
+    references) - whether or not routing names the procedure's family (a transient elastography, a paracentesis)."""
+    return any(s.kind in POSITIVE_SECTIONS for s in an.lay.sections) or any(
+        r.status in ('performed', 'incomplete') for r in readings.values())
+
+
+# gi3 fix round 1 (SCOPE-4, SCOPE-6): the headings under which a note records an encounter of its own - its examination
+# or its assessment of the patient (a closed class of sections.HEADINGS' 'exam' and 'assessment' labels). Never a
+# procedure's own history and physical ("Pre-procedure physical examination", "Pre-procedure assessment"), its vital
+# signs, or a "Diagnosis" field, which a procedure report or a letter writes as often as a visit note does.
+ENCOUNTER_LABELS = frozenset(('examination', 'physical examination', 'physical exam', 'exam', 'pe', 'assessment',
+                              'clinical impression'))
+
+
+def records_encounter(lay: Layout) -> bool:
+    """Whether the note records an encounter of its own (ENCOUNTER_LABELS): an examination or an assessment section."""
+    return any(s.kind in ('exam', 'assessment') and s.label in ENCOUNTER_LABELS for s in lay.sections)
+
+
+def _visit_clinician_times(an: Analysis, base: dict, procedure_text: bool) -> tuple[Mention, ...]:
     """gi3 scope (interpretation 43): the clinician times their sentences do not frame (an.clinician_times) that are the
     visit's time - beside a marker of today's visit, read as performed (a title, a chief complaint, reason or MDM
     heading, an MDM statement or a visit statement: a later visit's statement places the visit at another time and
     marks nothing), and outside today's procedure text: a time written under a procedure, findings or technique heading
     may be that procedure's, and a procedure's time never counts ("Physician time: 25 minutes." in an EGD report).
-    ``base``: the E/M mentions' readings before the document-level judgement."""
-    if not an.clinician_times or not any(r.status == 'performed' and m.kind != 'em-time' for m, r in base.items()):
+    ``base``: the E/M mentions' readings before the document-level judgement.
+    gi3 fix round 1 (SCOPE-4): in a document with today's procedure text (``procedure_text``: _procedure_text) a title
+    or a heading naming today's visit is no marker unless the note records an encounter of its own (records_encounter):
+    there the title alone is no E/M documentation of today (_route), and a time after the procedure's report
+    ("Impression" / "No advanced fibrosis." / "Physician time: 20 minutes." under "Hepatology clinic note") may be that
+    procedure's, so the title never makes it the visit's, and the time never keeps the title in turn. A clinic note that
+    examines and assesses the patient beside a same-day banding keeps its "Face-to-face time: 24 minutes.".
+    gi3 fix round 1 (SCOPE-1): a visit statement that a word of cues.EM_NOT_OFFICE leads is no marker either
+    (_EM_NOT_OFFICE_LEAD: "Post-procedure follow-up visit" over "Called the patient two days after her
+    colonoscopy.")."""
+    if not an.clinician_times:
+        return ()
+    titles_mark = not procedure_text or records_encounter(an.lay)
+
+    def marks(m: Mention) -> bool:
+        if m.value == 'title':
+            return titles_mark
+        return m.kind != 'em-visit' or not _EM_NOT_OFFICE_LEAD.search(an.text, max(0, m.start - _EM_VISIT_LEAD),
+                                                                       m.start)
+    if not any(r.status == 'performed' and m.kind != 'em-time' and marks(m) for m, r in base.items()):
         return ()
     return tuple(m for m in an.clinician_times if an.lay.section_at(m.start).kind not in POSITIVE_SECTIONS)
 
@@ -7350,7 +7458,8 @@ def _route(an: Analysis) -> RoutingResult:
     an.references = _references(an, attributed)
     readings.update(an.references)
     base = {m: _em_base_reading(an, m) for m in an.em}
-    visit_times = _visit_clinician_times(an, base)  # gi3 scope: a clinician's time beside a marker of today's visit
+    procedure_text = bool(an.em) and _procedure_text(an, readings)  # gi3 fix round 1 (SCOPE-4)
+    visit_times = _visit_clinician_times(an, base, procedure_text)  # gi3 scope: a clinician's time beside a marker
     if visit_times:
         an.em = tuple(sorted(an.em + visit_times, key=lambda m: m.start))
         base.update((m, _em_base_reading(an, m)) for m in visit_times)
@@ -7401,8 +7510,10 @@ def _route(an: Analysis) -> RoutingResult:
     # gi3 scope: on a procedure day the document's title is no E/M documentation of today by itself ("Gastroenterology
     # Clinic Note" over an anoscopy with banding, "Endoscopy follow-up note" over an EGD whose plan names a later visit),
     # so it is read only beside other E/M documentation of today - a chief complaint, reason or MDM heading, MDM, a visit
-    # statement or the visit's time read as performed - and otherwise as before titles were read.
-    if procedure_done and any(m.value == 'title' for m in an.em) and not any(
+    # statement or the visit's time read as performed - and otherwise as before titles were read. gi3 fix round 1
+    # (SCOPE-4): so in any document with today's procedure text, a routed family or not ("Hepatology clinic note" over a
+    # transient elastography under "Procedure").
+    if (procedure_done or procedure_text) and any(m.value == 'title' for m in an.em) and not any(
             r.status == 'performed' and m.value != 'title' for m, r in base.items()):
         an.em = tuple(m for m in an.em if m.value != 'title')  # as if the title named nothing (the span reader too)
         an.em_readings = {m: r for m, r in an.em_readings.items() if m.value != 'title'}
