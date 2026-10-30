@@ -1691,9 +1691,11 @@ def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int
 # closing charge block that states another date makes the date a question, and no date is sent. Every other fact is
 # the installed reading's, exactly - its texts and the answers it takes included - so nothing is ever newly sent. The
 # question keeps the document's own evidence only: a member's answer is taken only when it is the document's own date
-# (the date the installed reading sends), and the block's date is named only as the block's (CHARGE_DATE_NOTE). The
-# block may record this encounter or another occurrence, and the release's refutations showed that no guard on its words
-# or layout can tell which: a copied note's or report's block, a booking, a late or pathology charge, an appended
+# (the date the installed reading sends), and the block's date is named only as what the lines from the last charge or
+# billing heading to the document's end state (CHARGE_DATE_NOTE). Routing reads the date the installed reading sends all
+# the same (service_date_of), so only this fact changes. The block may record this encounter or another occurrence, and
+# the release's refutations showed that no guard on its words or layout can tell which: a copied note's or report's
+# block, a booking, a late or pathology charge, an appended
 # telephone encounter, another patient's block, a date of birth in a form the reader does not read. The guards below
 # (_closing_charge_block, _block_in_another_note, the birth values) only decide whether to ask, so a block they miss
 # costs a question, never a date taken or sent: the block closes the document, is headed by a heading of this closed
@@ -1762,17 +1764,18 @@ def _block_in_another_note(text: str, rows: '_Rows', reach_start: int, block_sta
 
 
 def _closing_charge_block(text: str, rows: '_Rows') -> Optional[tuple[int, int]]:
-    """(the start of its heading's line, the start of its first signature line or the document's end) of the note's own
-    closing charge block, or None. Read back from the end over at most CLOSING_REACH_LINES non-empty lines, each a field
-    ("Diagnosis: ..."), a code or cell line (a digit or a cell bar in it: "CPT 99214", "99214 | Office visit | 1") or a
-    signature line, until a line headed by a charge heading of CHARGE_HEADINGS (alone, or joined before a field on its line
-    by a colon or a dash: "Charge information: Date of service: ...", "Charge information — Date of service: ..."). Any
-    other line - prose, another heading, a descriptor - ends the search with None, and so does a word placing the block in
-    another occurrence (_CHARGE_ELSEWHERE) on any of its lines, or a line longer than CHARGE_HEADING_REACH (never read: the
-    heading reader's tail pattern is quadratic in a line's run of marks or spaces). The block ends at its first signature
-    line: a line after it is another entry ("Telephone encounter (DOS: 10/07/2026): ...", the fourth refutation's
-    dates-n4-2), never the block's. Read once per document."""
-    pos, seen, end = len(text), 0, len(text)
+    """(the start of its heading's line, the document's end) of the note's own closing charge block, or None. Read back
+    from the end over at most CLOSING_REACH_LINES non-empty lines, each a field ("Diagnosis: ..."), a code or cell line (a
+    digit or a cell bar in it: "CPT 99214", "99214 | Office visit | 1") or a signature line, until a line headed by a
+    charge heading of CHARGE_HEADINGS (alone, or joined before a field on its line by a colon or a dash: "Charge
+    information: Date of service: ...", "Charge information — Date of service: ..."). Any other line - prose, another
+    heading, a descriptor - ends the search with None, and so does a word placing the block in another occurrence
+    (_CHARGE_ELSEWHERE) on any of its lines, or a line longer than CHARGE_HEADING_REACH (never read: the heading reader's
+    tail pattern is quadratic in a line's run of marks or spaces). The region may hold an entry written after the note's
+    signature ("Telephone encounter (DOS: 10/07/2026): ..."): no word list tells a signature line from a field (the fifth
+    refutation's dates-n5-1 and n5-3), so CHARGE_DATE_NOTE names the region's lines, never "the block's" date. Read once
+    per document."""
+    pos, seen = len(text), 0
     while pos > 0 and seen < CLOSING_REACH_LINES:
         ls, le = rows.line(pos - 1)
         pos = ls
@@ -1783,31 +1786,30 @@ def _closing_charge_block(text: str, rows: '_Rows') -> Optional[tuple[int, int]]
         if le - ls > CHARGE_HEADING_REACH or _CHARGE_ELSEWHERE.search(line):
             return None
         if _heading_words(line) in CHARGE_HEADINGS:
-            return ls, end
+            return ls, len(text)
         colon = line.find(':')
-        if colon > 0 and (_heading_words(line[:colon]) in CHARGE_HEADINGS
-                          or _heading_words(_JOINED_DASH.split(line[:colon], 1)[0]) in CHARGE_HEADINGS):
-            return ls, end  # the heading joined to its first field, by a colon or a dash
-        signature = _SIGNATURE_LINE.match(line.strip())
-        if signature:
-            end = ls  # read back, the last signature line met is the block's first
-        if not (0 < colon <= 60 or '|' in line or any(ch.isdigit() for ch in line) or signature):
+        if colon > 0 and (_heading_words(line[:colon]) in CHARGE_HEADINGS or _heading_words(
+                _JOINED_DASH.split(_HEADING_MARKS.sub('', line[:colon]), 1)[0]) in CHARGE_HEADINGS):
+            return ls, len(text)  # the heading joined to its first field, by a colon or a dash (after its bullet)
+        if not (0 < colon <= 60 or '|' in line or any(ch.isdigit() for ch in line)
+                or _SIGNATURE_LINE.match(line.strip())):
             return None
     return None
 
 
-CHARGE_DATE_NOTE = ('The charge or billing block that ends the document states {block}, a date of service other than the '
-                    "document's own, {value} ({own}). The block may record this encounter or another occurrence, so the "
-                    "date is asked; a member's answer is taken only when it is the document's own date.")
+CHARGE_DATE_NOTE = ("The lines from the document's last charge or billing heading to its end state {block}, a date of "
+                    "service other than the document's own, {value} ({own}). Those lines may record this encounter or "
+                    "another occurrence, so the date is asked; a member's answer is taken only when it is the document's "
+                    'own date.')
 _CHARGE_NOTE_HEAD = CHARGE_DATE_NOTE.split('{', 1)[0]
-_CHARGE_NOTE_REST = '). The block may record this encounter or another occurrence'
+_CHARGE_NOTE_REST = '). Those lines may record this encounter or another occurrence'
 _CHARGE_NOTE_OWN = re.compile(r"a date of service other than the document's own, (\d{4}-\d{2}-\d{2}) \(")
 
 
 def charge_date_problem(fact) -> Optional[str]:
     """What a date question the note's closing charge block asks (_charge_block_asks) states as its problem: the note's
-    first sentence, naming the block's date as the block's and the document's own as its own - or None for any other
-    fact. Every reader that words that question reads it here, where its note is written (checks._date_problem).
+    first sentence, naming what the block's lines state as theirs and the document's own date as its own - or None for
+    any other fact. Every reader that words that question reads it here, where its note is written (checks._date_problem).
     ``fact`` is a Fact or a stored context fact (a mapping); the last marker is the note's own, whatever a quote holds."""
     get = fact.get if isinstance(fact, dict) else (lambda name, default=None: getattr(fact, name, default))
     note = str(get('note', '') or '')
@@ -1829,10 +1831,12 @@ def _charge_block_asks(text: str, lay: Layout, fact: Fact) -> Fact:
     """The service date fact, asked where the note's own closing charge block states another date of service than the one
     the installed reading sends (GI round 3, the narrow release; h2-08). Only a fact that reading sends - origin
     'document' - is ever changed, and only into a question; every other fact is returned exactly as it made it. The
-    question keeps that fact's evidence and nothing else, so a member's answer is taken only when it is the document's
-    own date (merge_user_values reads the evidence), and the block's date is named in its note only, as the block's: the
-    block may record this encounter or another occurrence, so it is never this encounter's date of service. Read once
-    per document: the closing block is bounded, and every other loop is linear."""
+    question keeps that fact's evidence and nothing else, and its note keeps the date that fact sends, so a member's answer
+    is taken or held exactly as that fact takes or holds it (charge_date_own, merge_user_values). The block's date is named
+    in the note only, as what the lines from the last charge or billing heading to the document's end state: those lines
+    may record this encounter or another occurrence - an entry written after the signature among them - so their date is
+    never this encounter's date of service. A block that also states the document's own date does not ask. Read once per
+    document: the closing block is bounded, and every other loop is linear."""
     if fact.origin != 'document' or not fact.value:
         return fact
     rows = _Rows(text)
@@ -2672,7 +2676,15 @@ def extract_context(text: str) -> dict[str, Fact]:
 
 
 def service_date_of(text: str) -> Optional[date]:
+    """The date routing reads where no effective date applies (detect._analysis), never a date a request carries
+    (jobs._service_date_of reads the stored facts). The question the note's closing charge block asks keeps it the date
+    the installed reading sends, so routing, and the inventory and the engine that read routing, read such a document
+    exactly as installed, asked or with a member's answer held (the fifth refutation, dates-n5-4: read with no date, a
+    dated service went from performed to "service date not established")."""
     fact = _context(text)[0]
+    own = charge_date_own(fact)
+    if own is not None:
+        return date.fromisoformat(own)
     return date.fromisoformat(fact.value) if fact.origin == 'document' else None
 
 

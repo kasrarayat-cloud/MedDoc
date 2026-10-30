@@ -1006,8 +1006,8 @@ def _date_problem(state: DateState) -> str:
             return f'The date of service is in conflict. {state.fact.note.rstrip(".")}'
         problem = charge_date_problem(state.fact)
         if problem:
-            # GI round 3, the narrow release: the closing charge block may record another occurrence, so its date is named
-            # as the block's - never as a documented date of service of this encounter (context._charge_block_asks)
+            # GI round 3, the narrow release: the closing charge block's lines may record another occurrence, so what they
+            # state is named as theirs - never as a documented date of service of this encounter (context._charge_block_asks)
             return problem
         return f'Conflicting dates of service are documented ({conflict_values(state.fact)})'
     if state.origin == 'unreadable':

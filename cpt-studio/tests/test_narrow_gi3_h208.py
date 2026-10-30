@@ -6,18 +6,22 @@ contradicted "Date of service: 2026-10-05" was sent. Now, where the installed re
 the note's own closing charge block (the closed class context.CHARGE_HEADINGS; never a visit or procedure date, never a
 history section's block) that states another date makes the date a question, and no date is sent. The question keeps
 the document's own evidence only: a member's answer is taken only when it is the document's own date, the one the
-installed revision sends, and the block's date is named only as the block's (context.CHARGE_DATE_NOTE,
-charge_date_problem) - the block may record another occurrence. Every other fact reads exactly as the installed revision
-90377ec6f413 read it, its texts and the answers it takes included: with no own date the charge block's date stays
-dropped, and where it already asks, nothing changes. Synthetic text only.
+installed revision sends, and the block's date is named only as what the lines from the last charge or billing heading
+to the document's end state (context.CHARGE_DATE_NOTE, charge_date_problem) - those lines may record another occurrence.
+Every other fact reads exactly as the installed revision 90377ec6f413 read it, its texts and the answers it takes
+included: with no own date the charge block's date stays dropped, and where it already asks, nothing changes. Routing
+reads the date the installed revision sends, asked or held. Synthetic text only.
 """
 import re
+from datetime import date
 from pathlib import Path
 
 from django.test import SimpleTestCase
 
-from studio.gi import context
+from studio import jobs
+from studio.gi import context, detect
 from studio.providers.corti import build_coding_request
+from studio.types import to_jsonable
 from studio.validation import checks
 
 FIXTURES = Path(__file__).resolve().parent / 'fixtures' / 'gi3'
@@ -35,8 +39,10 @@ def date_fact(text):
     return context.extract_context(text)['service_date']
 
 
-def date_lines(text):
-    request = build_coding_request('corti', 'test', text, context.service_date_of(text), 10 ** 7)
+def date_lines(text, user_values=None):
+    """The date lines of the request the stored facts make: the send path, never the date routing reads."""
+    facts = jobs._merged_facts(context.extract_context(text), user_values or {})
+    request = build_coding_request('corti', 'test', text, jobs._service_date_of(facts), 10 ** 7)
     return list(request.contexts[1:])
 
 
@@ -62,9 +68,9 @@ def reason_of(text):
 
 class ChargeBlockTests(SimpleTestCase):
     def assert_asked(self, text, charge='2026-10-06', own='2026-10-05'):
-        """The narrow release: the date is asked and no date is sent. The question names the block's date as the block's
-        and the document's own as its own; its evidence is the document's own only, so the document's own date is a
-        member's answer and the block's never is - nor is it quoted as "the document gives" in a held answer's note."""
+        """The narrow release: the date is asked and no date is sent. The question names what the block's lines state as
+        theirs and the document's own date as its own; its evidence is the document's own only, so the document's own date
+        is a member's answer and the block's never is - nor is it quoted as "the document gives" in a held answer's note."""
         fact = date_fact(text)
         problem = context.charge_date_problem(fact)
         self.assertEqual(fact.origin, 'conflict', [e.text for e in fact.evidence])
@@ -72,7 +78,8 @@ class ChargeBlockTests(SimpleTestCase):
         self.assertEqual({d for e in fact.evidence for d in quoted_dates('\u201c' + e.text + '\u201d')}, {own})
         self.assertEqual(context.documented_values(fact), ())  # no value a member's answer may choose
         self.assertEqual(date_lines(text), [])  # no date is sent
-        self.assertTrue(problem.startswith('The charge or billing block that ends the document states \u201c'), problem)
+        self.assertTrue(problem.startswith("The lines from the document's last charge or billing heading to its end state "
+                                           '\u201c'), problem)
         self.assertIn(charge, {d for d in quoted_dates(problem.split("other than the document's own", 1)[0])})
         self.assertEqual(quoted_dates(problem.split("other than the document's own", 1)[1]), {own})
         self.assertEqual(reason_of(text), problem + '; every service and every dated reference check depends on it.')
@@ -89,7 +96,7 @@ class ChargeBlockTests(SimpleTestCase):
         self.assertEqual(member(text, own), 'taken')
         self.assertLessEqual(quoted_dates(merged(text, other).note), {own})
         problem = context.charge_date_problem(date_fact(text))
-        if problem is not None:  # asked: the other date is named as the block's only
+        if problem is not None:  # asked: the other date is named as the block's lines' only
             self.assertEqual(quoted_dates(problem.split("other than the document's own", 1)[1]), {own})
 
     def assert_installed(self, text, value='2026-10-05'):
@@ -126,7 +133,10 @@ class ChargeBlockTests(SimpleTestCase):
                       '__Charge information__\nDate of service: 2026-10-06\n',
                       '__Charges:__\nDate of service: 2026-10-06\n',
                       'Charge information—Date of service: 2026-10-06\nDiagnosis: anemia\n',
-                      'Charge Information–Date of Service: 2026-10-06\nDiagnosis: anemia\n'):
+                      'Charge Information–Date of Service: 2026-10-06\nDiagnosis: anemia\n',
+                      # the fifth refutation's dates-n5-2: a dash bullet before a dash-joined heading
+                      '– Charge information – Date of service: 2026-10-06\nCPT: 99214\n',
+                      '— Billing — DOS: 10/06/2026\nCPT: 99214\n'):
             with self.subTest(block=block):
                 self.assert_asked(HEADER + PLAN + block)
 
@@ -280,10 +290,11 @@ class ChargeBlockTests(SimpleTestCase):
                 self.assertEqual(merged(text, '2026-10-06').note,
                                  context.USER_CONFLICT_NOTE.format(user='2026-10-06', document='2026-10-05'))
 
-    def test_a_block_that_states_the_documents_own_date_or_an_entry_after_the_signature_asks_nothing(self):
-        """The fourth refutation's dates-n4-2: the block ends at its first signature line, and a block that states the
-        document's own date does not contradict it - a later entry's date (a telephone call, an appointment, a lab draw)
-        is never named as the block's."""
+    def test_a_block_that_states_the_documents_own_date_asks_nothing_and_a_later_entry_is_named_as_the_lines(self):
+        """The fourth refutation's dates-n4-2 and the fifth's n5-1 and n5-3: a block that states the document's own date
+        does not contradict it, whatever entry follows its signature. Elsewhere the question names what the lines from the
+        last charge or billing heading to the document's end state - never "the block's" date: no word list tells a
+        signature line from a field ("Electronic signature: ...", "Signed ABN on file: no")."""
         signed = 'Electronically signed: Synthetic Doctor, MD (fictional), 2026-10-05 17:02\n'
         for tail in ('Charge information\nDate of service: 2026-10-05\nCPT: 99214\n' + signed
                      + 'Telephone encounter (DOS: 10/07/2026): labs reviewed with the patient. No charge.\n',
@@ -292,12 +303,54 @@ class ChargeBlockTests(SimpleTestCase):
                      'Charge information\nDate of service: 2026-10-05\nDate of service: 2026-10-06\nCPT: 99214\n'):
             with self.subTest(tail=tail[-50:]):
                 self.assert_installed(HEADER + PLAN + tail)
-        # the block's own date still asks, and only it is named
+        # a later entry after the block's own date: both are named, as the lines' dates
         text = (HEADER + PLAN + 'Charge information\nDate of service: 2026-10-06\n' + signed
                 + 'Follow-up appointment: DOS 11/04/2026 at 09:00 with Synthetic Doctor (fictional).\n')
         self.assert_asked(text)
         problem = context.charge_date_problem(date_fact(text))
-        self.assertEqual(quoted_dates(problem.split("other than the document's own", 1)[0]), {'2026-10-06'})
+        self.assertEqual(quoted_dates(problem.split("other than the document's own", 1)[0]), {'2026-10-06', '2026-11-04'})
+        # a block with no date of service of its own, a signature this service does not read, then a telephone entry: asked,
+        # its date named as the lines', and every answer taken or held as installed (n5-1)
+        text = (HEADER + PLAN + 'Charge information\nCPT: 99214\nICD-10: K74.60, R18.8\n'
+                'Electronic signature: Synthetic Doctor, MD (fictional), 2026-10-05 17:02\n'
+                'Telephone encounter (DOS: 10/07/2026): labs reviewed with the patient; continue diuretics. No charge.\n')
+        self.assert_asked(text, charge='2026-10-07')
+        # a field that opens with a signature word stays a field of the block (n5-3)
+        for block in ('Billing\nSigned ABN on file: no\nDate of service: 10/06/2026\nCPT: 99214\n',
+                      'Charge information\nDictated by: Synthetic Doctor, MD (fictional)\nDate of service: 2026-10-06\n'
+                      'CPT: 99214\n'):
+            with self.subTest(block=block):
+                self.assert_asked(HEADER + PLAN + block)
+
+    def test_routing_reads_what_the_installed_reading_sends_asked_or_held(self):
+        """The fifth refutation's dates-n5-4: routing's only way to the document's date is context.service_date_of, and a
+        question there read the document with no date - held or unanswered, a dated service went from performed to "service
+        date not established". Routing, and the inventory and the engine that read it, stay the installed reading's: only
+        the date fact changes, and no date is sent while the question stands."""
+        proc = (FIXTURES / 'upgrade' / 'proc-charge-block.txt').read_text(encoding='utf-8')
+        dated = proc.replace('removed with a cold snare and retrieved.\n',
+                             'removed with a cold snare and retrieved.\n'
+                             'A diminutive rectal polyp was removed with cold forceps on 2026-10-05.\n')
+        self.assertNotEqual(proc, dated)
+        own = date(2026, 10, 5)
+        for text in (proc, dated, H208):
+            with self.subTest(text=text[100:140]):
+                self.assert_asked(text)
+                self.assertEqual(context.service_date_of(text), own)
+                self.assertEqual(detect.route(text), detect.route(text, own))
+                stored = to_jsonable(detect.route(text, own))
+                for answer, sent in (({}, None), ({'service_date': '2026-10-06'}, None),
+                                     ({'service_date': STRANGER}, None), ({'service_date': '2026-10-05'}, own)):
+                    facts, service_date, routing = jobs._analyze_child(text, answer, 10 ** 6)
+                    self.assertEqual(service_date, sent, answer)  # the send path: a question or a held answer sends none
+                    self.assertEqual(routing, stored, answer)
+                    self.assertEqual(date_lines(text, answer), [f'Date of service: {sent}'] if sent else [], answer)
+        colonoscopy = next(f for f in detect.route(dated).findings if f.family == 'gi.colonoscopy')
+        self.assertEqual(colonoscopy.status, 'performed')
+        self.assertIn('cold forceps', {fact.value for fact in colonoscopy.facts if fact.name == 'interventions'}.pop())
+        # a fact the release leaves alone keeps the no-date reading: the release moves routing only off its own question
+        conflict = HEADER.replace('Date of service: 2026-10-05\n', 'Date of service: 2026-10-05\nDate of service: 2026-10-07\n')
+        self.assertIsNone(context.service_date_of(conflict + PLAN))
 
     def test_an_equal_date_changes_nothing(self):
         self.assert_installed(HEADER + PLAN + 'Charge information\nDate of service: 2026-10-05\n')
