@@ -71,7 +71,9 @@ class TitlesNamingNoOfficeVisitTests(unittest.TestCase):
         # installed), never ready on the call's time
         for name, text, title in (('telephone', A_TELEPHONE, 'Telephone follow-up note'),
                                   ('post-procedure', A_POST_PROCEDURE, 'Post-procedure follow-up note'),
-                                  ('telephone, long', A_TELEPHONE_LONG, 'Telephone follow-up note')):
+                                  ('telephone, long', A_TELEPHONE_LONG, 'Telephone follow-up note'),
+                                  ('audio-only', A_TELEPHONE.replace('Telephone follow-up note', 'Audio-only follow-up '
+                                                                     'note'), 'Audio-only follow-up note')):
             with self.subTest(name):
                 self.assertIsNone(em_status(text))
                 proposals, _ = run_engine(text, [('99212', [title, 'Physician time: 8 minutes.'])])
@@ -221,7 +223,8 @@ class TimeOfAnotherOccasionTests(unittest.TestCase):
                      'Total time at the previous visit: 40 minutes.', 'Total time at the August visit: 40 minutes.',
                      'Face-to-face time: 40 minutes at the previous visit.',
                      'At the previous visit, face-to-face time: 40 minutes.',
-                     'Clinician time over the past 30 days: 60 minutes.', 'Physician time yesterday: 20 minutes.'):
+                     'Clinician time over the past 30 days: 60 minutes.', 'Physician time yesterday: 20 minutes.',
+                     'Total time over two visits: 60 minutes.'):
             text = clinic('Clinic note - return visit', 'Continue omeprazole.', line)
             with self.subTest(line=line):
                 self.assertIsNone(fact_value(text, 'gi.office_em', 'time_minutes'))
@@ -317,7 +320,8 @@ class BookedVisitTimeTests(unittest.TestCase):
         # the booking words alone decide, in a note that does not say it was started before the visit (the reviewer's
         # input says so, and that statement alone refuses its times: the next test)
         for line in ('Visit time: 30 minutes (return visit slot).', 'Expected visit time: 30 minutes.',
-                     'Encounter time allotted: 30 minutes.', 'Scheduled visit time: 30 minutes.'):
+                     'Encounter time allotted: 30 minutes.', 'Scheduled visit time: 30 minutes.',
+                     'Visit time: 30 minutes (booked).'):
             text = clinic('Clinic note - return visit', 'Return in one year.', line)
             with self.subTest(line=line):
                 self.assertIsNone(fact_value(text, 'gi.office_em', 'time_minutes'))
@@ -341,6 +345,15 @@ class BookedVisitTimeTests(unittest.TestCase):
             text = clinic('Clinic note - return visit', 'Return in one year.', line)
             with self.subTest(line=line):
                 self.assertEqual(fact_value(text, 'gi.office_em', 'time_minutes'), minutes)
+
+    def test_controls_a_completed_note_that_names_work_done_before_the_visit_keeps_its_time(self):
+        # what else was done before the visit, or a pre-charting credit, never says the note precedes its visit
+        for line in ('Labs were drawn in advance of the visit.', 'Pre-charted by the medical assistant.',
+                     'Forms to be completed on the day of the colonoscopy.'):
+            text = clinic('Clinic note - return visit', 'Return in one year.', 'Total time: 30 minutes.').replace(
+                'Interval history\n', 'Interval history\n' + line + '\n')
+            with self.subTest(line=line):
+                self.assertEqual(fact_value(text, 'gi.office_em', 'time_minutes'), '30')
 
 
 # --- SCOPE-6: a no-marker note's later visit holds the E/M code -----------------------------------------------------
@@ -403,7 +416,8 @@ class InfusionTimeTests(unittest.TestCase):
         held(self, proposals['99215'], ['performed_status', 'em_basis'])
 
     def test_an_infusions_time_is_never_the_visits_beside_a_visit_title(self):
-        for line in ('Total infusion time: 120 minutes.', 'Time spent on the infusion: 120 minutes.'):
+        for line in ('Total infusion time: 120 minutes.', 'Time spent on the infusion: 120 minutes.',
+                     'Total time for the infliximab administration: 120 minutes.'):
             text = clinic('IBD clinic note', 'Return in 8 weeks.', line)
             with self.subTest(line=line):
                 self.assertIsNone(fact_value(text, 'gi.office_em', 'time_minutes'))
@@ -430,7 +444,9 @@ class VisitPlacedByTheServiceItNamesTests(unittest.TestCase):
     def test_a_visit_after_a_planned_service_stays_held(self):
         # SCOPE-8: a later visit still; routing's hold stands - performed_status asked, never ready
         for visit in (VISIT_AFTER, 'Clinic visit following the EGD planned for next month.',
-                      'Office visit to review the results of the colonoscopy scheduled for 2026-11-18.'):
+                      'Office visit to review the results of the colonoscopy scheduled for 2026-11-18.',
+                      'Colonoscopy scheduled for 2026-11-18, then an office visit.',
+                      'Colonoscopy scheduled for 2026-11-18, followed by an office visit.'):
             with self.subTest(visit=visit):
                 proposals, _ = run_engine(LETTER + visit + '\n', [('99213', [visit])])
                 held(self, proposals['99213'], ['performed_status', 'em_basis'])

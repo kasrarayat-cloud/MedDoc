@@ -1219,8 +1219,9 @@ def _performed_visits(routing: RoutingResult):
 
 
 # gi3 fix round 1 (SCOPE-8): the words that place a visit in time beside the service its statement names (closed
-# classes). After it - after, following, post, subsequent to, once, upon, when or until it - or before it - before,
-# prior to, ahead of, preceding, pending or awaiting it. A visit after a PLANNED service is a later visit still ("Office
+# classes). After it - after, following, post, subsequent to, once, upon, when or until it; then or followed by in a
+# sequence ("Colonoscopy scheduled for 2026-11-18, then office visit") - or before it - before, prior to, ahead of,
+# preceding, pending or awaiting it. A visit after a PLANNED service is a later visit still ("Office
 # visit after the colonoscopy scheduled for 2026-11-18."), and one before it is not placed today either; a visit before
 # a HISTORICAL service is an earlier one. Routing's hold then stands. A visit after a historical service ("Office visit
 # after the colonoscopy done last week") may be today's and reads as the visit's own. So do the words that review a
@@ -1228,8 +1229,8 @@ def _performed_visits(routing: RoutingResult):
 # review them ("Office visit to review the results of the colonoscopy scheduled for 2026-11-18."). Read in the words
 # between the visit statement and the service it names, and in the _VISIT_TIMED_LEAD characters that lead a service
 # named before it.
-_VISIT_AFTER_SERVICE = re.compile(r'\b(?:after(?:wards?)?|following|post|subsequent(?:ly)?|once|upon|when|until)\b',
-                                  re.A | re.I)
+_VISIT_AFTER_SERVICE = re.compile(r'\b(?:after(?:wards?)?|following|post|subsequent(?:ly)?|once|upon|when|until|then'
+                                  r'|followed\s+by)\b', re.A | re.I)
 _VISIT_BEFORE_SERVICE = re.compile(r'\b(?:before|prior|ahead|preceding|pending|awaiting)\b', re.A | re.I)
 _VISIT_AFTER_ITS_OUTCOME = re.compile(r'\b(?:results?|findings|pathology|reports?)\b', re.A | re.I)
 _VISIT_TIMED_LEAD = 40

@@ -775,7 +775,8 @@ EM_TIME_DAY = rx(r'\b(?:' + _EM_TIME_DAY + r')\b')
 # phrase right after them), never in the rest of its sentence ("Total time today: 30 minutes, including review of the
 # labs since the last visit." is today's).
 # Another occasion (a closed class): an earlier or a later visit, appointment, encounter, session, call or consultation
-# ("at the previous visit", "at the August visit", "since the last visit"), and a period that is no single date - a
+# ("at the previous visit", "at the August visit", "since the last visit", "over two visits"), and a period that is no
+# single date - a
 # week, a month, a calendar month, a quarter or a year ("this calendar month", "last week", "per month"), a number of
 # days before ("the past 30 days", "3 days ago"), and the day before or after. A statement whose own words also say the
 # date of the encounter (EM_TIME_DAY) is that date's ("Total time on the date of service, including review of the
@@ -785,7 +786,8 @@ _EM_OTHER_VISIT = (r'(?:previous|prior|last|earlier|preceding|recent|most\s+rece
                    r'|following|subsequent|later|' + _EM_MONTH + r'|(?:mon|tues|wednes|thurs|fri|satur|sun)day)\s+'
                    r'(?:(?:office|clinic|telephone|phone|video|telehealth|virtual|in-person|follow[- ]?up|return'
                    r'|new[- ]patient|established[- ]patient)\s+)?(?:visits?|appointments?|encounters?|sessions?|calls?'
-                   r'|consult(?:ation)?s?)')
+                   r'|consult(?:ation)?s?)|(?:two|three|four|both|several|multiple|all|\d{1,2})\s+'
+                   r'(?:visits|appointments|encounters|sessions)')
 _EM_OTHER_PERIOD = (r'(?:this|last|past|previous|prior|preceding|next|coming|current|each|every|per)\s+'
                     r'(?:calendar\s+)?(?:weeks?|months?|quarters?|years?)|calendar\s+(?:week|month|quarter|year)'
                     r'|(?:past|last|previous|preceding|next)\s+\d{1,3}\s+(?:days|weeks|months)'
@@ -806,20 +808,26 @@ EM_TIME_ELSEWHEN_AFTER = rx(r'[ \t]*(?:(?:in[ \t]+)?total[ \t]+)?(?:(?:at|during
 _EM_BOOKING = r'allotted|allocated|expected|scheduled|booked|estimated|anticipated|reserved|planned|budgeted'
 EM_TIME_BOOKED = rx(r'\b(?:(?:' + _EM_BOOKING + r')\s+(?:(?:visit|encounter|appointment)\s+)?(?:time|length|duration)'
                     r'|(?:time|length|duration)\s+(?:' + _EM_BOOKING + r')|slots?|allotment)\b')
-# ... and any time in a note that says it was written before its visit (a closed class of pre-charting statements: "Note
-# started in advance of the visit; to be completed on the day.", "Pre-charted", "Pre-visit planning note", "the visit
+# ... and in a parenthesis right after the minutes, any booking word qualifies them ("30 minutes (booked)")
+EM_TIME_BOOKING_WORD = rx(r'\b(?:' + _EM_BOOKING + r'|slots?|allotment)\b')
+# ... and any time in a note that says it was written before its visit (a closed class of statements about the note
+# itself: "Note started in advance of the visit; to be completed on the day.", "Pre-visit planning note", "the visit
 # has not yet taken place"): no time can have been spent at a visit still to come, so its "Visit time: 30 minutes." is
-# the booked length (the known limit S2 holds such a note, never ready). Read once per document.
-EM_PRECHARTED = rx(r'\b(?:in\s+advance\s+of|ahead\s+of)\s+(?:the|this|today\W?s|her|his)\s+'
-                   r'(?:visit|appointment|encounter)\b|\bpre-?chart(?:ed|ing)?\b'
-                   r'|\bpre-?visit\s+(?:planning|note|summary|preparation)\b'
-                   r'|\bto\s+be\s+completed\s+(?:on|at|after|during)\s+(?:the\s+)?(?:day|visit|appointment|encounter)\b'
+# the booked length (the known limit S2 holds such a note, never ready). Never what else was done before the visit
+# ("Labs were drawn in advance of the visit.") or a pre-charting credit ("Pre-charted by the medical assistant"), which
+# completed notes carry. Read once per document.
+EM_PRECHARTED = rx(r'\b(?:note|chart|documentation|record)\s+(?:was\s+|is\s+)?(?:started|opened|begun|prepared|written'
+                   r'|created)\s+(?:in\s+advance\s+of|ahead\s+of|before)\s+(?:the|this|today\W?s|her|his)\s+'
+                   r'(?:visit|appointment|encounter)\b|\bpre-?visit\s+planning\s+note\b'
+                   r'|\bto\s+be\s+completed\s+(?:on|at|after|during)\s+(?:the\s+)?(?:day\s+of\s+the\s+)?'
+                   r'(?:visit|appointment|encounter)\b|\bto\s+be\s+completed\s+on\s+the\s+day\b(?!\s+of\b)'
                    r'|\b(?:visit|appointment|encounter)\s+(?:has\s+)?not\s+(?:yet\s+)?(?:occurred|taken\s+place'
                    r'|happened)\b')
 # Another service's time: a drug or blood administration's (an infusion, a transfusion, an injection, a hydration, a
 # chemotherapy administration), as the time's own subject ("Total infusion time: 120 minutes.", "Time spent on the
-# infusion"), as a procedure's is (NOT_EM_TIME; interpretation 43). Time spent discussing an infusion is the visit's.
-_EM_ADMINISTRATION = r'infusions?|transfusions?|injections?|hydration|chemotherapy'
+# infusion", "Total time for the infliximab administration"), as a procedure's is (NOT_EM_TIME; interpretation 43).
+# Time spent discussing an infusion is the visit's.
+_EM_ADMINISTRATION = r'infusions?|transfusions?|injections?|hydration|chemotherapy|administrations?'
 EM_TIME_ADMINISTERED = rx(r'\b(?:(?:' + _EM_ADMINISTRATION + r')\s+(?:time|duration)|(?:time|duration)\s+(?:spent\s+)?'
                           r'(?:on|for|of|during)\s+(?:(?:the|an?)\s+)?(?:[a-z]+\s+)?(?:' + _EM_ADMINISTRATION + r'))\b')
 EM_TIME_LINE = rx(r'^[ \t]*(?:total\s+)?time(?:\s+spent)?[ \t]*[:\-][ \t]*(?P<minutes>\d{1,3})\s*(?:minutes|mins?)\b')
@@ -837,15 +845,15 @@ EM_TITLE = rx(r'^[ \t]*(?:[A-Za-z][A-Za-z /]{0,30}?[ \t]*[:|\u2013-][ \t]*)?'
               r"(?:[A-Za-z][\w&/,()'\u2019.-]*[ \t]+){0,4}?(?P<title>" + _EM_TITLE_NOUN + r')\b'
               r"(?:[ \t]*[-:\u2013\u2014,|][ \t]*[A-Za-z][\w ,/&()'\u2019-]{0,60})?[ \t]*$", FLAGS | re.M)
 # gi3 fix round 1 (SCOPE-1, SCOPE-7): the words that, leading a visit title, make it name no office or outpatient visit
-# (closed classes). A communication that is no visit - a telephone or phone call, an e-mail, a portal message
-# (EM_REMOTE: EM_VISIT names video and telehealth visits, never these; "Telephone follow-up note" over "Called the
-# patient two days after her colonoscopy"): anywhere in a title line ("Follow-up note - telephone"), and leading a visit
-# statement or as its means ("Telephone follow-up visit", "Office visit via telephone"), it names none. A drug or
+# (closed classes). A communication that is no visit - a telephone, phone or audio-only call, an e-mail, a portal
+# message (EM_REMOTE: EM_VISIT names video and telehealth visits, never these; "Telephone follow-up note" over "Called
+# the patient two days after her colonoscopy"): anywhere in a title line ("Follow-up note - telephone"), and leading a
+# visit statement or as its means ("Telephone follow-up visit", "Office visit via telephone"), it names none. A drug or
 # blood administration's own occasion - an infusion, an injection, a transfusion ("Infusion clinic note") - and the
 # follow-up of another service - "Post-procedure", "Post-op", "Postoperative", "Post-discharge" (a procedure's own
 # follow-up, a call or a visit inside its global period, a transitional care visit): a title they lead names no office
 # visit by itself, while a statement that names a visit ("Post-op follow-up visit") is read as before.
-_EM_REMOTE = r'\b(?:tele-?phon\w*|phone[sd]?|e-?mails?|portal)\b'
+_EM_REMOTE = r'\b(?:tele-?phon\w*|phone[sd]?|audio[- ]only|e-?mails?|portal)\b'
 EM_REMOTE = rx(_EM_REMOTE)
 EM_NOT_OFFICE = rx(_EM_REMOTE + r'|\b(?:infus\w*|inject\w*|transfus\w*)\b'
                    r'|\bpost(?:-[a-z]+|[ \t]*(?:op(?:erative)?|procedur(?:e|al))\b)')

@@ -198,7 +198,7 @@ def _em_time_elsewhere(text: str, sentence_start: int, start: int, minutes: int,
     if cues.EM_TIME_BOOKED.search(text, lo, minutes) or cues.EM_TIME_ADMINISTERED.search(text, lo, minutes):
         return True
     parenthesis = _EM_TIME_PARENTHESIS.match(text, end, hi)
-    return parenthesis is not None and cues.EM_TIME_BOOKED.search(text, *parenthesis.span()) is not None
+    return parenthesis is not None and cues.EM_TIME_BOOKING_WORD.search(text, *parenthesis.span()) is not None
 
 
 def _em_mentions(text: str, lay: Layout) -> tuple[tuple[Mention, ...], tuple[Mention, ...]]:
