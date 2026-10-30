@@ -500,6 +500,18 @@ class ProcedureLineItemTests(SimpleTestCase):
         self.assertEqual(statuses(text, [('43239', 'EGD with'), ('45385', 'cold snare polypectomy')]),
                          {'43239': 'ready', '45385': 'needs_clarification'})
 
+    def test_a_site_its_own_service_cannot_reach_is_not_its_own(self):
+        """gi3 fix round 2 (INV2-7): an act with no site of its own never takes one from its clause that its own
+        service cannot reach - the sigmoid colon is no site of an upper endoscopy's biopsies."""
+        for body in ('Upper endoscopy\nCold forceps biopsies were taken from the 6 mm polyp and the sigmoid colon was '
+                     'normal.',
+                     'EGD: biopsies of a 4 mm polyp, then the scope was withdrawn; colonoscopy showed sigmoid colon '
+                     'diverticula.'):
+            with self.subTest(body):
+                inv = read(HEAD + 'Procedure report\nProcedures: EGD and colonoscopy.\n' + body + '\n')
+                self.assertEqual([a.anatomy for a in acts(inv, 'gi.egd', 'biopsy', ('performed',))], [()])
+                self.assertFalse(acts(inv, 'gi.colonoscopy', 'biopsy'))
+
 
 class OtherMentionTechniqueTests(SimpleTestCase):
     """INV2-8: an act's technique is never a word inside another act's mention, unless that mention is its own
