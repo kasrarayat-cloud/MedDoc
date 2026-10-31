@@ -62,6 +62,9 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
         suffix = ".pdf"
     else:
         raise DocumentError("Only DOCX and PDF documents are supported.", "unsupported_format")
+    if operation == "check" and suffix != ".pdf":
+        # The download check is for PDFs only; a stored DOCX is not re-inspected when served.
+        raise DocumentError("Only PDF originals are checked before they are served.", "unsupported_format")
     target = Path(output_path) if output_path is not None else None
     if target is not None and (target.resolve() == source.resolve() or target.exists() or target.is_symlink()):
         raise DocumentError("Export must use a new file; originals and existing exports cannot be overwritten.", "immutable_original")
@@ -151,6 +154,18 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
 def inspect_template(path):
     """Inspect a newly stored original. Raises DocumentError for unsafe/unsupported files."""
     return _run(path, "inspect")
+
+
+def check_original(path, *, expected_sha256=None):
+    """The active-content check a stored PDF original must pass before its bytes are served.
+
+    ⚠️ Inspection at upload is not enough on its own (finding P1, docs/rebuild/pypdf-6.21.4.md):
+    originals accepted before the raw scan existed are still stored and still served, and the
+    check can only get stricter. This runs, in the isolated worker, the same raw scan, pypdf walk,
+    single-catalog and annotation rules as inspection, without the field or capacity rules, on
+    the bytes whose sha256 is `expected_sha256`. Raises DocumentError when they must not be served.
+    """
+    return _run(path, "check", expected_sha256=expected_sha256)
 
 
 def fill_template(original_path, mapping: list, answers: dict, output_path, *,

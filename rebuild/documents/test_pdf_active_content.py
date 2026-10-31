@@ -1,0 +1,694 @@
+"""Finding P1: active content hidden from the PDF upload check (docs/rebuild/pypdf-6.21.4.md).
+
+Every fixture is built here, in memory: the pre-commit hook forbids tracked PDFs, and a fixture
+that is generated is one that cannot drift from the shape it claims. Payloads are harmless:
+app.alert('synthetic'), a file name with no file, a URL-shaped string with no network use.
+
+Run under each pypdf the rebuild may ship with (6.21.1, 6.21.2, 6.21.4). Measured on all three
+with the base 4ebba7732 code: every HIDDEN fixture below was ACCEPTED as a supported template.
+"""
+
+import base64
+from contextlib import contextmanager
+from io import BytesIO
+import logging
+from pathlib import Path
+import re
+import tempfile
+import unittest
+from unittest import mock
+import zlib
+
+from pypdf import PdfReader
+from reportlab.pdfgen import canvas
+
+from . import engine, pdf_raw
+from .service import DocumentError, check_original, fill_template, inspect_template
+
+SCRIPT = b"<< /S /JavaScript /JS (app.alert\\('synthetic'\\)) >>"
+
+
+# ---------------------------------------------------------------------------- builders
+def form():
+    """The one stock shape the engine supports: a ReportLab Helvetica text field."""
+    buffer = BytesIO()
+    document = canvas.Canvas(buffer, invariant=1)
+    document.drawString(30, 780, "Synthetic question: Symptoms")
+    document.acroForm.textfield(name="Symptoms", tooltip="Symptoms", x=30, y=700, width=300, height=30,
+                                fontName="Helvetica", fontSize=10)
+    document.showPage()
+    document.save()
+    return buffer.getvalue()
+
+
+class Base:
+    """The form, and what an incremental update needs to know about it."""
+
+    def __init__(self):
+        self.data = form()
+        reader = PdfReader(BytesIO(self.data))
+        self.root = reader.trailer.raw_get("/Root").idnum
+        self.size = int(reader.trailer["/Size"])
+        self.startxref = int(re.findall(rb"startxref\s+(\d+)", self.data)[-1])
+        self.catalog = re.search(rb"(?:^|\n)%d 0 obj\s*(<<.*?>>)\s*endobj" % self.root, self.data, re.S).group(1)
+
+    def catalog_with(self, extra):
+        return self.catalog[:-2] + b" " + extra + b" >>"
+
+    def scripted(self, payload=True):
+        return self.catalog_with(b"/OpenAction " + SCRIPT) if payload else self.catalog
+
+
+def _body(data):
+    return bytearray(data if data.endswith(b"\n") else data + b"\n")
+
+
+def _objects(body, objects):
+    offsets = {}
+    for number, content in objects:
+        offsets[number] = len(body)
+        body += b"%d 0 obj\n" % number + content + b"\nendobj\n"
+    return offsets
+
+
+def _trailer(body, size, root, prev, at, extra=b""):
+    body += b"trailer\n<< /Size %d /Root %d 0 R /Prev %d %s>>\nstartxref\n%d\n%%%%EOF\n" % (size, root, prev, extra, at)
+    return bytes(body)
+
+
+def table_revision(data, objects, root, prev, size):
+    """A classic incremental update."""
+    body = _body(data)
+    offsets = _objects(body, objects)
+    at = len(body)
+    body += b"xref\n" + b"".join(b"%d 1\n%010d 00000 n \n" % (n, offsets[n]) for n in sorted(offsets))
+    return _trailer(body, size, root, prev, at)
+
+
+def xref_stream_revision(data, objects, root, prev, number, *, defect=None, compressed=(), w=(1, 4, 2)):
+    """An incremental update indexed by a cross-reference stream carrying one defect pypdf drops
+    even with strict=True: 'type' (/Type /Xref), 'nosize', 'indexover' or 'widew' (/W [1 4 9])."""
+    body = _body(data)
+    offsets = _objects(body, objects)
+    at = len(body)
+    rows = sorted([(n, 1, offsets[n], 0) for n in offsets] + [(n, 2, c, i) for n, c, i in compressed]
+                  + [(number, 1, at, 0)])
+    encoded = b"".join(bytes((kind,)) + a.to_bytes(w[1], "big") + b.to_bytes(w[2], "big") for _, kind, a, b in rows)
+    index = b" ".join(b"%d 1" % row[0] for row in rows)
+    if defect == "indexover":
+        index = index[:-1] + b"6"
+    fields = b"/Type %s %s/W [%s] /Index [%s] /Root %d 0 R /Prev %d /Length %d" % (
+        b"/Xref" if defect == "type" else b"/XRef", b"" if defect == "nosize" else b"/Size %d " % (number + 1),
+        b"1 4 9" if defect == "widew" else b"%d %d %d" % w, index, root, prev, len(encoded))
+    body += b"%d 0 obj\n<< %s >>\nstream\n" % (number, fields) + encoded + b"\nendstream\nendobj\n"
+    body += b"startxref\n%d\n%%%%EOF\n" % at
+    return bytes(body)
+
+
+def readable_on_top(data, size):
+    """A readable classic revision whose /Prev reaches the (dropped) one below it."""
+    prev = int(re.findall(rb"startxref\s+(\d+)", data)[-1])
+    root = int(re.findall(rb"/Root (\d+) 0 R", data)[-1])
+    return table_revision(data, [(size, b"(synthetic third revision)")], root, prev, size + 1)
+
+
+def object_stream(objects, encoding):
+    """(dictionary entries, encoded data) of an object stream holding `objects`."""
+    head, parts, offset = [], [], 0
+    for number, content in objects:
+        head.append(b"%d %d" % (number, offset))
+        parts.append(content + b"\n")
+        offset += len(content) + 1
+    header = b" ".join(head) + b"\n"
+    raw = header + b"".join(parts)
+    entries = b"/N %d /First %d" % (len(objects), len(header))
+    if encoding == "flate":
+        return entries + b" /Filter /FlateDecode", zlib.compress(raw)
+    if encoding == "flate-predictor":
+        columns, rows, prior = 7, [], bytes(7)
+        padded = raw + b" " * (-len(raw) % columns)
+        for at in range(0, len(padded), columns):
+            row = padded[at:at + columns]
+            rows.append(b"\x02" + bytes((a - b) & 255 for a, b in zip(row, prior)))
+            prior = row
+        return (entries + b" /Filter /FlateDecode /DecodeParms << /Predictor 12 /Columns %d >>" % columns,
+                zlib.compress(b"".join(rows)))
+    if encoding == "ascii85-flate":
+        return entries + b" /Filter [/ASCII85Decode /FlateDecode]", base64.a85encode(zlib.compress(raw)) + b"~>"
+    if encoding == "lzw":
+        from pypdf._codecs._codecs import LzwCodec   # test-time encoder only; the scan decodes itself
+        return entries + b" /Filter /LZWDecode", LzwCodec().encode(raw)
+    if encoding == "none":
+        return entries, raw
+    raise ValueError(encoding)
+
+
+def p1_trigger(defect, payload=True):
+    """The finding's own shape: a catalog with an /OpenAction script in revision 2, indexed by a
+    cross-reference stream with one defect, reached through /Prev from a readable revision 3."""
+    base = Base()
+    data = xref_stream_revision(base.data, [(base.root, base.scripted(payload))], base.root, base.startxref,
+                                base.size, defect=defect, w=(1, 4, 1))
+    return readable_on_top(data, base.size + 1)
+
+
+def in_object_stream(encoding, *, with_type=True, payload=True):
+    """The scripted catalog inside an object stream of a dropped revision."""
+    base = Base()
+    entries, encoded = object_stream([(base.root, base.scripted(payload))], encoding)
+    stm = base.size
+    head = (b"<< /Type /ObjStm " if with_type else b"<< ") + entries + b" /Length %d >>" % len(encoded)
+    data = xref_stream_revision(base.data, [(stm, head + b"\nstream\n" + encoded + b"\nendstream")], base.root,
+                                base.startxref, stm + 1, defect="type", compressed=[(base.root, stm, 0)])
+    return readable_on_top(data, stm + 2)
+
+
+def hybrid_xrefstm(payload=True):
+    """A classic section whose /XRefStm, unreadable to pypdf, alone indexes the new catalog."""
+    base = Base()
+    body = _body(base.data)
+    offsets = _objects(body, [(base.root, base.scripted(payload))])
+    stm, stm_at = base.size, len(body)
+    rows = bytes((1,)) + offsets[base.root].to_bytes(4, "big") + bytes((0,))
+    body += (b"%d 0 obj\n<< /Type /Xref /Size %d /W [1 4 1] /Index [%d 1] /Length %d >>\nstream\n"
+             % (stm, stm + 1, base.root, len(rows)) + rows + b"\nendstream\nendobj\n")
+    at = len(body)
+    body += b"xref\n0 1\n0000000000 65535 f \n%d 1\n%010d 00000 n \n" % (stm, stm_at)
+    return _trailer(body, stm + 1, base.root, base.startxref, at, b"/XRefStm %d " % stm_at)
+
+
+def first_match(payload=True):
+    """Revision 2's table points the catalog at another object, so pypdf re-locates it by regex
+    and takes the FIRST match in the file: the old, clean catalog. A reader that rebuilds the
+    table takes the last one."""
+    base = Base()
+    filler = base.size
+    body = _body(base.data)
+    offsets = _objects(body, [(base.root, base.scripted(payload)), (filler, b"(synthetic filler)")])
+    at = len(body)
+    body += b"xref\n%d 1\n%010d 00000 n \n%d 1\n%010d 00000 n \n" % (base.root, offsets[filler], filler, offsets[filler])
+    return _trailer(body, filler + 1, base.root, base.startxref, at)
+
+
+def not_in_xref(payload=True):
+    """The catalog names an object no table lists; pypdf finds its first spelling, in a comment."""
+    base = Base()
+    q = base.size
+    names = b"<< /JavaScript << /Names [(synthetic) " + SCRIPT + b"] >> >>" if payload else b"<< >>"
+    body = _body(base.data)
+    body += b"%% %d 0 obj << >> endobj\n" % q
+    offsets = _objects(body, [(base.root, base.catalog_with(b"/Names %d 0 R" % q)), (q, names)])
+    at = len(body)
+    body += b"xref\n%d 1\n%010d 00000 n \n" % (base.root, offsets[base.root])
+    return _trailer(body, q + 1, base.root, base.startxref, at)
+
+
+def invalid_entry(found=True, payload=True):
+    """A malformed table entry: pypdf re-locates the object by its first match, or marks it free."""
+    base = Base()
+    body = _body(base.data)
+    _objects(body, [(base.root, base.scripted(payload))])
+    at = len(body)
+    body += b"xref\n%d 1\n00000000xx 00000 n \n" % (base.root if found else 99)
+    return _trailer(body, 100, base.root, base.startxref, at)
+
+
+def rebuilt_table():
+    """A subsection count that is not an integer: pypdf rebuilds the whole table."""
+    base = Base()
+    body = _body(base.data)
+    offsets = _objects(body, [(base.root, base.catalog)])
+    at = len(body)
+    body += b"xref\n%d /x\n%010d 00000 n \n" % (base.root, offsets[base.root])
+    return _trailer(body, base.size, base.root, base.startxref, at)
+
+
+def root_recovery(payload=True):
+    """The trailer's /Root lost /Type /Catalog; pypdf's root_object adopts another catalog."""
+    base = Base()
+    bogus = base.catalog.replace(b"/Type /Catalog", b"")
+    return table_revision(base.data, [(base.root, bogus), (base.size, base.scripted(payload))], base.root,
+                          base.startxref, base.size + 1)
+
+
+def root_without_catalog_type():
+    """No /Type /Catalog anywhere: pypdf takes the trailer's root anyway, after searching."""
+    data = Base().data
+    assert data.count(b"/Type /Catalog") == 1
+    return data.replace(b"/Type /Catalog", b"/Type /Xatalog")          # same length: offsets stay right
+
+
+def trailer_without_root():
+    base = Base()
+    assert base.data.count(b"/Root %d 0 R" % base.root) == 1
+    return base.data.replace(b"/Root %d 0 R" % base.root, b"/Xoot %d 0 R" % base.root)
+
+
+def no_eof(payload=True):
+    """A last revision without %%EOF: pypdf goes back to the previous %%EOF, a viewer reads the
+    last startxref."""
+    base = Base()
+    data = table_revision(base.data, [(base.root, base.scripted(payload))], base.root, base.startxref, base.size)
+    return data[:data.rindex(b"%%EOF")]
+
+
+def escaped_names(hidden=True):
+    base = Base()
+    catalog = base.catalog_with(b"/Open#41ction << /S /Java#53cript /#4AS (app.alert\\('synthetic'\\)) >>")
+    if not hidden:
+        return table_revision(base.data, [(base.root, catalog)], base.root, base.startxref, base.size)
+    data = xref_stream_revision(base.data, [(base.root, catalog)], base.root, base.startxref, base.size,
+                                defect="type", w=(1, 4, 1))
+    return readable_on_top(data, base.size + 1)
+
+
+def after_eof():
+    base = Base()
+    return base.data + b"%d 0 obj\n" % base.root + base.scripted() + b"\nendobj\n"
+
+
+def inside_stream_data():
+    """A stream whose /Length runs over the next object up to a second "endstream": the object,
+    the scripted catalog of a dropped revision, is syntax only from its own "obj" keyword."""
+    base = Base()
+    s, xref = base.size, base.size + 1
+    body = _body(base.data)
+    inner = b"synthetic\nendstream\nendobj\n%d 0 obj\n" % base.root + base.scripted() + b"\nendobj\n"
+    s_at = len(body)
+    body += b"%d 0 obj\n<< /Length %d >>\nstream\n" % (s, len(inner)) + inner + b"\nendstream\nendobj\n"
+    root_at = s_at + body[s_at:].index(b"\n%d 0 obj" % base.root) + 1
+    at = len(body)
+    rows = b"".join(bytes((1,)) + offset.to_bytes(4, "big") + bytes((0,)) for offset in (root_at, s_at, at))
+    body += (b"%d 0 obj\n<< /Type /Xref /Size %d /W [1 4 1] /Index [%d 1 %d 1 %d 1] /Root %d 0 R /Prev %d "
+             b"/Length %d >>\nstream\n" % (xref, xref + 1, base.root, s, xref, base.root, base.startxref, len(rows))
+             + rows + b"\nendstream\nendobj\nstartxref\n%d\n%%%%EOF\n" % at)
+    return readable_on_top(bytes(body), xref + 1)
+
+
+def old_revision_script():
+    """Revision 2 adds a script; revision 3 takes it out again. pypdf reads revision 3 only."""
+    base = Base()
+    scripted = table_revision(base.data, [(base.root, base.scripted())], base.root, base.startxref, base.size)
+    prev = int(re.findall(rb"startxref\s+(\d+)", scripted)[-1])
+    return table_revision(scripted, [(base.root, base.catalog)], base.root, prev, base.size)
+
+
+def file_attachment():
+    """A /FileAttachment annotation with no /EF, unreferenced: only the subtype rule refuses it."""
+    base = Base()
+    annotation = (b"<< /Type /Annot /Subtype /FileAttachment /Rect [30 30 60 60] /Contents (synthetic) "
+                  b"/FS << /Type /Filespec /F (synthetic.txt) >> >>")
+    return table_revision(base.data, [(base.size, annotation)], base.root, base.startxref, base.size + 1)
+
+
+def container_without_object_stream_keys():
+    """A stream with neither /Type /ObjStm nor /N and /First, named as a container by an xref
+    stream's type-2 row. pdf.js resolves type-2 rows without looking at /Type."""
+    base = Base()
+    _, encoded = object_stream([(base.root, base.scripted())], "flate")
+    stm = base.size
+    head = b"<< /Filter /FlateDecode /Length %d >>" % len(encoded)
+    data = xref_stream_revision(base.data, [(stm, head + b"\nstream\n" + encoded + b"\nendstream")], base.root,
+                                base.startxref, stm + 1, defect="type", compressed=[(base.root, stm, 0)])
+    return readable_on_top(data, stm + 2)
+
+
+#: Shapes whose script or attachment the base code (4ebba7732) ACCEPTED, on 6.21.1, 6.21.2 and
+#: 6.21.4, with the raw kind the scan must report.
+HIDDEN = {
+    "P1 /Type /Xref in a /Prev revision": (lambda: p1_trigger("type"), "active"),
+    "P1 missing /Size in a /Prev revision": (lambda: p1_trigger("nosize"), "active"),
+    "P1 /Index count above /Size in a /Prev revision": (lambda: p1_trigger("indexover"), "active"),
+    "P1 /W [1 4 9] in a /Prev revision": (lambda: p1_trigger("widew"), "active"),
+    "hybrid /XRefStm pypdf cannot read": (hybrid_xrefstm, "active"),
+    "regex first-match recovery": (first_match, "active"),
+    "object outside the xref, found by its first spelling": (not_in_xref, "active"),
+    "invalid xref entry, recovered by first match": (invalid_entry, "active"),
+    "root recovery to another catalog": (root_recovery, "active"),
+    "last revision without %%EOF": (no_eof, "active"),
+    "catalog in an object stream (Flate)": (lambda: in_object_stream("flate"), "active"),
+    "catalog in an object stream (Flate + PNG predictor)": (lambda: in_object_stream("flate-predictor"), "active"),
+    "catalog in an object stream (ASCII85 then Flate)": (lambda: in_object_stream("ascii85-flate"), "active"),
+    "catalog in an object stream (LZW)": (lambda: in_object_stream("lzw"), "active"),
+    "catalog in an object stream without /Type": (lambda: in_object_stream("flate", with_type=False), "active"),
+    "object stream named only by an xref stream": (container_without_object_stream_keys, "active"),
+    "#-escaped names in a dropped revision": (escaped_names, "active"),
+    "objects after %%EOF": (after_eof, "active"),
+    "object inside another stream's data (/Length runs over it)": (inside_stream_data, "active"),
+    "script in an unreferenced old revision": (old_revision_script, "active"),
+    "unreferenced /FileAttachment annotation": (file_attachment, "annotation"),
+}
+
+#: No active content, but pypdf recovers structure while reading: refused as unreadable_pdf by
+#: the second layer. Each names the pypdf template it must produce (strict=True, every version).
+RECOVERED = {
+    "Previous trailer cannot be read: %(args)s": lambda: p1_trigger("type", payload=False),
+    "XRef object at %(xref_stm)d can not be read, some object may be missing": lambda: hybrid_xrefstm(False),
+    "Object ID %(idnum)d,%(generation)d ref repaired": lambda: first_match(False),
+    "Object %(idnum)d %(generation)d found": lambda: not_in_xref(False),
+    "entry %(num)d in Xref table invalid but object found": lambda: invalid_entry(True, False),
+    "entry %(num)d in Xref table invalid; object not found": lambda: invalid_entry(False, False),
+    "Invalid/Truncated xref table. Rebuilding it.": rebuilt_table,
+    "Invalid Root object in trailer": lambda: root_recovery(False),
+    "Possible root found at %(root_ref)r, but missing /Catalog key": root_without_catalog_type,
+    'Cannot find "/Root" key in trailer': trailer_without_root,
+    "CAUTION: startxref found while searching for %%EOF. The file might be truncated and some data might not be read.":
+        lambda: no_eof(False),
+}
+
+
+def raw_kind(data):
+    try:
+        pdf_raw.scan(data)
+    except pdf_raw.Refusal as refusal:
+        return refusal.kind
+    return None
+
+
+@contextmanager
+def pypdf_templates():
+    """The templates of every pypdf warning logged inside the block."""
+    records = []
+
+    class Handler(logging.Handler):
+        def emit(self, record):
+            records.append(record.msg)
+
+    handler = Handler(logging.WARNING)
+    logger = logging.getLogger("pypdf")
+    logger.addHandler(handler)
+    try:
+        yield records
+    finally:
+        logger.removeHandler(handler)
+
+
+def pypdf_reports(data):
+    """What this pypdf logs while reading the file the way inspection reads it: the reader, the
+    catalog, every object reachable from the trailer, the pages and the fields."""
+    with pypdf_templates() as seen:
+        try:
+            reader = PdfReader(BytesIO(data), strict=True)
+            reader.root_object
+            stack, visited = [reader.trailer], set()
+            while stack:
+                item = stack.pop()
+                if hasattr(item, "idnum"):
+                    if (item.idnum, item.generation) in visited:
+                        continue
+                    visited.add((item.idnum, item.generation))
+                    item = item.get_object()
+                if isinstance(item, dict):
+                    stack.extend(item.values())
+                elif isinstance(item, list):
+                    stack.extend(item)
+            len(reader.pages)
+            reader.get_fields()
+        except Exception:
+            pass
+    return seen
+
+
+class Workspace(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.directory = Path(self.temp.name)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def write(self, data, name="input.pdf"):
+        path = self.directory / name
+        path.write_bytes(data)
+        return path
+
+    def engine_code(self, data, operation="inspect"):
+        """The engine in-process, exactly as the worker calls it, without the sandbox."""
+        workspace = self.directory / ("engine-" + operation)
+        workspace.mkdir(exist_ok=True)
+        (workspace / "input.pdf").write_bytes(data)
+        try:
+            engine.process(workspace, {"operation": operation, "format": "pdf"})
+        except engine.DocumentFailure as failure:
+            return failure.code
+        except Exception:
+            return "invalid_document"
+        return "accepted"
+
+
+# ---------------------------------------------------------------------------- the raw scan alone
+class RawScanAlone(Workspace):
+    """pdf_raw.scan is the guarantee: every hidden shape must be refused by it with no other layer."""
+
+    def test_every_hidden_fixture_is_refused_by_the_raw_scan_alone(self):
+        for name, (build, kind) in HIDDEN.items():
+            with self.subTest(name=name):
+                self.assertEqual(raw_kind(build()), kind)
+
+    def test_controls_without_active_content_pass_the_raw_scan(self):
+        for name, build in {"form": form, **RECOVERED}.items():
+            with self.subTest(name=name):
+                self.assertIsNone(raw_kind(build()))
+
+    def test_every_hidden_fixture_is_refused_with_the_warning_layer_switched_off(self):
+        with mock.patch.object(engine, "PYPDF_RECOVERY_GUARD", False):
+            for name, (build, _kind) in HIDDEN.items():
+                with self.subTest(name=name):
+                    self.assertEqual(self.engine_code(build()), "unsafe_upload")
+                    self.assertEqual(self.engine_code(build(), "check"), "unsafe_upload")
+
+
+# ---------------------------------------------------------------------------- the second layer
+class SecondLayer(Workspace):
+    """pypdf's own reports, and the single-catalog rule, refuse what pypdf reads differently."""
+
+    def test_each_structure_recovery_is_reported_by_this_pypdf_and_refused_as_unreadable(self):
+        for template, build in RECOVERED.items():
+            with self.subTest(template=template):
+                self.assertIn(template, engine.PYPDF_STRUCTURE_RECOVERIES)
+                data = build()
+                self.assertIn(template, pypdf_reports(data))
+                self.assertEqual(self.engine_code(data), "unreadable_pdf")
+                self.assertEqual(self.engine_code(data, "check"), "unreadable_pdf")
+
+    def test_the_second_layer_alone_refuses_the_hidden_shapes_pypdf_recovers_from(self):
+        # With the raw scan disabled, every hidden shape that makes pypdf recover is still refused.
+        # The others (after %%EOF, an old revision, an unreferenced annotation) involve no recovery:
+        # only the raw scan sees them, which is why it, not this layer, is the guarantee.
+        silent = {"objects after %%EOF", "script in an unreferenced old revision",
+                  "unreferenced /FileAttachment annotation"}
+        with mock.patch.object(pdf_raw, "scan", lambda data: None):
+            for name, (build, _kind) in HIDDEN.items():
+                with self.subTest(name=name):
+                    if name in silent:
+                        self.assertEqual(self.engine_code(build()), "accepted")
+                    else:
+                        self.assertIn(self.engine_code(build()), {"unreadable_pdf", "unsafe_upload"})
+
+    def test_root_recovery_is_refused_without_the_warning_layer(self):
+        with mock.patch.object(pdf_raw, "scan", lambda data: None), \
+                mock.patch.object(engine, "PYPDF_RECOVERY_GUARD", False):
+            self.assertEqual(self.engine_code(root_recovery(False)), "unreadable_pdf")
+            self.assertEqual(self.engine_code(trailer_without_root()), "unreadable_pdf")
+
+    def test_ordinary_incremental_update_logs_no_recovery(self):
+        base = Base()
+        data = table_revision(base.data, [(base.size, b"(synthetic)")], base.root, base.startxref, base.size + 1)
+        with pypdf_templates() as seen:
+            self.assertEqual(self.engine_code(data), "accepted")
+        self.assertFalse(set(seen) & engine.PYPDF_STRUCTURE_RECOVERIES)
+
+
+# ---------------------------------------------------------------------------- the real worker
+class RealWorker(Workspace):
+    """Upload inspection, fill and the download check, through the sandboxed worker."""
+
+    def test_every_hidden_fixture_is_refused_by_inspection_and_by_the_download_check(self):
+        for name, (build, _kind) in HIDDEN.items():
+            with self.subTest(name=name):
+                path = self.write(build())
+                for operation in (inspect_template, check_original):
+                    with self.assertRaises(DocumentError) as caught:
+                        operation(path)
+                    self.assertEqual(caught.exception.code, "unsafe_upload", operation.__name__)
+
+    def test_recovered_structure_is_unreadable_with_the_user_message(self):
+        path = self.write(p1_trigger("type", payload=False))
+        with self.assertRaises(DocumentError) as caught:
+            inspect_template(path)
+        self.assertEqual(caught.exception.code, "unreadable_pdf")
+        self.assertEqual(str(caught.exception), "This PDF could not be read completely, so it cannot be checked "
+                                                "for active content. Save it as a new PDF and upload it again.")
+        with self.assertRaises(DocumentError) as caught:
+            check_original(path)
+        self.assertEqual(caught.exception.code, "unreadable_pdf")
+
+    def test_ordinary_forms_keep_their_verdict_and_are_served(self):
+        base = Base()
+        incremental = table_revision(base.data, [(base.size, b"(synthetic)")], base.root, base.startxref,
+                                     base.size + 1)
+        for data in (base.data, incremental):
+            path = self.write(data)
+            self.assertEqual([field["key"] for field in inspect_template(path)["fields"]], ["Symptoms"])
+            result = check_original(path)
+            self.assertTrue(result["checked"])
+            self.assertEqual(result["sandbox"], "landlock+seccomp")
+
+    def test_check_serves_safe_flat_pdfs_and_refuses_what_inspection_refuses_for_safety(self):
+        flat = BytesIO()
+        document = canvas.Canvas(flat, invariant=1)
+        document.drawString(30, 780, "Synthetic flat page")
+        document.showPage()
+        document.save()
+        path = self.write(flat.getvalue())
+        with self.assertRaises(DocumentError) as caught:
+            inspect_template(path)
+        self.assertEqual(caught.exception.code, "flat_pdf")                   # field rules: not the check's
+        self.assertTrue(check_original(path)["checked"])
+        encrypted = self.write(Base().data.replace(b"trailer\n<<", b"trailer\n<< /Encrypt 99 0 R", 1), "e.pdf")
+        with self.assertRaises(DocumentError) as caught:
+            check_original(encrypted)
+        self.assertEqual(caught.exception.code, "unsafe_upload")
+
+    def test_check_refuses_docx_and_changed_bytes(self):
+        path = self.write(b"PK\x03\x04synthetic", "input.docx")
+        with self.assertRaises(DocumentError) as caught:
+            check_original(path)
+        self.assertEqual(caught.exception.code, "unsupported_format")
+        path = self.write(form())
+        with self.assertRaises(DocumentError) as caught:
+            check_original(path, expected_sha256="0" * 64)
+        self.assertEqual(caught.exception.code, "source_changed")
+
+    def test_fill_writes_exactly_what_was_scanned_and_the_export_is_clean(self):
+        original = self.write(form())
+        before = original.read_bytes()
+        fields = inspect_template(original)["fields"]
+        output = self.directory / "filled.pdf"
+        fill_template(original, fields, {"Symptoms": "Synthetic symptom only"}, output)
+        self.assertEqual(original.read_bytes(), before)
+        exported = output.read_bytes()
+        pdf_raw.scan(exported)                                    # no active content reaches an export
+        self.assertEqual(PdfReader(BytesIO(exported)).get_form_text_fields()["Symptoms"], "Synthetic symptom only")
+        with mock.patch.object(Path, "read_bytes", autospec=True, side_effect=Path.read_bytes) as reads:
+            engine._open_pdf(original)
+        self.assertEqual(reads.call_count, 1)                     # one read: the scanned bytes are parsed
+
+    def test_fill_of_a_hidden_fixture_writes_no_export(self):
+        output = self.directory / "filled.pdf"
+        with self.assertRaises(DocumentError) as caught:
+            fill_template(self.write(p1_trigger("type")), [{"key": "Symptoms", "label": "Symptoms", "kind": "text",
+                          "locator": {"pdf_field": "Symptoms"}}], {"Symptoms": "x"}, output)
+        self.assertEqual(caught.exception.code, "unsafe_upload")
+        self.assertFalse(output.exists())
+
+    def test_too_complex_to_check_is_unreadable(self):
+        path = self.write(b"%PDF-1.7\n1 0 obj\n" + b"[" * 300 + b"\nendobj\n")
+        with self.assertRaises(DocumentError) as caught:
+            check_original(path)
+        self.assertEqual(caught.exception.code, "unreadable_pdf")
+
+
+# ---------------------------------------------------------------------------- scanner details
+def minimal(objects, trailer=b"<< /Root 1 0 R >>"):
+    """A small PDF; the scan needs no valid xref, so neither do these."""
+    body = b"%PDF-1.7\n" + b"".join(b"%d 0 obj\n%s\nendobj\n" % (n, c) for n, c in objects)
+    return body + b"trailer\n" + trailer + b"\n%%EOF\n"
+
+
+def objstm(objects, extra=b"", encoding="flate"):
+    entries, encoded = object_stream(objects, encoding)
+    return b"<< /Type /ObjStm " + entries + extra + b" /Length %d >>\nstream\n" % len(encoded) + encoded + b"\nendstream"
+
+
+class ScannerDetails(unittest.TestCase):
+    def kind(self, data):
+        return raw_kind(data)
+
+    def test_names_are_compared_decoded(self):
+        self.assertEqual(self.kind(minimal([(1, b"<< /Open#41ction 2 0 R >>")])), "active")
+        self.assertEqual(self.kind(minimal([(1, b"<< /#4Aava#53cript 2 0 R >>")])), "active")
+        self.assertEqual(self.kind(minimal([(1, b"<< /#4AS (synthetic) >>")])), "active")
+        # An invalid escape keeps its '#' in every reader, so it never spells a forbidden name.
+        self.assertIsNone(self.kind(minimal([(1, b"<< /OpenActio#6 1 >>")])))
+
+    def test_strings_and_comments_cannot_hide_a_forbidden_name(self):
+        # A reader that does not balance nested parentheses would end this string early.
+        self.assertEqual(self.kind(minimal([(1, b"<< /T (a(b) /A 2 0 R ) >>")])), "active")
+        self.assertEqual(self.kind(minimal([(1, b"<< /T (a(b) /JS (app.alert\\('synthetic'\\)) ) >>")])), "active")
+        self.assertEqual(self.kind(minimal([(1, b"<< >>")]) + b"% /OpenAction\n"), "active")
+        self.assertEqual(self.kind(minimal([(1, b"<< >>")]) + b"% 9 0 obj << /AA 2 0 R >> endobj\n"), "active")
+        self.assertEqual(self.kind(minimal([(1, b"<< /T <2F4A53> >>")]) + b"% /XFA [(x) 2 0 R]\n"), "active")
+
+    def test_ordinary_names_in_values_and_arrays_are_not_keys(self):
+        for content in (b"<< /Type /Encoding /Differences [65 /A /B /C /JS /AA] >>",
+                        b"<< /S /A /P 2 0 R >>", b"<< /Title (/A /B) /Subject (/JS) >>",
+                        b"<< /O /Layout /Placement /Block >>"):
+            with self.subTest(content=content):
+                self.assertIsNone(self.kind(minimal([(1, content)])))
+
+    def test_a_malformed_dictionary_is_judged_on_every_name(self):
+        # pdf.js skips the stray 7 and reads /A as a key; a strict pairing would call /A a value.
+        self.assertEqual(self.kind(minimal([(1, b"<< 7 /A << /S /GoTo /D [0 /Fit] >> >>")])), "active")
+        self.assertEqual(self.kind(minimal([(1, b"<< /K 1 2 /A 3 0 R >>")])), "active")
+
+    def test_actions_are_refused_by_their_type_even_without_the_key_that_reaches_them(self):
+        for kind in (b"/URI", b"/Launch", b"/GoToR", b"/GoToE", b"/SubmitForm", b"/RichMediaExecute"):
+            with self.subTest(kind=kind):
+                self.assertEqual(self.kind(minimal([(1, b"<< /S " + kind + b" /F (synthetic) >>")])), "active")
+
+    def test_encryption_anywhere_is_refused(self):
+        self.assertEqual(self.kind(minimal([(1, b"<< >>")], b"<< /Root 1 0 R /Encrypt 2 0 R >>")), "encrypted")
+        self.assertEqual(self.kind(minimal([(1, b"<< >>")]) + b"% trailer << /Encrypt 2 0 R >>\n"), "encrypted")
+
+    def test_object_stream_parameters_are_resolved_from_every_definition(self):
+        catalog = b"<< /Type /Catalog /OpenAction " + SCRIPT + b" >>"
+        _, encoded = object_stream([(5, catalog)], "flate")
+        indirect = (b"<< /Type /ObjStm /N 1 /First 4 /Filter 9 0 R /Length 8 0 R >>\nstream\n" + encoded
+                    + b"\nendstream")
+        self.assertEqual(self.kind(minimal([(3, indirect), (8, b"%d" % len(encoded)), (9, b"/FlateDecode")])), "active")
+        # pdf.js reads /F as /Filter when it is present.
+        alias = b"<< /Type /ObjStm /N 1 /First 4 /F /FlateDecode /Length %d >>\nstream\n" % len(encoded) + encoded + b"\nendstream"
+        self.assertEqual(self.kind(minimal([(3, alias)])), "active")
+        # Two definitions of the filter: both are decoded and checked.
+        both = minimal([(9, b"/ASCIIHexDecode"), (3, indirect), (8, b"%d" % len(encoded)), (9, b"/FlateDecode")])
+        self.assertEqual(self.kind(both), "unreadable")          # the ASCIIHex reading is not decodable
+
+    def test_an_object_stream_that_cannot_be_read_completely_is_unreadable(self):
+        catalog = b"<< /Type /Catalog >>"
+        cases = {
+            "corrupt Flate": objstm([(5, catalog)]).replace(b"stream\nx", b"stream\nX", 1),
+            "unknown filter": objstm([(5, catalog)], b" /Filter /JBIG2Decode", "none"),
+            "crypt filter": objstm([(5, catalog)], b" /Filter /Crypt", "none"),
+            "unresolved indirect length": b"<< /Type /ObjStm /N 1 /First 4 /Length 77 0 R >>\nstream\n5 0 <<>>\nendstream",
+        }
+        for name, content in cases.items():
+            with self.subTest(name=name):
+                self.assertEqual(self.kind(minimal([(3, content)])), "unreadable")
+
+    def test_object_streams_inside_object_streams_are_read(self):
+        inner = objstm([(6, b"<< /Type /Catalog /OpenAction " + SCRIPT + b" >>")])
+        self.assertEqual(self.kind(minimal([(3, objstm([(5, inner)]))])), "active")
+
+    def test_clean_object_streams_pass(self):
+        for encoding in ("flate", "flate-predictor", "ascii85-flate", "lzw", "none"):
+            with self.subTest(encoding=encoding):
+                self.assertIsNone(self.kind(minimal([(3, objstm([(5, b"<< /Type /Catalog >>"), (6, b"[1 2 3]")],
+                                                                encoding=encoding))])))
+
+    def test_bounds_refuse_as_unreadable(self):
+        self.assertEqual(self.kind(b"%PDF-1.7\n" + b"[" * (pdf_raw.MAX_DEPTH + 1)), "unreadable")
+        self.assertEqual(self.kind(b"%PDF-1.7\n" + b"%1 0 obj\n" * (pdf_raw.MAX_HIDDEN_ANCHORS + 1)), "unreadable")
+        with mock.patch.object(pdf_raw, "MAX_WORK", 50):
+            self.assertEqual(self.kind(form()), "unreadable")
+        with mock.patch.object(pdf_raw, "MAX_DECODED", 100):
+            self.assertEqual(self.kind(minimal([(3, objstm([(5, b"[" + b"0 " * 200 + b"]")]))])), "unreadable")
+
+    def test_work_on_the_ordinary_form_is_small(self):
+        stats = {}
+        pdf_raw.scan(form(), stats)
+        self.assertLess(stats["work"], pdf_raw.MAX_WORK // 100)
+
+
+if __name__ == "__main__":
+    unittest.main()

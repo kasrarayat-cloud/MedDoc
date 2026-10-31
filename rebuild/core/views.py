@@ -4,6 +4,7 @@ import os
 import re
 import secrets
 from datetime import datetime,timedelta
+from io import BytesIO
 from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
@@ -359,12 +360,36 @@ def template_detail(request,pk):
     review_rows = template_review.rows([{'field': f, 'definition': approved_definitions[f['key']]} for f in version.fields], template_review.label_displays(t)) if approved_definitions else []
     return render(request,'template_detail.html',{'review_rows':review_rows, 'layout_preparation':version.preparation, 'preview_token':secrets.token_hex(24), 'manual_form_allowed':manual_form_allowed,'template':t,'version':version,'form':form,'answer_contract_ready':answer_contract_ready,'answer_contract_error':answer_contract_error,'approved_definitions':approved_definitions,'definition_unavailable_reason':definition_unavailable_reason,'can_prepare_definitions':not definition_unavailable_reason and Membership.objects.filter(user=request.user,department=t.department,active=True,role__in=['owner','clinician']).exists(),'field_rows':field_location.rows(version.fields),'field_locations':[field_location.describe(f) for f in version.fields],'statements':statement_guide(version)})
 
+#: The download's type comes from the stored format, never from the client's file name: that name
+#: was cut to 200 characters AFTER its suffix was checked, so ".pdf" can be gone from it.
+ORIGINAL_TYPES={'pdf':'application/pdf','docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}
+
 def template_original(request,pk):
     t=get_object_or_404(scoped(Template,request.user),pk=pk)
     path=private_path(t.original_path)
-    if hashlib.sha256(path.read_bytes()).hexdigest()!=t.sha256:raise ValidationError('Original integrity check failed.')
+    payload=path.read_bytes()
+    if hashlib.sha256(payload).hexdigest()!=t.sha256:raise ValidationError('Original integrity check failed.')
+    kind=t.format.lower()
+    if kind not in ORIGINAL_TYPES:return refuse_original(request,t,'unsupported_format','This original has an unsupported format.')
+    if kind=='pdf':
+        # ⚠️ FINDING P1: a PDF accepted before the raw scan existed can carry a script the upload
+        # check never saw, and these are its exact bytes. Every PDF original is therefore checked
+        # again, in the isolated worker, before it is served; a refusal serves nothing at all.
+        from documents import check_original,DocumentError
+        try:check_original(path,expected_sha256=t.sha256)
+        except DocumentError as exc:return refuse_original(request,t,exc.code,str(exc))
     audit(request.user,'template.download',t.pk,department=t.department)
-    return FileResponse(path.open('rb'),as_attachment=True,filename=t.original_name)
+    name=t.original_name or 'original'
+    if not name.lower().endswith('.'+kind):name+='.'+kind
+    # The hashed bytes are the bytes served: the file is not opened a second time.
+    response=FileResponse(BytesIO(payload),as_attachment=True,filename=name,content_type=ORIGINAL_TYPES[kind])
+    response['X-Content-Type-Options']='nosniff'
+    return response
+
+def refuse_original(request,t,code,reason):
+    """Nothing of the file is sent; the refusal and its code are recorded."""
+    audit(request.user,'template.download_refused',t.pk,department=t.department,code=code)
+    return HttpResponse('This original cannot be downloaded: '+reason,status=409,content_type='text/plain; charset=utf-8')
 
 @require_http_methods(['GET','POST'])
 def encounter_new(request):
