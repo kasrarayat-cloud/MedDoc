@@ -656,7 +656,7 @@ review of synthetic text, and the reviewer decides every code.
 | gi3 STATE2-1 | sending disabled; a pre-install encounter whose context is remade by a resumed assess, or by the stale-stage sweep with no member action | assessed with no provider answer: every proposal dropped, the reviewer's decisions invalidated, and an unknown or failed outcome shown as "provider not run" → an unchanged request re-assesses with the recorded answer. When the request changed, an unknown outcome blocks the upgrade's predict (the encounter reads provider unknown), and any other recorded request stops it, keeping what is recorded. With no request recorded it runs as before | `jobs._request_for` (the adapter's own request builder) and `jobs._recorded_in_use` |
 
 ### Measured against the installed revision (offline, synthetic; never an accuracy figure)
-Measured on bd78d1295, whose studio code is what ships (later commits change docs only).
+Measured on b5ddc4d32, whose studio code is what ships (later commits change docs only).
 - Full suite: 3,585 Django tests OK (3 skipped); ops 211 and 37; node 61 and 56; no migration.
 - Reading gate: reader 0 changes in 8,446 texts; engine 0 changes in 6,397 stored assessments (no stored text reads the
   question).
@@ -691,7 +691,7 @@ Measured on bd78d1295, whose studio code is what ships (later commits change doc
   of the document, each stated quote is that line or a whole line after it, and its own quote stands in the document.
   Planted violations fail. The test helper makes the same check on every asked text in its module.
 - Cost: the context stage is linear to the 400,000-character cap over seventeen adversarial shapes (doubling ratios about
-  2). The worst is 2.54 s (blank lines after the block), against 2.26 s for installed on the same text. The eighth
+  2). The worst is 2.70 s (blank lines after the block), against 2.26 s for installed on the same text. The eighth
   refutation's bounded assess child: worst 11.8 s against installed's 11.1 s on one shape, 8.8 s against 4.9 s on another,
   and 136 MiB in both, under limits of 120 s and 768 MiB, on the commit before the last repair.
 - Mutants: 61 of 61 killed on a green baseline, each restore checked by sha256: the reader and gate split, the note's literal
