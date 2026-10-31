@@ -400,7 +400,7 @@ class PdfTests(unittest.TestCase):
         self.assertEqual((result.status, result.method, result.messages, result.ocr_pages),
                          ('ok', 'pdf-text', (), ()))
         self.assertEqual([text.strip() for text in page_texts(result)], self.PAGES)
-        self.assertEqual(result.engine, {'ingest': 'cpt-studio-ingest@3', 'pypdf': '6.21.2'})
+        self.assertEqual(result.engine, {'ingest': 'cpt-studio-ingest@4', 'pypdf': '6.21.4'})
 
     def test_each_page_marker_lands_in_its_own_span(self):
         pages = [f'Marker page {n}: synthetic findings text for this page only.' for n in range(1, 7)]
@@ -563,7 +563,7 @@ class OcrDetectionTests(unittest.TestCase):
     def test_availability_and_engine_versions_agree(self):
         versions = engine_versions()
         self.assertIsInstance(ocr_available(), bool)
-        self.assertEqual((versions['pypdf'], versions['python-docx']), ('6.21.2', '1.2.0'))
+        self.assertEqual((versions['pypdf'], versions['python-docx']), ('6.21.4', '1.2.0'))
         self.assertEqual('ocr' not in versions, ocr_available())
         if not ocr_available():
             self.assertEqual(versions['ocr'], 'not available')

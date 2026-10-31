@@ -70,10 +70,10 @@ from itertools import pairwise
 from pypdf import PageObject, get_configuration
 from pypdf.filters import ASCII85Decode, ASCIIHexDecode
 from pypdf._text_extraction import get_text_operands
-from pypdf.generic import ArrayObject, ContentStream, DictionaryObject, NameObject, StreamObject
+from pypdf.generic import ArrayObject, ContentStream, DictionaryObject, NameObject, NullObject, StreamObject
 from pypdf.generic._font import Font
 
-from .pdffonts import mapped_simple_font
+from .pdffonts import decodes, font_reading
 
 IDENTITY = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 MAX_FORM_DEPTH = 12  # a form nested deeper is assumed to paint an image over its whole bounding box
@@ -577,8 +577,8 @@ def _ING_glyphs(font, string) -> list:
     elif isinstance(font.encoding, str):
         try:
             text = string.decode(font.encoding, 'surrogatepass')
-        except UnicodeDecodeError:
-            text = string.decode(font.encoding, 'surrogateescape')
+        except UnicodeDecodeError:  # pypdf 6.21.4 then writes U+FFFD (6.21.2 used 'surrogateescape')
+            text = string.decode(font.encoding, 'replace')
         raw = ''
     else:
         text = ''.join(font.encoding.get(code, chr(code)) for code in string)
@@ -590,6 +590,17 @@ def _ING_glyphs(font, string) -> list:
         width = font.space_width if key == font.space_char else font.get_text_width(key)
         out.append((font.character_map.get(char, char), char == ' ', width))
     return out
+
+
+def _shown(operator, operands) -> list:
+    """What a text-showing operator shows: its string, or a TJ array's strings and numbers."""
+    if operator == b"'":
+        return list(operands[:1])
+    if operator == b'"':
+        return list(operands[2:3])
+    if operator == b'TJ':
+        return list(operands[0]) if operands and isinstance(operands[0], (list, ArrayObject)) else []
+    return list(operands[:1])
 
 
 @dataclass(frozen=True)
@@ -823,6 +834,9 @@ class PageContent:
     clipped_text: bool = False  # text drawn wholly outside what its clipping path or form box shows, dropped
     obscured_text: bool = False  # text kept that a viewer may not show (see _Paint, and paths not followed)
     struck_text: bool = False  # text kept that a line painted over it strikes through
+    # text kept that pypdf cannot read as the PDF encodes it (pdffonts.decodes; a font it cannot build, or none):
+    # pypdf would write U+FFFD or mojibake for it, so the page's text layer is not read (pdf.py)
+    unreadable_text: bool = False
     paint: _Paint | None = field(default=None, repr=False, compare=False)
     # (baseline, start, end, font size, where its first and last glyphs that draw something start and end, one
     # whitespace glyph's advance among those it opens or closes with, whether whitespace opens it, the widest gap
@@ -887,12 +901,13 @@ class _TextPlacement:
     """Where a content stream draws its text (PDF 32000-1 9.3-9.4), in page space."""
 
     def __init__(self, resources, fonts: dict, graphics: _Graphics, measured: dict | None = None,
-                 trims: dict | None = None):
+                 trims: dict | None = None, usable=None):
         table = resolved(resources.get('/Font'))
         self.table = table if isinstance(table, DictionaryObject) else DictionaryObject()
         self.fonts = fonts  # id(font dict) -> pypdf Font, or None when it cannot be read
         self.measured = {} if measured is None else measured  # (id(font dict), string) -> (glyphs, spaces, widths)
         self.trims = {} if trims is None else trims  # (id(font dict), string) -> its whitespace ends (_I2_trim)
+        self.usable = usable  # font dict -> whether pypdf builds the font extraction reads in its place
         self.graphics = graphics
         self.matrix = self.line = IDENTITY
         self.nothing = False  # the last run drew nothing: a zero font size, or a matrix that flattens it
@@ -935,6 +950,17 @@ class _TextPlacement:
     def move(self, tx: float, ty: float) -> None:
         self.matrix = self.line = multiply((1.0, 0.0, 0.0, 1.0, tx, ty), self.line)
 
+    def readable(self, operator, operands) -> bool:
+        """Whether pypdf reads the strings a text-showing operator shows as its font encodes them: there is a font,
+        pypdf builds it (or the copy extraction reads in its place), and every string decodes (pdffonts.decodes)."""
+        strings = [item for item in _shown(operator, operands) if isinstance(item, bytes) and item]
+        if not strings:
+            return True
+        font = self.state.font
+        if font is None or (self.usable is not None and not self.usable(font)):
+            return False  # pypdf draws it in a stand-in font that reads every byte as U+FFFD
+        return all(decodes(font, string) for string in strings)
+
     def run(self, operator, operands) -> _Run | None:
         """Apply a text-showing operator: where what it shows lies, or None when there is nothing to measure
         it by (no font size, a degenerate matrix)."""
@@ -947,10 +973,8 @@ class _TextPlacement:
                 state.word_spacing, state.char_spacing = number(operands[0]), number(operands[1])
             self.move(0.0, -state.leading)
             items = list(operands[2:3])
-        elif operator == b'TJ':
-            items = list(operands[0]) if operands and isinstance(operands[0], (list, ArrayObject)) else []
         else:
-            items = list(operands[:1])
+            items = _shown(operator, operands)
         start = self.matrix
         x = low = high = 0.0
         spans, strings = [], []
@@ -1091,7 +1115,8 @@ class _Walker:
         self.walk_limit = form_walk_limit()
         self.active: set[int] = set()  # forms being walked: a form that draws itself is not walked again
         self.checked: set[int] = set()
-        self.font_copies: dict[int, DictionaryObject | None] = {}  # id(font) -> its glyph-mapped copy, or None
+        self.font_copies: dict[int, DictionaryObject | None] = {}  # id(font) -> the copy extraction reads, or None
+        self.usable_fonts: dict[int, bool] = {}  # id(font) -> whether pypdf builds what extraction reads for it
 
     def page(self, page) -> PageContent:
         resources = resolved(page.get('/Resources'))
@@ -1134,7 +1159,7 @@ class _Walker:
         marked: list[bool] = []  # per open BMC/BDC: whether it hides what it encloses
         properties = resolved(resources.get('/Properties'))
         xobjects = resolved(resources.get('/XObject'))
-        text = _TextPlacement(resources, self.text_fonts, graphics, self.measured, self._I2_trims)
+        text = _TextPlacement(resources, self.text_fonts, graphics, self.measured, self._I2_trims, self.usable)
         path, pending = _Path(), None
         for index, (operands, operator) in enumerate(operations):
             hidden = any(marked)
@@ -1169,6 +1194,8 @@ class _Walker:
                         self.content.clipped_text = self.content.clipped_text or shows_text(operands)
                     kept.extend(state_only(operator, operands))
                     continue
+                if not text.readable(operator, operands):
+                    self.content.unreadable_text = True
                 if self.positions and run is not None and shows_text(operands):
                     self.shown(run, graphics, verdict)
                 elif self.positions and text.nothing and shows_text(operands):
@@ -1553,8 +1580,24 @@ class _Walker:
                 for entry in ('/ToUnicode', '/Encoding'):
                     self.check_stream(resolved(font.get(entry)))
 
+    def copy_of(self, font) -> DictionaryObject | None:
+        """The copy of ``font`` extraction reads in its place (pdffonts.font_reading), or None; read once."""
+        if id(font) not in self.font_copies:
+            if self.text_fonts.get(id(font)) is not None and resolved(font.get('/Subtype')) == '/Type0':
+                # measuring built it already: pypdf reads a composite font it builds as it is (no copy)
+                self.font_copies[id(font)], self.usable_fonts[id(font)] = None, True
+            else:
+                self.font_copies[id(font)], self.usable_fonts[id(font)] = font_reading(font)
+        return self.font_copies[id(font)]
+
+    def usable(self, font) -> bool:
+        """Whether pypdf builds the font extraction reads for ``font`` (its copy, or itself); read once."""
+        self.copy_of(font)
+        return self.usable_fonts[id(font)]
+
     def mapped_fonts(self, resources) -> dict:
-        """{font name: its glyph-mapped copy} for the simple symbol fonts ``resources`` names."""
+        """{font name: the copy extraction reads in its place} for the fonts ``resources`` names that have one: simple
+        symbol fonts, and fonts pypdf 6.21.4 reads otherwise than the PDF encodes them (pdffonts.mapped_font)."""
         fonts = resolved(resources.get('/Font'))
         if not isinstance(fonts, DictionaryObject):
             return {}
@@ -1563,9 +1606,11 @@ class _Walker:
             font = resolved(fonts.raw_get(key))
             if not isinstance(font, DictionaryObject):
                 continue
-            if id(font) not in self.font_copies:
-                self.font_copies[id(font)] = mapped_simple_font(font)
-            if self.font_copies[id(font)] is not None:
+            if id(font) not in self.font_copies and resolved(font.get('/Subtype')) == '/Type0':
+                # a composite font no text here used: pypdf skips it if it cannot build it (a /W it fails on), so it
+                # is not built a second time (a large ToUnicode makes that costly on every page)
+                continue
+            if self.copy_of(font) is not None:
                 mapped[key] = self.font_copies[id(font)]
         return mapped
 
@@ -1637,6 +1682,7 @@ class VisibleForm:
     placements: list  # (CTM in the form's own space, before its /Matrix; pixels or None) of each image it paints
     images: list  # the image XObjects it paints, each once
     covers: tuple = ()  # the opaque rectangles it paints (fills and images), in its own space, before its /Matrix
+    unreadable_text: bool = False  # it shows text pypdf cannot read as the PDF encodes it (PageContent)
 
 
 def visible_form(xobject, reader, optional: OptionalContent, resources) -> VisibleForm:
@@ -1644,7 +1690,7 @@ def visible_form(xobject, reader, optional: OptionalContent, resources) -> Visib
     form = walker.form(xobject, resources if isinstance(resources, DictionaryObject) else DictionaryObject(), 0)
     target = form.replacement if form.replacement is not None else xobject
     return VisibleForm(target, walker.content.damaged, walker.content.hidden_text, list(form.placements),
-                       list(walker.content.images), tuple(form.covers))
+                       list(walker.content.images), tuple(form.covers), walker.content.unreadable_text)
 
 
 def appearance_matrix(stream, rect) -> tuple | None:
@@ -1738,6 +1784,9 @@ def stream_state(stream, *, image: bool) -> str:
         return OK  # unfiltered, or empty: nothing a decoder could lose
     for index, name in enumerate(filters):
         params = resolved(parameters[index]) if index < len(parameters) else None
+        if name in FLATE and not image and not isinstance(params, (type(None), NullObject, DictionaryObject)):
+            # a predictor it may name is lost: pypdf 6.21.2 warned that the result may be wrong, so it is named
+            return DAMAGED
         params = params if isinstance(params, DictionaryObject) else DictionaryObject()
         last = index == len(filters) - 1
         if name in FLATE and image and last:

@@ -150,8 +150,41 @@ lines) in document order; headers/footers are listed in `messages` as not
 extracted. TXT: UTF-8 (BOM stripped) or explicit decode failure.
 Encrypted/corrupt/oversized/too-many-pages files fail with a specific message.
 
-Never silently partial (`cpt-studio-ingest@3`): content a viewer would show is
+Never silently partial (`cpt-studio-ingest@4`): content a viewer would show is
 read or reported, and content it would not show is excluded with a message.
+- Text pypdf cannot read as the PDF encodes it is never returned as text
+  (pypdf 6.21.4, `cpt-studio-ingest@4`; ACCURACY-RESIDUALS.md, "pypdf 6.21.4"). A
+  string a composite font's CMap cannot decode (an odd byte count in a
+  two-byte CMap), text in a CMap pypdf does not implement (any predefined CMap
+  outside its table but the UCS-2 ones, an embedded CMap stream, a dictionary),
+  and text in a font pypdf cannot build or the resources do not name (it
+  would draw it in a stand-in font that reads every byte as U+FFFD): in a
+  page's own content the page's text
+  layer is not read at all, and the page has no usable text layer (OCR, or
+  named and unread); in an annotation's appearance the annotation is
+  unreadable (named, partial). `pdffonts.decodes` and `font_reading` decide it,
+  from the content walk (`PageContent.unreadable_text`).
+- U+FFFD in what a page returns (its layer or its labelled block) is named:
+  'characters the PDF does not encode as valid text; they are shown as �',
+  whether a lone surrogate was replaced or a ToUnicode, a stored value or the
+  reader's own decoding wrote it. A failed result returns no text and never
+  carries that notice.
+- Glyph names are read by the Adobe Glyph List specification, never by
+  pypdf 6.21.4's int(name, 16): a simple font holding a name outside the list
+  that starts with 'u', in /Differences or in a Type 1 program's built-in
+  encoding, is read through a copy whose ToUnicode gives those codes what
+  the name stands for ('uni' and groups of four upper-case hex digits, 'u'
+  and four to six), in the precedence of PDF 32000-1 9.6.6 (the font's
+  ToUnicode, /Differences, the dictionary's named encoding, the built-in
+  encoding). A name that stands for no character (another form, a control
+  or private-use code, a noncharacter) is counted and dropped; every other
+  code reads as pypdf reads it. A font pypdf 6.21.4 no longer builds because
+  of a /BaseEncoding that is not a name or /W entries that are not widths is
+  read through a copy without them, as pypdf 6.21.2 ignored them.
+- A glyph that names no character alone in a typed box ('[' or '(', padding,
+  ']' or ')'), in the layer or in annotation text, is written '?': the box is
+  the unread mark `[?]` (held, named, partial), never the empty box `[]` the
+  dropped glyph would leave.
 - Check boxes (a contract with routing, 5.3): every box extraction recognises
   is written as ☐ (U+2610, unchecked) or ☒ (U+2612, checked), never another
   box glyph, or as the unread mark `[?]` where its state is not plainly what

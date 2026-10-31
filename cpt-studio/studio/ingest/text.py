@@ -16,13 +16,14 @@ from studio.types import ExtractionResult, PageSpan
 if TYPE_CHECKING:
     from .extract import Limits
 
-INGEST_VERSION = 'cpt-studio-ingest@3'
+INGEST_VERSION = 'cpt-studio-ingest@4'
 PAGE_SEPARATOR = '\n\n'
 # The method a failure is reported under before any page was read.
 METHOD_FOR_KIND = {'pdf': 'pdf-text', 'docx': 'docx', 'txt': 'txt'}
 
 _UTF8_BOM = b'\xef\xbb\xbf'
 _SURROGATES = re.compile('[\ud800-\udfff]')
+REPLACEMENT = '\ufffd'  # what text that is not valid is shown as
 
 
 def canonicalize(text: str) -> str:
@@ -37,8 +38,25 @@ def has_surrogates(text: str) -> bool:
 
 
 def replace_surrogates(text: str) -> tuple[str, bool]:
-    replaced, count = _SURROGATES.subn('�', text)
+    replaced, count = _SURROGATES.subn(REPLACEMENT, text)
     return replaced, count > 0
+
+
+def caused_by(exc: BaseException | None, kind: type) -> bool:
+    """Whether ``exc`` or one of its causes (the first 16) is a ``kind``."""
+    for _ in range(16):
+        if exc is None:
+            return False
+        if isinstance(exc, kind):
+            return True
+        exc = exc.__cause__ or exc.__context__
+    return False
+
+
+def from_memory(exc: BaseException | None) -> bool:
+    """Whether ``exc`` was raised because memory ran out: a MemoryError among its causes (pypdf 6.21.4 reports
+    running out of memory inside a dictionary as a read error)."""
+    return caused_by(exc, MemoryError)
 
 
 def non_space_count(text: str) -> int:

@@ -74,7 +74,7 @@ from pypdf.generic import ArrayObject, DecodedStreamObject, DictionaryObject, Na
 from .pdfcontent import (OptionalContent, appearance_matrix, as_list, clip, form_shows_text, multiply, number,
                          object_key, page_box, raw_entry, rectilinear, resolved, transformed_box, visible_form)
 from .pdfformat import displayed_texts
-from .pdffonts import undecodable
+from .pdffonts import undecodable, unread_in_boxes
 from .text import canonicalize, non_space_count
 
 HIDDEN_FLAGS = 2 | 32  # Hidden, NoView (PDF 32000-1 12.5.3)
@@ -116,6 +116,7 @@ class PageAnnotations:
     note_chars: int = 0
     hidden_text: bool = False  # an appearance held text in optional content that is hidden by default
     undecodable: int = 0  # characters dropped from what is written: they name no glyph
+    boxed: int = 0  # of those, the ones alone in a typed box, written as '?' (pdffonts.unread_in_boxes)
     boxes: list = field(default_factory=list)  # (rect, checked) of each displayed check box
     buttons: list = field(default_factory=list)  # rect of each displayed check box or radio button
     widgets: list = field(default_factory=list)  # Button of each displayed check box or radio button
@@ -303,9 +304,14 @@ class _Reader:
         self.found.fields.append(self.clean(line))
 
     def clean(self, text: str) -> str:
-        """``text`` without the characters that name no glyph, which are counted."""
-        kept = ''.join(char for char in text if not undecodable(char))
-        self.found.undecodable += len(text) - len(kept)
+        """``text`` without the characters that name no glyph, which are counted; one alone in a typed box is
+        written as '?', so the box reads as unread, not as an empty box."""
+        items = [None if undecodable(char) else char for char in text]
+        marked = unread_in_boxes(items)
+        kept = ''.join('?' if index in marked else item for index, item in enumerate(items)
+                       if item is not None or index in marked)
+        self.found.undecodable += items.count(None)
+        self.found.boxed += len(marked)
         return kept
 
     # Other annotations -------------------------------------------------------------
@@ -421,7 +427,7 @@ class _Reader:
         self.painted = (stream, form)
         stream = form.stream
         self.found.hidden_text = self.found.hidden_text or form.hidden_text
-        if form.damaged:
+        if form.damaged or form.unreadable_text:  # pypdf would write U+FFFD or mojibake for what it draws
             return None
         if not isinstance(resolved(stream.get('/Resources')), DictionaryObject) and self.defaults is not None:
             copy = DecodedStreamObject()  # an appearance relying on the form's default resources

@@ -86,7 +86,7 @@ from typing import TYPE_CHECKING
 
 import pypdf
 from pypdf import PasswordType
-from pypdf.errors import DependencyError
+from pypdf.errors import DependencyError, LimitReachedError
 from pypdf.generic import DictionaryObject, NullObject, StreamObject
 from pypdf.generic._font import Font
 
@@ -94,13 +94,13 @@ from studio.types import ExtractionResult
 
 from .ocr import OcrTools, ocr_page
 from .pdfannots import PageAnnotations, read_annotations
-from .pdffonts import composite_glyph, composite_map, kind, symbol_glyphs, undecodable
+from .pdffonts import composite_glyph, composite_map, kind, symbol_glyphs, undecodable, unread_in_boxes
 from .symbols import BOX_PRINTED_PATTERN, CHECKED_BOX, UNCHECKED_BOX
 from . import pdfcontent
 from .pdfcontent import (IDENTITY, OptionalContent, PageContent, analyse_page, as_list, extraction_page, image_state,
                          multiply, number, object_key, raw_entry, resolved, stream_damaged)
-from .text import (INGEST_VERSION, agree, canonicalize, failed, format_seconds, join_pages, non_space_count,
-                   page_phrase, pdf_method, replace_surrogates)
+from .text import (INGEST_VERSION, REPLACEMENT, agree, caused_by, canonicalize, failed, format_seconds, from_memory,
+                   join_pages, non_space_count, page_phrase, pdf_method, replace_surrogates)
 
 if TYPE_CHECKING:
     from .extract import Limits
@@ -175,14 +175,25 @@ UNANCHORED = ('The PDF is incomplete: its last revision has no cross-reference p
 PASSWORD = 'The PDF is password-protected.'
 AES_UNSUPPORTED = 'The PDF is encrypted with AES, which this server cannot decrypt.'
 NO_TEXT = 'No text could be read from the PDF.'
+INVALID_TAIL = '; they are shown as \ufffd.'  # how the invalid-text notice ends
 OBJECTS_DAMAGED = ('The PDF is damaged: a compressed block of its objects could not be decoded completely, so '
                    'text may be missing or wrong.')
 XFA = ('The PDF contains an XFA form; XFA content is not read, so form content that an XFA-capable viewer shows '
        'may be missing from the text.')
+SECTIONS_LOST = ('The PDF is damaged: part of its cross-reference data could not be read, so objects it lists, and '
+                 'any text they hold, may be missing.')
+LIMIT_REACHED = ('The PDF could not be read: its structure goes past a limit this server applies to uploaded files '
+                 '(such as the number of its cross-reference or page entries).')
 # pypdf reports these through logging, not exceptions, and then reads less than the page holds.
 DECODING_LOGGERS = ('pypdf.filters',)
 DECODING_WARNINGS = ('Impossible to decode XFormObject', 'Detected cyclic form XObject', 'Expected StreamObject')
 LIMIT_WARNINGS = ('Exceeded ',)  # pypdf stops drawing form XObjects after its invocation limit
+# pypdf leaves out a cross-reference section it cannot read and goes on: objects it lists may be missing.
+SECTION_WARNINGS = ('XRef object at ', 'Previous trailer cannot be read')
+# pypdf 6.21.4 ignores a /DecodeParms that is not a dictionary and decodes with the filter's defaults: on an ASCII85,
+# ASCIIHex, RunLength or LZW stream that is the whole stream (pdfcontent.stream_state checks it decodes to its end);
+# on Flate it may drop a predictor, which stream_state names as damage, as pypdf 6.21.2's own warning did.
+IGNORED_WARNINGS = ('Ignoring invalid DecodeParms',)
 
 
 def extract_pdf(data: bytes, limits: Limits, tools: OcrTools | None, deadline: float,
@@ -211,6 +222,9 @@ class _Page:
     # much under it to read); two check boxes over one known box, or one over several, are named as unread_box
     unverified: bool = False  # read with OCR, and an image's encoding could not be checked to its end
     unread_box: bool = False  # a printed box was written unread: a widget or mark disagrees with it or is not a check
+    # its content shows text pypdf cannot read as the PDF encodes it (PageContent.unreadable_text): the layer was not
+    # read, and the page has no usable text layer
+    unreadable: bool = False
 
     @property
     def text(self) -> str:
@@ -235,7 +249,7 @@ class _Ocr:
 
 
 def _extract(data, limits, tools, deadline, workdir, engine) -> ExtractionResult:
-    reader, problem = _open(data)
+    reader, problem, sections_lost = _open(data, limits)
     if problem:
         return failed('pdf-text', engine, problem)
     pages, problem = _page_list(reader, limits)
@@ -251,7 +265,8 @@ def _extract(data, limits, tools, deadline, workdir, engine) -> ExtractionResult
     has_xfa = not isinstance(xfa, (type(None), NullObject))
     read = [_read_page(page, reader, optional, acroform, number) for number, page in enumerate(pages, 1)]
 
-    no_layer = [n for n, page in enumerate(read, 1) if page.readable_chars < limits.min_text_chars_per_page]
+    no_layer = [n for n, page in enumerate(read, 1)
+                if page.unreadable or page.readable_chars < limits.min_text_chars_per_page]
     scanned = [n for n, page in enumerate(read, 1) if n not in no_layer
                and page.content.image_coverage >= SCAN_COVERAGE and page.readable_chars < SCAN_TEXT_CHARS]
     candidates = sorted(no_layer + scanned)
@@ -278,50 +293,104 @@ def _extract(data, limits, tools, deadline, workdir, engine) -> ExtractionResult
     messages, partial = _messages(read, texts, no_layer, scanned, unavailable, ocr, limits)
     if objects_damaged:
         messages.append(OBJECTS_DAMAGED)
+    if sections_lost:
+        messages.append(SECTIONS_LOST)
     if has_xfa:
         messages.append(XFA)
     method = pdf_method(len(ocr.texts), count)
 
     # An unread page that may be a scan still had its text layer read: that text is kept, and it counts.
     if not any(texts[n - 1].strip() for n in range(1, count + 1) if n not in unread or n in scanned):
-        return failed(method, engine, *messages, NO_TEXT)
+        # no text is returned, so nothing is shown as \ufffd: that notice would describe text the result does not hold
+        return failed(method, engine, *(message for message in messages if not message.endswith(INVALID_TAIL)),
+                      NO_TEXT)
     text, spans = join_pages(texts)
     if len(text) > limits.max_chars:
         return failed(method, engine, _too_long(len(text), limits))
-    status = 'partial' if unread or partial or objects_damaged or has_xfa else 'ok'
+    status = 'partial' if unread or partial or objects_damaged or sections_lost or has_xfa else 'ok'
     return ExtractionResult(status=status, method=method, text=text, pages=spans, messages=tuple(messages),
                             ocr_pages=tuple(sorted(ocr.texts)), engine=engine)
 
 
-def _open(data: bytes) -> tuple[pypdf.PdfReader | None, str]:
+def _open(data: bytes, limits: Limits) -> tuple[pypdf.PdfReader | None, str, bool]:
+    """(the reader, why the document cannot be read ('' when it can), whether pypdf left out a cross-reference
+    section it could not read, so that objects it lists may be missing)."""
     if b'%PDF-' not in data[:MARKER_WINDOW]:
-        return None, DAMAGED
+        return None, DAMAGED, False
     tail = data[-MARKER_WINDOW:]
     if b'%%EOF' not in tail:
-        return None, INCOMPLETE
+        return None, INCOMPLETE, False
     last = len(data) - len(tail) + tail.rindex(b'%%EOF')
     if not _padding(data[last + len(b'%%EOF'):]):
         # An incremental update cut short leaves an earlier revision's %%EOF last in
         # the file, followed by the start of the update: a parser reads the old revision.
-        return None, UNFINISHED
+        return None, UNFINISHED, False
     end = last  # a run of end markers with only padding between them closes one revision (pypdf #4008)
     while (previous := data.rfind(b'%%EOF', 0, end)) >= 0 and _padding(data[previous + len(b'%%EOF'):end]):
         end = previous
     if b'startxref' in data[:end] and b'startxref' not in data[data.rfind(b'%%EOF', 0, end) + 1:end]:
         # The last revision has no startxref of its own: a parser would fall back to an earlier one.
-        return None, UNANCHORED
+        return None, UNANCHORED, False
+    reader = None
     try:
-        # pypdf reads the file as it ends at that revision's marker: the padding carries no PDF data.
-        reader = pypdf.PdfReader(io.BytesIO(data[:end + len(b'%%EOF')]))
-        if reader.is_encrypted and reader.decrypt('') == PasswordType.NOT_DECRYPTED:
-            return None, PASSWORD
-        with contextlib.suppress(IndexError):  # no pages at all: reported by _page_list
-            reader.get_page(0)  # flattens the page tree: a broken one fails here, not mid-document
+        with _watching() as warnings:
+            # pypdf reads the file as it ends at that revision's marker: the padding carries no PDF data.
+            reader = pypdf.PdfReader(io.BytesIO(data[:end + len(b'%%EOF')]))
+            if reader.is_encrypted and reader.decrypt('') == PasswordType.NOT_DECRYPTED:
+                # pypdf 6.21.2 refused an encryption key length outside the standard before any password; 6.21.4
+                # tries it, so a file no empty password opens is named as 6.21.2 named it, not 'password-protected'
+                return None, PASSWORD if _key_length_valid(reader) else DAMAGED, False
+            with contextlib.suppress(IndexError):  # no pages at all: reported by _page_list
+                reader.get_page(0)  # flattens the page tree: a broken one fails here, not mid-document
     except (DependencyError, MemoryError):
         raise
-    except Exception:  # any parser error on untrusted bytes means the file is unreadable
-        return None, DAMAGED
-    return reader, ''
+    except LimitReachedError:  # pypdf stops at its structure limits: named as a limit, never as damage
+        return None, _limit_problem(reader, limits), False
+    except Exception as exc:  # any parser error on untrusted bytes means the file is unreadable
+        if from_memory(exc):
+            raise MemoryError from exc
+        if caused_by(exc, LimitReachedError):  # pypdf wraps a limit hit while reading a trailer
+            return None, _limit_problem(reader, limits), False
+        return None, DAMAGED, False
+    if _xref_limit_reached(reader):
+        return None, _limit_problem(reader, limits), False
+    return reader, '', warnings.sections
+
+
+def _xref_limit_reached(reader) -> bool:
+    """Whether pypdf 6.21.4 stopped reading a cross-reference stream at its entry limit and went on without it
+    (it logs only that the section 'can not be read')."""
+    counted = getattr(reader, '_xref_stream_entry_count', 0)
+    limit = getattr(reader, '_xref_stream_maximum_entries', None)
+    return isinstance(counted, int) and isinstance(limit, int) and counted > limit
+
+
+def _limit_problem(reader, limits: Limits) -> str:
+    """Why a document past one of pypdf's structure limits is not read: its page count when that is past the page
+    limit (counted here, from the page tree), else the limit."""
+    with contextlib.suppress(Exception):
+        root = resolved(reader.trailer.get('/Root'))
+        leaves = _leaf_count(root.raw_get('/Pages')) if isinstance(root, dict) and '/Pages' in root else None
+        if leaves is not None and leaves > limits.max_pages:
+            return f'The PDF has {leaves} pages; the limit is {limits.max_pages}.'
+    return LIMIT_REACHED
+
+
+def _key_length_valid(reader) -> bool:
+    """Whether the encryption key length the file declares is one the standard allows (ISO 32000-1 7.6.2: 40 to 128
+    bits in steps of 8; ISO 32000-2 7.6.6: 256), read as pypdf 6.21.2 read it: /Length (40 when absent), or the stream
+    crypt filter's /Length in bytes (16 when absent) for AES-128."""
+    try:
+        encryption = resolved(reader.trailer.get('/Encrypt'))
+        bits = int(number(encryption.get('/Length'), 40))
+        if int(number(encryption.get('/V'))) == 4:
+            filters, name = resolved(encryption.get('/CF')), resolved(encryption.get('/StmF'))
+            crypt = resolved(filters.get(name)) if isinstance(filters, dict) and isinstance(name, str) else None
+            if isinstance(crypt, dict) and resolved(crypt.get('/CFM')) == '/AESV2':
+                bits = int(number(crypt.get('/Length'), 16)) * 8
+    except Exception:
+        return True
+    return bits % 8 == 0 and (40 <= bits <= 128 or bits == 256)
 
 
 def _padding(data: bytes) -> bool:
@@ -403,15 +472,19 @@ class _DecodingWarnings(logging.Handler):
         super().__init__(logging.WARNING)
         self.seen = False  # a stream decoded only with repairs, or a form that could not be decoded
         self.limited = False  # forms past pypdf's invocation limit were not read
+        self.sections = False  # a cross-reference section was left out (read while the file is opened)
 
     def emit(self, record) -> None:
-        if record.name.startswith(DECODING_LOGGERS):
-            self.seen = True
-            return
         with contextlib.suppress(Exception):
             message = record.getMessage()
+            if record.name.startswith(DECODING_LOGGERS):
+                self.seen = self.seen or not message.startswith(IGNORED_WARNINGS)
+                return
             self.seen = self.seen or message.startswith(DECODING_WARNINGS)
             self.limited = self.limited or message.startswith(LIMIT_WARNINGS)
+            self.sections = self.sections or message.startswith(SECTION_WARNINGS)
+            return
+        self.seen = self.seen or record.name.startswith(DECODING_LOGGERS)  # a record whose message cannot be read
 
 
 @contextlib.contextmanager
@@ -428,7 +501,10 @@ def _watching():
 def _read_page(page, reader, optional, acroform, number: int) -> _Page:
     with _watching() as warnings:
         content = analyse_page(page, reader, optional)
-        layer = _layer_text(page, content)
+        # Text pypdf cannot read as the PDF encodes it (a string its CMap does not decode, a CMap pypdf does not
+        # implement, a font it cannot build) would reach the layer as U+FFFD and mojibake: the layer is not read, as
+        # pypdf 6.21.2 refused such a string, so the page goes to OCR or is named.
+        layer = _Layer() if content.unreadable_text else _layer_text(page, content)
         annotations = read_annotations(page, optional, acroform)
     if annotations.placements:  # images displayed annotations paint are on the page too
         content.placements.extend(annotations.placements)
@@ -436,12 +512,15 @@ def _read_page(page, reader, optional, acroform, number: int) -> _Page:
                               if all(image is not known for known in content.images))
         content.__dict__.pop('image_coverage', None)
     text, placed, overlap, unread_box = _placed_boxes(layer, annotations)
-    text, replaced = replace_surrogates(text)
-    block, block_replaced = replace_surrogates(annotations.block(number))
-    return _Page(layer=canonicalize(text), replaced=replaced or block_replaced, content=content,
+    text, _ = replace_surrogates(text)
+    block, _ = replace_surrogates(annotations.block(number))
+    # Text that is not valid is shown as U+FFFD however it got there: a lone surrogate replaced here, or U+FFFD a
+    # font's ToUnicode, a stored value or the reader's own decoding of one wrote.
+    return _Page(layer=canonicalize(text), replaced=REPLACEMENT in text or REPLACEMENT in block, content=content,
                  annotations=annotations, block=block, damaged=content.damaged or warnings.seen,
-                 limited=warnings.limited, undecodable=layer.undecodable, placed=placed, overlap=overlap,
-                 unread_box=unread_box)
+                 limited=warnings.limited, undecodable=layer.undecodable, placed=placed + layer.marks,
+                 overlap=overlap, unread_box=unread_box or bool(layer.marks or annotations.boxed),
+                 unreadable=content.unreadable_text)
 
 
 def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int, bool, bool]:
@@ -1146,6 +1225,7 @@ def _starts_with_word(text: str, offset: int, word: str) -> bool:
 class _Layer:
     text: str = ''  # decoded text-layer text, before canonicalisation
     undecodable: int = 0  # glyphs that name no character, dropped
+    marks: int = 0  # of those, the ones alone in a typed box, written as '?' (pdffonts.unread_in_boxes)
     lines: tuple = ()  # (offset in text, origin) of each line; origin (x, y, upright) when drawn by the page itself
     pieces: tuple = ()  # (offset, origin) of the first character (not a space) of each piece of text, as for lines
     ink: tuple = ()  # each string the page's upright text draws, as PageContent.ink records it
@@ -1229,14 +1309,15 @@ def _layer_text(page, content: PageContent) -> _Layer:
         with contextlib.suppress(Exception):
             page_resources[0] = copy.get_inherited('/Resources', None)  # as pypdf reads the page's resources
         raw = copy.extract_text(visitor_operand_before=before, visitor_operand_after=after, visitor_text=visit)
+        if ''.join(piece[0] for piece in pieces) != raw:
+            pieces = [(raw, None, None, None, ((), None, False, True))]
+        decoded = _decoded(pieces)  # inside the guard: a font it cannot classify leaves the page unread, not the file
     except (DependencyError, MemoryError):
         raise
     except Exception:
         return _Layer()
-    if ''.join(piece[0] for piece in pieces) != raw:
-        pieces = [(raw, None, None, None, ((), None, False, True))]
     ink, content.ink = tuple(content.ink), []  # read once, here: the page's other readers do not keep it
-    return replace(_decoded(pieces), ink=ink)
+    return replace(decoded, ink=ink)
 
 
 def _ING_form_space(operands, cm, outer, resources) -> tuple:
@@ -1303,17 +1384,26 @@ def _decoded(pieces) -> _Layer:
     placed_lines, placed_firsts = [], []  # the same, for text drawn inside a form XObject placed on the page
     drawn: dict = {}  # as _Layer.drawn
     decoders: dict[int, object] = {}
-    for text, origin, font, placed, (shows, em, single, positioned) in pieces:
+    mapped_all = []  # each piece's characters as decoded: the text, or None for a glyph that names no character
+    for text, _, font, _, _ in pieces:
         if id(font) not in decoders:
             decoders[id(font)] = _decoder(font)
         decode = decoders[id(font)]
+        mapped_all.append([decode(char, index == len(text) - 1) for index, char in enumerate(text)])
+    # A glyph that names no character alone in a typed box is written as '?': '[?]' is held, '[]' would be unchecked.
+    marked = unread_in_boxes(mapped if mapped is not None or char != ' ' else ' '
+                             for (text, *_), piece in zip(pieces, mapped_all) for char, mapped in zip(text, piece))
+    position, marks = -1, 0
+    for (text, origin, font, placed, (shows, em, single, positioned)), piece in zip(pieces, mapped_all):
         first = True  # the piece's first character drawn (not a space) is drawn at its origin
         lead = False  # whitespace opens the piece (drawn, or pypdf's own between pieces)
-        for index, char in enumerate(text):
-            mapped = decode(char, index == len(text) - 1)
+        for char, mapped in zip(text, piece):
+            position += 1
             if mapped is None:
                 dropped += char != ' '  # a space may be pypdf's own, between pieces of text
-                continue
+                if position not in marked:
+                    continue
+                mapped, marks = '?', marks + 1
             if mapped == '\n':
                 out.append(mapped)
                 size += 1
@@ -1334,7 +1424,7 @@ def _decoded(pieces) -> _Layer:
                 lead = True
             out.append(mapped)
             size += len(mapped)
-    return _Layer(''.join(out), dropped, tuple(lines), tuple(firsts), placed_lines=tuple(placed_lines),
+    return _Layer(''.join(out), dropped, marks, tuple(lines), tuple(firsts), placed_lines=tuple(placed_lines),
                   placed_pieces=tuple(placed_firsts), drawn=drawn)
 
 
@@ -1439,7 +1529,7 @@ def _messages(read, texts, no_layer, scanned, unavailable, ocr: _Ocr, limits) ->
     invalid = [n for n, page in enumerate(read, 1) if page.replaced and n not in ocr.texts]
     if invalid:
         messages.append(f'{page_phrase(invalid)} {agree(invalid, "contains", "contain")} characters the PDF does '
-                        'not encode as valid text; they are shown as �.')
+                        f'not encode as valid text{INVALID_TAIL}')
     unmapped = [(n, page.undecodable + page.annotations.undecodable) for n, page in enumerate(read, 1)
                 if n not in ocr.texts and page.undecodable + page.annotations.undecodable]
     if unmapped:

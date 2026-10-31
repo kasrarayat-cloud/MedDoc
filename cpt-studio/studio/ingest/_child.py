@@ -17,10 +17,11 @@ import time
 
 from studio.ingest.extract import Limits
 from studio.ingest.ocr import OcrTools
-from studio.ingest.text import INGEST_VERSION, METHOD_FOR_KIND, extract_txt, failed
+from studio.ingest.text import INGEST_VERSION, METHOD_FOR_KIND, extract_txt, failed, from_memory
 from studio.types import ExtractionResult, to_jsonable
 
 MAX_HEADER_BYTES = 64 * 1024
+MEMORY = 'The document needs more memory to read than the extraction limit allows.'
 PR_SET_DUMPABLE = 4
 
 
@@ -63,8 +64,10 @@ def guarded_parse(data, kind, limits, tools, deadline, workdir) -> ExtractionRes
     try:
         return parse(data, kind, limits, tools, deadline, workdir)
     except MemoryError:
-        return failed(method, engine, 'The document needs more memory to read than the extraction limit allows.')
+        return failed(method, engine, MEMORY)
     except Exception as exc:
+        if from_memory(exc):
+            return failed(method, engine, MEMORY)
         return failed(method, engine,
                       f'The document could not be read: the extractor stopped unexpectedly ({type(exc).__name__}).')
 
