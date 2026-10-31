@@ -716,6 +716,85 @@ class ActTests(unittest.TestCase):
             self.act()
 
 
+class PreflightFlowTests(unittest.TestCase):
+    """The whole preflight body with every host read faked: rows, held values, the contract to embed."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name).resolve()
+        self.addCleanup(self.temporary.cleanup)
+        venv = self.root / 'venv'
+        (venv / footprint.SITE / 'pypdf-6.21.1.dist-info').mkdir(parents=True)
+        (venv / footprint.SITE / 'pypdf-6.21.1.dist-info/METADATA').write_text(
+            'Metadata-Version: 2.1\nName: pypdf\nVersion: 6.21.1\n')
+        (venv / footprint.SITE / 'pypdf-6.21.1.dist-info/RECORD').write_text('pypdf-6.21.1.dist-info/RECORD,,\n')
+        self.venv = footprint.snapshot(venv)
+        self.manifest = op.build_manifest(BASE, [('M', '100644', '100644', 'a' * 40, 'b' * 40,
+                                                  'rebuild/requirements.txt')], lambda blob: blob.encode())
+        self.environment = ('QUILLMD_RELEASE_SHA="' + BASE + '"\n').encode()
+        self.calls = []
+        prior = SimpleNamespace(
+            await_health=lambda revision: {'release': revision}, foreign_services=lambda: {'x.service': 'MainPID=1'},
+            legacy=SimpleNamespace(Host=lambda helper: SimpleNamespace(state=lambda unit: {
+                'ActiveState': 'active', 'MainPID': '9'})),
+            managed_helper=object(), backup_restore=SimpleNamespace(read_private=lambda path, limit: self.environment),
+            source_guard=lambda: SimpleNamespace(), source_plan=lambda plan, guard: {'before': {'a': 1}, 'after': {}},
+            BASE=None, SOURCE=None, STATIC=None)
+        self.engine = SimpleNamespace(prior=prior, BASE=None, SOURCE=None, STATIC=None,
+                                      snapshot=lambda original: {'tables': {'core_encounter': [5, 'x']},
+                                                                 'pending': {'core_job': 0}, 'migrations': [1]},
+                                      unchanged=engine_module.unchanged,
+                                      render_environment=lambda original, revision, environment: original)
+        fake_footprint = SimpleNamespace(snapshot=lambda path: self.venv, summary=footprint.summary,
+                                         requirement_pins=footprint.requirement_pins,
+                                         requirements_mismatch=footprint.requirements_mismatch)
+        backup = SimpleNamespace(verify_report=lambda path, **kwargs: {
+            'report_sha256': 'e' * 64, 'run_id': 'r', 'restore_run_id': 's', 'source_commit': BASE})
+        modules = {'venv_footprint': fake_footprint, 'rebuild_release_backup': backup}
+        patches = {
+            'ops_module': lambda name, source=None: modules[name], 'load_engine': lambda: self.engine,
+            'candidate_worktree': lambda candidate: {'head': candidate},
+            'shared_tree_at_base': lambda base: {'head': base}, 'origin_main_is': lambda candidate: {},
+            'merge_hooks': lambda: frozenset(), 'compute_manifest': lambda *args: self.manifest,
+            'git': lambda repo, *arguments, **options: b'pypdf==6.21.4\n',
+            'venv_sharing_units': lambda prior, services: ['quillmd-corti-candidate.service'],
+            'foreign_idle': lambda units: {'idle': True, 'units': {}},
+            'live_venv_users': lambda exclude=(): [{'pid': 1, 'unit': 'quillmd-corti-candidate.service'}],
+            'locks_free': lambda: {}, 'outside_scheduled_windows': lambda moment: 'ok',
+            'citation': lambda prior, candidate: {'citation': '**Citation — 2 of 2**'},
+            'operator_hashes': lambda: {name: 'd' * 64 for name in op.OPERATOR_FILES},
+            'PENDING_ENVIRONMENT': self.root / 'absent-pending-env'}
+        for name, value in patches.items():
+            patcher = patch.object(op, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.args = SimpleNamespace(base=BASE, candidate=CANDIDATE, manifest_sha256=None,
+                                    declaration=self.root / 'missing.md', backup_report=self.root / 'backup.json')
+
+    def test_before_the_declaration_only_the_declaration_rows_fail_and_nothing_secret_is_reported(self):
+        report, context = op.preflight(self.args)
+        failed = sorted(row['check'] for row in report['checks'] if not row['passed'])
+        self.assertEqual(failed, ['declaration_contract', 'declaration_provenance', 'strict_declaration_gate'])
+        self.assertEqual(context['environment']['original'], self.environment)
+        self.assertNotIn(self.environment.decode().strip(), json.dumps(report, default=str))
+        contract = op.contract_from(report['contract_block'])
+        self.assertEqual(contract['requirements_mismatch'], {'pypdf': {'required': '6.21.4', 'installed': '6.21.1'}})
+        self.assertEqual(contract['code_candidate'], CANDIDATE)
+        self.assertEqual(contract['venv']['footprint_sha256'], self.venv['footprint_sha256'])
+        self.assertEqual(report['measured']['database']['tables'], {'core_encounter': 5})
+        self.assertIsNone(self.engine.BASE)  # the binding is restored after the preflight
+
+    def test_a_changed_manifest_busy_units_or_a_stray_process_fail_their_rows(self):
+        changed = SimpleNamespace(**vars(self.args))
+        changed.manifest_sha256 = '0' * 64
+        with patch.object(op, 'foreign_idle', lambda units: {'idle': False, 'units': {}}), \
+                patch.object(op, 'live_venv_users', lambda exclude=(): [{'pid': 2, 'unit': None}]):
+            report, _ = op.preflight(changed)
+        failed = {row['check'] for row in report['checks'] if not row['passed']}
+        self.assertTrue({'manifest_equals_the_preflight', 'venv_sharing_units_idle',
+                         'no_undeclared_live_venv_process'} <= failed)
+
+
 class CommandLineTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
