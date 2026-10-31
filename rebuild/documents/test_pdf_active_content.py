@@ -620,6 +620,14 @@ class ScannerDetails(unittest.TestCase):
         self.assertEqual(self.kind(minimal([(1, b"<< >>")]) + b"% 9 0 obj << /AA 2 0 R >> endobj\n"), "active")
         self.assertEqual(self.kind(minimal([(1, b"<< /T <2F4A53> >>")]) + b"% /XFA [(x) 2 0 R]\n"), "active")
 
+    def test_a_header_glued_to_its_number_is_still_an_object(self):
+        # pdf.js reads "9 0obj" as the header "9 0 obj"; here it sits inside another stream's data,
+        # where only a one-object parse at the keyword can see the key.
+        data = b"synthetic\n9 0obj << /A 5 0 R >> endobj\n"
+        stream = b"<< /Length %d >>\nstream\n" % len(data) + data + b"\nendstream"
+        self.assertEqual(self.kind(minimal([(3, stream)])), "active")
+        self.assertEqual(self.kind(minimal([(3, stream.replace(b"0obj", b"0 xobj"))])), None)
+
     def test_ordinary_names_in_values_and_arrays_are_not_keys(self):
         for content in (b"<< /Type /Encoding /Differences [65 /A /B /C /JS /AA] >>",
                         b"<< /S /A /P 2 0 R >>", b"<< /Title (/A /B) /Subject (/JS) >>",
@@ -636,6 +644,16 @@ class ScannerDetails(unittest.TestCase):
         for kind in (b"/URI", b"/Launch", b"/GoToR", b"/GoToE", b"/SubmitForm", b"/RichMediaExecute"):
             with self.subTest(kind=kind):
                 self.assertEqual(self.kind(minimal([(1, b"<< /S " + kind + b" /F (synthetic) >>")])), "active")
+
+    def test_every_definition_of_a_duplicated_key_is_judged(self):
+        # pypdf refuses duplicate keys; pdf.js keeps the LAST definition, so judging only the
+        # first would let "/S /GoTo /S /GoToR" through.
+        self.assertEqual(self.kind(minimal([(1, b"<< /S /GoTo /S /GoToR /F (synthetic.pdf) >>")])), "active")
+        self.assertEqual(self.kind(minimal([(1, b"<< /Subtype /Text /Subtype /FileAttachment >>")])), "annotation")
+        self.assertEqual(self.kind(minimal([(1, b"<< /Type /XObject /Type /EmbeddedFile >>")])), "active")
+        # An object stream whose filter is defined twice cannot be decoded without guessing which.
+        twice = objstm([(5, b"<< /Type /Catalog >>")], b" /Filter /ASCIIHexDecode")
+        self.assertEqual(self.kind(minimal([(3, twice)])), "unreadable")
 
     def test_encryption_anywhere_is_refused(self):
         self.assertEqual(self.kind(minimal([(1, b"<< >>")], b"<< /Root 1 0 R /Encrypt 2 0 R >>")), "encrypted")

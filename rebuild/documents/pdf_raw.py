@@ -77,6 +77,9 @@ MAX_VARIANTS = 8                      # decodings of one object stream whose par
 
 _WHITESPACE = b"\x00\t\n\x0c\r "
 _DELIMITING = frozenset(b"\x00\t\n\x0c\r ()<>[]{}/%")   # bytes that end a regular token
+#: What may stand right before an "obj" or "trailer" keyword that some reader still reads as one:
+#: pdf.js ends a number at its first non-number character, so "5 0obj" is a header there.
+_BEFORE_KEYWORD = _DELIMITING | frozenset(b"0123456789.+-")
 _REG = rb"[^\x00\t\n\x0c\r ()<>\[\]{}/%]"            # a PDF "regular" character
 # ⚠️ EVERY REPEATED GROUP BELOW IS POSSESSIVE (*+, ++). Python's regex engine otherwise keeps
 # backtracking state for each repetition of a group: a 60 MiB run of "1 " took 6.5 s and 5.5 GB.
@@ -175,6 +178,10 @@ _NAME_BITS.update({b"Encrypt": _ENCRYPT, b"N": _HAS_N, b"First": _HAS_FIRST, b"O
 _KEPT = frozenset((b"Type", b"Subtype", b"S", b"Length", b"Filter", b"DecodeParms", b"F", b"DP", b"N",
                    b"First", b"W", b"Predictor", b"Colors", b"BitsPerComponent", b"Columns", b"EarlyChange"))
 _KEPT_CONTAINERS = frozenset((b"Filter", b"DecodeParms", b"F", b"DP", b"W"))
+#: Every value of these keys is judged, not only the first: readers disagree on which duplicate wins.
+_VALUE_BITS = {b"Type": _EMBEDDED, b"Subtype": _ANNOT, b"S": _ACTION}
+#: Marks a dictionary that defines one of its kept entries twice with different values.
+_CONFLICT = object()
 _MAX_ITEMS = 64
 _STR = ("s",)
 _SCALAR = ("x",)
@@ -202,8 +209,8 @@ def _unreadable(reason):
 
 
 class _Frame:
-    __slots__ = ("is_dict", "state", "key", "kept", "key_bits", "any_bits", "bad", "n1", "n2", "items",
-                 "keep", "obj", "start")
+    __slots__ = ("is_dict", "state", "key", "kept", "key_bits", "any_bits", "value_bits", "bad", "n1", "n2",
+                 "items", "keep", "obj", "start")
 
     def __init__(self, is_dict, keep, obj, start):
         self.is_dict = is_dict
@@ -212,6 +219,7 @@ class _Frame:
         self.kept = None
         self.key_bits = 0       # policy bits of names in key position
         self.any_bits = 0       # policy bits of every name at this level
+        self.value_bits = 0     # refused values of /Type, /Subtype or /S, from any of their definitions
         self.bad = False        # key/value pairing broke: every name at this level is judged
         self.n1 = self.n2 = None
         self.items = [] if keep and not is_dict else None
@@ -265,22 +273,27 @@ class _Scanner:
             raise Refusal("encrypted", "/Encrypt key")
         if frame.key_bits & _KEY:
             raise Refusal("active", "forbidden key")
-        if kept.get(b"Type") == ("n", b"EmbeddedFile"):
+        if frame.value_bits & _EMBEDDED:
             raise Refusal("active", "/Type /EmbeddedFile")
-        subtype = kept.get(b"Subtype")
-        if subtype is not None and subtype[0] == "n" and subtype[1] in ACTIVE_ANNOTATIONS:
+        if frame.value_bits & _ANNOT:
             raise Refusal("annotation", "active annotation subtype")
-        action = kept.get(b"S")
-        if action is not None and action[0] == "n" and action[1] in ACTION_TYPES:
+        if frame.value_bits & _ACTION:
             raise Refusal("active", "action type")
         return ("d", kept, frame.any_bits)
 
     @staticmethod
     def _keep(frame, value):
-        if frame.key in _KEPT:
-            if frame.kept is None:
-                frame.kept = {}
-            frame.kept.setdefault(frame.key, value)
+        key = frame.key
+        if key in _KEPT:
+            kept = frame.kept
+            if kept is None:
+                kept = frame.kept = {}
+            if key not in kept:
+                kept[key] = value
+            elif kept[key] != value:
+                kept[_CONFLICT] = True       # pypdf refuses duplicates; pdf.js keeps the last
+            if value[0] == "n" and key in _VALUE_BITS:
+                frame.value_bits |= _NAME_BITS.get(value[1], 0) & _VALUE_BITS[key]
 
     def _define(self, obj, summary):
         """Remember a definition that a stream parameter may refer to (scalars and strings never are)."""
@@ -477,9 +490,7 @@ class _Scanner:
                                 frame.state = 1
                             elif state == 1:
                                 if frame.key in kept_keys:
-                                    if frame.kept is None:
-                                        frame.kept = {}
-                                    frame.kept.setdefault(frame.key, value)
+                                    self._keep(frame, value)
                                 frame.state = 0
                             elif state == 2:                     # the integer was the value
                                 self._keep(frame, ("i", frame.n1))
@@ -600,9 +611,7 @@ class _Scanner:
                         state = frame.state
                         if state == 1:
                             if frame.key in kept_keys:
-                                if frame.kept is None:
-                                    frame.kept = {}
-                                frame.kept.setdefault(frame.key, value)
+                                self._keep(frame, value)
                             frame.state = 0
                         else:
                             if state == 2:
@@ -696,7 +705,7 @@ class _Scanner:
         for pattern, canonical in ((_OBJ_ANCHOR, self.canonical_obj), (_TRAILER_ANCHOR, self.canonical_trailer)):
             for m in pattern.finditer(data):
                 at = m.start()
-                if at in canonical or at > 0 and data[at - 1] not in _DELIMITING:
+                if at in canonical or at > 0 and data[at - 1] not in _BEFORE_KEYWORD:
                     continue
                 self.stats["hidden_anchors"] += 1
                 if self.stats["hidden_anchors"] > MAX_HIDDEN_ANCHORS:
@@ -868,6 +877,8 @@ class _Scanner:
             kind = stream.kept.get(b"Type")
             if not (stream.bits & _HAS_W or kind is not None and kind[0] == "n" and kind[1].lower() == b"xref"):
                 continue
+            if _CONFLICT in stream.kept:
+                continue        # ambiguous: names nothing; /N and /First identify object streams anyway
             widths = stream.kept.get(b"W")
             if widths is None or widths[0] != "a" or widths[1] is None or len(widths[1]) < 3:
                 continue
@@ -900,6 +911,8 @@ class _Scanner:
                     continue
                 if stream.depth >= MAX_STREAM_NESTING:
                     raise _unreadable("object streams nested too deeply")
+                if _CONFLICT in stream.kept:
+                    raise _unreadable("an object stream dictionary defines an entry twice")
                 variants = self._variants(stream.kept)
                 stop = self._extent(stream)
                 if variants is None or stop is None:
