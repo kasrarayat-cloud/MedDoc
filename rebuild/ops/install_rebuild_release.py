@@ -97,6 +97,8 @@ QUIET_WINDOWS_UTC = ((dt.time(4, 20), dt.time(4, 50)), (dt.time(4, 55), dt.time(
 IDLE_WINDOW_SECONDS = 15
 IDLE_MAX_CPU_FRACTION = 0.02
 LIVE_VENV_MARKER = str(VENV) + '/bin/'
+#: The act writes the rendered environment here and renames it over rebuild/.env (exclusive create).
+PENDING_ENVIRONMENT = APP / '.rebuild-release-env-pending'
 UNIT_NAME = re.compile(r'[A-Za-z0-9@_.:-]+\.service')
 STAGE_LOG = '[rebuild-release]'
 
@@ -710,6 +712,8 @@ def preflight(args, *, executing=False):
                 checks.run('no_undeclared_live_venv_process', lambda: no_undeclared_venv_users(
                     measured['foreign_venv_units'], live_venv_users(exclude={os.getpid()})))
         checks.run('served_release_is_base', prior.await_health, args.base)
+        checks.run('no_pending_environment_file', lambda: require(
+            not PENDING_ENVIRONMENT.exists() and not PENDING_ENVIRONMENT.is_symlink(), 'pending_environment_file'))
         checks.run('coordination_locks_free', locks_free)
         checks.run('outside_scheduled_windows', outside_scheduled_windows, now_utc())
         report = checks.run('backup_report', backup.verify_report, args.backup_report, base=args.base,
@@ -974,7 +978,7 @@ def act(engine, plan, context, *, footprint, idle=foreign_idle, snapshot_venv=No
                 require(static_after == static_before, 'static_noop')
             stage = 'environment_publication'; note(stage)
             require((prior.APP / '.env').read_bytes() == original, 'environment_concurrency')
-            temporary = prior.APP / '.rebuild-release-env-pending'
+            temporary = prior.APP / PENDING_ENVIRONMENT.name
             prior.write_new(temporary, active); temporary.replace(prior.APP / '.env')
             stage = 'database_before_resume'; before_resume = engine.snapshot(active)
             stage = 'retain_database_before_resume'

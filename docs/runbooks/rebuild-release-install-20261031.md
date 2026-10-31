@@ -50,6 +50,9 @@ the stage order to the engine's.
 - Do not run tests, pip or Python without `-B` in a worktree whose `rebuild/.venv` links to the live venv, at any
   time between step 3 and step 8. `scripts/setup-worktree.sh` creates such links. A stray process on the live venv
   refuses the preflight, and new bytecode changes the footprint.
+- Run no synthetic workflow, upload or provider call during step 7. The engine's database baseline is taken while
+  the units still serve, and any row written before the stop, other than a health tick, refuses the act. That
+  refusal comes before publication, so the original release is restarted automatically.
 
 ## Values
 
