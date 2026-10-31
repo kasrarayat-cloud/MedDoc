@@ -1142,3 +1142,29 @@ What it means for this change (recorded by the receiving session, before buildin
     transcripts. h4, the primary set, was rebuilt from its author's own tool calls without being read: its manifest
     matches its pin (f8985709...) and all six of its renders are byte-identical to the hashes its author's run printed.
     h3, already exposed, could not be rebuilt or checked against its pin, so no claim rests on it.
+
+### Session interpretation, 2026-10-31 (1bf3b49c, the narrow release, after its sixth refutation) — recorded, not owner-ruled
+
+57. **The question holds the date, never the reading (56(c) overruled; the owner's sentence applied to its letter).** The
+    sixth refutation (dates, parity and pipeline lenses) found no wrong date sent and no member answer changed. It found
+    what 56 had wrong:
+    (a) *56(c) was the wrong target.* It settled for "an open question reads as installed reads a held answer". Parity-6-1
+        and 6-2 showed what that costs: read with no date, a 2025 colonoscopy read as done on this encounter, with a
+        same-day E/M warning, and a code documented as done today went from ready to excluded. The owner's sentence is
+        "Routing, inventory and engine readers stay as installed", and a reader handed None is not reading as installed.
+        So every reader now reads the date the installed reading sends (`charge_question_day`), and only the gates keep
+        none: each proposal holds on the question, and no dated reference applies. An open question reads as installed
+        reads the same document with its date, except the date and what hangs on it. The engine's label does not change:
+        for every document the installed revision read, its readers read what they read. A held member's answer stays as
+        installed.
+    (b) *"True by construction" was claimed before it was so.* The sentence still asserted what it could not know: "the
+        last heading", "a date of service", "the document's own" (dates-n6-1, n6-3 to n6-6). It now quotes the line it read
+        from, quotes each stated line whole, and says the date "is read from" its line. The test helper checks the claim
+        on every asked text: the first quote is a line of the document, and each stated quote a whole line at or after it.
+    (c) *Other readers kept the word.* All three lenses found the report, screen, list and change reason calling the fact
+        conflicting, independently. They now ask the same predicate as the check, and say "asked".
+    (d) *A limit accepted on measured reach.* Pipe6-1: a member's save that does not settle the date on a pre-install
+        encounter the release asks sends one dateless request, where installed only re-assessed, and can invalidate a
+        decision. Of the 36 live encounters exactly one can reach it, e084b793, with no decisions, and the walk does not
+        touch it. It is recorded, not repaired: the repair would change the save path, which is where the parked work kept
+        regressing, for one synthetic row. Pipe6-3 and pipe6-6 are rollback limits, recorded in the declaration.

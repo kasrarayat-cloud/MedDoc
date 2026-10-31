@@ -2957,8 +2957,9 @@ rule, never a sentence patch). The rules this added, by module:
 
 The owner's decision of 2026-10-30 (ruling file) shipped two changes on the installed revision 90377ec6f413. Every other
 reader is unchanged, so routing stays `gi-routing@4`, the inventory `gi-services@1` and the engine
-`cpt-studio-validation@4`. The engine's only change is the wording of the date question this release's reading raises
-(`checks._date_problem`); no stored assessment reads it.
+`cpt-studio-validation@4`: each reads what it read, for every document the installed revision read. The engine's changes
+are the wording of the date question this release's reading raises (`checks._date_problem`) and which date its readers
+are handed while that question stands; no stored assessment reads either.
 
 - **The note's own closing charge block** (`studio/gi/context.py`, `_charge_block_asks`). Rule A skips every date
   label a plan or history section holds. The release acts on one fact only: one the installed reading SENDS (origin
@@ -2982,20 +2983,27 @@ reader is unchanged, so routing stays `gi-routing@4`, the inventory `gi-services
   member's answer to it exactly as it does for that sent fact: that date taken, any other held with the installed note
   (`charge_date_own`). The answer is never re-read from the evidence, whose re-read can miss a form the label reader
   reads ("DOS-10/05/2026"). The block's date appears only in the note. The question's and check's wording read the
-  note's first sentence through `charge_date_problem` (`checks._date_problem`).
+  note's first sentence through `charge_date_problem` (`checks._date_problem`), and every reader that labels the fact asks
+  the same predicate and says "asked": the report, the screen and list (`date_asked`, `service_date_asked`) and the
+  change reason. It is no conflict in the document, since its lines may record another occurrence.
 
-  The block runs from its heading to the document's end, so an entry written after the note's signature is inside it.
+  The block runs from its first line to the document's end, so an entry written after the note's signature is inside it.
   Ending it at a signature line was one more word list: no such list tells a signature line from a field ("Electronic
-  signature: ..." was missed; "Signed ABN on file: no" was taken for one). So the text is true by construction instead:
-  the note names what the lines from the document's last charge or billing heading to its end state, as theirs, never
-  as "the block's" date (the fifth refutation, dates-n5-1 and n5-3).
+  signature: ..." was missed; "Signed ABN on file: no" was taken for one). So the sentence says only what is true of the
+  document whatever the guards decided: it quotes the line it read from, not "the last heading" (a billing heading outside
+  the closed class may follow, and a guard may take a line for a heading); it quotes each stated line whole, not up to its
+  date ("10/04/2026 through 10/06/2026", "(cancelled)"); and it says the date "is read from" its line, not that it is the
+  document's own (the installed reading may have taken a planned procedure's date) or that the lines state a date of
+  service (a filing deadline's label reads as one). The guards decide only whether to ask; a wrong guess costs a question.
 
-  Routing's only way to the document's date is `context.service_date_of`, which keeps the date the question's note
-  keeps, so `detect.route` reads such a document exactly as installed in every state (dates-n5-4: read with no date, a
-  dated service went from performed to "service date not established"). A request's date never comes from there:
-  `jobs._service_date_of` reads the stored facts. The inventory and the engine are handed the stored date, None while
-  the question stands, so an open question is the state installed reaches when it holds a member's answer: no new
-  state, and `engine` holds every proposal on it (`day is None`), so no code is ready while it stands.
+  The question holds the date and what hangs on it, never the reading. Every reader reads the date the question's note
+  keeps (`charge_question_day`): routing through `context.service_date_of`, its only way to the document's date, and the
+  inventory and evidence readers through `engine.assess`'s `read_day`. Read with no date, a dated service went from
+  performed to "service date not established" (dates-n5-4), a 2025 colonoscopy read as done on this encounter
+  (parity-6-2), and a code went from ready to excluded (parity-6-1). Every gate keeps `date_state.value`, None: each
+  proposal holds on the encounter question (`day is None`), and no dated reference is looked up (`_select`'s `dated`). A
+  request's date never comes from there: `jobs._service_date_of` reads the stored facts. A member's held answer is no
+  such question, and reads with no date, as installed reads it.
 
   Every other fact - no own date, or a question the installed reading already asks - is returned exactly as that
   reading made it, its texts and the answers it takes included. The release's refutations showed why: a block may

@@ -469,10 +469,16 @@ class ChargeBlockTests(SimpleTestCase):
                   'Place of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of colon polyps. Colonoscopy in '
                   '2025: a 6 mm polyp in the sigmoid colon was removed by cold snare.\nNo melena.\n\nObjective\nAbdomen soft.\n'
                   'Medical decision making: moderate.\nTotal time on the date of the encounter was 32 minutes.\n' + block)
+        # the evidence readers read it too, not only the inventory: with no date this passage read "not established as
+        # performed" and its code held, where the date reads it historical and excludes it (mutant E4; two gate documents)
+        outside = (BANNER + 'Date of service: 2026-10-05\nOutside records:\nColonoscopy at another facility in 2021.\n'
+                   'Prep: good. Extent: cecum.\nProcedure: Colonoscopy with cold snare polypectomy.\n'
+                   'Findings: The colonoscope was advanced to the hepatic flexure. A 6 mm sigmoid polyp was removed.\n' + block)
         cases = ((report, {'45385': 'After review of prior records a 6 mm polyp in the sigmoid colon was removed by cold snare in 2026.'},
                   {'45385': 'selected'}),
                  (office, {'45385': 'Colonoscopy in 2025: a 6 mm polyp in the sigmoid colon was removed by cold snare.'},
-                  {'45385': 'excluded'}))
+                  {'45385': 'excluded'}),
+                 (outside, {'43239': 'Colonoscopy at another facility in 2021.'}, {'43239': 'excluded'}))
         for text, codes, buckets in cases:
             with self.subTest(codes=list(codes)):
                 self.assert_asked(text)
