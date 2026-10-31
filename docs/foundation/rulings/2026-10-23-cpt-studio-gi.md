@@ -1194,3 +1194,18 @@ What it means for this change (recorded by the receiving session, before buildin
     (e) *What was not repaired, and why.* The considerations a fee-schedule row adds and an excluded code's reinstatement
         do wait on the date: they are gates, and the limit row names them. A stale tab during the install window reads an
         old page beside a new API: a limit of any install.
+
+### Session interpretation, 2026-10-31 (1bf3b49c, the narrow release, after its eighth refutation) — recorded, not owner-ruled
+
+59. **Back toward installed, in two places (58 refined).** The eighth refutation, one differential lens over the delta,
+    found nothing that blocks. It raised two limits, and each showed a step 58 had taken too far.
+    (a) *A running footer settles nothing.* 58(d) read the document's own date anywhere in the closing lines, so that an
+        addendum could settle the question. It also let a running PDF footer settle it: h2-08 with "Date of service:
+        10/05/2026 | Page 2 of 2" stopped asking and sent the contradicted date. That is installed's own reading, so it broke
+        no class of the pass, and it was still the shape the release exists for. Agreement now reads a plan's reach, as
+        before 58, or the application's own addendum section. What a member writes in an addendum still settles it, even in
+        words that retract it: that route is the one the question offers, and the limit is named.
+    (b) *A held answer with nothing kept stays installed.* 58(b) justified reading the date for a held answer by the
+        dateless answer it keeps. A date held at upload keeps none, and installed reaches that state with nothing to
+        misread. It reads as installed again. 58(b)'s sentence "a state installed never reaches" holds only for the answer it
+        keeps, and is narrowed to that.

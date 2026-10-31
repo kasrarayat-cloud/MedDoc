@@ -2978,7 +2978,9 @@ are handed while that question stands; no stored assessment reads either.
     the note's own plan brings its own plan and charge block, its title above them);
   - carry no date of birth (rule N2).
 
-  A block that also states the document's own date does not ask. The question keeps the installed fact's evidence and
+  The document's own date settles it in a plan's reach or in the application's addendum section (`ADDENDUM_HEADER`): a
+  running footer repeating it is no answer, or h2-08 as a PDF stops asking and sends the contradicted date (delta-2). The
+  question keeps the installed fact's evidence and
   nothing else, and its note (`CHARGE_DATE_NOTE`) keeps the date that fact sends. `merge_user_values` takes and holds a
   member's answer to it exactly as it does for that sent fact: that date taken, any other held with the installed note
   (`charge_date_own`). The answer is never re-read from the evidence, whose re-read can miss a form the label reader
@@ -3000,8 +3002,9 @@ are handed while that question stands; no stored assessment reads either.
   keeps (`charge_question_day`): routing through `context.service_date_of`, its only way to the document's date, and the
   inventory and evidence readers through `engine.assess`'s `read_day`. Read with no date, a dated service went from
   performed to "service date not established" (dates-n5-4), a 2025 colonoscopy read as done on this encounter
-  (parity-6-2), and a code went from ready to excluded (parity-6-1). So does a member's held answer on such a document,
-  which keeps the dateless request's answer (parity-7-1). Every gate keeps `date_state.value`, None: each proposal holds on
+  (parity-6-2), and a code went from ready to excluded (parity-6-1). So does a member's held answer that keeps the dateless
+  request's answer (parity-7-1). A held answer with no provider answer is a state the installed revision reaches, with
+  nothing to misread, and reads as it does (delta-1). Every gate keeps `date_state.value`, None: each proposal holds on
   the encounter question (`day is None`), and the checks read a reference with no date (`_select`'s `dated`), because
   `pfs_check` reads a row's `applicable_sources` and a row would open it. One reference fact is a reading, not a gate:
   whether a code is a procedure at all (`_procedural`), which reads `read_pfs`, the row the installed reading has. With no
