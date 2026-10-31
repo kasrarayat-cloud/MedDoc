@@ -1,0 +1,66 @@
+# pypdf 6.21.4 in the rebuild: what it changes, measured 2026-10-31
+
+`rebuild/requirements.txt` moves pypdf from 6.21.2 to 6.21.4. Seven advisories
+against 6.21.2 (CVE-2026-119203 to CVE-2026-119209) fail the required "Python
+dependency audit" in `.github/workflows/test.yml`, which blocks every pull
+request. All seven are denial of service from a crafted PDF: a long run, a large
+allocation or an infinite loop. The document worker already parses each upload
+under Landlock and seccomp with a 512 MiB address-space limit and 12 s of CPU
+(`documents/sandbox.py`) and a 20 s subprocess timeout (`documents/service.py`),
+so on either version such a file ends as a refused or timed-out document.
+
+**Nothing live changes with this commit.** The running rebuild keeps the pypdf
+its image was built with until its next install, and that install ships this
+pin, so its declaration should name it. This change did not read the running
+version: the local `rebuild/.venv` holds 6.21.1, and `main` pinned 6.21.2.
+
+## Measured differences
+
+An independent refutation ran `documents/engine.py` under both versions. It ran
+in-process with pypdf chosen by path and its version printed on every row, and
+through the real worker for F1, F3 and F4. A second agent then reproduced each
+finding from its description, and the author reproduced F1, P1 and F3 a third
+time. Every input is a hand-built PDF, and no real producer is known to write
+any of them.
+
+| | input | 6.21.2 | 6.21.4 |
+|---|---|---|---|
+| F1 | a /JavaScript name tree or an /OpenAction present only in a later revision whose cross-reference section 6.21.4 cannot read: a negative /Index count, more than 2,000,000 cross-reference stream entries in total, or an indirect /DecodeParms on a filter that ignores it | refused (`unsafe_upload`) | accepted and filled |
+| F2 | an AcroForm /DR Helvetica whose /Differences uses a glyph name outside the Adobe Glyph List form, such as `/uni006d` (lower-case hex) or `/u41` | the answer is painted | the stored value is right and the fill reports success, but that letter is missing from the painted appearance |
+| F3 | a /DR font whose /BaseEncoding is an array or a dictionary (the PDF format requires a name) | filled | every fill, even a blank one, fails with `TypeError` (`invalid_document`), after the upload was accepted |
+| F4 | an outline item that is not a dictionary, or a null /Next | the export fails | the item is dropped and the export succeeds |
+| N1 | valid /uniXXXX or /uXXXX names in that /Differences | a fallback font is added | /Helv is kept; the bytes differ and pdf.js paints the same answer |
+
+Unchanged on both versions:
+
+- 78 files from pdf-lib, pdfkit, ReportLab, pypdf's own writer and
+  `colon_blank_answers.pdf`;
+- 120 real-producer fills, byte-identical with PYTHONHASHSEED pinned (the name
+  of the 6.21.2 fallback font follows the hash seed);
+- `qualification.run()`, 18 of 18.
+
+The refutation did not render pages in Acrobat, PDFium or Preview. F2's missing
+letter is measured with pdf.js only.
+
+## P1: the upload check can be passed today, on either version
+
+F1 is not a new hole. pypdf 6.21.2 recovers from an unreadable cross-reference
+section in the same way, with `strict=True`. A cross-reference stream can be
+dropped the same way if it has:
+
+- `/Type /Xref`;
+- no /Size;
+- a short or over-wide /W;
+- an /Index count above its /Size.
+
+A file that hides its script behind such a section is accepted by `pdf_inspect`
+under 6.21.2 and 6.21.4 alike, while pdf.js still reports the script.
+
+Once inspection passes, the original is kept, and `template_original`
+(`core/views.py`) returns it byte for byte to the department's members. The
+upload form says active content is refused.
+
+pypdf logs each drop ("Previous trailer cannot be read", "XRef object at N can
+not be read, some object may be missing"). The worker discards that log, which
+is where a guard could look. A guard is rebuild work and is not part of this
+change.
