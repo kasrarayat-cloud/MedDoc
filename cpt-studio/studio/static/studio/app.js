@@ -253,7 +253,7 @@ function layoutDocument(text, pages, spans) {
 // question a closing charge block asks (date_asked, from context.charge_date_problem) is no conflict in the document.
 function factValue(fact, labels, isDate = false) {
   if (!fact) return 'Not documented';
-  if (fact.date_asked === true) return 'Asked: see the date question';
+  if (fact.date_asked === true) return 'Date asked';
   if (fact.origin === 'conflict') return fact.member_conflict === true ? 'Member entry differs from the document' : 'Conflicting values documented';
   if (fact.origin === 'missing' || fact.value == null || fact.value === '' || fact.value === 'not_documented') return 'Not documented';
   const value = isDate ? (formatDate(fact.value, true) || String(fact.value)) : lookup(labels, fact.value, String(fact.value));

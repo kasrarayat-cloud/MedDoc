@@ -24,8 +24,8 @@ from studio import jobs
 from studio.gi import context, detect
 from studio import reports, review, serializers
 from studio.providers.corti import build_coding_request, normalize_coding_response
-from studio.reference.store import PrefetchedReferenceLookup
-from studio.types import Fact, from_jsonable, to_jsonable
+from studio.reference.store import MUE, PFS, PrefetchedReferenceLookup
+from studio.types import Fact, ReferenceSourceInfo, from_jsonable, to_jsonable
 from studio.validation import checks
 
 FIXTURES = Path(__file__).resolve().parent / 'fixtures' / 'gi3'
@@ -73,7 +73,23 @@ def own_part(problem):
     return problem.rsplit(' is read from ', 1)[1]
 
 
-def assessed(text, answer, codes):
+def source(key, kind):
+    return ReferenceSourceInfo(key=key, kind=kind, publisher='CMS (synthetic rows)', title='Synthetic', release=key, url='',
+                               sha256='0' * 64, effective_start='2026-01-01', effective_end='2026-12-31', license_note='',
+                               scope_note='')
+
+
+SOURCES = (source('pfs-test', PFS), source('mue-test', MUE))
+
+
+def rows_of(global_days):
+    return {'pfs-test': {(code, ''): {'status': 'A', 'global_days': days, 'mult_proc': '0', 'endo_base': '', 'pctc': '0'}
+                         for code, days in global_days.items()},
+            'mue-test': {(code, ''): {'value': 1, 'mai': {'indicator': '2', 'label': 'Date of service edit'},
+                                      'rationale': 'Anatomic'} for code in global_days}}
+
+
+def assessed(text, answer, codes, rows=None):
     """The assess stage's own child on the stored facts, with a provider selecting each code on its passage."""
     stored = jobs._merged_facts(context.extract_context(text), {'service_date': answer} if answer else {})
     day = jobs._service_date_of(stored)
@@ -83,7 +99,7 @@ def assessed(text, answer, codes):
     normalized = normalize_coding_response('corti', build_coding_request('corti', 'corti-coding-v2@cptstudio-1', text, day,
                                                                          10 ** 8),
                                            json.dumps({'codes': entries, 'candidates': [], 'usageInfo': {}}).encode())
-    reference = RecordingLookup((), {}, list(codes))
+    reference = RecordingLookup(SOURCES if rows else (), rows or {}, list(codes))
     _, result = jobs._assess_child(text, day, (), {n: from_jsonable(Fact, v) for n, v in stored.items()}, normalized,
                                    reference, 'succeeded', None, ())
     jobs.release_routing_caches()
@@ -459,7 +475,7 @@ class ChargeBlockTests(SimpleTestCase):
         the evidence readers were handed no date: a 2025 colonoscopy read as done on this encounter, and a code documented as
         done today went from ready to excluded. Readers now read that date while the question stands; only the gates keep
         none. So every proposal reads as it does with the document's own date, excluded or not, except that a ready one holds
-        on the question, and no dated reference is looked up. A member's held answer reads with no date, as installed."""
+        on the question. A member's held answer reads the same (parity-7-1): it keeps the dateless request's answer."""
         block = '\nAssessment and plan\nFollow up in clinic.\n\nCharge information\nDate of service: 2026-10-06\n'
         report = (BANNER + 'Patient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: ASC (POS 24)\n'
                   'Colonoscopy report\nIndication: surveillance after EMR.\nFindings:\n'
@@ -493,13 +509,55 @@ class ChargeBlockTests(SimpleTestCase):
                 self.assertEqual([c.detail for c in asked.encounter_checks if c.id == 'services.inventory'],
                                  [c.detail for c in answered.encounter_checks if c.id == 'services.inventory'])
                 self.assertFalse([p for p in asked.proposals if p.status == 'ready'])
-                self.assertEqual(set(reference.days), {None})  # the gate: no dated reference while the question stands
+                self.assertIn(None, reference.days)  # the gate: the reference the checks read has no date
                 self.assertEqual(set(answered_reference.days), {date(2026, 10, 5)})
+                held, _ = assessed(text, '2026-10-06', codes)  # the date the question quotes, the natural wrong answer
+                self.assertEqual({p.code: (p.bucket, p.exclusion_reason, p.rationale) for p in held.proposals},
+                                 {p.code: (p.bucket, p.exclusion_reason, p.rationale) for p in asked.proposals})
         inventory = next(c.detail for c in assessed(office, None, cases[1][1])[0].encounter_checks if c.id == 'services.inventory')
         self.assertIn('Documented but not as done today: colonoscopy (historical)', inventory)
-        # a member's held answer is no such question: it reads with no date, as the installed revision reads it
-        held = next(p for p in assessed(report, '2026-10-01', cases[0][1])[0].proposals if p.code == '45385')
-        self.assertEqual(held.bucket, 'excluded')
+        # with a date nothing changes for a document the release leaves alone: a held answer there reads with no date
+        plain = report.replace('Date of service: 2026-10-06\n', 'CPT: 45385\n')
+        self.assert_installed(plain)
+        self.assertEqual(next(p for p in assessed(plain, '2026-10-01', cases[0][1])[0].proposals if p.code == '45385').bucket,
+                         'excluded')
+
+    def test_whether_a_code_is_a_procedure_does_not_wait_on_the_question(self):
+        """The seventh refutation's parity-7-2 and pipe7-1. With no fee-schedule row a code counts as procedural (fail-closed),
+        so while the question stood a breath test raised a same-day E/M warning and question. The row a reader reads is the
+        one the installed reading has; the checks still read no dated reference, so nothing opens on the open date."""
+        text = (HEADER + 'A hydrogen breath test was performed in the office today.\n'
+                'Total time on the date of the encounter was 32 minutes.\n\n' + PLAN + 'Charge information\n'
+                'Date of service: 2026-10-06\n')
+        codes = {'99214': 'Total time on the date of the encounter was 32 minutes.',
+                 '91065': 'A hydrogen breath test was performed in the office today.'}
+        rows = rows_of({'99214': 'XXX', '91065': 'XXX'})
+        self.assert_asked(text)
+        asked, reference = assessed(text, None, codes, rows)
+        answered, _ = assessed(text, '2026-10-05', codes, rows)
+        def of(result, code):
+            return next(p for p in result.proposals if p.code == code)
+        def ids(proposal):
+            return {c.id for c in proposal.checks}
+        self.assertNotIn('em.same_day_procedure', ids(of(asked, '99214')))
+        self.assertEqual(ids(of(asked, '99214')) & {'em.same_day_procedure', 'em.same_day_coverage'},
+                         ids(of(answered, '99214')) & {'em.same_day_procedure', 'em.same_day_coverage'})
+        self.assertEqual([q.fact for q in asked.clarifications], ['service_date'])
+        self.assertEqual({p.code: p.status for p in asked.proposals}, {'99214': 'needs_clarification', '91065': 'needs_clarification'})
+        # the gates did not open: the fee-schedule and unit checks read no dated reference while the question stands
+        for code in codes:
+            checks_of = {c.id: c for c in of(asked, code).checks}
+            self.assertEqual(checks_of['pfs.presence'].status, 'not_verified')
+            self.assertEqual(checks_of['mue.units'].status, 'not_verified')
+            self.assertEqual({c.id: c for c in of(answered, code).checks}['pfs.presence'].status, 'pass')
+        self.assertEqual(set(reference.days), {None, date(2026, 10, 5)})
+
+    def test_an_own_date_after_the_block_settles_the_question(self):
+        """The seventh refutation's text-3: an addendum stating the date the question names answers it, wherever the line stands
+        among the closing lines: it reads as installed, and that date is sent."""
+        block = 'Charge information\nDate of service: 2026-10-06\nCPT: 99214\n'
+        self.assert_asked(HEADER + PLAN + block)
+        self.assert_installed(HEADER + PLAN + block + '\nADDENDUM 1\nDate of service: 2026-10-05\n')
 
     def test_the_labels_around_the_question_call_it_asked_never_a_conflict(self):
         """The sixth refutation's dates-n6-2: the lines may record another occurrence, so the document may not conflict at all.

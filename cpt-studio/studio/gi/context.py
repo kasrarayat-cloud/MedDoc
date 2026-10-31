@@ -1836,11 +1836,12 @@ def charge_date_own(fact) -> Optional[str]:
     return found[-1].group(1) if found else None
 
 
-def charge_question_day(fact) -> Optional[date]:
-    """The date a reader reads the document against while the note's closing charge block's question stands: the date the
-    installed reading sends, never a date a request carries or a gate opens on. None for any other fact, a member's held
-    answer included (service_date_of, engine.assess)."""
-    own = charge_date_own(fact)
+def charge_question_day(text: str) -> Optional[date]:
+    """The date a reader reads a document against while its closing charge block's question stands, a member's held answer
+    included: the date the installed reading sends, never a date a request carries or a gate opens on. None for any other
+    document (service_date_of, engine.assess). The seventh refutation's parity-7-1: a held answer keeps the dateless
+    request's answer, and reading that with no date brought back everything the open question's readers had stopped."""
+    own = charge_date_own(_context(text)[0])
     return date.fromisoformat(own) if own else None
 
 
@@ -1866,8 +1867,8 @@ def _charge_block_asks(text: str, lay: Layout, fact: Fact) -> Fact:
               if mention.precision == 'day' and _is_birth(text, mention.start)}
     stated, agrees = [], False
     for m in SERVICE_DATE.finditer(text):
-        if m.start() < block or lay.section_at(m.start()).kind != 'plan' or not _CHARGE_DATE_LABEL.match(m.group('label')):
-            continue  # inside the closing block, in a plan's reach, the encounter's own date-of-service label only
+        if m.start() < block or not _CHARGE_DATE_LABEL.match(m.group('label')):
+            continue  # inside the closing block, the encounter's own date-of-service label only
         value = date_from_match(m)
         if value is None or value in births:
             continue  # no calendar date, or a date of birth
@@ -1875,8 +1876,10 @@ def _charge_block_asks(text: str, lay: Layout, fact: Fact) -> Fact:
         if _READING[kind] == 'aside':
             continue  # its own words place it in another occurrence ("Next date of service")
         if value.isoformat() == fact.value:
-            agrees = True  # the block states the document's own date: it does not contradict it (dates-n4-2)
-        else:
+            # its lines state the document's own date, wherever they stand: they do not contradict it (dates-n4-2), and an
+            # addendum stating it settles the question (the seventh refutation's text-3)
+            agrees = True
+        elif lay.section_at(m.start()).kind == 'plan':  # in a plan's reach, the installed reading's dropped line
             # the whole line: its words after the date may change what it says. Every line of the block is bounded
             stated.append(' '.join(text[rows.line(m.start())[0]:rows.line(m.end() - 1)[1]].split()))
     if agrees or not stated:
@@ -2703,7 +2706,7 @@ def service_date_of(text: str) -> Optional[date]:
     refutation, dates-n5-4: read with no date, a dated service went from performed to "service date not established").
     The engine's readers read the same date (engine.assess, charge_question_day)."""
     fact = _context(text)[0]
-    return charge_question_day(fact) or (date.fromisoformat(fact.value) if fact.origin == 'document' else None)
+    return charge_question_day(text) or (date.fromisoformat(fact.value) if fact.origin == 'document' else None)
 
 
 def _valid_user_value(name: str, value: str) -> bool:

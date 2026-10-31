@@ -874,7 +874,7 @@ test('a service date kept as evidence is quoted on the date chips, and said to b
   assert.equal(app.serviceDateChip(facts(undefined)), 'Not documented');
   // the question a closing charge block asks is no conflict in the document (the sixth refutation, dates-n6-2)
   const dateAsked = { value: null, origin: 'conflict', member_conflict: false, date_asked: true, evidence: kept.evidence };
-  assert.equal(app.serviceDateChip(facts(dateAsked)), 'Asked: see the date question');
+  assert.equal(app.serviceDateChip(facts(dateAsked)), 'Date asked');
   assert.equal(app.serviceDateMeta(facts(dateAsked)), 'Service date asked');
   const listed = app.documentRow(queueRow(2, 'needs_clarification', { state_label: 'Needs clarification', coding_state: 'incomplete',
     service_date: null, service_date_conflict: false, service_date_asked: true }));

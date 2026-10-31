@@ -66,6 +66,9 @@ class _Evaluation:
     # Where the document places the act the code accounts for when no service of its family is documented
     # (reconcile.placed_check). None when the inventory documents no such act, or names no service holding it.
     placed: Optional[Check] = None
+    # The fee-schedule row a reader reads: the one the installed reading has, while a closing charge block's question leaves
+    # ``reference`` empty for the gates. It decides whether the code is a procedure at all (_procedural).
+    read_pfs: Optional[dict] = None
 
 
 @dataclass(frozen=True)
@@ -138,8 +141,9 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     # the reading. Every reader reads the date the installed reading sends, as routing does, so the document reads as
     # installed reads it; every gate keeps date_state.value, None: each proposal holds on the encounter question and no
     # dated reference applies (the sixth refutation, parity-6-1 and 6-2: read with no date, a 2025 colonoscopy read as done
-    # today, and a code went from ready to excluded). A member's held answer is no such question, and reads as installed.
-    read_day = date_state.value or charge_question_day(date_state.fact)
+    # today, and a code went from ready to excluded). So does a member's held answer on such a document, which keeps the
+    # dateless request's answer (the seventh refutation, parity-7-1 and pipe7-2).
+    read_day = date_state.value or charge_question_day(text)
     sources = tuple(reference.sources())
     selections: list[_Selection] = []
     proposals: tuple[ProposalAssessment, ...] = ()
@@ -605,8 +609,9 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
         if elsewhere is not None:
             supported = reconcile.support(elsewhere, kept, today=today, report_family=report_family)
             placed = reconcile.placed_check(elsewhere, inventory, PROFILES[selection.family].label)
-    return replace(selection, evaluation=_Evaluation(finding, outcome, reference.lookup(code, day if dated else None), own, speaks_for,
-                                                     found, supported, note, placed))
+    row = reference.lookup(code, day if dated else None)
+    return replace(selection, evaluation=_Evaluation(finding, outcome, row, own, speaks_for, found, supported, note, placed,
+                                                     (row if dated else reference.lookup(code, day)).pfs))
 
 
 def _today_passage(text: str, span, day: Optional[date]) -> bool:
@@ -1418,12 +1423,14 @@ def _encounter(provider, context, routing, sources, date_state, selections) -> _
 
 def _procedural(s: _Selection) -> bool:
     """A non-E/M code that is procedural: a procedure profile, or a CMS global period other than XXX. A code
-    with no fee-schedule row for the date counts (fail-closed): the E/M is then held."""
+    with no fee-schedule row for the date counts (fail-closed): the E/M is then held. The row is the one a reader reads
+    (read_pfs): whether a breath test is a procedure does not wait on a closing charge block's question (the seventh
+    refutation's parity-7-2 and pipe7-1), so no same-day E/M question is raised for it."""
     if s.family in checks.EM_FAMILIES or s.evaluation is None:
         return False
     if s.profile.procedure:
         return True
-    pfs = s.evaluation.reference.pfs
+    pfs = s.evaluation.read_pfs
     return not pfs or pfs.get('global_days') != 'XXX'
 
 
