@@ -1,3 +1,12 @@
+# Open finding — 2026-10-31: a crafted PDF can hide active content from the upload check
+
+`pdf_inspect` refuses scripts and actions by walking what pypdf reads, and pypdf
+drops a cross-reference section it cannot read, even with `strict=True`. So a
+template can carry a script the check never sees, on pypdf 6.21.2 and 6.21.4
+alike, and the original is served back to the department as uploaded. Not
+repaired. Details and the shapes 6.21.4 adds: [pypdf 6.21.4 in the
+rebuild](pypdf-6.21.4.md).
+
 # Current internal operations supplement — September20–21,2026
 
 The [privileged operations supplement](privileged-operations-security-20260921.md)
