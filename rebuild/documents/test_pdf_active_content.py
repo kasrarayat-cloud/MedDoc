@@ -653,6 +653,81 @@ class ScannerDetails(unittest.TestCase):
         self.assertIsNone(self.kind(minimal([(1, glyphs.replace(b" r ", b" "))])))
         self.assertIsNone(self.kind(minimal([(1, b"<< /Type /Font /W [83 [333 278] 172 [500] 174 611] >>")])))
 
+    def test_an_r_that_ends_no_reference_makes_the_object_malformed(self):
+        # Found by differential fuzzing: PDFium ends an array at an R that follows no "N G", and
+        # lenient pypdf gives up there; both then read the rest of the array into the enclosing
+        # dictionary, here as a font's /Subtype /FileAttachment.
+        kept = b"<< /Type /Font /W [ 1 [ 722 R 556 ] 2 /Subtype /FileAttachment [ 3 ] ] >>"
+        skipped = b"<< /Type /Font /Widths [ 722 R 556 /Subtype /FileAttachment ] >>"
+        past_kept_items = b"<< /Type /Font /W [ " + b"(x) " * 64 + b"1 R 556 /Subtype /FileAttachment ] >>"
+        for content in (kept, skipped, past_kept_items):
+            with self.subTest(content=content[:30]):
+                self.assertEqual(self.kind(minimal([(1, content)])), "annotation")
+                # With a real reference the same names stay array items, as every reader reads them.
+                reference = content.replace(b"722 R", b"722 0 R").replace(b"1 R", b"1 0 R")
+                self.assertIsNone(self.kind(minimal([(1, reference)])))
+
+    def test_a_policy_name_outside_every_container_is_refused(self):
+        # Found by differential fuzzing: lenient pypdf skips an unreadable token up to the next
+        # whitespace, so "junk>>" carries the trailer past its end, and the names after startxref
+        # became its entries.
+        overrun = (b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Size 2 /Root 1 0 R junk>>\n"
+                   b"startxref\n9/Subtype /FileAttachment\n%%EOF\n")
+        self.assertEqual(self.kind(overrun), "annotation")
+        self.assertEqual(self.kind(minimal([(1, b"<< >>"), (9, b"/AA")])), "active")
+        self.assertEqual(self.kind(minimal([(1, b"<< >>"), (9, b"/Encrypt")])), "encrypted")
+        # A name that is an ordinary object's whole value stays ordinary.
+        self.assertIsNone(self.kind(minimal([(1, b"<< >>"), (9, b"/FlateDecode")])))
+
+    def test_the_data_of_a_malformed_stream_object_is_judged(self):
+        # Found by differential fuzzing: "/Helv 4 stream 0 R>>>>>>" made lenient pypdf skip every
+        # ">>" and read the form's data, up to "endobj", as entries of its font dictionary.
+        script = b"/OpenAction << /S /JavaScript /JS (app.alert\\('synthetic'\\)) >>"
+        attachment = b"/Subtype /FileAttachment"
+
+        def xobject(font, payload):
+            data = b"x" * 20 + b"\n" + payload
+            return (b"<< /Type /XObject /Subtype /Form /Resources << /Font << " + font
+                    + b" >> >> /Length %d >>\nstream\n" % len(data) + data + b"\nendstream")
+
+        def hidden(font):
+            inner = b"9 0 obj " + xobject(font, attachment) + b" endobj"
+            return b"<< /Length %d >>\nstream\n" % len(inner) + inner + b"\nendstream"
+
+        broken, ordinary = b"/Helv 4 stream 0 R", b"/Helv 4 0 R"
+        self.assertEqual(self.kind(minimal([(3, xobject(broken, script))])), "active")
+        self.assertEqual(self.kind(minimal([(3, xobject(broken, attachment))])), "annotation")
+        self.assertEqual(self.kind(minimal([(5, hidden(broken))])), "annotation")   # a one-object parse
+        # After a well-formed dictionary the same data is ordinary stream content.
+        self.assertIsNone(self.kind(minimal([(3, xobject(ordinary, script))])))
+        self.assertIsNone(self.kind(minimal([(5, hidden(ordinary))])))
+
+    def test_decoding_parameters_from_a_malformed_dictionary_are_not_trusted(self):
+        # Found by differential fuzzing: after the junk "o" the scan kept no more entries, lost
+        # /Filter and read the compressed bytes as they were, while pdf.js and pypdf re-pair the
+        # entries, inflate the data and find a link with a URI action.
+        def stream_object(head, encoded):
+            return head + b" /Length %d >>\nstream\n" % len(encoded) + encoded + b"\nendstream"
+
+        link = b"<< /Type /Annot /Subtype /Link /A << /S /URI /URI (synthetic) >> >>"
+        entries, encoded = object_stream([(5, link)], "flate")
+        self.assertEqual(self.kind(minimal([(3, stream_object(b"<< /Type /ObjStm " + entries, encoded))])), "active")
+        broken = b"<< /Type /ObjStm /Length 29 0 o " + entries
+        self.assertEqual(self.kind(minimal([(3, stream_object(broken, encoded))])), "unreadable")
+        # A predictor defined twice, or read from a malformed dictionary, is not trusted either.
+        entries, encoded = object_stream([(5, b"<< /Type /Catalog >>")], "flate-predictor")
+        parms = b"<< /Predictor 12 /Columns 7 >>"
+        self.assertIn(parms, entries)
+        twice = entries.replace(parms, b"<< /Predictor 12 /Predictor 1 /Columns 7 >>")
+        indirect = entries.replace(parms, b"9 0 R")
+        for objects in ([(3, stream_object(b"<< /Type /ObjStm " + twice, encoded))],
+                        [(3, stream_object(b"<< /Type /ObjStm " + indirect, encoded)),
+                         (9, b"<< /Predictor 12 junk /Columns 7 >>")]):
+            with self.subTest(parms=objects[-1][1][-48:]):
+                self.assertEqual(self.kind(minimal(objects)), "unreadable")
+        # Well formed, the same parameters decode as before.
+        self.assertIsNone(self.kind(minimal([(3, stream_object(b"<< /Type /ObjStm " + entries, encoded))])))
+
     def test_actions_are_refused_by_their_type_even_without_the_key_that_reaches_them(self):
         for kind in (b"/URI", b"/Launch", b"/GoToR", b"/GoToE", b"/SubmitForm", b"/RichMediaExecute"):
             with self.subTest(kind=kind):
