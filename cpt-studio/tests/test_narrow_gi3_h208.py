@@ -6,12 +6,14 @@ contradicted "Date of service: 2026-10-05" was sent. Now, where the installed re
 the note's own closing charge block (the closed class context.CHARGE_HEADINGS; never a visit or procedure date, never a
 history section's block) that states another date makes the date a question, and no date is sent. The question keeps
 the document's own evidence only: a member's answer is taken only when it is the document's own date, the one the
-installed revision sends, and the block's date is named only as what the lines from the last charge or billing heading
-to the document's end state (context.CHARGE_DATE_NOTE, charge_date_problem) - those lines may record another occurrence.
+installed revision sends, and the block's date is named only as what the lines from the block's first line to the
+document's end state (context.CHARGE_DATE_NOTE, charge_date_problem) - those lines may record another occurrence.
 Every other fact reads exactly as the installed revision 90377ec6f413 read it, its texts and the answers it takes
-included: with no own date the charge block's date stays dropped, and where it already asks, nothing changes. Routing
-reads the date the installed revision sends, asked or held. Synthetic text only.
+included: with no own date the charge block's date stays dropped, and where it already asks, nothing changes. Every
+reader reads the date the installed revision sends, so the question holds the date and what hangs on it, never the
+reading. Synthetic text only.
 """
+import json
 import re
 from datetime import date
 from pathlib import Path
@@ -20,8 +22,10 @@ from django.test import SimpleTestCase
 
 from studio import jobs
 from studio.gi import context, detect
-from studio.providers.corti import build_coding_request
-from studio.types import to_jsonable
+from studio import reports, review, serializers
+from studio.providers.corti import build_coding_request, normalize_coding_response
+from studio.reference.store import PrefetchedReferenceLookup
+from studio.types import Fact, from_jsonable, to_jsonable
 from studio.validation import checks
 
 FIXTURES = Path(__file__).resolve().parent / 'fixtures' / 'gi3'
@@ -60,6 +64,42 @@ def quoted_dates(note):
             for day in (context.date_from_match(m) for m in context.FULL_DATE.finditer(quote)) if day}
 
 
+def lines_part(problem):
+    """What the question says the block's lines state, up to the date the installed reading reads."""
+    return problem.rsplit(', while ', 1)[0]
+
+
+def own_part(problem):
+    return problem.rsplit(' is read from ', 1)[1]
+
+
+def assessed(text, answer, codes):
+    """The assess stage's own child on the stored facts, with a provider selecting each code on its passage."""
+    stored = jobs._merged_facts(context.extract_context(text), {'service_date': answer} if answer else {})
+    day = jobs._service_date_of(stored)
+    entries = [{'system': 'cpt', 'code': code, 'display': code, 'alternatives': [],
+                'evidences': [{'contextIndex': 0, 'text': passage, 'start': text.index(passage),
+                               'end': text.index(passage) + len(passage)}]} for code, passage in codes.items()]
+    normalized = normalize_coding_response('corti', build_coding_request('corti', 'corti-coding-v2@cptstudio-1', text, day,
+                                                                         10 ** 8),
+                                           json.dumps({'codes': entries, 'candidates': [], 'usageInfo': {}}).encode())
+    reference = RecordingLookup((), {}, list(codes))
+    _, result = jobs._assess_child(text, day, (), {n: from_jsonable(Fact, v) for n, v in stored.items()}, normalized,
+                                   reference, 'succeeded', None, ())
+    jobs.release_routing_caches()
+    return result, reference
+
+
+class RecordingLookup(PrefetchedReferenceLookup):
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.days = []
+
+    def lookup(self, code, service_date):
+        self.days.append(service_date)
+        return super().lookup(code, service_date)
+
+
 def reason_of(text):
     state = checks.service_date_state(context.extract_context(text), None)
     clarification = checks.service_date_clarification(state)
@@ -69,8 +109,10 @@ def reason_of(text):
 class ChargeBlockTests(SimpleTestCase):
     def assert_asked(self, text, charge='2026-10-06', own='2026-10-05'):
         """The narrow release: the date is asked and no date is sent. The question names what the block's lines state as
-        theirs and the document's own date as its own; its evidence is the document's own only, so the document's own date
-        is a member's answer and the block's never is - nor is it quoted as "the document gives" in a held answer's note."""
+        theirs and the date the installed reading reads, from its own line; its evidence is that line only, so that date is
+        a member's answer and the block's never is - nor is it quoted as "the document gives" in a held answer's note. And
+        every asked text proves the question literally true of it: its first quote is a line of the document, and each
+        stated quote a whole line at or after it (the sixth refutation's dates-n6-1, n6-4 and n6-6)."""
         fact = date_fact(text)
         problem = context.charge_date_problem(fact)
         self.assertEqual(fact.origin, 'conflict', [e.text for e in fact.evidence])
@@ -78,10 +120,17 @@ class ChargeBlockTests(SimpleTestCase):
         self.assertEqual({d for e in fact.evidence for d in quoted_dates('\u201c' + e.text + '\u201d')}, {own})
         self.assertEqual(context.documented_values(fact), ())  # no value a member's answer may choose
         self.assertEqual(date_lines(text), [])  # no date is sent
-        self.assertTrue(problem.startswith("The lines from the document's last charge or billing heading to its end state "
-                                           '\u201c'), problem)
-        self.assertIn(charge, {d for d in quoted_dates(problem.split("other than the document's own", 1)[0])})
-        self.assertEqual(quoted_dates(problem.split("other than the document's own", 1)[1]), {own})
+        self.assertTrue(problem.startswith('The lines from \u201c'), problem)
+        self.assertIn(charge, quoted_dates(lines_part(problem)))
+        self.assertEqual(quoted_dates(own_part(problem)), {own})
+        self.assertIn(f', while {own} is read from \u201c', problem)
+        lines = [' '.join(line.split()) for line in text.splitlines()]
+        heading, *stated = re.findall('\u201c([^\u201d]*)\u201d', lines_part(problem))
+        self.assertIn(heading, lines, problem)
+        after = lines[len(lines) - 1 - lines[::-1].index(heading):]
+        self.assertTrue(stated, problem)
+        for line in stated:
+            self.assertIn(line, after, problem)
         self.assertEqual(reason_of(text), problem + '; every service and every dated reference check depends on it.')
         self.assertEqual(context.charge_date_own(fact), own)
         self.assertEqual(member(text, own), 'taken')
@@ -97,7 +146,7 @@ class ChargeBlockTests(SimpleTestCase):
         self.assertLessEqual(quoted_dates(merged(text, other).note), {own})
         problem = context.charge_date_problem(date_fact(text))
         if problem is not None:  # asked: the other date is named as the block's lines' only
-            self.assertEqual(quoted_dates(problem.split("other than the document's own", 1)[1]), {own})
+            self.assertEqual(quoted_dates(own_part(problem)), {own})
 
     def assert_installed(self, text, value='2026-10-05'):
         """As the installed revision reads it: the header's own date, sent; a different member date held."""
@@ -293,8 +342,8 @@ class ChargeBlockTests(SimpleTestCase):
     def test_a_block_that_states_the_documents_own_date_asks_nothing_and_a_later_entry_is_named_as_the_lines(self):
         """The fourth refutation's dates-n4-2 and the fifth's n5-1 and n5-3: a block that states the document's own date
         does not contradict it, whatever entry follows its signature. Elsewhere the question names what the lines from the
-        last charge or billing heading to the document's end state - never "the block's" date: no word list tells a
-        signature line from a field ("Electronic signature: ...", "Signed ABN on file: no")."""
+        block's first line to the document's end state - never "the block's" date: no word list tells a signature line from
+        a field ("Electronic signature: ...", "Signed ABN on file: no")."""
         signed = 'Electronically signed: Synthetic Doctor, MD (fictional), 2026-10-05 17:02\n'
         for tail in ('Charge information\nDate of service: 2026-10-05\nCPT: 99214\n' + signed
                      + 'Telephone encounter (DOS: 10/07/2026): labs reviewed with the patient. No charge.\n',
@@ -308,7 +357,7 @@ class ChargeBlockTests(SimpleTestCase):
                 + 'Follow-up appointment: DOS 11/04/2026 at 09:00 with Synthetic Doctor (fictional).\n')
         self.assert_asked(text)
         problem = context.charge_date_problem(date_fact(text))
-        self.assertEqual(quoted_dates(problem.split("other than the document's own", 1)[0]), {'2026-10-06', '2026-11-04'})
+        self.assertEqual(quoted_dates(lines_part(problem)), {'2026-10-06', '2026-11-04'})
         # a block with no date of service of its own, a signature this service does not read, then a telephone entry: asked,
         # its date named as the lines', and every answer taken or held as installed (n5-1)
         text = (HEADER + PLAN + 'Charge information\nCPT: 99214\nICD-10: K74.60, R18.8\n'
@@ -329,8 +378,7 @@ class ChargeBlockTests(SimpleTestCase):
         self.assert_installed(HEADER + plan + 'Charge information\nCPT: 99214\n')
         text = HEADER + plan + 'Charge information\nDate of service: 2026-10-06\nCPT: 99214\n'
         self.assert_asked(text)
-        self.assertEqual(quoted_dates(context.charge_date_problem(date_fact(text)).split("other than the document's own", 1)[0]),
-                         {'2026-10-06'})
+        self.assertEqual(quoted_dates(lines_part(context.charge_date_problem(date_fact(text)))), {'2026-10-06'})
 
     def test_routing_reads_what_the_installed_reading_sends_asked_or_held(self):
         """The fifth refutation's dates-n5-4: routing's only way to the document's date is context.service_date_of, and a
@@ -361,6 +409,123 @@ class ChargeBlockTests(SimpleTestCase):
         # a fact the release leaves alone keeps the no-date reading: the release moves routing only off its own question
         conflict = HEADER.replace('Date of service: 2026-10-05\n', 'Date of service: 2026-10-05\nDate of service: 2026-10-07\n')
         self.assertIsNone(context.service_date_of(conflict + PLAN))
+
+    def test_the_question_says_only_what_is_true_of_the_document(self):
+        """The sixth refutation. A guard may read past a billing heading it does not know (n6-1), take a line for a heading
+        (n6-5) or a label for a date of service (n6-4), and the installed reading may send a planned date (n6-3): none of
+        that may make the sentence false, because it says none of it. It quotes the line it read from and each stated line
+        whole, and says the date "is read from" its line."""
+        def problem_of(text):
+            return context.charge_date_problem(date_fact(text))
+        # n6-1: a later billing heading outside the closed class: the question names the line it read from
+        text = HEADER + PLAN + 'Charge information\nDate of service: 2026-10-06\nCPT 99214\nFacility billing:\nPOS: 22\n'
+        self.assert_asked(text)
+        self.assertTrue(problem_of(text).startswith("The lines from \u201cCharge information\u201d to the document's end state"))
+        self.assertNotIn('last', problem_of(text))
+        # n6-3: a planned procedure's date the installed reading sends is read from its line, never called the document's own
+        text = (BANNER + 'Clinic note\nPatient: Synthetic Patient (fictional)\nColonoscopy details\nProcedure date: 11/04/2026\n'
+                '\nSubjective\nFollow-up.\n\n' + PLAN + 'Charge information\nDate of service: 10/06/2026\nCPT 99203\n')
+        self.assert_asked(text, own='2026-11-04')
+        self.assertNotIn("document's own", date_fact(text).note)
+        # n6-4 and n6-6: each stated line is quoted whole, so what follows its date is read beside it, and a long label keeps it
+        for line in ('Date of service: 10/04/2026 through 10/06/2026', 'Date of service: 10/06/2026 (cancelled)',
+                     'Note: date of service 10/06/2026 entered in error, corrected to 10/05/2026',
+                     'Timely filing deadline from date of service: 01/04/2027',
+                     'Gastroenterology outpatient professional reimbursement date of service: 10/16/2026'):
+            with self.subTest(line=line):
+                text = HEADER + PLAN + 'Billing\nCPT 99214\n' + line + '\n'
+                fact = date_fact(text)
+                self.assertEqual(fact.origin, 'conflict')
+                self.assertIn('\u201c' + line + '\u201d', problem_of(text))
+        self.assertEqual(context.charge_date_own(date_fact(HEADER + PLAN + 'Billing\nDate of service: 10/06/2026 (cancelled)\n')),
+                         '2026-10-05')
+        # a stated line cannot steer the date the note keeps: the marker's last match is the note's own
+        spoof = 'Billing\nDate of service: 10/06/2026, while 2020-01-01 is read from x\n'
+        self.assertEqual(context.charge_date_own(date_fact(HEADER + PLAN + spoof)), '2026-10-05')
+        self.assertEqual(context.service_date_of(HEADER + PLAN + spoof), date(2026, 10, 5))
+
+    def test_a_dated_ledger_row_is_no_dash_joined_heading(self):
+        """The sixth refutation's dates-n6-5: only a bullet is stripped before the dash join, so a date and its dash are no
+        bullet. A dash bullet (n5-2) and a numbered heading still read."""
+        self.assert_installed(HEADER + PLAN + 'Account activity\n2026-09-14 - Charge - amount: $150.00\n'
+                              'Date of service: 2026-10-06\n')
+        for block in ('\u2013 Charge information \u2013 Date of service: 2026-10-06\nCPT: 99214\n',
+                      '5. Charge information \u2013 Date of service: 2026-10-06\nCPT: 99214\n'):
+            with self.subTest(block=block):
+                self.assert_asked(HEADER + PLAN + block)
+
+    def test_the_question_holds_the_date_and_never_the_reading(self):
+        """The sixth refutation's parity-6-1 and 6-2. Routing read the date the installed reading sends, but the inventory and
+        the evidence readers were handed no date: a 2025 colonoscopy read as done on this encounter, and a code documented as
+        done today went from ready to excluded. Readers now read that date while the question stands; only the gates keep
+        none. So every proposal reads as it does with the document's own date, excluded or not, except that a ready one holds
+        on the question, and no dated reference is looked up. A member's held answer reads with no date, as installed."""
+        block = '\nAssessment and plan\nFollow up in clinic.\n\nCharge information\nDate of service: 2026-10-06\n'
+        report = (BANNER + 'Patient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\nPlace of service: ASC (POS 24)\n'
+                  'Colonoscopy report\nIndication: surveillance after EMR.\nFindings:\n'
+                  'After review of prior records a 6 mm polyp in the sigmoid colon was removed by cold snare in 2026.\n'
+                  'The colonoscope was advanced to the cecum.\nImpression: adenoma suspected.\n' + block)
+        office = (BANNER + 'Office visit note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\n'
+                  'Place of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of colon polyps. Colonoscopy in '
+                  '2025: a 6 mm polyp in the sigmoid colon was removed by cold snare.\nNo melena.\n\nObjective\nAbdomen soft.\n'
+                  'Medical decision making: moderate.\nTotal time on the date of the encounter was 32 minutes.\n' + block)
+        cases = ((report, {'45385': 'After review of prior records a 6 mm polyp in the sigmoid colon was removed by cold snare in 2026.'},
+                  {'45385': 'selected'}),
+                 (office, {'45385': 'Colonoscopy in 2025: a 6 mm polyp in the sigmoid colon was removed by cold snare.'},
+                  {'45385': 'excluded'}))
+        for text, codes, buckets in cases:
+            with self.subTest(codes=list(codes)):
+                self.assert_asked(text)
+                asked, reference = assessed(text, None, codes)
+                answered, answered_reference = assessed(text, '2026-10-05', codes)
+                self.assertEqual({p.code: p.bucket for p in asked.proposals}, buckets)
+                self.assertEqual({p.code: p.bucket for p in answered.proposals}, buckets)
+                self.assertEqual({p.code: p.exclusion_reason for p in asked.proposals},
+                                 {p.code: p.exclusion_reason for p in answered.proposals})
+                self.assertEqual({p.code: p.rationale for p in asked.proposals},
+                                 {p.code: p.rationale for p in answered.proposals})
+                self.assertEqual([c.detail for c in asked.encounter_checks if c.id == 'services.inventory'],
+                                 [c.detail for c in answered.encounter_checks if c.id == 'services.inventory'])
+                self.assertFalse([p for p in asked.proposals if p.status == 'ready'])
+                self.assertEqual(set(reference.days), {None})  # the gate: no dated reference while the question stands
+                self.assertEqual(set(answered_reference.days), {date(2026, 10, 5)})
+        inventory = next(c.detail for c in assessed(office, None, cases[1][1])[0].encounter_checks if c.id == 'services.inventory')
+        self.assertIn('Documented but not as done today: colonoscopy (historical)', inventory)
+        # a member's held answer is no such question: it reads with no date, as the installed revision reads it
+        held = next(p for p in assessed(report, '2026-10-01', cases[0][1])[0].proposals if p.code == '45385')
+        self.assertEqual(held.bucket, 'excluded')
+
+    def test_the_labels_around_the_question_call_it_asked_never_a_conflict(self):
+        """The sixth refutation's dates-n6-2: the lines may record another occurrence, so the document may not conflict at all.
+        Every reader that labels the fact asks charge_date_problem, as the check does; a real conflict keeps its wording."""
+        text = (HEADER + PLAN + 'Charge information\nCPT: 99214\nElectronically signed: Synthetic Doctor, MD (fictional)\n'
+                'Telephone encounter (DOS: 10/07/2026): labs reviewed. No charge.\n')
+        asked = to_jsonable(date_fact(text))
+        conflict = to_jsonable(date_fact(HEADER.replace('Date of service: 2026-10-05\n',
+                                                        'Date of service: 2026-10-05\nDate of service: 2026-10-07\n') + PLAN))
+        self.assertEqual(asked['origin'], 'conflict')
+        self.assertIsNone(context.charge_date_problem(conflict))
+        section = reports._context_section({'context': {'facts': {'service_date': asked}}})
+        self.assertTrue(section[0].startswith('  Service date: asked \u2014 The lines from \u201cCharge information\u201d'), section[0])
+        self.assertNotIn('conflict', section[0])
+        section = reports._context_section({'context': {'facts': {'service_date': conflict}}})
+        self.assertIn('conflicting documentation', section[0])
+        self.assertEqual(review._show_fact(review._fact_value(asked)), 'asked')
+        self.assertEqual(review._show_fact(review._fact_value(conflict)), 'conflicting values')
+
+        class Stored:
+            facts = {'service_date': asked}
+        facts = serializers._context_facts(Stored)
+        self.assertTrue(facts['service_date']['date_asked'])
+        self.assertFalse(facts['service_date']['member_conflict'])
+
+        class Encounter:
+            current_context = Stored
+        self.assertTrue(serializers._service_date_asked(Encounter))
+        self.assertFalse(serializers._service_date_conflict(Encounter))
+        Stored.facts = {'service_date': conflict}
+        self.assertFalse(serializers._service_date_asked(Encounter))
+        self.assertTrue(serializers._service_date_conflict(Encounter))
 
     def test_an_equal_date_changes_nothing(self):
         self.assert_installed(HEADER + PLAN + 'Charge information\nDate of service: 2026-10-05\n')

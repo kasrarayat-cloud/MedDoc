@@ -249,9 +249,11 @@ function layoutDocument(text, pages, spans) {
 }
 
 // A member's value unlike the document's is that conflict (member_conflict, from context.is_member_conflict), never
-// conflicting documentation; any conflict is shown as one, never as not documented (refutation r1, context-5).
+// conflicting documentation; any conflict is shown as one, never as not documented (refutation r1, context-5). The
+// question a closing charge block asks (date_asked, from context.charge_date_problem) is no conflict in the document.
 function factValue(fact, labels, isDate = false) {
   if (!fact) return 'Not documented';
+  if (fact.date_asked === true) return 'Asked: see the date question';
   if (fact.origin === 'conflict') return fact.member_conflict === true ? 'Member entry differs from the document' : 'Conflicting values documented';
   if (fact.origin === 'missing' || fact.value == null || fact.value === '' || fact.value === 'not_documented') return 'Not documented';
   const value = isDate ? (formatDate(fact.value, true) || String(fact.value)) : lookup(labels, fact.value, String(fact.value));
@@ -259,6 +261,7 @@ function factValue(fact, labels, isDate = false) {
 }
 
 function metaFact(fact, labels, name, isDate = false) {
+  if (fact?.date_asked === true) return `${name} asked`;
   if (fact?.origin === 'conflict') return fact.member_conflict === true ? `${name}: member entry differs from the document` : `${name} conflict`;
   if (!fact || fact.origin === 'missing' || fact.value == null || fact.value === '') return `${name} not documented`;
   const value = isDate ? (formatDate(fact.value) || String(fact.value)) : lookup(labels, fact.value, String(fact.value));
@@ -417,7 +420,7 @@ function documentRow(encounter, queued = false) {
   const open = Number.isInteger(encounter.open_clarifications) && encounter.open_clarifications > 0 ? plural(encounter.open_clarifications, 'open question', 'open questions') : '';
   const meta = [kind, families, open, ...(queued ? queueReasonLabels(encounter) : [])].filter(Boolean).join(' · ');
   const status = reviewedIncomplete(encounter) ? badge('amber', rowStateLabel(encounter)) : stateBadge(encounter.state, encounter.state_label);
-  return `<a class="document-row" href="#doc/${escapeHtml(encodeURIComponent(encounter.id))}"><span class="doc-row-main"><span class="doc-file-icon${tone === 'amber' ? ' amber' : ''}">${icon('file')}</span><span><strong>${escapeHtml(encounter.title || 'Untitled document')}</strong><small>${escapeHtml(meta)}</small></span></span><span>${status}</span><span class="doc-row-date">${escapeHtml(formatDate(encounter.service_date) || (encounter.service_date_conflict === true ? 'In conflict' : listedDateEvidence(encounter, 'Not read: ') || 'Not documented'))}</span>${icon('chevron', 'row-arrow')}</a>`;
+  return `<a class="document-row" href="#doc/${escapeHtml(encodeURIComponent(encounter.id))}"><span class="doc-row-main"><span class="doc-file-icon${tone === 'amber' ? ' amber' : ''}">${icon('file')}</span><span><strong>${escapeHtml(encounter.title || 'Untitled document')}</strong><small>${escapeHtml(meta)}</small></span></span><span>${status}</span><span class="doc-row-date">${escapeHtml(formatDate(encounter.service_date) || (encounter.service_date_asked === true ? 'Date asked' : encounter.service_date_conflict === true ? 'In conflict' : listedDateEvidence(encounter, 'Not read: ') || 'Not documented'))}</span>${icon('chevron', 'row-arrow')}</a>`;
 }
 
 function listRows(name, encounters) {
@@ -443,7 +446,7 @@ function inviteMarkup(encounters) {
   const recent = encounters?.[0];
   if (encounters === null) return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>Loading recent documents…</strong><p>One moment.</p></span>`;
   if (!recent) return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>No documents yet</strong><p>Upload a synthetic GI document to see proposals beside the source.</p></span><button type="button" class="button secondary" data-action="upload">New document ${icon('plus')}</button>`;
-  const detail = ['Most recent', rowStateLabel(recent), formatDate(recent.service_date) || (recent.service_date_conflict === true ? 'service date in conflict' : listedDateEvidence(recent, 'service date not read: ') || 'service date not documented')].filter(Boolean).join(' · ');
+  const detail = ['Most recent', rowStateLabel(recent), formatDate(recent.service_date) || (recent.service_date_asked === true ? 'service date asked' : recent.service_date_conflict === true ? 'service date in conflict' : listedDateEvidence(recent, 'service date not read: ') || 'service date not documented')].filter(Boolean).join(' · ');
   return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>${escapeHtml(recent.title || 'Untitled document')}</strong><p>${escapeHtml(detail)}</p></span><button type="button" class="button secondary" data-open="${escapeHtml(recent.id)}">Open review ${icon('arrow')}</button>`;
 }
 

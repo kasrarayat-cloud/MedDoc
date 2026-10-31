@@ -872,6 +872,14 @@ test('a service date kept as evidence is quoted on the date chips, and said to b
   assert.equal(app.serviceDateMeta(facts({ value: null, origin: 'conflict', member_conflict: true, evidence: kept.evidence })), 'Service date: member entry differs from the document');
   assert.equal(app.serviceDateChip(facts({ value: '2026-10-21', origin: 'user', evidence: [] })), '21 October 2026 (entered)');
   assert.equal(app.serviceDateChip(facts(undefined)), 'Not documented');
+  // the question a closing charge block asks is no conflict in the document (the sixth refutation, dates-n6-2)
+  const dateAsked = { value: null, origin: 'conflict', member_conflict: false, date_asked: true, evidence: kept.evidence };
+  assert.equal(app.serviceDateChip(facts(dateAsked)), 'Asked: see the date question');
+  assert.equal(app.serviceDateMeta(facts(dateAsked)), 'Service date asked');
+  const listed = app.documentRow(queueRow(2, 'needs_clarification', { state_label: 'Needs clarification', coding_state: 'incomplete',
+    service_date: null, service_date_conflict: false, service_date_asked: true }));
+  assert.equal(listed.includes('<span class="doc-row-date">Date asked</span>'), true);
+  assert.equal(listed.includes('In conflict'), false);
 });
 
 // demo RC8 / PR7: the cards led with a slogan and printed the engine's cue strings as the doctor's text.

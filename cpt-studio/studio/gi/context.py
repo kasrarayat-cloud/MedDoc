@@ -1691,9 +1691,9 @@ def _label_value(text: str, m: re.Match, rows: _Rows) -> Optional[tuple[int, int
 # closing charge block that states another date makes the date a question, and no date is sent. Every other fact is
 # the installed reading's, exactly - its texts and the answers it takes included - so nothing is ever newly sent. The
 # question keeps the document's own evidence only: a member's answer is taken only when it is the document's own date
-# (the date the installed reading sends), and the block's date is named only as what the lines from the last charge or
-# billing heading to the document's end state (CHARGE_DATE_NOTE). Routing reads the date the installed reading sends all
-# the same (service_date_of). The block may record this encounter or another occurrence, and the release's refutations
+# (the date the installed reading sends), and the block's date is named only as what the lines from the block's first
+# line to the document's end state (CHARGE_DATE_NOTE). Every reader reads the date the installed reading sends all the
+# same (service_date_of, engine.assess), so the question holds the date and never the reading. The block may record this encounter or another occurrence, and the release's refutations
 # showed that no guard on its words or layout can tell which: a copied note's or report's block, a booking, a late or
 # pathology charge, an appended telephone encounter, another patient's block, a date of birth in a form the reader does
 # not read. The guards below (_closing_charge_block, _block_in_another_note, the birth values) only decide whether to
@@ -1715,6 +1715,9 @@ _CHARGE_ELSEWHERE = cues.rx(r'\b(?:prior|previous(?:ly)?+|last|late|earlier|inde
 _SIGNATURE_LINE = cues.rx(r'(?:electronically[ \t]++|e-)?+(?:signed|co-?signed|dictated|transcribed|attest(?:ed|ation))\b')
 _HEADING_MARKS = re.compile(r'\A[\s#*_>•\-–—\d.)(]*+')
 _HEADING_TAIL = re.compile(r'[\s:.*_\-–—]*+\Z')
+# What may stand before a dash-joined heading: a bullet, never a number or a date ("2026-09-14 - Charge - amount: ..." is a
+# ledger row, dates-n6-5; "5. Charge information - ..." keeps its numbering for the heading reader)
+_HEADING_BULLET = re.compile(r'\A[\s#*_>•\-–—]*+')
 # A heading joined to its first field by a dash: an em or en dash, with or without blanks ("Charges — Date of ...",
 # "Charges—Date of ..."), or a hyphen between blanks - never one inside a word ("Follow-up")
 _JOINED_DASH = re.compile(r'[ \t]*+[—–][ \t]*+|[ \t]++-[ \t]++')
@@ -1789,7 +1792,7 @@ def _closing_charge_block(text: str, rows: '_Rows') -> Optional[int]:
             return ls
         colon = line.find(':')
         if colon > 0 and (_heading_words(line[:colon]) in CHARGE_HEADINGS or _heading_words(
-                _JOINED_DASH.split(_HEADING_MARKS.sub('', line[:colon]), 1)[0]) in CHARGE_HEADINGS):
+                _JOINED_DASH.split(_HEADING_BULLET.sub('', line[:colon]), 1)[0]) in CHARGE_HEADINGS):
             return ls  # the heading joined to its first field, by a colon or a dash (after its bullet)
         if not (0 < colon <= 60 or '|' in line or any(ch.isdigit() for ch in line)
                 or _SIGNATURE_LINE.match(line.strip())):
@@ -1797,25 +1800,31 @@ def _closing_charge_block(text: str, rows: '_Rows') -> Optional[int]:
     return None
 
 
-CHARGE_DATE_NOTE = ("The lines from the document's last charge or billing heading to its end state {block}, a date of "
-                    "service other than the document's own, {value} ({own}). Those lines may record this encounter or "
-                    "another occurrence, so the date is asked; a member's answer is taken only when it is the document's "
-                    'own date.')
+# The sixth refutation's dates-n6-1 and n6-3 to n6-6: this sentence says only what is true of the document whatever the
+# guards decided. It quotes the region's first line rather than calling it the last heading (a billing heading outside
+# the closed class may follow it, and a guard may take a ledger row for one), each stated line whole rather than up to its
+# date ("10/04/2026 through 10/06/2026", "(cancelled)", "entered in error"), and says the date "is read from" its line, not
+# that it is the document's own (the installed reading may have taken a planned procedure's date) or that the lines state
+# a date of service (a filing deadline's label reads as one).
+CHARGE_DATE_NOTE = ("The lines from {heading} to the document's end state {block}, while {value} is read from {own}. Those "
+                    "lines may record this encounter or another occurrence, so the date is asked; a member's answer is "
+                    'taken only when it is {value}.')
 _CHARGE_NOTE_HEAD = CHARGE_DATE_NOTE.split('{', 1)[0]
-_CHARGE_NOTE_REST = '). Those lines may record this encounter or another occurrence'
-_CHARGE_NOTE_OWN = re.compile(r"a date of service other than the document's own, (\d{4}-\d{2}-\d{2}) \(")
+_CHARGE_NOTE_REST = '. Those lines may record this encounter or another occurrence'
+_CHARGE_NOTE_OWN = re.compile(r', while (\d{4}-\d{2}-\d{2}) is read from ')
 
 
 def charge_date_problem(fact) -> Optional[str]:
     """What a date question the note's closing charge block asks (_charge_block_asks) states as its problem: the note's
-    first sentence, naming what the block's lines state as theirs and the document's own date as its own - or None for
-    any other fact. Every reader that words that question reads it here, where its note is written (checks._date_problem).
+    first sentence, naming what the block's lines state as theirs and the date the installed reading reads - or None for
+    any other fact. Every reader that words that question or labels it asks here, where its note is written
+    (checks._date_problem, reports, review, serializers).
     ``fact`` is a Fact or a stored context fact (a mapping); the last marker is the note's own, whatever a quote holds."""
     get = fact.get if isinstance(fact, dict) else (lambda name, default=None: getattr(fact, name, default))
     note = str(get('note', '') or '')
     if get('origin') != 'conflict' or not note.startswith(_CHARGE_NOTE_HEAD) or _CHARGE_NOTE_REST not in note:
         return None
-    return note[:note.rindex(_CHARGE_NOTE_REST) + 1]
+    return note[:note.rindex(_CHARGE_NOTE_REST)]
 
 
 def charge_date_own(fact) -> Optional[str]:
@@ -1827,16 +1836,24 @@ def charge_date_own(fact) -> Optional[str]:
     return found[-1].group(1) if found else None
 
 
+def charge_question_day(fact) -> Optional[date]:
+    """The date a reader reads the document against while the note's closing charge block's question stands: the date the
+    installed reading sends, never a date a request carries or a gate opens on. None for any other fact, a member's held
+    answer included (service_date_of, engine.assess)."""
+    own = charge_date_own(fact)
+    return date.fromisoformat(own) if own else None
+
+
 def _charge_block_asks(text: str, lay: Layout, fact: Fact) -> Fact:
     """The service date fact, asked where the note's own closing charge block states another date of service than the one
     the installed reading sends (GI round 3, the narrow release; h2-08). Only a fact that reading sends - origin
     'document' - is ever changed, and only into a question; every other fact is returned exactly as it made it. The
     question keeps that fact's evidence and nothing else, and its note keeps the date that fact sends, so a member's answer
     is taken or held exactly as that fact takes or holds it (charge_date_own, merge_user_values). The block's date is named
-    in the note only, as what the lines from the last charge or billing heading to the document's end state: those lines
-    may record this encounter or another occurrence - an entry written after the signature among them - so their date is
-    never this encounter's date of service. A block that also states the document's own date does not ask. Read once per
-    document: the closing block is bounded, and every other loop is linear."""
+    in the note only, as what the lines from the block's first line to the document's end state: those lines may record
+    this encounter or another occurrence - an entry written after the signature among them - so their date is never this
+    encounter's date of service. A block that also states the document's own date does not ask. Read once per document:
+    the closing block is bounded, and every other loop is linear."""
     if fact.origin != 'document' or not fact.value:
         return fact
     rows = _Rows(text)
@@ -1860,14 +1877,19 @@ def _charge_block_asks(text: str, lay: Layout, fact: Fact) -> Fact:
         if value.isoformat() == fact.value:
             agrees = True  # the block states the document's own date: it does not contradict it (dates-n4-2)
         else:
-            stated.append(_span(text, start, m.end()))
+            # the whole line: its words after the date may change what it says. Every line of the block is bounded
+            stated.append(' '.join(text[rows.line(m.start())[0]:rows.line(m.end() - 1)[1]].split()))
     if agrees or not stated:
         return fact
 
-    def quoted(spans):
-        return ', '.join('\u201c' + ' '.join(s.text.split())[:80] + '\u201d' for s in spans[:3])
+    def quoted(quotes):
+        return ', '.join('\u201c' + quote + '\u201d' for quote in quotes)
+
+    heading = ' '.join(text[block:rows.line(block)[1]].split())
+    own = [' '.join(s.text.split()) for s in fact.evidence[:3]]
     return Fact('service_date', None, 'conflict', fact.evidence,
-                CHARGE_DATE_NOTE.format(block=quoted(stated), value=fact.value, own=quoted(fact.evidence)))
+                CHARGE_DATE_NOTE.format(heading=quoted([heading]), block=quoted(list(dict.fromkeys(stated))[:3]),
+                                        value=fact.value, own=quoted(q if len(q) <= 120 else q[:119] + '\u2026' for q in own)))
 
 
 def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
@@ -2679,13 +2701,9 @@ def service_date_of(text: str) -> Optional[date]:
     (jobs._service_date_of reads the stored facts). The question the note's closing charge block asks keeps it the date
     the installed reading sends, so routing reads such a document exactly as installed in every state (the fifth
     refutation, dates-n5-4: read with no date, a dated service went from performed to "service date not established").
-    The inventory and the engine are handed the stored date, None while the question stands, so the open question reads
-    as the installed revision reads a held member's answer, and it is no new state."""
+    The engine's readers read the same date (engine.assess, charge_question_day)."""
     fact = _context(text)[0]
-    own = charge_date_own(fact)
-    if own is not None:
-        return date.fromisoformat(own)
-    return date.fromisoformat(fact.value) if fact.origin == 'document' else None
+    return charge_question_day(fact) or (date.fromisoformat(fact.value) if fact.origin == 'document' else None)
 
 
 def _valid_user_value(name: str, value: str) -> bool:

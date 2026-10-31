@@ -14,6 +14,7 @@ from dataclasses import dataclass, replace
 from datetime import date
 from typing import Mapping, Optional, Sequence
 
+from studio.gi.context import charge_question_day
 from studio.gi import sections as gi_sections
 from studio.gi import services as gi_services
 from studio.gi.profiles import DETECTED_FAMILIES, PROFILES, PROFILES_VERSION, ServiceProfile, family_for_code
@@ -133,6 +134,12 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     if provider_status == 'succeeded' and response is None:
         raise ValueError('A succeeded provider status needs its normalized response.')
     date_state = checks.service_date_state(context, service_date)
+    # GI round 3, the narrow release: the question a closing charge block asks holds the date and what hangs on it, never
+    # the reading. Every reader reads the date the installed reading sends, as routing does, so the document reads as
+    # installed reads it; every gate keeps date_state.value, None: each proposal holds on the encounter question and no
+    # dated reference applies (the sixth refutation, parity-6-1 and 6-2: read with no date, a 2025 colonoscopy read as done
+    # today, and a code went from ready to excluded). A member's held answer is no such question, and reads as installed.
+    read_day = date_state.value or charge_question_day(date_state.fact)
     sources = tuple(reference.sources())
     selections: list[_Selection] = []
     proposals: tuple[ProposalAssessment, ...] = ()
@@ -140,7 +147,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     coverage: list[Check] = []
     # The documented-service inventory is read from the text alone, before and independently of the proposals; the
     # page spans tell it where a page turns inside a sentence (refutation r1, formats-6).
-    inventory = (gi_services.build(text, service_date=date_state.value, routing=routing, context_facts=context,
+    inventory = (gi_services.build(text, service_date=read_day, routing=routing, context_facts=context,
                                    pages=pages)
                  if READ_DOCUMENTED_SERVICES else gi_services.ServiceInventory(version=gi_services.INVENTORY_VERSION))
     problems = gi_services.validate(inventory, text)
@@ -150,7 +157,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         listable = [c for c in response.codes if isinstance(c.code, str) and 0 < len(c.code) <= MAX_LISTED_CODE]
         if len(listable) < len(response.codes):
             provider.append(checks.unlisted_codes_check(len(response.codes) - len(listable), MAX_LISTED_CODE))
-        selections = [_select(group, text, pages, routing, reference, date_state.value, usable)
+        selections = [_select(group, text, pages, routing, reference, read_day, usable, dated=date_state.value is not None)
                       for group in _merge_selected(listable)]
         second_alternatives: list[ProposalAssessment] = []
         if second is not None and usable is not None:
@@ -502,7 +509,7 @@ def _merge_selected(codes: Sequence[ProviderCode]) -> list[list[ProviderCode]]:
 
 
 def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult, reference: ReferenceLookup,
-            day: Optional[date], inventory=None) -> _Selection:
+            day: Optional[date], inventory=None, *, dated: bool = True) -> _Selection:
     code = group[0].code
     code_kind, scope_reason = checks.code_scope(code)
     kept, dropped = checks.exact_evidence([span for item in group for span in item.evidence], text, pages)
@@ -598,7 +605,7 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
         if elsewhere is not None:
             supported = reconcile.support(elsewhere, kept, today=today, report_family=report_family)
             placed = reconcile.placed_check(elsewhere, inventory, PROFILES[selection.family].label)
-    return replace(selection, evaluation=_Evaluation(finding, outcome, reference.lookup(code, day), own, speaks_for,
+    return replace(selection, evaluation=_Evaluation(finding, outcome, reference.lookup(code, day if dated else None), own, speaks_for,
                                                      found, supported, note, placed))
 
 
