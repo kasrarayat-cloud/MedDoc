@@ -656,8 +656,8 @@ review of synthetic text, and the reviewer decides every code.
 | gi3 STATE2-1 | sending disabled; a pre-install encounter whose context is remade by a resumed assess, or by the stale-stage sweep with no member action | assessed with no provider answer: every proposal dropped, the reviewer's decisions invalidated, and an unknown or failed outcome shown as "provider not run" → an unchanged request re-assesses with the recorded answer. When the request changed, an unknown outcome blocks the upgrade's predict (the encounter reads provider unknown), and any other recorded request stops it, keeping what is recorded. With no request recorded it runs as before | `jobs._request_for` (the adapter's own request builder) and `jobs._recorded_in_use` |
 
 ### Measured against the installed revision (offline, synthetic; never an accuracy figure)
-Measured on 321d3de79, whose studio code is what ships (later commits change tests and docs only).
-- Full suite: 3,583 Django tests OK (3 skipped); ops 211 and 37; node 61 and 56; no migration.
+Measured on bd78d1295, whose studio code is what ships (later commits change docs only).
+- Full suite: 3,585 Django tests OK (3 skipped); ops 211 and 37; node 61 and 56; no migration.
 - Reading gate: reader 0 changes in 8,446 texts; engine 0 changes in 6,397 stored assessments (no stored text reads the
   question).
 - The 36 live encounters' stored responses, replayed: one changes. h2-08's date is now asked, and its check reads "The lines
@@ -669,15 +669,16 @@ Measured on 321d3de79, whose studio code is what ships (later commits change tes
   - 2,160 are the installed reading's sent date turned into this release's question, with the same evidence, setting,
     status and routing date, and every member answer taken or held exactly as installed takes or holds it;
   - 0 are anything else, so none is newly sent and no member answer changes.
-- The assess stage's own child over 42,832 texts in three member states, against installed, with fee-schedule rows
+- The assess stage's own child over 42,883 texts in three member states, against installed, with fee-schedule rows
   loaded and one synthetic provider answer of four codes: 7,486 constructed, 6,545 real documents with a closing block
-  appended so the release asks them, and 28,801 of the sixth refutation's inputs:
+  appended so the release asks them, and 28,852 of the sixth refutation's inputs:
   - routing is identical in every state;
   - the document's own answer gives installed's assessment in every recorded field;
   - an open question equals installed's assessment with the date in every proposal's bucket, exclusion reason and rationale
     and in every encounter check and question, except the date check, the date question and the completeness line.
     Installed's 3,911 ready proposals hold on the question, none is ready, and the excluded set is exactly installed's;
-  - a held answer reads as the open question does;
+  - a held answer over a kept provider answer reads as the open question does, and a date held with no provider answer
+    is identical to installed's on all 5,775 held uploads of the eighth refutation's scan;
   - the controls fail as they must: the tree before the routing repair breaks routing on 156 of the real documents, the
     tree before the readers' repair breaks the open question's equality on 51, and the tree before the held repair breaks
     the held equality on 51. That corpus holds no performed XXX service, so it cannot see parity-7-2: its evidence is the
@@ -686,14 +687,14 @@ Measured on 321d3de79, whose studio code is what ships (later commits change tes
   XXX codes among them): every difference is the date, the date question, the completeness line, a ready proposal held, a
   dated reference left unknown, a fee-schedule row's sentence not shown, an excluded code's reinstatement waiting on the
   date, or a documented service's date field. Each is named in "gi3 what an open question holds".
-- The question's sentence, checked literally on all 42,823 asked texts of that set, 0 violations: its first quote is a line
+- The question's sentence, checked literally on all 42,883 texts of that set, 0 violations: its first quote is a line
   of the document, each stated quote is that line or a whole line after it, and its own quote stands in the document.
   Planted violations fail. The test helper makes the same check on every asked text in its module.
 - Cost: the context stage is linear to the 400,000-character cap over seventeen adversarial shapes (doubling ratios about
-  2). The worst is 2.60 s (blank lines after a signature), against 2.22 s for installed on the same text. The seventh
-  refutation's bounded assess child: worst 8.2 s against installed's 4.9 s, and 62 MiB against 37 MiB, under limits of 120 s
-  and 768 MiB, on the commit before the last repair.
-- Mutants: 58 of 58 killed on a green baseline, each restore checked by sha256: the reader and gate split, the note's literal
+  2). The worst is 2.54 s (blank lines after the block), against 2.26 s for installed on the same text. The eighth
+  refutation's bounded assess child: worst 11.8 s against installed's 11.1 s on one shape, 8.8 s against 4.9 s on another,
+  and 136 MiB in both, under limits of 120 s and 768 MiB, on the commit before the last repair.
+- Mutants: 61 of 61 killed on a green baseline, each restore checked by sha256: the reader and gate split, the note's literal
   claims, the labels, the heading readers, the charge-block guards and the state safeguards. Four survivors along the way
   were findings: a dead bound, removed; the region's lower bound and the evidence readers' date, each now pinned by a test;
   and an addendum test that used a header the application does not write, rewritten on its own.
@@ -731,7 +732,12 @@ Measured on 321d3de79, whose studio code is what ships (later commits change tes
     a save reached later encounters too (text-1, pipe7-3). The first two are repaired (interpretation 58), and the limit's row
     now says what is true. An addendum stating the date now settles the question (text-3). Text-2, parity-7-3, parity-7-4
     and parity-7-5 are named in the limits below;
-  - EIGHTH_REFUTATION
+  - the eighth, on b102d2cbf (one lens, differential, over that delta), found nothing that blocks. It raised two limits, and
+    both are repaired because each showed a step taken too far (interpretation 59): a running PDF footer repeating the date
+    settled the question, so h2-08 with one stopped asking (delta-2), and a date held with no provider answer no longer
+    read as installed (delta-1). Its agreement batteries now flip only the application's addenda, 20 of 580, and every text
+    that stops asking returns installed's fact;
+  - NINTH_REFUTATION
 
 ### Known limits (each reads exactly as the installed revision reads it, unless its row says it asks)
 
