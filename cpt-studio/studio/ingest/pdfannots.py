@@ -74,7 +74,7 @@ from pypdf.generic import ArrayObject, DecodedStreamObject, DictionaryObject, Na
 from .pdfcontent import (OptionalContent, appearance_matrix, as_list, clip, form_shows_text, multiply, number,
                          object_key, page_box, raw_entry, rectilinear, resolved, transformed_box, visible_form)
 from .pdfformat import displayed_texts
-from .pdffonts import undecodable, unread_in_boxes
+from .pdffonts import BoxGuard, not_valid_text, undecodable
 from .text import canonicalize, non_space_count
 
 HIDDEN_FLAGS = 2 | 32  # Hidden, NoView (PDF 32000-1 12.5.3)
@@ -116,7 +116,7 @@ class PageAnnotations:
     note_chars: int = 0
     hidden_text: bool = False  # an appearance held text in optional content that is hidden by default
     undecodable: int = 0  # characters dropped from what is written: they name no glyph
-    boxed: int = 0  # of those, the ones alone in a typed box, written as '?' (pdffonts.unread_in_boxes)
+    boxed: int = 0  # unread characters alone in a typed box, written as '?' (pdffonts.BoxGuard)
     boxes: list = field(default_factory=list)  # (rect, checked) of each displayed check box
     buttons: list = field(default_factory=list)  # rect of each displayed check box or radio button
     widgets: list = field(default_factory=list)  # Button of each displayed check box or radio button
@@ -304,19 +304,29 @@ class _Reader:
         self.found.fields.append(self.clean(line))
 
     def clean(self, text: str) -> str:
-        """``text`` without the characters that name no glyph, which are counted; one alone in a typed box is
-        written as '?', so the box reads as unread, not as an empty box."""
-        items = [None if undecodable(char) else char for char in text]
-        marked = unread_in_boxes(items)
-        kept = ''.join('?' if index in marked else item for index, item in enumerate(items)
-                       if item is not None or index in marked)
-        self.found.undecodable += items.count(None)
-        self.found.boxed += len(marked)
-        return kept
+        """``text`` without the characters that name no glyph, which are counted; a typed box whose only content is
+        unread characters (ones that name no glyph, or text that is not valid: U+FFFD, a lone surrogate) and padding
+        is written as its brackets round exactly '?', so the box reads as unread, never as an empty box or as a mark
+        (pdffonts.BoxGuard)."""
+        out, guard, opener = [], BoxGuard(), 0
+        for char in text:
+            if undecodable(char) or not_valid_text(char):
+                guard.unread(True)
+                if undecodable(char):
+                    self.found.undecodable += 1
+                    continue
+            elif guard.text(char) is not None:  # the box closes: what it held since its opener is the unread mark
+                del out[opener + 1:]
+                out.append('?')
+                self.found.boxed += 1
+            elif char in '[(' and guard.opener:
+                opener = len(out)
+            out.append(char)
+        return ''.join(out)
 
     # Other annotations -------------------------------------------------------------
     def free_text(self, annotation, shown: bool) -> None:
-        contents = canonicalize(text_of(annotation.get('/Contents'))).strip('\n')
+        contents = keep_nul(text_of(annotation.get('/Contents'))).strip('\n')
         if not contents.strip():
             contents = rich_text(annotation.get('/RC'))
         if self.appearance_hidden(annotation):  # it draws nothing, so what /Contents says is not shown
@@ -331,8 +341,11 @@ class _Reader:
             self.found.hidden += 1
             return
         drawn = squeezed(appearance or '')
-        if contents.strip() and normal_appearance(annotation) is not None and drawn != squeezed(contents):
-            self.found.mismatched.append('text annotation')
+        if contents.strip() and normal_appearance(annotation) is not None:
+            if appearance is None:  # what it shows cannot be read: not a known disagreement, but unread
+                self.found.unreadable += 1
+            elif drawn != squeezed(contents):
+                self.found.mismatched.append('text annotation')
         self.found.texts.append(self.clean(text))
 
     def other(self, annotation, subtype, shown: bool) -> None:
@@ -441,7 +454,7 @@ class _Reader:
             copy[NameObject('/Resources')] = self.defaults
             stream = copy
         try:
-            return canonicalize(self.page.extract_xform_text(stream, (0, 90, 180, 270), 200.0))
+            return keep_nul(self.page.extract_xform_text(stream, (0, 90, 180, 270), 200.0))
         except (MemoryError, RecursionError):
             raise
         except Exception:
@@ -538,17 +551,17 @@ def choice_text(info: _Field) -> str:
                 break
         if text:
             shown.append(text)
-    return canonicalize('; '.join(shown))
+    return keep_nul('; '.join(shown))
 
 
 def value_text(value) -> str:
     value = resolved(value)
     if isinstance(value, StreamObject):  # a long or rich-text value
         try:
-            return canonicalize(value.get_data().decode('utf-8', 'replace'))
+            return keep_nul(value.get_data().decode('utf-8', 'replace'))
         except Exception:
             return ''
-    return canonicalize(text_of(value))
+    return keep_nul(text_of(value))
 
 
 def rich_text(value) -> str:
@@ -566,9 +579,9 @@ def rich_text(value) -> str:
         root = etree.fromstring(markup.encode('utf-8'), etree.XMLParser(resolve_entities=False, no_network=True,
                                                                         remove_comments=True, remove_pis=True))
     except etree.XMLSyntaxError:  # not well-formed: its text without the tags
-        return canonicalize(_TAGS.sub('', markup)).strip('\n')
+        return keep_nul(_TAGS.sub('', markup)).strip('\n')
     paragraphs = [''.join(paragraph.itertext()) for paragraph in root.iter('{*}p')]
-    return canonicalize('\n'.join(paragraphs) if paragraphs else ''.join(root.itertext())).strip('\n')
+    return keep_nul('\n'.join(paragraphs) if paragraphs else ''.join(root.itertext())).strip('\n')
 
 
 def normal_appearance(annotation):
@@ -605,4 +618,13 @@ def one_line(text: str) -> str:
 
 
 def squeezed(text: str) -> str:
-    return _WHITESPACE.sub('', text)
+    """``text`` as compared with another: no whitespace, and none of the characters that name no glyph (which the
+    labelled block drops)."""
+    return ''.join(char for char in _WHITESPACE.sub('', text) if not undecodable(char))
+
+
+def keep_nul(text: str) -> str:
+    """``text`` canonical (text.canonicalize) but for NUL, which a value, a note or an appearance keeps until the
+    labelled block's clean() counts it (alone in a typed box, the unread mark): canonicalisation would remove it and
+    leave '[]', an unchecked box."""
+    return canonicalize(text, keep_nul=True)

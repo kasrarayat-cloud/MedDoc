@@ -94,11 +94,12 @@ from studio.types import ExtractionResult
 
 from .ocr import OcrTools, ocr_page
 from .pdfannots import PageAnnotations, read_annotations
-from .pdffonts import composite_glyph, composite_map, kind, symbol_glyphs, undecodable, unread_in_boxes
+from .pdffonts import (PAD_CHARS, UNREAD_TEXT, BoxGuard, composite_glyph, composite_map, kind, not_valid_text,
+                       symbol_glyphs, undecodable)
 from .symbols import BOX_PRINTED_PATTERN, CHECKED_BOX, UNCHECKED_BOX
 from . import pdfcontent
 from .pdfcontent import (IDENTITY, OptionalContent, PageContent, analyse_page, as_list, extraction_page, image_state,
-                         multiply, number, object_key, raw_entry, resolved, stream_damaged)
+                         multiply, number, object_key, raw_entry, readings_for, resolved, stream_damaged)
 from .text import (INGEST_VERSION, REPLACEMENT, agree, caused_by, canonicalize, failed, format_seconds, from_memory,
                    join_pages, non_space_count, page_phrase, pdf_method, replace_surrogates)
 
@@ -222,8 +223,8 @@ class _Page:
     # much under it to read); two check boxes over one known box, or one over several, are named as unread_box
     unverified: bool = False  # read with OCR, and an image's encoding could not be checked to its end
     unread_box: bool = False  # a printed box was written unread: a widget or mark disagrees with it or is not a check
-    # its content shows text pypdf cannot read as the PDF encodes it (PageContent.unreadable_text): the layer was not
-    # read, and the page has no usable text layer
+    # its content shows text pypdf cannot read as the PDF encodes it (PageContent.unreadable_text): that text was drawn,
+    # for extraction, in pdffonts.unread_font and dropped, and the rest of the layer read; the page is named (partial)
     unreadable: bool = False
 
     @property
@@ -265,8 +266,7 @@ def _extract(data, limits, tools, deadline, workdir, engine) -> ExtractionResult
     has_xfa = not isinstance(xfa, (type(None), NullObject))
     read = [_read_page(page, reader, optional, acroform, number) for number, page in enumerate(pages, 1)]
 
-    no_layer = [n for n, page in enumerate(read, 1)
-                if page.unreadable or page.readable_chars < limits.min_text_chars_per_page]
+    no_layer = [n for n, page in enumerate(read, 1) if page.readable_chars < limits.min_text_chars_per_page]
     scanned = [n for n, page in enumerate(read, 1) if n not in no_layer
                and page.content.image_coverage >= SCAN_COVERAGE and page.readable_chars < SCAN_TEXT_CHARS]
     candidates = sorted(no_layer + scanned)
@@ -502,16 +502,17 @@ def _read_page(page, reader, optional, acroform, number: int) -> _Page:
     with _watching() as warnings:
         content = analyse_page(page, reader, optional)
         # Text pypdf cannot read as the PDF encodes it (a string its CMap does not decode, a CMap pypdf does not
-        # implement, a font it cannot build) would reach the layer as U+FFFD and mojibake: the layer is not read, as
-        # pypdf 6.21.2 refused such a string, so the page goes to OCR or is named.
-        layer = _Layer() if content.unreadable_text else _layer_text(page, content)
+        # implement, a font it cannot build or the resources do not name) would reach the layer as U+FFFD and mojibake:
+        # the operator showing it was drawn, for extraction, in pdffonts.unread_font, so it is dropped and the page is
+        # named, and the rest of the layer, in fonts pypdf reads as the PDF encodes them, is read.
+        layer = _layer_text(page, content, readings_for(reader))
         annotations = read_annotations(page, optional, acroform)
     if annotations.placements:  # images displayed annotations paint are on the page too
         content.placements.extend(annotations.placements)
         content.images.extend(image for image in annotations.images
                               if all(image is not known for known in content.images))
         content.__dict__.pop('image_coverage', None)
-    text, placed, overlap, unread_box = _placed_boxes(layer, annotations)
+    text, placed, overlap, unread_box = _placed_boxes(layer, annotations, content.unread_boxes)
     text, _ = replace_surrogates(text)
     block, _ = replace_surrogates(annotations.block(number))
     # Text that is not valid is shown as U+FFFD however it got there: a lone surrogate replaced here, or U+FFFD a
@@ -523,7 +524,7 @@ def _read_page(page, reader, optional, acroform, number: int) -> _Page:
                  unreadable=content.unreadable_text)
 
 
-def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int, bool, bool]:
+def _placed_boxes(layer: _Layer, annotations: PageAnnotations, unread_text=()) -> tuple[str, int, bool, bool]:
     """The layer text with the page's displayed check boxes written in; how many characters that added (glyphs
     inserted, and what an unread mark adds over the box it replaces); whether a check box may lie over a printed box
     whose position could not be read, or had too much under it to read (OVERLAP; the page is then partial); and
@@ -546,7 +547,9 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
       line that runs on into another column (_ING_Ink.runs_on). Nothing is written on a row holding a button that is
       not tied, and a piece two buttons claim gets neither: ambiguity is never resolved by guessing.
     Pieces and printed boxes are indexed by row and by x within each row, so a button reads only what lies beside or
-    under it. Last, every printed box is placed where it is drawn (_I2_Places: its glyph and width, or the piece that
+    under it. An unchecked box on a row that holds text the reader could not read (``unread_text``: where each such
+    operator draws, pdfcontent.PageContent.unread_boxes) writes '[?]': that text may be its label, or lie between it
+    and the piece it is tied to. Last, every printed box is placed where it is drawn (_I2_Places: its glyph and width, or the piece that
     draws it), and a widget or mark over one that the readings above left decided leaves it unread (_I2_under_marks):
     holds only."""
     text, widgets = layer.text, annotations.widgets
@@ -685,12 +688,17 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
             named = True
             unsettled_boxes(*found)
     near: dict[int, int] = {}  # widget index -> offset of the piece nearest to its right, on one line
+    beside_unread: set[int] = set()  # widgets on a row that holds text the reader could not read
     groups: dict[int, list] = {}
     for i, w in enumerate(widgets):
         if i in over_a_box:
             continue
         x0, y0, x1, y1 = w.rect
         gap = min(BOX_GAP_MAX, max(BOX_GAP_MIN, BOX_GAP * max(x1 - x0, y1 - y0)))
+        # Text on the box's row that could not be read may be its label, or lie between it and the piece it is tied
+        # to: unchecked, it is unsure there (it may hold that text, not the piece's).
+        if any(box[1] - BOX_SLACK <= y1 and y0 <= box[3] + BOX_SLACK for box in unread_text):
+            beside_unread.add(i)
         tie = _ING_beside(text, pieces, w, x1 - (x1 - x0) / 2, x1 + gap)
         if tie is not None:
             near[i] = tie
@@ -720,7 +728,7 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
         if box is None:
             # A box with a label to its left may be the label's: unchecked, it holds what it sits beside. An unchecked
             # box before a text line that runs on into another column holds that column's text too.
-            unsure = not on and (i in labelled or ink.runs_on(offset, starts[offset]))
+            unsure = not on and (i in beside_unread or i in labelled or ink.runs_on(offset, starts[offset]))
             edits[offset] = (offset, (_ING_UNREAD_BOX if unsure else glyph) + ' ')
         elif offset not in edits:  # a printed box starts the piece: never write two glyphs
             printed = _ING_printed_on(box)
@@ -1225,7 +1233,7 @@ def _starts_with_word(text: str, offset: int, word: str) -> bool:
 class _Layer:
     text: str = ''  # decoded text-layer text, before canonicalisation
     undecodable: int = 0  # glyphs that name no character, dropped
-    marks: int = 0  # of those, the ones alone in a typed box, written as '?' (pdffonts.unread_in_boxes)
+    marks: int = 0  # unread glyphs alone in a typed box, written as '?' (pdffonts.BoxGuard)
     lines: tuple = ()  # (offset in text, origin) of each line; origin (x, y, upright) when drawn by the page itself
     pieces: tuple = ()  # (offset, origin) of the first character (not a space) of each piece of text, as for lines
     ink: tuple = ()  # each string the page's upright text draws, as PageContent.ink records it
@@ -1240,7 +1248,7 @@ class _Layer:
     drawn: dict = field(default_factory=dict)
 
 
-def _layer_text(page, content: PageContent) -> _Layer:
+def _layer_text(page, content: PageContent, readings=None) -> _Layer:
     """The page's text layer, decoded font by font (studio.ingest.pdffonts).
 
     pypdf reports each piece of text it writes with the font and the position
@@ -1311,7 +1319,7 @@ def _layer_text(page, content: PageContent) -> _Layer:
         raw = copy.extract_text(visitor_operand_before=before, visitor_operand_after=after, visitor_text=visit)
         if ''.join(piece[0] for piece in pieces) != raw:
             pieces = [(raw, None, None, None, ((), None, False, True))]
-        decoded = _decoded(pieces)  # inside the guard: a font it cannot classify leaves the page unread, not the file
+        decoded = _decoded(pieces, readings)  # inside the guard: a font it cannot classify leaves the page unread
     except (DependencyError, MemoryError):
         raise
     except Exception:
@@ -1378,32 +1386,64 @@ def _origin(cm, tm) -> tuple[float, float, bool] | None:
     return m[4], m[5], upright
 
 
-def _decoded(pieces) -> _Layer:
+def _decoded(pieces, readings=None) -> _Layer:
+    """The layer read from pypdf's pieces in one pass, keeping only what is written: a glyph that names no character
+    is counted and dropped; UNREAD_TEXT (text pypdf cannot read as the PDF encodes it, drawn in pdffonts.unread_font)
+    is dropped, its page named elsewhere; and a typed box whose only content is unread glyphs (pdffonts.BoxGuard: ones
+    that name no character, or text that is not valid) and padding is written as the contract's unread mark, its
+    brackets round exactly '?' ('[?]', held): never '[]' (unchecked), '[\ufffd]' (a mark that checks it) or '[? ]'
+    (which routing does not hold). What the box held is replaced once it closes; ``readings``: the document's
+    pdffonts.FontReadings (each font's kind)."""
     out: list[str] = []
     size, dropped, lines, starting, firsts = 0, 0, [], True, []
     placed_lines, placed_firsts = [], []  # the same, for text drawn inside a form XObject placed on the page
     drawn: dict = {}  # as _Layer.drawn
     decoders: dict[int, object] = {}
-    mapped_all = []  # each piece's characters as decoded: the text, or None for a glyph that names no character
-    for text, _, font, _, _ in pieces:
+    guard, marks = BoxGuard(), 0
+    opener = (0, 0)  # (index in out, offset after it) of the item that opened the box being read
+    for number, (text, origin, font, placed, (shows, em, single, positioned)) in enumerate(pieces):
         if id(font) not in decoders:
-            decoders[id(font)] = _decoder(font)
+            decoders[id(font)] = _decoder(font, readings)
         decode = decoders[id(font)]
-        mapped_all.append([decode(char, index == len(text) - 1) for index, char in enumerate(text)])
-    # A glyph that names no character alone in a typed box is written as '?': '[?]' is held, '[]' would be unchecked.
-    marked = unread_in_boxes(mapped if mapped is not None or char != ' ' else ' '
-                             for (text, *_), piece in zip(pieces, mapped_all) for char, mapped in zip(text, piece))
-    position, marks = -1, 0
-    for (text, origin, font, placed, (shows, em, single, positioned)), piece in zip(pieces, mapped_all):
         first = True  # the piece's first character drawn (not a space) is drawn at its origin
         lead = False  # whitespace opens the piece (drawn, or pypdf's own between pieces)
-        for char, mapped in zip(text, piece):
-            position += 1
-            if mapped is None:
-                dropped += char != ' '  # a space may be pypdf's own, between pieces of text
-                if position not in marked:
+        last = len(text) - 1
+        for index, char in enumerate(text):
+            mapped = None if char == UNREAD_TEXT else decode(char, index == last)
+            if mapped is None and char == ' ':
+                continue  # a space may be pypdf's own, between pieces of text: padding
+            opens = False  # whether this item opens a box
+            if mapped is None or (len(mapped) == 1 and not_valid_text(mapped)):
+                # an unread glyph: one alone in a box (with padding, or more unread glyphs) is its unread mark
+                if guard.opener and guard.pending is None:  # (its token is made only where it may be needed)
+                    guard.unread((number, first, lead, origin, placed, (shows, font, em, single, positioned)))
+                if mapped is None:
+                    dropped += char != UNREAD_TEXT
                     continue
-                mapped, marks = '?', marks + 1
+            else:
+                closed = guard.text(mapped)
+                if closed is not None:  # the box closes: what it held since its opener is the unread mark
+                    piece, was_first, was_lead, at_origin, at_placed, (at_shows, *rest) = closed
+                    marks += 1
+                    del out[opener[0] + 1:]
+                    size = opener[1]
+                    while firsts and firsts[-1][0] >= size:  # a piece the box held starts no more
+                        firsts.pop()
+                    while placed_firsts and placed_firsts[-1][0] >= size:
+                        placed_firsts.pop()
+                    while drawn and next(reversed(drawn)) >= size:
+                        drawn.popitem()
+                    if was_first:  # the mark is the first character its piece draws
+                        firsts.append((size, at_origin))
+                        if at_origin is None and at_placed is not None:
+                            placed_firsts.append((size, at_placed))
+                        drawn[size] = (at_shows, was_lead, *rest)
+                        if piece == number:
+                            first = False
+                    lead = False if first else lead  # what this piece wrote before was the box's, now gone
+                    out.append('?')
+                    size += 1
+                opens = guard.opener and any(part not in PAD_CHARS for part in mapped)
             if mapped == '\n':
                 out.append(mapped)
                 size += 1
@@ -1424,13 +1464,15 @@ def _decoded(pieces) -> _Layer:
                 lead = True
             out.append(mapped)
             size += len(mapped)
+            if opens:
+                opener = (len(out) - 1, size)
     return _Layer(''.join(out), dropped, marks, tuple(lines), tuple(firsts), placed_lines=tuple(placed_lines),
                   placed_pieces=tuple(placed_firsts), drawn=drawn)
 
 
-def _decoder(font):
+def _decoder(font, readings=None):
     """(char, last in its piece) -> the character it stands for, or None for a glyph that names none."""
-    style = kind(font) if font is not None else 'text'
+    style = (readings.kind(font) if readings is not None else kind(font)) if font is not None else 'text'
     if style == 'glyph-index':  # nothing it writes is a character; pypdf's own line break ends a piece
         return lambda char, last: '\n' if char == '\n' and last else None
     if style == 'symbol-composite':
@@ -1479,6 +1521,8 @@ def _render_problem(page, dpi: int) -> str:
 # --- messages -----------------------------------------------------------------------
 
 SCANNED = 'mostly covered by an image and {has} only a short text layer'
+UNREADABLE_TEXT = ('{pages} {has} text in a font or encoding this server cannot read as the PDF encodes it; that text '
+                   'was not extracted, so check it against the original.')
 
 
 def _messages(read, texts, no_layer, scanned, unavailable, ocr: _Ocr, limits) -> tuple[list[str], bool]:
@@ -1538,6 +1582,11 @@ def _messages(read, texts, no_layer, scanned, unavailable, ocr: _Ocr, limits) ->
         messages.append(f'{page_phrase(pages)} {agree(pages, "has", "have")} {total:,} character{"" if one else "s"} '
                         f'that {"does" if one else "do"} not map to text (symbol-font glyphs, private-use or control '
                         f'codes); {"it was" if one else "they were"} not extracted.')
+    # Text in a font or encoding pypdf cannot read as the PDF encodes it, dropped from a layer that was read: not on a
+    # page read with OCR or without a usable layer (its own message covers it).
+    unreadable = [n for n, page in enumerate(read, 1) if page.unreadable and n not in ocr.texts and n not in no_layer]
+    if unreadable:
+        messages.append(UNREADABLE_TEXT.format(pages=page_phrase(unreadable), has=agree(unreadable, 'has', 'have')))
     damaged = [n for n, page in enumerate(read, 1) if page.damaged]
     if damaged:
         its = agree(damaged, 'its', 'their')
@@ -1589,8 +1638,8 @@ def _messages(read, texts, no_layer, scanned, unavailable, ocr: _Ocr, limits) ->
         messages.append(f'{page_phrase(struck)} {agree(struck, "has", "have")} text struck through by a line drawn '
                         'across it; it was read as written, so check it against the original.')
     annotation_partial = _annotation_messages(read, set(ocr.texts), messages)
-    return messages, bool(damaged or unchecked or limited or overlapped or unread_boxes or marked or obscured
-                          or struck) or annotation_partial
+    return messages, bool(unreadable or damaged or unchecked or limited or overlapped or unread_boxes or marked
+                          or obscured or struck) or annotation_partial
 
 
 def _scanned_phrase(pages) -> str:

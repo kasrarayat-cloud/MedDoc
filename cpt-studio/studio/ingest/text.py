@@ -26,10 +26,11 @@ _SURROGATES = re.compile('[\ud800-\udfff]')
 REPLACEMENT = '\ufffd'  # what text that is not valid is shown as
 
 
-def canonicalize(text: str) -> str:
-    """CRLF and CR -> LF, NUL removed, Unicode NFC. Nothing else."""
-    text = text.replace('\r\n', '\n').replace('\r', '\n').replace('\x00', '')
-    return unicodedata.normalize('NFC', text)
+def canonicalize(text: str, *, keep_nul: bool = False) -> str:
+    """CRLF and CR -> LF, NUL removed (unless ``keep_nul``: a reader that counts it removes it), Unicode NFC.
+    Nothing else."""
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
+    return unicodedata.normalize('NFC', text if keep_nul else text.replace('\x00', ''))
 
 
 def has_surrogates(text: str) -> bool:

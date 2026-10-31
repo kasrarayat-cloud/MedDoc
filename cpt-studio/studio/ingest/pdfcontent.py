@@ -70,10 +70,11 @@ from itertools import pairwise
 from pypdf import PageObject, get_configuration
 from pypdf.filters import ASCII85Decode, ASCIIHexDecode
 from pypdf._text_extraction import get_text_operands
-from pypdf.generic import ArrayObject, ContentStream, DictionaryObject, NameObject, NullObject, StreamObject
+from pypdf.generic import (ArrayObject, ByteStringObject, ContentStream, DictionaryObject, FloatObject, NameObject,
+                           NullObject, StreamObject)
 from pypdf.generic._font import Font
 
-from .pdffonts import decodes, font_reading
+from .pdffonts import UNREAD_FONT, FontReadings, decodes, unread_codes
 
 IDENTITY = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 MAX_FORM_DEPTH = 12  # a form nested deeper is assumed to paint an image over its whole bounding box
@@ -835,7 +836,8 @@ class PageContent:
     obscured_text: bool = False  # text kept that a viewer may not show (see _Paint, and paths not followed)
     struck_text: bool = False  # text kept that a line painted over it strikes through
     # text kept that pypdf cannot read as the PDF encodes it (pdffonts.decodes; a font it cannot build, or none):
-    # pypdf would write U+FFFD or mojibake for it, so the page's text layer is not read (pdf.py)
+    # pypdf would write U+FFFD or mojibake for it, so the operator showing it is drawn, for extraction, in
+    # pdffonts.unread_font, and the page is named (pdf.py)
     unreadable_text: bool = False
     paint: _Paint | None = field(default=None, repr=False, compare=False)
     # (baseline, start, end, font size, where its first and last glyphs that draw something start and end, one
@@ -844,6 +846,9 @@ class PageContent:
     # draws, in drawing order: where text ends, which the text layer does not say (pdf.py reads the gaps around check
     # boxes, and where printed boxes are drawn)
     ink: list = field(default_factory=list, repr=False, compare=False)
+    # where the text the reader could not read lies on the page (each such operator's glyph box): no check box is tied
+    # to page text across it (pdf.py), since what it says (a box's label, or text between) is unknown
+    unread_boxes: list = field(default_factory=list, repr=False, compare=False)
 
     @property
     def largest_image_pixels(self) -> int:
@@ -895,19 +900,27 @@ class _TextState:
     leading: float = 0.0
     rise: float = 0.0
     mode: int = 0  # the text rendering mode (Tr)
+    # the operands of the Tf that set the font in the content stream being read, None before one: pypdf reads each
+    # form XObject's content from its own start, with no font, whatever font the stream that draws it set
+    tf: list | None = None
 
 
 class _TextPlacement:
     """Where a content stream draws its text (PDF 32000-1 9.3-9.4), in page space."""
 
     def __init__(self, resources, fonts: dict, graphics: _Graphics, measured: dict | None = None,
-                 trims: dict | None = None, usable=None):
-        table = resolved(resources.get('/Font'))
+                 trims: dict | None = None, plan=None):
+        try:
+            table = resolved(resources.get('/Font'))
+        except (MemoryError, RecursionError):
+            raise
+        except Exception:  # a font table pypdf cannot parse: no font is found in it
+            table = None
         self.table = table if isinstance(table, DictionaryObject) else DictionaryObject()
         self.fonts = fonts  # id(font dict) -> pypdf Font, or None when it cannot be read
         self.measured = {} if measured is None else measured  # (id(font dict), string) -> (glyphs, spaces, widths)
         self.trims = {} if trims is None else trims  # (id(font dict), string) -> its whitespace ends (_I2_trim)
-        self.usable = usable  # font dict -> whether pypdf builds the font extraction reads in its place
+        self.plan = plan  # font dict -> pdffonts.decode_plan of what extraction reads for it (FontReadings.plan)
         self.graphics = graphics
         self.matrix = self.line = IDENTITY
         self.nothing = False  # the last run drew nothing: a zero font size, or a matrix that flattens it
@@ -922,8 +935,14 @@ class _TextPlacement:
             self.matrix = self.line = IDENTITY
         elif operator == b'Tf' and len(operands) >= 2:
             name = operands[0]
-            font = resolved(self.table.raw_get(name)) if isinstance(name, str) and name in self.table else None
+            try:
+                font = resolved(self.table.raw_get(name)) if isinstance(name, str) and name in self.table else None
+            except (MemoryError, RecursionError):
+                raise
+            except Exception:  # a font object pypdf cannot parse (past one of its limits): no font
+                font = None
             state.font, state.size = (font if isinstance(font, DictionaryObject) else None), number(operands[1])
+            state.tf = list(operands[:2])
         elif operator in (b'Tc', b'Tw', b'Tz', b'TL', b'Ts', b'Tr') and operands:
             value = number(operands[0])
             if operator == b'Tc':
@@ -952,14 +971,30 @@ class _TextPlacement:
 
     def readable(self, operator, operands) -> bool:
         """Whether pypdf reads the strings a text-showing operator shows as its font encodes them: there is a font,
-        pypdf builds it (or the copy extraction reads in its place), and every string decodes (pdffonts.decodes)."""
+        pypdf builds it (or the copy extraction reads in its place), and every string decodes (pdffonts.decodes, by
+        the font's plan, worked out once per font)."""
         strings = [item for item in _shown(operator, operands) if isinstance(item, bytes) and item]
         if not strings:
             return True
         font = self.state.font
-        if font is None or (self.usable is not None and not self.usable(font)):
-            return False  # pypdf draws it in a stand-in font that reads every byte as U+FFFD
-        return all(decodes(font, string) for string in strings)
+        if font is None:
+            return False  # pypdf draws it in a stand-in font that reads every byte as U+FFFD, or in none
+        plan = self.plan(font) if self.plan is not None else None
+        return all(decodes(font, string, plan) for string in strings)
+
+    def unread(self, operator, operands) -> list:
+        """The operations that replace a text-showing operator whose text pypdf cannot read as the PDF encodes it, in
+        the text extraction reads: its line move (' and "), then codes of pdffonts.unread_font as wide as its strings
+        are as pypdf measures them, at its font size, and the font that was set restored (by Tf when the stream set
+        it, else by q/Q, as pypdf starts each form's content with none)."""
+        widths = sum(self.measure(item)[2] for item in _shown(operator, operands)
+                     if isinstance(item, (bytes, str)) and not isinstance(item, NameObject))
+        show = ([ByteStringObject(unread_codes(widths))], b'Tj')
+        selected = ([NameObject(UNREAD_FONT), FloatObject(self.state.size)], b'Tf')
+        moves = state_only(operator, operands)
+        if self.state.tf is not None:
+            return moves + [selected, show, (list(self.state.tf), b'Tf')]
+        return moves + [([], b'q'), selected, show, ([], b'Q')]
 
     def run(self, operator, operands) -> _Run | None:
         """Apply a text-showing operator: where what it shows lies, or None when there is nothing to measure
@@ -1008,7 +1043,12 @@ class _TextPlacement:
         """How far ``string`` moves the text position, in text-space units (each string measured once per font: a
         form drawn many times shows the same strings)."""
         state = self.state
-        key = (id(state.font), bytes(string) if isinstance(string, bytes) else string)
+        glyphs, spaces, widths = self.measure(string)
+        return (widths / 1000 * state.size + glyphs * state.char_spacing + spaces * state.word_spacing) * state.scale
+
+    def measure(self, string) -> tuple:
+        """(glyphs, spaces, glyph-space width) of ``string`` in the current font, as pypdf measures it; read once."""
+        key = (id(self.state.font), bytes(string) if isinstance(string, bytes) else string)
         if key not in self.measured:
             font = self.font()
             if font is None:
@@ -1019,8 +1059,7 @@ class _TextPlacement:
                 except Exception:
                     text, widths = '', UNKNOWN_GLYPH_WIDTH * len(string)
                 self.measured[key] = (max(len(text), 1 if string else 0), text.count(' '), widths)
-        glyphs, spaces, widths = self.measured[key]
-        return (widths / 1000 * state.size + glyphs * state.char_spacing + spaces * state.word_spacing) * state.scale
+        return self.measured[key]
 
     def _I2_trim(self, string) -> tuple[float, float, float, float]:
         """(the advance of the whitespace glyphs ``string`` opens with, of those it closes with, of one of them, and the
@@ -1115,8 +1154,7 @@ class _Walker:
         self.walk_limit = form_walk_limit()
         self.active: set[int] = set()  # forms being walked: a form that draws itself is not walked again
         self.checked: set[int] = set()
-        self.font_copies: dict[int, DictionaryObject | None] = {}  # id(font) -> the copy extraction reads, or None
-        self.usable_fonts: dict[int, bool] = {}  # id(font) -> whether pypdf builds what extraction reads for it
+        self.readings = readings_for(reader)  # how extraction reads each font, worked out once per document
 
     def page(self, page) -> PageContent:
         resources = resolved(page.get('/Resources'))
@@ -1134,23 +1172,29 @@ class _Walker:
             return self.content
         self.check_fonts(resources)
         graphics = _Graphics(IDENTITY, _Clip(self.content.box), _TextState())
-        kept, replaced, _, _ = self.walk(operations, resources, graphics, 0, self.content.placements, [])
+        # pypdf reads no text from a page without resources (no font), as from such a form
+        kept, replaced, _, changes = self.walk(operations, resources, graphics, 0, self.content.placements, [],
+                                               len(resources) > 0)
         self.content.operations = kept
         self.paint.finish()
         self.content.obscured_text = self.content.obscured_text or self.paint.obscured
         self.content.struck_text = self.paint.struck
-        fonts = self.mapped_fonts(resources)
+        fonts = self.mapped_fonts(resources, changes)
         if replaced or fonts:
             self.content.resources = with_replacements(resources, replaced, fonts)
         return self.content
 
     def walk(self, operations, resources, graphics: _Graphics, depth: int, placements: list,
-             covers: list) -> tuple[list, dict, bool, tuple]:
+             covers: list, extracted: bool = True) -> tuple[list, dict, bool, tuple]:
         """(kept operations, {new XObject name: filtered form}, changed, changes) for one content stream, drawn
         with ``graphics`` (copied: the caller's state is not changed). The images it paints are added to
         ``placements`` and the opaque rectangles to ``covers`` (both in the space the walk starts in); ``changes``
-        names each operation not kept as it was, so equal filtered copies can be shared."""
+        names each operation not kept as it was, so equal filtered copies can be shared. ``extracted``: whether pypdf
+        reads this stream's text at all (it reads none from a form without resources of its own), so that its text is
+        judged (PageContent.unreadable_text) and text it cannot read is drawn, for extraction, in
+        pdffonts.unread_font."""
         graphics = graphics.copy()
+        graphics.text.tf = None  # pypdf reads every content stream from its own start, with no font set
         kept: list = []
         replaced: dict = {}
         names: dict[int, str] = {}  # id(filtered form) -> its name in this stream's resources
@@ -1159,7 +1203,7 @@ class _Walker:
         marked: list[bool] = []  # per open BMC/BDC: whether it hides what it encloses
         properties = resolved(resources.get('/Properties'))
         xobjects = resolved(resources.get('/XObject'))
-        text = _TextPlacement(resources, self.text_fonts, graphics, self.measured, self._I2_trims, self.usable)
+        text = _TextPlacement(resources, self.text_fonts, graphics, self.measured, self._I2_trims, self.plan)
         path, pending = _Path(), None
         for index, (operands, operator) in enumerate(operations):
             hidden = any(marked)
@@ -1194,12 +1238,18 @@ class _Walker:
                         self.content.clipped_text = self.content.clipped_text or shows_text(operands)
                     kept.extend(state_only(operator, operands))
                     continue
-                if not text.readable(operator, operands):
-                    self.content.unreadable_text = True
+                unread = extracted and not text.readable(operator, operands)
                 if self.positions and run is not None and shows_text(operands):
                     self.shown(run, graphics, verdict)
                 elif self.positions and text.nothing and shows_text(operands):
                     self.paint.obscured = True  # zero-size glyphs show nothing: kept, named
+                if unread:  # pypdf would write U+FFFD or mojibake for it: drawn, for extraction, as unread text
+                    self.content.unreadable_text = True
+                    if self.positions and run is not None:
+                        self.content.unread_boxes.append(run.box)
+                    kept.extend(text.unread(operator, operands))
+                    changes.append((index, UNREAD_FONT))
+                    continue
             elif operator in TEXT_STATE or operator == b'Tr':
                 text.apply(operator, operands)
             elif operator in PATH_OPERATORS:
@@ -1233,7 +1283,7 @@ class _Walker:
                                    colour=graphics.fill if mask else UNKNOWN)
             elif operator == b'Do' and operands:
                 action, replacement = self.draw(operands[0], xobjects, resources, graphics, depth, hidden, placements,
-                                                covers)
+                                                covers, extracted)
                 if action == 'drop':
                     changes.append(index)
                     continue
@@ -1431,8 +1481,10 @@ class _Walker:
             entry = raw_entry(properties, entry)
         return self.optional.visible(entry)
 
-    def draw(self, name, xobjects, resources, graphics: _Graphics, depth, hidden, placements, covers):
-        """('keep' | 'drop' | 'replace', replacement form) for one ``Do``."""
+    def draw(self, name, xobjects, resources, graphics: _Graphics, depth, hidden, placements, covers,
+             extracted: bool = True):
+        """('keep' | 'drop' | 'replace', replacement form) for one ``Do``; ``extracted``: as walk, for the stream that
+        draws it."""
         xobject = resolved(raw_entry(xobjects, name))
         if not isinstance(xobject, StreamObject):
             return 'keep', None
@@ -1471,14 +1523,17 @@ class _Walker:
                 # pypdf enters the forms kept here, in the same order, and stops at the same count: it reads none
                 # past this one, and the page is named as drawing more forms than the extractor reads.
                 return 'keep', None
-            return self.placed_form(xobject, resources, graphics, form_ctm, depth + 1, placements, covers)
-        form = self.form(xobject, resources, depth + 1)
+            return self.placed_form(xobject, resources, graphics, form_ctm, depth + 1, placements, covers,
+                                    extracted and own_text(xobject))
+        form = self.form(xobject, resources, depth + 1, extracted and own_text(xobject))
         placements.extend((multiply(local, form_ctm), pixels) for local, pixels in form.placements)
         covers.extend(transformed_box(rect, form_ctm) for rect in form.covers if rectilinear(form_ctm))
         return ('replace', form.replacement) if form.replacement is not None else ('keep', None)
 
-    def placed_form(self, xobject, parent_resources, graphics: _Graphics, form_ctm, depth, placements, covers):
-        """Walk a form where it is placed, in page space, inside its box: its text is judged where it lands."""
+    def placed_form(self, xobject, parent_resources, graphics: _Graphics, form_ctm, depth, placements, covers,
+                    extracted: bool = True):
+        """Walk a form where it is placed, in page space, inside its box: its text is judged where it lands
+        (``extracted``: as walk)."""
         own = resolved(xobject.get('/Resources'))
         resources = own if isinstance(own, DictionaryObject) else parent_resources
         operations = self.operations(xobject)
@@ -1496,11 +1551,14 @@ class _Walker:
                 inner.clip.narrowed(box, shape=((tuple(corners),), False))
         self.active.add(id(xobject))
         try:
-            kept, replaced, changed, changes = self.walk(operations, resources, inner, depth, placements, covers)
+            kept, replaced, changed, changes = self.walk(operations, resources, inner, depth, placements, covers,
+                                                         extracted)
         finally:
             self.active.discard(id(xobject))
-        fonts = self.mapped_fonts(resources)
-        if not changed and not fonts:
+        fonts = self.mapped_fonts(resources, changes)
+        if not extracted or (not changed and not fonts):
+            # pypdf reads no text from a form without resources of its own: a copy given its parent's would read text
+            # in fonts it does not hold (U+FFFD for every byte)
             return 'keep', None
         key = (id(xobject), id(resources), changes)
         if key not in self.variants:
@@ -1528,11 +1586,12 @@ class _Walker:
         replacement.operations = kept
         return replacement
 
-    def form(self, xobject, parent_resources, depth) -> _Form:
-        """Walk a form XObject once (in its own space); later uses re-place what it paints."""
+    def form(self, xobject, parent_resources, depth, extracted: bool = True) -> _Form:
+        """Walk a form XObject once (in its own space); later uses re-place what it paints (``extracted``: as
+        walk)."""
         own = resolved(xobject.get('/Resources'))
         resources = own if isinstance(own, DictionaryObject) else parent_resources
-        key = (id(xobject), id(resources))
+        key = (id(xobject), id(resources), extracted)
         if key in self.forms:
             return self.forms[key]
         operations = self.operations(xobject)
@@ -1542,12 +1601,13 @@ class _Walker:
         self.active.add(id(xobject))
         try:
             graphics = _Graphics(IDENTITY, _Clip((-math.inf, -math.inf, math.inf, math.inf)), _TextState())
-            kept, replaced, changed, _ = self.walk(operations, resources, graphics, depth, placements, covers)
+            kept, replaced, changed, changes = self.walk(operations, resources, graphics, depth, placements, covers,
+                                                         extracted)
         finally:
             self.active.discard(id(xobject))
         replacement = None
-        fonts = self.mapped_fonts(resources)
-        if changed or fonts:
+        fonts = self.mapped_fonts(resources, changes)
+        if extracted and (changed or fonts):  # as placed_form: none for a form pypdf reads no text from
             replacement = self.filtered(xobject, kept, resources, replaced, fonts)
         self.forms[key] = _Form(replacement, placements, covers)
         return self.forms[key]
@@ -1571,53 +1631,112 @@ class _Walker:
                 self.content.damaged = True
 
     def check_fonts(self, resources) -> None:
-        fonts = resolved(resources.get('/Font'))
-        if not isinstance(fonts, DictionaryObject):
-            return
-        for key in list(fonts):
-            font = resolved(fonts.raw_get(key))
-            if isinstance(font, DictionaryObject):
-                for entry in ('/ToUnicode', '/Encoding'):
-                    self.check_stream(resolved(font.get(entry)))
+        for _, font in self.fonts_of(resources):
+            for entry in ('/ToUnicode', '/Encoding'):
+                try:
+                    stream = resolved(font.get(entry))
+                except (MemoryError, RecursionError):
+                    raise
+                except Exception:  # an object pypdf cannot parse: the font's text is judged unreadable where shown
+                    continue
+                self.check_stream(stream)
+
+    @staticmethod
+    def fonts_of(resources) -> list:
+        """(name, font dictionary) of each font ``resources`` names that pypdf can parse."""
+        found = []
+        try:
+            fonts = resolved(resources.get('/Font'))
+            for key in list(fonts) if isinstance(fonts, DictionaryObject) else []:
+                try:
+                    font = resolved(fonts.raw_get(key))
+                except (MemoryError, RecursionError):
+                    raise
+                except Exception:
+                    continue
+                if isinstance(font, DictionaryObject):
+                    found.append((key, font))
+        except (MemoryError, RecursionError):
+            raise
+        except Exception:
+            pass
+        return found
 
     def copy_of(self, font) -> DictionaryObject | None:
-        """The copy of ``font`` extraction reads in its place (pdffonts.font_reading), or None; read once."""
-        if id(font) not in self.font_copies:
-            if self.text_fonts.get(id(font)) is not None and resolved(font.get('/Subtype')) == '/Type0':
-                # measuring built it already: pypdf reads a composite font it builds as it is (no copy)
-                self.font_copies[id(font)], self.usable_fonts[id(font)] = None, True
-            else:
-                self.font_copies[id(font)], self.usable_fonts[id(font)] = font_reading(font)
-        return self.font_copies[id(font)]
+        """The copy of ``font`` extraction reads in its place (pdffonts.font_reading), or None; read once a document."""
+        built = self.text_fonts.get(id(font))
+        if built is not None and subtype_of(font) == '/Type0':
+            return self.readings.reading(font, built)[0]  # measuring built it already: not built a second time
+        return self.readings.reading(font)[0]
 
-    def usable(self, font) -> bool:
-        """Whether pypdf builds the font extraction reads for ``font`` (its copy, or itself); read once."""
+    def plan(self, font) -> bool | str:
+        """pdffonts.decode_plan of what extraction reads for ``font`` (False when pypdf builds nothing for it)."""
         self.copy_of(font)
-        return self.usable_fonts[id(font)]
+        return self.readings.plan(font)
 
-    def mapped_fonts(self, resources) -> dict:
-        """{font name: the copy extraction reads in its place} for the fonts ``resources`` names that have one: simple
-        symbol fonts, and fonts pypdf 6.21.4 reads otherwise than the PDF encodes them (pdffonts.mapped_font)."""
-        fonts = resolved(resources.get('/Font'))
-        if not isinstance(fonts, DictionaryObject):
-            return {}
+    def mapped_fonts(self, resources, changes=()) -> dict:
+        """{font name: the font extraction reads in its place} for the fonts ``resources`` names that have one: simple
+        symbol fonts and fonts pypdf 6.21.4 reads otherwise than the PDF encodes them (their copy, pdffonts.mapped_font),
+        and fonts pypdf cannot build (pdffonts.unread_font: all their text is drawn in it, and pypdf would fail on the
+        font, not reading the rest of the stream's text). With unread_font under its own name when ``changes`` (a
+        walk's) drew text in it."""
         mapped = {}
-        for key in list(fonts):
-            font = resolved(fonts.raw_get(key))
-            if not isinstance(font, DictionaryObject):
-                continue
-            if id(font) not in self.font_copies and resolved(font.get('/Subtype')) == '/Type0':
+        for key, font in self.fonts_of(resources):
+            if not self.readings.known(font) and subtype_of(font) == '/Type0':
                 # a composite font no text here used: pypdf skips it if it cannot build it (a /W it fails on), so it
                 # is not built a second time (a large ToUnicode makes that costly on every page)
                 continue
-            if self.copy_of(font) is not None:
-                mapped[key] = self.font_copies[id(font)]
+            copy, usable = self.readings.reading(font)
+            if not usable:
+                mapped[key] = self.readings.unread
+            elif copy is not None:
+                mapped[key] = copy
+        if any(isinstance(change, tuple) and change[1] == UNREAD_FONT for change in changes):
+            mapped[UNREAD_FONT] = self.readings.unread
         return mapped
 
 
 def is_true(value) -> bool:
     value = resolved(value)
     return getattr(value, 'value', value) is True
+
+
+def subtype_of(font) -> object:
+    """A font dictionary's /Subtype, or None when pypdf cannot parse it."""
+    try:
+        return resolved(font.get('/Subtype'))
+    except (MemoryError, RecursionError):
+        raise
+    except Exception:
+        return None
+
+
+def own_text(xobject, defaults=None) -> bool:
+    """Whether pypdf reads text from a form XObject at all: it reads none from one whose /Resources is missing, not a
+    dictionary or empty (it uses no resources it would inherit). ``defaults``: the resources an annotation's reader
+    gives an appearance that has no dictionary of its own (the form's /DR, pdfannots)."""
+    try:
+        own = resolved(xobject.get('/Resources'))
+    except (MemoryError, RecursionError):
+        raise
+    except Exception:
+        return False
+    if not isinstance(own, DictionaryObject):
+        own = defaults
+    return isinstance(own, DictionaryObject) and len(own) > 0
+
+
+def readings_for(reader) -> FontReadings:
+    """The document's FontReadings, kept on its reader (so it lives as long as the document is read, and no longer):
+    each font is worked out once for all of its pages and annotation appearances."""
+    readings = getattr(reader, '_cpt_studio_font_readings', None)
+    if not isinstance(readings, FontReadings):
+        readings = FontReadings()
+        try:
+            reader._cpt_studio_font_readings = readings
+        except Exception:  # a reader that keeps no attributes: this walker's own
+            pass
+    return readings
 
 
 def pixel_count(width, height) -> int:
@@ -1635,8 +1754,14 @@ def with_replacements(resources, replaced: dict, fonts: dict | None = None) -> D
         entries[NameObject(name)] = form
     copy[NameObject('/XObject')] = entries
     if fonts:
-        font_table = resolved(resources.get('/Font'))
-        names = DictionaryObject({NameObject(key): font_table.raw_get(key) for key in font_table})
+        try:
+            font_table = resolved(resources.get('/Font'))
+        except (MemoryError, RecursionError):
+            raise
+        except Exception:  # a font table pypdf cannot parse: only what is added here is read
+            font_table = None
+        names = DictionaryObject({NameObject(key): font_table.raw_get(key) for key in font_table}) \
+            if isinstance(font_table, DictionaryObject) else DictionaryObject()
         for name, font in fonts.items():
             names[NameObject(name)] = font
         copy[NameObject('/Font')] = names
@@ -1686,8 +1811,10 @@ class VisibleForm:
 
 
 def visible_form(xobject, reader, optional: OptionalContent, resources) -> VisibleForm:
+    """``resources``: what the reader gives an appearance with no resources of its own (the form's /DR, or None)."""
     walker = _Walker(reader, optional, (0.0, 0.0, 0.0, 0.0))
-    form = walker.form(xobject, resources if isinstance(resources, DictionaryObject) else DictionaryObject(), 0)
+    defaults = resources if isinstance(resources, DictionaryObject) else DictionaryObject()
+    form = walker.form(xobject, defaults, 0, own_text(xobject, defaults))
     target = form.replacement if form.replacement is not None else xobject
     return VisibleForm(target, walker.content.damaged, walker.content.hidden_text, list(form.placements),
                        list(walker.content.images), tuple(form.covers), walker.content.unreadable_text)

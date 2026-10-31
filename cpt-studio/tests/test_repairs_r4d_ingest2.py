@@ -1024,23 +1024,20 @@ class PaddingInsideAStringTests(unittest.TestCase):
 
     def test_a_next_column_in_a_font_the_page_does_not_have_is_unread(self):
         """The next column in MAC's text object set in a font the page's resources do not hold: pypdf draws it in its
-        stand-in font, U+FFFD for every byte, so the page's text layer is not read at all (cpt-studio-ingest@4,
-        ACCURACY-RESIDUALS.md "pypdf 6.21.4"): the page has no usable text layer, and goes to OCR or is named. Until
-        ingest@3 the layer was read with '[?] MAC' and the column as U+FFFD; '☐ MAC' was never written."""
-        from studio.ingest import extract_document
-        from tests.test_ingest import FakeOcr
+        stand-in font, U+FFFD for every byte, so that operator is dropped and the page named (cpt-studio-ingest@4,
+        ACCURACY-RESIDUALS.md "pypdf 6.21.4", round 2: the operator, not the page, is the unit). The rest of the
+        layer is read. MAC's unchecked box is on a row holding that unread text, which may run on from MAC: '[?] MAC',
+        as until ingest@3 (when the column was read as U+FFFD); an empty box before MAC is never written (round 1 of
+        ingest@4 left the page unread)."""
+        from studio.ingest.pdf import UNREADABLE_TEXT
         from tests.test_repairs_ingest_pdf import esc
-        data = column_row(tail=f'[(MAC) -3000] TJ /XX 11 Tf ({esc(SENTENCE)}) Tj')
-        result = extracted(data)
-        self.assertEqual((result.status, result.text), ('failed', ''))
-        self.assertEqual((result.messages[0], result.messages[-1]),
-                         ('Page 1 has no usable text layer and OCR is not available on this server.',
-                          'No text could be read from the PDF.'))
-        with FakeOcr() as fake:
-            ocred = extract_document(data, 'synthetic.pdf', 'application/pdf', ocr=fake.tools)
-        self.assertEqual((ocred.status, ocred.ocr_pages), ('ok', (1,)))
-        self.assertNotIn('☐ MAC', ocred.text)
-        self.assertNotIn('\ufffd', ocred.text)
+        result = extracted(column_row(tail=f'[(MAC) -3000] TJ /XX 11 Tf ({esc(SENTENCE)}) Tj'))
+        self.assertEqual((result.status, result.messages[0]),
+                         ('partial', UNREADABLE_TEXT.format(pages='Page 1', has='has')))
+        self.assertIn(f'{UNREAD} MAC', result.text)
+        self.assertNotIn('\u2610 MAC', result.text)
+        self.assertNotIn(SENTENCE, result.text)
+        self.assertNotIn('\ufffd', result.text)
 
     def test_word_spaces_inside_the_string_keep_the_glyph(self):
         """Controls: padding no wider than 0.6 em past one word space at its own width (two extra Helvetica spaces,

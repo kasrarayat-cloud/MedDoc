@@ -16,35 +16,49 @@
   ToUnicode and no CIDToGIDMap stream is written in glyph indices, which name
   no character; pypdf would show them as arbitrary characters. Its text is
   counted and dropped.
-- Private-use and control characters from any font name no character
+- NUL, private-use and control characters from any font name no character
   either; ``undecodable`` says which characters the caller counts and drops.
 - **Glyph names pypdf reads by its own rule** (``mapped_font``). pypdf 6.21.4
   reads a /Differences or built-in glyph name that is not in the Adobe Glyph
   List and starts with 'u' by int(name, 16): 'u20' as a space, 'uni0000' as
   NUL, 'uF00C' as a private-use character, and a name too long for a
-  character fails the font. A text font holding such a name is replaced,
-  for extraction only, by a copy whose ToUnicode gives each of those codes
-  what the name stands for under the Adobe Glyph List specification ('uni'
-  and groups of four upper-case hex digits, or 'u' and four to six), in the
-  precedence PDF 32000-1 9.6.6 gives: the font's own ToUnicode, then
-  /Differences, then the dictionary's named encoding, then the font
-  program's built-in encoding. A name that stands for no character (another
-  form, a control or private-use code, a noncharacter) is counted and
-  dropped. Every other code reads exactly as pypdf reads it.
+  character fails the font. A text font holding such a name, or whose
+  program pypdf cannot read for its built-in encoding, is replaced, for
+  extraction only, by a copy whose ToUnicode gives every code what the PDF
+  encodes, in the precedence PDF 32000-1 9.6.6 and 9.10.2 give: the font's
+  own ToUnicode, then /Differences, then the dictionary's named encoding,
+  then the font program's built-in encoding (where no named encoding
+  replaces it). A glyph name is read by the Adobe Glyph List specification
+  (section 2: the list's own entry; else the name up to its first period,
+  each '_' component a name the list holds, 'uni' and groups of four
+  upper-case hex digits, or 'u' and four to six). A name that stands for no
+  character (no component maps, a control or private-use code, a
+  noncharacter), and a ToUnicode entry that gives none (an empty
+  destination), are counted and dropped.
 - **Fonts pypdf 6.21.4 no longer builds** (a /BaseEncoding that is not a
   name, /W entries that are not widths): the copy extraction reads leaves
   that entry out, as pypdf 6.21.2 ignored it, so the text is read and is not
-  replaced by U+FFFD for every byte.
+  replaced by U+FFFD for every byte. A composite font whose /Encoding is an
+  embedded CMap of two-byte codes only (fpdf2's CID-keyed CFF fonts) is read
+  through a copy with the Identity CMap and its widths by code, so its
+  ToUnicode decides every code.
 - **Text pypdf cannot read as the PDF encodes it** (``decodes``): a composite
-  font whose CMap pypdf does not implement (it reads the bytes as UTF-16BE),
-  or a string its CMap cannot decode (an odd byte count in a two-byte font).
-  The page reader treats such text as unreadable rather than read pypdf's
-  U+FFFD and mojibake as text.
+  font whose CMap pypdf does not implement (it reads the bytes as UTF-16BE,
+  which is what a UCS-2 or UTF-16 CMap encodes and nothing else does), or a
+  string its CMap cannot decode (an odd byte count in a two-byte font). The
+  page reader draws such text, for extraction only, in ``unread_font``, so
+  that the operator showing it is dropped and named rather than read as
+  pypdf's U+FFFD and mojibake.
+- ``FontReadings`` works each of these out once per font and font program for
+  a whole document, and a font whose inspection fails (pypdf's structure
+  limits among the reasons) is a font whose text cannot be read.
 
 Importable without Django (the extraction child imports it).
 """
 from __future__ import annotations
 
+import bisect
+import math
 import re
 
 from pypdf._cmap import _predefined_cmap
@@ -74,11 +88,11 @@ def resolved(value):
 
 
 def undecodable(char: str) -> bool:
-    """A character no font maps a glyph to: a control code (other than tab and line ends), private use, or a
-    noncharacter (U+FDD0-U+FDEF, and the last two code points of every plane, U+FFFF among them). NUL is left to
-    canonicalisation, which removes it."""
+    """A character no font maps a glyph to: NUL or another control code (other than tab and line ends), private use,
+    or a noncharacter (U+FDD0-U+FDEF, and the last two code points of every plane, U+FFFF among them). A ToUnicode
+    entry <0000> is what producers write for a glyph with no character (pdfkit for .notdef)."""
     code = ord(char)
-    return ((0 < code < 0x20 and char not in '\t\n\r') or 0x7F <= code <= 0x9F or 0xE000 <= code <= 0xF8FF
+    return ((code < 0x20 and char not in '\t\n\r') or 0x7F <= code <= 0x9F or 0xE000 <= code <= 0xF8FF
             or code >= 0xF0000 or 0xFDD0 <= code <= 0xFDEF or (code & 0xFFFE) == 0xFFFE)
 
 
@@ -146,24 +160,26 @@ def glyph_for(code: int, shown: str | None, table: dict[int, str], named: str | 
     return table.get(code, UNMAPPED)
 
 
-MAX_DIFFERENCES = 4096  # entries of an /Encoding /Differences array read (a meaningful one has at most 256 names)
 _UNI_NAME = re.compile(r'uni([0-9A-F]{4})|u([0-9A-F]{4,6})')
 
 
 def differences(font: DictionaryObject) -> dict[int, str]:
-    """{code: glyph name} for the codes a simple font's /Encoding /Differences re-encodes."""
+    """{code: glyph name} for the codes a simple font's /Encoding /Differences re-encodes, read as pypdf reads the
+    array, so that no name pypdf applies is missed: every item (pypdf's parser bounds an array's length), a number
+    setting the next code (0 before any), any other item taking the next code, and a code from -256 to -1 standing for
+    the code 256 above it (pypdf indexes its 256-entry table with it)."""
     encoding = resolved(font.get('/Encoding'))
     items = resolved(encoding.get('/Differences')) if isinstance(encoding, DictionaryObject) else None
     names: dict[int, str] = {}
-    code = None
-    for item in list(items)[:MAX_DIFFERENCES] if isinstance(items, (list, ArrayObject)) else []:
-        item = resolved(item)
-        if isinstance(item, NameObject):
-            if code is not None and 0 <= code <= 0xFF:
-                names[code] = str(item).removeprefix('/')
-            code = None if code is None else code + 1
-        elif isinstance(item, int) and not isinstance(item, bool):
+    code = 0
+    for item in items if isinstance(items, (list, ArrayObject)) else []:
+        if isinstance(item, int) and not isinstance(item, bool):  # as pypdf: a number item, not a reference to one
             code = int(item)
+            continue
+        item = resolved(item)
+        if isinstance(item, NameObject) and -0x100 <= code <= 0xFF:
+            names[code % 0x100] = str(item).removeprefix('/')
+        code += 1
     return names
 
 
@@ -192,20 +208,21 @@ def mapped_font(font) -> DictionaryObject | None:
     return font_reading(font)[0]
 
 
-def font_reading(font) -> tuple[DictionaryObject | None, bool]:
+def font_reading(font, programs: dict | None = None, built: Font | None = None) -> tuple[DictionaryObject | None, bool]:
     """(the copy of ``font`` extraction reads in its place, or None; whether pypdf builds what extraction reads for
     it: the copy, or the font itself). A font pypdf cannot build is drawn by its extractor in a stand-in font that
-    reads every byte as U+FFFD."""
+    reads every byte as U+FFFD. ``programs``: as builtin_encoding; ``built``: pypdf's Font of a composite ``font``,
+    when it was built already (it is not built again)."""
     if not isinstance(font, DictionaryObject):
         return None, False
     subtype = resolved(font.get('/Subtype'))
     if subtype == '/Type0':
-        return _composite_copy(font)
+        return _composite_copy(font, built)
     if symbol_glyphs(font) is not None and subtype in SIMPLE_FONTS:
         copy = mapped_simple_font(font)
         return copy, copy is not None
     if subtype in SIMPLE_FONTS or subtype == '/Type3':
-        return _text_font_copy(font)
+        return _text_font_copy(font, programs)
     try:
         Font.from_font_resource(font)
         return None, True
@@ -254,10 +271,10 @@ _AGL_U = re.compile(r'u([0-9A-F]{4,6})')
 MAX_FONT_PROGRAM_BYTES = 4 * 1024 * 1024  # a Type 1 program's clear text read for its built-in encoding
 
 
-def agl_text(name: str) -> str | None:
-    """The characters the glyph ``name`` stands for under the Adobe Glyph List specification: a name the list holds,
-    'uni' and groups of four upper-case hex digits each naming a character outside the surrogates, or 'u' and four
-    to six naming one; None for any other name (other digit counts, lower case, '0x', '+', '_', a suffix)."""
+def _agl_component(name: str) -> str:
+    """What one component of a glyph name maps to (Adobe Glyph List specification, section 2, step 3): a name the
+    list holds; 'uni' and groups of four upper-case hex digits each naming a character outside the surrogates; 'u'
+    and four to six naming one; '' for anything else (other digit counts, lower case, '0x', '+')."""
     known = adobe_glyphs.get('/' + name)
     if known is not None:
         return known
@@ -265,17 +282,28 @@ def agl_text(name: str) -> str | None:
     if match:
         digits = match.group(1)
         values = [int(digits[start:start + 4], 16) for start in range(0, len(digits), 4)]
-        return None if any(0xD800 <= value <= 0xDFFF for value in values) else ''.join(map(chr, values))
+        return '' if any(0xD800 <= value <= 0xDFFF for value in values) else ''.join(map(chr, values))
     match = _AGL_U.fullmatch(name)
     if match:
         value = int(match.group(1), 16)
-        return None if value > 0x10FFFF or 0xD800 <= value <= 0xDFFF else chr(value)
-    return None
+        return '' if value > 0x10FFFF or 0xD800 <= value <= 0xDFFF else chr(value)
+    return ''
+
+
+def agl_text(name: str) -> str | None:
+    """The characters the glyph ``name`` stands for under the Adobe Glyph List specification (section 2): the list's
+    own entry for the whole name; else the name up to its first period ('uni2610.alt', 'u2610.001'), split at '_'
+    into components ('uni2610_uni2612'), each mapped by ``_agl_component`` and joined; None when that is nothing."""
+    known = adobe_glyphs.get('/' + name)
+    if known is not None:
+        return known
+    return ''.join(_agl_component(part) for part in name.split('.', 1)[0].split('_')) or None
 
 
 def pypdf_reads_by_number(name: str) -> bool:
-    """Whether pypdf 6.21.4 reads the glyph ``name`` by its own number rule (a name outside the Adobe Glyph List that
-    starts with 'u': int(rest, 16)), which pypdf 6.21.2 did not apply to /Differences, nor to 'u' names anywhere."""
+    """Whether pypdf 6.21.4 may read the glyph ``name`` otherwise than the Adobe Glyph List specification: a name
+    outside its glyph list that starts with 'u', which it reads as int(rest, 16) where that parses (pypdf 6.21.2 did
+    not apply that rule to /Differences, nor to 'u' names anywhere) and else as the literal name."""
     return name.startswith('u') and '/' + name not in adobe_glyphs
 
 
@@ -283,16 +311,28 @@ def _names_no_character(text: str) -> bool:
     return not text or any(char == '\x00' or undecodable(char) for char in text)
 
 
-def builtin_encoding(font: DictionaryObject) -> dict[int, str]:
+def builtin_encoding(font: DictionaryObject, programs: dict | None = None) -> dict[int, str]:
     """{code: glyph name} of the built-in encoding pypdf reads from a Type 1 font program (/FontFile) when the font
     has no ToUnicode: the 'dup <code> /<name> put' lines of its clear text after /Encoding, as pypdf parses them,
-    without its failures (a name too long for a character, bytes that are not UTF-8, a code outside 0-255)."""
+    without its failures (a name too long for a character, bytes that are not UTF-8, a code outside 0-255).
+    ``programs`` ({id(program): (program, names)}, kept by FontReadings) holds the program's names once read: every
+    font dictionary that shares the program, on every page and annotation, reads them from there."""
     if '/ToUnicode' in font or resolved(font.get('/Subtype')) != '/Type1':
         return {}
     descriptor = resolved(font.get('/FontDescriptor'))
     program = resolved(descriptor.get('/FontFile')) if isinstance(descriptor, DictionaryObject) else None
     if not isinstance(program, StreamObject):
         return {}
+    known = programs.get(id(program)) if programs is not None else None
+    if known is not None and known[0] is program:
+        return known[1]
+    names = _program_names(program)
+    if programs is not None:
+        programs[id(program)] = (program, names)  # the program is kept with its names: its id stays its own
+    return names
+
+
+def _program_names(program: StreamObject) -> dict[int, str]:
     try:
         data = program.get_data()[:MAX_FONT_PROGRAM_BYTES]
     except (MemoryError, RecursionError):
@@ -357,49 +397,53 @@ def buildable(font: DictionaryObject) -> tuple[Font | None, DictionaryObject | N
     return None, None
 
 
-def _text_font_copy(font: DictionaryObject) -> tuple[DictionaryObject | None, bool]:
+def _text_font_copy(font: DictionaryObject, programs: dict | None = None) -> tuple[DictionaryObject | None, bool]:
     """(a copy of a simple text font that pypdf reads as the PDF encodes it (see the module docstring), or None when
-    pypdf reads the font itself so; whether pypdf builds what extraction reads), as font_reading."""
+    pypdf reads the font itself so; whether pypdf builds what extraction reads), as font_reading.
+
+    The copy is made for a font holding a glyph name pypdf 6.21.4 reads by its own rule, or whose program pypdf
+    cannot read for the built-in encoding its codes come from: every code then reads as the source encodes it
+    (``by_source``), which also keeps a /Differences character from being looked up again as another code's. A font
+    whose own ToUnicode gives some code no character (an empty destination: pypdf writes nothing for the glyph) gets
+    a copy in which that code is the private-use mark that is counted and dropped, every other code as pypdf reads
+    it."""
     names = differences(font)
-    builtin = builtin_encoding(font)
+    builtin = builtin_encoding(font, programs)
     by_number = {code for code, name in names.items() if pypdf_reads_by_number(name)}
     by_number |= {code for code, name in builtin.items() if pypdf_reads_by_number(name)}
     original, base = buildable(font)
     if original is None:
         return None, False
-    if not by_number:
-        if base is font:
-            return None, True
-        if builtin and resolved(base.get('/FontDescriptor')) is not resolved(font.get('/FontDescriptor')):
-            by_number = set(builtin)  # pypdf cannot read the program its codes come from: read them here
-        else:
-            return base, True
-    has_to_unicode = '/ToUnicode' in font
+    # True when pypdf cannot read the font program, so the codes its built-in encoding names would be read as
+    # StandardEncoding guesses (pypdf reads the copy without the program).
+    lost = resolved(base.get('/FontDescriptor')) is not resolved(font.get('/FontDescriptor'))
+    own = original.character_map if '/ToUnicode' in font else {}  # the font's own ToUnicode, by the code's character
+    by_source = bool(by_number) or (lost and bool(builtin))
+    if not by_source and '' not in own.values():
+        return (None, True) if base is font else (base, True)
     encoding = resolved(font.get('/Encoding'))
     named = encoding if isinstance(encoding, NameObject) else \
         resolved(encoding.get('/BaseEncoding')) if isinstance(encoding, DictionaryObject) else None
     table = charset_encoding.get(named) if isinstance(named, NameObject) else None
     pypdf_encoding = original.encoding if isinstance(original.encoding, dict) else {}
-    # True when pypdf could not read the font program, so the built-in names are read here as pypdf reads them.
-    lost = resolved(base.get('/FontDescriptor')) is not resolved(font.get('/FontDescriptor'))
 
     def read(code: int) -> str:
-        if code not in by_number:
+        mine = own.get(chr(code))
+        if mine is not None:  # the font's own ToUnicode decides (PDF 32000-1 9.10.2); '' gives no character
+            return mine if mine and not _names_no_character(mine) else UNMAPPED
+        if not by_source:
             # as pypdf reads it: its encoding, then its character map, character by character
             text = ''.join(original.character_map.get(char, char) for char in pypdf_encoding.get(code, chr(code)))
             return text or UNMAPPED
-        own = original.character_map.get(chr(code)) if has_to_unicode else None
-        if own:
-            return own
-        difference, inbuilt = names.get(code), builtin.get(code)
-        if difference is not None and (pypdf_reads_by_number(difference) or not lost or inbuilt is None):
+        difference = names.get(code)
+        if difference is not None:
             text = agl_text(difference)  # /Differences decides (PDF 32000-1 9.6.6.1)
-        elif inbuilt is not None and pypdf_reads_by_number(inbuilt) and table is not None:
-            text = table[code]  # the dictionary's named encoding decides over the program's built-in one
-        elif inbuilt is not None:
-            text = agl_text(inbuilt)  # the built-in encoding, where it decides (or pypdf would have read it)
+        elif table is not None:
+            text = table[code]  # the dictionary's named encoding, which replaces the program's built-in one
+        elif code in builtin:
+            text = agl_text(builtin[code])  # the program's built-in encoding is the base (9.6.6.2, Table 112)
         else:
-            text = table[code] if table is not None else None
+            text = pypdf_encoding.get(code, chr(code))  # a code the program does not name: as pypdf's base gives it
         return UNMAPPED if text is None or _names_no_character(text) else text
 
     try:
@@ -414,18 +458,28 @@ def _text_font_copy(font: DictionaryObject) -> tuple[DictionaryObject | None, bo
         return (None, True) if base is font else (base, True)
 
 
-def _composite_copy(font: DictionaryObject) -> tuple[DictionaryObject | None, bool]:
-    """A copy of a composite font whose descendant's /W keeps only width entries, when pypdf 6.21.4 cannot build the
-    font itself because of the others (a string or a name where a width list belongs: pypdf 6.21.2 kept them as
-    widths of codes the text rarely uses); None when pypdf builds the font, or cannot build the copy either; as
-    font_reading."""
-    try:
-        Font.from_font_resource(font)
-        return None, True
-    except (MemoryError, RecursionError):
-        raise
-    except Exception:
-        pass
+def _composite_copy(font: DictionaryObject, built: Font | None = None) -> tuple[DictionaryObject | None, bool]:
+    """A copy of a composite font: read with the Identity CMap when its /Encoding is an embedded CMap of two-byte codes
+    with a ToUnicode (``_identity_copy``); with its ToUnicode's empty destinations as the private-use mark that is
+    counted and dropped (``_marked_copy``); or with its descendant's /W keeping only width entries, when pypdf 6.21.4
+    cannot build the font itself because of the others (a string or a name where a width list belongs: pypdf 6.21.2
+    kept them as widths of codes the text rarely uses). None when pypdf builds the font and reads it as the PDF
+    encodes it, or cannot build a copy either; as font_reading."""
+    encoding = resolved(font.get('/Encoding'))
+    if isinstance(encoding, StreamObject) and '/ToUnicode' in font:
+        identity = _identity_copy(font, encoding)
+        if identity is not None:
+            return identity, True
+    if built is None:
+        try:
+            built = Font.from_font_resource(font)
+        except (MemoryError, RecursionError):
+            raise
+        except Exception:
+            built = None
+    if built is not None:
+        marked = _marked_copy(font, built)
+        return marked, True
     descendants = resolved(font.get('/DescendantFonts'))
     if not isinstance(descendants, (list, ArrayObject)) or not descendants:
         return None, False
@@ -477,25 +531,25 @@ def _widths_only(entries) -> ArrayObject:
 
 
 def composite_codec(font) -> str | None:
-    """The codec pypdf decodes a composite font's strings with when it implements the font's CMap: its predefined
-    table, or a UCS-2 CMap; None for any other (another predefined CMap, an embedded CMap stream, a dictionary or no
-    /Encoding), whose bytes pypdf reads as UTF-16BE, which is not what they encode."""
+    """The codec pypdf decodes a composite font's strings with when that is what the font's CMap encodes: its
+    predefined table, or UTF-16BE for a UCS-2 or UTF-16 CMap (pypdf reads every CMap it does not implement as
+    UTF-16BE, which is exactly what those encode: MuPDF's /UniKS-UTF16-H among them); None for any other (another
+    predefined CMap, an embedded CMap stream, a dictionary or no /Encoding)."""
     encoding = resolved(font.get('/Encoding'))
     if not isinstance(encoding, NameObject):
         return None
     if encoding in _predefined_cmap:
         return _predefined_cmap[encoding]
-    return 'utf-16-be' if '-UCS2-' in encoding else None
+    return 'utf-16-be' if '-UCS2-' in encoding or '-UTF16-' in encoding else None
 
 
-def decodes(font, string: bytes) -> bool:
-    """Whether pypdf reads ``string`` shown in ``font`` (a font dictionary) as the font encodes it. A simple font maps
-    each byte through a code table, unless its /Encoding names a CMap. A glyph-index font's codes are dropped by the
-    page reader, so whatever pypdf makes of them is not read. Any other composite font needs a CMap pypdf implements
-    under which the whole string decodes: pypdf 6.21.2 refused a string that does not (or wrote lone surrogates),
-    and 6.21.4 writes U+FFFD and mojibake."""
-    if not string:
-        return True
+def decode_plan(font) -> bool | str:
+    """How the strings a font shows are judged (``decodes``), worked out once per font: True when pypdf reads every
+    string as the font encodes it, False when it reads none so, else the codec under which a string must decode. A
+    simple font maps each byte through a code table, unless its /Encoding names a CMap. A glyph-index font's codes are
+    dropped by the page reader, so whatever pypdf makes of them is not read. Any other composite font needs a CMap
+    pypdf implements under which the whole string decodes: pypdf 6.21.2 refused a string that does not (or wrote lone
+    surrogates), and 6.21.4 writes U+FFFD and mojibake."""
     encoding = resolved(font.get('/Encoding'))
     if resolved(font.get('/Subtype')) != '/Type0':
         return not (isinstance(encoding, str) and encoding not in charset_encoding
@@ -503,13 +557,166 @@ def decodes(font, string: bytes) -> bool:
     if kind(font) == 'glyph-index':
         return True
     codec = composite_codec(font)
-    if codec is None:
-        return False
+    return False if codec is None else codec
+
+
+def decodes(font, string: bytes, plan: bool | str | None = None) -> bool:
+    """Whether pypdf reads ``string`` shown in ``font`` (a font dictionary) as the font encodes it (``plan``: the
+    font's decode_plan, when worked out already). A UTF-16BE string decodes when its byte count is even: a lone
+    surrogate passes, as pypdf passes it, and the page reader replaces and names it."""
+    if not string:
+        return True
+    plan = decode_plan(font) if plan is None else plan
+    if isinstance(plan, bool):
+        return plan
+    if plan == 'utf-16-be':
+        return len(string) % 2 == 0
     try:
-        string.decode(codec, 'surrogatepass')
+        string.decode(plan, 'surrogatepass')
     except UnicodeDecodeError:
         return False
     return True
+
+
+# --- reading composite fonts through a copy --------------------------------------------------------------------------
+
+MAX_EMBEDDED_CMAP_BYTES = 1 << 20  # an embedded CMap read for its code lengths and CIDs
+MAX_CMAP_CODES = 0x10000  # two-byte codes: at most this many, and four times as many range steps
+MAX_WIDTH_STEPS = 1 << 20  # /W entries matched against the CIDs a copy needs
+_CMAP_SECTION = re.compile(rb'begin(codespacerange|cidchar|cidrange)(.*?)end\1', re.S)
+_CMAP_TOKEN = re.compile(rb'<[0-9A-Fa-f\s]*>|[-+]?\d+')
+
+
+def _two_byte_code(token: bytes) -> int | None:
+    digits = re.sub(rb'\s', b'', token[1:-1]) if token.startswith(b'<') else b''
+    return int(digits, 16) if len(digits) == 4 else None
+
+
+def _cmap_codes(cmap: StreamObject) -> dict[int, int] | None:
+    """{code: CID} of an embedded CMap every code space range of which is two bytes long; None for any other (another
+    code length, a CMap that uses another, one too large to read here, a malformed section)."""
+    try:
+        data = cmap.get_data()
+    except (MemoryError, RecursionError):
+        raise
+    except Exception:
+        return None
+    if len(data) > MAX_EMBEDDED_CMAP_BYTES or b'usecmap' in data:
+        return None
+    spaces, codes, steps = 0, {}, 0
+    for section, body in _CMAP_SECTION.findall(data):
+        tokens = _CMAP_TOKEN.findall(body)
+        if section == b'codespacerange':
+            if not tokens or len(tokens) % 2 or any(_two_byte_code(token) is None for token in tokens):
+                return None
+            spaces += len(tokens) // 2
+            continue
+        width = 2 if section == b'cidchar' else 3
+        if len(tokens) % width:
+            return None
+        for start in range(0, len(tokens), width):
+            group = tokens[start:start + width]
+            low, high = _two_byte_code(group[0]), _two_byte_code(group[width - 2])
+            if low is None or high is None or high < low or group[-1].startswith(b'<'):
+                return None
+            steps += high - low + 1
+            if steps > 4 * MAX_CMAP_CODES:
+                return None
+            for offset in range(high - low + 1):
+                codes[low + offset] = int(group[-1]) + offset
+    return codes if spaces else None
+
+
+def _cid_widths(entries, needed: set) -> dict[int, float]:
+    """{CID: width} for the CIDs in ``needed`` that a CID font's /W gives (its width entries, as _widths_only),
+    matched through at most MAX_WIDTH_STEPS steps (past them a CID keeps the default width)."""
+    items, wanted = list(_widths_only(entries)), sorted(needed)
+    widths, index, steps = {}, 0, 0
+    while index < len(items) and steps <= MAX_WIDTH_STEPS:
+        first = int(items[index])
+        if isinstance(items[index + 1], ArrayObject):
+            run = items[index + 1]
+            for cid in wanted[bisect.bisect_left(wanted, first):bisect.bisect_right(wanted, first + len(run) - 1)]:
+                widths[cid] = float(run[cid - first])
+                steps += 1
+            index += 2
+        else:
+            last, width = int(items[index + 1]), float(items[index + 2])
+            for cid in wanted[bisect.bisect_left(wanted, first):bisect.bisect_right(wanted, last)]:
+                widths[cid] = width
+                steps += 1
+            index += 3
+        steps += 1
+    return widths
+
+
+def _w_array(entries) -> ArrayObject:
+    """A /W array giving each (code, width) of ``entries`` (sorted by code), consecutive codes in one list."""
+    out, start, run = ArrayObject(), None, []
+    for code, width in list(entries) + [(None, None)]:
+        if run and code == start + len(run):
+            run.append(width)
+            continue
+        if run:
+            out.extend([NumberObject(start), ArrayObject(FloatObject(value) for value in run)])
+        start, run = code, [width]
+    return out
+
+
+def _identity_copy(font: DictionaryObject, cmap: StreamObject) -> DictionaryObject | None:
+    """A copy of a composite font whose /Encoding is an embedded CMap of two-byte codes (fpdf2 writes one for a
+    CID-keyed CFF font), read with the Identity CMap: each code stays two bytes, the font's ToUnicode gives its
+    characters, and the descendant's widths are given by code (through the CMap's CIDs), so pypdf measures the text as
+    the font draws it. pypdf reads such a font one byte a code (StandardEncoding), which is right only by accident, for
+    codes below 0x100 its ToUnicode holds. None when the CMap is not that, or pypdf cannot build the copy."""
+    codes = _cmap_codes(cmap)
+    descendants = resolved(font.get('/DescendantFonts'))
+    if codes is None or not isinstance(descendants, (list, ArrayObject)) or len(descendants) != 1:
+        return None
+    descendant = resolved(descendants[0])
+    if not isinstance(descendant, DictionaryObject):
+        return None
+    try:
+        widths = _cid_widths(resolved(descendant.get('/W')), set(codes.values()))
+        inner = DictionaryObject({NameObject(key): descendant.raw_get(key) for key in descendant})
+        inner[NameObject('/W')] = _w_array(sorted((code, widths[cid]) for code, cid in codes.items() if cid in widths))
+        whole = DictionaryObject({NameObject(key): font.raw_get(key) for key in font})
+        vertical = resolved(cmap.get('/WMode')) == 1
+        whole[NameObject('/Encoding')] = NameObject('/Identity-V' if vertical else '/Identity-H')
+        whole[NameObject('/DescendantFonts')] = ArrayObject([inner])
+        Font.from_font_resource(whole)
+        return whole
+    except (MemoryError, RecursionError):
+        raise
+    except Exception:
+        return None
+
+
+def _marked_copy(font: DictionaryObject, built: Font) -> DictionaryObject | None:
+    """A copy of a composite font whose ToUnicode gives some code no character (an empty destination: pypdf writes
+    nothing for the glyph, so a mark alone in typed brackets would leave an empty box): its ToUnicode followed by
+    entries that give each such code the private-use mark that is counted and dropped. None when no code has an empty
+    destination, or the copy does not read so."""
+    empty = sorted(ord(key) for key, value in built.character_map.items()
+                   if value == '' and isinstance(key, str) and len(key) == 1)
+    if not empty:
+        return None
+    try:
+        data = resolved(font.get('/ToUnicode')).get_data()
+        mark = UNMAPPED.encode('utf-16-be').hex().upper()
+        entries = [f'<{code:04X}> <{mark}>' for code in empty]
+        added = ''.join(f'\n{len(block)} beginbfchar\n' + '\n'.join(block) + '\nendbfchar'
+                        for block in (entries[start:start + 100] for start in range(0, len(entries), 100)))
+        stream = DecodedStreamObject()
+        stream.set_data(data + added.encode('ascii') + b'\n')
+        copy = DictionaryObject({NameObject(key): font.raw_get(key) for key in font})
+        copy[NameObject('/ToUnicode')] = stream
+        marked = Font.from_font_resource(copy).character_map
+        return copy if all(marked.get(chr(code)) == UNMAPPED for code in empty) else None
+    except (MemoryError, RecursionError):
+        raise
+    except Exception:
+        return None
 
 
 def _with_to_unicode(font: DictionaryObject, glyphs: dict[int, str], dropped: tuple) -> DictionaryObject:
@@ -557,26 +764,158 @@ def _copy_widths(original: Font, font: DictionaryObject, copy: DictionaryObject)
 
 
 _PAD = re.compile(BOX_PAD)
+PAD_CHARS = frozenset(chr(code) for code in range(0x3001) if _PAD.fullmatch(chr(code)))  # BOX_PAD's characters
+
+
+def not_valid_text(char: str) -> bool:
+    """Whether ``char`` is text that is not valid: U+FFFD (a ToUnicode writer's 'no character', pypdf's replacement)
+    or a lone surrogate (shown as U+FFFD). It is kept and named, but alone in a typed box it is no box state."""
+    return char == '\ufffd' or '\ud800' <= char <= '\udfff'
+
+
+class BoxGuard:
+    """The box contract's guard, read item by item in order: a typed box whose only content is unread glyphs (ones
+    that name no character, or text that is not valid) and padding is found ('[' or '(' and padding, the unread
+    glyphs, padding and ']' or ')', on one line), so that its reader writes it as its brackets round exactly '?'.
+    Dropped, a glyph that names no character would leave '[]' or '( )', which routing reads as an unchecked box,
+    '[\ufffd]' reads as a mark that checks it, and routing does not hold '[? ]'; written so, the box is the contract's
+    unread mark ('[?]'), held. Only the open box's first unread glyph is kept (its token), so reading a page of any
+    length holds one position at a time."""
+    __slots__ = ('opener', 'pending')
+
+    def __init__(self):
+        self.opener = False  # the last character that is not padding opened a box
+        self.pending = None  # the token of the open box's first unread glyph
+
+    def unread(self, token) -> bool:
+        """An unread glyph at ``token``: whether it is the first in an open box (its token is then pending)."""
+        if self.opener and self.pending is None:
+            self.pending = token
+            return True
+        return False
+
+    def text(self, item: str):
+        """Text that is read: the pending token when ``item`` closes the box that glyph stands alone in, else None."""
+        closed = None
+        for char in item:
+            if char in PAD_CHARS:
+                continue
+            if char in '])' and self.opener and self.pending is not None:
+                closed = self.pending
+            self.opener, self.pending = char in '[(', None
+        return closed
 
 
 def unread_in_boxes(items) -> set[int]:
-    """The index of the first glyph that names no character (an item None) alone in each typed box: '[' or '(' and
-    padding before it, padding or more such glyphs and ']' or ')' after it, on one line. Dropped, it would leave '[]'
-    or '( )', which routing reads as an unchecked box; written as '?' there, the box is the contract's unread mark
-    ('[?]'), held. ``items``: in order, each glyph's text, or None for a glyph that names no character."""
-    marks, opener, first = set(), False, None
+    """The index of the first glyph that names no character (an item None) alone in each typed box (BoxGuard).
+    ``items``: in order, each glyph's text, or None for a glyph that names no character."""
+    marks, guard = set(), BoxGuard()
     for index, item in enumerate(items):
         if item is None:
-            if opener and first is None:
-                first = index
+            guard.unread(index)
             continue
-        for char in item:
-            if _PAD.fullmatch(char):
-                continue
-            if char in '])' and opener and first is not None:
-                marks.add(first)
-            opener, first = char in '[(', None
+        closed = guard.text(item)
+        if closed is not None:
+            marks.add(closed)
     return marks
+
+
+# --- the font extraction reads in place of text it cannot read ------------------------------------------------------
+
+UNREAD_TEXT = '\ufdd7'  # what pypdf extracts where the page reader drew text it cannot read as the PDF encodes it
+UNREAD_FONT = '/CptStudioUnreadText'  # the resource name the page reader gives unread_font
+_UNREAD_CODE, _UNREAD_BITS = 0x41, 20  # code 0x41 + k draws UNREAD_TEXT and is 2 ** k glyph-space units wide
+
+
+def unread_font() -> DictionaryObject:
+    """The font the page reader draws text in that pypdf cannot read as the PDF encodes it (an operator replaced by
+    unread_codes in this font): every code draws UNREAD_TEXT, which the reader counts and drops, a mark alone in a
+    typed box written as the unread mark. Its codes are powers of two wide, so a string of them measures what the
+    operator it stands for measured, and pypdf spaces the text around it as before."""
+    last = _UNREAD_CODE + _UNREAD_BITS - 1
+    stream = DecodedStreamObject()
+    stream.set_data(_to_unicode({code: UNREAD_TEXT for code in range(_UNREAD_CODE, last + 1)}).encode('ascii'))
+    descriptor = DictionaryObject({NameObject('/Type'): NameObject('/FontDescriptor'),
+                                   NameObject('/FontName'): NameObject('/CptStudioUnreadText'),
+                                   NameObject('/Flags'): NumberObject(32), NameObject('/MissingWidth'): NumberObject(0),
+                                   NameObject('/FontBBox'): ArrayObject([NumberObject(0)] * 4),
+                                   NameObject('/ItalicAngle'): NumberObject(0), NameObject('/Ascent'): NumberObject(0),
+                                   NameObject('/Descent'): NumberObject(0), NameObject('/CapHeight'): NumberObject(0),
+                                   NameObject('/StemV'): NumberObject(0)})
+    return DictionaryObject({NameObject('/Type'): NameObject('/Font'), NameObject('/Subtype'): NameObject('/Type1'),
+                             NameObject('/BaseFont'): NameObject('/CptStudioUnreadText'),
+                             NameObject('/FirstChar'): NumberObject(_UNREAD_CODE),
+                             NameObject('/LastChar'): NumberObject(last),
+                             NameObject('/Widths'): ArrayObject(NumberObject(1 << bit) for bit in range(_UNREAD_BITS)),
+                             NameObject('/FontDescriptor'): descriptor, NameObject('/ToUnicode'): stream})
+
+
+def unread_codes(width: float) -> bytes:
+    """Codes of unread_font together ``width`` glyph-space units wide (rounded, within 1 and 2 ** 20 - 1)."""
+    units = min(max(round(width), 1), (1 << _UNREAD_BITS) - 1) if math.isfinite(width) else 1
+    return bytes(_UNREAD_CODE + bit for bit in range(_UNREAD_BITS) if units >> bit & 1)
+
+
+class FontReadings:
+    """How extraction reads each font of one document, worked out once per font dictionary and font program and
+    shared by the walkers of all its pages and annotation appearances (pdfcontent.readings_for): the copy pypdf reads
+    in its place and whether pypdf builds it (font_reading), how its strings are judged (decode_plan), its kind, and
+    each Type 1 program's built-in encoding. A font whose inspection fails (pypdf's structure limits among the
+    reasons: an object past one is never read, however often it is asked for) is unusable: its text is unread and
+    named, never the reason the document fails. Each font is kept with its reading, so its id stays its own."""
+
+    def __init__(self):
+        self.programs: dict = {}  # id(font program) -> (program, its built-in encoding)
+        self._readings: dict = {}  # id(font dict) -> (font dict, copy or None, usable)
+        self._plans: dict = {}  # id(font dict) -> (font dict, decode plan)
+        self._kinds: dict = {}  # id(font dict) -> (font dict, kind)
+        self.unread = unread_font()
+
+    def known(self, font) -> bool:
+        """Whether ``font`` was read already."""
+        known = self._readings.get(id(font))
+        return known is not None and known[0] is font
+
+    def reading(self, font, built: Font | None = None) -> tuple[DictionaryObject | None, bool]:
+        """(the copy of ``font`` extraction reads in its place, or None; whether pypdf builds what it reads)."""
+        known = self._readings.get(id(font))
+        if known is None or known[0] is not font:
+            try:
+                copy, usable = font_reading(font, self.programs, built)
+            except (MemoryError, RecursionError):
+                raise
+            except Exception:
+                copy, usable = None, False
+            known = self._readings[id(font)] = (font, copy, usable)
+        return known[1], known[2]
+
+    def plan(self, font) -> bool | str:
+        """decode_plan of what extraction reads for ``font`` (False when pypdf builds nothing for it)."""
+        known = self._plans.get(id(font))
+        if known is None or known[0] is not font:
+            copy, usable = self.reading(font)
+            try:
+                plan = decode_plan(copy if copy is not None else font) if usable else False
+            except (MemoryError, RecursionError):
+                raise
+            except Exception:
+                plan = False
+            known = self._plans[id(font)] = (font, plan)
+        return known[1]
+
+    def kind(self, font) -> str:
+        """kind(font), once per font ('text' for a font whose inspection fails: its glyphs are read as pypdf writes
+        them, which the plan has judged)."""
+        known = self._kinds.get(id(font))
+        if known is None or known[0] is not font:
+            try:
+                value = kind(font)
+            except (MemoryError, RecursionError):
+                raise
+            except Exception:
+                value = 'text'
+            known = self._kinds[id(font)] = (font, value)
+        return known[1]
 
 
 def composite_map(font: DictionaryObject) -> frozenset:

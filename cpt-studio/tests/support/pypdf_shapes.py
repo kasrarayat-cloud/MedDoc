@@ -792,6 +792,310 @@ def shapes() -> dict[str, bytes]:
     return _shapes()
 
 
+# --- the refutation of the round's reader (round 2 of the repair, 2026-10-31): each finding's shape -------------------
+
+PERFORMED = 'Procedures performed:'
+GLYPH_NAMES = {' ': 'space', '-': 'hyphen', '.': 'period', ':': 'colon', '0': 'zero', '1': 'one', '2': 'two',
+               '6': 'six'}
+KNEE_ROWS = ['Left knee 2026-10-21: biopsy.', 'No biopsy 2026-10-12.']
+FORM_ROWS = [('Hypertension', True), ('Diabetes', False), ('Smoker', True), ('Asthma', False)]
+
+
+def performed_box(mark_codes: str, label: str = SNARE, font: str = '/F2') -> str:
+    """The note under 'Procedures performed:', then '[' + ``mark_codes`` in ``font`` + ']' and ``label``."""
+    return (lines(NOTE[:4] + [PERFORMED]) + f'\nBT /F1 11 Tf 72 620 Td ([) Tj {font} 11 Tf <{mark_codes}> Tj /F1 11 Tf '
+                                            f'(] {esc(label)}) Tj ET')
+
+
+def subset_rows(rows, bad: str | None = None, encoding: str = '') -> bytes:
+    """F1: ``rows`` in a Type 1 font whose program's built-in encoding gives codes from 0x30 upward, in order of first
+    use, to their glyphs (as a subset font numbers them), with ``bad`` at the unused code 254 (a name pypdf 6.21.4
+    cannot read: it then reads the font without its program). No /Encoding unless given, so the built-in encoding
+    decides (PDF 32000-1 Table 112)."""
+    codes, entries, shown = {}, {}, []
+    for row in rows:
+        hexed = ''
+        for char in row:
+            if char not in codes:
+                codes[char] = 0x30 + len(codes)
+                entries[codes[char]] = GLYPH_NAMES.get(char, char)
+            hexed += f'{codes[char]:02X}'
+        shown.append(hexed)
+    if bad is not None:
+        entries[254] = bad
+    content = lines(NOTE) + '\n' + '\n'.join(f'BT /F2 11 Tf 72 {600 - 20 * index} Td <{hexed}> Tj ET'
+                                             for index, hexed in enumerate(shown))
+    return with_font(content, builtin_font(entries, encoding=encoding))
+
+
+def type3_mark(encoding: str, to_unicode_body: bytes | None = None) -> dict:
+    """A Type 3 font whose glyph /mark (and /u20, the same drawing) is a check mark: ``encoding`` selects them."""
+    check = stream('600 0 0 -50 600 700 d1 70 w 1 J 1 j 90 330 m 240 120 l 540 640 l S')
+    widths = ' '.join('600' if code == 0x41 else '250' for code in range(256))
+    ref = '/ToUnicode 12 0 R' if to_unicode_body is not None else ''
+    font = {0: (f'<< /Type /Font /Subtype /Type3 /FontBBox [0 -50 600 700] /FontMatrix [0.001 0 0 0.001 0 0] '
+                f'/CharProcs << /mark 10 0 R /u20 10 0 R /space 11 0 R >> /Encoding {encoding} /FirstChar 0 '
+                f'/LastChar 255 /Widths [{widths}] /Resources << >> {ref} >>').encode(),
+            10: check, 11: stream('250 0 d0')}
+    if to_unicode_body is not None:
+        font[12] = to_unicode_body
+    return font
+
+
+def one_byte_to_unicode(entries) -> bytes:
+    """A one-byte ToUnicode whose bfchar entries are given as (code, destination hex) (an empty destination: '')."""
+    body = (f'1 begincodespacerange\n<00> <FF>\nendcodespacerange\n{len(entries)} beginbfchar\n'
+            + ''.join(f'<{code:02X}> <{destination}>\n' for code, destination in entries) + 'endbfchar\n')
+    return stream('/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CMapName /Synthetic-UCS def\n'
+                  '/CMapType 2 def\n' + body + 'endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n')
+
+
+def truetype_mark(destination: str) -> dict:
+    """A TrueType text font (WinAnsi) whose ToUnicode gives code 0x41, a box mark, ``destination`` (hex, '' empty)."""
+    return {0: (b'<< /Type /Font /Subtype /TrueType /BaseFont /ABCDEF+FormGlyphs /FirstChar 32 /LastChar 65 /Widths ['
+                + b' '.join([b'600'] * 34) + b'] /Encoding /WinAnsiEncoding /ToUnicode 7 0 R >>'),
+            7: one_byte_to_unicode([(0x41, destination), (0x20, '0020')])}
+
+
+def identity_mark(destination: str) -> dict:
+    """An Identity-H subset font whose ToUnicode gives code 0x0041, a box mark, ``destination`` (pdfkit writes <0000>
+    for its .notdef glyph; '' an empty destination), and codes 0x20-0x7E their own characters."""
+    body = ('1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n'
+            f'1 beginbfchar\n<0041> <{destination}>\nendbfchar\n2 beginbfrange\n<0020> <0040> <0020>\n'
+            '<0042> <007E> <0042>\nendbfrange\n')
+    font = composite(descendant=8, descriptor=9, to_unicode_ref='/ToUnicode 7 0 R')
+    font[7] = stream('/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CMapName /Synthetic-UCS def\n'
+                     '/CMapType 2 def\n' + body + 'endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n')
+    return font
+
+
+def utf16_hex(text: str) -> str:
+    return text.encode('utf-16-be').hex().upper()
+
+
+KOREAN = '대장내시경 검사 결과 정상'  # a normal colonoscopy, in Korean
+
+
+def korean_page(cmap: str = '/UniKS-UTF16-H') -> bytes:
+    """CL-1: the note, then a line in a non-embedded Korean font under a UTF-16 CMap pypdf does not list (MuPDF's
+    /Dotum /UniKS-UTF16-H), no ToUnicode."""
+    font = composite('Dotum', encoding=cmap, descendant=8, descriptor=9, ordering='Korea1', cid_type='CIDFontType0',
+                     cid_to_gid='')
+    return with_font(lines(NOTE) + f'\nBT /F2 11 Tf 72 600 Td <{utf16_hex(KOREAN)}> Tj ET', font)
+
+
+def korean_free_text() -> bytes:
+    """CL-1: a FreeText whose /Contents is a Korean result and whose appearance draws it in the UTF-16 font (MuPDF builds
+    such an appearance itself)."""
+    value = 'Reviewer note: ' + KOREAN
+    font = composite('Batang', encoding='/UniKS-UTF16-H', descendant=23, descriptor=24, ordering='Korea1',
+                     cid_type='CIDFontType0', cid_to_gid='')
+    page = annotated(f'BT /F9 10 Tf 2 5 Td <{utf16_hex(value)}> Tj ET', font=font,
+                     annotation=f'/Subtype /FreeText /DA (/Helv 10 Tf 0 g) /Contents {utf16(value)}')
+    return page
+
+
+def embedded_cmap_page(text: str, *, first_cid: int = 100) -> bytes:
+    """CL-2: ``text`` in a CID-keyed font whose /Encoding is an embedded CMap of two-byte codes (fpdf2's CID-keyed CFF
+    shape): each distinct character a code from 1 up, mapped to the CID ``first_cid`` above it, a ToUnicode giving each
+    code its character, and /W widths by CID (a space 250, anything else 500); the note before it in Helvetica."""
+    codes = {}
+    for char in text:
+        codes.setdefault(char, len(codes) + 1)
+    cidchars = '\n'.join(f'<{code:04X}> {code + first_cid}' for code in codes.values())
+    cmap = stream('/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo << /Registry (Adobe) '
+                  '/Ordering (Identity) /Supplement 0 >> def\n/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n'
+                  f'1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n{len(codes)} begincidchar\n{cidchars}\n'
+                  'endcidchar\nendcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n',
+                  '/Type /CMap /CMapName /Adobe-Identity-UCS /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) '
+                  '/Supplement 0 >>')
+    widths = ' '.join(f'{code + first_cid} [{250 if char == " " else 500}]' for char, code in codes.items())
+    font = composite('MPDFAA+Unifont', encoding='12 0 R', descendant=8, descriptor=9, cid_type='CIDFontType0',
+                     cid_to_gid='', widths=f'/W [{widths}]', to_unicode_ref='/ToUnicode 7 0 R')
+    font[7] = to_unicode(pairs=[(code, char) for char, code in codes.items()])
+    font[12] = cmap
+    shown = ''.join(f'{codes[char]:04X}' for char in text)
+    return with_font(lines(NOTE) + f'\nBT /F2 11 Tf 72 600 Td <{shown}> Tj ET', font)
+
+
+def cid_line_page(cmap: str = '/EUC-H') -> bytes:
+    """CL-3: the note in Helvetica, then one ASCII line in a CID font under a predefined CMap pypdf does not implement
+    (ReportLab's CIDFont writes this shape)."""
+    font = composite('HeiseiMin-W3', encoding=cmap, descendant=8, descriptor=9, ordering='Japan1',
+                     cid_type='CIDFontType0', cid_to_gid='')
+    return with_font(lines(NOTE) + '\nBT /F2 12 Tf 72 600 Td (ASCII line in CID font: polyp.) Tj ET', font)
+
+
+def live_form(footer: str, footer_font: dict | None = None, *, pages: int = 1) -> bytes:
+    """F1 (block): a page of labels with live AcroForm check boxes (/AS read for the labelled block) and a text field
+    with a value, and one footer line ``footer`` drawn in /F7 (``footer_font``, or a name the resources do not hold);
+    ``pages`` 2 puts a plain page before it."""
+    objects, kids, fields = {}, [], []
+    widgets = []
+    for index, (label, on) in enumerate(FORM_ROWS):
+        number = 40 + 3 * index
+        state = '/Yes' if on else '/Off'
+        objects[number] = (f'<< /Type /Annot /Subtype /Widget /FT /Btn /T ({label}) /V {state} /AS {state} '
+                           f'/Rect [72 {698 - 20 * index} 84 {710 - 20 * index}] /F 4 /AP << /N << /Yes {number + 1} 0 R '
+                           f'/Off {number + 2} 0 R >> >> >>').encode()
+        objects[number + 1] = stream('q BT /ZaDb 10 Tf 1 2 Td (4) Tj ET Q', '/Type /XObject /Subtype /Form /BBox '
+                                                                          '[0 0 12 12] /Resources << /Font << /ZaDb 60 0 R '
+                                                                          '>> >>')
+        objects[number + 2] = stream('', '/Type /XObject /Subtype /Form /BBox [0 0 12 12]')
+        widgets.append(number)
+    objects[52] = (b'<< /Type /Annot /Subtype /Widget /FT /Tx /T (Indication) /V (Screening colonoscopy) '
+                   b'/Rect [140 596 340 612] /F 4 /AP << /N 53 0 R >> >>')
+    objects[53] = stream('/Tx BMC q BT /Helv 10 Tf 2 4 Td (Screening colonoscopy) Tj ET Q EMC',
+                         '/Type /XObject /Subtype /Form /BBox [0 0 200 16] /Resources << /Font << /Helv 4 0 R >> >>')
+    widgets.append(52)
+    objects[60] = b'<< /Type /Font /Subtype /Type1 /BaseFont /ZapfDingbats >>'
+    body = lines([BANNER, 'Medical history (form check boxes):'], top=740) + '\n' + '\n'.join(
+        f'BT /F1 11 Tf 90 {700 - 20 * index} Td ({label}) Tj ET' for index, (label, _) in enumerate(FORM_ROWS)) + \
+        f'\nBT /F1 11 Tf 72 600 Td (Indication:) Tj ET\nBT /F7 7 Tf 72 40 Td {footer} Tj ET'
+    fonts = '/F1 4 0 R' + (' /F7 61 0 R' if footer_font is not None else '')
+    if footer_font is not None:
+        objects[61] = footer_font[0]
+        objects.update({key: value for key, value in footer_font.items() if key})
+    if pages == 2:
+        objects[30] = (b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> '
+                       b'/Contents 31 0 R >>')
+        objects[31] = stream(lines(NOTE + ['Hypertension and Diabetes are reviewed on the next page.']))
+        kids.append(30)
+    kids.append(3)
+    fields = ' '.join(f'{number} 0 R' for number in widgets)
+    objects.update({1: f'<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [{fields}] /DR << /Font << /Helv 4 0 R '
+                       f'/ZaDb 60 0 R >> >> >> >>'.encode(),
+                    2: f'<< /Type /Pages /Kids [{" ".join(f"{kid} 0 R" for kid in kids)}] /Count {len(kids)} >>'.encode(),
+                    3: (f'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << {fonts} >> >> '
+                        f'/Contents 5 0 R /Annots [{fields}] >>').encode(),
+                    4: HELVETICA, 5: stream(body)})
+    return serialise(objects)
+
+
+UNBUILDABLE_WIDTHS = {0: b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /FirstChar 32 /LastChar 34 /Widths [278 /x 355] '
+                         b'/Encoding /WinAnsiEncoding >>'}
+
+
+def flattened_field(*, symbol_font: bool = False, own_resources: str | None = None) -> bytes:
+    """F2 (resourceless form): the note with typed boxes, then a field's old appearance drawn by the page as a form
+    XObject (pdf-lib's flatten keeps a /DR-reliant appearance so): no /Resources (``own_resources``: its own), its
+    /Helv not in the page's resources. ``symbol_font``: the page's resources also hold a symbol font (a font the
+    reader reads through a copy)."""
+    resources = f'/Resources << {own_resources} >>' if own_resources is not None else ''
+    objects = {6: stream('/Tx BMC q BT /Helv 10 Tf 0 g 2 4 Td (Screening colonoscopy) Tj ET Q EMC',
+                         f'/Type /XObject /Subtype /Form /BBox [0 0 200 16] {resources}'),
+               7: b'<< /Type /Font /Subtype /Type1 /BaseFont /ZapfDingbats >>'}
+    body = lines(NOTE[:1] + ['Medical history:', '[X] Hypertension', '[ ] Diabetes', 'Indication:']) + \
+        '\nq 1 0 0 1 140 616 cm /FlatWidget1 Do Q' + ('\nBT /F3 9 Tf 72 500 Td (4) Tj ET' if symbol_font else '')
+    fonts = '/F1 4 0 R' + (' /F3 7 0 R' if symbol_font else '')
+    return page_pdf(body, fonts=fonts, extra=objects, xobjects='/FlatWidget1 6 0 R',
+                    catalog='/AcroForm << /Fields [] /DR << /Font << /Helv 4 0 R >> >> >>')
+
+
+def long_base_font(length: int, strings: int) -> bytes:
+    """COST-1: an Identity-H font with a ToUnicode whose /BaseFont is a literal string ``length`` characters long,
+    showing one TJ of ``strings`` two-byte strings ('A' each) beside the note."""
+    font = composite(descendant=8, descriptor=9, to_unicode_ref='/ToUnicode 7 0 R')
+    font[0] = font[0].replace(b'/BaseFont /ABCDEF+SyntheticSans', b'/BaseFont (' + b'A-' * (length // 2) + b')', 1)
+    font[7] = to_unicode(ranges=IDENTITY_RANGE)
+    return with_font(lines(NOTE) + '\nBT /F2 2 Tf 72 600 Td [' + '<0041>' * strings + '] TJ ET', font)
+
+
+def shared_program(fonts: int, pages: int, annotations: int, program_bytes: int) -> bytes:
+    """COST-2: ``fonts`` Type 1 font dictionaries sharing one descriptor whose /FontFile clear text is
+    ``program_bytes`` long (a built-in encoding of 'dup' lines), all listed in each of ``pages`` pages' resources and
+    in the appearances of ``annotations`` FreeText annotations on the last page; one of them shows a line."""
+    head = b'%!PS-AdobeFont-1.0: ProbeSerif 001\n/FontName /ProbeSerif def\n/Encoding 256 array\n'
+    tail = b'dup 65 /A put\nreadonly def\ncurrentfile eexec\n' + bytes(range(256)) * 4
+    program = head + b'dup\n' * ((program_bytes - len(head) - len(tail)) // 4) + tail
+    objects = {6: flate(program, f'/Length1 {len(program) - 1024} /Length2 1024 /Length3 0'),
+               7: (b'<< /Type /FontDescriptor /FontName /ProbeSerif /Flags 32 /FontBBox [0 -200 1000 900] /ItalicAngle 0 '
+                   b'/Ascent 900 /Descent -200 /CapHeight 700 /StemV 80 /FontFile 6 0 R >>')}
+    widths = '/FirstChar 32 /LastChar 126 /Widths [' + ' '.join(['500'] * 95) + ']'
+    table = '/F1 4 0 R'
+    for index in range(fonts):
+        objects[10 + index] = (f'<< /Type /Font /Subtype /Type1 /BaseFont /ProbeSerif /Encoding /WinAnsiEncoding '
+                               f'{widths} /FontDescriptor 7 0 R >>').encode()
+        table += f' /G{index} {10 + index} 0 R'
+    objects[8] = f'<< {table} >>'.encode()
+    number, kids = 200, []
+    for page in range(pages):
+        annots = []
+        if page == pages - 1:
+            for index in range(annotations):
+                objects[number] = stream(f'BT /G0 9 Tf 1 3 Td (n{index}) Tj ET', '/Type /XObject /Subtype /Form '
+                                                                                  '/BBox [0 0 25 12] /Resources << '
+                                                                                  '/Font 8 0 R >>')
+                objects[number + 1] = (f'<< /Type /Annot /Subtype /FreeText /Rect [{40 + index % 20 * 27} '
+                                       f'{60 + index // 20 * 14} {65 + index % 20 * 27} {72 + index // 20 * 14}] '
+                                       f'/Contents (n{index}) /DA (/G0 9 Tf 0 g) /AP << /N {number} 0 R >> >>').encode()
+                annots.append(number + 1)
+                number += 2
+        objects[number] = stream(lines([f'Page {page + 1}: an ordinary line of text that the reader keeps.'])
+                                 + '\nBT /G0 11 Tf 72 700 Td (Shown in the probe font.) Tj ET')
+        entry = f' /Annots [{" ".join(f"{a} 0 R" for a in annots)}]' if annots else ''
+        objects[number + 1] = (f'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font 8 0 R >> '
+                               f'/Contents {number} 0 R{entry} >>').encode()
+        kids.append(number + 1)
+        number += 2
+    objects.update({1: b'<< /Type /Catalog /Pages 2 0 R >>', 4: HELVETICA,
+                    2: f'<< /Type /Pages /Kids [{" ".join(f"{kid} 0 R" for kid in kids)}] /Count {len(kids)} >>'.encode()})
+    return serialise(objects)
+
+
+def box_beside_unread() -> bytes:
+    """An unchecked live check box (/T Consent) whose label right of it is drawn in a CID font under a CMap pypdf does
+    not implement, and, within the box's reach to the right, 'Biopsy taken' in Helvetica: the label is unread, so the
+    box must not be read as 'Biopsy taken''s."""
+    font = composite('HeiseiMin-W3', encoding='/EUC-H', descendant=8, descriptor=9, ordering='Japan1',
+                     cid_type='CIDFontType0', cid_to_gid='')
+    objects = {20: (b'<< /Type /Annot /Subtype /Widget /FT /Btn /T (Consent) /V /Off /AS /Off /Rect [72 598 84 610] '
+                    b'/F 4 /AP << /N << /Yes 21 0 R /Off 22 0 R >> >> >>'),
+               21: stream('q BT /ZaDb 10 Tf 1 2 Td (4) Tj ET Q', '/Type /XObject /Subtype /Form /BBox [0 0 12 12] '
+                                                               '/Resources << /Font << /ZaDb 23 0 R >> >>'),
+               22: stream('', '/Type /XObject /Subtype /Form /BBox [0 0 12 12]'),
+               23: b'<< /Type /Font /Subtype /Type1 /BaseFont /ZapfDingbats >>'}
+    content = (lines(NOTE) + '\nBT /F2 11 Tf 90 600 Td (Ka) Tj ET\nBT /F1 11 Tf 110 600 Td (Biopsy taken) Tj ET')
+    return with_font(content, font, extra=objects, annots='/Annots [20 0 R]',
+                     catalog='/AcroForm << /Fields [20 0 R] >>')
+
+
+ARRAY_LIMIT = 100_000  # pypdf's array_maximum_element_count, under both versions
+
+
+def over_the_limit(where: str, elements: int = ARRAY_LIMIT + 1) -> bytes:
+    """LIMIT-1: a font past pypdf's array element limit, where the reader inspects it: 'annotation', a FreeText's
+    appearance font whose /Differences is an indirect array of ``elements``; 'page', the page's last line in that
+    font; 'unused', the font only listed in the page's resources; 'descendants', a composite font whose
+    /DescendantFonts has ``elements`` entries, used by the page's last line."""
+    objects = {9: ('[0 ' + '/a ' * (elements - 1) + ']').encode(),
+               10: b'<< /Type /Encoding /BaseEncoding /WinAnsiEncoding /Differences 9 0 R >>',
+               11: b'<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman /Encoding 10 0 R >>'}
+    body, fonts, annots = lines(NOTE), '/F1 4 0 R', ''
+    if where == 'annotation':
+        objects[12] = stream('BT /G1 9 Tf 2 4 Td (Polyp) Tj ET', '/Type /XObject /Subtype /Form /BBox [0 0 60 14] '
+                                                                '/Resources << /Font << /G1 11 0 R >> >>')
+        objects[13] = (b'<< /Type /Annot /Subtype /FreeText /Rect [72 480 132 494] /F 4 /Contents (Polyp) '
+                       b'/DA (/G1 9 Tf 0 g) /AP << /N 12 0 R >> >>')
+        annots = '/Annots [13 0 R]'
+    elif where in ('page', 'unused'):
+        fonts += ' /G1 11 0 R'
+        if where == 'page':
+            body += '\nBT /G1 11 Tf 72 600 Td (Cold snare polypectomy of the sigmoid polyp) Tj ET'
+    else:
+        objects[9] = ('[' + '14 0 R ' * elements + ']').encode()
+        objects[14] = (b'<< /Type /Font /Subtype /CIDFontType2 /BaseFont /ProbeSans /CIDSystemInfo << /Registry (Adobe) '
+                       b'/Ordering (Identity) /Supplement 0 >> /FontDescriptor 15 0 R /DW 500 /CIDToGIDMap /Identity >>')
+        objects[15] = (b'<< /Type /FontDescriptor /FontName /ProbeSans /Flags 32 /FontBBox [0 -200 1000 900] '
+                       b'/ItalicAngle 0 /Ascent 900 /Descent -200 /CapHeight 700 /StemV 80 >>')
+        objects[11] = (b'<< /Type /Font /Subtype /Type0 /BaseFont /ProbeSans /Encoding /Identity-H /DescendantFonts '
+                       b'9 0 R >>')
+        del objects[10]
+        fonts += ' /G1 11 0 R'
+        body += '\nBT /G1 11 Tf 72 600 Td <00410042> Tj ET'
+    return page_pdf(body, fonts=fonts, extra=objects, annots=annots)
+
+
 def heavy_shapes() -> dict[str, bytes]:
     """The parser rows past pypdf 6.21.4's 2,000,000-entry limits (a few seconds each to build and read)."""
     return {'parser-01 hybrid /XRefStm over the limit': xref_limit('hybrid'),

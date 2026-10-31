@@ -4,8 +4,9 @@ judged by what the document shows, and equality with 6.21.2 is a safety net only
 Every document is synthetic and built in tests/support/pypdf_shapes.py from raw PDF syntax; nothing is read from disk.
 The documents go through the real extraction child, with OCR unavailable and with stand-in OCR tools, so the tests
 see the statuses, notices and OCR routing an upload gets. Text pypdf cannot read as the font encodes it is never
-returned as text: an appearance that shows it is unreadable (partial), a page that shows it has no usable text layer
-(OCR, or named). A glyph that names no character alone in a typed box is the unread mark '[?]', never an empty box.
+returned as text: an appearance that shows it is unreadable (partial); on a page, the operator that shows it is dropped
+and the page named (partial), the rest of its layer read, and a page left with no usable text layer goes to OCR or is
+named. A glyph that names no character alone in a typed box is the unread mark '[?]', never an empty box.
 """
 from __future__ import annotations
 
@@ -41,6 +42,8 @@ ANNOTATION = ('Page 1 has text added as PDF annotations; it was read and added a
 FIELDS = ('Page 1 has PDF form fields; their values were read and added after the page text, labelled as form '
           'fields.')
 OCR_READ = 'Page {n} was read with OCR; OCR can misread characters \u2014 check evidence against the original.'
+UNREAD_TEXT = ('{pages} text in a font or encoding this server cannot read as the PDF encodes it; that text was not '
+               'extracted, so check it against the original.')
 MOJIBAKE = set('\ufffd\u2612') | {chr(code) for code in range(0x3400, 0xA000)}  # what pypdf 6.21.4 wrote
 
 
@@ -70,14 +73,15 @@ class CutStringInAnAppearanceTests(unittest.TestCase):
                 self.assertFalse(MOJIBAKE & set(result.text), result.text)
 
     def test_the_page_beside_it_and_a_page_layer_cut_the_same_way(self):
-        result = extract(SHAPES['n-1 page 2 stamp cut, page 3 layer cut'])
-        self.assertEqual((result.status, result.messages),
-                         ('partial', (NO_LAYER.format(n=3), UNREADABLE.format(n=2))))
-        self.assertEqual(result.text.split('\n\n'), [shapes.NOTE_TEXT, shapes.NOTE_TEXT, ''])
-        with FakeOcr() as fake:
-            ocred = extract(SHAPES['n-1 page 2 stamp cut, page 3 layer cut'], ocr=fake.tools)
-        self.assertEqual((ocred.status, ocred.ocr_pages), ('partial', (3,)))
-        self.assertIn(OCR_READ.format(n=3), ocred.messages)
+        """Page 3 draws the note in Helvetica, which pypdf reads as the PDF encodes it, and the cut string: only the
+        cut string is dropped, and the page named (round 2 of the repair; ingest@4 at first left all of page 3
+        unread)."""
+        for ocr in (False, True):
+            with FakeOcr() as fake:
+                result = extract(SHAPES['n-1 page 2 stamp cut, page 3 layer cut'], ocr=fake.tools if ocr else None)
+            self.assertEqual((result.status, result.messages, result.ocr_pages),
+                             ('partial', (UNREAD_TEXT.format(pages='Page 3 has'), UNREADABLE.format(n=2)), ()))
+            self.assertEqual([page.strip() for page in result.text.split('\n\n')], [shapes.NOTE_TEXT] * 3)
 
     def test_a_whole_string_in_the_same_font_is_read(self):
         result = extract(shapes.annotated(shapes.shown('004100420043')))
@@ -125,24 +129,25 @@ class UnimplementedCMapTests(unittest.TestCase):
 
 
 class CutStringInThePageTests(unittest.TestCase):
-    """TXT-7, n-3 and the page layer: a cut string in the page's own text makes its layer unusable, so pypdf's U+FFFD,
-    and whatever a ToUnicode entry for code FFFD turns it into (a checked box, 'X'), never reaches the text."""
+    """TXT-7, n-3 and the page layer: a cut string in the page's own text is dropped (the operator showing it), so
+    pypdf's U+FFFD, and whatever a ToUnicode entry for code FFFD turns it into (a checked box, 'X'), never reaches the
+    text; the page is named, and the rest of its layer, in fonts pypdf reads as the PDF encodes them, is read (round 2
+    of the repair: the smallest unit is the operator, not the page)."""
 
     NAMES = [name for name in SHAPES if name.startswith(('TXT-7 ', 'n-3 ', 'page layer '))]
 
-    def test_the_page_goes_to_ocr_or_is_named(self):
+    def test_the_cut_string_is_dropped_and_named_and_the_page_read(self):
         self.assertEqual(len(self.NAMES), 9)
         for name in self.NAMES:
-            with self.subTest(name):
-                result = extract(SHAPES[name])
-                self.assertEqual((result.status, result.messages), ('failed', (NO_LAYER.format(n=1), NO_TEXT)))
-                with FakeOcr() as fake:
-                    ocred = extract(SHAPES[name], ocr=fake.tools)
-                self.assertEqual((ocred.status, ocred.ocr_pages), ('ok', (1,)))
-                self.assertNotIn('\u2612', ocred.text)
+            for ocr in (False, True):
+                with self.subTest(name, ocr=ocr), FakeOcr() as fake:
+                    result = extract(SHAPES[name], ocr=fake.tools if ocr else None)
+                    self.assertEqual((result.status, result.messages, result.ocr_pages),
+                                     ('partial', (UNREAD_TEXT.format(pages='Page 1 has'),), ()))
+                    self.assertEqual(result.text.strip(), shapes.NOTE_TEXT)
 
-    def test_the_page_beside_keeps_its_text_and_the_unreadable_page_adds_none(self):
-        """The unreadable page's layer is not read at all: none of it reaches the result beside the other page's."""
+    def test_the_page_beside_keeps_its_text_and_the_unreadable_string_adds_none(self):
+        """Page 2's note is read; the cut string, or the lines in a CMap pypdf does not implement, add nothing."""
         cjk = shapes.composite('HYSMyeongJo-Medium', encoding='/KSCms-UHC-H', descendant=8, descriptor=9,
                                ordering='Korea1', cid_type='CIDFontType0', cid_to_gid='')
         for label, data in (('cut string', shapes.beside_plain_page('BT /F2 11 Tf 72 600 Td <00410042FF> Tj ET',
@@ -151,8 +156,10 @@ class CutStringInThePageTests(unittest.TestCase):
                                 shapes.lines(shapes.CJK_TEXT, top=600, font='/F2'), cjk))):
             with self.subTest(label):
                 result = extract(data)
-                self.assertEqual((result.status, result.messages), ('partial', (NO_LAYER.format(n=2),)))
-                self.assertEqual(result.text, shapes.NOTE_TEXT + '\n\n')  # page 2's note too: its layer is not read
+                self.assertEqual((result.status, result.messages),
+                                 ('partial', (UNREAD_TEXT.format(pages='Page 2 has'),)))
+                self.assertEqual(result.text.count(shapes.NOTE_TEXT), 2)
+                self.assertEqual(result.text.replace(shapes.NOTE_TEXT, '').strip(), '')  # only the line breaks
 
 
 class ReplacementCharacterNoticeTests(unittest.TestCase):
@@ -227,13 +234,16 @@ class GlyphNameTests(unittest.TestCase):
     def test_the_glyph_list_rules(self):
         self.assertEqual([agl_text(name) for name in ('A', 'uni2610', 'uni00410042', 'u1F5F9', 'u2610')],
                          ['A', '\u2610', 'AB', '\U0001f5f9', '\u2610'])
-        for name in ('u20', 'u261', 'uni261', 'uni00e9', 'u0x41', 'u+41', 'u4_1', 'uniD800', 'u110000', 'uni0041.alt',
+        # the specification's section 2: up to the first period, '_' components ('uni0041.alt' is 'A')
+        self.assertEqual([agl_text(name) for name in ('uni0041.alt', 'uni2610_uni2612', 'u2610.001', 'A.sc')],
+                         ['A', '\u2610\u2612', '\u2610', 'A'])
+        for name in ('u20', 'u261', 'uni261', 'uni00e9', 'u0x41', 'u+41', 'u4_1', 'uniD800', 'u110000', '.alt',
                      'u' + 'F' * 20):
             with self.subTest(name):
                 self.assertIsNone(agl_text(name))
         self.assertTrue(pypdf_reads_by_number('uniF00C') and pypdf_reads_by_number('u20'))
         self.assertFalse(pypdf_reads_by_number('udieresis') or pypdf_reads_by_number('A'))
-        self.assertTrue(all(undecodable(char) for char in '\x01\uf00c\uffff\ufffe\ufdd0\U0010fffe'))
+        self.assertTrue(all(undecodable(char) for char in '\x00\x01\uf00c\uffff\ufffe\ufdd0\U0010fffe'))
         self.assertFalse(any(undecodable(char) for char in 'A \t\n\u2610\ufffd'))
 
     def test_the_box_guard(self):
@@ -270,16 +280,15 @@ class FontBuildTests(unittest.TestCase):
 
     def test_a_font_pypdf_cannot_build_is_not_read_as_replacement_characters(self):
         """pypdf draws the text of a font it cannot build in a stand-in font that reads every byte as U+FFFD, under
-        either version: that text is unreadable, so the page has no usable text layer."""
+        either version: that text is unreadable, so the line in it is dropped and the page named; the note beside it,
+        in Helvetica, is read."""
         for name in ('unbuildable: a composite font whose descendant is no dictionary',
                      'unbuildable: a simple font whose descriptor is no dictionary'):
             with self.subTest(name):
                 result = extract(SHAPES[name])
-                self.assertEqual((result.status, result.messages), ('failed', (NO_LAYER.format(n=1), NO_TEXT)))
-                with FakeOcr() as fake:
-                    ocred = extract(SHAPES[name], ocr=fake.tools)
-                self.assertEqual((ocred.status, ocred.ocr_pages), ('ok', (1,)))
-                self.assertNotIn('\ufffd', ocred.text)
+                self.assertEqual((result.status, result.messages),
+                                 ('partial', (UNREAD_TEXT.format(pages='Page 1 has'),)))
+                self.assertEqual(result.text.strip(), shapes.NOTE_TEXT)
 
     def test_a_built_in_name_that_is_no_character_is_counted(self):
         result = extract(SHAPES['TXT-6 font used'])
@@ -297,7 +306,8 @@ class CompositeEncodingTests(unittest.TestCase):
             with self.subTest(name):
                 result = extract(SHAPES[name])
                 self.assertEqual((result.status, result.messages), ('partial', (NO_LAYER.format(n=2),)))
-                self.assertEqual(result.text.split('\n\n'), [shapes.NOTE_TEXT, ''])
+                # page 2 adds only the line break between its two dropped strings
+                self.assertEqual([page.strip() for page in result.text.split('\n\n')], [shapes.NOTE_TEXT, ''])
                 with FakeOcr() as fake:
                     ocred = extract(SHAPES[name], ocr=fake.tools)
                 self.assertEqual((ocred.status, ocred.ocr_pages), ('ok', (2,)))
