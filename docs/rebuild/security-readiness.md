@@ -1,11 +1,154 @@
-# Open finding — 2026-10-31: a crafted PDF can hide active content from the upload check
+# Finding P1 — repaired 2026-10-31 (not yet installed): active content hidden from the PDF upload check
 
-`pdf_inspect` refuses scripts and actions by walking what pypdf reads, and pypdf
-drops a cross-reference section it cannot read, even with `strict=True`. So a
-template can carry a script the check never sees, on pypdf 6.21.2 and 6.21.4
-alike, and the original is served back to the department as uploaded. Not
-repaired. Details and the shapes 6.21.4 adds: [pypdf 6.21.4 in the
-rebuild](pypdf-6.21.4.md).
+**What was wrong.** `pdf_inspect` refused scripts and actions by walking what
+pypdf resolves from the trailer. pypdf drops a cross-reference section it cannot
+read (even with `strict=True`), re-locates objects by regex taking the first
+match, adopts another catalog when the trailer's /Root is not one, and never reads
+stream data. On the base `4ebba7732`, 21 hand-built shapes carrying a harmless
+script or attachment were accepted as supported templates on pypdf 6.21.1, 6.21.2
+and 6.21.4, and `template_original` served such an original back byte for byte.
+The reproduction and the triggers: [pypdf 6.21.4 in the rebuild](pypdf-6.21.4.md).
+
+**What the check guarantees now.**
+
+- **A raw scan of the exact bytes is the guarantee** (`documents/pdf_raw.py`). It
+  runs on every PDF the worker reads (upload inspection, every fill, and the new
+  download check) before pypdf reads the same bytes, and asks no PDF parser what
+  the document is. It tokenizes the whole file and applies the policy to every
+  dictionary in every revision, in unreferenced objects and trailers, before the
+  header and after %%EOF; parses one object at every `obj` and `trailer` keyword
+  the sequential pass did not read as syntax (in a comment, a string or another
+  stream's data, glued header numbers included); decodes every object stream
+  (Flate, LZW, ASCII85, ASCIIHex, RunLength, PNG/TIFF predictors, chains,
+  indirect parameters from every definition in the file, pdf.js's /F and /DP
+  aliases); and a byte-pattern pass refuses the long forbidden names in any
+  spelling and the short ones wherever they are shaped like a key. The policy is
+  the engine's (forbidden keys, /Type /EmbeddedFile, the active annotation
+  subtypes) plus action types named by /S, and /Encrypt as a key anywhere. Where
+  readers disagree, every reading is judged: every value of a duplicated key;
+  every name in a malformed object (a value where a key belongs, a key without
+  its value, a keyword or an `R` that no reader takes as a value, a broken number
+  or string), at any depth, because a lenient reader re-pairs what follows the
+  error; and every policy name standing outside every container, because a
+  reader that skips junk up to the next whitespace runs a dictionary past its end.
+- **What it cannot read completely is refused**, never passed: an object stream
+  it cannot decode (unknown or crypt filter, corrupt data, parameters it cannot
+  resolve, that are defined ambiguously or twice, or that come from a malformed
+  dictionary); any stream object malformed anywhere, and any dictionary followed
+  by `stream` that the scan did not read as a stream's start, because which
+  entries a reader keeps there cannot be known (pdf.js and PDFium skip a `[`,
+  `<<` or `(` where a key belongs, where the scan opens a container); and anything
+  past its bounds (64 MiB decoded, one work budget, nesting, hidden objects,
+  definitions). Code `unreadable_pdf`: "This PDF could not be read completely, so
+  it cannot be checked for active content. Save it as a new PDF and upload it
+  again."
+- **A second, independent layer:** pypdf's walk (unchanged), a refusal when
+  `reader.root_object` is not the trailer's /Root (pages, fields and
+  `PdfWriter.append` read the former, the walk the latter), and a refusal when
+  pypdf logs a recovery that drops or replaces structure: 27 templates read from
+  the source of 6.21.1, 6.21.2 and 6.21.4. Eleven test fixtures without active
+  content each make all three versions log their own template, 15 of the 27 in
+  all; the other 12 are logged only with `strict=False`, just before a strict-mode
+  exception, or inside a rebuild of object streams, and are kept so that a change
+  of mode cannot open them. The worker used to discard that log.
+- **Download:** a PDF original is checked in the worker (raw scan, pypdf walk,
+  single catalog, pypdf's recovery reports, annotation subtypes; no field or
+  capacity rule) before it is served. A refusal sends no byte, answers 409 with
+  the reason, and records `template.download_refused` with the code. A served original is typed from
+  `Template.format` (`application/pdf` or the DOCX type, never guessed from the
+  client's name), sent as an attachment with `X-Content-Type-Options: nosniff`,
+  and a stored name whose suffix was cut off gets the format's suffix. DOCX
+  originals are not re-inspected.
+- **Fill:** the export is written by pypdf from the reader built on the scanned
+  bytes (read once), and the single-catalog rule keeps `PdfWriter.append` on the
+  catalog the walk checked. A test scans a real export with the raw scan.
+- **Stored originals:** `manage.py check_pdf_originals --output <new file>`
+  reports, read-only (a read-only transaction, no audit row), how many stored PDF
+  originals the download gate would refuse, with template ids and codes only.
+
+**What it does not guarantee.**
+
+- It refuses the listed active content; it does not render, and it does not
+  examine fonts, images or content streams for parser exploits.
+- Ordinary stream data (content streams, fonts, images) is not read as syntax.
+  An object hidden there is read from its own `obj` or `trailer` keyword; a reader
+  that parsed objects there without that keyword is not covered, and the
+  byte-pattern pass skips ordinary stream data (measured: no ordinary file has a
+  forbidden name there, but the corpus has few uncompressed content streams).
+- The byte-pattern pass treats short keys (/A /AA /JS /EF /URI /XFA /Encrypt)
+  only where shaped like a key. A reader whose tokenizer departs from the PDF
+  syntax so as to hide a short key from the scan's parse AND leave it unshaped is
+  not covered. Differential fuzzing against lenient pypdf and against pdf.js
+  (details below) found nine files that a reader read differently from the scan,
+  each now covered; it is a sample, not a proof.
+- Lenient pypdf skips an unreadable token up to the next whitespace, so junk glued
+  to `>>` runs a dictionary past its end. The scan covers what fuzzing found that
+  to reach (standalone names after it; a malformed stream object is refused
+  outright), not the habit in general: when the next object's header is glued to
+  its dictionary (`obj<<`), such a reader can shift that object's key/value
+  pairing, and that is not covered. pdf.js and PDFium end a token at a delimiter
+  and do not read this way.
+- Encryption is refused, not decrypted.
+- A template list only knows the pypdf versions it was read from; the raw scan is
+  what covers an unknown recovery's content.
+- Nothing live changes until an install, and no installer changes the live venv:
+  production runs pypdf 6.21.1 from `/opt/meddoc-pro/rebuild/.venv` (see
+  [pypdf 6.21.4](pypdf-6.21.4.md)). The repair is proved on 6.21.1, 6.21.2 and
+  6.21.4; `pdf_raw` uses only the standard library.
+- Stored originals are not rewritten (the database forbids it). An existing PDF
+  template the new check refuses can no longer be downloaded or filled: finalizing
+  an encounter that uses it fails with the refusal. How many live templates that
+  affects is unknown until `check_pdf_originals` runs against the live database.
+
+**Measured** (2026-10-31, code `2dcff8790` against base `4ebba7732`, through the
+real sandboxed worker run with each version's interpreter; corpus of 133 files
+from 13 producer families, built offline and kept outside the repository; every
+verdict and download-check result is the same as on `095387ecd`):
+
+| | pypdf 6.21.1 | 6.21.2 | 6.21.4 |
+|---|---|---|---|
+| ordinary corpus: verdict changes | 6 | 6 | 6 |
+| supported files still filled, byte-identical old vs new | 34 of 34 | 34 of 34 | 34 of 34 |
+| the four known P1 trigger files (accepted by the base) | refused | refused | refused |
+| 21 hidden-content test shapes (all accepted by the base) | refused | refused | refused |
+| 11 recovery shapes without active content | `unreadable_pdf` | `unreadable_pdf` | `unreadable_pdf` |
+
+- **The six changed files, all refused as `unreadable_pdf` by the second layer
+  while the raw scan finds nothing in them,** are pypdf's own incremental writer
+  with two or three increments over a ReportLab form. Reading the older
+  cross-reference stream, strict pypdf raises "Overwriting cache for 0 13" (both
+  increments number their stream 13), logs "Previous trailer cannot be read",
+  drops that section and the base table, and re-locates four objects by first
+  match: it then reads the base revision's AcroForm, without the
+  `/NeedAppearances false` the first increment added. So pypdf's view really
+  differs from the file, but no active content is involved; the refusal protects
+  what pypdf reads, not against a script. It is kept as designed and reported;
+  accepting these files would mean exporting from pypdf's stale view.
+- **Worst case** on 26 adversarial and large inputs of at most 10 MiB, three of
+  them aimed at the checks added last, against the worker's 12 s of CPU and
+  512 MiB: no single sample above 2.81 s and 179 MiB, measured while the host ran
+  at load 7 to 15 (the base code took 3.20 s on one of the same files in the same
+  run); 24 repeats of the four slowest inputs took 1.49 to 2.38 s. The raw scan
+  alone peaks at about 1.6 s in-process on a quieter host; the ordinary corpus
+  uses at most 3,519 of its 1,000,000 work units.
+- **Fuzzing.** A mutated corpus file that the raw scan passes goes to two
+  oracles: lenient pypdf (6.21.1 and 6.21.4), which reads the most, and pdf.js
+  4.10.38, a real viewer's parser; either finding a forbidden key, an action, an
+  attachment or an active annotation is a miss. Across the repair they found nine
+  files: three before `095387ecd`, and six that `095387ecd` passed, the last two
+  of which `fb1f259a1` passed too. pdf.js confirmed three of the nine as
+  real-viewer bypasses, all object streams whose dictionary held junk
+  (`/Length 29 0 o`, a `[` before `/Length`, `29 0[ R`): pdf.js read a link with
+  a URI action from data the scan had not decoded. The other six are lenient-pypdf
+  re-pairings in which pdf.js showed nothing (it opened five of them); one of
+  them, an `R` that ends no reference, PDFium's parser source reads the same way
+  (PDFium was not run). All nine are refused and kept as minimal tests. On the final code, 100,000
+  mutations ended only in verdicts; 500,000 mutations, 132,442 of them passing
+  the raw scan, gave lenient pypdf no miss; and pdf.js found nothing in 63,797
+  mutations passing the raw scan, nor in the 98 ordinary corpus files it passes.
+- **Tests:** `documents.test_pdf_active_content` (on CI's explicit list) and
+  `core.tests.test_template_original_safety` build every fixture in memory; both
+  pass on 6.21.1, 6.21.2 and 6.21.4.
 
 # Current internal operations supplement — September20–21,2026
 

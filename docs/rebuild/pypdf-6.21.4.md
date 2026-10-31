@@ -9,10 +9,18 @@ under Landlock and seccomp with a 512 MiB address-space limit and 12 s of CPU
 (`documents/sandbox.py`) and a 20 s subprocess timeout (`documents/service.py`),
 so on either version such a file ends as a refused or timed-out document.
 
-**Nothing live changes with this commit.** The running rebuild keeps the pypdf
-its image was built with until its next install, and that install ships this
-pin, so its declaration should name it. This change did not read the running
-version: the local `rebuild/.venv` holds 6.21.1, and `main` pinned 6.21.2.
+**Nothing live changes with this commit, and no install will change it on its
+own.** *(Corrected 2026-10-31. This paragraph first said the running rebuild
+keeps the pypdf "its image was built with until its next install, and that
+install ships this pin". That was false.)* There is no image and no per-release
+venv: every rebuild service runs the permanent venv `/opt/meddoc-pro/rebuild/.venv`,
+which holds pypdf 6.21.1 (installed 2026-10-22 by a private helper). No tracked
+installer applies a change to `rebuild/requirements.txt`, and the tracked install
+engines refuse a delta that contains it; a code-only install leaves the venv as it
+is, and nothing at startup compares the installed versions with the pins. This pin
+reaches production only through a separately declared dependency install. Until
+then production runs 6.21.1, which is why the P1 repair below is proved on 6.21.1
+as well as 6.21.2 and 6.21.4.
 
 ## Measured differences
 
@@ -42,7 +50,18 @@ Unchanged on both versions:
 The refutation did not render pages in Acrobat, PDFium or Preview. F2's missing
 letter is measured with pdf.js only.
 
-## P1: the upload check can be passed today, on either version
+## P1: repaired 2026-10-31 (code `1ae49392d`, `ecc5c20e6`, `095387ecd`, `fb1f259a1`, `2dcff8790`; not yet installed)
+
+The upload check no longer depends on what pypdf reads. `documents/pdf_raw.py`
+scans the exact bytes of every PDF the worker reads, on upload, on every fill and
+before a stored PDF original is downloaded, and refuses what it cannot read
+completely as `unreadable_pdf`. pypdf's walk stays as a second layer, now with a
+single-catalog rule and pypdf's own recovery reports, which the worker used to
+discard. What this guarantees, what it does not, and the measurements are in
+[security readiness](security-readiness.md). The text below is the finding as it
+was reported, kept as the record.
+
+## P1 as reported: the upload check can be passed today, on either version
 
 F1 is not a new hole. pypdf 6.21.2 recovers from an unreadable cross-reference
 section in the same way, with `strict=True`. A cross-reference stream can be
@@ -63,4 +82,5 @@ upload form says active content is refused.
 pypdf logs each drop ("Previous trailer cannot be read", "XRef object at N can
 not be read, some object may be missing"). The worker discards that log, which
 is where a guard could look. A guard is rebuild work and is not part of this
-change.
+change. *(2026-10-31: that guard now exists as the second layer; the first is the
+raw scan, because a log can only report what one pypdf version says.)*
