@@ -562,6 +562,33 @@ class ChargeBlockTests(SimpleTestCase):
         self.assertNotEqual(layout(text).section_at(text.rindex('Date of service')).kind, 'plan')  # the application's own header
         self.assert_installed(text)
 
+    def test_a_running_footer_repeating_the_date_settles_nothing(self):
+        """The eighth refutation's delta-2: h2-08 as a PDF whose footer repeats the header's date stopped asking and sent the
+        contradicted date. A line beyond the plan that is no addendum is no answer: the block's date still stands against
+        it. In h2-08 "Diagnosis:" opens a section, so the footer stands outside the plan."""
+        footer = 'Synthetic Patient (fictional) | Date of service: 10/05/2026 | Page 2 of 2\n'
+        self.assertNotEqual(layout(H208 + footer).section_at(len(H208) + 40).kind, 'plan')
+        self.assert_asked(H208 + footer)
+
+    def test_a_held_answer_with_no_provider_answer_reads_as_installed(self):
+        """The eighth refutation's delta-1: held at upload nothing is sent and no answer is kept, so there is nothing to misread
+        and no reason to differ from the installed revision, which reads that state with no date. With an answer kept, the
+        reading is the date's (test_the_question_holds_the_date_and_never_the_reading)."""
+        block = '\nAssessment and plan\nFollow up in clinic.\n\nCharge information\nDate of service: 2026-10-06\n'
+        text = (BANNER + 'Office visit note\nPatient: Synthetic Patient (fictional)\nDate of service: 2026-10-05\n'
+                'Place of service: office (POS 11)\nEstablished patient\n\nSubjective\nFollow-up of colon polyps. Colonoscopy in '
+                '2025: a 6 mm polyp in the sigmoid colon was removed by cold snare.\nNo melena.\n\nObjective\nAbdomen soft.\n'
+                'Medical decision making: moderate.\nTotal time on the date of the encounter was 32 minutes.\n' + block)
+        self.assert_asked(text)
+        stored = jobs._merged_facts(context.extract_context(text), {'service_date': '2026-10-06'})
+        self.assertIsNone(jobs._service_date_of(stored))
+        _, result = jobs._assess_child(text, None, (), {n: from_jsonable(Fact, v) for n, v in stored.items()}, None,
+                                       RecordingLookup((), {}, []), 'not_run', None, ())
+        jobs.release_routing_caches()
+        inventory = next(c.detail for c in result.encounter_checks if c.id == 'services.inventory')
+        self.assertIn('Documented as done on this encounter: colonoscopy (performed)', inventory)
+        self.assertEqual(result.proposals, ())
+
     def test_the_labels_around_the_question_call_it_asked_never_a_conflict(self):
         """The sixth refutation's dates-n6-2: the lines may record another occurrence, so the document may not conflict at all.
         Every reader that labels the fact asks charge_date_problem, as the check does; a real conflict keeps its wording."""

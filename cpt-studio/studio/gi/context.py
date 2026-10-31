@@ -1837,10 +1837,10 @@ def charge_date_own(fact) -> Optional[str]:
 
 
 def charge_question_day(text: str) -> Optional[date]:
-    """The date a reader reads a document against while its closing charge block's question stands, a member's held answer
-    included: the date the installed reading sends, never a date a request carries or a gate opens on. None for any other
-    document (service_date_of, engine.assess). The seventh refutation's parity-7-1: a held answer keeps the dateless
-    request's answer, and reading that with no date brought back everything the open question's readers had stopped."""
+    """The date a reader reads a document against while its closing charge block's question stands: the date the installed
+    reading sends, never a date a request carries or a gate opens on. None for any other document (service_date_of,
+    engine.assess, which also reads it for a held answer that keeps the dateless request's answer: the seventh refutation's
+    parity-7-1, where reading that with no date brought back what the open question's readers had stopped)."""
     own = charge_date_own(_context(text)[0])
     return date.fromisoformat(own) if own else None
 
@@ -1875,11 +1875,14 @@ def _charge_block_asks(text: str, lay: Layout, fact: Fact) -> Fact:
         kind, start = _labelled_kind(text, m.start('label'), m.end('label'), m.start('date'), m.end(), value)
         if _READING[kind] == 'aside':
             continue  # its own words place it in another occurrence ("Next date of service")
+        section = lay.section_at(m.start())
         if value.isoformat() == fact.value:
-            # its lines state the document's own date, wherever they stand: they do not contradict it (dates-n4-2), and an
-            # addendum stating it settles the question (the seventh refutation's text-3)
-            agrees = True
-        elif lay.section_at(m.start()).kind == 'plan':  # in a plan's reach, the installed reading's dropped line
+            # the block's own lines state the document's date, so they do not contradict it (dates-n4-2), and an addendum
+            # stating it settles the question (the seventh refutation's text-3). Any other line beyond the plan is no
+            # answer: a running PDF footer repeats the header's date, and h2-08 with one stopped asking (the eighth's delta-2)
+            agrees = agrees or section.kind == 'plan' or bool(
+                section.heading and ADDENDUM_HEADER.fullmatch(str(section.heading.text)))
+        elif section.kind == 'plan':  # in a plan's reach, the installed reading's dropped line
             # the whole line: its words after the date may change what it says. Every line of the block is bounded
             stated.append(' '.join(text[rows.line(m.start())[0]:rows.line(m.end() - 1)[1]].split()))
     if agrees or not stated:

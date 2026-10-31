@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from datetime import date
 from typing import Mapping, Optional, Sequence
 
-from studio.gi.context import charge_question_day
+from studio.gi.context import charge_question_day, is_member_conflict
 from studio.gi import sections as gi_sections
 from studio.gi import services as gi_services
 from studio.gi.profiles import DETECTED_FAMILIES, PROFILES, PROFILES_VERSION, ServiceProfile, family_for_code
@@ -141,9 +141,11 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     # the reading. Every reader reads the date the installed reading sends, as routing does, so the document reads as
     # installed reads it; every gate keeps date_state.value, None: each proposal holds on the encounter question and no
     # dated reference applies (the sixth refutation, parity-6-1 and 6-2: read with no date, a 2025 colonoscopy read as done
-    # today, and a code went from ready to excluded). So does a member's held answer on such a document, which keeps the
-    # dateless request's answer (the seventh refutation, parity-7-1 and pipe7-2).
-    read_day = date_state.value or charge_question_day(text)
+    # today, and a code went from ready to excluded). So does a member's held answer that keeps the dateless request's
+    # answer (the seventh refutation, parity-7-1 and pipe7-2). A held answer with no provider answer is a state the installed
+    # revision reaches, with nothing to misread, and reads as it does (the eighth refutation, delta-1).
+    read_day = date_state.value or (None if response is None and is_member_conflict(date_state.fact)
+                                    else charge_question_day(text))
     sources = tuple(reference.sources())
     selections: list[_Selection] = []
     proposals: tuple[ProposalAssessment, ...] = ()
