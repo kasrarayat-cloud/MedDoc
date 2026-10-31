@@ -15,13 +15,14 @@ reading. Synthetic text only.
 """
 import json
 import re
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from django.test import SimpleTestCase
 
 from studio import jobs
 from studio.gi import context, detect
+from studio.gi.sections import layout
 from studio import reports, review, serializers
 from studio.providers.corti import build_coding_request, normalize_coding_response
 from studio.reference.store import MUE, PFS, PrefetchedReferenceLookup
@@ -557,7 +558,9 @@ class ChargeBlockTests(SimpleTestCase):
         among the closing lines: it reads as installed, and that date is sent."""
         block = 'Charge information\nDate of service: 2026-10-06\nCPT: 99214\n'
         self.assert_asked(HEADER + PLAN + block)
-        self.assert_installed(HEADER + PLAN + block + '\nADDENDUM 1\nDate of service: 2026-10-05\n')
+        text = HEADER + PLAN + block + jobs.addendum_block_text(2, datetime(2026, 10, 31, 8, 0), 'Date of service: 2026-10-05')
+        self.assertNotEqual(layout(text).section_at(text.rindex('Date of service')).kind, 'plan')  # the application's own header
+        self.assert_installed(text)
 
     def test_the_labels_around_the_question_call_it_asked_never_a_conflict(self):
         """The sixth refutation's dates-n6-2: the lines may record another occurrence, so the document may not conflict at all.

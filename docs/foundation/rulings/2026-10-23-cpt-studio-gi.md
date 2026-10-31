@@ -1168,3 +1168,29 @@ What it means for this change (recorded by the receiving session, before buildin
         decision. Of the 36 live encounters exactly one can reach it, e084b793, with no decisions, and the walk does not
         touch it. It is recorded, not repaired: the repair would change the save path, which is where the parked work kept
         regressing, for one synthetic row. Pipe6-3 and pipe6-6 are rollback limits, recorded in the declaration.
+
+### Session interpretation, 2026-10-31 (1bf3b49c, the narrow release, after its seventh refutation) — recorded, not owner-ruled
+
+58. **The reader and gate split, finished (57 refined).** The seventh refutation was a differential pass: only what is
+    worse than installed, or a text the release adds that misstates the source, could block. It found no wrong date sent,
+    and the sentence held literally on 37,910 asked texts. Five things changed what 57 said:
+    (a) *A reference row can be a reader.* 57(a) called every reference use a gate. This was the first run with
+        fee-schedule rows loaded, and it showed `_procedural` reads a row's global days: with none a code counts as
+        procedural (installed's fail-closed rule for an unknown date), so a breath test raised a same-day E/M question.
+        Whether a code is a procedure is a reading, so `_procedural` reads the row the installed reading has. Everything
+        else stays a gate: `pfs_check` reads a row's `applicable_sources`, so handing the checks a row would open them.
+    (b) *A held answer on such a document reads as the open question does.* 57(a) left it reading with no date, as
+        installed. But installed's held state has no provider answer, and here the dateless answer is kept, so the
+        misreadings 57 had stopped came back, on the date the question quotes, the most natural wrong answer: a code went
+        to excluded on a false reason. "As installed" was the wrong target for a state installed never reaches.
+    (c) *57(d)'s limit was stated too narrowly.* It said only pre-install encounters reach it, and rested on that. A
+        member clearing a date reaches it on any encounter (text-1, pipe7-3): one dateless request, and a decision on a
+        ready code invalidated. The decision stands on a different ground: a dateless request is what an open question
+        asks; avoiding it would pair a dated answer with an undated context, which the stages' date pairing refuses; and
+        that path is where the parked work kept regressing. The row now says all of this. The live reach of a save of
+        something else is still one encounter with no decisions.
+    (d) *Its text can be true and still not settle.* An addendum stating the date the question names now settles it,
+        wherever the line stands. The chip no longer promises a question that may not be on the page yet.
+    (e) *What was not repaired, and why.* The considerations a fee-schedule row adds and an excluded code's reinstatement
+        do wait on the date: they are gates, and the limit row names them. A stale tab during the install window reads an
+        old page beside a new API: a limit of any install.

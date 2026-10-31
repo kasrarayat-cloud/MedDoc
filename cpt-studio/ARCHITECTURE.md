@@ -3000,10 +3000,13 @@ are handed while that question stands; no stored assessment reads either.
   keeps (`charge_question_day`): routing through `context.service_date_of`, its only way to the document's date, and the
   inventory and evidence readers through `engine.assess`'s `read_day`. Read with no date, a dated service went from
   performed to "service date not established" (dates-n5-4), a 2025 colonoscopy read as done on this encounter
-  (parity-6-2), and a code went from ready to excluded (parity-6-1). Every gate keeps `date_state.value`, None: each
-  proposal holds on the encounter question (`day is None`), and no dated reference is looked up (`_select`'s `dated`). A
-  request's date never comes from there: `jobs._service_date_of` reads the stored facts. A member's held answer is no
-  such question, and reads with no date, as installed reads it.
+  (parity-6-2), and a code went from ready to excluded (parity-6-1). So does a member's held answer on such a document,
+  which keeps the dateless request's answer (parity-7-1). Every gate keeps `date_state.value`, None: each proposal holds on
+  the encounter question (`day is None`), and the checks read a reference with no date (`_select`'s `dated`), because
+  `pfs_check` reads a row's `applicable_sources` and a row would open it. One reference fact is a reading, not a gate:
+  whether a code is a procedure at all (`_procedural`), which reads `read_pfs`, the row the installed reading has. With no
+  row a code counts as procedural (fail-closed), so a breath test raised a same-day E/M question (parity-7-2). A request's
+  date never comes from any of this: `jobs._service_date_of` reads the stored facts.
 
   Every other fact - no own date, or a question the installed reading already asks - is returned exactly as that
   reading made it, its texts and the answers it takes included. The release's refutations showed why: a block may
