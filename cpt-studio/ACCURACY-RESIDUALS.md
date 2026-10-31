@@ -679,9 +679,9 @@ Measured on 8dbc9e9a0, whose studio code is what ships (later commits change tes
     line. Installed's 3,297 ready proposals hold on the question, none is ready, and the excluded set is exactly installed's;
   - the controls fail as they must: the tree before the routing repair breaks routing on 156 of the real documents, and
     the tree before the readers' repair breaks the open question's equality on 51 of them.
-- Every input of the sixth refutation (56,215 texts) goes through that comparison, and the fifth lens's fuzz through the
-  note's literal check. The test helper proves the sentence on every asked text in its module: its first quote is a line
-  of the document, each stated quote a whole line at or after it.
+- The question's sentence, checked literally on the same 42,883 texts, 0 violations: its first quote is a line of the
+  document, each stated quote is that line or a whole line after it, and its own quote stands in the document. Planted
+  violations fail. The test helper makes the same check on every asked text in its module.
 - Cost: the context stage is linear to the 400,000-character cap over seventeen adversarial shapes (doubling ratios about
   2). The worst is 2.59 s (blank lines after a signature), against 2.22 s for installed on the same text.
 - Mutants: 55 of 55 killed on a green baseline, each restore checked by sha256: the reader and gate split, the note's literal
