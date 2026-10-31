@@ -99,8 +99,8 @@ from .symbols import BOX_PRINTED_PATTERN, CHECKED_BOX, UNCHECKED_BOX
 from . import pdfcontent
 from .pdfcontent import (IDENTITY, OptionalContent, PageContent, analyse_page, as_list, extraction_page, image_state,
                          multiply, number, object_key, raw_entry, resolved, stream_damaged)
-from .text import (INGEST_VERSION, agree, canonicalize, failed, format_seconds, join_pages, non_space_count,
-                   page_phrase, pdf_method, replace_surrogates)
+from .text import (INGEST_VERSION, REPLACEMENT, agree, canonicalize, failed, format_seconds, join_pages,
+                   non_space_count, page_phrase, pdf_method, replace_surrogates)
 
 if TYPE_CHECKING:
     from .extract import Limits
@@ -436,9 +436,10 @@ def _read_page(page, reader, optional, acroform, number: int) -> _Page:
                               if all(image is not known for known in content.images))
         content.__dict__.pop('image_coverage', None)
     text, placed, overlap, unread_box = _placed_boxes(layer, annotations)
-    text, replaced = replace_surrogates(text)
+    text, _ = replace_surrogates(text)
     block, block_replaced = replace_surrogates(annotations.block(number))
-    return _Page(layer=canonicalize(text), replaced=replaced or block_replaced, content=content,
+    # pypdf itself writes the replacement character for a string it cannot decode, so the text is what says so.
+    return _Page(layer=canonicalize(text), replaced=REPLACEMENT in text or block_replaced, content=content,
                  annotations=annotations, block=block, damaged=content.damaged or warnings.seen,
                  limited=warnings.limited, undecodable=layer.undecodable, placed=placed, overlap=overlap,
                  unread_box=unread_box)

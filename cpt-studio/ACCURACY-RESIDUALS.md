@@ -627,3 +627,33 @@ So the 527 wrong or uncertain sends are asked, never sent, and the sentence now 
 integrator accepted by decision (row gi2 dates-F1; the owner may overrule), two of them wrong by the source and
 listed for the owner. The ruling file keeps interpretation 28 as written; this is its measured correction
 (interpretation 37 corrects interpretation 31's figures the same way).
+
+## pypdf 6.21.4 (2026-10-31): what a new upload reads differently
+
+Seven advisories against pypdf 6.21.2 (CVE-2026-119203 to CVE-2026-119209) failed the required dependency audit on
+every pull request, so `cpt-studio` and `rebuild` both moved to 6.21.4. The move is not neutral here: this reader imports
+pypdf's text decoder and font class. Only a new upload meets the rows below; an extracted revision is never re-read
+(`jobs.stage_extract` skips it), so its text and its `engine` record stay as they were. `cpt-studio-ingest@4` marks the
+new reading.
+
+Measured through the real ingest child under each version, each run's recorded `engine` naming its pypdf: the 314 PDFs
+of the corpus read identically apart from that record, and none of them reaches a row below, which is why 18 hand-written
+PDFs, one per shape the source diff touches, were read as well. Ten read exactly as under 6.21.2 (a whole string, a lone
+surrogate code, five /DecodeParms forms and, by the repair, the first row's three); the other eight differ as below:
+
+| shape | 6.21.2 | 6.21.4, repaired |
+|---|---|---|
+| a two-byte font's string cut at an odd byte, last byte 0x80 or above | shown as �, the page named | the same, by the repair: pypdf now writes � itself, so the surrogate the notice looked for never arrived and the notice was lost |
+| the same, last byte below 0x80 | pypdf raised, so the page's whole text layer went unread (OCR, else "no usable text layer"); inside a form, the page reported damaged | the text layer is read, the glyph shown as �, the page named |
+| a ToUnicode that gives U+FFFD | shown as �, not named | shown as �, the page named |
+| /uniXXXX or /uXXXX glyph names in /Differences | the glyph's name written into the text | the character |
+| an indirect width in a CID font's /W | the page's text layer unread | read |
+| a non-numeric TD | the page's text layer unread | read; see the limit below |
+
+### Known limits
+
+| row | what remains |
+|---|---|
+| pypdf-1 | A non-numeric TD moves nothing, so the line after it joins the line before ("Second line of text.Third line of text."). No word is lost and no message names it; 6.21.2 left the whole page unread instead. |
+| pypdf-2 | A page whose only fault is a cut string with a last byte below 0x80 now keeps its text layer rather than going to OCR. That includes one-byte ASCII written in an Identity-H font, a producer's error: `(Polyp) Tj (Biopsy) Tj` reads as `偯汹�䉩潰獹` and `(A) Tj (B) Tj (C) Tj` as `���`, the page named, where 6.21.2 left the page unread; an even-length string alone reads as other characters under both versions, unnamed. Predefined CJK CMaps (90ms-RKSJ-H, GBK-EUC-H) read as under 6.21.2. |
+| pypdf-3 | `rebuild` runs pypdf 6.21.2 until its own install: this change reaches it only through its next image. |

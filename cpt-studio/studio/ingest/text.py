@@ -16,13 +16,14 @@ from studio.types import ExtractionResult, PageSpan
 if TYPE_CHECKING:
     from .extract import Limits
 
-INGEST_VERSION = 'cpt-studio-ingest@3'
+INGEST_VERSION = 'cpt-studio-ingest@4'
 PAGE_SEPARATOR = '\n\n'
 # The method a failure is reported under before any page was read.
 METHOD_FOR_KIND = {'pdf': 'pdf-text', 'docx': 'docx', 'txt': 'txt'}
 
 _UTF8_BOM = b'\xef\xbb\xbf'
 _SURROGATES = re.compile('[\ud800-\udfff]')
+REPLACEMENT = '�'
 
 
 def canonicalize(text: str) -> str:
@@ -37,7 +38,7 @@ def has_surrogates(text: str) -> bool:
 
 
 def replace_surrogates(text: str) -> tuple[str, bool]:
-    replaced, count = _SURROGATES.subn('�', text)
+    replaced, count = _SURROGATES.subn(REPLACEMENT, text)
     return replaced, count > 0
 
 

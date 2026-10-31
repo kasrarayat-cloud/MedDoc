@@ -150,8 +150,13 @@ lines) in document order; headers/footers are listed in `messages` as not
 extracted. TXT: UTF-8 (BOM stripped) or explicit decode failure.
 Encrypted/corrupt/oversized/too-many-pages files fail with a specific message.
 
-Never silently partial (`cpt-studio-ingest@3`): content a viewer would show is
+Never silently partial (`cpt-studio-ingest@4`): content a viewer would show is
 read or reported, and content it would not show is excluded with a message.
+- Text that is not valid: a lone surrogate, or U+FFFD in a PDF page's text (a
+  font's ToUnicode gives it, or pypdf, since 6.21.4, writes it for a string it
+  cannot decode: an odd byte count in a two-byte font), is shown as � and the
+  page is named in a message. The text is what says so, not the replacing: `pdf.py`
+  no longer sees the surrogate pypdf used to hand it.
 - Check boxes (a contract with routing, 5.3): every box extraction recognises
   is written as ☐ (U+2610, unchecked) or ☒ (U+2612, checked), never another
   box glyph, or as the unread mark `[?]` where its state is not plainly what

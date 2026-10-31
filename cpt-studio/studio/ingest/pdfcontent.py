@@ -578,7 +578,7 @@ def _ING_glyphs(font, string) -> list:
         try:
             text = string.decode(font.encoding, 'surrogatepass')
         except UnicodeDecodeError:
-            text = string.decode(font.encoding, 'surrogateescape')
+            text = string.decode(font.encoding, 'replace')
         raw = ''
     else:
         text = ''.join(font.encoding.get(code, chr(code)) for code in string)

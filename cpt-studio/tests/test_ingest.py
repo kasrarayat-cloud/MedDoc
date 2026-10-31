@@ -30,6 +30,7 @@ from studio.ingest import _child as child_module
 from studio.ingest import docx as docx_ingest
 from studio.ingest import extract as extract_module
 from studio.ingest.pdf import extract_pdf
+from studio.ingest.pdfannots import PageAnnotations
 from studio.ingest.text import extract_txt, join_pages, page_phrase
 from studio.types import ExtractionResult, PageSpan
 from tests.support import docgen
@@ -400,7 +401,7 @@ class PdfTests(unittest.TestCase):
         self.assertEqual((result.status, result.method, result.messages, result.ocr_pages),
                          ('ok', 'pdf-text', (), ()))
         self.assertEqual([text.strip() for text in page_texts(result)], self.PAGES)
-        self.assertEqual(result.engine, {'ingest': 'cpt-studio-ingest@3', 'pypdf': '6.21.2'})
+        self.assertEqual(result.engine, {'ingest': 'cpt-studio-ingest@4', 'pypdf': '6.21.4'})
 
     def test_each_page_marker_lands_in_its_own_span(self):
         pages = [f'Marker page {n}: synthetic findings text for this page only.' for n in range(1, 7)]
@@ -476,6 +477,17 @@ class PdfTests(unittest.TestCase):
                 tempfile.TemporaryDirectory() as workdir:
             result = extract_pdf(data, Limits(), None, time.monotonic() + 60, workdir)
         self.assertEqual((result.status, result.text), ('ok', 'Polyp � removed with cold snare.'))
+        self.assertEqual(result.messages, ('Page 1 contains characters the PDF does not encode as valid text; '
+                                           'they are shown as �.',))
+
+    def test_invalid_characters_in_the_annotation_block_are_replaced_and_reported(self):
+        data = docgen.make_pdf([self.PAGES[0]])
+        block = '[PDF annotation text on page 1]\nPolyp \ud800 removed.'
+        with mock.patch.object(PageAnnotations, 'block', return_value=block), \
+                tempfile.TemporaryDirectory() as workdir:
+            result = extract_pdf(data, Limits(), None, time.monotonic() + 60, workdir)
+        self.assertEqual(result.status, 'ok')
+        self.assertIn('Polyp � removed.', result.text)
         self.assertEqual(result.messages, ('Page 1 contains characters the PDF does not encode as valid text; '
                                            'they are shown as �.',))
 
@@ -563,7 +575,7 @@ class OcrDetectionTests(unittest.TestCase):
     def test_availability_and_engine_versions_agree(self):
         versions = engine_versions()
         self.assertIsInstance(ocr_available(), bool)
-        self.assertEqual((versions['pypdf'], versions['python-docx']), ('6.21.2', '1.2.0'))
+        self.assertEqual((versions['pypdf'], versions['python-docx']), ('6.21.4', '1.2.0'))
         self.assertEqual('ocr' not in versions, ocr_available())
         if not ocr_available():
             self.assertEqual(versions['ocr'], 'not available')
