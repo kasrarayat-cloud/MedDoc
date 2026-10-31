@@ -1243,3 +1243,46 @@ What it means for this change (recorded by the receiving session, before buildin
     that the rebuild's upload check can already be passed with a crafted cross-reference section, on the version
     `main` pins today. That is recorded in `docs/rebuild/security-readiness.md`, is not this release's to repair,
     and goes to the owner.
+
+## Owner directive, 2026-10-31 — a complete reviewed synthetic GI demonstration (fourth round)
+
+Received directly from the owner in session 1bf3b49c on 31 October 2026 (about 17:35Z), as pasted instruction text,
+after the install of revision 80df1831d168 (PRs #1448 and #1451) and its report (PR #1452). Recorded by the receiving
+session in its first commit, before the work that depends on it. Verbatim:
+
+> Continue from CPT Studio round three, installed revision 80df1831d168. The objective is a complete, reviewed synthetic GI demonstration with an actual downloaded report, alongside repair of the documented shared interpretation defects.
+>
+> Start in a fresh worktree using scripts/setup-worktree.sh. Coordinate one integration/deployment owner. Preserve existing encounters, decisions, raw responses, failures, receipts and rollback artifacts.
+>
+> 1. Address the reported live rebuild PDF-security finding first, as a separate scoped change. Read docs/rebuild/security-readiness.md and docs/rebuild/pypdf-6.21.4.md. Reproduce the inspection bypass using harmless fixtures; repair the actual upload and original-download path. Do not assume strict=True, warning suppression or a dependency upgrade establishes safety. Verify malformed/unreadable content cannot silently pass the active-content policy, while ordinary supported PDFs remain usable.
+>
+> 2. Repair and verify the documented PDF compatibility regressions before deploying the dependency update to each application. Check rendered checkboxes, extracted text, OCR routing, annotations and filled answers. Verify installed runtime versions and resource limits. Do not conceal the dependency audit failure.
+>
+> 3. Repair CPT Studio’s shared service interpretation: bind dates, performed/planned/historical/negated status, anatomy, procedure extent and evidence to the correct service. Use h4 and h2-08 as regression cases, plus independently authored unseen variants. No patient-specific exceptions, forced approvals or weakened validators. “Unchanged from installed” is insufficient when installed behavior is known to be wrong.
+>
+> 4. Investigate Corti omissions separately using retained requests and responses first. Trace missing EUS/EGD and the ERCP discrepancy through source text, submitted payload, raw response and local filtering. Do not invent missing codes or promote alternatives. Keep provisional author expectations separate from qualified GI-coder adjudication.
+>
+> 5. After those repairs, execute a small fresh HTTPS acceptance test through the ordinary reviewer account: upload, necessary clarification, coding review, clearly labelled synthetic approval, reload and actual reviewed download. Verify completeness, evidence and persisted selections independently. Report legitimate documentation questions separately from software false holds.
+>
+> Use existing standing synthetic-testing authority, bounded purposeful provider calls and duplicate protection. Do not request repeated funding approval already superseded. Finish with installed revision, actual downloads, measured usage and precise remaining limitations. Do not claim reliable GI coding from installation or download checks alone.
+
+### Session interpretation, 2026-10-31 (1bf3b49c, fourth round, on receipt) — recorded, not owner-ruled
+
+62. **Order and scope.** The rebuild's upload check (P1) is repaired first, on its own branch and pull request, and
+    installed in the rebuild on its own declaration. The pypdf move then happens per application, and only after that
+    application's documented regressions are repaired and measured. The rebuild already pins 6.21.4 on `main` (PR #1449),
+    so its next install carries that pin; that install is judged as a pypdf move too. The CPT Studio interpretation
+    repair follows. The Corti investigation reads retained rows and sends nothing. The acceptance test comes last.
+    Installing the rebuild is in scope for items 1 and 2. Round 3 had kept app.quillmd.com unchanged.
+63. **The acceptance test uses the ordinary reviewer account.** For item 5 this overrides interpretation 40, which kept
+    every synthetic approval on the agent account. This session makes the approval through the demo-reviewer account,
+    and the decision's own record says it is a synthetic acceptance-test approval made by the session, not a human
+    review. The report says the same. No other decision is made through that account.
+64. **One integration and deployment owner.** This session alone commits to integration branches, pushes, merges and
+    installs. Parallel agents investigate, write in their own worktrees and refute from read-only sandboxes.
+65. **Nothing retained is deleted or rewritten.** That covers existing encounters, decisions, raw responses, failures,
+    install receipts and rollback artifacts, including the pre-app dump of round 3. A repair that would need to rewrite
+    a stored row is a finding for the owner, not something to carry out.
+66. **Right by the source, for readers too.** Interpretation 38's bar applies to the pypdf move as well. A reading that
+    differs from 6.21.2 is judged against the document, not against equality with 6.21.2. Equality with the installed
+    reader is a safety net, never acceptance, wherever the installed reading is known to be wrong.
