@@ -1286,3 +1286,28 @@ session in its first commit, before the work that depends on it. Verbatim:
 66. **Right by the source, for readers too.** Interpretation 38's bar applies to the pypdf move as well. A reading that
     differs from 6.21.2 is judged against the document, not against equality with 6.21.2. Equality with the installed
     reader is a safety net, never acceptance, wherever the installed reading is known to be wrong.
+
+### Session interpretation, 2026-10-31 (1bf3b49c, fourth round, the rebuild installer) — recorded, not owner-ruled
+
+Decided by the integration owner (interpretation 64) and recorded by the installer's author in its first commit,
+before the code that depends on it.
+
+67. **The rebuild's next install is code only, through a tracked installer.**
+    - **D1.** The next act installs code only. The candidate is `origin/main` at the act: it carries P1, the
+      never-installed PR #1434 instruction text and every other path since `67acb2628`. The live venv
+      `/opt/meddoc-pro/rebuild/.venv` stays exactly as found (pypdf 6.21.1, filelock 4.0.0, msgpack 1.2.2 and the 63
+      unrecorded bytecode files), asserted by a full footprint before and after. `rebuild/requirements.txt` will name
+      newer versions than the venv; that mismatch is declared, not refused. The dependency move is a later, separate
+      act (D1b).
+    - **D2.** No rollback ever downgrades the venv.
+    - **D3.** The Corti candidate units and every other foreign service stay running and unchanged. The act verifies
+      them idle and unchanged before and after, as the October engine did.
+    - **D4.** The declaration reaches `main` through a pull request before the act, so the candidate contains it. The
+      October rule "the declaration is a direct child commit of the candidate adding only that file" is replaced by:
+      the declaration is tracked, unmodified and committed in the candidate, and the strict gate of
+      `scripts/run-ruled-mutation.sh` passes.
+
+    This refines interpretation 62, which is kept as written: the next install carries main's pins in the tree but not
+    in the venv, so it is judged as a code install with a declared requirements/runtime mismatch. The pypdf move is
+    judged later, in D1b, after item 2's regressions are repaired and measured. In the install analyst's plan, D1
+    matches option (ii) of its question O1 and D2 matches the precedent answer of its question O2.
