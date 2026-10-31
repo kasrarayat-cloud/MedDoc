@@ -1209,3 +1209,9 @@ What it means for this change (recorded by the receiving session, before buildin
         dateless answer it keeps. A date held at upload keeps none, and installed reaches that state with nothing to
         misread. It reads as installed again. 58(b)'s sentence "a state installed never reaches" holds only for the answer it
         keeps, and is narrowed to that.
+
+60. **The code is frozen (session 1bf3b49c, 2026-10-31).** The ninth refutation, one lens over the two conditions 59 added,
+    found nothing that blocks, so the refutations stop here: nine over the narrow diff, the last two with no blocking finding.
+    Their remaining limits are named in ACCURACY-RESIDUALS.md and go to the owner in the report. The owner's decision named
+    one focused refutation; 53(e) explains why the rule required more, and each repair's cost is in that file's measured
+    block. No reliable-coding claim is made.

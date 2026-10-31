@@ -2978,8 +2978,9 @@ are handed while that question stands; no stored assessment reads either.
     the note's own plan brings its own plan and charge block, its title above them);
   - carry no date of birth (rule N2).
 
-  The document's own date settles it in a plan's reach or in the application's addendum section (`ADDENDUM_HEADER`): a
-  running footer repeating it is no answer, or h2-08 as a PDF stops asking and sends the contradicted date (delta-2). The
+  The document's own date settles it in a plan's reach or in the application's addendum section (`ADDENDUM_HEADER`). A line
+  beyond both is no answer: h2-08's running PDF footer stands after its "Diagnosis:" field, and reading it would stop the
+  question and send the contradicted date (delta-2). In a plan's reach nothing tells a footer from the plan's own line. The
   question keeps the installed fact's evidence and
   nothing else, and its note (`CHARGE_DATE_NOTE`) keeps the date that fact sends. `merge_user_values` takes and holds a
   member's answer to it exactly as it does for that sent fact: that date taken, any other held with the installed note

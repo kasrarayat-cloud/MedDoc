@@ -1853,8 +1853,8 @@ def _charge_block_asks(text: str, lay: Layout, fact: Fact) -> Fact:
     is taken or held exactly as that fact takes or holds it (charge_date_own, merge_user_values). The block's date is named
     in the note only, as what the lines from the block's first line to the document's end state: those lines may record
     this encounter or another occurrence - an entry written after the signature among them - so their date is never this
-    encounter's date of service. A block that also states the document's own date does not ask. Read once per document:
-    the closing block is bounded, and every other loop is linear."""
+    encounter's date of service. The document's own date stated in a plan's reach or the application's addendum section
+    does not ask. Read once per document: the closing block is bounded, and every other loop is linear."""
     if fact.origin != 'document' or not fact.value:
         return fact
     rows = _Rows(text)
