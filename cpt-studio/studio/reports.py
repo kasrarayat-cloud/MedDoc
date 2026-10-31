@@ -20,7 +20,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from . import audit, review
-from .gi.context import is_member_conflict
+from .gi.context import charge_date_problem, is_member_conflict
 from .gi.profiles import PROFILES
 from .models import Clarification, Decision, Encounter, Membership, Proposal, ReportArtifact
 from .types import CONTEXT_FACTS, sha256_json
@@ -73,6 +73,9 @@ ORIGIN_WORDING = {'document': 'documented', 'user': 'member-supplied encounter m
 # A member's value unlike the document's single one (context.is_member_conflict) is that conflict, never conflicting
 # documentation (refutation r1, context-5).
 MEMBER_CONFLICT_WORDING = 'member-entered encounter metadata differs from the document'
+# The question a closing charge block asks: its lines may record another occurrence, so it is no conflict in the document
+# (the sixth refutation, dates-n6-2). Its note says why.
+CHARGE_QUESTION_WORDING = 'asked'
 # Informational codes: provider candidates and alternatives, and codes the bounded second review selected that account
 # for no unresolved service - none of them selectable, not all of them "never selected" (refutation r1, report lens).
 ALTERNATIVES_TITLE = 'ALTERNATIVES — INFORMATIONAL, NEVER SELECTABLE'
@@ -537,6 +540,7 @@ def _context_section(snap):
         origin = fact['origin']
         value = fact['value'] if fact['value'] and origin in ('document', 'user') else None
         wording = (MEMBER_CONFLICT_WORDING if is_member_conflict(fact)
+                   else CHARGE_QUESTION_WORDING if charge_date_problem(fact)
                    else ORIGIN_WORDING.get(origin, f'origin {origin}'))
         line = f'  {_human(name).capitalize()}: ' + (f'{_human(value)} ({wording})' if value else wording)
         if fact['note']:

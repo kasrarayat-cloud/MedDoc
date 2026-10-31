@@ -14,6 +14,7 @@ from dataclasses import dataclass, replace
 from datetime import date
 from typing import Mapping, Optional, Sequence
 
+from studio.gi.context import charge_question_day, is_member_conflict
 from studio.gi import sections as gi_sections
 from studio.gi import services as gi_services
 from studio.gi.profiles import DETECTED_FAMILIES, PROFILES, PROFILES_VERSION, ServiceProfile, family_for_code
@@ -65,6 +66,9 @@ class _Evaluation:
     # Where the document places the act the code accounts for when no service of its family is documented
     # (reconcile.placed_check). None when the inventory documents no such act, or names no service holding it.
     placed: Optional[Check] = None
+    # The fee-schedule row a reader reads: the one the installed reading has, while a closing charge block's question leaves
+    # ``reference`` empty for the gates. It decides whether the code is a procedure at all (_procedural).
+    read_pfs: Optional[dict] = None
 
 
 @dataclass(frozen=True)
@@ -133,6 +137,15 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     if provider_status == 'succeeded' and response is None:
         raise ValueError('A succeeded provider status needs its normalized response.')
     date_state = checks.service_date_state(context, service_date)
+    # GI round 3, the narrow release: the question a closing charge block asks holds the date and what hangs on it, never
+    # the reading. Every reader reads the date the installed reading sends, as routing does, so the document reads as
+    # installed reads it; every gate keeps date_state.value, None: each proposal holds on the encounter question and no
+    # dated reference applies (the sixth refutation, parity-6-1 and 6-2: read with no date, a 2025 colonoscopy read as done
+    # today, and a code went from ready to excluded). So does a member's held answer that keeps the dateless request's
+    # answer (the seventh refutation, parity-7-1 and pipe7-2). A held answer with no provider answer is a state the installed
+    # revision reaches, with nothing to misread, and reads as it does (the eighth refutation, delta-1).
+    read_day = date_state.value or (None if response is None and is_member_conflict(date_state.fact)
+                                    else charge_question_day(text))
     sources = tuple(reference.sources())
     selections: list[_Selection] = []
     proposals: tuple[ProposalAssessment, ...] = ()
@@ -140,7 +153,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     coverage: list[Check] = []
     # The documented-service inventory is read from the text alone, before and independently of the proposals; the
     # page spans tell it where a page turns inside a sentence (refutation r1, formats-6).
-    inventory = (gi_services.build(text, service_date=date_state.value, routing=routing, context_facts=context,
+    inventory = (gi_services.build(text, service_date=read_day, routing=routing, context_facts=context,
                                    pages=pages)
                  if READ_DOCUMENTED_SERVICES else gi_services.ServiceInventory(version=gi_services.INVENTORY_VERSION))
     problems = gi_services.validate(inventory, text)
@@ -150,7 +163,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         listable = [c for c in response.codes if isinstance(c.code, str) and 0 < len(c.code) <= MAX_LISTED_CODE]
         if len(listable) < len(response.codes):
             provider.append(checks.unlisted_codes_check(len(response.codes) - len(listable), MAX_LISTED_CODE))
-        selections = [_select(group, text, pages, routing, reference, date_state.value, usable)
+        selections = [_select(group, text, pages, routing, reference, read_day, usable, dated=date_state.value is not None)
                       for group in _merge_selected(listable)]
         second_alternatives: list[ProposalAssessment] = []
         if second is not None and usable is not None:
@@ -502,7 +515,7 @@ def _merge_selected(codes: Sequence[ProviderCode]) -> list[list[ProviderCode]]:
 
 
 def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult, reference: ReferenceLookup,
-            day: Optional[date], inventory=None) -> _Selection:
+            day: Optional[date], inventory=None, *, dated: bool = True) -> _Selection:
     code = group[0].code
     code_kind, scope_reason = checks.code_scope(code)
     kept, dropped = checks.exact_evidence([span for item in group for span in item.evidence], text, pages)
@@ -598,8 +611,9 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
         if elsewhere is not None:
             supported = reconcile.support(elsewhere, kept, today=today, report_family=report_family)
             placed = reconcile.placed_check(elsewhere, inventory, PROFILES[selection.family].label)
-    return replace(selection, evaluation=_Evaluation(finding, outcome, reference.lookup(code, day), own, speaks_for,
-                                                     found, supported, note, placed))
+    row = reference.lookup(code, day if dated else None)
+    return replace(selection, evaluation=_Evaluation(finding, outcome, row, own, speaks_for, found, supported, note, placed,
+                                                     (row if dated else reference.lookup(code, day)).pfs))
 
 
 def _today_passage(text: str, span, day: Optional[date]) -> bool:
@@ -1411,12 +1425,14 @@ def _encounter(provider, context, routing, sources, date_state, selections) -> _
 
 def _procedural(s: _Selection) -> bool:
     """A non-E/M code that is procedural: a procedure profile, or a CMS global period other than XXX. A code
-    with no fee-schedule row for the date counts (fail-closed): the E/M is then held."""
+    with no fee-schedule row for the date counts (fail-closed): the E/M is then held. The row is the one a reader reads
+    (read_pfs): whether a breath test is a procedure does not wait on a closing charge block's question (the seventh
+    refutation's parity-7-2 and pipe7-1), so no same-day E/M question is raised for it."""
     if s.family in checks.EM_FAMILIES or s.evaluation is None:
         return False
     if s.profile.procedure:
         return True
-    pfs = s.evaluation.reference.pfs
+    pfs = s.evaluation.read_pfs
     return not pfs or pfs.get('global_days') != 'XXX'
 
 

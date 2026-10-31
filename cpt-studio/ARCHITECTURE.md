@@ -2953,6 +2953,82 @@ rule, never a sentence patch). The rules this added, by module:
   sections print is re-checked against the revision text; each provider run is "used by this assessment" only when
   its own provider check did not fail; `ops/verify_downloads.py` reads a wrapped source passage as one entry.
 
+### 5.13 GI round 3: the narrow release (2026-10-30)
+
+The owner's decision of 2026-10-30 (ruling file) shipped two changes on the installed revision 90377ec6f413. Every other
+reader is unchanged, so routing stays `gi-routing@4`, the inventory `gi-services@1` and the engine
+`cpt-studio-validation@4`: each reads what it read, for every document the installed revision read. The engine's changes
+are the wording of the date question this release's reading raises (`checks._date_problem`) and which date its readers
+are handed while that question stands; no stored assessment reads either.
+
+- **The note's own closing charge block** (`studio/gi/context.py`, `_charge_block_asks`). Rule A skips every date
+  label a plan or history section holds. The release acts on one fact only: one the installed reading SENDS (origin
+  'document'). There, the encounter's own date-of-service label (date of service, DOS, service or encounter date) in the
+  note's own closing charge block that states another date makes the date a question. `_closing_charge_block` reads the
+  block once per document, reading back from the end. The block must:
+  - close the document;
+  - sit in a plan section's reach;
+  - be headed by a heading of the closed class `CHARGE_HEADINGS`, alone or joined to its first field by a colon or a
+    dash;
+  - hold only fields, code or cell lines and signature lines, none over 120 characters (`CHARGE_HEADING_REACH`: the
+    heading reader's tail pattern is quadratic in a long run of marks or spaces, so a longer line is never read);
+  - name no other occurrence on any of its lines (`_CHARGE_ELSEWHERE`);
+  - not belong to a copied note (`_block_in_another_note`: a heading-like line naming another occurrence between the
+    block and the document's first plan section, or on the nearest non-empty line above it - a note copied in after
+    the note's own plan brings its own plan and charge block, its title above them);
+  - carry no date of birth (rule N2).
+
+  The document's own date settles it in a plan's reach or in the application's addendum section (`ADDENDUM_HEADER`). A line
+  beyond both is no answer: h2-08's running PDF footer stands after its "Diagnosis:" field, and reading it would stop the
+  question and send the contradicted date (delta-2). In a plan's reach nothing tells a footer from the plan's own line. The
+  question keeps the installed fact's evidence and
+  nothing else, and its note (`CHARGE_DATE_NOTE`) keeps the date that fact sends. `merge_user_values` takes and holds a
+  member's answer to it exactly as it does for that sent fact: that date taken, any other held with the installed note
+  (`charge_date_own`). The answer is never re-read from the evidence, whose re-read can miss a form the label reader
+  reads ("DOS-10/05/2026"). The block's date appears only in the note. The question's and check's wording read the
+  note's first sentence through `charge_date_problem` (`checks._date_problem`), and every reader that labels the fact asks
+  the same predicate and says "asked": the report, the screen and list (`date_asked`, `service_date_asked`) and the
+  change reason. It is no conflict in the document, since its lines may record another occurrence.
+
+  The block runs from its first line to the document's end, so an entry written after the note's signature is inside it.
+  Ending it at a signature line was one more word list: no such list tells a signature line from a field ("Electronic
+  signature: ..." was missed; "Signed ABN on file: no" was taken for one). So the sentence says only what is true of the
+  document whatever the guards decided: it quotes the line it read from, not "the last heading" (a billing heading outside
+  the closed class may follow, and a guard may take a line for a heading); it quotes each stated line whole, not up to its
+  date ("10/04/2026 through 10/06/2026", "(cancelled)"); and it says the date "is read from" its line, not that it is the
+  document's own (the installed reading may have taken a planned procedure's date) or that the lines state a date of
+  service (a filing deadline's label reads as one). The guards decide only whether to ask; a wrong guess costs a question.
+
+  The question holds the date and what hangs on it, never the reading. Every reader reads the date the question's note
+  keeps (`charge_question_day`): routing through `context.service_date_of`, its only way to the document's date, and the
+  inventory and evidence readers through `engine.assess`'s `read_day`. Read with no date, a dated service went from
+  performed to "service date not established" (dates-n5-4), a 2025 colonoscopy read as done on this encounter
+  (parity-6-2), and a code went from ready to excluded (parity-6-1). So does a member's held answer that keeps the dateless
+  request's answer (parity-7-1). A held answer with no provider answer is a state the installed revision reaches, with
+  nothing to misread, and reads as it does (delta-1). Every gate keeps `date_state.value`, None: each proposal holds on
+  the encounter question (`day is None`), and the checks read a reference with no date (`_select`'s `dated`), because
+  `pfs_check` reads a row's `applicable_sources` and a row would open it. One reference fact is a reading, not a gate:
+  whether a code is a procedure at all (`_procedural`), which reads `read_pfs`, the row the installed reading has. With no
+  row a code counts as procedural (fail-closed), so a breath test raised a same-day E/M question (parity-7-2). A request's
+  date never comes from any of this: `jobs._service_date_of` reads the stored facts.
+
+  Every other fact - no own date, or a question the installed reading already asks - is returned exactly as that
+  reading made it, its texts and the answers it takes included. The release's refutations showed why: a block may
+  record another occurrence and no guard can always tell (the second), and quoting the block's date beside a question
+  the document already raised misstated it (the third). So the guards above decide only whether to ask, and a block
+  they miss costs a question, never a date taken or sent. Line lookups are bisected and read lines are bounded, so the
+  reader is linear.
+- **The context re-read and the disabled-provider safeguards** (`studio/jobs.py`):
+  - `CONTEXT_VERSION` gi-context@3, with @1 and @2 earlier: a stage remakes such a context before it sends or assesses,
+    and no second review is offered on it;
+  - with sending disabled, `_request_for` rebuilds a run's request with the adapter's own builder, so an unchanged
+    request re-assesses with the recorded answer;
+  - with sending disabled, the upgrade's predict never replaces a recorded request (`_recorded_in_use`) with "provider
+    not run". An unknown outcome blocks it, and the encounter reads provider unknown; any other recorded request stops
+    it (`REMADE_DISABLED_MESSAGE`). With no request recorded it runs as before (ec5 skeptic:1);
+  - an upgrade's own predict (`_upgrade_predict_key`), queued under an earlier revision and remade again, queues the
+    upgrade's predict for the fresh context, never a member's ordinary predict (STATE2N-1).
+
 ## 6. Security
 
 Login required for everything except `/health/` and `/login/`. No public

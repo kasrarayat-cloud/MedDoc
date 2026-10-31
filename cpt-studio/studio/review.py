@@ -15,6 +15,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from . import audit
+from .gi.context import charge_date_problem
 from .models import (Assessment, Clarification, Decision, DecisionInvalidation, Encounter, Job, Proposal,
                      ProviderRun, SourceRevision)
 from .types import sha256_json, to_jsonable
@@ -420,6 +421,8 @@ def _withdraw_superseded(encounter, assessment, raised):
 def _fact_value(fact):
     if not fact:
         return ('absent', '')
+    if charge_date_problem(fact):
+        return ('asked', 'asked')  # a closing charge block's question is no conflict in the document (dates-n6-2)
     return (fact.get('value') or 'not documented', fact.get('origin') or '')
 
 

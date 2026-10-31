@@ -627,3 +627,186 @@ So the 527 wrong or uncertain sends are asked, never sent, and the sentence now 
 integrator accepted by decision (row gi2 dates-F1; the owner may overrule), two of them wrong by the source and
 listed for the owner. The ruling file keeps interpretation 28 as written; this is its measured correction
 (interpretation 37 corrects interpretation 31's figures the same way).
+
+## GI round 3 (2026-10-29/30): the narrow release
+
+The owner's directive of 2026-10-29 (ruling file, "Owner directive, 2026-10-29") asked for repairs to four things:
+- the shared date and section binding, h2-08 first;
+- the extent and table interpretation;
+- the current-visit versus future-follow-up scope;
+- the inventory's fact binding.
+
+Session 7c8d38da ran four investigations, four repairs and two fix rounds on branch
+`fix/cpt-studio-gi-binding-20261029`. Six independent lenses refuted each round, finding 45, 46 and 46 findings. The
+third was a differential round, with 41 findings blocking. Each fix round fixed the previous round's findings and
+introduced new ones: new date sends, a member's correct answer refused, quadratic shapes, and decisions lost. On
+2026-10-30 the owner decided to ship a narrow release instead (ruling file, "Owner decision, 2026-10-30").
+
+That branch, with its refutations' findings (session scratch, summarised in the ruling file), is kept as the next
+round's starting record. None of its rules ship. Nothing here is an accuracy measure: every expectation is a source
+review of synthetic text, and the reviewer decides every code.
+
+### What ships (`fix/cpt-studio-gi3-narrow-20261030`, built on 90377ec6f413)
+
+| id | the defect (input) | before (90377ec6f413) → after | how |
+|---|---|---|---|
+| gi3 h2-08 | h2-08: the header's "Date of service: 2026-10-05"; at the end of its "Assessment and plan", "Charge information" / "Date of service: 2026-10-06" | 2026-10-06 dropped (rule A skips every plan-section date label) and 2026-10-05 sent → the date is asked and the request is sent with no date line. The question says only what is true of the document: "The lines from “Charge information” to the document's end state “Date of service: 2026-10-06”, while 2026-10-05 is read from “Date of service: 2026-10-05”". A member's 2026-10-05 makes one dated request. Any other answer is held with the installed note ("... the document gives 2026-10-05 ..."): every answer is taken or held exactly as installed takes or holds it. The block may record this encounter or another occurrence, so its date is never taken (the narrow refutations) | only where the installed reading sends a date (`context._charge_block_asks`): the note's own closing charge block states another date of service (`_closing_charge_block`, read once per document). The block must:<br>- close the document;<br>- sit in a plan section's reach;<br>- be headed by a heading of the closed class `CHARGE_HEADINGS`, alone or joined to its first field;<br>- hold only fields, code or cell lines and signature lines, none over 120 characters;<br>- name no other occurrence on any of its lines (`_CHARGE_ELSEWHERE`);<br>- not belong to a copied note (`_block_in_another_note`: no heading-like line naming another occurrence between the block and the document's first plan section, or on the nearest non-empty line above it);<br>- carry no date of birth.<br>Only the encounter's own date-of-service label counts (date of service, DOS, service or encounter date). The document's own date settles it in a plan's reach or in the application's addendum section; a line beyond both, a running footer after a section-opening field among them, settles nothing. The block runs from its heading to the document's end, so an entry written after the signature is among its lines. The question keeps the installed fact's evidence only, so only the document's own date is a member's answer; what the lines state is named in its note only, each stated line quoted whole, as theirs and never as the block's (`CHARGE_DATE_NOTE`, read by `charge_date_problem`). Every reader reads the date the installed reading sends (`context.service_date_of`, `charge_question_day`, `engine.assess`), so the document reads exactly as installed reads it, unanswered or with a member's answer held over a kept provider answer; only the gates keep no date (each proposal holds on the question, and no dated reference applies). The report, the screen, the list and the change reason say "asked", never "conflicting". Every fact the installed reading does not send - no own date, or a question it already asks - is returned exactly as it made it, so nothing is newly sent, not even through a member's answer |
+| gi3 h2-08's layouts | the charge block with a CPT or ICD line, field lines, a cell table, a heading in bold ("**Charge information**", "__Charge information__"), the heading joined to its first field by a colon or a dash, with or without blanks ("Charge Information: Date of Service: ...", "Charge Information — Date of Service: ...", "Charge Information—Date of Service: ...", "Charges: 99214, date of service ..."), a dash bullet before a dash-joined heading ("- Charge information - Date of service: ..."), a field that opens with a signature word ("Signed ABN on file: no", "Dictated by: ..."), or a signature line after it (the second refutation's F7, and the narrow refutations' dates-n1, dates-n2-8, dates-n4-3, dates-n5-2 and dates-n5-3 shapes) | 2026-10-05 sent → asked, as above | the same rule |
+| gi3 context re-read | a context 90377ec6f413 recorded (gi-context@2), such as the live e084b793 (the earlier h2-08), which says 2026-10-05 as documented | kept current, so a predict queued or stopped at the install, a reconciliation or a second review would send 2026-10-05 again → remade under the current rules before any stage sends or assesses on it, and no second review is offered on it | `jobs.CONTEXT_VERSION` gi-context@3, with @1 and @2 earlier (interpretation 49) |
+| gi3 STATE2-1 | sending disabled; a pre-install encounter whose context is remade by a resumed assess, or by the stale-stage sweep with no member action | assessed with no provider answer: every proposal dropped, the reviewer's decisions invalidated, and an unknown or failed outcome shown as "provider not run" → an unchanged request re-assesses with the recorded answer. When the request changed, an unknown outcome blocks the upgrade's predict (the encounter reads provider unknown), and any other recorded request stops it, keeping what is recorded. With no request recorded it runs as before | `jobs._request_for` (the adapter's own request builder) and `jobs._recorded_in_use` |
+
+### Measured against the installed revision (offline, synthetic; never an accuracy figure)
+Measured on b5ddc4d32, whose `cpt-studio/` code and requirements are what ship. Later commits change documentation,
+and the merge of `main` adds only the rebuild's pypdf pin and its documents (PR #1449).
+- Full suite: 3,585 Django tests OK (3 skipped); ops 211 and 37; node 61 and 56; no migration.
+- Reading gate: reader 0 changes in 8,446 texts; engine 0 changes in 6,397 stored assessments (no stored text reads the
+  question).
+- The 36 live encounters' stored responses, replayed: one changes. h2-08's date is now asked, and its check reads "The lines
+  from “Charge information” to the document's end state “Date of service: 2026-10-06”, while 2026-10-05 is read from “Date
+  of service: 2026-10-05”". No status line moves.
+- A mechanical differential over 227,700 constructed date texts, field by field against the installed reading:
+  - 225,540 are identical in every recorded field (the fact, its note, setting, status, evidence, the date routing reads,
+    and whether each date the text states, and a date none states, is taken or held as a member's answer);
+  - 2,160 are the installed reading's sent date turned into this release's question, with the same evidence, setting,
+    status and routing date, and every member answer taken or held exactly as installed takes or holds it;
+  - 0 are anything else, so none is newly sent and no member answer changes.
+- The assess stage's own child over 42,883 texts in three member states, against installed, with fee-schedule rows
+  loaded and one synthetic provider answer of four codes: 7,486 constructed, 6,545 real documents with a closing block
+  appended so the release asks them, and 28,852 of the sixth refutation's inputs:
+  - routing is identical in every state;
+  - the document's own answer gives installed's assessment in every recorded field;
+  - an open question equals installed's assessment with the date in every proposal's bucket, exclusion reason and rationale
+    and in every encounter check and question, except the date check, the date question and the completeness line.
+    Installed's 3,911 ready proposals hold on the question, none is ready, and the excluded set is exactly installed's;
+  - a held answer over a kept provider answer reads as the open question does, and a date held with no provider answer
+    is identical to installed's on all 5,775 held uploads of the eighth refutation's scan;
+  - the controls fail as they must: the tree before the routing repair breaks routing on 156 of the real documents, the
+    tree before the readers' repair breaks the open question's equality on 51, and the tree before the held repair breaks
+    the held equality on 51. That corpus holds no performed XXX service, so it cannot see parity-7-2: its evidence is the
+    next line, a test and a mutant.
+- The whole result, every leaf, over the seventh refutation's sets (1,120 texts, 3,820 open questions, its office set with
+  XXX codes among them): every difference is the date, the date question, the completeness line, a ready proposal held, a
+  dated reference left unknown, a fee-schedule row's sentence not shown, an excluded code's reinstatement waiting on the
+  date, or a documented service's date field. Each is named in "gi3 what an open question holds".
+- The question's sentence, checked literally on all 42,883 texts of that set, 0 violations: its first quote is a line
+  of the document, each stated quote is that line or a whole line after it, and its own quote stands in the document.
+  Planted violations fail. The test helper makes the same check on every asked text in its module.
+- Cost: the context stage is linear to the 400,000-character cap over seventeen adversarial shapes (doubling ratios about
+  2). The worst is 2.70 s (blank lines after the block), against 2.26 s for installed on the same text. The eighth
+  refutation's bounded assess child: worst 11.8 s against installed's 11.1 s on one shape, 8.8 s against 4.9 s on another,
+  and 136 MiB in both, under limits of 120 s and 768 MiB, on the commit before the last repair.
+- Mutants: 61 of 61 killed on a green baseline, each restore checked by sha256: the reader and gate split, the note's literal
+  claims, the labels, the heading readers, the charge-block guards and the state safeguards. Four survivors along the way
+  were findings: a dead bound, removed; the region's lower bound and the evidence readers' date, each now pinned by a test;
+  and an addendum test that used a header the application does not write, rewritten on its own.
+- Refutations of the narrow diff, each by independent lenses told to refute:
+  - the first, on 5a2c36b9a (dates, state, cost), found dates-n1 to n4, STATE-N1 and STATE-N2. All are repaired except
+    dates-n2, a charge date with words after it, which is a known limit below;
+  - the second, on a38aee190 (dates, state, cost), found seven shapes in which another occurrence's closing charge
+    block passed the guards and its date was taken as a member's answer and sent (dates-n2-1 to n2-7), dates-n2-8 (a
+    dash-joined heading, now read) and STATE2N-1 (repaired); cost found nothing. The block's date stopped being an
+    answer at all (interpretation 53(b));
+  - the third, on a52a1a964 (dates, state), found no send and no wrong answer, but texts that quoted the block's date
+    as a documented date of service (dates-n3-1 to n3-3, STATE3N-W1). The release now changes only a date the
+    installed reading sends (interpretation 54). dates-n3-4 and n3-5 are known limits below;
+  - the fourth, on 1080eb5ad (dates), found no send. It found that an own date hyphen-joined to its label
+    ("DOS-10/05/2026") could not answer the question (dates-n4-1), and that an entry after the signature was named as
+    the block's (dates-n4-2). Both are repaired (interpretation 55), and so is its limit, dates-n4-3 (an underscore-bold
+    heading, a dash with no blanks);
+  - the fifth, on c833f8b09 (dates), found no send and no answer wrongly taken. Seven signature forms left an entry
+    written after the signature in the block, and the question called that entry's date the block's (dates-n5-1); a
+    field opening with a signature word cut the block short (dates-n5-3); a dash bullet hid a dash-joined heading
+    (dates-n5-2); and routing read with no date on the question (dates-n5-4). All four are repaired (interpretation 56):
+    the signature end is gone, the question's text is true by construction, and routing reads the date the installed
+    reading sends;
+  - the sixth, on e09b69b4c (dates, parity, pipeline), found no wrong date sent and no member answer changed. It found the
+    inventory and evidence readers reading with no date, so a 2025 colonoscopy read as done today and a code went from
+    ready to excluded (parity-6-1, parity-6-2, pipe6-4); a sentence still asserting what it could not know (dates-n6-1, n6-3
+    to n6-6); and other readers calling the fact conflicting (dates-n6-2, pipe6-2, parity-6-3). All are repaired
+    (interpretation 57). Pipe6-1, pipe6-5 and parity-6-4 are known limits below; pipe6-3 and pipe6-6 are rollback limits in
+    the declaration;
+  - the seventh, on 55bf54530 (text, parity, pipeline), was differential: only what is worse than installed, or a text the
+    release adds that misstates the source, could block. It found no wrong date sent, and the sentence held literally on
+    37,910 asked texts. With fee-schedule rows loaded for the first time, it found that a code with no row counts as
+    procedural, so a breath test raised a same-day E/M question (parity-7-2, pipe7-1); that a held answer re-read the kept
+    dateless answer with no date, so a code went to excluded on a false reason (parity-7-1, pipe7-2); and that the limit on
+    a save reached later encounters too (text-1, pipe7-3). The first two are repaired (interpretation 58), and the limit's row
+    now says what is true. An addendum stating the date now settles the question (text-3). Text-2, parity-7-3, parity-7-4
+    and parity-7-5 are named in the limits below;
+  - the eighth, on b102d2cbf (one lens, differential, over that delta), found nothing that blocks. It raised two limits, and
+    both are repaired because each showed a step taken too far (interpretation 59): a running PDF footer repeating the date
+    settled the question, so h2-08 with one stopped asking (delta-2), and a date held with no provider answer no longer
+    read as installed (delta-1). Its agreement batteries now flip only the application's addenda, 20 of 580, and every text
+    that stops asking returns installed's fact;
+  - the ninth, on 27c981629 (one lens over those two conditions), found nothing that blocks: over 16,860 reader texts and 40
+    plans on real stages, no text the eighth candidate asked stopped asking, each answer is taken or held as installed, and
+    no plan sends a date installed never sent. Its three limits corrected this file's wording, and are named below.
+
+### Known limits (each reads exactly as the installed revision reads it, unless its row says it asks)
+
+| id | input | output | why not repaired in this release |
+|---|---|---|---|
+| gi3 h2-08 family outside the class | a charge block under "Today's appointment", "Billing and scheduling", "Taper schedule", "Follow-up visit, level 4", "Next steps", "Future plan" or "Follow-up"; a charge table with no heading or space-aligned columns; a descriptor line between the heading and the date ("Office visit, established patient"), or a PDF-wrapped field tail; a charge date with words after it ("2026-10-06 (follow-up visit)"); a charge block that does not close the document; a line over 120 characters in the block (a cost bound: the heading reader is quadratic in a long run of marks or spaces); a heading-like line naming another occurrence between the plan's heading and the block ("Pathology pending", "Next colonoscopy in 3 years": read as a copied note's title); a heading joined to its field with no separator ("Charge Information Date of Service: ..." after a PDF line join); the date in a table column under a "Date of service" header cell; a signature line with neither a colon nor a digit ("Reviewed and electronically signed by Synthetic Doctor", or a bare name line); a block line holding a guard word that names no other occurrence ("Body mass index" in an ICD line, "Fee schedule: ..."); an own history heading or a data-reviewed line naming another occurrence ("Prior endoscopy") between the document's first plan section and the block, when a plan-kind section ("Recommendations") comes early or the line stands right above the plan's heading (the third narrow refutation's dates-n3-4 and n3-5) | the header's own date sent and the other dropped, as installed | the release reads only the closed charge-heading class (owner decision 2026-10-30); widening the binding is what three refutation rounds could not make converge |
+| gi3 charge blocks of another occurrence, recognised | a copied report's or note's charge block whose title names it (right above its plan, or further up over its own date and history), a booking ("Colonoscopy scheduled ...", "Prior authorization: ..."), a prior visit's late charge, a pathology charge, or a date of birth the reader reads, auto-filled into the charge date (the narrow refutation's dates-n3 and dates-n4) | read as installed: the header's own date is sent | the guards keep the question for the note's own block |
+| gi3 charge blocks of another occurrence, not recognised | the second narrow refutation's dates-n2-1 to n2-7: a copied note announced in a sentence, a field or an OCR-misread title; a copy-forward; a booking announced in a sentence; an appended telephone encounter; a late or pathology charge in other words; another patient's block; a date of birth in a form the reader does not read ("DOB: 06/02/59") | asked where installed sent the header's date: an extra question. That date is named only as what the lines from the block's first line state, never taken as a member's answer and never sent | no guard on the block's words or layout can tell it from the note's own; the reading makes that harmless instead |
+| gi3 an entry after the signature | a dated entry written after the note's signature, under a charge block that states no date of its own or another one ("Telephone encounter (DOS: 10/07/2026): ...", "Follow-up appointment: DOS 11/04/2026"), whatever form the signature takes (the fifth narrow refutation's dates-n5-1) | asked where installed sent the header's date: an extra question. The entry's date is named as the lines', and a member's 2026-10-05 is taken as installed takes it. A plan's own line or an addendum stating the document's date asks nothing | no word list tells a signature line from a field: ending the block at one left seven signature forms unread, and cut the block at "Signed ABN on file: no". So the text is true by construction, and this question is the cost |
+| gi3 what an open question holds | a document the release asks, unanswered or with a member's answer held over a kept provider answer | every reader reads as installed reads it with the date it sends: routing, the inventory, the evidence readers, the excluded codes and whether a code is a procedure. What waits on the date: no proposal is ready; the fee-schedule, unit and endoscopic-base checks read unknown (the last is absent for a code outside a procedure profile, since only a row names its base); the considerations a fee-schedule row adds (modifier 53, PC/TC) are not shown; an excluded code's reinstatement waits on the date; global days are not verified; a documented service's date field is empty | a date in question cannot open a gate, and a dated reference cannot be applied to it. The answer that takes the date restores installed's assessment exactly |
+| gi3 a held answer after the dateless request | a member's other date, 2026-10-06 among them, after the first dateless request was sent (the sixth refutation's pipe6-5 and parity-6-4) | nothing is sent; the dateless answer still answers the held context, so its proposals stay, read as an open question reads them and held on the question. Installed, which had sent a dated request, records a hold and shows none. A date held with no provider answer, at upload, reads exactly as installed | keeping a recorded answer loses nothing, and the document's own answer restores installed's assessment |
+| gi3 a save that leaves the question open | a member's save that leaves the question open while the run in use is a dated request: on any encounter, clearing a date; on an encounter recorded before this install, also a save of something else, such as the setting (the sixth refutation's pipe6-1, the seventh's text-1 and pipe7-3) | one dateless request is sent, where installed only re-assessed. Never a date. The re-assessment holds every proposal on the question, so a decision on a ready code is invalidated, with its reason recorded, and does not return when the date is entered again. A failed dated request is followed by this dateless one too. At this install one encounter can be reached by a save of something else, e084b793 (of 36), and it has no decisions | a dateless request is what an open question asks. Avoiding it would pair a dated answer with an undated context, which the stages' date pairing refuses, and that path is where the parked work kept regressing |
+| gi3 a dateless request beside a retained dated one | the identical text uploaded again with no date, after a dated request for it is retained in the workspace (the seventh refutation's text-2) | one dateless request is sent, where installed reuses the retained answer | it is a different request from the retained one, so no identical re-send. The duplicate protection holds for the dateless request itself |
+| gi3 a decision made while the question stands | a reviewer's decision on a held proposal, then the document's own date as the answer (the seventh refutation's parity-7-5) | invalidated, with its reason recorded, because the proposal's status changes | the existing rule for any status change; the reviewer decides again on the settled reading |
+| gi3 lines a guard misjudges | a line that is no heading ("Coding: full code", "billing." ending a wrapped sentence, "99214 - Charge: $150.00") or a label that is no date of service ("Timely filing deadline from date of service: ...", "Posting date, not the date of service: ...") in the closing region (the sixth refutation's dates-n6-4 and n6-5) | asked where installed sent the header's date: an extra question, whose text quotes the lines as they stand | the guards only decide whether to ask, so a wrong guess costs a question and the text stays true |
+| gi3 an addendum stating the date | an addendum line stating the document's date, even when its own words retract it ("Date of service: 2026-10-05, changed to 2026-10-06 by billing", the eighth refutation's delta-2) | the question is settled and that date is sent, as installed sends it. Under a field that opens its own section ("Diagnosis: ...", "Findings: ...") it does not settle: the question stays open and a member's 2026-10-05 is still taken | an addendum is the route the question offers, and no guard on its words can read it. The other shape errs toward asking |
+| gi3 a footer in a plan's reach | a running footer repeating the document's date with no section-opening field above it, so it stands in the plan's reach (the ninth refutation) | agrees, so the block's date stops asking and the header's date is sent, as installed sends it | a plan's own line stating the date agrees, and nothing tells a footer from it there. h2-08 itself has such a field, and asks |
+| gi3 the block's date as an answer | a member answers h2-08's question with 2026-10-06, the date its charge block states | held with the installed note ("... the document gives 2026-10-05 ..."); nothing is sent. An addendum stating the date settles it | the block may record this encounter or another occurrence, and no guard can always tell which (the narrow refutations); a date that may be another occurrence's is never a member's answer (the owner's decision of 2026-10-28; interpretations 53 and 54) |
+| gi3 history charge block | a billing block in a history section's reach ("Prior procedures:" / "Billing" / "Date of service: ...") | read as installed (dropped) | it may bill a prior occurrence, and asking would offer that occurrence's date as a member's answer (the third refutation's STATE3-1) |
+| gi3 unread separators | "Date of service........ 10/05/2026", or a non-breaking space after the colon | not read, as installed | a reader change outside the release |
+| gi3 other contradicted dates | the refutation rounds' other class-1 shapes: a later or earlier visit's date near a follow-up title; a planned procedure's date in a clinic note | as installed | interpretation 41: no reliable-coding claim while any is known |
+| gi3 STATE-3 | a pre-install encounter on reload (all 36 live encounters are gi-context@2) | shows its recorded reading until a member's action or a stage reads it again; e084b793 still shows 2026-10-05 as documented | a reload runs no stage; nothing sends that date again (the re-read above) |
+| gi3 STATE3-5 | sending disabled, and a member explicitly resumes the stopped upgrade predict | assessed with no answer, as installed assesses any predict while sending is disabled | a member's explicit action: enable sending before resuming |
+| gi3 h2-08 99215 | h2-08 after the date is answered | 99215 held (performed_status, em_basis), as installed | installed routing does not read h2-08's visit, and the scope repair did not ship |
+| gi3 extent, scope and inventory | the full round's targets: h2-01, h2-02 and h2-04's extents from tables; h2-07's 99213; the h2-10 stent exchange | as installed | not in the narrow release. The parked branch's repairs measured better on curated corpora, but every refutation found regressions against installed |
+
+### pypdf 6.21.4 is not taken (the advisories, 2026-10-31; interpretation 61)
+
+This release keeps pypdf 6.21.2, as installed. Seven advisories against 6.21.2 (CVE-2026-119203 to
+CVE-2026-119209) are denial of service from a crafted PDF. The ingest child contains them: it has an address-space
+limit and a CPU limit, and its process group is killed at the deadline. CPT Studio's own workflow audits this
+file, so it stays red after its tests pass until CPT Studio moves. The required audit reads the rebuild's pins,
+which PR #1449 moved.
+
+The move was refuted before this decision. The candidate was pypdf 6.21.4 plus a reader repair that:
+- names a page whose text-layer text holds U+FFFD;
+- decodes `_ING_glyphs` as pypdf does;
+- labels the reading `cpt-studio-ingest@4`.
+
+That candidate is kept unmerged on branch `prep/cpt-studio-pypdf-6.21.4-20261031` as the next round's start. Its
+documentation is known to be wrong where n-6 says.
+
+Four lenses compared it with installed through the real ingest child, and each row recorded both pypdf versions.
+An independent agent reproduced every finding below. The author also reproduced the first three rows. Every input
+is hand-built unless a producer is named.
+
+| id | input | 6.21.2 (installed) | 6.21.4 with that repair |
+|---|---|---|---|
+| TXT-2 (block) | a valid PDF in a predefined character map pypdf does not implement, ASCII written as one byte, an odd byte count. ReportLab's CIDFont writes it with KSCms-UHC-H, 90msp-RKSJ-H, EUC-H, B5pc-H and eight more | failed: no usable text layer, so OCR reads the page | ok: a page of CJK mojibake, no OCR, under "they are shown as �". An even byte count already reads as mojibake, unnamed, on 6.21.2 |
+| TXT-3 (block) | a check mark whose /Differences glyph name is private-use or a control code (/uniF00C, /uF00C, /uni0001, /uni0000), with no ToUnicode | "[/uniF00C] Cold snare polypectomy": performed | "[] Cold snare polypectomy": an unchecked box, negated, so a ready code is excluded. Through a ToUnicode entry, 6.21.2 already reads "[]" |
+| TXT-1, n-1, n-2 (block) | a cut two-byte string, or one-byte text in a two-byte font, in an appearance the reader reads: a stamp, a signature, a push button, a FreeText without /Contents, a field without a value. pypdf's own form filler writes it for a blank field whose subset font lacks a character | the notice (last byte 0x80 or above), or partial: "a form field or annotation whose text could not be read" | the notice is lost, or partial becomes ok, with U+FFFD and mojibake in the labelled block |
+| n-4 | a page under 20 readable characters holding U+FFFD, with no OCR result (libcairo writes the ToUnicode shape) | failed, no invalid-text notice | failed, and the notice says characters "are shown as �" beside no text |
+| TXT-7, n-3 | a cut string in a font whose ToUnicode has an entry for code FFFD | U+FFFD, named | the replacement becomes that entry's character ("ABX", "45381"), unnamed |
+| TXT-8, TXT-9 | glyph names outside the Adobe Glyph List form, or /u names that reach pypdf's existing mis-lookups | the name written | a plausible wrong character, or a box state the page does not show |
+| TXT-6 | a /uXXXX name too long for a character, in a Type 1 font's built-in encoding | read | the page unread, even when no text uses the font |
+| TXT-4, parser-03, parser-04 | a font 6.21.4 no longer builds: an array or dictionary /BaseEncoding, a string or name in /W | read | every glyph U+FFFD, under a notice that blames the PDF |
+| TXT-5 | a page 6.21.2 could not read | that page unread | one page's font fails the whole document |
+| parser-01, parser-02 | more than 2,000,000 cross-reference stream entries in total | read | objects in object streams vanish: an annotation and its notice are lost at status ok, or the document fails as damaged |
+| parser-05, parser-06 | more than 2,000,000 page-dictionary entries | read, or the too-many-pages message | damaged |
+| parser-07 | a memory failure inside a dictionary | the memory message | "damaged" or "stopped unexpectedly" |
+| parser-08 | a /DecodeParms that is not a dictionary on an ASCII85, ASCIIHex, RunLength or LZW stream | read | the page is reported damaged, though every byte decodes |
+| parser-09, parser-10 | an encryption key length out of range | damaged, or refused | "password-protected", or opened with no notice (failed becomes ok) |
+| parser-11 | CCITT data with no /Height | a damage report | none |
+| TXT-10, n-5, n-6, n-7 | NUL and U+FFFF decoded from glyph names; U+FFFD reaching the block by the reader's own decode, or literally; the candidate's own sentences and one mocked test | unnamed | unnamed, as installed; the candidate's documentation and its block test say more than they show |
+
+The next round's repair must read each shape no worse than installed before CPT Studio moves. The parser rows need
+the reader to tell a dropped section or a hit limit from damage, from pypdf's warnings. The text rows need it to keep
+6.21.2's refusals for strings it cannot decode as the font says (TXT-2, n-2), and its literal glyph names where a
+decoded one would be dropped (TXT-3).

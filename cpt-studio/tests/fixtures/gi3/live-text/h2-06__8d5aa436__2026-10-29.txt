@@ -1,0 +1,32 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Juniper Falls Digestive Health (fictional)
+Office follow-up visit
+
+Patient: Corwin Ashdown-Pereira (fictional)
+Date of birth: 1988-09-14
+Synthetic record: H2-SYN-1106
+Date of service: 2026-10-14
+Place of service: office (POS 11)
+Visit type: established patient, follow-up
+Clinician: Beatriz Holloway-Sung, MD, Gastroenterology (fictional)
+
+Chief complaint
+Ulcerative colitis flare.
+
+History of present illness
+Left-sided ulcerative colitis diagnosed in 2019 and in remission on mesalamine 4.8 g daily until about three weeks ago, when bloody stools returned: five to six a day, with urgency and one stool at night. No fever. Fecal calprotectin collected on 2026-10-06 was 640 mcg/g, and C-reactive protein on 2026-10-03 was 14 mg/L. Stool testing for Clostridioides difficile on 2026-10-06 was negative. His last colonoscopy, on 2025-02-19, showed mild inflammation from the rectum to the descending colon.
+
+Examination
+Temperature 36.9 C, heart rate 84, blood pressure 124/78. Abdomen soft with mild left lower quadrant tenderness, no guarding, normal bowel sounds.
+
+Assessment
+Left-sided ulcerative colitis with a moderate flare despite oral mesalamine; infection excluded.
+
+Plan
+Start budesonide extended-release tablets 9 mg daily for eight weeks and mesalamine enemas nightly; continue oral mesalamine. The risks of corticosteroids were discussed. If there is no response within two weeks, we will discuss advanced therapy, with tuberculosis and hepatitis B screening first. Flexible sigmoidoscopy in about eight weeks to check mucosal healing.
+Return visit: 2026-11-18.
+
+Time spent on the date of the encounter: 33 minutes, including review of the stool and blood results, history and examination, counseling about treatment options, prescriptions and documentation.
+
+Signed: Beatriz Holloway-Sung, MD (fictional), 2026-10-14 17:40

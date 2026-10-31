@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from datetime import date
 from typing import Mapping, Optional, Sequence
 
-from studio.gi.context import is_member_conflict
+from studio.gi.context import charge_date_problem, is_member_conflict
 from studio.gi.profiles import DETECTED_FAMILIES, PROFILES, PROFILES_VERSION, ServiceProfile
 from studio.reference.store import (KIND_LABELS, MUE, PFS, UNKNOWN_DATE_NOTE, applied_sources,
                                     modifier_only_prefix, source_applies)
@@ -1004,6 +1004,11 @@ def _date_problem(state: DateState) -> str:
     if state.origin == 'conflict':
         if is_member_conflict(state.fact):
             return f'The date of service is in conflict. {state.fact.note.rstrip(".")}'
+        problem = charge_date_problem(state.fact)
+        if problem:
+            # GI round 3, the narrow release: the closing charge block's lines may record another occurrence, so what they
+            # state is named as theirs - never as a documented date of service of this encounter (context._charge_block_asks)
+            return problem
         return f'Conflicting dates of service are documented ({conflict_values(state.fact)})'
     if state.origin == 'unreadable':
         return f'The date of service “{excerpt(str(state.fact.value))}” is not a readable date'

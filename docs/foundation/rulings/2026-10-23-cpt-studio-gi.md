@@ -799,3 +799,447 @@ What it changes, so a later session does not re-derive it:
     own label - interpretation 28's open family, which the owner ruled only for headings, titles and row fields - so they
     are listed for the owner (ACCURACY-RESIDUALS, gi2 dates-F1-n1). In the other 131, every other date is stated as
     another occurrence's on its own line or under its heading.
+
+## Owner directive, 2026-10-29 — reliable shared GI interpretation (third round)
+
+Received directly from the owner in session 7c8d38da on 29 October 2026 (about 18:05Z), as pasted instruction text,
+after the install of revision 90377ec6f413 (PR #1445) and its report (PR #1447). Recorded by the receiving session in
+its first commit, before the work that depends on it. Verbatim:
+
+> Continue from installed CPT Studio revision 90377ec6f413 and reports #1445/#1447.
+>
+> The objective remains reliable shared GI interpretation. Successful installation and unchanged behavior versus an older revision are insufficient acceptance criteria.
+>
+> Prioritize h2-08: trace the original document, section boundaries, both service-date fields and the outbound request. A conflicting applicable service date must not be silently discarded because an unfamiliar heading inherits the Plan section. Repair the shared date/section binding, preserving genuine historical and planned dates.
+>
+> Then repair the shared extent/table interpretation and current-visit versus future-follow-up scope. Inspect the existing service inventory and repair its fact binding; do not assume a wholesale rewrite or add document-specific exceptions.
+>
+> Use source-reviewed expected facts and varied layouts/paraphrases. Known cases become regression tests. Keep a small independently written unseen set for acceptance. Require an independent adversarial review of correctness before freezing, rather than only comparison with the previous version.
+>
+> Keep Corti’s EUS omission separate. Do not invent codes, promote unsupported candidates or repeat unchanged requests indefinitely.
+>
+> Preserve original evidence, decisions, review safeguards and duplicate protection. Use parallel independent agents with one integration/deployment owner.
+>
+> After offline verification, perform minimal justified live synthetic checks, including the demo-reviewer login, clarification/recovery, persisted decisions, reload and actual reviewed downloads. Label synthetic approvals accurately.
+>
+> Report what is correct, what remains uncertain, provider omissions and demo readiness separately. Do not declare reliable coding while a known contradicted service date is still sent.
+
+### Session interpretation, 2026-10-29 (7c8d38da, third round) — recorded, not owner-ruled
+
+38. **The acceptance bar moves from "no worse than installed" to "right by the source".** The second round converged on a
+    differential (never worse than the installed revision); the owner rules that insufficient. This round's repairs are
+    judged against source-reviewed expected facts written per document, its adversarial review is told to find inputs
+    the head reads WRONG by the source (not only differently from 2b82889f or 90377ec6f413), and the differential checks
+    remain a safety net only.
+39. **Known cases and the unseen set.** The fresh set h2-01..h2-10 and ho-01..ho-04 are known cases from this round on:
+    they become regression tests with source-reviewed expected facts. A new, small, independently written set (h3) is the
+    acceptance set: its author reads neither the application code nor the repairs, and this session reads it only after
+    the code is frozen.
+40. **Synthetic approvals and the demo account.** Every live approval is made by the agent account and labelled as agent
+    review. The demo-reviewer account is a human account: the live check logs it in and reads its session, and makes no
+    decision with it, so no synthetic approval is ever attributed to a human account.
+41. **A contradicted service date is a blocker for any claim of reliable coding.** While any known source sends a date
+    the document contradicts (h2-08 at 90377ec6f413), the report says so first and declares no reliable coding.
+
+### Session interpretation, 2026-10-29 (7c8d38da, third round, after the investigations) — recorded, not owner-ruled
+
+Made by the integration owner on reading four independent investigations (date/section binding, extent/tables, visit
+scope, inventory fact binding), each with source-reviewed expected facts over varied layouts and paraphrases. Recorded
+before the repairs that depend on them.
+
+42. **The date binding.** A plan or history section governs a date label only while its reach lasts. A colon-less heading
+    the section reader cannot place (a "neutral" heading: "Charge information", "Billing", "Visit details") ends that
+    reach unless its words name a plan, a history, another occurrence, a service, an act or another document. A label
+    no section governs speaks: it is read as a candidate that can only be ASKED, never sent by itself (so a heading
+    vocabulary that misses a plan word over-asks rather than sends a planned date). Where such a label is the document's
+    only date-of-service label, it is asked and a member's answer equal to it is taken (an accepted over-ask). Inside a
+    plan with no block heading, the encounter's own date-of-service field speaks, and a visit or procedure date field
+    is asked unless the plan item right before it names a later occurrence and its date is later than the visit's.
+    A plan or history section opened by the document's own title governs no label. The setting and patient-status
+    readers share this binding. The section boundaries themselves are not moved for dates (routing, extent and the
+    inventory read them). Version labels stay as installed (the second round's precedent): encounters already read keep
+    their recorded contexts; new uploads and member changes read under the new rules.
+43. **E/M time basis.** A clinician's time on the date of service that its sentence frames as visit time, or that stands
+    beside the document's own visit marker ("Face-to-face time: 24 minutes", "Physician time on the service date: 44
+    minutes"), documents the time basis. It is a lower bound of the total time on the date, so it never over-levels; the
+    level stays the reviewer's decision. A procedure's, sedation or interpretation time never counts.
+44. **Today's visit and future follow-up.** Today's visit is established only by the document's own markers (a title in
+    its head naming no other occurrence, a visit statement outside plan and history, a chief complaint, reason or MDM
+    heading, MDM, or the visit's own time). A future occurrence (a return visit, labs, imaging, a repeat procedure) never
+    establishes today's visit and is never presented as doubt about it. Planned-only documents and notes with no marker
+    stay held: known limits, never ready.
+45. **Tables.** There is one table model. A cell that holds only an answer answers its own column; a value bound to an
+    extent column ends at its cell. A procedure-summary label over a summary table opens a procedure section; a table
+    alone is never evidence that a service was done today.
+46. **Inventory binding.** A past-tense denial in an act's own segment binds that act; a table answer binds to its own
+    row's service. A table "Yes" states the act done only for a service already documented as performed (interpretation
+    24); otherwise it holds. A stent placement or removal that is part of a documented exchange is held for the reviewer
+    with the exchange named, never ready and never excluded. The ruled annotation behaviour (a white-out annotation
+    names the page partial) is unchanged.
+47. **Acceptance-set exposure.** A workflow journal preview showed the integration owner part of the sealed h3 author's
+    summary (document shapes and some headings) before the code was frozen; the repair agents never saw it. A second
+    sealed set, h4, was commissioned from a separate author whose only return is counts and hashes. h4 is the primary
+    unseen acceptance set; h3 is reported as exposed to the integration owner, never as unseen.
+
+### Session interpretation, 2026-10-29 (7c8d38da, third round, at integration) — recorded, not owner-ruled
+
+Made by the integration owner on merging the four repairs and measuring the merged tree, before the independent
+adversarial review. Each refines 42, 45 or 46 where an owner reported a residual for this decision, or where the merged
+tree's own live replay showed one.
+
+48. **Integration refinements.**
+    (a) *A billing date of service under a kind-of-service heading (refines 42).* In a plan section, the encounter's own
+        date-of-service label (date of service, DOS, service date, encounter date) under a block heading that names its
+        block only as a kind of service - a service's name, or a visit, encounter, procedure, examination, consultation,
+        session or review noun, with no plan, history, other-occurrence, status, other-document, return or recall word
+        ("Office visit", "Clinic visit", "Coding review", "Colonoscopy") - speaks against the note's own labelled date
+        (a conflict, asked). A heading naming another occurrence ("Next appointment", "Prior visit", "Return visit",
+        "Recall", "Results", "Labs", "Referral") still governs, and so does a table's column label. Visit and procedure
+        date fields keep 42's item rule.
+    (b) *No planned date as the only answer (refines 42).* Where the note labels no date of its own, a plan's visit or
+        procedure date field that no later-occurrence item governs stays dropped as the installed reading dropped it,
+        so a member may answer any date; where the note labels its own date, the field still speaks (a conflict).
+        Neither (a) nor (b) ever sends a date: each only asks, or reads as installed.
+    (c) *An office note's summary table (refines 45).* A procedure-summary label opens nothing in a document whose own
+        head titles it an office or clinic encounter's note (the visit-title marker of 44): such a table is a pasted
+        report's unless something says otherwise, so its services are asked, as installed.
+    (d) *One table model in one place (45).* The inventory reads the shared table model; its private copy, built to the
+        same rule so the repairs could land in parallel, is removed after measured agreement on every corpus.
+    (e) *An act's instrument (46).* An act never takes the technique of the instrument its own kind rules out: a forceps
+        biopsy or hot forceps removal is never "(cold snare)", a snare removal never "(forceps)" - the instrument is what
+        tells 45380 and 45384 from 45385, and the rationale must not misstate it.
+    (f) *Added 2026-10-30, after the independent refutation - see 50(a). The code cites it as 48(f).*
+
+### Session interpretation, 2026-10-30 (7c8d38da, third round, after the independent refutation) — recorded, not owner-ruled
+
+49. **Correction to 42's version clause (recorded, not rewritten).** Interpretation 42 kept the version labels as
+    installed so that "encounters already read keep their recorded contexts". The independent refutation of the
+    integrated round (state lens, STATE-1 and STATE-2) showed that this keeps a context the new rules contradict CURRENT:
+    h2-08's live context (gi-context@2) says 2026-10-05 as documented, and a predict queued or stopped at the install, a
+    reconciliation or a reviewer-asked second review would send that date again, while an assess resumed after the
+    install read 99215 ready on it. On today's 36 live encounters this was latent (h2-08's last stage is a succeeded
+    assess), but nothing prevented it. So CONTEXT_VERSION becomes gi-context@3 and gi-context@2 an earlier version: the
+    machinery the gi-context@1 upgrade built remakes an earlier context under the current rules before any stage sends or
+    assesses on it, and refuses a second review on one. What 42 meant still holds for display: a reload runs no stage,
+    so a pre-install encounter keeps showing its recorded reading until a member's action or a stage reads it again.
+50. **Integration refinements after fix round 1, and two decisions before the freeze.**
+    (a) *A charge line's date (refines 48(a); cited in the code as 48(f)).* In a plan section, the encounter's own
+        date-of-service label in a block that carries a CPT code between its heading and the label ("CPT: 99214",
+        "CPT code 45380", "CPT 43239-59") is this encounter's charge. Its date speaks against the note's own labelled
+        date (a conflict, asked) whatever words the block's heading uses ("Evaluation and management", "Colonoscopy
+        with biopsy"), unless the heading explicitly names another occurrence ("Prior visit", "Next appointment").
+        Like 48(a) and (b) it never sends a date: it only asks, or reads as installed.
+    (b) *A visit title stacked under the document's own follow-up title (refines 44).* A visit title in the head, directly
+        under the document's own follow-up title ("Gastroenterology follow-up" / "Clinic note - return visit"), is this
+        visit's title and never a block heading naming another occurrence. A title led by an other-occurrence word
+        ("Prior clinic note", "Previous clinic note", "Scheduled office visit") still governs and documents nothing of
+        today's visit.
+    (c) *No visit time from a title alone where the note documents nothing of the visit (refines 43 and 44; the scope
+        residual S-R1, decided must-fix).* After fix round 1, a "Hepatology clinic note" whose only clinical content is
+        "Transient elastography today: ..." and "Physician time: 20 minutes." read 99213 ready; the installed revision
+        held it. A ready E/M on a note that documents only another service's result is an unsupported promotion
+        (must-fix class 4), and that time is most plausibly the elastography's interpretation, which 43 never counts.
+        Rule: a visit title makes an unframed clinician time the visit's only where the note records part of the visit
+        itself - a history, an examination or an assessment of its own. Otherwise the E/M is held, never ready and
+        never excluded. Whether routing codes the procedure's family makes no difference.
+    (d) *Version labels for the other readers (extends 49).* Routing, the documented-service inventory and the validation
+        engine all read differently in this round, so their labels change at the freeze: gi-routing@5, gi-services@2
+        (with the inventory's check source) and cpt-studio-validation@5. Otherwise a download made before the install
+        and one made after it would name the same rules for different readings. The change affects provenance only:
+        proposal fingerprints do not include the labels (engine._fingerprint), so no decision is invalidated by a label
+        alone. The engine label's only other reader is the re-assessment's stated reasons (review._what_changed and
+        _what_differs), which then name the engine change truthfully.
+
+### Session interpretation, 2026-10-30 (7c8d38da, third round, after the second refutation) — recorded, not owner-ruled
+
+The second refutation (six lenses over b6997c39d) reported 46 findings: nine requests that should not be sent (each
+reproduced by the integration owner; two newly sent by this round's own code), a regression of the installed reading in
+most of the code-status findings, two quadratic shapes in the integration owner's own 48(f) and 50(b) code, and one
+data-loss path behind 49's version bump. Fix round 1's repairs were where most of them were, as in every round before.
+
+51. **What blocks, and the fail-closed rules the second fix round follows (refines 41-46 and 48-50).**
+    (a) *Class 4 (a correction, recorded not rewritten).* This round's refutation briefs graded "a code made ready or
+        excluded wrongly" as must-fix class 4, while its repair and fix briefs kept the earlier rounds' wording, "a code
+        approved or removed without a reviewer". The directive forbids promoting unsupported candidates, and a ready code
+        is a promoted one, so the refutation's wording governs this round: a code made ready that the source does not
+        support, or excluded where the source supports it, is must-fix.
+    (b) *What blocks the freeze.* Every must-fix finding that regresses the installed revision 90377ec6f413's reading
+        or comes from this round's own code; and every request that should not be sent - a contradicted, planned or
+        historical date sent, or a conflicting applicable date dropped so that another is sent - whether or not the
+        installed revision sends it too (41, and the directive's first priority). A must-fix finding the installed
+        revision shares outside those is repaired where a general, measured rule exists; otherwise it is a known limit
+        with its input and output, named among the report's uncertain readings.
+    (c) *Dates: an uncertain binding asks.* (1) The encounter's own-date labels (date of service, DOS, service date,
+        encounter date) are never dropped by their surroundings. In a plan or history section, under any block heading
+        or in a table, such a label speaks against the note's own date (a conflict, asked), unless the label itself, or
+        a heading of a closed class that explicitly names another occurrence ("Next appointment", "Prior visit"), names
+        the occurrence it dates. (2) A label is the note's own only where the document allows it: a procedure date is
+        never an office or clinic note's own date, and in the title's section a field after its first clinical sentence,
+        or under a stacked heading that does not positively name this visit, follows the plan and history rules, not the
+        header's. (3) The head is read as the head whatever a title above it says, and a label's separator is any short
+        run of punctuation and spaces, so the visit's own header date is never lost. None of these sends a date the
+        installed revision does not send, except the head's own date read under the document's own follow-up title.
+    (d) *Scope: today's visit needs positive evidence both ways.* An office E/M is excluded only where the document
+        positively shows that no visit took place today. A planned or earlier visit's mention, or a word of another
+        occasion inside today's time statement, is never evidence against today's visit. It is ready only where the
+        document's own markers establish both today's visit and its basis; another modality (telephone, portal,
+        infusion, a letter) in the head, or a time whose occasion is uncertain, holds it.
+    (e) *Inventory and extent: an act needs its own affirmation.* An act or a status read from a table cell, a relative
+        clause or a summary is performed only where that cell or clause affirms it with no denial, plan or
+        other-occasion word of its own. Otherwise it reads as the installed revision reads it. A procedure section opens
+        only on positive evidence (a procedure report's own title or heading), never by default under an office or
+        follow-up note.
+    (f) *Word lists.* A closed list may add positive evidence. A list that exempts something from asking or holding
+        fails open by construction, so none is added.
+
+### Session interpretation, 2026-10-30 (7c8d38da, third round, at the second integration) — recorded, not owner-ruled
+
+52. **Two corrections at the second integration (recorded, not rewritten).**
+    (a) *50(c)'s assessment.* 50(c) named "a history, an examination or an assessment of its own" as the note's record of
+        the visit. The scope owner's fix showed the assessment half wrong by the source: a study's interpretation is
+        written under "Assessment and plan" too ("Transient elastography today: ..." / "Assessment and plan: No advanced
+        fibrosis. Repeat in one year." / "Physician time: 20 minutes."), so the time may be the study's. A history,
+        interval history, review of systems, examination or SOAP "Subjective" with content of its own records the visit;
+        an assessment heading alone does not, and such a note is held, never ready (the installed revision held it).
+    (b) *50(d)'s timing.* The version labels change before the third refutation rather than at the freeze, so that the
+        tree the refutation reads is the tree that ships.
+
+## Owner decision, 2026-10-30 (session 7c8d38da) — how round 3 finishes: a narrow release
+
+Asked by the integration owner after the third, differential refutation, verbatim:
+
+> Round 3 is not converging. The third, differential review of the candidate (dca76ed15) found 46 findings, 41 blocking.
+> I reproduced the key ones: it newly sends a later visit's date (2027-04-05) where installed sent none; on an EGD
+> report and a signature-dated note it refuses every member answer (the correct one included) where installed sent the
+> right date; a pathology block's date becomes an acceptable answer that then gets sent; a context-stage scan takes 23 s
+> at 30k characters (installed 0.05 s); a re-read loses a reviewer's approval on Resume. Each fix round fixed the last
+> findings and introduced new ones (about 45 per round, three rounds, about 6M agent tokens per fix+review cycle).
+> Nothing is pushed or installed; live is still 90377ec6f413. How should round 3 finish?
+
+The options offered, verbatim:
+- "Narrow release (Recommended)": "Ship only the h2-08 fix, built on the installed revision. Where installed silently
+  drops a plan-section date of service, a charge or billing block's date now becomes a question instead; nothing new is
+  ever sent. Add the context re-read and disabled-provider safeguards, run one focused refutation of that small diff,
+  then PR, install and the live walk. The extent, scope, inventory and wider date work moves to a next round with a
+  'never worse than installed' guard. Other contradicted-date shapes stay known limits, so still no reliable-coding
+  claim."
+- "One more fix round": "Fix only the must-not-ship findings in all four areas (wrong date sends, quadratic cost, data
+  loss) and accept the remaining code-status and wording regressions against installed as known capability losses. Then
+  a final differential review. About 6M tokens and 8 hours. On every round so far, fixing introduced new findings."
+- "Continue full rounds": "Keep running fix and refutation cycles at the current bar until a differential review finds
+  nothing blocking. Cost and duration are open-ended; three cycles have not converged."
+
+**The owner's answer: "Narrow release (Recommended)".**
+
+What it means for this change (recorded by the receiving session, before building on it):
+- The release is built on the installed revision 90377ec6f413 (origin/main's cpt-studio is byte-identical to it), not on
+  the round-3 integration branch. That branch (`fix/cpt-studio-gi-binding-20261029`, head dca76ed15 with the second
+  integration's work) is kept for the next round, with its three refutations' findings, as that round's starting record.
+- What ships: the h2-08 fix (a charge or billing block's date of service, which the installed reading drops inside a
+  plan section, becomes a question where it differs from the note's own date; nothing new is ever sent); the context
+  re-read (interpretation 49: gi-context@3, @2 earlier); and the disabled-provider safeguards (STATE2-1 as refined by
+  the full suite and the ec5 ruling). Routing, inventory and engine readers stay as installed, so their labels do not
+  change; interpretations 42-48 and 50-52 describe the integration branch's rules and do not ship with this release.
+- One focused refutation of the small diff, then the PR, the install and the live walk.
+- Interpretation 41 stands: other contradicted-date shapes remain known limits, and no reliable-coding claim is made.
+
+### Session interpretation, 2026-10-30 (7c8d38da, the narrow release, after its refutations) — recorded, not owner-ruled
+
+53. **The narrow release, as its two refutations refined it.**
+    (a) *Which charge block asks.* The decision's wording is "a charge or billing block's date now becomes a question".
+        The first narrow refutation showed that such a block can belong to another occurrence (dates-n3, dates-n4). Its
+        examples were a copied note's or report's block, a booking, a prior visit's late charge, a pathology charge, and
+        a date of birth auto-filled into the block. So only the note's own closing charge block asks, read on positive
+        evidence (ACCURACY-RESIDUALS.md, "GI round 3 ... the narrow release"), and a block its guards recognise as
+        another occurrence's reads exactly as installed.
+    (b) *Its date is never an answer.* The second refutation found seven more shapes that passed those guards: a copied
+        note announced in a sentence, a booking announced in a sentence, an appended telephone encounter, late and
+        pathology charges in other words, another patient's block, and a date of birth in a form the reader does not
+        read. Their dates were then taken as a member's answer and sent, which installed never did. No guard on the
+        block's words or layout can decide whose block it is. So the block's date is read 'beside' (df-d:4): it makes
+        the date a question and is quoted, but it is never a value a member's answer may choose. Only the document's
+        own date is taken, and that is the date the installed revision sends. This applies the owner's decision of
+        2026-10-28 for wrong-occurrence dates: a member cannot answer with a date that may be another occurrence's;
+        an addendum settles it. A block the guards miss therefore costs an extra question, never a date taken or sent.
+        The cost is that a member who believes h2-08's 2026-10-06 is held and must amend the document, as installed
+        requires today. The question names the block, so it says nothing the source contradicts.
+    (c) *What sending-disabled keeps.* STATE2-1 stopped the upgrade's predict only beside a succeeded run. The first
+        refutation showed an unknown or failed outcome replaced by "provider not run" (STATE-N1). Now any recorded
+        request (succeeded, failed or unknown) stops it, and an unknown outcome blocks it as it blocks every send. The
+        stop message claims nothing about an assessment (STATE-N2).
+    (d) *An upgrade's own predict stays one.* The second refutation found that 90377ec6f413's own upgrade predict,
+        still queued at the swap, was remade here into a member's ordinary predict and sent (STATE2N-1). No live row
+        can reach it at this install, but the next version bump could. Remade again, an upgrade's predict now queues
+        the upgrade's predict for the fresh context, which never sends.
+    (e) *Refutations of the finished diff.* The decision named one focused refutation. Its findings changed the diff,
+        and so did the second's. The standing rule (AGENTS.md: the adversarial pass runs over the finished diff before
+        merge) applies to each repair. So the same lenses refute the final diff again before the PR. This is not a new
+        round of the parked work.
+
+### Session interpretation, 2026-10-30 (7c8d38da, the narrow release, after its third refutation) — recorded, not owner-ruled
+
+54. **The release changes only a date the installed reading sends (a correction of 53(b)'s mechanism, not of its
+    principle).** 53(b) read the block's date 'beside' and kept it in the fact's evidence as a span no member's answer
+    agrees with. The third refutation found no send and no answer wrongly taken. It found that the texts misstated the
+    source in three ways (dates-n3-1 to n3-3, STATE3N-W1):
+    - beside a question the document's own dates already raised (an own date in a form the reader does not read, a
+      title or a second label stating another day), the question and check quoted the block's date as one more
+      "documented" date of service, and the note claimed the block's date was never taken where the title stated it;
+    - a member's unrelated date was held with "the document gives" followed by the block's line.
+    So the release now acts on one fact only: one the installed reading sends (origin 'document'). There, where the
+    note's own closing charge block states another date of service, the date is asked. The question keeps that fact's
+    evidence and nothing else, so only the document's own date is a member's answer, and any other answer is held with
+    the installed note. The block's date appears only in the fact's note, named as the block's
+    (`context._charge_block_asks`, `CHARGE_DATE_NOTE`, read by `charge_date_problem`). Every other fact is returned
+    exactly as the installed reading made it, its texts and the answers it takes included. The principle of 53(b)
+    stands: the block's date is never this encounter's date of service.
+
+### Session interpretation, 2026-10-30 (7c8d38da, the narrow release, after its fourth refutation) — recorded, not owner-ruled
+
+55. **The question answers as the installed fact would, and names only the block's own lines (54, refined).** The
+    fourth refutation found no send. It found two texts or holds that misstated the source, and one limit:
+    - an own date hyphen-joined to its label ("DOS-10/05/2026"), which the installed reading reads and sends, could not
+      answer the question, because the answer was checked by re-reading the evidence, which misses that form
+      (dates-n4-1);
+    - the closing block's region took in an entry written after the signature, such as a no-charge telephone call or
+      an appointment, and named that entry's date as the block's (dates-n4-2).
+    So the note keeps the date the installed fact sends, and a member's answer to the question is taken or held exactly
+    as that fact takes or holds it, with the installed note. The block ends at its first signature line, and a block
+    that also states the document's own date does not ask. The limit, an underscore-bold heading and a dash with no
+    blanks (dates-n4-3), is now read.
+
+### Session interpretation, 2026-10-30 (1bf3b49c, the narrow release, after its fifth refutation) — recorded, not owner-ruled
+
+56. **Its text is true by construction, and routing stays the installed reading (55, refined).** The fifth refutation
+    found no send and no answer wrongly taken. It found one misstatement, one regression against installed and two
+    limits:
+    - dates-n5-1: ending the block at its first signature line was one more word list. Seven signature forms it does
+      not read left an entry written after the signature in the block, and the question said the charge or billing block
+      states that entry's date;
+    - dates-n5-3: a field that opens with a signature word ("Signed ABN on file: no") cut the block before its own date;
+    - dates-n5-2: a dash bullet before a dash-joined heading hid the heading;
+    - dates-n5-4: routing's only way to the document's date, `context.service_date_of`, returned None on the question.
+      Read with no date, unanswered or with a member's answer held, a dated service went from performed to "service date
+      not established", against the owner's "Routing, inventory and engine readers stay as installed".
+
+    (a) *The block has no signature end.* No word list tells a signature line from a field, so the list is removed
+        rather than extended. The block runs to the document's end, and the question names what "the lines from the
+        document's last charge or billing heading to its end" state, as theirs. That sentence is true of any line it can
+        name. The cost is an extra question on a dated entry after the signature, a known limit with its own row.
+    (b) *Routing reads the date the installed reading sends*, which the question's note keeps. Session 7c8d38da's last
+        thought was to record n5-4 as a limit. Session 1bf3b49c repaired it instead: it is two lines, it can reach no
+        request (`jobs._service_date_of` reads the stored facts), and it turns the owner's sentence from nearly true into a
+        property a mechanical differential can check. A version label kept over changed readings is the trap the context
+        re-read (49) exists to close.
+    (c) *What "stay as installed" means for the inventory and the engine.* They are handed the stored date, which is None
+        while the question stands, so they cannot read the document as installed reads it with a sent date. What holds is
+        narrower and exact: an open question reads as installed reads a held member's answer, so it is no new state, and
+        the engine holds every proposal on it. The ruling's sentence is about readers, and those are unchanged.
+
+    **Takeover.** The host rebooted at 2026-10-30 22:00:21Z, after session 7c8d38da stopped at 21:14Z mid-repair. `/tmp`
+    was wiped, and with it the session's scratch, including both sealed acceptance sets. Session 1bf3b49c continues as
+    the single integration and deployment owner (the owner said "Continue"), and rebuilt the harness from the session
+    transcripts. h4, the primary set, was rebuilt from its author's own tool calls without being read: its manifest
+    matches its pin (f8985709...) and all six of its renders are byte-identical to the hashes its author's run printed.
+    h3, already exposed, could not be rebuilt or checked against its pin, so no claim rests on it.
+
+### Session interpretation, 2026-10-31 (1bf3b49c, the narrow release, after its sixth refutation) — recorded, not owner-ruled
+
+57. **The question holds the date, never the reading (56(c) overruled; the owner's sentence applied to its letter).** The
+    sixth refutation (dates, parity and pipeline lenses) found no wrong date sent and no member answer changed. It found
+    what 56 had wrong:
+    (a) *56(c) was the wrong target.* It settled for "an open question reads as installed reads a held answer". Parity-6-1
+        and 6-2 showed what that costs: read with no date, a 2025 colonoscopy read as done on this encounter, with a
+        same-day E/M warning, and a code documented as done today went from ready to excluded. The owner's sentence is
+        "Routing, inventory and engine readers stay as installed", and a reader handed None is not reading as installed.
+        So every reader now reads the date the installed reading sends (`charge_question_day`), and only the gates keep
+        none: each proposal holds on the question, and no dated reference applies. An open question reads as installed
+        reads the same document with its date, except the date and what hangs on it. The engine's label does not change:
+        for every document the installed revision read, its readers read what they read. A held member's answer stays as
+        installed.
+    (b) *"True by construction" was claimed before it was so.* The sentence still asserted what it could not know: "the
+        last heading", "a date of service", "the document's own" (dates-n6-1, n6-3 to n6-6). It now quotes the line it read
+        from, quotes each stated line whole, and says the date "is read from" its line. The test helper checks the claim
+        on every asked text: the first quote is a line of the document, and each stated quote a whole line at or after it.
+    (c) *Other readers kept the word.* All three lenses found the report, screen, list and change reason calling the fact
+        conflicting, independently. They now ask the same predicate as the check, and say "asked".
+    (d) *A limit accepted on measured reach.* Pipe6-1: a member's save that does not settle the date on a pre-install
+        encounter the release asks sends one dateless request, where installed only re-assessed, and can invalidate a
+        decision. Of the 36 live encounters exactly one can reach it, e084b793, with no decisions, and the walk does not
+        touch it. It is recorded, not repaired: the repair would change the save path, which is where the parked work kept
+        regressing, for one synthetic row. Pipe6-3 and pipe6-6 are rollback limits, recorded in the declaration.
+
+### Session interpretation, 2026-10-31 (1bf3b49c, the narrow release, after its seventh refutation) — recorded, not owner-ruled
+
+58. **The reader and gate split, finished (57 refined).** The seventh refutation was a differential pass: only what is
+    worse than installed, or a text the release adds that misstates the source, could block. It found no wrong date sent,
+    and the sentence held literally on 37,910 asked texts. Five things changed what 57 said:
+    (a) *A reference row can be a reader.* 57(a) called every reference use a gate. This was the first run with
+        fee-schedule rows loaded, and it showed `_procedural` reads a row's global days: with none a code counts as
+        procedural (installed's fail-closed rule for an unknown date), so a breath test raised a same-day E/M question.
+        Whether a code is a procedure is a reading, so `_procedural` reads the row the installed reading has. Everything
+        else stays a gate: `pfs_check` reads a row's `applicable_sources`, so handing the checks a row would open them.
+    (b) *A held answer on such a document reads as the open question does.* 57(a) left it reading with no date, as
+        installed. But installed's held state has no provider answer, and here the dateless answer is kept, so the
+        misreadings 57 had stopped came back, on the date the question quotes, the most natural wrong answer: a code went
+        to excluded on a false reason. "As installed" was the wrong target for a state installed never reaches.
+    (c) *57(d)'s limit was stated too narrowly.* It said only pre-install encounters reach it, and rested on that. A
+        member clearing a date reaches it on any encounter (text-1, pipe7-3): one dateless request, and a decision on a
+        ready code invalidated. The decision stands on a different ground: a dateless request is what an open question
+        asks; avoiding it would pair a dated answer with an undated context, which the stages' date pairing refuses; and
+        that path is where the parked work kept regressing. The row now says all of this. The live reach of a save of
+        something else is still one encounter with no decisions.
+    (d) *Its text can be true and still not settle.* An addendum stating the date the question names now settles it,
+        wherever the line stands. The chip no longer promises a question that may not be on the page yet.
+    (e) *What was not repaired, and why.* The considerations a fee-schedule row adds and an excluded code's reinstatement
+        do wait on the date: they are gates, and the limit row names them. A stale tab during the install window reads an
+        old page beside a new API: a limit of any install.
+
+### Session interpretation, 2026-10-31 (1bf3b49c, the narrow release, after its eighth refutation) — recorded, not owner-ruled
+
+59. **Back toward installed, in two places (58 refined).** The eighth refutation, one differential lens over the delta,
+    found nothing that blocks. It raised two limits, and each showed a step 58 had taken too far.
+    (a) *A running footer settles nothing.* 58(d) read the document's own date anywhere in the closing lines, so that an
+        addendum could settle the question. It also let a running PDF footer settle it: h2-08 with "Date of service:
+        10/05/2026 | Page 2 of 2" stopped asking and sent the contradicted date. That is installed's own reading, so it broke
+        no class of the pass, and it was still the shape the release exists for. Agreement now reads a plan's reach, as
+        before 58, or the application's own addendum section. What a member writes in an addendum still settles it, even in
+        words that retract it: that route is the one the question offers, and the limit is named.
+    (b) *A held answer with nothing kept stays installed.* 58(b) justified reading the date for a held answer by the
+        dateless answer it keeps. A date held at upload keeps none, and installed reaches that state with nothing to
+        misread. It reads as installed again. 58(b)'s sentence "a state installed never reaches" holds only for the answer it
+        keeps, and is narrowed to that.
+
+60. **The code is frozen (session 1bf3b49c, 2026-10-31).** The ninth refutation, one lens over the two conditions 59 added,
+    found nothing that blocks, so the refutations stop here: nine over the narrow diff, the last two with no blocking finding.
+    Their remaining limits are named in ACCURACY-RESIDUALS.md and go to the owner in the report. The owner's decision named
+    one focused refutation; 53(e) explains why the rule required more, and each repair's cost is in that file's measured
+    block. No reliable-coding claim is made.
+
+### Session interpretation, 2026-10-31 (1bf3b49c, the narrow release, the pypdf advisories) — recorded, not owner-ruled
+
+61. **The release ships on pypdf 6.21.2, and only the rebuild's pin moves.** Seven advisories against pypdf 6.21.2
+    (CVE-2026-119203 to CVE-2026-119209) failed the required dependency audit on every pull request, this release's
+    included. That audit reads `rebuild/requirements.txt`, and PR #1449 moved that pin to 6.21.4 on its own. CPT
+    Studio's pin stays at 6.21.2, as installed, for three reasons.
+    (a) *6.21.4 reads uploads differently.* Four refutation lenses attacked the move. An independent agent reproduced
+        each finding, with both versions recorded. They found 34 differences in CPT Studio's reader, four of them
+        blocking:
+        - A valid ReportLab PDF using a predefined CJK character map had no usable text layer and went to OCR. It now
+          reads as status ok, with a page of mojibake that the next stage would send.
+        - A check mark named by a private-use glyph became "[]". Routing reads that as an unchecked box, so a
+          performed service reads as negated.
+        - A cut string in an annotation's appearance lost its notice, or went from partial to ok.
+        The author reproduced all four. Each breaks "nothing new is ever sent" or "never worse than installed", and
+        repairing them means reading as 6.21.2 failed, which is new reader work.
+    (b) *The advisories are contained.* All seven are denial of service from a crafted PDF. CPT Studio reads each
+        upload in a child process that has an address-space limit and a CPU limit, and whose process group is
+        killed at the deadline. Only signed-in synthetic accounts upload. Staying on 6.21.2 keeps the installed
+        exposure and adds none.
+    (c) *The cost is a red that tells the truth.* CPT Studio's own workflow ends with its dependency audit, so its
+        check stays red after every test has passed. It stays red until a later round moves CPT Studio to 6.21.4 with
+        its reader repaired. That workflow is not a required check, and no gate is overridden.
+    The findings are listed in ACCURACY-RESIDUALS.md under "pypdf 6.21.4 is not taken". The same refutation found
+    that the rebuild's upload check can already be passed with a crafted cross-reference section, on the version
+    `main` pins today. That is recorded in `docs/rebuild/security-readiness.md`, is not this release's to repair,
+    and goes to the owner.

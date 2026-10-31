@@ -2,7 +2,7 @@
 from django.conf import settings
 
 from . import models, review
-from .gi.context import is_member_conflict
+from .gi.context import charge_date_problem, is_member_conflict
 from .gi.profiles import PROFILES, profile
 from .providers.base import ProviderUnavailable
 
@@ -63,10 +63,18 @@ def _service_date(encounter):
 
 def _service_date_conflict(encounter):
     """Whether the service date is a conflict (within the document, or a member's against it): the list says so,
-    never "not documented" (refutation r1, context-5)."""
+    never "not documented" (refutation r1, context-5). The question a closing charge block asks is no conflict
+    (_service_date_asked)."""
     context = encounter.current_context
     fact = (context.facts or {}).get('service_date') if context else None
-    return (fact or {}).get('origin') == 'conflict'
+    return (fact or {}).get('origin') == 'conflict' and not charge_date_problem(fact)
+
+
+def _service_date_asked(encounter):
+    """Whether the service date is the question a closing charge block asks (context.charge_date_problem): its lines may
+    record another occurrence, so the list says it is asked, never "in conflict" (the sixth refutation, dates-n6-2)."""
+    context = encounter.current_context
+    return charge_date_problem((context.facts or {}).get('service_date') if context else None) is not None
 
 
 def _service_date_evidence(encounter):
@@ -85,10 +93,12 @@ def _service_date_evidence(encounter):
 
 
 def _context_facts(context):
-    """The stored context facts, each with ``member_conflict`` (context.is_member_conflict): the one predicate every
-    reader that words a conflict asks, so the screen never calls a member's value conflicting documentation."""
+    """The stored context facts, each with ``member_conflict`` (context.is_member_conflict) and ``date_asked``
+    (context.charge_date_problem): the predicates every reader that words a conflict asks, so the screen never calls a
+    member's value or a closing charge block's question conflicting documentation."""
     facts = (context.facts or {}) if context else {}
-    return {name: {**fact, 'member_conflict': is_member_conflict(fact)} for name, fact in facts.items()}
+    return {name: {**fact, 'member_conflict': is_member_conflict(fact), 'date_asked': charge_date_problem(fact) is not None}
+            for name, fact in facts.items()}
 
 
 def _source_kind(revision):
@@ -162,6 +172,7 @@ def encounter_summary(encounter):
         # worded from the run a provider_failed state reads: a response refused whole is "not used" (7c8 reports-5)
         'state_label': review.encounter_state_label(encounter), 'service_date': _service_date(encounter),
         'service_date_conflict': _service_date_conflict(encounter),
+        'service_date_asked': _service_date_asked(encounter),
         'service_date_evidence': _service_date_evidence(encounter),
         'families': _family_labels(encounter), 'source_kind': _source_kind(encounter.current_revision),
         'open_clarifications': encounter.clarifications.filter(state=models.Clarification.OPEN,

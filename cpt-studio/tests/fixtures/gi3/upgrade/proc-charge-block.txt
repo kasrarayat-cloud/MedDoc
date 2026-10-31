@@ -1,0 +1,18 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Harborview Endoscopy Center (fictional)
+Colonoscopy report
+Patient: Wren Halvorsen-Abara (fictional)
+Date of service: 2026-10-05
+Place of service: Ambulatory surgery center
+
+Indication: Screening colonoscopy.
+Procedure: Colonoscopy.
+The colonoscope was advanced to the cecum. The cecum was identified by the appendiceal orifice and the ileocecal valve.
+A 7 mm sessile polyp in the sigmoid colon was removed with a cold snare and retrieved.
+
+Assessment and plan
+Sigmoid polyp removed. Await pathology.
+Repeat colonoscopy in 5 years.
+
+Charge information
+Date of service: 2026-10-06

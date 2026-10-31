@@ -744,6 +744,22 @@ class UpgradeStopsOnlyWhereItWouldSendTests(Base):
         self.assertEqual((latest.kind, latest.state, latest.error),
                          (models.Job.PREDICT, models.Job.CANCELLED, jobs.REMADE_REQUEST_MESSAGE))
 
+    def test_an_earlier_revisions_upgrade_predict_queued_at_the_swap_stays_one(self):
+        """The narrow release's second refutation, STATE2N-1: the installed revision queues its own upgrade predict
+        (predict:<context>:after-upgrade) when it remakes an earlier context at a stage that never sends. Still queued at
+        the swap, that predict was remade here into a member's ordinary predict and sent. It stays an upgrade's predict,
+        which stops where it would send."""
+        encounter_id, context = self.installed_upload(REPORT_NEWLY_DATED, read_date=False)
+        self.installed_run(encounter_id, None)  # the installed pair's request, with no date line, answered
+        encounter = self.encounter(encounter_id)
+        jobs.enqueue(models.Job.PREDICT, encounter=encounter, revision=encounter.current_revision, context=context,
+                     key=jobs._upgrade_predict_key(context), requested_by=self.reviewer)
+        drain()
+        self.assertEqual(self.sent(), 1)  # the installed revision's own request only
+        latest = review.latest_job(self.encounter(encounter_id))
+        self.assertEqual((latest.kind, latest.state, latest.error),
+                         (models.Job.PREDICT, models.Job.CANCELLED, jobs.REMADE_REQUEST_MESSAGE))
+
     def test_with_the_provider_disabled_now_nothing_is_stopped(self):
         encounter_id, context = self.installed_upload(REPORT_NEWLY_DATED, read_date=False)
         self.installed_job(encounter_id, models.Job.ASSESS, context, run=None)
@@ -754,6 +770,33 @@ class UpgradeStopsOnlyWhereItWouldSendTests(Base):
         self.assertEqual(self.upgrade_stages(encounter_id), [])
         self.assertEqual(encounter.state, 'provider_not_run')
         self.assertFalse(review.can_resume(encounter))
+
+    def test_with_the_provider_disabled_a_recorded_failed_request_stays_and_the_predict_stops(self):
+        """gi3 (STATE2-1, refined by the narrow release's refutation STATE-N1): with sending disabled the upgrade's
+        predict never replaces a recorded request with 'provider not run' - a failed request stays recorded, and the
+        predict stops saying so (REMADE_DISABLED_MESSAGE). Nothing is sent."""
+        encounter_id, context = self.installed_upload(REPORT_NEWLY_DATED, read_date=False)
+        run = self.installed_run(encounter_id, None, state=models.ProviderRun.FAILED)
+        self.installed_job(encounter_id, models.Job.ASSESS, context, run=run)
+        sent = self.sent()
+        with mock.patch('studio.jobs.get_provider', return_value=None):
+            drain()
+        self.assertEqual([stage['error'] for stage in self.upgrade_stages(encounter_id)], [jobs.REMADE_DISABLED_MESSAGE])
+        self.assertEqual(self.encounter(encounter_id).state, 'stopped')
+        self.assertEqual(self.sent(), sent)
+
+    def test_with_the_provider_disabled_an_unknown_outcome_blocks_and_reads_unknown(self):
+        """... and an outcome still unknown blocks it, as it blocks every send: the encounter reads 'provider_unknown'
+        (installed read that), never 'provider_not_run', and no stop hides it (skeptic:1)."""
+        encounter_id, context = self.installed_upload(REPORT_NEWLY_DATED, read_date=False)
+        run = self.installed_run(encounter_id, None, state=models.ProviderRun.UNKNOWN)
+        self.installed_job(encounter_id, models.Job.ASSESS, context, run=run)
+        sent = self.sent()
+        with mock.patch('studio.jobs.get_provider', return_value=None):
+            drain()
+        self.assertEqual(self.upgrade_stages(encounter_id), [])
+        self.assertEqual(self.encounter(encounter_id).state, 'provider_unknown')
+        self.assertEqual(self.sent(), sent)
 
     def test_an_unknown_outcome_reads_as_unknown_and_no_resume_is_offered(self):
         encounter_id, context = self.installed_upload(REPORT_NEWLY_DATED, read_date=False)

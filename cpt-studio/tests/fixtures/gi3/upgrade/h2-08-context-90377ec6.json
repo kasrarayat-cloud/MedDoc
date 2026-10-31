@@ -1,0 +1,53 @@
+{
+ "billing_context": {
+  "evidence": [],
+  "name": "billing_context",
+  "note": "No explicit professional or facility billing statement is documented.",
+  "origin": "missing",
+  "value": "not_documented"
+ },
+ "patient_status": {
+  "evidence": [
+   {
+    "end": 324,
+    "start": 305,
+    "text": "Established patient"
+   }
+  ],
+  "name": "patient_status",
+  "note": "",
+  "origin": "document",
+  "value": "established"
+ },
+ "service_date": {
+  "evidence": [
+   {
+    "end": 270,
+    "start": 243,
+    "text": "Date of service: 2026-10-05"
+   }
+  ],
+  "name": "service_date",
+  "note": "",
+  "origin": "document",
+  "value": "2026-10-05"
+ },
+ "setting": {
+  "evidence": [
+   {
+    "end": 295,
+    "start": 271,
+    "text": "Place of service: office"
+   },
+   {
+    "end": 303,
+    "start": 297,
+    "text": "POS 11"
+   }
+  ],
+  "name": "setting",
+  "note": "",
+  "origin": "document",
+  "value": "office"
+ }
+}

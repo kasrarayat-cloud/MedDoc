@@ -31,6 +31,17 @@
  * made again - the form refuses it, so it is sent as a stale page or a repeated request sends it, through the page's own
  * api() client - sends nothing. The coding checks are then judged on the encounter after the edit.
  *
+ * The documented date question: a document with NO upload.service_date whose review_plan.context_edit is
+ * {"service_date": "YYYY-MM-DD"} answers the encounter's open date question (its own dates conflict, or it states none
+ * the reader reads, so the primary request went without a "Date of service" line), through the same form. The edit is
+ * made only once the walk has seen, before it: an open encounter-scope service_date question; no service date
+ * established (none a request carries, no member date, no member conflict); and every primary run carrying a request
+ * made for the revision text with no date, at least one of them answered (sent, or a retained answer reused) - proven
+ * by its request hash. Otherwise nothing is saved and the run says why. After the save: the context states the
+ * answered date as the member's; exactly one new run, a primary run for the revision text and that date (proven by its
+ * request hash), sent or reusing a retained identical answer; every earlier run unchanged; no service_date question
+ * open; and the same save made again sends nothing, as above. clear_member_date needs a member date entered at upload.
+ *
  * A document whose manifest review_plan carries "second_review": {"ask": true, "approve_codes": [...]} has the bounded
  * second review asked for once, through the screen's own button, when the encounter offers it (ARCHITECTURE 5.11):
  * its request is recorded, processing is awaited (read-only polling; never a Stop, never a second ask), and the
@@ -567,7 +578,9 @@ function planProblems(doc, notes = {}) {
     else if (declared && acts[0] !== 'clear_member_date') problems.push(`${where}.documented_date names the date a cleared member date leaves, so it goes only with clear_member_date`);
     else if (declared && !isoDate(edit.documented_date)) problems.push(`${where}.documented_date ${JSON.stringify(edit.documented_date)} is not a YYYY-MM-DD date`);
     else if (declared && edit.documented_date === upload) problems.push(`${where}.documented_date is the member's date entered at upload: clearing it leaves no conflict settled`);
-    else if (!uploadSet) problems.push(`${where} settles a member date conflict, so upload.service_date must give the member's date`);
+    // Without a member date entered at upload there is no member conflict to settle: {"service_date": ...} answers the
+    // encounter's open date question (contextEditPlan), and there is no member date to clear.
+    else if (!uploadSet && acts[0] === 'clear_member_date') problems.push(`${where}.clear_member_date clears the member's date entered at upload, but upload.service_date gives none: an open date question is answered with {"service_date": "YYYY-MM-DD"}`);
   }
   if (plan.approve_codes !== undefined) {
     const codes = plan.approve_codes;
@@ -644,6 +657,11 @@ function checkSecondReview(before, after, ask) {
 function contextEditPlan(doc) {
   const plan = doc?.review_plan?.context_edit;
   if (plan === undefined || plan === null) return null;
+  const upload = doc?.upload?.service_date;
+  if (plan.clear_member_date !== true && (upload === null || upload === undefined || upload === '')) {
+    // no member date entered at upload: the date answers the encounter's open date question (planProblems)
+    return { clear_member_date: false, service_date: plan.service_date, answers_question: true };
+  }
   return plan.clear_member_date === true
     ? { clear_member_date: true, service_date: '', documented_date: isoDate(plan.documented_date) ? plan.documented_date : null }
     : { clear_member_date: false, service_date: plan.service_date };
@@ -748,6 +766,7 @@ function checkUploadDate(uploadDate, enc) {
 // hold run records it, nothing was built, reused or sent, and - for a clear - the date it must then send is named
 // (documentedServiceDate). The walk saves nothing unless every one holds.
 function contextEditPreconditions(before, uploadDate, plan = null) {
+  if (plan?.answers_question) return questionEditPreconditions(before);
   const fact = before?.context?.facts?.service_date || {};
   const member = before?.context?.user_values?.service_date ?? null;
   const earlier = before?.provider_runs || [];
@@ -772,6 +791,7 @@ function contextEditPreconditions(before, uploadDate, plan = null) {
 // before: the encounter once processing finished (the member conflict held); after: once the edit's processing settled;
 // settled: once the identical second save's settled (null if it was not made); edit: what the walk did (editContext).
 function checkContextEdit(before, after, settled, plan, edit, uploadDate) {
+  if (plan?.answers_question) return checkQuestionEdit(before, after, settled, plan, edit);
   const member = before?.context?.user_values?.service_date ?? null;
   const earlier = before?.provider_runs || [];
   const holds = earlier.filter(isMemberDateHold);
@@ -819,7 +839,17 @@ function checkContextEdit(before, after, settled, plan, edit, uploadDate) {
     ? `changed or missing: ${changed.map(run => `${run.id} (${describeRun(run)})`).join(', ')}`
     : `${holds.length} hold run(s) and ${earlier.length - holds.length} other earlier run(s) unchanged (state, hashes, usage, error)`));
 
-  const identical = edit.identical || {};
+  out.push(...identicalSaveChecks(after, settled, edit.identical || {}));
+  out.push(check('context_edit.outcome', 'soft', one?.state === 'succeeded',
+    `run ${one ? describeRun(one) : 'none'}; usage ${JSON.stringify(one?.usage || {})}; state ${after.state}`));
+  return out;
+}
+
+// The same values saved again, once the save's processing settled (after: then; settled: once the second save's
+// processing settled, or null): nothing sent or held, every run unchanged, and - soft - only a re-check, which the
+// screen's form refuses to send itself (editContext sends it through the page's api() client).
+function identicalSaveChecks(after, settled, identical) {
+  const out = [];
   let rechecked = null;
   if (identical.http_status !== 201 || !settled) {
     out.push(check('context_edit.identical_save', 'hard', false, `the identical save ${identical.http_status === null || identical.http_status === undefined
@@ -841,6 +871,127 @@ function checkContextEdit(before, after, settled, plan, edit, uploadDate) {
   }
   out.push(check('context_edit.form_refuses_identical', 'soft', identical.form_posted === false && identical.form_toast === IDENTICAL_REFUSAL,
     identical.form_posted ? 'the screen\'s form sent the identical save' : `the screen's form sent nothing and said ${JSON.stringify(identical.form_toast ?? '')}`));
+  return out;
+}
+
+// --- the documented date question (review_plan.context_edit {"service_date": ...} without upload.service_date) -------
+//
+// A document whose own dates conflict, or that states none the reader reads, leaves the encounter's date question open
+// (studio/validation/checks.py service_date_clarification: scope encounter, fact service_date) and its primary request
+// without a "Date of service" line (studio/providers/corti.py build_coding_request). A member's date answers it through
+// the screen's form: the answered context asks for another request than the run in use carries, so the save makes that
+// one request - or reuses a retained identical answer - (jobs.change_context, stage_predict), and the same save made
+// again only re-checks with it. A date the document's own reading cannot agree with is a member conflict instead
+// (context.merge_user_values): nothing is taken, and the checks below fail and say so.
+
+// The open service_date questions of the encounter's current assessment: any scope, or (encounterOnly) the encounter's
+// own question, which no proposal holds.
+function openDateQuestions(enc, encounterOnly = false) {
+  return (enc?.clarifications || []).filter(c => Boolean(c) && c.state === 'open' && c.fact === 'service_date'
+    && (!encounterOnly || (c.scope === 'encounter' && !c.proposal_id)));
+}
+
+function describeQuestion(c) {
+  const reason = String(c.reason ?? '');
+  return `${c.scope}${c.proposal_id ? ` (proposal ${c.proposal_id})` : ''} "${c.question}"`
+    + `${reason ? ` (${reason.length > 140 ? `${reason.slice(0, 139)}…` : reason})` : ''}`;
+}
+
+// A run that answered its request: sent, or a retained identical answer reused (nothing sent).
+function answeredRun(run) {
+  return sentRun(run) || (run.state === 'succeeded' && Boolean(run.reused_from));
+}
+
+// The dates a request of this encounter could have been made for, to name the one a run's hash proves: none, the one
+// the context states, and every date the service-date fact's evidence quotes.
+function candidateDates(enc) {
+  const fact = enc?.context?.facts?.service_date || {};
+  const quoted = (Array.isArray(fact.evidence) ? fact.evidence : []).flatMap(span => [...quotedDates(span?.text)]);
+  return [null, contextRequestDate(enc), ...quoted];
+}
+
+// What the answer settles, before it is made: the encounter's date question is open; no service date is established
+// (none a request carries, no member date, no member conflict); every primary run that carries a request carries the
+// request for the revision text with no date, and at least one such request was answered. The walk saves nothing
+// unless every one holds.
+function questionEditPreconditions(before) {
+  const fact = before?.context?.facts?.service_date || {};
+  const member = before?.context?.user_values?.service_date ?? null;
+  const asked = openDateQuestions(before, true);
+  const elsewhere = openDateQuestions(before).filter(c => !asked.includes(c));
+  const stated = contextRequestDate(before);
+  const text = typeof before?.revision?.text === 'string' ? before.revision.text : '';
+  const dateless = primaryRequestSha256(text, null);
+  const carrying = (before?.provider_runs || []).filter(run => run.purpose === 'primary' && run.request_sha256);
+  const answered = carrying.filter(answeredRun);
+  const dated = carrying.filter(run => run.request_sha256 !== dateless);
+  const unestablished = stated === null && fact.member_conflict !== true && (member === null || member === '');
+  return [
+    check('context_edit.question_open', 'hard', asked.length > 0, asked.length
+      ? `open encounter date question: ${describeQuestion(asked[0])}`
+      : `no open encounter-scope service_date question, so there is nothing for the date to answer${elsewhere.length
+        ? ` (open elsewhere: ${elsewhere.map(describeQuestion).join('; ')})` : ''}`),
+    check('context_edit.date_unestablished', 'hard', unestablished,
+      `service date ${JSON.stringify(fact.value ?? null)} (${fact.origin || 'not reported'})`
+        + `${fact.member_conflict === true ? ', a member conflict' : ''}; member value ${JSON.stringify(member)}; `
+        + `a request for this context carries ${stated || 'no date'}`),
+    check('context_edit.dateless_before', 'hard', answered.length > 0 && dated.length === 0, dated.length
+      ? `a primary request was not the dateless one for the revision text: ${dated.map(run => `${run.id} (${describeRun(run)}) `
+        + `carries ${requestDateOf(run, text, candidateDates(before))}`).join('; ')}`
+      : answered.length
+        ? `${carrying.length} primary run(s) carrying a request, each the request for the revision text with no date; answered: `
+          + `${answered.map(describeRun).join(', ')}`
+        : `no primary request was answered (sent, or a retained answer reused) before the edit: ${carrying.map(describeRun).join(', ')
+          || 'no primary run carries a request'}`),
+  ];
+}
+
+// before: the encounter once processing finished (the date question open); after: once the save's processing settled;
+// settled: once the same save made again settled (null if it was not); edit: what the walk did (editContext).
+function checkQuestionEdit(before, after, settled, plan, edit) {
+  const out = questionEditPreconditions(before);
+  out.push(check('context_edit.request', 'hard', edit?.http_status === 201,
+    `POST context answered HTTP ${edit?.http_status ?? 'none'}${edit?.error ? `: ${edit.error}` : ''}; the form sent ${JSON.stringify(edit?.posted ?? null)}`));
+  if (edit?.http_status !== 201 || !after) return out;
+
+  const wanted = plan.service_date;
+  const factAfter = after.context?.facts?.service_date || {};
+  const value = after.context?.user_values?.service_date ?? null;
+  const stated = contextRequestDate(after);
+  out.push(check('context_edit.date_after', 'hard',
+    factAfter.member_conflict !== true && factAfter.origin === 'user' && stated === wanted && value === wanted,
+    `member value ${JSON.stringify(value)}; service date ${JSON.stringify(factAfter.value ?? null)} (${factAfter.origin})`
+      + `${factAfter.member_conflict === true ? ', a member conflict: the answer was held against the document, not taken' : ''}`
+      + `; a request for this context carries ${stated || 'no date'} (answered: ${wanted}, as the member's date)`));
+
+  const earlier = before?.provider_runs || [];
+  const text = after.revision?.text || '';
+  const want = primaryRequestSha256(text, wanted);
+  const seen = new Set(earlier.map(run => run.id));
+  const fresh = (after.provider_runs || []).filter(run => !seen.has(run.id));
+  const one = fresh.length === 1 ? fresh[0] : null;
+  const carries = Boolean(one) && one.request_sha256 === want;
+  out.push(check('context_edit.one_request', 'hard', Boolean(one) && one.purpose === 'primary' && answeredRun(one) && carries,
+    `${fresh.length} new run(s): ${fresh.map(describeRun).join(', ') || 'none'}`
+      + (one ? `; ${one.reused_from ? 'a retained answer was reused (nothing sent)' : sentRun(one) ? 'one request sent' : 'no request sent'}; `
+        + `its request is ${carries ? `the request for the revision text and ${wanted}`
+          : `${requestDateOf(one, text, [wanted, ...candidateDates(before)])}, not the one for ${wanted}`}` : '')));
+  const sent = fresh.filter(sentRun);
+  out.push(check('context_edit.sent_at_most_once', 'hard', sent.length <= 1 && sent.every(run => run.request_sha256 === want),
+    `${sent.length} new request(s) sent${sent.length ? `: ${sent.map(run => `${describeRun(run)} ${run.request_sha256 === want ? 'for' : 'NOT for'} ${wanted}`).join(', ')}` : ''}`));
+  const kept = new Map((after.provider_runs || []).map(run => [run.id, run]));
+  const changed = earlier.filter(run => !kept.has(run.id) || runRecord(kept.get(run.id)) !== runRecord(run));
+  out.push(check('context_edit.earlier_runs_kept', 'hard', changed.length === 0, changed.length
+    ? `changed or missing: ${changed.map(run => `${run.id} (${describeRun(run)})`).join(', ')}`
+    : `${earlier.length} earlier run(s) unchanged (state, hashes, usage, reuse, reconciliation, error)`));
+  const openAfter = openDateQuestions(after);
+  const openSettled = settled ? openDateQuestions(settled) : [];
+  out.push(check('context_edit.question_closed', 'hard', openAfter.length === 0 && openSettled.length === 0,
+    openAfter.length ? `still open after the save: ${openAfter.map(describeQuestion).join('; ')}`
+      : openSettled.length ? `open again after the same save made again: ${openSettled.map(describeQuestion).join('; ')}`
+        : `no service_date question open after the save${settled ? ' or after the same save made again' : ''}`));
+
+  out.push(...identicalSaveChecks(after, settled, edit.identical || {}));
   out.push(check('context_edit.outcome', 'soft', one?.state === 'succeeded',
     `run ${one ? describeRun(one) : 'none'}; usage ${JSON.stringify(one?.usage || {})}; state ${after.state}`));
   return out;
@@ -1413,8 +1564,8 @@ async function verifyDocument(page, opts, manifest, item, sink) {
 
     let current = enc;
     if (editPlan && !editing) {  // nothing is saved, so nothing is sent, on a precondition the walk did not see hold
-      const edit = { http_status: null, error: `not made: ${unmet.map(a => a.id).join(' and ')} failed, so the edit has nothing verified to settle` };
-      record.context_edit = { plan: doc.review_plan.context_edit, http_status: null, error: edit.error };
+      const edit = { http_status: null, error: `not made: ${unmet.map(a => a.id).join(' and ')} failed, so the edit has nothing verified to ${editPlan.answers_question ? 'answer' : 'settle'}` };
+      record.context_edit = { plan: doc.review_plan.context_edit, ...(editPlan.answers_question ? { answers_question: true } : {}), http_status: null, error: edit.error };
       add(checkContextEdit(enc, null, null, editPlan, edit, doc.upload?.service_date || null));
     } else if (editing) {
       if (stopRequested(opts.out)) throw new Error('stopped: a STOP file is present; the context was not edited');
@@ -1422,7 +1573,8 @@ async function verifyDocument(page, opts, manifest, item, sink) {
       // the date named before the edit (a clear) or the edited one: what the request must carry, never read back from it
       const wanted = edit.after ? (editPlan.clear_member_date ? documentedServiceDate(enc, editPlan).date : editPlan.service_date) : null;
       record.context_edit = {
-        plan: doc.review_plan.context_edit, asked_at: edit.asked_at, form: edit.form, posted: edit.posted, http_status: edit.http_status,
+        plan: doc.review_plan.context_edit, ...(editPlan.answers_question ? { answers_question: true } : {}),
+        asked_at: edit.asked_at, form: edit.form, posted: edit.posted, http_status: edit.http_status,
         error: edit.error, timed_out: edit.timed_out, identical: edit.identical,
         request_date: edit.after ? wanted : null,
         expected_request_sha256: edit.after ? primaryRequestSha256(edit.after.revision?.text || '', wanted) : null,
@@ -1622,6 +1774,7 @@ module.exports = {
   contextEditPlan, isMemberDateHold, contextRequestDate, primaryRequestSha256, checkUploadDate, checkContextEdit, contextEditPreconditions,
   checkDecisionLabels, planProblems, MEMBER_DATE_HOLD_MESSAGE, PROVIDER_SYSTEMS,
   documentedServiceDate, quotedDates, USER_CONFLICT_NOTE, USER_ELSEWHERE_NOTE,
+  checkQuestionEdit, questionEditPreconditions, openDateQuestions, identicalSaveChecks, verifyDocument,
 };
 
 if (require.main === module) {
