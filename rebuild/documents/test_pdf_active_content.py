@@ -679,7 +679,7 @@ class ScannerDetails(unittest.TestCase):
         # A name that is an ordinary object's whole value stays ordinary.
         self.assertIsNone(self.kind(minimal([(1, b"<< >>"), (9, b"/FlateDecode")])))
 
-    def test_the_data_of_a_malformed_stream_object_is_judged(self):
+    def test_a_malformed_stream_object_is_unreadable(self):
         # Found by differential fuzzing: "/Helv 4 stream 0 R>>>>>>" made lenient pypdf skip every
         # ">>" and read the form's data, up to "endobj", as entries of its font dictionary.
         script = b"/OpenAction << /S /JavaScript /JS (app.alert\\('synthetic'\\)) >>"
@@ -695,9 +695,11 @@ class ScannerDetails(unittest.TestCase):
             return b"<< /Length %d >>\nstream\n" % len(inner) + inner + b"\nendstream"
 
         broken, ordinary = b"/Helv 4 stream 0 R", b"/Helv 4 0 R"
-        self.assertEqual(self.kind(minimal([(3, xobject(broken, script))])), "active")
-        self.assertEqual(self.kind(minimal([(3, xobject(broken, attachment))])), "annotation")
-        self.assertEqual(self.kind(minimal([(5, hidden(broken))])), "annotation")   # a one-object parse
+        self.assertEqual(self.kind(minimal([(3, xobject(broken, script))])), "unreadable")
+        self.assertEqual(self.kind(minimal([(3, xobject(broken, attachment))])), "unreadable")
+        self.assertEqual(self.kind(minimal([(5, hidden(broken))])), "unreadable")   # a one-object parse
+        # A key without its value is malformed too.
+        self.assertEqual(self.kind(minimal([(3, xobject(b"/Helv", attachment))])), "unreadable")
         # After a well-formed dictionary the same data is ordinary stream content.
         self.assertIsNone(self.kind(minimal([(3, xobject(ordinary, script))])))
         self.assertIsNone(self.kind(minimal([(5, hidden(ordinary))])))
@@ -727,6 +729,21 @@ class ScannerDetails(unittest.TestCase):
                 self.assertEqual(self.kind(minimal(objects)), "unreadable")
         # Well formed, the same parameters decode as before.
         self.assertIsNone(self.kind(minimal([(3, stream_object(b"<< /Type /ObjStm " + entries, encoded))])))
+
+    def test_a_stream_start_this_scan_did_not_read_is_unreadable(self):
+        # Found by fuzzing, and pdf.js reported the link both times: a "[" before /Length, or in
+        # "29 0[ R", opened an array here that never closed, so the object stream was never
+        # decoded. pdf.js and PDFium skip any token that is not a name where a key belongs; PDFium
+        # also reads a string's contents there as entries.
+        link = b"<< /Type /Annot /Subtype /Link /A << /S /URI /URI (synthetic) >> >>"
+        entries, encoded = object_stream([(5, link)], "flate")
+        tail = b" /Length %d >>\nstream\n" % len(encoded) + encoded + b"\nendstream"
+        for head in (b"<< /Type /ObjStm [ " + entries, b"<< /Type /ObjStm ( " + entries,
+                     b"<< /Type /ObjStm << " + entries, b"<< /Type /ObjStm " + entries + b" /K 9 0[ R"):
+            with self.subTest(head=head[-12:]):
+                self.assertEqual(self.kind(minimal([(3, head + tail)])), "unreadable")
+        # Read as a stream, the same object stream is decoded and its link refused.
+        self.assertEqual(self.kind(minimal([(3, b"<< /Type /ObjStm " + entries + tail)])), "active")
 
     def test_actions_are_refused_by_their_type_even_without_the_key_that_reaches_them(self):
         for kind in (b"/URI", b"/Launch", b"/GoToR", b"/GoToE", b"/SubmitForm", b"/RichMediaExecute"):

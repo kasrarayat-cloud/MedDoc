@@ -15,8 +15,10 @@ objects hidden inside comments, strings or the data of other streams, and the de
 of every object stream. It never needs to know which revision is current or what is reachable:
 a dictionary that carries an action is refused wherever it is, because SOME reader of the
 original may reach it. Whatever it cannot decode completely is refused as unreadable, and so is
-an object stream whose decoding parameters come from a malformed or self-contradicting
-dictionary: readers pair such entries differently, so no one decoding is THE content.
+every stream it cannot be sure it read as every reader does: a stream object malformed
+anywhere, decoding parameters from a malformed or self-contradicting dictionary (readers pair
+such entries differently, so no one decoding is THE content), and a dictionary followed by
+"stream" that the scan did not read as a stream's start.
 
 The policy is exactly the engine's (the forbidden keys, /Type /EmbeddedFile, the active
 annotation subtypes) plus action types named by /S, and /Encrypt as a key anywhere: encryption
@@ -24,12 +26,13 @@ is refused, never decrypted. Where readers disagree, the scan takes every readin
 
 - every value of a duplicated /Type, /Subtype or /S is judged (pypdf refuses duplicates and
   pdf.js keeps the last);
-- a MALFORMED object (a value where a key belongs, a keyword no reader takes as a value, an R
-  that ends no "N G R", a broken number or string) is judged on every policy name in it, at any
-  depth and inside its strings, because a lenient reader re-pairs whatever follows the error;
-- a policy name standing outside every container is refused, and so is one in the data of a
-  malformed stream object, because a reader that skips junk up to the next whitespace runs a
-  malformed dictionary past its end and takes such names for its entries.
+- a MALFORMED object (a value where a key belongs, a key without its value, a keyword no reader
+  takes as a value, an R that ends no "N G R", a broken number or string) is judged on every
+  policy name in it, at any depth and inside its strings, because a lenient reader re-pairs
+  whatever follows the error;
+- a policy name standing outside every container is refused, because a reader that skips junk
+  up to the next whitespace runs a malformed dictionary past its end and takes such names for
+  its entries.
 
 The last two came from differential fuzzing against lenient pypdf. Three views are combined,
 so that no one tokenizer disagreement can hide a key:
@@ -125,6 +128,8 @@ _HEADER_BEFORE = re.compile(rb"(\d{1,10})[\x00\t\n\x0c\r ]+(\d{1,5})[\x00\t\n\x0
 _OBJ_ANCHOR = re.compile(rb"obj(?!" + _REG + rb")")
 _TRAILER_ANCHOR = re.compile(rb"trailer(?!" + _REG + rb")")
 _ENDOBJ = re.compile(rb"endobj")
+#: Where any reader may start a stream: the end of a dictionary, then the keyword "stream".
+_STREAM_START = re.compile(rb">>" + _GAPS + rb"(stream)(?!" + _REG + rb")")
 _INT = re.compile(_GAPS + rb"(\d{1,10})(?!" + _REG + rb")")
 # Runs that carry nothing for the policy are skipped with one character-class search each
 # (5 ns/byte; a possessive group costs 28): the contents of an array whose items are not needed
@@ -276,12 +281,11 @@ class _Frame:
 
 
 class _Stream:
-    __slots__ = ("buf", "kept", "bits", "start", "end", "obj", "depth", "decoded", "malformed")
+    __slots__ = ("buf", "kept", "bits", "start", "end", "obj", "depth", "decoded")
 
     def __init__(self, buf, kept, bits, start, end, obj, depth):
         self.buf, self.kept, self.bits, self.start, self.end = buf, kept or {}, bits, start, end
         self.obj, self.depth, self.decoded = obj, depth, None
-        self.malformed = False      # its object holds a malformed token at any depth
 
 
 class _Scanner:
@@ -299,6 +303,7 @@ class _Scanner:
         self.canonical_trailer = set()
         self.regions = []           # the file's stream-data spans in the sequential view
         self.hidden_ranges = []     # spans of objects found at hidden anchors inside stream data
+        self.stream_starts = set()  # "stream" keywords in the file read as a stream's start
         self.stats = {"hidden_anchors": 0, "object_streams": 0}
 
     # ---------------------------------------------------------------- policy
@@ -518,6 +523,8 @@ class _Scanner:
                         else:
                             frame = stack.pop()
                             value = self._close_dict(frame)
+                            if _MALFORMED in value[1]:
+                                top_junk = True      # e.g. a key without its value: pdf.js reads on
                             work -= 1
                             start = frame.start
                             if frame.obj is not None:
@@ -683,12 +690,12 @@ class _Scanner:
                             if last_dict is not None:
                                 data_start, stop, resume = self._stream_data(buf, pos, end, last_dict[1])
                                 self.work = work
-                                added = self._add_stream(buf, last_dict, data_start, stop, last_obj, depth)
                                 # top_junk and top_runs still describe last_dict: no top-level
                                 # container has opened since it closed.
-                                if top_junk or self._runs_junk(buf, top_runs):
-                                    added.malformed = True
-                                    self._judge_data(buf, data_start, stop)
+                                self._refuse_malformed_stream(buf, last_dict, top_junk, top_runs)
+                                self._add_stream(buf, last_dict, data_start, stop, last_obj, depth)
+                                if is_file:
+                                    self.stream_starts.add(start)
                                 work = self.work
                                 if is_file:
                                     self.regions.append((data_start, stop))
@@ -742,10 +749,10 @@ class _Scanner:
                         if buf.startswith(b"stream", after) and (after + 6 == end or buf[after + 6] in _DELIMITING):
                             data_start, stop, resume = self._stream_data(buf, after + 6, end, value[1])
                             self.work = work
-                            added = self._add_stream(buf, value, data_start, stop, None, depth)
-                            if top_junk or self._runs_junk(buf, top_runs):
-                                added.malformed = True
-                                self._judge_data(buf, data_start, stop)
+                            self._refuse_malformed_stream(buf, value, top_junk, top_runs)
+                            self._add_stream(buf, value, data_start, stop, None, depth)
+                            if buf is self.data:
+                                self.stream_starts.add(after)
                             work = self.work
                             return value, resume
                     return value, pos
@@ -796,15 +803,16 @@ class _Scanner:
         if m is not None:
             _refuse_name(_NAME_BITS.get(_unescape(m.group(0))[1:], 0), "in a malformed object")
 
-    def _judge_data(self, buf, start, stop):
-        """⚠️ THE DATA OF A MALFORMED STREAM OBJECT IS JUDGED LIKE THE OBJECT ITSELF. Lenient pypdf
-        skips junk up to the next whitespace, so junk glued to ">>" runs the dictionary past its
-        end, through "stream" and the data, and it reads the names there as entries until an
-        "endobj" (found by fuzzing: an /OpenAction placed after a form XObject's data)."""
-        self._charge((stop - start) // 64 + buf.count(b"/", start, stop) // 3)
-        m = _POLICY_NAMES.search(buf, start, stop)
-        if m is not None:
-            _refuse_name(_NAME_BITS.get(_unescape(m.group(0))[1:], 0), "in the data of a malformed stream")
+    def _refuse_malformed_stream(self, buf, summary, junk, runs):
+        """⚠️ A STREAM OBJECT THAT IS MALFORMED ANYWHERE IS REFUSED AS UNREADABLE: which entries a
+        reader keeps, and where it ends the dictionary, cannot be known. Fuzzing found both: after
+        the junk "o" in "/Length 29 0 o /N 9 /First 57 /Filter /FlateDecode" this scan kept no
+        more entries and "decoded" the compressed bytes as they were, while pdf.js and pypdf
+        re-paired the entries, inflated the data and read a link with a URI action; and lenient
+        pypdf, skipping junk up to the next whitespace, ran a form XObject's dictionary through
+        its data and read an /OpenAction there. No ordinary file of the corpus has such a stream."""
+        if junk or _MALFORMED in summary[1] or self._runs_junk(buf, runs):
+            raise _unreadable("a stream object is malformed")
 
     def _runs_junk(self, buf, runs):
         """Does a skipped array run hold a token no reader takes as an array item?"""
@@ -1084,7 +1092,7 @@ class _Scanner:
             kind = stream.kept.get(b"Type")
             if not (stream.bits & _HAS_W or kind is not None and kind[0] == "n" and kind[1].lower() == b"xref"):
                 continue
-            if _CONFLICT in stream.kept or _MALFORMED in stream.kept or stream.malformed:
+            if _CONFLICT in stream.kept:
                 continue        # ambiguous: names nothing; /N and /First identify object streams anyway
             widths = stream.kept.get(b"W")
             if widths is None or widths[0] != "a" or widths[1] is None or len(widths[1]) < 3:
@@ -1122,13 +1130,6 @@ class _Scanner:
                     raise _unreadable("object streams nested too deeply")
                 if _CONFLICT in stream.kept:
                     raise _unreadable("an object stream dictionary defines an entry twice")
-                # ⚠️ A MALFORMED OBJECT STREAM DICTIONARY IS NOT DECODED WITH WHAT SURVIVED OF IT.
-                # After junk the scan keeps no more entries, so "/Length 29 0 o /N 9 /First 57
-                # /Filter /FlateDecode" lost its /Filter, and the compressed bytes were "decoded"
-                # as they were and found clean, while pdf.js and pypdf re-pair the entries,
-                # inflate the data and read a link with a URI action (found by fuzzing).
-                if stream.malformed or _MALFORMED in stream.kept:
-                    raise _unreadable("an object stream dictionary is malformed")
                 variants = self._variants(stream.kept)
                 stop = self._extent(stream)
                 if variants is None or stop is None:
@@ -1379,12 +1380,24 @@ class _Scanner:
         return bytes(out)
 
     # ---------------------------------------------------------------- entry
+    def _unread_streams(self):
+        """⚠️ EVERY STREAM SOME READER CAN START MUST BE ONE THIS SCAN READ. pdf.js and PDFium skip any
+        token where a key belongs that is not a name, a "[", "<<" or "(" included, and PDFium then
+        reads a string's contents as entries; this scan opens the container. Fuzzing found "[" put
+        before /Length, and "29 0[ R", hide an object stream's start inside an array that never
+        closed here: its data was never decoded, and pdf.js read a link with a URI action from it."""
+        for m in _STREAM_START.finditer(self.data):
+            self._charge(1)
+            if m.start(1) not in self.stream_starts:
+                raise _unreadable("a stream whose dictionary could not be read")
+
     def run(self):
         data = self.data
         self._walk(data, 0, len(data), "file")
         self._anchors()
         self._patterns(data, self.regions, self.hidden_ranges)
         self._object_streams()
+        self._unread_streams()
 
 
 def scan(data, stats=None):
