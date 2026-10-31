@@ -68,9 +68,9 @@ so the stored states recompute as they are (predicted below).
   release's question. A tab open across the install reads an old page beside the new API until it reloads: a list date may read
   "Not documented" there.
 
-## Baseline (read-only, 2026-10-31T10:56:49Z; re-read immediately before the commit that lands this declaration; this act's preflight receipt is binding)
+## Baseline (read-only, 2026-10-31T11:52:33Z; re-read immediately before the commit that lands this declaration; this act's preflight receipt is binding)
 
-- Live database (SELECT only): bc7df129's tools/live_counts.sh at 2026-10-31T09:22:57Z, identical at the re-reads of 10:10:29Z and 10:56:49Z: encounters 36,
+- Live database (SELECT only): bc7df129's tools/live_counts.sh at 2026-10-31T09:22:57Z, identical at the re-reads of 10:10:29Z, 10:56:49Z and 11:52:33Z: encounters 36,
   revisions 36, source_files 32, provider_runs 38, provider_runs_sent 34, assessments 39, proposals 479, decisions 24,
   clarifications 35, audit_events 308, reports 96, jobs 148, jobs_active 0, users 3, reference_sources 2, reference_facts
   34665, studio_migrations 6, credits_sum 1.478504.
@@ -83,8 +83,8 @@ so the stored states recompute as they are (predicted below).
     - None reserved or sending; no unknown outcome.
   - encounters: needs_clarification 19, reviewed 12, no_codes 3, ready_for_review 2. e084b793 is needs_clarification with
     0 decisions.
-  - the last audit event is the agent's report.generated at 2026-10-29T07:28:00Z, from the round-2 walk; idle 185,329 s
-    at the 10:56:49Z re-read.
+  - the last audit event is the agent's report.generated at 2026-10-29T07:28:00Z, from the round-2 walk; idle 188,674 s
+    at the 11:52:33Z re-read.
   - accounts: users 3, all active, each with one active membership:
     - demo-reviewer: human, reviewer;
     - owner: human, owner;
@@ -101,8 +101,8 @@ so the stored states recompute as they are (predicted below).
 - nginx, routing, DNS, ACME, co-tenants and host resources: read by the preflight phase, whose receipt is binding. The quillmd-cpt
   vhost must still be 259b895dd1307e81b8fbcb5439874477daf71eba63c9b996b3bdfc572bf71a0c and quillmd
   e9aa049d9190713b60e8243b56e082c3fe59e068c205e0d595407f7d08a97638.
-  scripts/check-cotenants.sh: rc 0 at 2026-10-31T09:22Z, 10:10Z and 10:56Z (quillmd.com 200, www 200, app 302, admin 503, pro 410).
-- Host, at 2026-10-31T10:56:49Z: 32,093 MiB RAM (31 GiB as `free -g` rounds it), 25,698 MiB available; 4,095 MiB swap, 0 MiB
+  scripts/check-cotenants.sh: rc 0 at 2026-10-31T09:22Z, 10:10Z, 10:56Z and 11:52Z (quillmd.com 200, www 200, app 302, admin 503, pro 410).
+- Host, at 2026-10-31T11:52:33Z: 32,093 MiB RAM (31 GiB as `free -g` rounds it), 25,577 MiB available; 4,095 MiB swap, 0 MiB
   used; 14 CPUs; 104 GiB free on / (82% used). The preflight phase requires at least 10 GiB free.
 
 ## Expected changes, per phase
@@ -114,18 +114,28 @@ so the stored states recompute as they are (predicted below).
     of 2026-10-26 22:19Z, 10-28 and 10-29, whose logs in the receipts directory show them CACHED. Three things support it:
     - the Dockerfile, .dockerignore, requirements.txt and installer are byte-identical to 90377ec6f413's;
     - REVISION is declared after every RUN;
-    - the build cache has held 516.9 MB in every preflight report since the 10-29 build, with no prune.
-    So nothing is fetched, and only `COPY . .`, collectstatic and the image metadata differ from 0b95b5113214. If the build log
-    shows that apt or pip ran, that is recorded, and the package comparison below decides.
-  - By the operator, after the phase, with no network, each in a throwaway container (`docker run --rm --network none
-    --read-only --pull=never`):
-    - `pypdf.__version__` in the new image reads 6.21.2;
-    - the package list is read with `dpkg-query -W -f '${Package} ${Version}\n'`. It is read first from the kept image
-      0b95b5113214, where it must reproduce the recorded list: 166 lines, sha256
-      6f1b61f6480b598761c5e9e9af22c901c8cfde16cadb83fe5c23b1b749b07ed8. It is then read from the new image, and the two must be
-      identical, because OCR renders scanned pages with poppler and reads them with tesseract through these packages. They
-      include tesseract-ocr 5.3.0-2, tesseract-ocr-eng 1:4.1.0-2, libtesseract5 5.3.0-2, liblept5 1.82.0-3+b3, poppler-utils
-      and libpoppler126 22.12.0-2+deb12u3, and the image libraries they use. Any difference is a stop before app.
+    - the build cache read 516.9 MB at every exact reading since the 10-29 build: six preflight reports from 10-29 22:10Z to
+      10-31 09:52Z. The report stamped 07:17:51Z, just before that build, read 501.4 MB. The other ten reports since the build
+      give only a rounded 0.5 GB, "unchanged", the reclaimable 8.7 MB, or no cache row, and none records a prune.
+    So nothing is fetched. Every RootFS layer of the new image except the last two (`COPY . .` and collectstatic) is expected to
+    equal 0b95b5113214's. If the build log shows that apt or pip ran, that is a stop before app: the package comparison below
+    sees only Debian packages and pypdf's version, and with 22 `==` pins and no hashes a pip rerun could install other wheel
+    files under the same versions. Going on after such a rerun is a separate recorded decision.
+  - By the operator, after the phase, with no network, each in a throwaway container. The image's entrypoint
+    (deploy/entrypoint.sh) accepts only the roles web, worker, migrate and manage and exits 64 on any other command, so each read
+    names its program with --entrypoint:
+    - the newest image build log in the receipts directory shows steps 2 to 6 CACHED;
+    - `docker image inspect -f '{{json .RootFS.Layers}}'` on both images: 11 layers each, the first 9 equal, the last two not;
+    - `docker run --rm --network none --read-only --pull=never --entrypoint python cpt-studio:80df1831d168 -c 'import pypdf;
+      print(pypdf.__version__)'` prints 6.21.2;
+    - `docker run --rm --network none --read-only --pull=never --entrypoint dpkg-query <image> -W -f '${Package} ${Version}\n'`
+      runs first with cpt-studio:90377ec6f413 (0b95b5113214). There it must reproduce the recorded list: 166 lines, sha256
+      6f1b61f6480b598761c5e9e9af22c901c8cfde16cadb83fe5c23b1b749b07ed8. It then runs with cpt-studio:80df1831d168, and the two
+      lists must be identical, because OCR renders scanned pages with poppler and reads them with tesseract through these
+      packages. They include tesseract-ocr 5.3.0-2, tesseract-ocr-eng 1:4.1.0-2, libtesseract5 5.3.0-2, liblept5 1.82.0-3+b3,
+      poppler-utils and libpoppler126 22.12.0-2+deb12u3, and the image libraries they use.
+    These checks are scripted in lead/opchecks.sh post-image, which this act runs. A read that exits non-zero or prints nothing
+    is a failed check, never a pass, and any difference is a stop before app.
 - Before app, outside the installer and read-only on the database: one `pg_dump -Fc` of the cptstudio database through the database
   container's own pg_dump, written to /home/claude/cpt-studio-install-20261023/pre-app-80df1831d168-YYYYMMDDTHHMMSSZ.dump (0600); its
   `pg_restore --list` must show the table data (29 TABLE DATA entries at the last reading). It is the only data-level way back. It
@@ -142,11 +152,13 @@ so the stored states recompute as they are (predicted below).
   - every encounter's stored list state is recomputed with this revision's derivation, the provider disabled. Expected receipt
     `states_recomputed`: {"encounters": 36, "changed": {}}. Predicted by running this revision's code (b5ddc4d32, byte-identical in
     cpt-studio/studio/ and ops/) under pypdf 6.21.2 over the live rows dumped read-only at 2026-10-31T09:21:53Z, in a scratch database on the
-    test server: RECOMPUTE {"encounters": 36, "changed": {}}, with a positive control (a planted unknown outcome turned one encounter's
-    state from reviewed to provider_unknown); installed's code gives the same. The prediction holds only while the re-read baseline
-    shows no live activity;
-  - any failure of the phase is a stop under this declaration, judged before any rerun. What each failure leaves is set out under
-    "Rollback per phase" (the 90377ec6f413 app phase took 28 s).
+    test server: RECOMPUTE {"encounters": 36, "changed": {}}. A positive control, an unknown outcome planted on 5e02eb08's one sent
+    run, turned that encounter from reviewed to provider_unknown, and installed's code gives the same answer. The answers were re-run
+    at 11:50Z and are kept in the session's lead/predict/: out-g3pred_cand3.txt sha256 cfd1236f…, out-g3pred_inst3.txt 6c23bfcf…,
+    out-g3pred_ctrl3.txt f8f1fb9d…. The prediction holds only while the re-read baseline shows no live activity;
+  - any failure of the phase is a stop under this declaration, judged before any rerun. "Rollback per phase" sets out what the
+    failures named there leave. For any other failure, read `docker ps -a` and the receipt before any decision (the 90377ec6f413
+    app phase took 28 s).
 
   Counts after app: every count equals the pre-app reading (no migration, nothing re-assessed).
 - verify: none.
@@ -217,14 +229,22 @@ again.
    - h4-01 to h4-06, the sealed acceptance set (manifest /home/claude/cpt-studio-gi3-walk/h4/manifest.json, sha256
      3cce1a9dd68ba555b0b2d3fbb8a285ad35980c7f56ade700fb356e528b873973).
      - Its author, by the manifest's own account, read none of the service's code, tests, architecture notes or residual lists,
-       nor the repair work. The one exception: for the manifest's format, the author read a pre-repair copy of
-       ops/verify_browser.cjs, as h4-03's walk_note records.
+       nor the current repair work.
+     - For format only, the author read cpt-studio/ops files as installed (pre-repair, 90377ec6): ops/verify_browser.cjs, which
+       h4-03's walk_note records, and, not mentioned in the manifest, generate.py, the first 80 lines of verify_downloads.py and
+       most of ops/verification/manifest.json.
+     - Each document's provenance records a collision check against the earlier sets ho and h2 and "the format corpus", which
+       the author's check tool defines as cpt-studio/ops/verification/documents/*.txt with its manifest.json.
      - This session read h4 only after the code froze.
      - It was rebuilt after the reboot from its author's tool calls: its manifest matches the pin f8985709d985eb1d, and its six
        renders are byte-identical to the hashes its author's run printed.
      - The walk's amendment adds review_plan.approve_codes from the author's source-reviewed codes. It also adds
-       review_plan.context_edit with the date each source states where the frozen reader leaves the date asked (all but h4-05),
-       chosen before any provider answer. h4-02 also carries the author's designated rejection, the gi.flex_sig family with 45331
+       review_plan.context_edit to h4-01, h4-02, h4-04 and h4-06, each with the date its source states (the author's expected
+       service date) where the frozen reader leaves that date asked. These were chosen before any provider answer.
+     - h4-03's context_edit, 2026-10-06, is the author's own and predates the amendment. Its source states two dates of service
+       for the one case: the header's 10/06/2026 and the ledger's 10/08/2026. The author's walk_note records the header's date as
+       a simulated reply to the query. For h4-03 the amendment added only approve_codes.
+     - h4-05 has no context_edit. h4-02 also carries the author's designated rejection, the gi.flex_sig family with 45331
        preferred.
      - Offline, the frozen tree reads the same 1 of 6 dates and the same routing as installed, so most of the author's
        expectations are expected to fail. A failed expectation is a result, recorded and reported, not a stop.
@@ -237,8 +257,13 @@ again.
      source-reviewed codes, so it is rejected rather than approved, with the note "designated rejection exercising the reject path;
      not a clinical judgement". Otherwise it is the family's last ready code, or none if the family has no ready code.
    - On every document it confirms each undecided reinstatable exclusion in a family that document's must_not_code lists.
-   - Every other ready code, named or not, and every other exclusion, stays undecided and withholds that document's reviewed
-     report. So does a named code that is proposed but not ready. On h2-08 nothing is approved or rejected.
+   - Every other selected code, ready or not and named or not, stays undecided and withholds that document's reviewed report. So
+     does every reinstatable exclusion the walk does not confirm.
+   - An exclusion that is not reinstatable (a code out of scope, or one with no exact evidence) and an alternative take no
+     decision. They stay undecided but do not by themselves withhold the report, so a named code proposed only in one of those
+     forms withholds nothing. If nothing else blocks, the walk downloads the reviewed TXT and CSV.
+   - Only when a succeeded run leaves nothing at all to decide is the report withheld on that account.
+   - On h2-08 nothing is approved or rejected.
 - Bounds for each document (database counts, SELECT only, before and after each):
   - encounters +1 and revisions +1; source_files +1, or 0 for a paste;
   - h4-05, whose date the reader reads: provider_runs +1, provider_runs_sent +1 at most, jobs +4 (extract, analyze, predict,
@@ -247,7 +272,13 @@ again.
   - h4-01 to h4-04 and h4-06: provider_runs +2 and provider_runs_sent +2 at most (the dateless primary, then the answered date's
     one primary; the identical save adds none), jobs +7 at most. The 7 are: the upload's extract, analyze, predict and assess; the
     answer's predict and assess; and the identical save's one assess on the run already in use, which sends nothing. That last one
-    was measured live on round 2's h2-10, encounter f514e436. Fewer jobs only when a stage fails or a save is not accepted;
+    was measured live on round 2's h2-10, encounter f514e436. Fewer jobs when a stage fails or a save is refused, and in three
+    cases where neither happens:
+    - +4 when the dateless primary is recorded not sent (a token-endpoint refusal, or a credentials or connection failure),
+      because the walk then makes no save;
+    - +6 when that primary's outcome is unknown, because each save's predict is blocked and queues no assess;
+    - +6 when the answer is held as a member conflict, because each save re-assesses with the dateless primary's answer and
+      queues no predict;
   - second-review runs +0; jobs_active back to 0; users, reference_sources, reference_facts and studio_migrations +0;
   - decisions and reports +(what the walk's evidence records as HTTP 201).
 - For the whole walk: provider_runs +13 and provider_runs_sent +12 at most, about 0.5 credits at 0.0435 per sent request so far
@@ -295,6 +326,11 @@ The installer is byte-identical to the one that installed 90377ec6f413, so its r
 - preflight, image and verify change nothing that serves. A failed image leaves at most an unused image.
 - app fails before the swap (the credentials parse, migrate or the queue read refuses): nothing is replaced, and the 90377ec6f413
   pair keeps running.
+- app fails while the 90377ec6f413 pair is being parked (a docker inspect, stop or rename that fails, or an interrupt): no new
+  container has run and nothing is closed. If the worker was already parked, it is renamed back and started. The container being
+  parked is left as the failure left it: running, stopped under its own name, or, after an interrupt, stopped and renamed
+  *-previous. A failure while the worker itself is being parked restores nothing, so that worker can be left stopped while its web
+  serves. The receipt carries that error only, or ok false with no error.
 - app fails after the 90377ec6f413 pair is parked and before the new pair is ready. First:
   - the new pair is stopped;
   - the stages it queued, ran or left resumable since the swap, and every open stage of a kind the parked worker cannot run, are
@@ -303,9 +339,9 @@ The installer is byte-identical to the one that installed 90377ec6f413, so its r
 
   What follows depends on the close's hazard read (UNDO_HAZARDS):
   - it names no hazard: the stored states are put back, the new pair is removed, and the 90377ec6f413 pair is renamed back and
-    started. The receipt carries only the original failure (after an interrupt reaching the installer, ok false with no error) and
-    names no encounter. The close and the put-back are in app-<stamp>-NN-undo.log in the receipts directory (closed stages and
-    encounters as counts), which the receipt does not point to;
+    started. The receipt carries only the original failure (or, after an interrupt, ok false with no error) and names no
+    encounter. The close and the put-back are in app-<stamp>-NN-undo.log in the receipts directory (closed stages and encounters
+    as counts), which the receipt does not point to;
   - it names records the 90377ec6f413 worker would act on (unknown, outcome, conflict, second_review): as above, except that the
     worker is renamed back and left stopped, so nothing can be sent, and details.hazards names the encounters. That worker is not
     started by hand: this revision is installed again once its failure is fixed;
@@ -314,31 +350,79 @@ The installer is byte-identical to the one that installed 90377ec6f413, so its r
     rollback-app refuses while they stand. The ways on, each a separate recorded decision, are: start the new pair, clear them on
     its web, run rollback-app and then rename the parked pair back; or keep this revision.
 
-  If the stages cannot be closed or the put-back fails, the new pair is left stopped and the old pair parked: run rollback-app under
-  this declaration, then rename the parked pair back and start it.
-- app stops after the new pair is ready, because the recompute fails, the parked pair cannot be removed, or an interrupt reaches the
-  installer itself: nothing is stopped or restored.
+  Two failures leave a mixed state:
+  - If the stages cannot be closed or the put-back fails, the new pair is left stopped and the old pair parked. Run rollback-app
+    under this declaration, then rename the parked pair back and start it.
+  - The undo's own docker steps can fail: stopping or removing the new pair, and renaming the parked pair back or starting it. The
+    undo then stops where it failed, so the new pair may still run, or the old pair may be only partly renamed back. The receipt
+    names only that step's error, not the original failure, and the undo log, when written, holds the close. Before any remedy,
+    read `docker ps -a` and the revision label of whatever holds cpt-studio-web and cpt-studio-worker. rollback-app stops, closes
+    the stages created since, and removes whatever holds those names.
+- app stops after the new pair is ready, because the recompute fails, the parked pair cannot be removed, or an interrupt reaches
+  the installer itself: nothing is stopped or restored.
   - The 80df1831d168 pair keeps serving, with the provider live.
   - The 90377ec6f413 pair stays parked (*-previous), or only its web, if its worker was already removed.
-  - The receipt is ok false, and details.states_recomputed says whether the states were recomputed.
-  - Its message names INSTALL.md's two remedies: remove the parked pair by hand and rerun app, or run rollback-app and then rename
-    the parked pair back.
-- An installer killed outright (the door's 3600 s ceiling, or any SIGTERM or SIGKILL) writes no receipt and runs no restore. The
-  containers stay as the kill left them; read them with `docker ps -a`.
-- Each of these is a stop. The pair that is running serves while it is judged, and no remedy (rerun app, rollback-app, rename back)
-  is taken without a decision recorded under this declaration.
+  - The receipt is ok false, and its message depends on details.states_recomputed:
+    - If that is null (the recompute failed, or the interrupt came during it), the whole 90377ec6f413 pair is still parked. The
+      message names two remedies: remove the parked pair by hand and rerun app, which recomputes the states; or run rollback-app
+      and then rename the parked pair back.
+    - If it is set (the parked pair could not be removed, or the interrupt came during the removal), the message names no rerun.
+      Either remove what is left of the parked pair by hand, which is all that is left of app (INSTALL.md); or run rollback-app
+      and then rename back what is still parked. If the worker was already removed, that brings back only the 90377ec6f413 web,
+      with no worker.
+- Interrupts under the door. The door runs the installer under `timeout -k 15`, in timeout's own process group
+  (scripts/lib/run-watched.sh).
+  - A Ctrl-C at the door's terminal, or a hang-up, ends only the door: it exits 130 with no FINISHED line and no receipt. The
+    installer runs on to its own end and writes its receipt later. Until then it holds the receipts lock, so a rerun or
+    rollback-app is refused. Nothing is judged, and no container is renamed by hand, until that receipt exists.
+  - An interrupt is sent only to the installer's own pid, never to timeout, to timeout's process group, or by `pkill -f
+    install.py`, which also matches the door and timeout. One that also reaches timeout is forwarded to the installer a second
+    time and can stop the undo at its first step. The receipt is then the same ok false with no error, although nothing was
+    restored. Otherwise, timeout's SIGKILL 15 s later can stop the undo partway, with no receipt.
+  - So a receipt of ok false with no error does not show a restore. An interrupted app is judged by three things:
+    - app-<stamp>-NN-undo.log, which shows that the close and the put-back ran;
+    - `docker ps -a`, which shows which pair exists and runs;
+    - /health/'s release through 127.0.0.1:9150, which shows which pair serves.
+- An installer killed outright (the door's 3600 s ceiling, or any SIGTERM or SIGKILL) writes no receipt. It has run no restore
+  unless an interrupt started one first. Read `docker ps -a` and any app-*-undo.log.
+- Each of these is a stop. The pair that is running serves while it is judged, and no remedy (rerun app, rollback-app, rename
+  back) is taken without a decision recorded under this declaration.
 - After a successful app there is no parked pair. Going back to 90377ec6f413 has three steps:
   1. reconcile every unknown provider outcome;
-  2. run rollback-app under this declaration, which refuses, stopping nothing, while the installer's hazard read names any
-     encounter;
+  2. run rollback-app under this declaration.
+     - While its first hazard read (UNDO_HAZARDS_READ, with the pair's own image) names any encounter, it refuses and stops
+       nothing, and so does any error before it stops the pair.
+     - Otherwise it stops the 80df1831d168 pair (worker first), closes every stage that pair left open and every open stage of a
+       kind the next worker cannot run, and settles the provider runs they left unsettled (sending becomes unknown, reserved
+       becomes not sent). It then reads the hazards again, puts back the list states 057a7d39 labels otherwise, and removes the
+       pair.
+     - If the close or the put-back fails, or the second read names a record, the pair is left stopped, not removed. A request
+       in flight when the worker stopped is then an unknown outcome. It stays stopped until it is started again (`docker start
+       cpt-studio-worker cpt-studio-web`), cleared on its web, and rollback-app is rerun.
+     - From the stop until a pair runs again, cpt.quillmd.com answers only nginx's 503, "CPT Studio is temporarily
+       unavailable.". After a removal that lasts until step 3's reinstall completes, so step 3's declaration is written and
+       committed before step 2 runs;
   3. a separately declared reinstall of 90377ec6f413, from a checkout whose cpt-studio/ is 90377ec6f413's.
 
-  Image 0b95b5113214 and its image receipt are kept for it. That hazard read (this revision's UNDO_HAZARDS_READ) was run read-only
-  over the 2026-10-31T09:21:53Z dump in a scratch database on the test server, the same way as the state prediction. It names
-  nothing: {"hazards": {}}. Its control, an unknown outcome planted on 5e02eb08, is named ("unknown"). The read covers every
-  encounter, including those the walk adds. An encounter it names for a reason other than "unknown" is cleared on this revision's
-  web by a Resume, a date answer or an addendum (ops/INSTALL.md, "Reinstalling an older revision"). An addendum can send a request,
-  so it is a separate recorded decision, and until it is taken this revision stays installed.
+  Image 0b95b5113214 and its image receipt are kept for it.
+
+  That hazard read (this revision's UNDO_HAZARDS_READ, taken from 80df1831's ops/install.py by the session's
+  lead/predict/predict_hazards.py) was run read-only over the 2026-10-31T09:21:53Z dump, in scratch databases on the test server,
+  the same way as the state prediction. Over the 36 encounters recorded then, it names nothing: {"hazards": {}}. Its control,
+  an unknown outcome planted on 5e02eb08's one sent run, is named: {"5e02eb08-…": ["unknown"]}. Both answers were re-run at 11:50Z
+  and are kept as out-g3pred_haz3.txt sha256 5f5ac07e… and out-g3pred_hazc3.txt 12e0d240….
+
+  This prediction does not cover the encounters the walk adds. The installer's own read, at the close or at rollback-app, covers
+  every encounter recorded at that time, and that read, not this prediction, picks the branch. An encounter it names is cleared
+  on this revision's web as ops/INSTALL.md, "Reinstalling an older revision", sets out:
+  - an unknown outcome by a reconcile;
+  - a stopped stage (conflict, or an outcome a Resume would send again) by a Resume;
+  - the date question by a date answer;
+  - an outcome a metadata save would send again, and second_review, second_review_refused and second_review_unread, only by an
+    addendum, or this revision stays installed.
+
+  A reconcile, a date answer, an addendum and a Resume that re-runs a predict can each send a provider request. So each is a
+  separate recorded decision, and until the ones an encounter needs are taken, this revision stays installed.
 - Limits, each found by the sixth to eighth refutations with real rows on the test server, never on this host:
   - rows this release writes read back on installed with no crash: the stored question reads "conflicting documentation", and the list "In conflict";
   - after a rollback, a member's save on an encounter the release asked sends the dated request installed sends at upload, because installed reads
@@ -398,7 +482,9 @@ Stop and diagnose on any of the following. Do not rerun a phase, and do not uplo
   - a provider authentication, quota or payment failure. This stop acts from the next document, not inside the failing one. The
     walk tool has no stop of its own on a provider failure, and it counts a failed or unknown dateless primary as answered. So when
     the coding endpoint refuses that primary (recorded failed and sent), the walk still saves the declared date, and the server
-    sends that date's one request within the bounds. A refusal at the token endpoint is recorded not sent, and the walk then makes
+    makes that date's one primary run within the bounds. On h4-01 to h4-04 and h4-06 that request is attempted. On h2-08 it is
+    answered by reusing e084b793's retained run, and nothing is sent, because the predict stage looks for a retained identical
+    answer before every send door. A refusal at the token endpoint is recorded not sent, and the walk then makes
     no edit. After an unknown outcome, the walk still saves, decides and exports, and the server sends nothing. Those in-document
     actions are recorded as part of the stopped document;
   - verify_downloads exiting 1 (a report check failed) or 2 (a check could not be performed) for a document. Exit 2 is never a
