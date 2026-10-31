@@ -1215,3 +1215,31 @@ What it means for this change (recorded by the receiving session, before buildin
     Their remaining limits are named in ACCURACY-RESIDUALS.md and go to the owner in the report. The owner's decision named
     one focused refutation; 53(e) explains why the rule required more, and each repair's cost is in that file's measured
     block. No reliable-coding claim is made.
+
+### Session interpretation, 2026-10-31 (1bf3b49c, the narrow release, the pypdf advisories) — recorded, not owner-ruled
+
+61. **The release ships on pypdf 6.21.2, and only the rebuild's pin moves.** Seven advisories against pypdf 6.21.2
+    (CVE-2026-119203 to CVE-2026-119209) failed the required dependency audit on every pull request, this release's
+    included. That audit reads `rebuild/requirements.txt`, and PR #1449 moved that pin to 6.21.4 on its own. CPT
+    Studio's pin stays at 6.21.2, as installed, for three reasons.
+    (a) *6.21.4 reads uploads differently.* Four refutation lenses attacked the move. An independent agent reproduced
+        each finding, with both versions recorded. They found 34 differences in CPT Studio's reader, four of them
+        blocking:
+        - A valid ReportLab PDF using a predefined CJK character map had no usable text layer and went to OCR. It now
+          reads as status ok, with a page of mojibake that the next stage would send.
+        - A check mark named by a private-use glyph became "[]". Routing reads that as an unchecked box, so a
+          performed service reads as negated.
+        - A cut string in an annotation's appearance lost its notice, or went from partial to ok.
+        The author reproduced all four. Each breaks "nothing new is ever sent" or "never worse than installed", and
+        repairing them means reading as 6.21.2 failed, which is new reader work.
+    (b) *The advisories are contained.* All seven are denial of service from a crafted PDF. CPT Studio reads each
+        upload in a child process that has an address-space limit and a CPU limit, and whose process group is
+        killed at the deadline. Only signed-in synthetic accounts upload. Staying on 6.21.2 keeps the installed
+        exposure and adds none.
+    (c) *The cost is a red that tells the truth.* CPT Studio's own workflow ends with its dependency audit, so its
+        check stays red after every test has passed. It stays red until a later round moves CPT Studio to 6.21.4 with
+        its reader repaired. That workflow is not a required check, and no gate is overridden.
+    The findings are listed in ACCURACY-RESIDUALS.md under "pypdf 6.21.4 is not taken". The same refutation found
+    that the rebuild's upload check can already be passed with a crafted cross-reference section, on the version
+    `main` pins today. That is recorded in `docs/rebuild/security-readiness.md`, is not this release's to repair,
+    and goes to the owner.

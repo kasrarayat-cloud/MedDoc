@@ -656,7 +656,8 @@ review of synthetic text, and the reviewer decides every code.
 | gi3 STATE2-1 | sending disabled; a pre-install encounter whose context is remade by a resumed assess, or by the stale-stage sweep with no member action | assessed with no provider answer: every proposal dropped, the reviewer's decisions invalidated, and an unknown or failed outcome shown as "provider not run" → an unchanged request re-assesses with the recorded answer. When the request changed, an unknown outcome blocks the upgrade's predict (the encounter reads provider unknown), and any other recorded request stops it, keeping what is recorded. With no request recorded it runs as before | `jobs._request_for` (the adapter's own request builder) and `jobs._recorded_in_use` |
 
 ### Measured against the installed revision (offline, synthetic; never an accuracy figure)
-Measured on b5ddc4d32, whose studio code is what ships (later commits change docs only).
+Measured on b5ddc4d32, whose `cpt-studio/` code and requirements are what ship. Later commits change documentation,
+and the merge of `main` adds only the rebuild's pypdf pin and its documents (PR #1449).
 - Full suite: 3,585 Django tests OK (3 skipped); ops 211 and 37; node 61 and 56; no migration.
 - Reading gate: reader 0 changes in 8,446 texts; engine 0 changes in 6,397 stored assessments (no stored text reads the
   question).
@@ -766,3 +767,46 @@ Measured on b5ddc4d32, whose studio code is what ships (later commits change doc
 | gi3 h2-08 99215 | h2-08 after the date is answered | 99215 held (performed_status, em_basis), as installed | installed routing does not read h2-08's visit, and the scope repair did not ship |
 | gi3 extent, scope and inventory | the full round's targets: h2-01, h2-02 and h2-04's extents from tables; h2-07's 99213; the h2-10 stent exchange | as installed | not in the narrow release. The parked branch's repairs measured better on curated corpora, but every refutation found regressions against installed |
 
+### pypdf 6.21.4 is not taken (the advisories, 2026-10-31; interpretation 61)
+
+This release keeps pypdf 6.21.2, as installed. Seven advisories against 6.21.2 (CVE-2026-119203 to
+CVE-2026-119209) are denial of service from a crafted PDF. The ingest child contains them: it has an address-space
+limit and a CPU limit, and its process group is killed at the deadline. CPT Studio's own workflow audits this
+file, so it stays red after its tests pass until CPT Studio moves. The required audit reads the rebuild's pins,
+which PR #1449 moved.
+
+The move was refuted before this decision. The candidate was pypdf 6.21.4 plus a reader repair that:
+- names a page whose text-layer text holds U+FFFD;
+- decodes `_ING_glyphs` as pypdf does;
+- labels the reading `cpt-studio-ingest@4`.
+
+That candidate is kept unmerged on branch `prep/cpt-studio-pypdf-6.21.4-20261031` as the next round's start. Its
+documentation is known to be wrong where n-6 says.
+
+Four lenses compared it with installed through the real ingest child, and each row recorded both pypdf versions.
+An independent agent reproduced every finding below. The author also reproduced the first three rows. Every input
+is hand-built unless a producer is named.
+
+| id | input | 6.21.2 (installed) | 6.21.4 with that repair |
+|---|---|---|---|
+| TXT-2 (block) | a valid PDF in a predefined character map pypdf does not implement, ASCII written as one byte, an odd byte count. ReportLab's CIDFont writes it with KSCms-UHC-H, 90msp-RKSJ-H, EUC-H, B5pc-H and eight more | failed: no usable text layer, so OCR reads the page | ok: a page of CJK mojibake, no OCR, under "they are shown as �". An even byte count already reads as mojibake, unnamed, on 6.21.2 |
+| TXT-3 (block) | a check mark whose /Differences glyph name is private-use or a control code (/uniF00C, /uF00C, /uni0001, /uni0000), with no ToUnicode | "[/uniF00C] Cold snare polypectomy": performed | "[] Cold snare polypectomy": an unchecked box, negated, so a ready code is excluded. Through a ToUnicode entry, 6.21.2 already reads "[]" |
+| TXT-1, n-1, n-2 (block) | a cut two-byte string, or one-byte text in a two-byte font, in an appearance the reader reads: a stamp, a signature, a push button, a FreeText without /Contents, a field without a value. pypdf's own form filler writes it for a blank field whose subset font lacks a character | the notice (last byte 0x80 or above), or partial: "a form field or annotation whose text could not be read" | the notice is lost, or partial becomes ok, with U+FFFD and mojibake in the labelled block |
+| n-4 | a page under 20 readable characters holding U+FFFD, with no OCR result (libcairo writes the ToUnicode shape) | failed, no invalid-text notice | failed, and the notice says characters "are shown as �" beside no text |
+| TXT-7, n-3 | a cut string in a font whose ToUnicode has an entry for code FFFD | U+FFFD, named | the replacement becomes that entry's character ("ABX", "45381"), unnamed |
+| TXT-8, TXT-9 | glyph names outside the Adobe Glyph List form, or /u names that reach pypdf's existing mis-lookups | the name written | a plausible wrong character, or a box state the page does not show |
+| TXT-6 | a /uXXXX name too long for a character, in a Type 1 font's built-in encoding | read | the page unread, even when no text uses the font |
+| TXT-4, parser-03, parser-04 | a font 6.21.4 no longer builds: an array or dictionary /BaseEncoding, a string or name in /W | read | every glyph U+FFFD, under a notice that blames the PDF |
+| TXT-5 | a page 6.21.2 could not read | that page unread | one page's font fails the whole document |
+| parser-01, parser-02 | more than 2,000,000 cross-reference stream entries in total | read | objects in object streams vanish: an annotation and its notice are lost at status ok, or the document fails as damaged |
+| parser-05, parser-06 | more than 2,000,000 page-dictionary entries | read, or the too-many-pages message | damaged |
+| parser-07 | a memory failure inside a dictionary | the memory message | "damaged" or "stopped unexpectedly" |
+| parser-08 | a /DecodeParms that is not a dictionary on an ASCII85, ASCIIHex, RunLength or LZW stream | read | the page is reported damaged, though every byte decodes |
+| parser-09, parser-10 | an encryption key length out of range | damaged, or refused | "password-protected", or opened with no notice (failed becomes ok) |
+| parser-11 | CCITT data with no /Height | a damage report | none |
+| TXT-10, n-5, n-6, n-7 | NUL and U+FFFF decoded from glyph names; U+FFFD reaching the block by the reader's own decode, or literally; the candidate's own sentences and one mocked test | unnamed | unnamed, as installed; the candidate's documentation and its block test say more than they show |
+
+The next round's repair must read each shape no worse than installed before CPT Studio moves. The parser rows need
+the reader to tell a dropped section or a hit limit from damage, from pypdf's warnings. The text rows need it to keep
+6.21.2's refusals for strings it cannot decode as the font says (TXT-2, n-2), and its literal glyph names where a
+decoded one would be dropped (TXT-3).
