@@ -73,7 +73,7 @@ MAX_OBJECT_STREAMS = 2_000            # object-stream decodings
 MAX_DEPTH = 256                       # dictionary/array nesting
 MAX_STREAM_NESTING = 4                # object streams inside decoded object streams
 MAX_DEFINITIONS = 150_000             # object definitions kept (the pypdf walk refuses 100,000 objects)
-MAX_VARIANTS = 8                      # decodings of one object stream whose parameters are ambiguous
+MAX_VARIANTS = 8                      # distinct definitions of one object, and decodings of one stream
 
 _WHITESPACE = b"\x00\t\n\x0c\r "
 _DELIMITING = frozenset(b"\x00\t\n\x0c\r ()<>[]{}/%")   # bytes that end a regular token
@@ -84,7 +84,6 @@ _REG = rb"[^\x00\t\n\x0c\r ()<>\[\]{}/%]"            # a PDF "regular" character
 # ⚠️ EVERY REPEATED GROUP BELOW IS POSSESSIVE (*+, ++). Python's regex engine otherwise keeps
 # backtracking state for each repetition of a group: a 60 MiB run of "1 " took 6.5 s and 5.5 GB.
 _GAPS = rb"(?:[\x00\t\n\x0c\r ]+|%[^\r\n]*)*+"         # whitespace and comments, possibly none
-_GAPS1 = rb"(?:[\x00\t\n\x0c\r ]+|%[^\r\n]*)++"        # at least one
 
 _TOKEN = re.compile(
     rb"[\x00\t\n\x0c\r ]*(?:"
@@ -97,8 +96,13 @@ _TOKEN = re.compile(
     rb"|(" + _REG + rb"+)"                # 7 number or keyword
     rb")")
 _STRING_SPECIAL = re.compile(rb"[()\\]")
-_REF_TAIL = re.compile(_GAPS1 + rb"(\d{1,10})" + _GAPS1 + rb"R(?!" + _REG + rb")")
-_STREAM_NEXT = re.compile(_GAPS + rb"stream(?!" + _REG + rb")")
+# ⚠️ GAPS BETWEEN TOKENS ARE CROSSED IN PYTHON (_gap_end), ONE CHARGED STEP PER COMMENT. A
+# regex look-ahead across whitespace and comments is free to the budget, and from an anchor at
+# the end of a comment line it crosses every following comment line: 900,000 such lines took
+# more than 30 s. Only plain whitespace runs, which cannot hold an anchor, are left to C.
+_SPACE = re.compile(rb"[\x00\t\n\x0c\r ]*")
+_SPACES_ONLY = re.compile(rb" *")
+_UINT = re.compile(rb"\d{1,10}")
 _HEADER_BEFORE = re.compile(rb"(\d{1,10})[\x00\t\n\x0c\r ]+(\d{1,5})[\x00\t\n\x0c\r ]*\Z")
 # The keyword first: a leading lookbehind would defeat the literal search (1.45 s on 10 MiB).
 # The byte before it is checked by the caller.
@@ -114,6 +118,9 @@ _INT_STOP = re.compile(rb"[^0-9\x00\t\n\x0c\r ]")
 _XREF_STOP = re.compile(rb"[^0-9fn\x00\t\n\x0c\r ]")
 _EOL = re.compile(rb"[\r\n]")
 _DIGITS = re.compile(rb"\d{1,18}")
+#: A whole token that is a number. "333\xe7389" is not: pdf.js reads 333 and then junk.
+_NUMBER = re.compile(rb"[+-]?(?:\d+\.?\d*|\.\d+)\Z")
+_HEX_JUNK = re.compile(rb"[^0-9A-Fa-f\x00\t\n\x0c\r ]")
 _HEADER = re.compile(rb"[\x00\t\n\x0c\r ]+(\d{1,10})[\x00\t\n\x0c\r ]+(obj)(?!" + _REG + rb")")
 
 
@@ -149,12 +156,14 @@ def _names(names):
             + b")(?!" + _REG + b")")
 
 
-_KEY_SHAPED = _GAPS + rb"(?:<<|\d{1,10}" + _GAPS1 + rb"\d{1,10}" + _GAPS + rb"R(?!" + _REG + rb"))"
 _BACKUP_LONG = re.compile(_names(LONG_NAMES))
-_BACKUP_SHORT = re.compile(
-    _names((b"A", b"AA", b"EF", b"URI", b"Encrypt")) + rb"(?=" + _KEY_SHAPED + rb")"
-    rb"|" + _names((b"JS",)) + rb"(?=" + _KEY_SHAPED + rb"|" + _GAPS + rb"[(<])"
-    rb"|" + _names((b"XFA",)) + rb"(?=" + _KEY_SHAPED + rb"|" + _GAPS + rb"\[)")
+#: Every name the policy can refuse, as a key or as the value of /Type, /Subtype or /S.
+_POLICY_NAMES = re.compile(_names(FORBIDDEN_KEYS | ACTIVE_ANNOTATIONS | ACTION_TYPES | {b"Encrypt"}))
+#: A token inside an array that no reader takes as a value: not a number, R, true, false or null.
+_ARRAY_JUNK = re.compile(rb"(?<![^\x00\t\n\x0c\r ()<>\[\]{}%])(?!(?:[+-]?(?:\d+\.?\d*|\.\d+)|R|true|false|null)(?!"
+                         + _REG + rb"))" + _REG + rb"+")
+#: Short keys count only where they are shaped like a key (judged in _key_shaped).
+_BACKUP_SHORT = re.compile(_names((b"A", b"AA", b"EF", b"URI", b"Encrypt", b"JS", b"XFA")))
 
 # What a name means to the policy, looked up once per name token.
 _KEY = 1          # forbidden as a dictionary key
@@ -162,6 +171,7 @@ _ENCRYPT = 2      # /Encrypt as a key
 _EMBEDDED = 4     # /EmbeddedFile, refused as the value of /Type
 _ANNOT = 8        # refused as the value of /Subtype
 _ACTION = 16      # refused as the value of /S
+_POLICY = _KEY | _ENCRYPT | _EMBEDDED | _ANNOT | _ACTION
 _HAS_N, _HAS_FIRST, _HAS_OBJSTM, _HAS_W = 32, 64, 128, 256
 _NAME_BITS = {}
 for _name in FORBIDDEN_KEYS:
@@ -182,6 +192,8 @@ _KEPT_CONTAINERS = frozenset((b"Filter", b"DecodeParms", b"F", b"DP", b"W"))
 _VALUE_BITS = {b"Type": _EMBEDDED, b"Subtype": _ANNOT, b"S": _ACTION}
 #: Marks a dictionary that defines one of its kept entries twice with different values.
 _CONFLICT = object()
+#: Stands for an object defined in more than MAX_VARIANTS different ways.
+_AMBIGUOUS = object()
 _MAX_ITEMS = 64
 _STR = ("s",)
 _SCALAR = ("x",)
@@ -306,14 +318,21 @@ class _Scanner:
         known = self.definitions.get(key)
         if known is None:
             self.definitions[key] = summary
+        elif known is _AMBIGUOUS:
+            return
         elif isinstance(known, list):
-            if summary not in known:
-                known.append(summary)
+            if summary not in known:            # at most MAX_VARIANTS comparisons
+                if len(known) >= MAX_VARIANTS:
+                    self.definitions[key] = _AMBIGUOUS
+                else:
+                    known.append(summary)
         elif known != summary:
             self.definitions[key] = [known, summary]
 
     def _definitions(self, number, generation):
         known = self.definitions.get(number << 16 | (generation & 0xFFFF))
+        if known is _AMBIGUOUS:
+            raise _unreadable("a stream parameter is defined in too many ways")
         return known if known is None or isinstance(known, list) else [known]
 
     # ---------------------------------------------------------------- tokenizer
@@ -349,8 +368,8 @@ class _Scanner:
         them is found by its own "obj" keyword instead (_anchors).
         """
         start = after_keyword
-        while start < end and buf[start] == 0x20:
-            start += 1
+        spaces = _SPACES_ONLY.match(buf, start, end)
+        start = spaces.end()
         if buf.startswith(b"\r\n", start):
             start += 2
         elif start < end and buf[start] in (0x0A, 0x0D):
@@ -359,9 +378,7 @@ class _Scanner:
         if length is not None and length[0] == "i":
             stop = start + length[1]
             if stop <= end:
-                at = stop
-                while at < end and buf[at] in _WHITESPACE:
-                    at += 1
+                at = _SPACE.match(buf, stop, end).end()
                 if buf.startswith(b"endstream", at):
                     return start, stop, at + 9
         found = buf.find(b"endstream", start, end)
@@ -406,6 +423,12 @@ class _Scanner:
         obj_open = False     # its value has not been read yet
         last_dict = None     # a dictionary that just completed at top level, for "stream"
         last_obj = None
+        # ⚠️ ONE MALFORMED TOKEN ANYWHERE IN AN OBJECT AND EVERY NAME IN IT IS JUDGED. A lenient
+        # reader that meets junk inside an array gives up on the array and on its dictionary and
+        # reads the rest as entries of the enclosing dictionary: lenient pypdf took glyph names
+        # after a stray "r" in /Differences for keys, and an inserted "/Subtype /FileAttachment"
+        # after a corrupt number in /W for an annotation subtype (found by differential fuzzing).
+        top_start, top_junk, top_runs, top_named = None, False, [], False
         work = self.work
         try:
             while True:
@@ -434,13 +457,19 @@ class _Scanner:
                             keep = True
                             holder = obj if obj_open else None
                             obj_open = False
+                            top_start, top_junk, top_runs, top_named = start, False, [], False
                         frame = _Frame(c == 0x3C, keep, holder, start)
                         stack.append(frame)
                         last_dict = None
                         ints = []
                         if frame.items is None and not frame.is_dict:
                             self.work = work
+                            skipped = pos
                             pos = self._skip_array(buf, pos, end)
+                            if pos > skipped:
+                                top_runs.append((skipped, pos))
+                                if not top_named:
+                                    top_named = self._names_in(buf, skipped, pos)
                             work = self.work
                         continue
                     if c == 0x3E and pos - start == 2:            # >>
@@ -448,6 +477,7 @@ class _Scanner:
                             continue
                         if not stack[-1].is_dict:
                             value = _JUNK
+                            top_junk = True
                         else:
                             frame = stack.pop()
                             value = self._close_dict(frame)
@@ -455,23 +485,33 @@ class _Scanner:
                             start = frame.start
                             if frame.obj is not None:
                                 self._define(frame.obj, value)
+                            if not stack:
+                                self.work = work
+                                self._judge_object(buf, top_start, pos, top_junk, top_runs, top_named)
+                                work = self.work
                     elif c == 0x5D:                              # ]
                         if not stack:
                             continue
                         if stack[-1].is_dict:
                             value = _JUNK
+                            top_junk = True
                         else:
                             frame = stack.pop()
                             value = ("a", tuple(frame.items) if frame.items is not None else None)
                             start = frame.start
                             if frame.obj is not None:
                                 self._define(frame.obj, value)
+                            if not stack:
+                                self.work = work
+                                self._judge_object(buf, top_start, pos, top_junk, top_runs, top_named)
+                                work = self.work
                     else:                                        # { } ) or a single >
                         if not stack:
                             last_dict = None
                             ints = []
                             continue
                         value = _JUNK
+                        top_junk = True
                 elif k == 6:
                     raw = m.group(6)
                     if 0x23 in raw:
@@ -483,6 +523,8 @@ class _Scanner:
                         if frame.is_dict:
                             bits = name_bits.get(raw, 0)
                             frame.any_bits |= bits
+                            if bits & _POLICY:
+                                top_named = True
                             state = frame.state
                             if state == 0:
                                 frame.key = raw
@@ -498,13 +540,17 @@ class _Scanner:
                                 frame.key_bits |= bits
                                 frame.state = 1
                             else:                                # two integers and no R
-                                frame.bad = True
+                                frame.bad = top_junk = True
                             continue
+                        if name_bits.get(raw, 0) & _POLICY:
+                            top_named = True
                         if frame.items is not None:
                             self._append(frame, value)
                         continue
                 elif k == 3 or k == 4:
                     value = _STR
+                    if k == 3 and stack and (buf[pos - 1] != 0x3E or _HEX_JUNK.search(buf, start + 1, pos - 1)):
+                        top_junk = True                    # unterminated, or not hexadecimal
                 elif k == 5:
                     self.work = work        # helpers charge self.work: hand the count over and back
                     pos = self._string_end(buf, start, end)
@@ -524,15 +570,17 @@ class _Scanner:
                                     frame.n2 = int(tok)
                                     frame.state = 3
                                 else:
-                                    frame.bad = True
+                                    frame.bad = top_junk = True
                             elif frame.items is not None:
                                 self._append(frame, ("i", int(tok)))
                             continue
                         if one or obj_open:
-                            ref = _REF_TAIL.match(buf, pos, end)
-                            value = ("r", int(tok), int(ref.group(1))) if ref is not None else ("i", int(tok))
+                            self.work = work
+                            ref = self._ref_after(buf, pos, end)
+                            work = self.work
+                            value = ("r", int(tok), ref[0]) if ref is not None else ("i", int(tok))
                             if ref is not None:
-                                pos = ref.end()
+                                pos = ref[1]
                             if one:
                                 return value, pos
                             self._define(obj, value)
@@ -554,7 +602,7 @@ class _Scanner:
                         ints = (ints + found)[-2:] if len(found) == 1 else found
                         last_dict = None
                         continue
-                    if tok in (b"true", b"false", b"null") or tok[0] in b"+-.0123456789":
+                    if tok in (b"true", b"false", b"null") or _NUMBER.match(tok):
                         value = _SCALAR
                     elif stack:
                         frame = stack[-1]
@@ -564,14 +612,16 @@ class _Scanner:
                                     self._keep(frame, ("r", frame.n1, frame.n2))
                                     frame.state = 0
                                 else:
-                                    frame.bad = True
+                                    frame.bad = top_junk = True
                             elif frame.items is not None:
                                 items = frame.items
                                 if len(items) >= 2 and items[-1][0] == "i" and items[-2][0] == "i":
                                     generation = items.pop()[1]
                                     items[-1] = ("r", items[-1][1], generation)
                         elif frame.is_dict:
-                            frame.bad = True
+                            frame.bad = top_junk = True
+                        else:
+                            top_junk = True                       # a keyword no reader takes as a value
                         continue
                     else:                                        # a keyword at top level
                         if one:
@@ -616,20 +666,27 @@ class _Scanner:
                         else:
                             if state == 2:
                                 self._keep(frame, ("i", frame.n1))
-                            frame.bad = True                     # a value where a key belongs
+                            frame.bad = top_junk = True          # a value where a key belongs
                             frame.state = 0
                     elif frame.items is not None:
                         self._append(frame, value)
                     else:
                         self.work = work
+                        skipped = pos
                         pos = self._skip_array(buf, pos, end)
+                        if pos > skipped:
+                            top_runs.append((skipped, pos))
+                            if not top_named:
+                                top_named = self._names_in(buf, skipped, pos)
                         work = self.work
                     continue
                 if one:
                     if value[0] == "d":
-                        after = _STREAM_NEXT.match(buf, pos, end)
-                        if after is not None:
-                            data_start, stop, resume = self._stream_data(buf, after.end(), end, value[1])
+                        self.work = work
+                        after = self._gap_end(buf, pos, end)
+                        work = self.work
+                        if buf.startswith(b"stream", after) and (after + 6 == end or buf[after + 6] in _DELIMITING):
+                            data_start, stop, resume = self._stream_data(buf, after + 6, end, value[1])
                             self.work = work
                             self._add_stream(buf, value, data_start, stop, None, depth)
                             work = self.work
@@ -648,6 +705,8 @@ class _Scanner:
                 ints = []
             # End of the buffer: judge every container still open (a truncated file included).
             result = None
+            if stack:
+                top_junk = True                                   # an object that never closes
             while stack:
                 frame = stack.pop()
                 if frame.is_dict:
@@ -656,9 +715,78 @@ class _Scanner:
                         self._define(frame.obj, result)
                 else:
                     result = ("a", None)
+                if not stack:
+                    self.work = work
+                    self._judge_object(buf, top_start, end, top_junk, top_runs, top_named)
+                    work = self.work
             return (result if one else None), pos
         finally:
             self.work = work
+
+    def _names_in(self, buf, start, stop):
+        """Does a skipped array run hold a name the policy could refuse? (Charged by its slashes.)"""
+        self._charge(buf.count(b"/", start, stop) // 3)
+        return _POLICY_NAMES.search(buf, start, stop) is not None
+
+    def _judge_object(self, buf, start, stop, junk, runs, named):
+        """A malformed object is refused when it holds any policy name, at any depth, in any role,
+        inside its strings included: a malformed string is where a lenient reader's tokens and
+        this scan's part ways."""
+        if not junk:
+            if not named:
+                return
+            for a, b in runs:
+                self._charge((b - a) // 16 + 1)
+                if _ARRAY_JUNK.search(buf, a, b):
+                    junk = True
+                    break
+            if not junk:
+                return
+        self._charge((stop - start) // 64 + buf.count(b"/", start, stop) // 3)
+        for m in _POLICY_NAMES.finditer(buf, start, stop):
+            bits = _NAME_BITS.get(_unescape(m.group(0))[1:], 0)
+            if bits & _ENCRYPT:
+                raise Refusal("encrypted", "/Encrypt in a malformed object")
+            if bits & _ANNOT and not bits & _KEY:
+                raise Refusal("annotation", "active annotation subtype in a malformed object")
+            raise Refusal("active", "forbidden name in a malformed object")
+
+    def _gap_end(self, buf, pos, end):
+        """Past whitespace and comments, as a lexer skips them; every comment is a charged step."""
+        while True:
+            pos = _SPACE.match(buf, pos, end).end()
+            if pos >= end or buf[pos] != 0x25:
+                return pos
+            self._charge(1)
+            eol = _EOL.search(buf, pos, end)
+            if eol is None:
+                return end
+            pos = eol.start()
+
+    def _ref_after(self, buf, pos, end):
+        """(generation, end) when "G R" follows an integer that ended at `pos`, as pdf.js reads it."""
+        at = self._gap_end(buf, pos, end)
+        if at == pos:
+            return None
+        generation = _UINT.match(buf, at, end)
+        if generation is None:
+            return None
+        after = self._gap_end(buf, generation.end(), end)
+        if buf.startswith(b"R", after) and (after + 1 == end or buf[after + 1] in _DELIMITING):
+            return int(generation.group()), after + 1
+        return None
+
+    def _key_shaped(self, buf, pos, name):
+        """Is what follows a name a dictionary, a reference or (for /JS) a string, /XFA an array?"""
+        end = len(buf)
+        at = self._gap_end(buf, pos, end)
+        if buf.startswith(b"<<", at) or (name == b"JS" and buf[at:at + 1] in (b"(", b"<")) \
+                or (name == b"XFA" and buf[at:at + 1] == b"["):
+            return True
+        number = _UINT.match(buf, at, end)
+        if number is None or (number.end() < end and buf[number.end()] not in _DELIMITING):
+            return False
+        return self._ref_after(buf, number.end(), end) is not None
 
     def _skip_array(self, buf, pos, end):
         """To the next delimiter that can matter inside an array: comments are crossed, not stopped at."""
@@ -728,6 +856,7 @@ class _Scanner:
                 index = bisect_right(starts, at) - 1
                 if index >= 0 and at < self.regions[index][1]:
                     if endobjs is None:
+                        self._charge(data.count(b"endobj") // 8)
                         endobjs = [e.start() for e in _ENDOBJ.finditer(data)]
                     following = bisect_right(endobjs, stop)
                     limit = endobjs[following] + 6 if following < len(endobjs) else end
@@ -740,39 +869,44 @@ class _Scanner:
         # slashes is refused as too complex instead of taking seconds.
         self._charge(buf.count(b"/") // 3)
         starts = [r[0] for r in regions]
+        merged = []
+        for a, b in sorted(ranges):
+            if merged and a <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], b)
+            else:
+                merged.append([a, b])
+        hidden_starts = [r[0] for r in merged]
 
         def ordinary_data(at):
             index = bisect_right(starts, at) - 1
-            return (index >= 0 and at < regions[index][1]
-                    and not any(a <= at < b for a, b in ranges))
+            if index < 0 or at >= regions[index][1]:
+                return False
+            index = bisect_right(hidden_starts, at) - 1
+            return index < 0 or at >= merged[index][1]
 
         for m in _BACKUP_LONG.finditer(buf):
             if not ordinary_data(m.start()):
                 raise Refusal("active", "forbidden name in the raw bytes")
         for m in _BACKUP_SHORT.finditer(buf):
-            if not ordinary_data(m.start()):
-                if _unescape(m.group(0)) == b"/Encrypt":
+            if ordinary_data(m.start()):
+                continue
+            name = _unescape(m.group(0))[1:]
+            if self._key_shaped(buf, m.end(), name):
+                if name == b"Encrypt":
                     raise Refusal("encrypted", "/Encrypt shaped like a key in the raw bytes")
                 raise Refusal("active", "forbidden key shaped like a key in the raw bytes")
 
     # ---------------------------------------------------------------- object streams
-    def _resolve(self, value, seen=()):
+    def _resolve(self, value):
         """Every value a reference may denote. ALL definitions count: readers disagree on which wins."""
         if value is None or value[0] != "r":
             return [value]
-        key = (value[1], value[2])
-        if key in seen or len(seen) > 8:
-            raise _unreadable("reference loop in stream parameters")
-        found = self._definitions(*key)
-        if not found:
+        self._charge(1)
+        found = self._definitions(value[1], value[2])
+        if not found or any(item[0] == "r" for item in found):
+            # Unresolved, or a reference to a reference: neither pdf.js nor pypdf follows that.
             return None
-        out = []
-        for item in found:
-            resolved = self._resolve(item, seen + (key,))
-            if resolved is None:
-                return None
-            out.extend(each for each in resolved if each not in out)
-        return out
+        return list(found)                      # at most MAX_VARIANTS, already distinct
 
     def _variants(self, kept):
         """Every filter chain a reader may apply, or None while a reference is unresolved.
@@ -883,8 +1017,8 @@ class _Scanner:
             if widths is None or widths[0] != "a" or widths[1] is None or len(widths[1]) < 3:
                 continue
             w = [item[1] if item[0] == "i" else -1 for item in widths[1][:3]]
-            if min(w) < 0 or max(w) > 8 or sum(w) == 0:
-                continue
+            if min(w) < 0 or max(w) > 8 or sum(w) == 0 or w[0] == 0:
+                continue                # with no type field every row is type 1: no container named
             try:
                 variants = self._variants(stream.kept)
                 stop = self._extent(stream)
@@ -893,6 +1027,7 @@ class _Scanner:
                 for variant in variants:
                     data = self._decode(stream.buf[stream.start:stop], variant)
                     row = sum(w)
+                    self._charge(len(data) // row // 2 + 1)
                     for at in range(0, len(data) - row + 1, row):
                         if (int.from_bytes(data[at:at + w[0]], "big") if w[0] else 1) == 2:
                             found.add(int.from_bytes(data[at + w[0]:at + w[0] + w[1]], "big"))
@@ -909,6 +1044,7 @@ class _Scanner:
             for stream in list(self.streams):
                 if not self._is_object_stream(stream, containers):
                     continue
+                self._charge(1)
                 if stream.depth >= MAX_STREAM_NESTING:
                     raise _unreadable("object streams nested too deeply")
                 if _CONFLICT in stream.kept:
@@ -949,6 +1085,7 @@ class _Scanner:
             return
         pos = 0
         for _index in range(min(n, len(content))):
+            self._charge(2)
             number = _INT.match(content, pos, first)
             offset = number and _INT.match(content, number.end(), first)
             if not offset:
@@ -1127,12 +1264,12 @@ class _Scanner:
         prior = bytearray(width)
         at = 0
         while at < len(data):
+            self._charge(1)                         # every row, whatever its type
             kind = data[at]
             row = bytearray(data[at + 1:at + 1 + width])
             at += width + 1
             size = len(row)
             if kind == 2 and size == width:
-                self._charge(1)
                 a = int.from_bytes(row, "big")
                 b = int.from_bytes(prior, "big")
                 row = bytearray((((a & low) + (b & low)) ^ ((a ^ b) & high)).to_bytes(width, "big"))

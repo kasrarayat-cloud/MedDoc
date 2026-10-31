@@ -640,6 +640,19 @@ class ScannerDetails(unittest.TestCase):
         self.assertEqual(self.kind(minimal([(1, b"<< 7 /A << /S /GoTo /D [0 /Fit] >> >>")])), "active")
         self.assertEqual(self.kind(minimal([(1, b"<< /K 1 2 /A 3 0 R >>")])), "active")
 
+    def test_a_malformed_object_is_judged_on_every_name_inside_it(self):
+        # Found by differential fuzzing against lenient pypdf: after junk inside an array, a lenient
+        # reader drops the array and its dictionary and reads the rest as entries of the enclosing one.
+        glyphs = b"<< /Type /Font /Encoding << /Differences [0 /space /two r /five /A /B] >> >>"
+        self.assertEqual(self.kind(minimal([(1, glyphs)])), "active")
+        widths = b"<< /Type /Font /W [83 [333\xe7389 278] 172 /Subtype /FileAttachment 174 611] >>"
+        self.assertEqual(self.kind(minimal([(1, widths)])), "annotation")
+        hidden = b"<< /Type /Font /Encoding << /Differences [0 /space /<two /A /B /C> /D] >> >>"
+        self.assertEqual(self.kind(minimal([(1, hidden)])), "active")   # names swallowed by a bad hex string
+        # The same objects, well formed, are ordinary fonts.
+        self.assertIsNone(self.kind(minimal([(1, glyphs.replace(b" r ", b" "))])))
+        self.assertIsNone(self.kind(minimal([(1, b"<< /Type /Font /W [83 [333 278] 172 [500] 174 611] >>")])))
+
     def test_actions_are_refused_by_their_type_even_without_the_key_that_reaches_them(self):
         for kind in (b"/URI", b"/Launch", b"/GoToR", b"/GoToE", b"/SubmitForm", b"/RichMediaExecute"):
             with self.subTest(kind=kind):
@@ -701,6 +714,34 @@ class ScannerDetails(unittest.TestCase):
             self.assertEqual(self.kind(form()), "unreadable")
         with mock.patch.object(pdf_raw, "MAX_DECODED", 100):
             self.assertEqual(self.kind(minimal([(3, objstm([(5, b"[" + b"0 " * 200 + b"]")]))])), "unreadable")
+
+    @staticmethod
+    def reason(data):
+        try:
+            pdf_raw.scan(data)
+        except pdf_raw.Refusal as refusal:
+            return refusal.reason
+        return None
+
+    def test_work_that_used_to_escape_the_budget_is_charged(self):
+        # Each of these ran for 15 s to over 30 s before its loop or look-ahead was charged.
+        lines = b"%PDF-1.7\n" + b"%1 0 obj 5\n" * 5000          # each anchor's look-ahead crossed every later line
+        self.assertEqual(self.reason(lines), "work limit")
+        defined = b"".join(b"9 0 obj /F%d endobj\n" % i for i in range(pdf_raw.MAX_VARIANTS + 1))
+        stream = b"<< /Type /ObjStm /N 1 /First 4 /Filter 9 0 R /Length 5 >>\nstream\n0 0 1\nendstream"
+        self.assertEqual(self.reason(minimal([(3, stream)]) + defined), "a stream parameter is defined in too many ways")
+        rows = zlib.compress(b"\x02" * 2_100_000)
+        xref = b"<< /Type /XRef /W [1 0 0] /Size 2 /Filter /FlateDecode /Length %d >>\nstream\n" % len(rows) + rows + b"\nendstream"
+        self.assertEqual(self.reason(minimal([(3, xref)])), "work limit")
+        content = b"5 0\n[" + b"0 " * 600_000 + b"]"
+        rows = bytearray(2 * len(content))
+        rows[1::2] = content                                    # PNG rows of type 0, one byte each
+        encoded = zlib.compress(bytes(rows))
+        predicted = (b"<< /Type /ObjStm /N 1 /First 4 /Filter /FlateDecode /DecodeParms << /Predictor 12 /Columns 1 >> "
+                     b"/Length %d >>\nstream\n" % len(encoded) + encoded + b"\nendstream")
+        self.assertEqual(self.reason(minimal([(3, predicted)])), "work limit")
+        with mock.patch.object(pdf_raw, "MAX_WORK", 10_000_000):     # the same rows decode when affordable
+            self.assertIsNone(self.reason(minimal([(3, predicted)])))
 
     def test_work_on_the_ordinary_form_is_small(self):
         stats = {}
