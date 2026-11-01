@@ -170,7 +170,7 @@ class NotInPersonTests(SimpleTestCase):
     def test_no_show_did_not_arrive_and_did_not_attend(self):
         for words in ('Patient did not arrive; no-show.', 'No-show for this visit.', 'She did not attend.',
                       'He did not show up for the visit.', 'Telephone visit only.', 'Audio-only visit.',
-                      'No in-person contact today.'):
+                      'No in-person contact today.', 'Phone f/u about her reflux.', 'Patient no showed.'):
             self.assert_held(OFFICE.replace('Heartburn.\n', words + '\n') + 'Total time: 20 minutes.\n')
 
     def test_a_head_title_is_read_whatever_its_section(self):  # kills pv1-c4-head

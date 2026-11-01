@@ -751,14 +751,15 @@ EM_TIME_ACTIVITIES = rx(r'[ \t]*,?[ \t]*(?:covering|including|included|spent\s+(
 # visits (EM_VISIT), and holding them is a policy this round does not make.
 NOT_IN_PERSON = rx(r'\bnot\s+seen\s+in\s+(?:the\s+)?(?:office|clinic|person)\b|\bno\s+in[- ]person\b'
                    r'|\b(?:by|via|over\s+the|on\s+the)\s+(?:tele)?phone\b'
-                   r'|\b(?:tele)?phone\s+(?:calls?|encounters?|visits?|consultations?|consults?|follow-?ups?|contacts?|'
-                   r'conversations?|interviews?|appointments?|notes?|discussions?|messages?|triage)\b'
+                   r'|\b(?:tele)?phone\s+(?:calls?|encounters?|visits?|consultations?|consults?|follow-?ups?|f/u\b|'
+                   r'check-?ins?|contacts?|conversations?|interviews?|appointments?|notes?|discussions?|messages?|'
+                   r'triage)\b'
                    r'|\btelephonic(?:ally)?\b|\baudio[- ]only\b'
-                   r"|\bno[- ]?shows?\b|\b(?:did\s+not|didn't|failed\s+to)\s+(?:arrive|attend|show\s+up)\b")
+                   r"|\bno[- ]?show(?:s|ed)?\b|\b(?:did\s+not|didn't|failed\s+to)\s+(?:arrive|attend|show\s+up)\b")
 # ... and a title line of the note's head naming a telephone or audio-only encounter ("Telephone encounter", "Phone
 # visit"), read whatever section the head falls in (a note may open on a heading such as "Follow-up").
 NOT_IN_PERSON_TITLE = rx(r'^[ \t]*+(?:[\w-]++[ \t]++){0,3}?(?:telephone|phone|audio[- ]only)[ \t]++(?:encounter|call|'
-                         r'visit|consultation|follow-?up|note|triage)\b[^\n]{0,40}$', FLAGS | re.M)
+                         r'visit|consultation|follow-?up|f/u|note|triage)\b[^\n]{0,40}$', FLAGS | re.M)
 _LEVEL = r'straightforward|low|moderate|high'
 _LEVEL_END = r'(?=[ \t]*(?:[- ]complexity\b|level\b|[:,.;(]|\n|$))'
 MDM_LEVEL = rx(r'(?:\b(?:medical\s+decision[- ]making|MDM)\b[^.;\n]{0,60}?'
