@@ -145,7 +145,7 @@ def read_response(request: ProviderRequest, response_bytes) -> ParticipantReadin
     model = envelope.get('model')
     returned = reading.recorded_model(model)
     if model != MODEL:  # I6: checked before anything else the response says
-        named = f'model {reading.quoted(model, 100)}' if isinstance(model, str) and model.strip() else 'no model'
+        named = f'model {reading.named(model)}' if isinstance(model, str) else 'no model'
         return refused(f'it names {named} as the model that answered, not {MODEL}', returned)
     if envelope.get('type') != 'message':
         return refused('the response is not a message', returned)

@@ -59,6 +59,7 @@ _TOP_LISTS = (('services', MAX_SERVICES, 'services'), ('codes', MAX_CODES, 'code
 _SCHEMA_KEYWORDS = frozenset({'type', 'properties', 'required', 'additionalProperties', 'items', 'enum'})
 _DATE = re.compile(r'[0-9]{4}-[0-9]{2}-[0-9]{2}')
 _RECORDED_MODEL = re.compile(r'[\x21-\x7e]{1,100}')  # fits ProviderRun.returned_model
+_TOKEN_CHARS = 20  # a code, service id or date named in a problem; longer text is described, not repeated
 _WHITESPACE = re.compile(r'\s+')
 _SURROGATE = re.compile('[\ud800-\udfff]')
 
@@ -140,6 +141,12 @@ def quoted(value, limit: int = 300) -> str:
         return 'no reason was given'
     text = ' '.join(value.split())
     return text if len(text) <= limit else text[:limit] + '...'
+
+
+def named(value: str, limit: int = 100) -> str:
+    """A vendor-stated name for a problem message: quoted, so a difference in spacing or case is visible, and
+    bounded."""
+    return repr(value if len(value) <= limit else value[:limit] + '...')
 
 
 def refusal(provider: str, adapter_version: str, requested_model: str, returned_model: str,
@@ -254,6 +261,14 @@ def _name(key: str) -> str:
     return repr(key if len(key) <= 40 else key[:40] + '...')
 
 
+def _token(value: str) -> str:
+    """How a problem names a model-written code, id or date: quoted when it is a short token, otherwise by its
+    length only, so no longer text the model wrote into the field (a descriptor, say; I9) is repeated."""
+    if len(value) <= _TOKEN_CHARS and not _WHITESPACE.search(value.strip()):
+        return repr(value)
+    return f'a value of {len(value):,} characters'
+
+
 # --- bounds --------------------------------------------------------------------------
 
 def bound_error(reading: dict) -> str:
@@ -355,13 +370,13 @@ class _Reader:
         when = parsed['date_of_service']
         value = when['value']
         if value and not _iso_date(value):
-            self.problems.append(f'date_of_service {_name(value)} is not a YYYY-MM-DD date; it was not used.')
+            self.problems.append(f'date_of_service {_token(value)} is not a YYYY-MM-DD date; it was not used.')
             value = ''
         date_evidence = self.quotes(when['evidence'])
         services, ids = [], set()
         for index, item in enumerate(parsed['services']):
             if item['id'] in ids:
-                self.problems.append(f'services[{index}] repeats the service id {_name(item["id"])}.')
+                self.problems.append(f'services[{index}] repeats the service id {_token(item["id"])}.')
             ids.add(item['id'])
             services.append(ParticipantService(
                 id=item['id'], family=item['family'], status=item['status'], description=item['description'],
@@ -370,7 +385,7 @@ class _Reader:
                 provider_role=item['provider_role'], evidence=self.quotes(item['evidence'])))
         codes = []
         for index, item in enumerate(parsed['codes']):
-            where = f'codes[{index}] ({_name(item["code"])})'
+            where = f'codes[{index}] ({_token(item["code"])})'
             if item['units'] not in UNITS:
                 self.problems.append(f'{where} gives {_units(item["units"])} units, outside 1 to 99; it was dropped.')
                 continue
@@ -384,7 +399,7 @@ class _Reader:
         for index, item in enumerate(parsed['not_coded']):
             where = f'not_coded[{index}]'
             if item['code'] and not CODE.fullmatch(item['code']):
-                self.problems.append(f'{where} ({_name(item["code"])}) is not a five-character CPT code; '
+                self.problems.append(f'{where} ({_token(item["code"])}) is not a five-character CPT code; '
                                      'it is kept as given.')
             self.unknown_services(where, item['service_ids'], ids)
             not_coded.append(ParticipantNotCoded(service_ids=tuple(item['service_ids']), code=item['code'],

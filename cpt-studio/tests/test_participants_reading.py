@@ -179,6 +179,7 @@ class AstraAnswerTests(_GoodAnswerContract, OfflineTestCase):
                 self.assertIn('as the model that answered, not gpt-6-astra', problem)
         self.assertIn('names no model', self.refused(self.envelope(model=None)))
         self.assertIn('names no model', self.refused(self.envelope(model=['gpt-6-astra'])))
+        self.assertIn("names model 'gpt-6-astra ' as the model", self.refused(self.envelope(model='gpt-6-astra ')))
         result = self.read(self.envelope(model='gpt-6-astra-2026-09-15'))
         self.assertEqual((result.refused, result.returned_model), (False, 'gpt-6-astra-2026-09-15'))
         refused = self.read(self.envelope(model='gpt-6-astra-mini'))
@@ -186,7 +187,7 @@ class AstraAnswerTests(_GoodAnswerContract, OfflineTestCase):
 
     def test_the_model_is_checked_before_anything_else_the_response_says(self):
         problem = self.refused(self.envelope(model='gpt-6-astra-mini', status='incomplete'))
-        self.assertIn("names model gpt-6-astra-mini as the model that answered", problem)
+        self.assertIn("names model 'gpt-6-astra-mini' as the model that answered", problem)
 
     def test_output_without_a_message_text_is_refused(self):
         for output, expect in (([], 'carries no output text'),
@@ -276,7 +277,7 @@ class FableAnswerTests(_GoodAnswerContract, OfflineTestCase):
         self.assertFalse(self.read(json.dumps(envelope).encode()).refused)
 
     def test_the_model_is_checked_before_anything_else_the_response_says(self):
-        self.assertIn('names model claude-opus-5-5 as the model that answered',
+        self.assertIn("names model 'claude-opus-5-5' as the model that answered",
                       self.refused(self.envelope(model='claude-opus-5-5', stop_reason='max_tokens')))
 
     def test_a_response_that_is_not_a_message_or_carries_no_text_is_refused(self):
@@ -432,6 +433,27 @@ class ReadingTests(OfflineTestCase):
         self.assertEqual(result.problems, tuple(
             f'codes[{index}] ({value!r}) is not a five-character CPT code; it is kept as given.'
             for index, value in enumerate(values) if index > 1))
+
+    def test_problems_name_a_long_value_by_its_length_and_never_repeat_it(self):
+        """I9: a model could write descriptor-like text into a code, id or date field. The value is kept as given (the
+        contract), but a problem names it by its length only."""
+        long_code = 'Colonoscopy, flexible; with removal of polyp by snare technique'
+        long_id = 'first service, the colonoscopy'
+        result = self.read(empty_reading(
+            date_of_service={'value': 'the twenty-first of October, 2026', 'evidence': []},
+            services=[service(1, id=long_id), service(2, id=long_id)],
+            codes=[code(long_code, service_ids=[]), code(long_code, units=0, service_ids=[])],
+            not_coded=[{'service_ids': [], 'code': long_code, 'reason': 'other', 'evidence': []}]))
+        self.assertEqual([c.code for c in result.codes], [long_code])
+        self.assertEqual(result.problems, (
+            'date_of_service a value of 33 characters is not a YYYY-MM-DD date; it was not used.',
+            'services[1] repeats the service id a value of 30 characters.',
+            'codes[0] (a value of 63 characters) is not a five-character CPT code; it is kept as given.',
+            'codes[1] (a value of 63 characters) gives 0 units, outside 1 to 99; it was dropped.',
+            'not_coded[0] (a value of 63 characters) is not a five-character CPT code; it is kept as '
+            'given.'))
+        for text in ('Colonoscopy', 'first service', 'twenty-first'):
+            self.assertFalse(any(text in problem for problem in result.problems), text)
 
     def test_units_outside_1_to_99_drop_that_code(self):
         units = (1, 99, 0, 100, -1, 10 ** 40)
