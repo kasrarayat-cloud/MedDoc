@@ -37,12 +37,14 @@ class MutantRegistryTests(SimpleTestCase):
         names = [m.name for m in mutants.MUTANTS]
         census = {p: [n for n in names if n.startswith(prefixes)] for p, prefixes in mutants.PACKAGE_PREFIXES.items()}
         self.assertEqual({p: len(v) for p, v in census.items()},
-                         {'PS': 7, 'PA': 13, 'PD': 11, 'PV1': 17, 'PE': 29, 'PI': 23, 'PO': 21})  # PE +19, PI +4: the
-        # Wave 1 repair, cycle 1 (pe.json and pi.json, amendment_20261101_cycle1)
+                         {'PS': 7, 'PA': 13, 'PD': 11, 'PV1': 17, 'PE': 31, 'PI': 23, 'PO': 21})  # PE +19, PI +4: the
+        # Wave 1 repair, cycle 1 (pe.json and pi.json, amendment_20261101_cycle1); then PE +2 and PI -1
+        # (amendment_20261101_cycle1_b: the head must name the family; pi-carry-lesion-start withdrawn with its code) and
+        # PI +1 (amendment_20261101_cycle1_c: pi-carry-lesion-heading)
         stage_a = [n for n in names if n.startswith(mutants.STAGE_A_PREFIXES)]
         self.assertEqual(len(stage_a), 11)
         self.assertEqual(sorted(sum(census.values(), []) + stage_a), sorted(names))  # every name in one place only
-        self.assertEqual(len(names), 132)
+        self.assertEqual(len(names), 134)
         for package, slice_ in (('PD', mutants.PD_MUTANTS), ('PV1', mutants.PV1_MUTANTS), ('PE', mutants.PE_MUTANTS),
                                 ('PI', mutants.PI_MUTANTS), ('PO', mutants.PO_MUTANTS)):
             self.assertEqual([m.name for m in slice_], census[package], package)

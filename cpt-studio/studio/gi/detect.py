@@ -3712,6 +3712,10 @@ def _pe_routing_reach(an: Analysis, pre: str, post: str, found: re.Match, depth:
       the duodenum" says nothing of where the gastroscope went;
     - the document is no note written around a procedure (_pe_around_procedure: a letter, a booking, a handout, a records
       review quoting a report);
+    - the document's head names the family whose endpoint the verb reaches (_pe_head_names, routing's own names in its
+      title lines and procedure fields; GI round 4 Wave 1 repair, amendment_20261101_cycle1_b: an 'Upper Endoscopy
+      Report' whose pasted colonoscopy block sat under 'Additional Pages', or under no heading, had read the cecum
+      reached);
     - the verb lies inside today's procedure narrative (in_todays_narrative, the copy guards PI's S1 and E1 read too:
       never in an attached or outside report, under a line naming another occurrence's record - "Outside Records" over
       "At Mercy GI the colonoscope was navigated to the cecum" - after a sign-off or a statement that a copy follows, in a
@@ -3728,6 +3732,8 @@ def _pe_routing_reach(an: Analysis, pre: str, post: str, found: re.Match, depth:
         return False
     if _pe_around_procedure(an):
         return False
+    if not _pe_head_names(an, table):
+        return False  # the head names no family this reach completes: no positive evidence of today's report of it
     verb = at - len(pre) + found.start()
     return in_todays_narrative(an.text, verb, an.service_date, (at - len(pre), at + len(post)))
 
@@ -3965,6 +3971,68 @@ def todays_procedure_report(text: str) -> bool:
     if not head.sedation:  # a sedation field
         return False
     return not any(_GI4_TITLE_HOLD.search(text, s, e) for s, e in head.titles)
+
+
+# The head's procedure fields, whose value names the procedures the report documents ("Procedure: EGD with biopsy.";
+# services._PI_PROCEDURE_FIELD until the Wave 1 repair's amendment_20261101_cycle1_b, which made it one head for PE and PI).
+_GI4_PROCEDURE_FIELD = re.compile(r'[ \t]*+[#*_>]*+[ \t]*+(?:procedures?(?:[ \t]*+\(s\))?+(?:[ \t]++(?:performed|done))?+'
+                                  r'|operations?|examinations?|exams?|study|studies)[ \t]*+:', re.A | re.I)
+_GI4_PROCEDURE_FIELD_CHARS = 400  # a procedure field is read this far (a field's value is short: bounded work)
+
+
+@functools.lru_cache(maxsize=16)
+def head_procedure_spans(text: str) -> tuple:
+    """(start, end) of the head's lines that name the procedures the document reports (GI round 4 Wave 1 repair,
+    amendment_20261101_cycle1_b: one implementation, read by PI's S1 and PE's routing-only reach): its title lines
+    (_gi4_head: the title-shaped lines among its first sections.AROUND_PROCEDURE_TITLE_LINES non-empty lines, before its
+    first field) and its procedure fields ('Procedure:', 'Procedures performed:', 'Operation:', 'Examination:', 'Exam:',
+    'Study:'; each read at most _GI4_PROCEDURE_FIELD_CHARS characters) among its first sections.PROCEDURE_HEAD_LINES
+    non-empty lines - but never past the first heading-like line after its first field: the body starts there, so a
+    'Procedure: Colonoscopy.' line under a later heading or inside a pasted block is the body's, never the head's (the
+    refutation's S1-f2 note has its 'Procedure: EGD with biopsy.' under 'History', and a short pasted block can bring
+    its 'Procedure: Colonoscopy.' within the first 12 non-empty lines). A reader that needs the head to name a family
+    reads only these spans: positive evidence that today's report documents that family."""
+    spans = list(_gi4_head(text).titles)
+    end = gi_sections.head_lines_end(text, gi_sections.PROCEDURE_HEAD_LINES)
+    start, fielded = 0, False
+    while start < end:
+        nl = text.find('\n', start, end)
+        line_end = end if nl < 0 else nl
+        body = _GI4_MARKUP.match(text, start, line_end).end()
+        if body < line_end:
+            if fielded and _gi4_heading_like(_gi4_line(text, start, line_end)):
+                break  # the body's first heading: nothing after it is the head's
+            if _GI4_PROCEDURE_FIELD.match(text, start, line_end):
+                spans.append((start, min(line_end, start + _GI4_PROCEDURE_FIELD_CHARS)))
+            if _GI4_FIELD.match(text, body, line_end):
+                fielded = True
+        if nl < 0:
+            break
+        start = nl + 1
+    return tuple(spans)
+
+
+def _pe_head_names(an: Analysis, table) -> bool:
+    """Whether the document's head names a family whose endpoint ``table`` reads, by routing's own service mentions
+    (cues.SERVICE_PATTERNS, the Analysis' mentions) inside head_procedure_spans: gi.egd for the upper landmarks,
+    gi.colonoscopy or gi.flex_sig for the lower. Positive evidence that today's report documents the family a
+    routing-only reach would complete (GI round 4 Wave 1 repair, amendment_20261101_cycle1_b: an EGD report's pasted
+    colonoscopy block under a heading no closed list names had read the cecum reached). Memoised per analysis."""
+    key = ('pe-head-names', table is cues.UPPER_LANDMARKS)
+    if key not in an.memo:
+        families = ('gi.egd',) if table is cues.UPPER_LANDMARKS else ('gi.colonoscopy', 'gi.flex_sig')
+        named = False
+        for s, e in head_procedure_spans(an.text):
+            i = bisect.bisect_left(an._service_starts, s)
+            while i < len(an.services) and an.services[i].start < e:
+                if an.services[i].family in families:
+                    named = True
+                    break
+                i += 1
+            if named:
+                break
+        an.memo[key] = named
+    return an.memo[key]
 
 
 def _gi4_today(text: str, service_date: Optional[date]) -> Optional[date]:

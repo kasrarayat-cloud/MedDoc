@@ -428,3 +428,57 @@ class AttachedReportReachTests(SimpleTestCase):
                 p = row['proposals']['45385']
                 self.assertEqual((p['bucket'], p['status']), ('selected', 'needs_clarification'), name)
                 self.assertIn('extent', p['clarifications'], name)
+
+
+class HeadNamesFamilyTests(SimpleTestCase):
+    """amendment_20261101_cycle1_b (pe.json): a routing-only reach counts only for a family the document's head NAMES, by
+    routing's own service mentions in detect.head_procedure_spans (its title lines and its procedure fields, never past
+    the body's first heading). The probes below leaked through cycle 1's copy guards: the pasted colonoscopy block of an
+    EGD report under a heading no closed list names, or under none, made 45385 READY (installed: held on extent)."""
+    NEUTRAL = ''.join(f'Line {i} of the pages lists medications and allergies in detail.\n' for i in range(8))
+    BLOCK = ('Procedure: Colonoscopy.\nThe colonoscope was {verb} to the cecum. A 10 mm sigmoid polyp was removed with a '
+             'hot snare.\n')
+
+    def shapes(self):
+        e = AttachedReportReachTests.E
+        for verb in ('navigated', 'steered'):
+            block = self.BLOCK.format(verb=verb)
+            yield f'neutral heading, {verb}', e + 'Additional Pages\n' + self.NEUTRAL + block
+            yield f'no heading, no filler, {verb}', e + block
+            yield f'generic title, {verb}', e.replace('Upper Endoscopy Report', 'Procedure Note') + 'Additional Pages\n' \
+                + self.NEUTRAL + block
+
+    def test_routing_reads_no_extent_there(self):
+        for name, text in self.shapes():
+            with self.subTest(name):
+                colon = detect.route(text, dt.date(2026, 10, 20)).finding(COLON)
+                jobs.release_routing_caches()
+                self.assertNotIn('extent', [f.name for f in colon.facts], name)
+
+    def test_45385_is_never_ready(self):
+        from ops.gi4 import battery
+        for name, text in self.shapes():
+            with self.subTest(name):
+                row = battery.run_row(battery.modules(), name, text, [
+                    ('43239', 'Cold forceps biopsies of the antrum were taken.', 'done'),
+                    ('45385', 'A 10 mm sigmoid polyp was removed with a hot snare.', 'not_done')])
+                p = row['proposals']['45385']
+                self.assertEqual((p['bucket'], p['status']), ('selected', 'needs_clarification'), name)
+
+    def test_the_head_spans_stop_at_the_body(self):
+        e = AttachedReportReachTests.E + self.BLOCK.format(verb='navigated')
+        spans = [e[s:t] for s, t in detect.head_procedure_spans(e)]
+        self.assertIn('Upper Endoscopy Report', spans)
+        self.assertNotIn('Procedure: Colonoscopy.', spans)  # the 8th non-empty line, but under the body's 'Procedure'
+        field = B + 'Procedure Note\nDate of service: 10/20/2026\nEndoscopist: Synthetic MD\nProcedure: Colonoscopy\n'
+        self.assertIn('Procedure: Colonoscopy', [field[s:t] for s, t in detect.head_procedure_spans(field)])
+
+    def test_the_head_rule_alone_decides_the_no_heading_shape(self):
+        # the same text is read where the head names the colonoscopy, and only there: the head rule alone holds it
+        text = AttachedReportReachTests.E + self.BLOCK.format(verb='navigated')
+        extents = {}
+        for title in ('Upper Endoscopy Report', 'Gastroscopy and Colonoscopy'):
+            colon = detect.route(text.replace('Upper Endoscopy Report', title), dt.date(2026, 10, 20)).finding(COLON)
+            jobs.release_routing_caches()
+            extents[title] = [str(f.value) for f in colon.facts if f.name == 'extent']
+        self.assertEqual(extents, {'Upper Endoscopy Report': [], 'Gastroscopy and Colonoscopy': ['cecum']})

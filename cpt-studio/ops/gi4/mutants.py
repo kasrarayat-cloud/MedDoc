@@ -361,6 +361,14 @@ PE_MUTANTS = (
            '    if False:\n        return False', _PE_UNIT),
     Mutant('pe-today-beyond-reach', 'the passage is not beyond heading reach (sections.beyond_heading_reach)', _PE_DETECT,
            '    return not marks.beyond[line_start]', '    return True', _PE_UNIT),
+    # --- amendment_20261101_cycle1_b: the head must NAME the family (one head, read by PE here and PI's S1) ---
+    Mutant('pe-head-family', "a routing-only reach counts only for a family the document's head names (routing's own "
+           'names in its title lines and procedure fields)', _PE_DETECT,
+           '    if not _pe_head_names(an, table):\n        return False',
+           '    if False:\n        return False', _PE_UNIT),
+    Mutant('pe-head-span-body', "the head's procedure fields never reach past the body's first heading", _PE_DETECT,
+           "                break  # the body's first heading: nothing after it is the head's",
+           "                pass  # the body's first heading: nothing after it is the head's", _PE_UNIT),
 )
 # --- package PI: the inventory (detector tests.test_gi4_pi; moved here from tests/test_gi4_pi_mutants.py, which now
 # checks this slice; its (name, guard, path, old, new, detector) tuples are Mutant records here) ---
@@ -426,20 +434,21 @@ PI_MUTANTS = (
            "            if any(a.kind == 'stent' and a.status == 'performed' and a.id not in phantom for a in d.acts):",
            '            if True:', _PI_UNIT),
     # --- GI round 4 Wave 1 repair, cycle 1 ---
-    Mutant('pi-reach-family', "S1 is never read for a family the head's procedure names exclude", 'studio/gi/services.py',
-           '    return not _pi_head_excludes(original, family)', '    return True', _PI_UNIT),
+    Mutant('pi-reach-family', 'S1 reads a reach only for a family the head NAMES (amendment_20261101_cycle1_b: positive '
+           "evidence, replacing cycle 1's hold-only 'the head excludes')", 'studio/gi/services.py',
+           '    if family not in _pi_head_families(original):\n        return False',
+           '    if False:\n        return False', _PI_UNIT),
     Mutant('pi-carry-lesion', "A1: a carry the paragraph's lesion carry stands against holds (a misbinding never binds)",
            'studio/gi/services.py',
            "        return ''  # GI round 4 Wave 1 repair (F5): the lesion carry is another family's - hold, never bind",
            "        pass  # GI round 4 Wave 1 repair (F5): the lesion carry is another family's - hold, never bind",
            _PI_UNIT),
-    Mutant('pi-carry-lesion-start', "A1: a sentence starting the named service's own narrative clears the lesion carry",
-           'studio/gi/services.py',
-           "                    lesion_carry = None  # Wave 1 repair (F5): the named service's own narrative starts here",
-           "                    pass  # Wave 1 repair (F5): the named service's own narrative starts here", _PI_UNIT),
     Mutant('pi-carry-lesion-paragraph', 'A1: the lesion carry stands only within its paragraph (no blank line between)',
-           'studio/gi/services.py', '    return not (pos > end and PARAGRAPH_BREAK.search(text, end, pos))',
-           '    return True', _PI_UNIT),
+           'studio/gi/services.py', '        return False  # a blank line: the paragraph, and its lesion carry, ended',
+           '        pass  # a blank line: the paragraph, and its lesion carry, ended', _PI_UNIT),
+    # --- amendment_20261101_cycle1_c ---
+    Mutant('pi-carry-lesion-heading', 'A1: the lesion carry lapses at a line written as a heading between it and the act',
+           'studio/gi/services.py', '    return not _pi_heading_between(text, end, pos)', '    return True', _PI_UNIT),
 )
 # --- package PO: second-review offers, the amendment A1-A5 included (detector tests.test_gi4_po; moved here from
 # tests/test_gi4_po_mutants.py, which now checks this slice) ---

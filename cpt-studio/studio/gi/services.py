@@ -2902,44 +2902,28 @@ def _pi_todays_statement(text: str, span: Span) -> bool:
     return detect.in_todays_narrative(_ORIGINAL.get() or text, span.start, None, (span.start, span.end))
 
 
-# The head's procedure fields, whose value names the procedures the report documents ("Procedure: EGD with biopsy.").
-_PI_PROCEDURE_FIELD = _rx(r'[ \t]*+[#*_>]*+[ \t]*+(?:procedures?(?:[ \t]*+\(s\))?+(?:[ \t]++(?:performed|done))?+'
-                          r'|operations?|examinations?|exams?|study|studies)[ \t]*+:')
-_PI_PROCEDURE_FIELD_CHARS = 400  # a procedure field is read this far (bounded work per S1 mention)
-
-
-def _pi_head_excludes(text: str, family: str) -> bool:
-    """Whether the head of ``text`` (as written) names the procedures it documents and none of them is ``family``: a
-    title line of its head (detect._gi4_head) or a procedure field among its first 12 non-empty lines names services by
-    SERVICES' own names, none of them ``family`` ("Procedure: EGD with biopsy." above an attached colonoscopy report;
-    GI round 4 Wave 1 repair, F1). A head that names no service by those names excludes nothing. Hold-only."""
+def _pi_head_families(text: str) -> frozenset:
+    """The families the head of ``text`` (as written) names by SERVICES' own names in its title lines and procedure
+    fields (detect.head_procedure_spans: never past the body's first heading), the one head PE reads too (GI round 4
+    Wave 1 repair, amendment_20261101_cycle1_b)."""
     from studio.gi import detect  # local: detect imports context, which this module also imports
-    head = detect._gi4_head(text)
-    spans = list(head.titles)
-    end = _sections.head_lines_end(text, _sections.PROCEDURE_HEAD_LINES)
-    start = 0
-    while start < end:
-        nl = text.find('\n', start, end)
-        line_end = end if nl < 0 else nl
-        if _PI_PROCEDURE_FIELD.match(text, start, line_end):
-            spans.append((start, min(line_end, start + _PI_PROCEDURE_FIELD_CHARS)))  # a field's value is short
-        if nl < 0:
-            break
-        start = nl + 1
-    named = {f for s, e in spans for f, _, pattern in SERVICES if pattern.search(text, s, e)}
-    return bool(named) and family not in named
+    return frozenset(f for s, e in detect.head_procedure_spans(text) for f, _, pattern in SERVICES
+                     if pattern.search(text, s, e))
 
 
 def _pi_todays_reach(text: str, family: str, pos: int, ss: int, se: int, service_date) -> bool:
     """Whether S1's reach at ``pos`` (its sentence [ss, se)) is today's: inside today's procedure narrative (detect.
-    in_todays_narrative on the document as written) and of a family the head does not exclude (_pi_head_excludes). GI
-    round 4 Wave 1 repair (F1): a reach in an attached report or in unit statistics inside today's EGD note had read a
-    colonoscopy performed."""
+    in_todays_narrative on the document as written) and of a family the head NAMES (_pi_head_families: positive evidence
+    that today's report documents it). GI round 4 Wave 1 repair: a reach in an attached report or in unit statistics
+    inside today's EGD note had read a colonoscopy performed (F1), and under a heading no closed list names, or none,
+    after the cycle-1 guards (amendment_20261101_cycle1_b, which replaced the hold-only 'head excludes' rule)."""
     from studio.gi import detect  # local: detect imports context, which this module also imports
     original = _ORIGINAL.get() or text
+    if family not in _pi_head_families(original):
+        return False  # the head names no such family: no positive evidence that today's report documents it
     if not detect.in_todays_narrative(original, pos, service_date, (ss, se)):
         return False
-    return not _pi_head_excludes(original, family)
+    return True
 
 
 def _endpoint_named(family: str, spans: Sequence[Span], text: str = '') -> str:
@@ -2999,22 +2983,37 @@ def _pi_lesion_against(lesion_carry, family: str, part: _Part, pos: int, text: s
     characters and no blank line (GI round 4 Wave 1 repair, F5: "A 12 mm polyp was seen in the gastric body. The
     colonoscopy had been done first, under the same sedation. A hot snare was used to remove the polyp." had bound the
     gastric polypectomy to the colonoscopy, through the passing sentence's carry). A sentence that names a service never
-    re-binds such an act: the act stays unattributed, as installed."""
+    re-binds such an act, whatever sites it names (amendment_20261101_cycle1_b: "The colonoscopy, done first, had reached
+    the cecum." had cleared the lesion carry as the start of the colonoscopy's own narrative and bound the gastric snare
+    again): the act stays unattributed, as installed. Only a sentence that gives a lesion a family replaces the lesion
+    carry; it lapses with its part, a blank line, a line written as a heading (amendment_20261101_cycle1_c: h4-04's
+    'Large Bowel', where the layout reads no heading) or CARRY_REACH characters."""
     if lesion_carry is None:
         return False
     other, part_start, end = lesion_carry
     if other == family or part_start != part.start or pos - end > CARRY_REACH:
         return False
-    return not (pos > end and PARAGRAPH_BREAK.search(text, end, pos))
+    if pos > end and PARAGRAPH_BREAK.search(text, end, pos):
+        return False  # a blank line: the paragraph, and its lesion carry, ended
+    return not _pi_heading_between(text, end, pos)
 
 
-def _pi_narrative_start(text: str, start: int, end: int, family: str) -> bool:
-    """Whether a sentence that names one service ([start, end)) also names sites that service reaches, and only such
-    sites ("The colonoscope was advanced to the cecum."): its own narrative starts there, so the paragraph's lesions
-    before it no longer stand against its carry (GI round 4 Wave 1 repair, F5). A passing mention names no site ("The
-    colonoscopy had been done first", "The colonoscope was cleaned and set aside")."""
-    regions = {region for _, region, _, _ in _anatomy_in(text, start, min(end, start + SENTENCE_READ_CHARS))} - {''}
-    return bool(regions) and regions <= FAMILY_REGIONS.get(family, frozenset())
+def _pi_heading_between(text: str, start: int, end: int) -> bool:
+    """Whether a line written as a heading stands wholly between ``start`` and ``end`` (GI round 4 Wave 1 repair,
+    amendment_20261101_cycle1_c): a complete line of at most 60 characters with no colon, most of its words capitalised
+    and no stop (_heading_shaped) - the next part of the document starts there even where the layout reads no heading
+    ("Large Bowel" between h4-04's antral polyp and its rectal polyps). The lines that hold ``start`` and ``end`` are
+    never read. Bounded: the caller reads at most CARRY_REACH characters."""
+    nl = text.find('\n', start, end)
+    while nl >= 0:
+        line_end = text.find('\n', nl + 1, end)
+        if line_end < 0:
+            return False  # the line runs on to ``end``: the act's own line
+        line = text[nl + 1:line_end].strip()
+        if line and len(line) <= 60 and ':' not in line and _heading_shaped(line):
+            return True
+        nl = line_end
+    return False
 
 
 def _pi_indwelling_state(text: str, clause_start: int, ms: int, me: int) -> bool:
@@ -3771,7 +3770,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
         carrying = len([f for f in performed_families if f != 'gi.office_em']) > 1
         # GI round 4 Wave 1 repair (F5): the family of the paragraph's last lesion given one (family, part start, end of
         # its sentence; '' when one sentence gave lesions to two families). A carry it stands against holds
-        # (_pi_lesion_against); only a sentence that starts the named service's own narrative clears it.
+        # (_pi_lesion_against); a sentence naming one service never clears it (amendment_20261101_cycle1_b), only a
+        # sentence that gives a lesion a family replaces it.
         lesion_carry: Optional[tuple[str, int, int]] = None
         indwelling: list[tuple[str, str]] = []  # (family, act id) read as an indwelling stent's state (W1, below)
         # where each lesion was last named as itself, and where each service's text last named a lesion this reader did
@@ -3795,8 +3795,6 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                                 | _instrument_families(text, ss, se, drafts))
             if carrying and len(named_here) == 1:
                 carry = (named_here[0], part.start, se)  # GI round 4 (A1): every sentence naming one service sets it
-                if lesion_carry is not None and _pi_narrative_start(text, ss, se, named_here[0]):
-                    lesion_carry = None  # Wave 1 repair (F5): the named service's own narrative starts here
             elif carrying and named_here:
                 carry = None  # two services named: the paragraph carries neither
             if not mentions and not lesion_matches:
