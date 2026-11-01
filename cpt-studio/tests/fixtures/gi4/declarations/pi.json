@@ -217,5 +217,76 @@
   "tests": "tests/test_gi4_*.py (21 modules, 464 tests) on the sealed export: 463 pass. The one failure is tests.test_gi4_replay.ReplayTests.test_the_replay_equals_installed_in_every_member_state, whose 22 differing paths are exactly the declared h4-03 and h4-06 movement against the pins written on fbc59ee53 (not re-pinned here: the integrator regenerates the shared pins). Full Django suite (manage.py test tests) on a copy of the export: 4,049 tests in 1,829 s, every one passing or skipped (3 skipped) except that same declared pin test; manage.py check clean and makemigrations --check reporting no changes; the ops tests 211 of 211.",
   "lens_cases": "The cycle-2 refutation's 100 cases on 8caa74cad: 33 move against fbc59ee53 - 28 to installed's reading exactly, fingerprints included, and h4-04's 5 title inputs to installed's binding with S1 and PE kept - and the other 67 read as on fbc59ee53. Of the 63 cases the lens named E1 or A1, 51 read exactly as installed and 12 are PA's E1c inputs, unchanged from fbc59ee53.",
   "cost_on_the_regression_set": "h4-03's 43244 and h4-06's 45385 held [extent] again in every member state (the E1 drop's known limit); h4-04 exactly as on fbc59ee53 (45378 held [extent, performed_status], 43251 READY with fingerprint 9d6bff8e); h2-10's 43274 and h4-01's 99204 READY as before."
+ },
+ "integration_20261101_cycle2": {
+  "date": "2026-11-01",
+  "written": "by the Wave 1 repair cycle 2 integration on fix/cpt-studio-gi4-interpretation-20261101 (merges 4bbac86d7 PD+PO+PA, 96b2a1372 PV1, 5bc13d6d1 PI, 488e8093e the acceptance tool; comments 18ccea7a5; pins 53ccc98c0), BEFORE the label code it declares. Every row was measured offline or on the throwaway database (127.0.0.1:55461) on sealed exports of installed 80df1831d168, b840ae756, fbc59ee53 and the merged head 18ccea7a5, whose readings the label code does not move (scratch: /home/claude/cpt-studio-gi4-20261031/w1c2/integ)",
+  "px_c": {
+   "what": "h4-04's 43251: the installed live approval (the retained live state: approve 43251 on fingerprint 92e16310) is invalidated at h4-04's next assessment after the install. Not a defect: the reading moved, by S1, as after_measurement recorded on b840ae756",
+   "measured": {
+    "installed 80df1831d168, walk (2026-10-19)": [
+     "selected",
+     "ready",
+     "92e16310d388a9854d0c69d7ada5861cd4645f12c40c4dab79f05eddc1f6ab1c",
+     [
+      [
+       "routing.family",
+       "warn"
+      ],
+      [
+       "service.status",
+       "warn"
+      ]
+     ]
+    ],
+    "fbc59ee53, walk": [
+     "selected",
+     "ready",
+     "9d6bff8eb00fe89ae3b9faeefed0a475c9ba47182b5a02ad013ac822f0c99d72",
+     [
+      [
+       "routing.family",
+       "warn"
+      ],
+      [
+       "service.status",
+       "warn"
+      ],
+      [
+       "pfs.endoscopic_base",
+       "info"
+      ]
+     ]
+    ],
+    "merged head 18ccea7a5, walk": [
+     "selected",
+     "ready",
+     "9d6bff8eb00fe89ae3b9faeefed0a475c9ba47182b5a02ad013ac822f0c99d72",
+     [
+      [
+       "routing.family",
+       "warn"
+      ],
+      [
+       "service.status",
+       "warn"
+      ],
+      [
+       "pfs.endoscopic_base",
+       "info"
+      ]
+     ]
+    ],
+    "none (every tree)": [
+     "selected",
+     "needs_clarification",
+     "fa8a41b1ad6d1dc0b3b46a595aa05456220c36298d30a5d2327d87c1ff8924b7"
+    ],
+    "45378 beside it, walk": "installed excluded/excluded (85b857ab); fbc59ee53 and the merged head selected/needs_clarification (78ecf6ba), S1's reach read performed"
+   },
+   "why": "the walk request (e89468e0) and its retained answer (442e8f3e) are the same on every tree; what moves is 45378 beside 43251 - held (selected) instead of excluded since S1 reads the colonoscope's reach - so a second endoscopic base code stands beside 43251, whose checks gain pfs.endoscopic_base (info). The fingerprint reads [check id, status] (engine._fingerprint), so it moves; nothing about 43251 itself moves (READY, its evidence, its status). The other dated states hold the member's answer since PD (no 43251 proposal there on fbc59ee53 or the merged head); installed was ready in each",
+   "consequence": "the live approval is not carried (review._carry_decisions carries a decision only to a proposal of the same fingerprint) and is invalidated with a recorded reason naming the change (\"the checks for 43251 changed\") at h4-04's next assessment: the first stage that remakes its gi-context@3 context (a member's save, Resume, a reconciliation) or the member's next date answer. Nothing happens at the install itself: a reload runs no stage. The reviewer approves again on 9d6bff8e. It is the only decision in the eight retained live states (tests/fixtures/gi4/regression/*.json stored.decisions)",
+   "inventory_label": "the inventory's label moves to gi-services@2 (and its check source to cpt-studio:gi-services@2) with this integration (pd.json integration_20261101_cycle2.px_a); no fingerprint reads it"
+  }
  }
 }

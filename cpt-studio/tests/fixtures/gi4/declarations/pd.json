@@ -383,5 +383,241 @@
     "context._WORDED_FIELD"
    ]
   }
+ },
+ "integration_20261101_cycle2": {
+  "date": "2026-11-01",
+  "written": "by the Wave 1 repair cycle 2 integration on fix/cpt-studio-gi4-interpretation-20261101 (merges 4bbac86d7 PD+PO+PA, 96b2a1372 PV1, 5bc13d6d1 PI, 488e8093e the acceptance tool; comments 18ccea7a5; pins 53ccc98c0), BEFORE the label code it declares. Every row was measured offline or on the throwaway database (127.0.0.1:55461) on sealed exports of installed 80df1831d168, b840ae756, fbc59ee53 and the merged head 18ccea7a5, whose readings the label code does not move (scratch: /home/claude/cpt-studio-gi4-20261031/w1c2/integ)",
+  "px_a_version_labels": {
+   "precedent": "interpretations 49 and 50(d) (docs/foundation/rulings/2026-10-23-cpt-studio-gi.md): a reader that reads differently from the installed revision carries a new label, so a download made before the install and one made after it never name the same rules for different readings; a context recorded under earlier context rules is remade under the current ones before any stage sends or assesses on it, and no second review is offered or sent on one",
+   "readers_measured": {
+    "about": "installed 80df1831d168 against the merged head 18ccea7a5: the compact H1 replay of the eight regression documents in every member state (ops.gi4.pins.compact_replay) - a reader's own movement is read where both trees send the same request for the same date - and the code; the corpus measurements are the integration's H2-H4 on the final head",
+    "context (jobs.CONTEXT_VERSION, gi-context@3)": "reads differently: the date channel moves in h4-01 (7 states), h4-02 (4), h4-04 (5) and h4-06 (5) - PD's rules (a) and (c) - and context.py and sections.py changed (PD, PS)",
+    "routing (detect.ROUTING_VERSION, gi-routing@4)": "reads differently: h4-04 in all 7 states, among them none and walk, where both trees send the same request (gi.egd extent \"incomplete: stomach\" -> \"second part of duodenum\", PE's routing-only reach); detect.py and cues.py changed (PE, PV1's C4, C4-time and EMR-9 holds, PS)",
+    "inventory (services.INVENTORY_VERSION, gi-services@1)": "reads differently: h4-04 in all 7 states, none and walk among them at the same request (gi.egd extent; gi.colonoscopy negated -> uncertain, S1); services.py changed (PI's S1, W1 and reach predicate)",
+    "engine (engine.ENGINE_VERSION, cpt-studio-validation@4)": "reads differently: h4-05 moves in all 9 states in nothing but its offers, every request and reading the same (gi.eus no_proposal offered False -> True, PO-2), and h4-02 in none and walk at the same request (PO-1); engine.py and validation/checks.py changed (PA, PO, PV1's V3)",
+    "unchanged since installed": "jobs.py (until these labels), review.py and profiles.py (gi-profiles@3 stays)"
+   },
+   "labels": {
+    "jobs.CONTEXT_VERSION": "gi-context@3 -> gi-context@4; gi-context@3 joins jobs.EARLIER_CONTEXT_VERSIONS",
+    "detect.ROUTING_VERSION": "gi-routing@4 -> gi-routing@5",
+    "services.INVENTORY_VERSION": "gi-services@1 -> gi-services@2, with the inventory's check source reconcile.INVENTORY_SOURCE cpt-studio:gi-services@1 -> cpt-studio:gi-services@2",
+    "engine.ENGINE_VERSION": "cpt-studio-validation@4 -> cpt-studio-validation@5"
+   },
+   "readers_of_the_labels": {
+    "context": "jobs.make_context stamps it. _remade_context: a predict, assess or reconciliation given a context of an earlier version remakes it under the current rules before it sends or assesses, and the upgrade's own predict never sends (only a member's Resume does); _second_review_bounds and stage_review2: no second review is offered or sent on one (SECOND_REVIEW_EARLIER_CONTEXT) until a member's save reads it again; the audit event context.remade; the reports and the API show it. Every encounter recorded before the install carries gi-context@3 and meets this at its next stage; none runs at the install (a reload runs no stage, so it keeps showing its recorded reading until then)",
+    "routing": "RoutingRun.version, the API and the reports' Versions line. RoutingRun.sha256 hashes the result, so a re-assessment's stated reasons name \"document routing\" among its changes. No decision reads it",
+    "inventory": "Assessment.services (the reports' \"Read by gi-services@2\") and the source of each inventory check (Check.source). No fingerprint reads either",
+    "engine": "Assessment.engine_version and the reports' Versions line; review._what_changed names \"engine cpt-studio-validation@4 -> cpt-studio-validation@5\" in a re-assessment's reasons, and review._what_differs words an invalidation \"re-assessed by another engine version\" where no persisted part of the proposal differs; review._carry_decisions carries by fingerprint alone",
+    "fingerprints": "engine._fingerprint reads code, family, profile_version, the evidence texts, [check id, status], the context values, units and status: no label",
+    "tests": "test_repairs_status_r2_routing VersionTests (@5) and test_repairs_status_r2_validation EngineVersionTests (@5); test_gi4_pd_state's CTS-6 rows run the pre-install stages under installed's labels (gi-context@3, remade as @4 at the save); test_gi4_state (H5): the earlier labels the remake row uses are installed's, and three new rows (below). The generic next-bump tests (test_repairs_gi2_sends F3, the round-3 upgrade rows) stand unchanged; test_reports' synthetic gi-services@1 inventories are data, not the label"
+   },
+   "proof_49": "tests.test_gi4_state: test_an_earlier_context_version_is_remade_and_the_upgrades_predict_never_sends (now asserting the earlier labels are installed's own: a gi-context@3 context is remade before the queued assess runs, and the upgrade's predict sends nothing; only Resume sends); test_a_predict_queued_before_the_install_is_remade_under_the_new_rules_before_it_sends (CTS-6's rule (a) document, recorded with installed's reading and labels: the queued predict remakes the context - the round-4 rules ask the date - and sends only the dateless request, never installed's dated one); test_no_second_review_on_a_pre_install_context_until_a_save_reads_it_again (offer refused with SECOND_REVIEW_EARLIER_CONTEXT, the ask 409, no REVIEW2 job, nothing sent; a save remakes it as gi-context@4 and one ask then sends once); RoundFourLabelTests.test_a_label_moves_no_fingerprint (every H4 row under installed's routing, inventory and engine labels and under these: every proposal's fingerprint equal, the labels each result carries checked to differ)",
+   "decisions": "A label alone invalidates no decision: no fingerprint reads one. What invalidates a decision is a reading that moves its proposal's fingerprint, at its encounter's next assessment after the install (review._carry_decisions: carried exactly when the fingerprint is equal, otherwise invalidated with a recorded reason). In the eight retained live states the only decision is h4-04's 43251 approval on 92e16310, which reads 9d6bff8e here: invalidated at h4-04's next assessment (pi.json integration_20261101_cycle2.px_c). The date rules add their own (px_d below). The live database is not read here: the install session classifies each current revision offline with this reader, installed's fingerprints against these, as CTS-6's record says",
+   "expected": {
+    "H1": "4 paths more than the readings move, against installed and against fbc59ee53: /versions/context, routing, inventory and engine; every document and state as without the labels",
+    "H2, H3, H4, H7": "no movement from the labels (no reader they record reads one)",
+    "pins": "only the commit stamp moves (ops.gi4.pins.compact_replay records no version)",
+    "H5 and the suites": "pass"
+   }
+  },
+  "px_d_cts6": {
+   "finding": "CTS-6 (amendment_20261101.findings): on b840ae756 a member's setting save on an encounter recorded before the install sends ['dated', 'DATELESS'] and invalidates the 45378 approval; installed sends ['dated'] and carries it",
+   "reproduced": "on the throwaway database, on sealed exports of installed 80df1831d168 and the merged head 18ccea7a5: the encounter's stages before the install run under installed's reading and labels (gi-context@3, patched in; on installed the patches change nothing), then the member saves the care setting; the refuter's rule (a) document (PD-06: installed sends 2026-10-19, this reader asks) and a rule (c) narrowing document (a member date of another day entered before the install)",
+   "rows_about": "[case, step, requests sent, 45378 status, context version, service date [origin, value], approval invalidated, decision carried]; \"dated 36c86c4f\" is the member's 2026-10-30 request",
+   "rows_installed": [
+    [
+     "1 setting save then the installed date",
+     "before the install, approved",
+     [
+      "dated 2026-10-19"
+     ],
+     "ready",
+     "gi-context@3",
+     [
+      "document",
+      "2026-10-19"
+     ],
+     false,
+     false
+    ],
+    [
+     "1 setting save then the installed date",
+     "after a setting save",
+     [
+      "dated 2026-10-19"
+     ],
+     "ready",
+     "gi-context@3",
+     [
+      "document",
+      "2026-10-19"
+     ],
+     false,
+     true
+    ],
+    [
+     "1 setting save then the installed date",
+     "after answering 2026-10-19",
+     [
+      "dated 2026-10-19"
+     ],
+     "ready",
+     "gi-context@3",
+     [
+      "user",
+      "2026-10-19"
+     ],
+     false,
+     true
+    ],
+    [
+     "2 the installed date re saved first",
+     "after re-saving 2026-10-19",
+     [
+      "dated 2026-10-19"
+     ],
+     "ready",
+     "gi-context@3",
+     [
+      "user",
+      "2026-10-19"
+     ],
+     false,
+     true
+    ],
+    [
+     "3 a member date of another day on a narrowed document",
+     "before the install, 2026-10-30 taken, approved",
+     [
+      "DATELESS",
+      "dated 36c86c4f"
+     ],
+     "ready",
+     "gi-context@3",
+     [
+      "user",
+      "2026-10-30"
+     ],
+     false,
+     false
+    ],
+    [
+     "3 a member date of another day on a narrowed document",
+     "after a setting save",
+     [
+      "DATELESS",
+      "dated 36c86c4f"
+     ],
+     "ready",
+     "gi-context@3",
+     [
+      "user",
+      "2026-10-30"
+     ],
+     false,
+     true
+    ]
+   ],
+   "rows_merged_head": [
+    [
+     "1 setting save then the installed date",
+     "before the install, approved",
+     [
+      "dated 2026-10-19"
+     ],
+     "ready",
+     "gi-context@3",
+     [
+      "document",
+      "2026-10-19"
+     ],
+     false,
+     false
+    ],
+    [
+     "1 setting save then the installed date",
+     "after a setting save",
+     [
+      "dated 2026-10-19",
+      "DATELESS"
+     ],
+     "needs_clarification",
+     "gi-context@3",
+     [
+      "conflict",
+      null
+     ],
+     true,
+     false
+    ],
+    [
+     "1 setting save then the installed date",
+     "after answering 2026-10-19",
+     [
+      "dated 2026-10-19",
+      "DATELESS"
+     ],
+     "ready",
+     "gi-context@3",
+     [
+      "user",
+      "2026-10-19"
+     ],
+     true,
+     false
+    ],
+    [
+     "2 the installed date re saved first",
+     "after re-saving 2026-10-19",
+     [
+      "dated 2026-10-19"
+     ],
+     "ready",
+     "gi-context@3",
+     [
+      "user",
+      "2026-10-19"
+     ],
+     false,
+     true
+    ],
+    [
+     "3 a member date of another day on a narrowed document",
+     "before the install, 2026-10-30 taken, approved",
+     [
+      "DATELESS",
+      "dated 36c86c4f"
+     ],
+     "ready",
+     "gi-context@3",
+     [
+      "user",
+      "2026-10-30"
+     ],
+     false,
+     false
+    ],
+    [
+     "3 a member date of another day on a narrowed document",
+     "after a setting save",
+     [
+      "DATELESS",
+      "dated 36c86c4f"
+     ],
+     "not proposed",
+     "gi-context@3",
+     [
+      "conflict",
+      null
+     ],
+     true,
+     false
+    ]
+   ],
+   "differs": "yes, as on b840ae756: (i) the setting save sends ONE new paid dateless primary request, 45378 goes Ready for review -> Needs clarification and the approval is invalidated (\"Re-assessed after changes (service date: 2026-10-19 -> asked; setting: not documented -> asc [member-supplied]): the status of 45378 changed from Ready for review to Needs clarification.\"); answering 2026-10-19 then sends nothing and returns READY, but the approval must be made again; re-saving the date first carries it, as installed. (ii) the member's 2026-10-30, taken and sent by installed, is held at the save (a member date conflict): nothing is sent, 45378 is no longer proposed and the approval is invalidated",
+   "cause": "the save re-reads the context with this reader: PD's rule (a) asks the date installed sent (the head's \"Date seen: 10/12/2026 in clinic; procedure today\" states another own day), and rule (c) narrows the accepted answers to the sign-off's day. Both are declared holds that the round keeps (amendment_20261101; neither was refuted in cycle 2). With gi-context@3 now an earlier version, the same re-read also happens at the first stage that remakes such a context (a Resume, a reconciliation, a predict queued at the swap), as interpretation 49 requires; never at the install itself",
+   "fix": "NONE. No change restores installed's behaviour exactly: a hold (not sending the dateless request) still leaves the approval invalidated and 45378 held, so it is not installed's reading either; keeping a pre-install context's date across a save is the stale-context state interpretation 49 forbids, and would be a new releasing rule; reverting rule (a) or (c) undoes declared holds over the whole corpus (SEND->ASK 1,391; the narrowing), not this consequence. Under the round's two-cycle rule no releasing rule is added",
+   "known_limit": "KNOWN LIMIT, recorded with the rows above: an encounter recorded before the install whose document rule (a) now asks (installed sent its date) sends one new dateless primary request and loses the approvals whose status changes at its first context save or remake after the install; one whose member date rule (c) now holds is held there, nothing sent, its approvals invalidated. Re-saving the installed date first sends nothing and carries the decision. tests/test_gi4_pd_state.py RecordedInstallConsequenceTests pins it, with the pre-install stages under installed's labels; after the label code the save's context is gi-context@4 and every other value of these rows is unchanged (declared here, measured on the final head)"
+  }
  }
 }

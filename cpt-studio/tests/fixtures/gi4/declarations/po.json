@@ -1811,5 +1811,71 @@
    "C2 reads only the NEAREST heading-like line above the act: a pasted block whose own short lines (a grid row, a short field line) stand between the act and its outside heading reads as today's, and a pre-procedure note under a title outside sections.AROUND_PROCEDURE_WORDS that says nothing called off, with an act pasted into its own section and no heading of another record above it, is still offered",
    "both guards withhold only offers; the offer is the member's to ask for, once per revision and date, and no stage sends anything for it"
   ]
+ },
+ "integration_20261101_cycle2": {
+  "date": "2026-11-01",
+  "written": "by the Wave 1 repair cycle 2 integration on fix/cpt-studio-gi4-interpretation-20261101 (merges 4bbac86d7 PD+PO+PA, 96b2a1372 PV1, 5bc13d6d1 PI, 488e8093e the acceptance tool; comments 18ccea7a5; pins 53ccc98c0), BEFORE the label code it declares. Every row was measured offline or on the throwaway database (127.0.0.1:55461) on sealed exports of installed 80df1831d168, b840ae756, fbc59ee53 and the merged head 18ccea7a5, whose readings the label code does not move (scratch: /home/claude/cpt-studio-gi4-20261031/w1c2/integ)",
+  "px_b": {
+   "what": "U1 (PA x PO) and U2 (PV1 C4 x PO): two offer-battery cells the Wave 1 integration (b840ae756) measured moving where no declaration named the movement, pinned since in tests/test_gi4_po.py as UNDECLARED_OFFERS and never declared. Declared here with their rows, re-measured on the merged head; tests/test_gi4_po.py now reads these two cells from this entry, and checks that offer_battery.rows above still says otherwise for each (that expectation is superseded for these two cells only)",
+   "about": "[family, act, reason, offered] per unresolved item, read as tests/test_gi4_po.py offers_of reads it (jobs._analyze_child, the merge, jobs._assess_child with the row's own or an empty synthetic provider answer); proposals [code, bucket, status, fingerprint prefix]",
+   "cells": [
+    {
+     "row": "S3h h4-05 counterfactual, EUS code citing the narrative",
+     "answer": "own",
+     "installed": [
+      [
+       "gi.eus",
+       "",
+       "no_proposal",
+       false
+      ]
+     ],
+     "b840ae756": [],
+     "fbc59ee53": [],
+     "integrated": [],
+     "proposals": {
+      "installed": [
+       [
+        "43259",
+        "excluded",
+        "excluded",
+        "3d4ae4f2"
+       ]
+      ],
+      "integrated": [
+       [
+        "43259",
+        "selected",
+        "needs_clarification",
+        "0c8014ae"
+       ]
+      ]
+     }
+    },
+    {
+     "row": "telephone-only time",
+     "answer": "empty",
+     "installed": [
+      [
+       "gi.office_em",
+       "",
+       "no_proposal",
+       true
+      ]
+     ],
+     "b840ae756": [],
+     "fbc59ee53": [],
+     "integrated": [],
+     "proposals": {
+      "installed": [],
+      "integrated": []
+     }
+    }
+   ],
+   "U1": "S3h with its own answer (43259 citing the narrative): PO declared the EUS item offered (PO-2). PA's declared hold (pa.json: 43259 excluded/excluded -> selected/needs_clarification [performed_status, target]) gives the EUS family a held proposal, so the \"documented, no supported proposal\" item PO-2 would flag does not exist: no unresolved item, nothing offered. Installed lists the item but does not offer it, and excludes today's EUS. Hold direction: nothing promoted, the code is held for the reviewer",
+   "U2": "telephone-only time with an empty answer: PO declared installed's offered office-visit item kept. PV1's C4 (pv1.json, kept in cycle 2: telephone wording holds every E/M reading) reads gi.office_em uncertain, not performed, so there is no unresolved documented service and nothing is offered (installed: performed, the no_proposal item offered). Hold direction: a visit the note may not document in person is not offered for a second review",
+   "measured": "every cell equal on b840ae756, fbc59ee53 and the merged head: the cycle-2 drops do not move them",
+   "engine_label": "the engine's label moves to cpt-studio-validation@5 with this cycle's integration, PO-1 and PO-2 among its new readings (pd.json integration_20261101_cycle2.px_a)"
+  }
  }
 }
