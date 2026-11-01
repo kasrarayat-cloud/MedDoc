@@ -121,5 +121,28 @@
    "Closed hold lists stay incomplete: a pasted report of the SAME family the head names, under a neutral heading, with no date, sign-off or copy statement, still reads as today's narrative.",
    "A head that names a family only in the body (a 'Procedure:' line after the first heading) gives S1 no evidence: fail-closed by design."
   ]
+ },
+ "amendment_20261101_cycle1_c": {
+  "provenance": "Written on 2026-11-01 BEFORE the code of this amendment, after amendment_20261101_cycle1_b (commit bcc2d21d2) and a first measurement of its rules in the uncommitted working tree. Still cycle 1. Every key above this one is unchanged: each value is identical, and the only byte added before this key is the comma that separates it.",
+  "measured_against_cycle1_b": {
+   "what_was_wrong": "amendment_20261101_cycle1_b predicted that withdrawing the cycle-1 exception moves nothing in h4-04 ('its gastric polyp and its rectal acts are sited'). Measured in the working tree with that rule: FALSE. h4-04's rectal polyps ('In the rectum, 4 and 6 cm from the anal verge, there were two 3 mm pale, flat polyps') take no family from their own site there and reached the colonoscopy only through the paragraph carry, which the exception had freed: the 'Large Bowel' line stands between them and the antral polyp's lesion carry, but the layout reads no part boundary there, so the lesion carry stood. With the strict rule the rectal polyps became unattributed (never the EGD's, so MUST binding.lower-not-on-upper still holds, and the H1 replay was EQUAL because the replay records no lesion binding); tests.test_gi4_pi.ParagraphCarryTests.test_h4_04_the_rectal_polyps_belong_to_the_colonoscopy caught it.",
+   "not_committed": "The strict rule was never committed alone: this amendment lands before the code."
+  },
+  "rules": {
+   "a1_lesion_carry_heading": "The paragraph's lesion carry also lapses at a line written as a heading that stands wholly between its sentence and the act or lesion it would hold: at most 60 characters, no colon, most of its words capitalised and no stop (the inventory's own _heading_shaped, read on complete lines only, at most CARRY_REACH characters of text). The next part of the document starts there even where the layout reads no heading (h4-04's 'Large Bowel'). Everything else of amendment_20261101_cycle1_b stands: a sentence naming one service never clears the lesion carry, whatever sites it names, so the F5-class asides (on the gastric polyp's own line) still hold."
+  },
+  "movements_vs_b840ae756": {
+   "H1": "EQUAL (as declared before); and h4-04's inventory binds the rectal polyps to the colonoscopy, as on b840ae756.",
+   "H2": "No movement.",
+   "H3": "Movements only back toward installed values (as declared in amendment_20261101_cycle1_b), measured after.",
+   "H4": "No movement.",
+   "H5": "Unchanged.",
+   "H6": "pi-carry-lesion-paragraph is re-anchored on its own line (the blank-line lapse); pi-carry-lesion-heading is new (detector: h4-04's rectal binding and the bidirectional report).",
+   "H7": "Linear: at most CARRY_REACH characters read per carried act or lesion, as the paragraph carry already does.",
+   "probe_cases": "The F5-class probes of amendment_20261101_cycle1_b read as installed: in each the gastric polyp, the aside and the snare share one line, so no line stands between them."
+  },
+  "known_limits": [
+   "A short line that is written as a heading but is no heading (a capitalised fragment of at most 60 characters, with no stop) between a lesion and an unsited act lapses the lesion carry as a blank line does."
+  ]
  }
 }
