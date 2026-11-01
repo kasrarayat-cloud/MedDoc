@@ -4,6 +4,7 @@ import os
 import re
 import secrets
 from datetime import datetime,timedelta
+from io import BytesIO
 from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
@@ -359,12 +360,42 @@ def template_detail(request,pk):
     review_rows = template_review.rows([{'field': f, 'definition': approved_definitions[f['key']]} for f in version.fields], template_review.label_displays(t)) if approved_definitions else []
     return render(request,'template_detail.html',{'review_rows':review_rows, 'layout_preparation':version.preparation, 'preview_token':secrets.token_hex(24), 'manual_form_allowed':manual_form_allowed,'template':t,'version':version,'form':form,'answer_contract_ready':answer_contract_ready,'answer_contract_error':answer_contract_error,'approved_definitions':approved_definitions,'definition_unavailable_reason':definition_unavailable_reason,'can_prepare_definitions':not definition_unavailable_reason and Membership.objects.filter(user=request.user,department=t.department,active=True,role__in=['owner','clinician']).exists(),'field_rows':field_location.rows(version.fields),'field_locations':[field_location.describe(f) for f in version.fields],'statements':statement_guide(version)})
 
+#: The download's type comes from the stored format, never from the client's file name: that name
+#: was cut to 200 characters AFTER its suffix was checked, so ".pdf" can be gone from it.
+ORIGINAL_TYPES={'pdf':'application/pdf','docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}
+
 def template_original(request,pk):
     t=get_object_or_404(scoped(Template,request.user),pk=pk)
     path=private_path(t.original_path)
-    if hashlib.sha256(path.read_bytes()).hexdigest()!=t.sha256:raise ValidationError('Original integrity check failed.')
+    payload=path.read_bytes()
+    if hashlib.sha256(payload).hexdigest()!=t.sha256:raise ValidationError('Original integrity check failed.')
+    kind=t.format.lower()
+    if kind not in ORIGINAL_TYPES:return refuse_original(request,t,'unsupported_format','This original cannot be downloaded: This original has an unsupported format.')
+    if kind=='pdf':
+        # ⚠️ FINDING P1: a PDF accepted before the raw scan existed can carry a script the upload
+        # check never saw, and these are its exact bytes. Every PDF original is therefore checked
+        # again, in the isolated worker, before it is served; a refusal serves nothing at all.
+        # ⚠️ SI-4: a check that could not run (timeout, worker failure) is not a verdict; it is
+        # refused just the same, as 503 "try again", and audited with its code.
+        from .template_source import check_pdf_original,PdfTemplateRefused,PdfTemplateCheckUnavailable
+        try:check_pdf_original(t)
+        except PdfTemplateRefused as exc:return refuse_original(request,t,exc.code,'This original cannot be downloaded: '+exc.messages[0])
+        except PdfTemplateCheckUnavailable as exc:return refuse_original(request,t,exc.code,ORIGINAL_CHECK_UNAVAILABLE,status=503)
     audit(request.user,'template.download',t.pk,department=t.department)
-    return FileResponse(path.open('rb'),as_attachment=True,filename=t.original_name)
+    name=t.original_name or 'original'
+    if not name.lower().endswith('.'+kind):name+='.'+kind
+    # The hashed bytes are the bytes served: the file is not opened a second time.
+    response=FileResponse(BytesIO(payload),as_attachment=True,filename=name,content_type=ORIGINAL_TYPES[kind])
+    response['X-Content-Type-Options']='nosniff'
+    return response
+
+ORIGINAL_CHECK_UNAVAILABLE=('This original cannot be downloaded right now: QuillMD could not check it. This is a temporary '
+                            'problem on our side, not a verdict about the form: try again in a few minutes.')
+
+def refuse_original(request,t,code,text,status=409):
+    """Nothing of the file is sent; the refusal and its code are recorded."""
+    audit(request.user,'template.download_refused',t.pk,department=t.department,code=code)
+    return HttpResponse(text,status=status,content_type='text/plain; charset=utf-8')
 
 @require_http_methods(['GET','POST'])
 def encounter_new(request):
@@ -388,8 +419,12 @@ def encounter_new(request):
                 form.add_error('template_version',CURRENT_MAPPING_ERROR)
                 return render(request,'encounter_form.html',{'form':form,'has_patients':form.fields['patient'].queryset.exists()},status=409)
             from .semantic_preparation import validated_semantic_definitions
-            try: validated_semantic_definitions(current)
+            from .template_source import assert_pdf_template_usable
+            try:
+                validated_semantic_definitions(current)
+                assert_pdf_template_usable(current.template)      # DL-2: a refused PDF original never starts an encounter
             except ValidationError as exc:
+                # SI-4: a check that could not run says "try again" instead; the form keeps everything entered.
                 form.add_error('template_version', error_message(exc))
                 return render(request,'encounter_form.html',{'form':form,'has_patients':form.fields['patient'].queryset.exists()},status=409)
             e=Encounter(department=data['patient'].department,patient=data['patient'],template_version=data['template_version'],created_by=request.user,notes=data['notes'],service_date=data['service_date']);e.full_clean(exclude=['notes','answers','finalized_at','finalized_by','export_path','export_sha256']);e.save()
@@ -595,6 +630,11 @@ def generate_view(request,pk,recovery=False):
     try:
         if not rate_limit('generate:'+str(request.user.pk),limit=30):raise ValidationError('Generation rate limit reached.')
         if 'revision' in request.POST and request.POST['revision']!=str(e.revision):raise ValidationError('Source notes changed. Reload before generating answers.')
+        # DL-2, kept synchronous in round 4 because refusing here loses nothing (the notes are saved): a refused
+        # PDF form is 409, a check that could not run 503 "try again", and nothing is queued. It runs before
+        # enqueue's encounter lock is taken; the worker checks again immediately before the provider call.
+        from .template_source import assert_pdf_template_usable
+        assert_pdf_template_usable(e.template_version.template)
         quoted=usage_quote(request,e,generation_request=True)
         job=enqueue(e,request.user,config=quoted,expected_revision=e.revision,
                     require_current_generation_quote=bool(request.POST.get('usage_quote')),
@@ -623,7 +663,9 @@ def generate_view(request,pk,recovery=False):
             response=JsonResponse(result);response['Cache-Control']='no-store';return response
     except ValidationError as exc:
         if wants_json:
-            response=JsonResponse({'error':error_message(exc),'message':error_message(exc)},status=409)
+            from .template_source import PdfTemplateCheckUnavailable
+            response=JsonResponse({'error':error_message(exc),'message':error_message(exc)},
+                                  status=503 if isinstance(exc,PdfTemplateCheckUnavailable) else 409)
             response['Cache-Control']='no-store';return response
         messages.error(request,error_message(exc))
     return redirect('encounter_detail',pk=pk)
@@ -959,9 +1001,44 @@ def finalize(request,pk):
 def export(request,pk):
     e=get_object_or_404(scoped(Encounter,request.user),pk=pk,status='finalized')
     path=private_path(e.export_path)
-    if hashlib.sha256(path.read_bytes()).hexdigest()!=e.export_sha256:return HttpResponse('Export integrity check failed.',status=409)
+    payload=path.read_bytes()
+    if hashlib.sha256(payload).hexdigest()!=e.export_sha256:return HttpResponse('Export integrity check failed.',status=409)
+    kind=e.template_version.template.format.lower()
+    if kind=='pdf':
+        # ⚠️ FINDING DL-1: a stored PDF export was served after a sha256 check only. New exports are
+        # built from originals the gate now re-checks, but an export FINALIZED BEFORE that repair can
+        # still carry active content pypdf's root recovery copied out of such an original into a form
+        # every viewer reads. So the export's TEMPLATE ORIGINAL is checked, exactly as its own
+        # download is, before a stored PDF export is served; a refused original serves nothing.
+        # ⚠️ SI-1 / SI-2 (2026-11-01): the EXPORT itself is not scanned. The raw scan is a
+        # hostile-input check of ≤10 MiB uploads, while an export holds the doctor's own words (the
+        # word "trailer" and a later "/Launch" in an answer refused a clean form's export) and may be
+        # up to 30 MiB (a 10.5 MiB export of a clean form was refused for its size). Both refusals
+        # came after finalize, when nothing could change the document any more. The original is
+        # the only input an export took that the doctor did not write, and it is ≤10 MiB.
+        # A PDF template has no prepared source (preparation is Word-only and read_original reads
+        # ZIPs), so the original is the exact file every PDF export was filled from.
+        from .template_source import check_pdf_original,PdfTemplateRefused,PdfTemplateCheckUnavailable
+        try:check_pdf_original(e.template_version.template)
+        except PdfTemplateRefused as exc:
+            audit(request.user,'encounter.export_refused',e.pk,department=e.department,code=exc.code)
+            return HttpResponse('This document cannot be downloaded: the PDF form it was filled from is no longer accepted. '
+                                +exc.messages[0],status=409,content_type='text/plain; charset=utf-8')
+        except PdfTemplateCheckUnavailable as exc:
+            audit(request.user,'encounter.export_refused',e.pk,department=e.department,code=exc.code)
+            if exc.code in ('source_unavailable','source_changed'):
+                # The stored original is missing or no longer the uploaded file: nothing can vouch for this export.
+                return HttpResponse('This document cannot be downloaded: the PDF form it was filled from is missing or '
+                                    'changed, so it cannot be checked. Contact your administrator.',
+                                    status=409,content_type='text/plain; charset=utf-8')
+            return HttpResponse('This document cannot be downloaded right now: QuillMD could not check the PDF form it '
+                                'was filled from. This is a temporary problem on our side, not a verdict about your '
+                                'document: try again in a few minutes.',status=503,content_type='text/plain; charset=utf-8')
     audit(request.user,'encounter.export',e.pk,department=e.department)
-    return FileResponse(path.open('rb'),as_attachment=True,filename=f'quillmd-{str(e.pk)[:8]}.{e.template_version.template.format.lower()}')
+    # The hashed bytes are the bytes served: the file is not opened a second time.
+    response=FileResponse(BytesIO(payload),as_attachment=True,filename=f'quillmd-{str(e.pk)[:8]}.{kind}')
+    response['X-Content-Type-Options']='nosniff'
+    return response
 
 def voice_standard():
     """The displayed per-recording limit and the length that fits it, from the same quote an upload is checked against."""

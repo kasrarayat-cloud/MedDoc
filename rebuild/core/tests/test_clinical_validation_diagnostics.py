@@ -91,8 +91,10 @@ class ClinicalValidationWorkerDiagnosticTests(TestCase):
         frozen_raw = deepcopy(raw)
         identity = deepcopy(IDENTITY)
         department_id = UUID(identity['department_id'])
+        # A Word form, as every form with semantic definitions is: since P1 round 4 the worker reads the form's
+        # format before the provider path (core.template_source.provider_refusal), and a real template has one.
         version = SimpleNamespace(pk=UUID(identity['template_version_id']), fields=fields,
-            template=SimpleNamespace(department_id=department_id))
+            template=SimpleNamespace(department_id=department_id, format='docx'))
         encounter = SimpleNamespace(pk=UUID(identity['encounter_id']), notes=notes,
             template_version=version, template_version_id=version.pk, department_id=department_id,
             department=SimpleNamespace(pk=department_id), patient_id=UUID(identity['patient_id']),
