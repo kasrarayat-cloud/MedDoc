@@ -1311,3 +1311,17 @@ before the code that depends on it.
     in the venv, so it is judged as a code install with a declared requirements/runtime mismatch. The pypdf move is
     judged later, in D1b, after item 2's regressions are repaired and measured. In the install analyst's plan, D1
     matches option (ii) of its question O1 and D2 matches the precedent answer of its question O2.
+
+    Added by the integration owner on 2026-11-01, after four refutation rounds of the installer:
+    - **Why the installer is tracked.** The October installs ran through a private, untracked operator that patched the
+      tracked engine at runtime, and their declarations survive only as unpushed commits in execution worktrees. This act's
+      installer lives in the repository with tests, its default mode is a read-only preflight, and it went through four
+      refutation rounds (22, 14, 6 and 4 findings, the last two signal and lock edge cases).
+    - **Signals.** The act blocks every terminating signal and takes them only at checkpoints. It must still not be
+      signalled: under the runner, a group signal ends in SIGKILL after 15 s, and the Go docker client can abort a unit
+      action. It is run detached, with no other operator process, and only a separately declared reverse act recovers a
+      killed act.
+    - **Backups.** Every scheduled rebuild backup has failed since 2026-10-12. Each referenced file is copied through its
+      own helper container, and the file count outgrew the fixed 540-second timeout. The act therefore takes a manual
+      encrypted backup and an isolated restore check first. Repairing the schedule is outside this round and goes to the
+      owner.
