@@ -19,7 +19,9 @@ from pypdf import PdfReader
 
 from studio.ingest import Limits, extract_document
 from studio.ingest import pdffonts
-from studio.ingest.pdf import BOX_SLACK, _I3_Bands, _I4_lone_marks, extract_pdf, unreadable_note
+from studio.ingest.pdf import (BOX_SLACK, _I3_Bands, _I4_lone_marks, _I4_may_hold, _I4_Readable, _ING_Rows, _Layer,
+                               _placed_boxes, extract_pdf, unreadable_note)
+from studio.ingest.pdfannots import Button, PageAnnotations
 from studio.ingest.pdffonts import (PREDEFINED_CODE_SPACES, UNREAD, Codes, CodeSpace, box_glyphs, decode_plan,
                                     read_codes)
 from tests.support import pypdf_shapes as shapes
@@ -170,6 +172,76 @@ class BulletAndWidgetTests(unittest.TestCase):
         self.assertFalse(_I3_Bands([(72.0, 600.0, 77.5, 610.0)]).beside((72.0, 703.0, 83.0, 714.0)))  # another row
         many = _I3_Bands([(72.0 + 0.001 * index, 700.0, 77.0, 715.0) for index in range(1000)])
         self.assertTrue(many.beside((72.0 - BOX_SLACK, 703.0, 83.0, 714.0)))  # more than can be read: as beside
+
+
+class OptionRowTests(unittest.TestCase):
+    """Measured after the round's first repair (no reading below the installed reader's): a glyph that cannot be read
+    before an item whose options are check boxes tied to 'Yes' and 'No' on its row (a bullet in a fillable form,
+    '・ Diabetes: ☐ Yes ☒ No') was the unread mark, and the unread glyph made each unchecked option '[?]' as text
+    beside it: every item held, where the installed reader (its mojibake, or nothing, in the glyph's place) read each
+    by its options. The row's own boxes govern it, and text beyond a piece that can be read is no option's label."""
+
+    ORDER = ('Hypertension', 'Diabetes', 'Smoker', 'Asthma')
+
+    def test_a_glyph_before_an_item_whose_options_are_check_boxes(self):
+        expected = ['historical', 'negated', 'historical', 'negated']  # FORM_ROWS: Yes for Hypertension and Smoker
+        for printed in (False, True):  # check boxes tied to the options' words, or the options' boxes printed
+            control = extract(shapes.yes_no_rows(None, None, printed=printed))
+            self.assertEqual([reading(control.text, item) for item in self.ORDER], expected)
+            rows = control.text.split('applies):\n', 1)[1].split('\n\n', 1)[0]  # '- Hypertension: ☒ Yes ☐ No' ...
+            for name, code, font, separate in (('/EUC-H bullet', 'A1A6', shapes.euc_font(), False),
+                                               ('/EUC-H bullet, separate', 'A1A6', shapes.euc_font(), True),
+                                               ('glyph-index bullet', '0B2C', shapes.glyph_index_font(), False),
+                                               ('/EUC-H box', 'A2A2', shapes.euc_font(), False)):
+                with self.subTest(name, printed=printed):
+                    result = extract(shapes.yes_no_rows(code, font, separate=separate, printed=printed))
+                    self.assertNotIn('[?]', result.text)
+                    if not separate:
+                        self.assertIn(rows.replace('- ', f'{FFFD} '), result.text)
+                    self.assertEqual([reading(result.text, item) for item in self.ORDER], expected)
+
+    def test_the_rows_own_boxes_govern_it(self):
+        text = f'{UNREAD} Diabetes: Yes No'
+        starts = {0: (72.0, 704.0, True), 2: (84.0, 704.0, True)}
+        widget = mock.Mock(rect=(200.0, 703.0, 211.0, 714.0))
+        options = {12: (12, '☐ '), 16: (16, '☒ ')}  # the options' glyphs, written before 'Yes' and 'No'
+        self.assertEqual(_I4_lone_marks(text, starts, {}, options, [widget]), {})
+        self.assertEqual(_I4_lone_marks(text, starts, {}, options, [widget], [(72.0, 704.0)]), {})  # a box shape too
+        self.assertEqual(_I4_lone_marks(text, starts, {}, {}, [widget]), {0: (1, '[?]')})  # a check box tied to nothing
+        alone = f'{UNREAD}\nDiabetes: Yes No'  # the glyph on a line of its own: its label's line is the row's
+        self.assertEqual(_I4_lone_marks(alone, starts, {}, {12: (12, '☐ ')}, [widget]), {})
+        self.assertEqual(_I4_lone_marks(alone, starts, {}, {}, [widget]), {0: (2, '[?] ')})
+
+    def test_text_beyond_a_piece_that_can_be_read_is_no_label(self):
+        yes = (200.0, 703.0, 211.0, 714.0)
+        row = _I4_Readable(f'{UNREAD} Diabetes: Yes',
+                           _ING_Rows([(704.0, 72.0, 0, None), (704.0, 84.0, 2, None), (704.0, 215.0, 12, None)]))
+        self.assertEqual(row.left_of(yes), 84.0)  # the bullet's piece cannot be read: 'Diabetes:' is the nearest
+        self.assertIsNone(row.left_of((60.0, 703.0, 70.0, 714.0)))
+        self.assertFalse(_I4_may_hold((72.0, 703.0, 77.5, 714.0), yes, 84.0))  # 'Diabetes:' between: no option's label
+        box = (72.0, 703.0, 83.0, 714.0)
+        self.assertTrue(_I4_may_hold((40.0, 703.0, 60.0, 714.0), box, None))  # nothing that can be read between
+        self.assertTrue(_I4_may_hold((40.0, 703.0, 60.0, 714.0), box, 10.0))  # what can be read lies further left
+        self.assertTrue(_I4_may_hold((90.0, 703.0, 100.0, 714.0), box, None))  # right of it: before its piece
+        self.assertTrue(_I4_may_hold((150.0, 703.0, 160.0, 714.0), box, 10.0))  # or running on from its piece
+        self.assertFalse(_I4_may_hold((72.5, 703.0, 82.5, 714.0), box, None))  # under it: its own printed box
+
+    def test_boxes_beside_text_that_cannot_be_read_cost_a_bisection_each(self):
+        """Each button asks for the nearest piece that can be read on its left once (a bisection a row), beside the
+        bounded scan of the unread text on its rows it always made: twice the rows, about twice the time."""
+        def placed(rows: int):
+            text = '\n'.join(f'{UNREAD} Item: Yes No' for _ in range(rows))
+            pieces, buttons, boxes = [], [], []
+            for index in range(rows):
+                y, start = 100.0 + 20 * index, index * 15
+                pieces += [(start, (72.0, y, True)), (start + 2, (84.0, y, True)), (start + 8, (215.0, y, True)),
+                           (start + 12, (275.0, y, True))]
+                buttons += [Button((200.0, y - 1, 211.0, y + 10), False, False, 'Yes', 2 * index),
+                            Button((260.0, y - 1, 271.0, y + 10), True, False, 'No', 2 * index + 1)]
+                boxes += [(72.0 - 3 * k, y - 1, 77.5 - 3 * k, y + 10) for k in range(8)]  # unread text on its left
+            layer = _Layer(text=text, pieces=tuple(pieces))
+            return lambda: _placed_boxes(layer, PageAnnotations(widgets=buttons), boxes)
+        assert_doubles(self, placed(1500), placed(3000), 'buttons beside text that cannot be read')
 
 
 class CodecCodeTests(unittest.TestCase):

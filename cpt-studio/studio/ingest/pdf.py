@@ -579,7 +579,10 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations, unread_text=(),
     Pieces and printed boxes are indexed by row and by x within each row, so a button reads only what lies beside or
     under it. An unchecked box on a row that holds text the reader could not read beside it (``unread_text``: where
     each such operator draws, pdfcontent.PageContent.unread_boxes; text lying under the box is its own printed box)
-    writes '[?]': that text may be its label, or lie between it and the piece it is tied to. Last, every printed box is
+    writes '[?]' where that text may be its label (left of it, no piece of text that can be read starting between
+    them) or lies right of it (between it and the piece it is tied to, or running on from that piece) (_I4_may_hold);
+    text left of it beyond a piece that can be read holds neither (a bullet before an item whose options the boxes
+    are, '� Diabetes: ☐ Yes ☒ No'). Last, every printed box is
     placed where it is drawn (_I2_Places: its glyph and width, or the piece that draws it), and a widget or mark over
     one that the readings above left decided leaves it unread (_I2_under_marks): holds only; and a glyph that could not
     be read at the start of a checklist row is the unread mark (_I4_lone_marks; ``box_glyphs``: where each operator
@@ -720,22 +723,27 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations, unread_text=(),
             named = True
             unsettled_boxes(*found)
     near: dict[int, int] = {}  # widget index -> offset of the piece nearest to its right, on one line
-    beside_unread: set[int] = set()  # widgets on a row that holds text the reader could not read
+    beside_unread: set[int] = set()  # widgets beside text the reader could not read that may hold what they stand for
     unread_rows = _I3_Bands(unread_text)
+    readable = _I4_Readable(text, pieces) if unread_rows.boxes else None
     groups: dict[int, list] = {}
     for i, w in enumerate(widgets):
         if i in over_a_box:
             continue
         x0, y0, x1, y1 = w.rect
         gap = min(BOX_GAP_MAX, max(BOX_GAP_MIN, BOX_GAP * max(x1 - x0, y1 - y0)))
-        # Text on the box's row that could not be read may be its label, or lie between it and the piece it is tied
-        # to: unchecked, it is unsure there (it may hold that text, not the piece's). Text lying under the box is the
-        # printed box it is drawn over, not text beside it.
-        if unread_rows.beside(w.rect):
-            beside_unread.add(i)
         tie = _ING_beside(text, pieces, w, x1 - (x1 - x0) / 2, x1 + gap)
         if tie is not None:
             near[i] = tie
+        # Text on the box's row that could not be read may be its label (left of it, no text that can be read
+        # starting between them), or lie between it and the piece it is tied to, or run on from that piece: unchecked,
+        # it is unsure there (it may hold that text, not the piece's). Text lying under the box is the printed box it
+        # is drawn over, not text beside it; text left of it beyond a piece that can be read (a bullet before the item
+        # whose options the boxes are) is neither (_I4_may_hold).
+        if readable is not None:
+            left = readable.left_of(w.rect)
+            if unread_rows.beside(w.rect, lambda box, rect=w.rect, left=left: _I4_may_hold(box, rect, left)):
+                beside_unread.add(i)
         if w.radio:
             groups.setdefault(w.group, []).append(i)
     ink = _ING_Ink(layer.ink, starts, near, widgets, layer) if near else None
@@ -833,16 +841,18 @@ class _I3_Bands:
         index = bisect_right(self.bottoms, y1 + BOX_SLACK)
         return index > 0 and self.tops[index - 1] >= y0 - BOX_SLACK
 
-    def beside(self, rect) -> bool:
+    def beside(self, rect, counts=None) -> bool:
         """Whether a box meets the band of ``rect`` (a button), as ``meets``, and reaches left or right of it by more
-        than BOX_SLACK: text on the button's row, not the button's own printed box lying under it. Read from the box
-        with the highest bottom down, while the highest top below still meets the band; past _ING_MAX_SCAN boxes, True
-        (as if one were beside it), so each question costs a bisection and a bounded scan."""
+        than BOX_SLACK: text on the button's row, not the button's own printed box lying under it; with ``counts``,
+        only a box for which counts(box) holds. Read from the box with the highest bottom down, while the highest top
+        below still meets the band; past _ING_MAX_SCAN boxes, True (as if one were beside it), so each question costs a
+        bisection and a bounded scan."""
         x0, y0, x1, y1 = rect
         index, read = bisect_right(self.bottoms, y1 + BOX_SLACK) - 1, 0
         while index >= 0 and self.tops[index] >= y0 - BOX_SLACK:
             box = self.boxes[index]
-            if box[3] >= y0 - BOX_SLACK and (box[0] < x0 - BOX_SLACK or box[2] > x1 + BOX_SLACK):
+            if box[3] >= y0 - BOX_SLACK and (box[0] < x0 - BOX_SLACK or box[2] > x1 + BOX_SLACK) \
+                    and (counts is None or counts(box)):
                 return True
             read += 1
             if read > _ING_MAX_SCAN:
@@ -861,6 +871,43 @@ def _I3_unclaimed(marks: dict, edits: dict) -> dict:
         if index == len(taken) or taken[index] > end:
             out[start] = (end, replacement)
     return out
+
+
+class _I4_Readable:
+    """Where each piece of page text that can be read starts (its first character not UNREAD), by row as ``pieces``
+    (_ING_Rows) holds them: the nearest one left of a button on its rows costs a bisection a row."""
+
+    def __init__(self, text: str, pieces: '_ING_Rows'):
+        self.pieces = pieces
+        self.xs = [[x for x, offset, _ in row if offset < len(text) and text[offset] not in (UNREAD, '\n')]
+                   for row in pieces.rows]
+
+    def left_of(self, rect) -> float | None:
+        """Where the nearest piece that can be read starts left of ``rect`` (by more than BOX_SLACK) on its rows; None
+        when none does, or past _ING_MAX_ROWS rows (as if none did: text that could not be read there may be a label)."""
+        x0, y0, x1, y1 = rect
+        rows = self.pieces.around(y0, y1)
+        best = None
+        for row in rows or ():
+            xs = self.xs[row]
+            index = bisect_right(xs, x0 - BOX_SLACK) - 1
+            if index >= 0 and (best is None or xs[index] > best):
+                best = xs[index]
+        return best
+
+
+def _I4_may_hold(box, rect, left: float | None) -> bool:
+    """Whether text that could not be read (``box``: where it is drawn, on the row of ``rect``, a button, and not
+    under it) may hold what the button stands for: right of the button (between it and the piece it is tied to, or
+    running on from that piece); or left of it with no piece of text that can be read starting between them (``left``:
+    where the nearest such piece left of the button starts, _I4_Readable.left_of), so that it may be the button's
+    label. Text further left, beyond a piece that can be read (a bullet before an item whose options the buttons are:
+    '� Diabetes: ☐ Yes ☒ No'), is neither."""
+    bx0, by0, bx1, by1 = box
+    x0, y0, x1, y1 = rect
+    if bx1 > x1 + BOX_SLACK:
+        return True
+    return bx0 < x0 - BOX_SLACK and (left is None or left < bx1 - BOX_SLACK)
 
 
 _I4_RUN = 2  # the characters a box glyph that could not be read stands as: one, or two (a box and its padding in one
@@ -932,16 +979,24 @@ def _I4_lone_marks(text: str, starts: dict, drawn: dict, edits: dict, widgets: l
       row whose glyph pypdf wrote on a line of its own taking its label's line, blank lines between them aside; any
       other line, a heading among them, ends it);
     - or a check box (``widgets``) lies on its row;
-    and never where a check box's state already governs it: a check box tied to the row's label (an edit at the label).
-    Anything else (a bullet or list marker in a font that cannot be read, under a procedure list) is left as U+FFFD,
-    its item as listed, as the installed reader's mojibake left it. The glyph is otherwise a box whose state cannot be
-    read: written as U+FFFD it would leave its item to read as listed (affirmed); as the unread mark, on the item's line,
-    the item is held. One pass over the lines, then one over the rows."""
+    and never where a check box's state already governs it: a check box tied to the row's label (an edit at the label),
+    or boxes the row shows of its own (a printed box on its line or its label's, or a check box's glyph written there:
+    the item's options, '� Diabetes: ☐ Yes ☒ No', which routing reads, as it read them beside the installed reader's
+    mojibake). Anything else (a bullet or list marker in a font that cannot be read, under a procedure list) is left as
+    U+FFFD, its item as listed, as the installed reader's mojibake left it. The glyph is otherwise a box whose state
+    cannot be read: written as U+FFFD it would leave its item to read as listed (affirmed); as the unread mark, on the
+    item's line, the item is held. One pass over the lines, then one over the rows."""
     size, line, number = len(text), 0, 0
     taken = sorted(edits)
     shapes, rows = _I4_Points(box_glyphs), _I3_Bands(w.rect for w in widgets)
     kinds: dict[int, bool | None] = {}  # line number -> a row (whether it shows a box), or None: a blank line
-    candidates: list = []  # (line number, offset, end, mark, glyph a box shape, a check box on its row)
+    candidates: list = []  # (line number, offset, end, mark, glyph a box shape, a check box on its row, own boxes)
+
+    def shows_box(start: int, stop: int) -> bool:
+        """Whether text[start:stop] (one line) shows a printed box or holds an edit (a check box's glyph written)."""
+        index = bisect_left(taken, start)
+        return PRINTED_BOX.search(text, start, stop) is not None or (index < len(taken) and taken[index] <= stop)
+
     while line <= size:
         end = text.find('\n', line)
         end = size if end < 0 else end
@@ -956,10 +1011,14 @@ def _I4_lone_marks(text: str, starts: dict, drawn: dict, edits: dict, widgets: l
             origin = starts.get(first)
             points = [origin, *(drawn.get(first) or ((),))[0]]
             shape = any(point is not None and shapes.near(point[0], point[1]) for point in points)
+            own = boxed  # the row's own boxes: on its line, or on its label's line when that is the next
+            if found[2] > end:
+                stop = text.find('\n', found[2])
+                own = own or shows_box(found[2], size if stop < 0 else stop)
             boxed = boxed or shape
             if found[2] not in edits:  # a check box tied to the row's label governs it
                 candidates.append((number, first, found[0], found[1], shape,
-                                   origin is not None and rows.meets(origin[1], origin[1])))
+                                   origin is not None and rows.meets(origin[1], origin[1]), own))
             if found[2] > end:  # its label is the next line's: that line is the row's
                 kinds[number + 1] = kinds.get(number + 1, False)
         if first >= end:
@@ -980,8 +1039,8 @@ def _I4_lone_marks(text: str, starts: dict, drawn: dict, edits: dict, widgets: l
             block = []
             continue
         block.append(index)
-    return {first: (end, mark) for number, first, end, mark, shape, checkbox in candidates
-            if shape or checkbox or listed.get(number)}
+    return {first: (end, mark) for number, first, end, mark, shape, checkbox, own in candidates
+            if not own and (shape or checkbox or listed.get(number))}
 
 
 def _I2_under_marks(layer: '_Layer', printed: list, widgets: list, annotations: PageAnnotations, held: set,

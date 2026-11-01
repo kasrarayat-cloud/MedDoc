@@ -1385,6 +1385,48 @@ def widget_rows(code: str, font: dict) -> bytes:
                     catalog=f'/AcroForm << /Fields [{fields}] /DR << /Font << /ZaDb 60 0 R >> >> >>')
 
 
+def yes_no_rows(code: str | None, font: dict | None, *, separate: bool = False, printed: bool = False) -> bytes:
+    """R3-MEAN-2 (the round-4 repair's own measurement): a fillable intake form, each row a glyph (hex ``code`` in /F2,
+    ``font``; None: a readable '-' in Helvetica) at x 72, its item and a colon in Helvetica at x 84, then a check box
+    tied to 'Yes' (x 200, the word at 215) and one tied to 'No' (x 260, the word at 275), each word its own text
+    object: Yes checked for Hypertension and Smoker, No for Diabetes and Asthma (FORM_ROWS; ZapfDingbats appearances).
+    ``separate``: the glyph and the item each their own text object, as ReportLab draws them; ``printed``: no form,
+    the options' boxes printed in ZapfDingbats (/F3: 'o' an empty box, 'n' a filled one) where the check boxes lie."""
+    objects = {60: ZAPF}
+    fonts = '/F1 4 0 R /F3 60 0 R' if printed else '/F1 4 0 R'
+    if font is not None:
+        objects.update({6: font[0], **{key: value for key, value in font.items() if key}})
+        fonts += ' /F2 6 0 R'
+    rows, refs, number = [], [], 40
+    for index, (label, on) in enumerate(FORM_ROWS):
+        y = 704 - 18 * index
+        glyph = f'/F2 11 Tf 1 0 0 1 72 {y} Tm <{code}> Tj' if code else f'/F1 11 Tf 1 0 0 1 72 {y} Tm (-) Tj'
+        item = f'/F1 11 Tf 1 0 0 1 84 {y} Tm ({label}:) Tj'
+        rows.append(f'BT {glyph} ET\nBT {item} ET' if separate else f'BT {glyph} {item} ET')
+        if printed:  # each option's box and its word in one text object
+            rows.append(f'BT /F3 11 Tf 1 0 0 1 200 {y} Tm ({"n" if on else "o"}) Tj /F1 11 Tf 1 0 0 1 215 {y} Tm (Yes) Tj '
+                        f'ET\nBT /F3 11 Tf 1 0 0 1 260 {y} Tm ({"o" if on else "n"}) Tj /F1 11 Tf 1 0 0 1 275 {y} Tm '
+                        '(No) Tj ET')
+            continue
+        rows.append(f'BT /F1 11 Tf 1 0 0 1 215 {y} Tm (Yes) Tj ET\nBT /F1 11 Tf 1 0 0 1 275 {y} Tm (No) Tj ET')
+        for name, x, checked in (('yes', 200, on), ('no', 260, not on)):
+            state = '/Yes' if checked else '/Off'
+            objects[number] = (f'<< /Type /Annot /Subtype /Widget /FT /Btn /T ({label}_{name}) /V {state} /AS {state} '
+                               f'/Rect [{x} {y - 1} {x + 11} {y + 10}] /F 4 /AP << /N << /Yes {number + 1} 0 R /Off '
+                               f'{number + 2} 0 R >> >> >>').encode()
+            objects[number + 1] = stream('q BT /ZaDb 9 Tf 1 2 Td (4) Tj ET Q', '/Type /XObject /Subtype /Form /BBox [0 0 '
+                                         '11 11] /Resources << /Font << /ZaDb 60 0 R >> >>')
+            objects[number + 2] = stream('', '/Type /XObject /Subtype /Form /BBox [0 0 11 11]')
+            refs.append(f'{number} 0 R')
+            number += 3
+    fields = ' '.join(refs)
+    if printed:
+        return page_pdf(lines(INTAKE, top=740, step=18) + '\n' + '\n'.join(rows), fonts=fonts, extra=objects)
+    return page_pdf(lines(INTAKE, top=740, step=18) + '\n' + '\n'.join(rows), fonts=fonts, extra=objects,
+                    annots=f'/Annots [{fields}]',
+                    catalog=f'/AcroForm << /Fields [{fields}] /DR << /Font << /ZaDb 60 0 R >> >> >>')
+
+
 def short_form(state: str) -> bytes:
     """R3-MEAN-4: a page of 'Form' in Helvetica, sixteen kanji and kana in the /EUC-H font and one live check box
     Biopsy (/V and /AS ``state``): too little readable text for a layer, but an exact form field."""

@@ -196,8 +196,13 @@ read or reported, and content it would not show is excluded with a message.
   codec of the character set its predefined CMap encodes,
   `pdffonts.box_glyphs`; a row of its list showing a box glyph or a check box's
   glyph; or a check box on its row) and not governed by a check box tied to the
-  row; counted and named: 'text in a font or encoding this server cannot read
-  as the PDF encodes it; N characters stand in its place as �, or as the
+  row or by boxes the row shows of its own (a printed box or a check box's glyph
+  on its line: an item's options, '� Diabetes: ☐ Yes ☒ No'); an unchecked check
+  box beside such text on its row is unsure (`[?]`) only where that text may be
+  its label (left of it, no text that can be read starting between them) or
+  lies right of it (before the piece it is tied to, or running on from that
+  piece); counted and named: 'text in a font or encoding this server cannot
+  read as the PDF encodes it; N characters stand in its place as �, or as the
   unread mark [?] in a box' (partial; N counts what stands in the text's
   place, never the glyphs the page draws). A space in what the walk reads
   itself is neutral to pypdf, as the space it stands for is, so a
