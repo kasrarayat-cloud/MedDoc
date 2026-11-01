@@ -159,6 +159,15 @@
    "cues_added": ["context._PD_CALL_PHRASE"],
    "expected": "measured before coding with the phrase list on the second entry's 979 narrowing texts of the H2 corpus: none carries such a phrase, and no regression text does - so no measured text moves (H1, H2 counts and H4 as the second entry declares); only shapes like the one above move, from narrowing to the quote-only fact (installed's answers)",
    "mutants": "added pd-no-call-phrase (detector tests.test_gi4_pd). PD census 34 -> 35, total 132 -> 133"
+  },
+  "fourth_entry": {
+   "date": "2026-11-01",
+   "written": "after the third entry's code was committed (4b690ae5c) and measured (H1, H2, H4), BEFORE this guard's code (same session, still cycle 1)",
+   "why": "binding rule (1) names an attestation among the lines that are NOT the author's own sign-off. The second entry reads an attestation by the performer the head names as his own sign-off, which h4-06 needs (its only closing line is 'Attested:' by the colonoscopist its head names). Read that way it also takes a SUPERVISING attestation: 'Fellow: X / Attending: Dr. P / Day of procedure: 11/04/2026 / ... / Electronically signed by X / Attested by Dr. P, 11/04/2026' (the fellow's signature undated) narrows to the attestation's day although the author's own signature states none",
+   "added_guard": "(1) amended: a line that only attests (no sign, authenticate or finalize verb) is the author's own sign-off ONLY when it is the closing region's sole closing-role line - no other signature, co-signature, dictation or transcription line, dated or not, among the note's last 8 non-empty lines after the head - and it names the performer the head names. An attestation beside any other closing line narrows nothing unless an own-verb sign-off naming the performer states the day itself. Hold direction only",
+   "cues_added": [],
+   "expected": "measured before coding on the 979 narrowing texts of the H2 corpus: 108 rest on an attestation-only sign-off and none of them has another closing-role line in its closing region; no regression text moves (h4-06's attestation is its only closing line). So no measured count moves (H1, H2, H4 as declared); only shapes like the one above move, from narrowing to the quote-only fact (installed's answers)",
+   "mutants": "added pd-attest-sole-line (detector tests.test_gi4_pd). PD census 35 -> 36, total 133 -> 134"
   }
  }
 }
