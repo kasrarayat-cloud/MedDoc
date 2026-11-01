@@ -1466,12 +1466,12 @@
       [
        "gi.egd",
        "no_proposal",
-       false
+       true
       ],
       [
        "gi.flex_sig",
        "not_covered",
-       false
+       true
       ]
      ],
      "proposals": [
@@ -1529,12 +1529,12 @@
       [
        "gi.egd",
        "no_proposal",
-       false
+       true
       ],
       [
        "gi.flex_sig",
        "not_covered",
-       false
+       true
       ]
      ],
      "proposals": [
@@ -1592,12 +1592,12 @@
       [
        "gi.egd",
        "no_proposal",
-       false
+       true
       ],
       [
        "gi.flex_sig",
        "not_covered",
-       false
+       true
       ]
      ],
      "proposals": [
@@ -1660,12 +1660,12 @@
       [
        "gi.egd",
        "no_proposal",
-       false
+       true
       ],
       [
        "gi.flex_sig",
        "not_covered",
-       false
+       true
       ]
      ],
      "proposals": [
@@ -1723,12 +1723,12 @@
       [
        "gi.egd",
        "no_proposal",
-       false
+       true
       ],
       [
        "gi.flex_sig",
        "not_covered",
-       false
+       true
       ]
      ],
      "proposals": [
@@ -1786,12 +1786,12 @@
       [
        "gi.egd",
        "no_proposal",
-       false
+       true
       ],
       [
        "gi.flex_sig",
        "not_covered",
-       false
+       true
       ]
      ],
      "proposals": [
@@ -2494,7 +2494,7 @@
       [
        "gi.eus",
        "no_proposal",
-       false
+       true
       ]
      ],
      "proposals": [],
@@ -2552,7 +2552,7 @@
       [
        "gi.eus",
        "no_proposal",
-       false
+       true
       ]
      ],
      "proposals": [],
@@ -2610,7 +2610,7 @@
       [
        "gi.eus",
        "no_proposal",
-       false
+       true
       ]
      ],
      "proposals": [],
@@ -2657,7 +2657,7 @@
       [
        "gi.eus",
        "no_proposal",
-       false
+       true
       ]
      ],
      "proposals": [],
@@ -2715,7 +2715,7 @@
       [
        "gi.eus",
        "no_proposal",
-       false
+       true
       ]
      ],
      "proposals": [],
@@ -2773,7 +2773,7 @@
       [
        "gi.eus",
        "no_proposal",
-       false
+       true
       ]
      ],
      "proposals": [],
@@ -2831,7 +2831,7 @@
       [
        "gi.eus",
        "no_proposal",
-       false
+       true
       ]
      ],
      "proposals": [],
@@ -2889,7 +2889,7 @@
       [
        "gi.eus",
        "no_proposal",
-       false
+       true
       ]
      ],
      "proposals": [],
@@ -2936,7 +2936,7 @@
       [
        "gi.eus",
        "no_proposal",
-       false
+       true
       ]
      ],
      "proposals": [],
@@ -3246,6 +3246,6 @@
   }
  },
  "meta": {
-  "commit": "80df1831d168c4ee83d83c37bac9860690986cf3"
+  "commit": "dc7b95ff6a65a13fe1e22998664a47767f7e3d03"
  }
 }
