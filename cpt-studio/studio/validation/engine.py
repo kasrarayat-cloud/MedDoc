@@ -438,7 +438,11 @@ STRICT_PROMOTIONS = (gi_services.OWN_BOX_CHECKED, 'performed: its form field is 
 
 def _routing_agrees(u: reconcile.Unresolved, inventory, routing: Optional[RoutingResult], text: str,
                     day: Optional[date]) -> bool:
-    """Whether the routing-era reader also reads the unresolved item as done today (see SECOND_REVIEW_CHECKED)."""
+    """Whether the routing-era reader also reads the unresolved item as done today (see SECOND_REVIEW_CHECKED), or -
+    GI round 4, package PO - does not contradict the documented-service reading of it on a document whose own head
+    makes it today's procedure report (_po_not_contradicted). Either only marks the item as one a second review may ask
+    about: the review is still asked for by a member, once per revision and date (jobs.request_second_review), and no
+    stage sends one."""
     if u.reason not in ('no_proposal', 'not_covered') or routing is None:
         return False
     families = {u.family, legacy_family(u.family)}
@@ -459,6 +463,238 @@ def _routing_agrees(u: reconcile.Unresolved, inventory, routing: Optional[Routin
             return True  # its own clause states it done; only routing's family summary doubts the service
         if strict and status == 'uncertain' and cues[:1] and cues[0].startswith(detect.SILENT):
             return True
+    return _po_not_contradicted(u, routing, text, day, families)
+
+
+# GI round 4, package PO (the plan's M1 and PO-2). Routing reads a family that is named only in a title, a grid header
+# or a line under a heading it does not know as silent, and reads a passage that a runaway section reaches across an
+# unread heading-like line as that section's (h4-02, h4-05): such readings say nothing against the documented-service
+# reading, so the unresolved item is offered for the member-asked second review. Every condition only withholds the
+# offer (fail-closed), and the document's own head must make it today's procedure report: a records review, a pasted
+# outside report, an education handout or a note written around a procedure (booking, call, consent) is never offered
+# this way, whatever routing reads in it. Amended 2026-11-01 (tests/fixtures/gi4/declarations/po.json,
+# amendment_20261101) with five holds the package's own refutation earned: A1 a head field labelled sedation or
+# anaesthesia, A2 the family named on a title line of the head, A3 (PO-2) a passage of the item on such a title line,
+# A4 (PO-2) no unread heading naming another occurrence anywhere within the reach, A5 no statement that a procedure was
+# called off or not performed which names none.
+_PO_OWN_TIME = ('historical:', 'planned:')  # routing's cue for a time word of the mention's own clause
+# A1: a field of the head whose LABEL names sedation or anaesthesia ("Sedation:", "Sedation provider:", "Sedation and
+# airway:", "Anesthetic care:"). The PS head guard also accepts the word anywhere in a head line ("She tolerated
+# sedation poorly in the past.") and any "Attending:" field, which a clinic note carries.
+_PO_SEDATION_FIELD = re.compile(r'^[ \t]*+[^:\n]{0,60}?\b(?:sedation|sedative|an(?:a)?esthesia|an(?:a)?esthetic'
+                                r'|an(?:a)?esthesiology)\b[^:\n]{0,60}?:', re.A | re.I | re.M)
+# A5: a procedure called off or not performed, referred to and not named, in forms routing's own
+# cues.PROCEDURE_CANCELLED and cues.PROCEDURE_NOT_PERFORMED do not read (a closed list, read only to hold): "No
+# endoscopic procedure was performed today." (never "No other procedures were performed."), "Procedure not
+# performed.", "The examination did not take place.", "Status: Cancelled - the patient had eaten breakfast."
+_PO_NOT_DONE = re.compile(
+    r"\bno\s+(?!(?:other|further|additional|more|separate|extra|second)\b)(?:[\w-]+\s+){1,2}?"
+    r"(?:procedures?|endoscop(?:y|ies)|exam(?:ination)?s?|stud(?:y|ies))\s+(?:was|were|has\s+been|have\s+been)\s+"
+    r"(?:performed|done|undertaken|attempted)\b"
+    r"|\b(?:procedure|exam|examination|study|endoscopy)\s+(?:was\s+|were\s+|is\s+|has\s+been\s+|had\s+been\s+)?"
+    r"not\s+(?:been\s+)?(?:performed|done|started|begun|undertaken|attempted|carried\s+out)\b"
+    r"|\b(?:procedure|exam|examination|study|endoscopy)\s+(?:did\s+not|didn['’]t|never|could\s+not"
+    r"|couldn['’]t)\s+(?:happen|occur|take\s+place|start|begin|proceed|be\s+(?:performed|done))\b"
+    r"|\b(?:procedure\s+)?(?:status|outcome)[ \t]*+:[ \t]*+(?:cancel(?:l)?ed|not\s+(?:performed|done|started)"
+    r"|postponed|deferred|rescheduled|aborted|called\s+off|no[- ]show)\b", re.A | re.I)
+
+
+def _po_cached(fn):
+    """``fn`` cached as this module's other per-text readers would be: functools.lru_cache(maxsize=4), which
+    jobs.release_routing_caches clears (this module is one of its ROUTING_CACHE_MODULES)."""
+    import functools  # local: the package edits only functions of its own
+    return functools.lru_cache(maxsize=4)(fn)
+
+
+def _po_not_contradicted(u: reconcile.Unresolved, routing: RoutingResult, text: str, day: Optional[date],
+                         families: set) -> bool:
+    """Whether routing says nothing against the unresolved item ``u`` the installed rule does not offer: the document is
+    today's procedure report by its own head (_po_todays_procedure_report), routing names the item's family on a title
+    line of that head where it reads done today or says nothing (A2: a family routing never names has no such
+    mention), and either
+    - PO-1: every mention of the family is silent, and no passage of the item (its evidence) is read as not done today
+      or with a worded doubt (_po_says_nothing); or
+    - PO-2: no mention of the family contradicts - each is done today, says nothing, is another occasion's by a time
+      word of its own clause, or is not done today only by a section that reaches it across an unread heading-like line
+      (_po_section_only_across_unread_heading) - a passage of the item on a title line says nothing (A3: the
+      documented-service reader takes the item from the report's own title), and every passage of the item says
+      nothing or is not done today only by such a section, at least one of them so.
+    A passage outside the text is never read as saying nothing."""
+    report, titles = _po_document(text)
+    if not report:
+        return False
+    mentions = [m for f in routing.findings if f.family in families for m in f.mentions]
+    named = any(_po_on_title(titles, m.span.start)
+                and (m.status in checks.POSITIVE or _po_says_nothing(m.status, m.cues)) for m in mentions)
+    if not named:  # A2
+        return False
+    from studio.gi import detect  # the analysis is cached per text
+    readings = []
+    for ev in u.evidence:
+        if not (0 <= ev.start < ev.end <= len(text)):
+            return False
+        readings.append((ev.start, *detect.status_for_span(text, ev.start, ev.end, day)))
+    if all(_po_silent(m.status, m.cues) for m in mentions):  # PO-1
+        return all(_po_says_nothing(status, cues) for _, status, cues in readings)
+    for m in mentions:  # PO-2: no mention contradicts
+        if m.status in checks.POSITIVE or _po_says_nothing(m.status, m.cues):
+            continue
+        if m.status in ('historical', 'planned') and (_po_another_occasion(m.cues)
+                                                      or _po_section_only_across_unread_heading(text, m.span.start,
+                                                                                                m.status, m.cues)):
+            continue
+        return False
+    if not any(_po_on_title(titles, pos) and _po_says_nothing(status, cues)
+               for pos, status, cues in readings):  # A3
+        return False
+    runaway = [_po_section_only_across_unread_heading(text, pos, status, cues) for pos, status, cues in readings]
+    return any(runaway) and all(r or _po_says_nothing(status, cues) for r, (_, status, cues) in zip(runaway, readings))
+
+
+def _po_another_occasion(cues: Sequence[str]) -> bool:
+    """A not-today mention that is another occasion's by a time word of its own clause ("Earlier EUS: 2025-04-09",
+    "slightly larger than at the earlier EUS", "a colonoscopy has been scheduled for 2026-12-03"): at least one such
+    cue, and nothing but such cues, section labels and statements of performance (a doubt or a denial riding along says
+    something)."""
+    return any(c.startswith(_PO_OWN_TIME) for c in cues) and all(
+        c.startswith(_PO_OWN_TIME + (checks.SECTION_CUE_PREFIX, checks.PERFORMED_CUE_PREFIX)) for c in cues)
+
+
+@_po_cached
+def _po_document(text: str) -> tuple:
+    """(whether the document is today's procedure report by its own head, the spans of its title lines): read once per
+    text, whatever the number of unresolved items (the head readers scan the text up to the head's last line)."""
+    return _po_todays_procedure_report(text), _po_title_lines(text)
+
+
+def _po_todays_procedure_report(text: str) -> bool:
+    """Positive evidence that the document is a procedure's own report, of a procedure that took place: its head
+    carries a sedation or anesthesia line or a field naming who performed it (GI round 4, PS: the judge's guard 1) and
+    a field labelled sedation or anaesthesia (A1); none of its head lines is the title of a note written around a
+    procedure (booking, scheduling, pre-procedure, telephone or call, instructions, consent, education, handout,
+    correspondence, letter, records review); and it never says that a procedure was called off or not performed while
+    naming none (A5)."""
+    return (gi_sections.procedure_report_head(text)
+            and _po_sedation_field(text)
+            and not gi_sections.around_procedure_title(text)
+            and not _po_procedure_not_done(text))
+
+
+def _po_sedation_field(text: str) -> bool:
+    """A1: a field of the head (its first PROCEDURE_HEAD_LINES non-empty lines) whose label names sedation or
+    anaesthesia (_PO_SEDATION_FIELD)."""
+    end = gi_sections.head_lines_end(text, gi_sections.PROCEDURE_HEAD_LINES)
+    return end > 0 and _PO_SEDATION_FIELD.search(text, 0, end) is not None
+
+
+def _po_procedure_not_done(text: str) -> bool:
+    """A5: whether the text says that a procedure was called off or not performed without naming it ("The procedure was
+    cancelled before sedation.", "No endoscopic procedure was performed today."): routing reads such a statement for
+    the family the sentence names and attaches it to none, so routing's silence about a family is then no agreement.
+    Read anywhere in the text and only to hold (an earlier encounter's cancellation written the same way holds too)."""
+    from studio.gi import cues  # local, as detect is in _routing_agrees
+    return any(p.search(text) for p in (cues.PROCEDURE_CANCELLED, cues.PROCEDURE_NOT_PERFORMED, _PO_NOT_DONE))
+
+
+def _po_title_lines(text: str) -> tuple:
+    """A2/A3: the (start, end) of the head's title lines - among its first AROUND_PROCEDURE_TITLE_LINES non-empty lines,
+    those before its first field line (a colon with a value after it), each a stand-alone line of at most
+    AROUND_PROCEDURE_TITLE_CHARS characters with no sentence end, read as sections.around_procedure_title reads a title
+    (without its markup; a line longer than four times that is never one). A line under the head's fields is no title:
+    the first line of a record copied there ("EGD at Mercy GI") is not the report's."""
+    end = gi_sections.head_lines_end(text, gi_sections.AROUND_PROCEDURE_TITLE_LINES)
+    out, start = [], 0
+    while start < end:
+        nl = text.find('\n', start, end)
+        line_end = end if nl < 0 else nl
+        if line_end - start <= 4 * gi_sections.AROUND_PROCEDURE_TITLE_CHARS:
+            line = text[start:line_end].strip().lstrip('#*_>').rstrip('#*_').strip()
+            if line and gi_sections._TITLE_FIELD.search(line):
+                break  # the head's first field line: the title stands before it
+            elif line and len(line) <= gi_sections.AROUND_PROCEDURE_TITLE_CHARS and line[-1] not in '.!?;,':
+                out.append((start, line_end))
+        elif gi_sections._TITLE_FIELD.search(text, start, line_end):
+            break  # a long field line is a field line too
+        if nl < 0:
+            break
+        start = nl + 1
+    return tuple(out)
+
+
+def _po_on_title(titles: tuple, pos: int) -> bool:
+    """Whether ``pos`` lies on one of the title lines ``titles`` (_po_title_lines)."""
+    return any(start <= pos < end for start, end in titles)
+
+
+def _po_silent(status: str, cues: Sequence[str]) -> bool:
+    """Routing's silence (checks.silent), never read from a reading with no cue at all."""
+    return bool(cues) and checks.silent(status, cues)
+
+
+def _po_says_nothing(status: str, cues: Sequence[str]) -> bool:
+    """A reading that says nothing against today: silence, or an uncertain reading no word decided - only section
+    labels, a statement of performance its section holds (a runaway indication), or routing's family summary
+    (detect.UNESTABLISHED). Any worded doubt (a negation, a hedge, a deferral, a denial) and any not-today status say
+    something."""
+    if _po_silent(status, cues):
+        return True
+    return status == 'uncertain' and bool(cues) and all(
+        c.startswith((checks.SECTION_CUE_PREFIX, checks.PERFORMED_CUE_PREFIX, checks.SILENT_CUE_PREFIX))
+        or c == UNESTABLISHED for c in cues)
+
+
+def _po_section_only_across_unread_heading(text: str, pos: int, status: str, cues: Sequence[str]) -> bool:
+    """Whether a not-today reading at ``pos`` takes its time only from its section (historical or planned, every cue a
+    section label or a statement of performance, at least one section label), and that section reaches ``pos`` only
+    across a heading-like line the layout does not read (sections.beyond_heading_reach), with no occurrence words on the
+    nearest heading-like line above (sections.under_another_occurrence: "Previous EUS Findings" tells another time
+    itself) nor on any unread heading-like line between the section's heading and ``pos`` (A4:
+    _po_unread_line_names_another_occurrence). The section's heading must lie within the helper's reach
+    (HEADING_REACH_CHARS and HEADING_REACH_LINES): beyond it beyond_heading_reach answers True without finding a line,
+    which fails closed for a hold and would release here, so it is never read as a found line."""
+    if status not in ('historical', 'planned') or not cues \
+            or not all(c.startswith((checks.SECTION_CUE_PREFIX, checks.PERFORMED_CUE_PREFIX)) for c in cues) \
+            or not any(c.startswith(checks.SECTION_CUE_PREFIX) for c in cues):
+        return False
+    lay = gi_sections.layout(text)
+    section = lay.section_at(pos)
+    if section.heading is None:
+        return False
+    lo = text.find('\n', section.heading.end)
+    if lo < 0 or lo >= pos or pos - lo > gi_sections.HEADING_REACH_CHARS \
+            or text.count('\n', lo, pos) > gi_sections.HEADING_REACH_LINES:
+        return False
+    return (gi_sections.beyond_heading_reach(text, lay, pos)
+            and not gi_sections.under_another_occurrence(text, pos)
+            and not _po_unread_line_names_another_occurrence(text, lo, pos))
+
+
+def _po_heading_like(line: str) -> bool:
+    """A short stand-alone line written as a heading, as sections.beyond_heading_reach reads one: at most 60
+    characters, opening with a letter, no sentence end, no colon, no list item, two words or more, and every word of
+    four letters or more capitalised ("What the Earlier Echoendoscope Showed")."""
+    return bool(line) and len(line) <= 60 and line[0].isalpha() and line[-1] not in '.;:!?,' and ':' not in line \
+        and not gi_sections._LIST_ITEM.match(line) and len(line.split()) >= 2 \
+        and all(w[:1].isupper() for w in gi_sections._HEADING_WORD.findall(line) if len(w) >= 4)
+
+
+def _po_unread_line_names_another_occurrence(text: str, lo: int, pos: int) -> bool:
+    """A4: whether a heading-like line (_po_heading_like) between ``lo`` (the end of the section heading's line) and
+    the line of ``pos`` names another occurrence's record (sections.ANOTHER_OCCURRENCE_HEAD: "What the Earlier
+    Echoendoscope Showed", "Earlier EUS Report Excerpt"), wherever it stands: sections.under_another_occurrence reads
+    only OCCURRENCE_HEAD_LINES lines and OCCURRENCE_HEAD_REACH characters back. Bounded: at most HEADING_REACH_LINES
+    lines and HEADING_REACH_CHARS characters, the reach the caller keeps ``pos`` within; False when no such line is
+    found there."""
+    lo = max(lo, pos - gi_sections.HEADING_REACH_CHARS)
+    end = text.rfind('\n', lo, pos)
+    for _ in range(gi_sections.HEADING_REACH_LINES):
+        if end <= lo:
+            return False
+        start = text.rfind('\n', lo, end) + 1
+        line = text[max(start, lo):end].strip()
+        if _po_heading_like(line) and gi_sections.ANOTHER_OCCURRENCE_HEAD.search(line):
+            return True
+        end = start - 1
     return False
 
 
