@@ -906,6 +906,9 @@ class _TextState:
     tf: list | None = None
 
 
+_SAVE, _RESTORE = ([], b'q'), ([], b'Q')  # operations pypdf only reads, shared by every transcribed operator
+
+
 def _space_threshold(built, missing: bool) -> float:
     """The TJ adjustment (thousandths of an em) from which pypdf's extraction adds a space between the strings it
     separates: 95% of half the font's space width, as pypdf measures it (a font whose space has no width as 200, as
@@ -1032,12 +1035,16 @@ class _TextPlacement:
                         units.append(unit)
             elif units and not units[-1].endswith(' ') and abs(number(item)) >= threshold:
                 units.append(' ')  # pypdf adds a space for an adjustment of half a space or more
-        show = ([ByteStringObject(self.transcript.show(units, width))], b'Tj')
-        selected = ([NameObject(UNREAD_FONT), FloatObject(self.state.size)], b'Tf')
+        show = self.transcript.operation((tuple(units), width), lambda: (
+            [ByteStringObject(self.transcript.show(units, width))], b'Tj'))
+        size = self.state.size
+        selected = self.transcript.operation(('Tf', size), lambda: ([NameObject(UNREAD_FONT), FloatObject(size)], b'Tf'))
         moves = state_only(operator, operands)
-        if self.state.tf is not None:
-            return moves + [selected, show, (list(self.state.tf), b'Tf')], unread
-        return moves + [([], b'q'), selected, show, ([], b'Q')], unread
+        tf = self.state.tf
+        if tf is not None:  # restored by the stream's own Tf, its operands as they were
+            restore = self.transcript.operation(('restore', *map(repr, tf)), lambda: (list(tf), b'Tf'))
+            return moves + [selected, show, restore], unread
+        return moves + [_SAVE, selected, show, _RESTORE], unread
 
     def run(self, operator, operands) -> _Run | None:
         """Apply a text-showing operator: where what it shows lies, or None when there is nothing to measure

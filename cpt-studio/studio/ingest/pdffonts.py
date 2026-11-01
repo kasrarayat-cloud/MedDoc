@@ -1064,6 +1064,7 @@ class Transcript:
 
     def __init__(self):
         self.codes: dict[str, int] = {}
+        self.operations: dict = {}  # what an operation draws -> the operation, shared by every operator drawing it
         self.next = _FIRST_TEXT_CODE
         self._font: DictionaryObject | None = None
         self._to_unicode: StreamObject | None = None
@@ -1081,6 +1082,15 @@ class Transcript:
         code = self.codes[text] = self.next
         self.next = 0xE000 if self.next + 1 == 0xD800 else self.next + 1  # a surrogate would pair with the next code
         return code
+
+    def operation(self, key, make):
+        """The operation ``make()`` builds for ``key``, built once a walk: pypdf only reads the operations, so every
+        transcribed operator that draws the same text as wide (each of 350,000 unread strings 'AB') shares one, and a
+        page of them holds a reference for each, not an object."""
+        known = self.operations.get(key)
+        if known is None:
+            known = self.operations[key] = make()
+        return known
 
     def show(self, units: list[str], width: float) -> bytes:
         """The codes that read as ``units`` (in order: pieces of text, UNREAD among them; a space as SPACE), then codes

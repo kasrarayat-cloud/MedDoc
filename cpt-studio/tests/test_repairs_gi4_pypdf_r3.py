@@ -30,7 +30,7 @@ from studio.ingest import pdfannots, pdffonts
 from studio.ingest.pdf import (BOX_GAP_MAX, BOX_SLACK, _I3_Bands, _I3_lone_marks, _I3_unclaimed, _Layer, _placed_boxes,
                                extract_pdf, unreadable_note)
 from studio.ingest.pdfannots import Button, PageAnnotations
-from studio.ingest.pdfcontent import readings_for
+from studio.ingest.pdfcontent import OptionalContent, analyse_page, readings_for
 from studio.ingest.pdffonts import SPACE, UNREAD, Transcript, read_codes
 from tests.support import pypdf_shapes as shapes
 from tests.test_repairs_ingest_r2 import reading
@@ -62,10 +62,24 @@ def best(work, repeat: int = 3) -> float:
     return min(times)
 
 
-def assert_doubles(case, small: float, large: float, label: str) -> None:
+def assert_doubles(case, small, large, label: str, repeat: int = 3) -> None:
     """Twice the input costs at most about twice as much: under three times, with 50 ms allowed for timer noise (work
-    that grows with the square of the input costs four times as much)."""
-    case.assertLess(large, 3 * small + 0.05, f'{label}: {small:.3f} s, then {large:.3f} s for twice the input')
+    that grows with the square of the input costs four times as much). ``small`` and ``large`` are the work on the
+    input and on twice the input, timed in turn, ``repeat`` times each, the shortest of each kept, so that both see the
+    same load."""
+    fast, slow = in_turn((small, large), repeat)
+    case.assertLess(slow, 3 * fast + 0.05, f'{label}: {fast:.3f} s, then {slow:.3f} s for twice the input')
+
+
+def in_turn(works, repeat: int = 3) -> list[float]:
+    """The shortest of ``repeat`` timings of each of ``works``, timed one after another in each round, in seconds."""
+    times = [[] for _ in works]
+    for _ in range(repeat):
+        for index, work in enumerate(works):
+            started = time.perf_counter()
+            work()
+            times[index].append(time.perf_counter() - started)
+    return [min(each) for each in times]
 
 
 class MarkTests(unittest.TestCase):
@@ -292,14 +306,14 @@ class CostTests(unittest.TestCase):
         """R2-COST-A: a lazy back-referencing pattern scanned to the end of the data from every unclosed section: a
         1 MiB CMap of them ran to the 240 s deadline. Read keyword by keyword, a malformed CMap costs one pass."""
         small, large = self.openers(48 * 1024), self.openers(96 * 1024)
-        assert_doubles(self, best(lambda: pdffonts._cmap_layout(small)), best(lambda: pdffonts._cmap_layout(large)),
+        assert_doubles(self, lambda: pdffonts._cmap_layout(small), lambda: pdffonts._cmap_layout(large),
                        'unclosed CMap sections')
         for unclosed in (False, True):
             with self.subTest(unclosed=unclosed):
                 small, large = self.cmap(8000, unclosed), self.cmap(16000, unclosed)
                 self.assertEqual(pdffonts._cmap_layout(small) is None, unclosed)
-                assert_doubles(self, best(lambda: pdffonts._cmap_layout(small)),
-                               best(lambda: pdffonts._cmap_layout(large)), 'embedded CMap')
+                assert_doubles(self, lambda: pdffonts._cmap_layout(small), lambda: pdffonts._cmap_layout(large),
+                               'embedded CMap')
         whole = self.openers(pdffonts.MAX_EMBEDDED_CMAP_BYTES)
         self.assertLess(best(lambda: self.assertIsNone(pdffonts._cmap_layout(whole)), 1), 0.5)
         result = in_process(shapes.shared_cmap_fonts(3, unclosed=500_000))
@@ -355,7 +369,7 @@ class CostTests(unittest.TestCase):
                        for index in range(widgets)]
             boxes = [(72.0, 60.0 + index % 400, 80.0, 64.0 + index % 400) for index in range(unread)]
             return lambda: _placed_boxes(_Layer(), PageAnnotations(widgets=buttons), boxes)
-        assert_doubles(self, best(placed(1500, 6000)), best(placed(3000, 12000)), 'widgets beside unread text')
+        assert_doubles(self, placed(1500, 6000), placed(3000, 12000), 'widgets beside unread text')
 
     def test_a_long_value_is_squeezed_once(self):
         """R2-COST-E: each widget squeezed the field's value character by character in Python (4,000 widgets of a
@@ -379,25 +393,33 @@ class CostTests(unittest.TestCase):
         self.assertEqual(pdfannots.squeezed('a\ufffd\u2610b'), 'a\ufffd\u2610b')
         text = ('Indication:screening;prepadequate;withdrawal8minutes.' * 20_000)[:1_000_000]
         whitespace = re.compile(r'\s+')
-        self.assertLess(best(lambda: pdfannots.squeezed(text)), 3 * best(lambda: whitespace.sub('', text)) + 0.01)
+        squeezing, removing = in_turn((lambda: pdfannots.squeezed(text), lambda: whitespace.sub('', text)))
+        self.assertLess(squeezing, 3 * removing + 0.01)
 
     def test_lone_marks_are_found_in_one_pass(self):
         small = (f'{UNREAD} Diabetes\n' * 20_000) + UNREAD * 40_000
         large = (f'{UNREAD} Diabetes\n' * 40_000) + UNREAD * 80_000
         self.assertEqual(len(_I3_lone_marks(small, {})), 20_000)
-        assert_doubles(self, best(lambda: _I3_lone_marks(small, {})), best(lambda: _I3_lone_marks(large, {})),
-                       'lone marks')
+        assert_doubles(self, lambda: _I3_lone_marks(small, {}), lambda: _I3_lone_marks(large, {}), 'lone marks')
 
         def unclaimed(count: int):
             marks = {10 * index: (10 * index + 1, '[?]') for index in range(count)}
             edits = {10 * index + 5: (10 * index + 6, 'x') for index in range(count)}
             return lambda: self.assertEqual(len(_I3_unclaimed(marks, edits)), count)
-        assert_doubles(self, best(unclaimed(4000)), best(unclaimed(8000)), 'lone marks beside other readings')
+        assert_doubles(self, unclaimed(4000), unclaimed(8000), 'lone marks beside other readings')
 
     def test_transcription_grows_with_the_operators(self):
+        """Each transcribed operator is a few operations in what pypdf reads; operators that draw the same text as wide
+        share them (350,000 unread 'AB' strings held 1,066 MiB before: one object an operation each)."""
         small, large = shapes.unread_operators(3000), shapes.unread_operators(6000)
         self.assertEqual(in_process(small).status, 'failed')  # nothing on the page can be read: no usable layer
-        assert_doubles(self, best(lambda: in_process(small), 2), best(lambda: in_process(large), 2), 'transcription')
+        assert_doubles(self, lambda: in_process(small), lambda: in_process(large), 'transcription', 2)
+        for data, count in ((small, 3000), (large, 6000)):
+            reader = PdfReader(io.BytesIO(data))
+            operations = analyse_page(reader.pages[0], reader, OptionalContent(reader.trailer['/Root'])).operations
+            shown = [operation for operation in operations if operation[1] in (b'Tj', b'Tf')]
+            # each operator's own Tf, then the transcription's Tf, Tj and Tf: three objects for them all
+            self.assertEqual((len(shown), len({id(operation) for operation in shown})), (4 * count, count + 3))
 
 
 if __name__ == '__main__':
