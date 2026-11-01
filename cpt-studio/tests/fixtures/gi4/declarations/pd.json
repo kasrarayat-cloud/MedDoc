@@ -1,0 +1,73 @@
+{
+ "package": "PD",
+ "summary": "GI round 4, package PD (date step 1), studio/gi/context.py only. Wide own-date labels in the document's head (Date seen, Case date, Exam date, Date performed, Day of procedure, and the other forms of _WIDE_DATE_LABEL) and the worded date-of-service field of D2 ('Service date logged for this case: ...') only ever ASK or NARROW, and are never sent: (a) the installed reading sends X and such a label states Y: the date is asked and only X is a member's answer (the narrow release's question, read by charge_date_problem / charge_date_own / charge_question_day, so every reader still reads X); (b) the installed reading already asks with evidence: unchanged; (c) it asks with no evidence at all (any member date taken): the labels become that evidence - one value only when a closing-role line states the same day, several values as a conflict of those values - so only dates the document states are taken. Hardening: no wide or worded label is read when sections.around_procedure_title matches (the installed fact stands); corroboration only from closing-role lines among the last 8 non-empty lines, never from a consent, order, request, booking/scheduling or call/phone line. Built so that the installed candidates - and so the installed fact - are computed exactly as installed (the wide candidates are read beside them, never among them: the prototype's joint pass let _after_another_header keep an addendum's own label 'own' when a wide label stood in the head, a possible NEW-SEND), and every other text reads byte-identically.",
+ "cues_added": [
+  "context.WIDE_DATE_ASK_NOTE",
+  "context.WIDE_DATE_NOTE",
+  "context.WIDE_SERVICE_DATE",
+  "context._CLOSING_ROLE",
+  "context._PD_CLOSING_LINES",
+  "context._PD_NOT_CLOSING",
+  "context._WIDE_DATE_LABEL",
+  "context._WIDE_NOTE_HEAD",
+  "context._WORDED_FIELD"
+ ],
+ "movements": {
+  "FACT-CHANGED": 20944,
+  "NEW-HELD": 78260,
+  "SEND->ASK": 4326
+ },
+ "movement_bounds": {
+  "corpus": "H2 as package PS ran it: the harness corpus (regression texts, generated corpus, seeded families, repository texts) plus /home/claude/cpt-studio-gi4-20261031/stage-a/out/minimal-corpus.jsonl; 51,925 texts, 281,868 text x member states",
+  "how": "computed BEFORE any PD code existed, from the installed tree's observation (80df1831d168) and a regex scan only (wave1/pd/probes/h2_bounds.py): PD can move only a text that carries a wide own-date label or a worded date-of-service field with a valid calendar date and is not titled as a note written around a procedure (sections.around_procedure_title, the PS rule); every other text's candidates are installed's by construction",
+  "FACT-CHANGED": "20,944 = such texts (33,807 carry such a label; 12,863 of them are titled around a procedure and read none)",
+  "SEND->ASK": "4,326 = such texts whose installed 'none' state sends a date (rule (a))",
+  "NEW-HELD": "78,260 = every state of such texts whose answer installed took (strict bound); expected at most 59,099 = those whose answer no wide or worded label of the text states (rule (c) narrows to the stated dates; rules (a) and (b) hold nothing new)",
+  "zero": "NEW-SEND 0 and NEW-TAKE 0 (the gate, by construction: a wide label is never sent, rule (a) takes only installed's own date, rule (c) takes a subset of installed's 'any date'); REQUEST-CHANGED 0, LAYOUT-CHANGED 0, MENTIONS-CHANGED 0, STATE-CHANGED 0, READER-ERROR 0, TEXT-MISSING 0; every moved text is one of the counted texts (checked by set, not only by count)"
+ },
+ "battery": [],
+ "battery_note": "No permanent H4 row carries a wide own-date label or a worded date-of-service field (static scan of ops/gi4/battery.py CASES), so no row can move: every row's bucket, status, violations and fingerprint equal installed's.",
+ "replay": {
+  "h4-01": {"fact": ["missing", null], "evidence": ["Date seen: 10/26/2026"], "note": "WIDE_DATE_NOTE",
+            "accepted": ["2026-10-26"],
+            "newly_held": ["doc:2026-10-14", "doc:2026-11-02", "doc:2026-11-23", "doc:2026-12-14", "far", "minus1", "plus1"],
+            "unchanged": ["none (DATELESS, stored dateless request d47c7756)", "walk 2026-10-26 (stored dated request 37eaacde, retained answer)"],
+            "failed_hard": []},
+  "h4-02": {"fact": ["missing", null], "evidence": ["Case date: 2026-10-21"], "note": "WIDE_DATE_NOTE",
+            "accepted": ["2026-10-21"], "newly_held": ["far", "minus1", "plan", "plus1"],
+            "unchanged": ["none (DATELESS, f02f70f6)", "walk 2026-10-21 (16c1b10b)"], "failed_hard": []},
+  "h4-03": {"fact": ["conflict", null], "evidence": ["Exam date: 10/06/2026", "Service date logged for this case: 10/08/2026"],
+            "note": "Conflicting documented values: 2026-10-06, 2026-10-08.",
+            "accepted": ["2026-10-06", "2026-10-08"], "newly_held": ["doc:2026-10-09", "far", "minus1", "plus1"],
+            "unchanged": ["none (DATELESS, 8eaed7a5)", "walk 2026-10-06 (acdebca2)", "doc:2026-10-08 (taken as installed)"],
+            "failed_hard": []},
+  "h4-04": {"fact": ["missing", null], "evidence": ["Date performed: October 19, 2026"], "note": "WIDE_DATE_NOTE",
+            "accepted": ["2026-10-19"], "newly_held": ["doc:2026-09-28", "far", "minus1", "plan", "plus1"],
+            "unchanged": ["none (DATELESS, 07851e22)", "walk 2026-10-19 (e89468e0)"], "failed_hard": []},
+  "h4-05": "EQUAL",
+  "h4-06": {"fact": ["missing", null], "evidence": ["Day of procedure: Oct 27, 2026"], "note": "WIDE_DATE_NOTE",
+            "accepted": ["2026-10-27"], "newly_held": ["doc:2025-09-30", "far", "minus1", "plan", "plus1"],
+            "unchanged": ["none (DATELESS, b38da885)", "walk 2026-10-27 (83712b2f)"], "failed_hard": []},
+  "h2-08": "EQUAL",
+  "h2-10": "EQUAL",
+  "all": "every stored request sha256 rebuilds unchanged; no state sends a date it did not send; in a newly held state the request is no longer built and the assess child reads the hold (provider failed, no answer), as for every member-date hold; every other state is equal in the compact view (date channel, request, routing, inventory, proposals with fingerprints, questions, offers, completeness)"
+ },
+ "h1_hard_failures": "installed 25 (date.sends-only-the-truth: h4-01 7, h4-02 4, h4-03 4, h4-04 5, h4-06 5 - each a member date taken where the own label is unread) -> 0",
+ "h3": "no MUST regression and no SHOULD regression; movement only in date cells (date.send, date.answer-held, date.no-send-before-answer), fixed only; date.own-read[out] is MAY (PD2, never judged) and stays unsent",
+ "must_hold": [
+  "F7: 'Pre-procedure telephone call / Day of procedure: 11/04/2026 / ... Signed ... Oct 30, 2026' and the variant signed on 11/04: the installed fact (no evidence) stands, the call's own date is taken, nothing is sent before an answer",
+  "F7: 'Endoscopy booking / Case date: 2026-11-04', with or without 'Attested: ..., 2026-11-04': the installed fact stands; 2026-11-04 is never sent by the document",
+  "'Prior colonoscopy at an outside center / Date performed: May 2, 2019' above 'Date of service: October 19, 2026': sends 2026-10-19 as installed; 2019-05-02 is never sent or taken",
+  "'Date of service: 10/06/2026' with 'Last exam date: 04/02/2025': sends 2026-10-06 as installed",
+  "X+Y head conflict 'Date of service: 10/18/2026' + 'Date performed: 10/19/2026': asked (dateless); only 2026-10-18 is taken; every reader reads 2026-10-18",
+  "a wide label never reaches a request: no state sends a date only a wide or worded label states",
+  "a closing-role line outside the last 8 non-empty lines, or on a consent, order, request, booking or call line, corroborates nothing (the installed fact stands)",
+  "a wide label in the head beside an aside header date and an authored addendum's own label: the installed fact stands exactly (never sent where installed asks)"
+ ],
+ "guards_and_mutants": "one killing mutant per guard, each detected by tests.test_gi4_pd (SimpleTestCase, no database): the around-procedure title hold; the last-8-lines reach; the not-a-closing-line words; the installed candidates read apart from the wide ones; plus the prototype's guards PD now carries: corroboration of a single value, the own-reading filter, the worded field's occurrence words, the head reach, and rule (a) taking only installed's date",
+ "deviations_from_the_prototype": [
+  "wide and worded candidates are read beside the installed candidates (_pd_wide_candidates) and appended after the installed post-processing, so _installed_service_date_fact reads exactly the installed candidates",
+  "_head_end counts lines with sections.head_lines_end (one pass, no backtracking on a long blank line)",
+  "a worded field (words before its colon, never alone in its field) is noted with WIDE_DATE_NOTE, never with FIELD_DATE_NOTE (which says the words come after the date)"
+ ]
+}
