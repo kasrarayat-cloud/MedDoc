@@ -6,7 +6,8 @@ it is read only by detect._landmarks, through detect._pe_reached_before. These t
 - the constant: exactly installed plus the two verbs with the same flags; cues.REACHED_BEFORE unchanged; neither
   context.py nor sections.py (the request side) reads the new one;
 - the release: h4-04's EGD extent reads the second part of the duodenum (installed: "incomplete: stomach") in every
-  member state, with 43251's bucket, status and fingerprint unchanged; and plain shapes read the endpoint they state;
+  member state, with 43251's bucket, status and fingerprint unchanged by PE (in the integrated Wave 1 tree its
+  fingerprint moves by package PI's recorded movement only); and plain shapes read the endpoint they state;
 - the plan's must-holds and every guard: each shape in INSTALLED reads exactly what installed 06e6d204e (cpt-studio
   identical to 80df1831d168) reads, measured on a sealed export before this file was written - "The pylorus could not
   be passed" stays "incomplete: stomach", a 30 cm stricture never reads complete, and a denied, hedged, planned,
@@ -218,9 +219,12 @@ class RoutingReleaseTests(SimpleTestCase):
         egd = [s for s in inventory.services if s.family == EGD]
         self.assertEqual([(s.status, s.completion, s.extent) for s in egd], [('performed', 'complete', D2)])
 
-    def test_h4_04_replay_moves_only_the_extent_and_43251_keeps_its_fingerprint(self):
+    def test_h4_04_replay_moves_only_the_extent_and_pe_moves_no_fingerprint(self):
         """The declaration: in every member state gi.egd reads the second part of the duodenum; 43251 stays selected
-        with its installed status and fingerprint (92e16310 in the walk state: facts.required stays 'pass')."""
+        with its status, and PE moves no fingerprint (92e16310 in the walk state under PE alone: facts.required stays
+        'pass'). In the integrated Wave 1 tree 43251's walk fingerprint is 9d6bff8e: package PI's movement, recorded
+        in pi.json after_measurement (45378 now held beside 43251 adds pfs.endoscopic_base; the one live approval is
+        invalidated at its next assessment, an install fact) - exactly PI's own value, so PE adds nothing to it."""
         pinned = json.loads((FIXTURES / 'pins' / 'replay.json').read_text())['documents']['h4-04']
         result = replay.replay({'h4-04': regression.load_fixtures()['h4-04']})['documents']['h4-04']
         self.assertEqual(sorted(result['states']), sorted(pinned['states']))
@@ -233,7 +237,7 @@ class RoutingReleaseTests(SimpleTestCase):
                              if p['bucket'] != 'alternative')
                 self.assertEqual(now, pinned['states'][label]['proposals'])
         walk = {p['code']: p for p in result['states']['walk']['proposals']}
-        self.assertEqual((walk['43251']['status'], walk['43251']['fingerprint'][:8]), ('ready', '92e16310'))
+        self.assertEqual((walk['43251']['status'], walk['43251']['fingerprint'][:8]), ('ready', '9d6bff8e'))  # PI's
 
 
 class InstalledReadingTests(SimpleTestCase):

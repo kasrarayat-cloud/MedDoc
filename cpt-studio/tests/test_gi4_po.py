@@ -35,8 +35,32 @@ from studio.validation import engine, reconcile
 
 FIXTURES = Path(__file__).resolve().parent / 'fixtures' / 'gi4'
 DECLARED = json.loads((FIXTURES / 'declarations' / 'po.json').read_text(encoding='utf-8'))
+PD_DECLARED = json.loads((FIXTURES / 'declarations' / 'pd.json').read_text(encoding='utf-8'))
 PIN = json.loads((FIXTURES / 'pins' / 'replay.json').read_text(encoding='utf-8'))
 DOCS = regression.load_fixtures()
+# The Wave 1 integration (all six packages in one tree). The H4 rows package PA added after PO branched, which PO's
+# declaration predates: their offers are not moved by any Wave 1 package (measured on installed 80df1831d168, on each
+# package's own tree and on the integrated tree, with the row's own answer and with an empty one).
+PA_ROWS_OFFERS = {
+    'PA1 disagreeing second reader: a plan line it reads nothing in (EUS)': {
+        'own': [], 'empty': [['gi.eus', '', 'no_proposal', True]]},
+    'PA2 disagreeing second reader: "No further" read as uncertain (EUS)': {
+        'own': [], 'empty': [['gi.eus', '', 'no_proposal', True]]},
+    'PA3 agreeing second reader: a headed prior-procedures line (ERCP)': {
+        'own': [['gi.ercp', '', 'no_proposal', True]], 'empty': [['gi.ercp', '', 'no_proposal', True]]},
+}
+# UNDECLARED: two offer-battery cells the integrated tree moves where NO declaration names the movement (po.json pins
+# them otherwise; pa.json and pv1.json never ran this battery). Recorded by the Wave 1 integration, not declared away:
+# po.json is unchanged and stays the expectation for every other cell, and these two are pinned at the measured value,
+# with PO's declared value checked to differ, until a declaration or a ruling settles them.
+#   S3h, own answer: PA's declared hold of 43259 (pa.json: excluded -> selected/needs_clarification) gives the EUS family
+#     a held proposal, so the 'no_proposal' item PO declared its offer on no longer exists (PA alone measures the same).
+#   telephone-only time, empty answer: PV1's C4 hold (pv1.json: telephone wording holds every E/M reading) no longer
+#     reads the visit as performed, so installed's offered 'no_proposal' office-visit item is gone (PV1 alone the same).
+UNDECLARED_OFFERS = {
+    ('S3h h4-05 counterfactual, EUS code citing the narrative', 'own'): [],
+    ('telephone-only time', 'empty'): [],
+}
 H402, H405 = DOCS['h4-02']['text'], DOCS['h4-05']['text']
 B = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
 FILL = ''.join(f'Line {i} of the outside summary lists medications and allergies in detail.\n' for i in range(8))
@@ -201,9 +225,14 @@ class RegressionOfferTests(SimpleTestCase):
     def test_the_declared_documents_offer_in_every_member_state(self):
         for doc_id in ('h4-02', 'h4-05'):
             want = DECLARED['replay'][doc_id]
+            # The Wave 1 integration: a state package PD declares newly held (pd.json) is assessed as a member-date hold
+            # (no provider answer), so each item's reason there is 'no_proposal'; the offer flag stays PO's
+            pd = PD_DECLARED['replay'].get(doc_id)
+            held = set(pd['newly_held']) if isinstance(pd, dict) else set()
             self.assertEqual(sorted(self.result['documents'][doc_id]['states']), sorted(want['states']), doc_id)
             for label in want['states']:
-                self.assertEqual(self.offers(doc_id, label), sorted([f, r, po] for f, r, _, po in want['offers']),
+                self.assertEqual(self.offers(doc_id, label),
+                                 sorted([f, 'no_proposal' if label in held else r, po] for f, r, _, po in want['offers']),
                                  (doc_id, label))
 
     def test_no_other_document_moves(self):
@@ -228,11 +257,19 @@ class OfferBatteryTests(SimpleTestCase):
 
     def test_every_row_offers_as_declared(self):
         rows = DECLARED['offer_battery']['rows']
-        self.assertEqual(sorted(rows), sorted(battery.CASES))
+        self.assertEqual(sorted(set(battery.CASES) - set(rows)), sorted(PA_ROWS_OFFERS))  # PA's rows only
+        self.assertEqual(sorted(set(rows) - set(battery.CASES)), [])
         for name, (text, codes) in battery.CASES.items():
-            own = offers_of(text, [(code, quote) for code, quote, _ in codes])
-            self.assertEqual(own, declared(rows[name]['own']), (name, 'own'))
-            self.assertEqual(offers_of(text), declared(rows[name]['empty']), (name, 'empty'))
+            got = {'own': offers_of(text, [(code, quote) for code, quote, _ in codes]), 'empty': offers_of(text)}
+            for answer in ('own', 'empty'):
+                with self.subTest(name, answer=answer):
+                    if name in PA_ROWS_OFFERS:
+                        self.assertEqual(got[answer], PA_ROWS_OFFERS[name][answer])
+                    elif (name, answer) in UNDECLARED_OFFERS:
+                        self.assertEqual(got[answer], UNDECLARED_OFFERS[(name, answer)])
+                        self.assertNotEqual(got[answer], declared(rows[name][answer]))  # still unlike PO's declaration
+                    else:
+                        self.assertEqual(got[answer], declared(rows[name][answer]))
 
 
 class GuardRowTests(SimpleTestCase):
