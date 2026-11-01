@@ -2,27 +2,37 @@
 
 Nothing here reaches the live host: git runs in temporary repositories, and the act runs against fakes of the
 engine's primitives. The real engine module is imported only for its pure helpers and its own source text.
+Tests named after a finding (GI-*, PT-*, AS-*) pin the repair of that finding from the 2026-11-01 refutation.
 """
 import ast
 from contextlib import contextmanager, redirect_stdout, redirect_stderr
 from copy import deepcopy
+import errno
+import hashlib
 import io
 import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
+import sys
 import tempfile
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+import zlib
 
 from ops import activate_core_workflow_repair as engine_module
 from ops import install_rebuild_release as op
+from ops import managed_helper
 from ops import venv_footprint as footprint
 
 BASE = '1' * 40
 CANDIDATE = '2' * 40
+#: Literal, never op.SIGNALS: a test that iterates the module's own list passes vacuously when the list is emptied.
+ROUTED_SIGNALS = ('SIGTERM', 'SIGINT', 'SIGHUP')
 GIT_ENV = {'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_AUTHOR_NAME': 'test',
            'GIT_AUTHOR_EMAIL': 'test@example.invalid', 'GIT_COMMITTER_NAME': 'test',
            'GIT_COMMITTER_EMAIL': 'test@example.invalid'}
@@ -48,11 +58,16 @@ def commit(repo, files, message='change', remove=()):
     return git(repo, 'rev-parse', 'HEAD')
 
 
-def new_repo(root):
-    repo = root / 'repo'
+def new_repo(root, name='repo'):
+    repo = root / name
     repo.mkdir()
     git(repo, 'init', '-q', '-b', 'main')
     return repo
+
+
+def wait_for_signal():
+    for _ in range(200):
+        time.sleep(0.005)
 
 
 class GitIsolation(unittest.TestCase):
@@ -86,14 +101,17 @@ class ManifestTests(GitIsolation):
         self.assertEqual(op.classify('rebuild/ops/test_x.py', 'A'), 'support')
         self.assertEqual(op.classify('cpt-studio/studio/migrations/0001_x.py', 'A'), 'passenger')
         self.assertEqual(op.classify('.github/workflows/test.yml', 'M'), 'passenger')
+        self.assertEqual(op.classify('scripts/ci/verify-cpt-studio.sh', 'A'), 'passenger')
         refused = [('rebuild/core/x.py', 'D'), ('rebuild/core/x.py', 'T'), ('rebuild/core/migrations/0040_x.py', 'A'),
                    ('rebuild/deploy/quillmd-fresh-worker.service', 'M'), ('rebuild/staticfiles/app.js', 'A'),
                    ('rebuild/static/fonts/x.ttf', 'A'), ('apps/x/node_modules/y.js', 'A'), ('rebuild/.venv/x', 'A'),
                    ('docs/backups/x.md', 'A'), ('/abs.py', 'A'), ('a//b.py', 'A'), ('./a.py', 'A'), ('../a.py', 'A'),
-                   ('a\\b.py', 'A'), ('a\nb.py', 'A'), ('scripts/hooks/post-merge', 'A')]
+                   ('a\\b.py', 'A'), ('a\nb.py', 'A'), ('scripts/hooks/post-merge', 'A'),
+                   ('scripts/hooks/pre-auto-gc', 'A'), ('.gitattributes', 'A'), ('rebuild/.gitattributes', 'M'),
+                   *[(name, 'M') for name in op.GATE_INSTRUMENTS]]
         for name, status in refused:
             with self.subTest(name=name, status=status), self.assertRaises(op.Refusal):
-                op.classify(name, status, hooks=frozenset({'scripts/hooks/post-merge'}))
+                op.classify(name, status, hooks=frozenset({'scripts/hooks/post-merge', 'scripts/hooks/pre-auto-gc'}))
 
     def test_manifest_rows_modes_sizes_and_digest(self):
         blobs = {'a' * 40: b'new', 'b' * 40: b'old', 'c' * 40: b'x' * (op.BLOB_LIMIT + 1)}
@@ -112,6 +130,51 @@ class ManifestTests(GitIsolation):
         for variant in variants:
             with self.subTest(variant=variant), self.assertRaises(op.Refusal):
                 op.build_manifest(BASE, variant, blobs.__getitem__)
+
+    def test_as1_a_dot_named_component_only_where_the_base_tracks_it(self):
+        """AS-1: rebuild/.env/<x> and .env/<x> refuse; a new file under a tracked .github/ is admitted."""
+        blobs = {'a' * 40: b'new', 'b' * 40: b'old'}
+        tracked = frozenset({'.github', '.github/workflows', '.github/workflows/test.yml', 'rebuild',
+                             'rebuild/.gitignore', '.env.example'})
+
+        def build(name, status='A'):
+            old = ('100644', 'b' * 40) if status == 'M' else ('000000', '0' * 40)
+            return op.build_manifest(BASE, [(status, old[0], '100644', old[1], 'a' * 40, name)], blobs.__getitem__,
+                                     base_paths=tracked)
+        for name in ('.github/workflows/new.yml', 'rebuild/core/a.py'):
+            build(name)
+        for name in ('.github/workflows/test.yml', 'rebuild/.gitignore'):
+            build(name, 'M')
+        for name in ('rebuild/.env/notes.md', '.env/README.md', '.worktrees/x/rebuild/core/a.py',
+                     'cpt-studio/.gitignore', 'rebuild/.runtime-copy/x.py', '.env.local'):
+            with self.subTest(name=name), self.assertRaises(op.Refusal) as caught:
+                build(name)
+            self.assertEqual(str(caught.exception), 'untracked_dot_path')
+        with self.assertRaises(op.Refusal):     # without the base listing every dot path refuses
+            op.build_manifest(BASE, [('M', '100644', '100644', 'b' * 40, 'a' * 40, '.github/workflows/test.yml')],
+                              blobs.__getitem__)
+
+    def test_manifest_from_a_real_repository_and_its_refusals(self):
+        repo = new_repo(self.root)
+        base = commit(repo, {'rebuild/core/a.py': 'one\n', 'rebuild/requirements.txt': 'pypdf==6.21.1\n',
+                             'docs/old.md': 'old\n', 'rebuild/.gitignore': '*.log\n',
+                             '.github/workflows/test.yml': 'x: 1\n'})
+        candidate = commit(repo, {'rebuild/core/a.py': 'two\n', 'rebuild/requirements.txt': 'pypdf==6.21.4\n',
+                                  'rebuild/.gitignore': '*.log\n*.pyc\n', '.github/workflows/new.yml': 'y: 1\n'})
+        manifest = op.compute_manifest(repo, base, candidate, frozenset())
+        self.assertEqual({n: r['status'] for n, r in manifest['paths'].items()},
+                         {'.github/workflows/new.yml': 'A', 'rebuild/.gitignore': 'M', 'rebuild/core/a.py': 'M',
+                          'rebuild/requirements.txt': 'M'})
+        self.assertEqual(manifest['paths']['rebuild/core/a.py']['sha256'], op.sha(b'two\n'))
+        for files, remove in (({}, ('docs/old.md',)), ({'link': ('symlink', 'docs/old.md')}, ()),
+                              ({'rebuild/core/migrations/0040_x.py': 'x\n'}, ()),
+                              ({'rebuild/.env/notes.md': 'x\n'}, ()), ({'cpt-studio/.gitignore': '*.pyc\n'}, ()),
+                              ({'scripts/check-citation.sh': 'exit 0\n'}, ())):
+            with self.subTest(files=files, remove=remove):
+                git(repo, 'reset', '-q', '--hard', candidate)
+                refused = commit(repo, files, remove=remove)
+                with self.assertRaises(op.Refusal):
+                    op.compute_manifest(repo, base, refused, frozenset())
 
     def test_facts_name_runtime_dot_and_static_paths(self):
         rows = {'rebuild/core/a.py': 'runtime', 'rebuild/requirements.txt': 'requirements',
@@ -132,23 +195,74 @@ class ManifestTests(GitIsolation):
                 op.admit_requirements(manifest, check)
         self.assertTrue(op.admit_requirements({'paths': {'rebuild/core/a.py': {}}}, False))
 
-    def test_manifest_from_a_real_repository_and_its_refusals(self):
-        repo = new_repo(self.root)
-        base = commit(repo, {'rebuild/core/a.py': 'one\n', 'rebuild/requirements.txt': 'pypdf==6.21.1\n',
-                             'docs/old.md': 'old\n'})
-        candidate = commit(repo, {'rebuild/core/a.py': 'two\n', 'rebuild/requirements.txt': 'pypdf==6.21.4\n',
-                                  'cpt-studio/.gitignore': '*.pyc\n'})
-        manifest = op.compute_manifest(repo, base, candidate, frozenset())
-        self.assertEqual({n: r['status'] for n, r in manifest['paths'].items()},
-                         {'cpt-studio/.gitignore': 'A', 'rebuild/core/a.py': 'M', 'rebuild/requirements.txt': 'M'})
-        self.assertEqual(manifest['paths']['rebuild/core/a.py']['sha256'], op.sha(b'two\n'))
-        for files, remove in (({}, ('docs/old.md',)), ({'link': ('symlink', 'docs/old.md')}, ()),
-                              ({'rebuild/core/migrations/0040_x.py': 'x\n'}, ())):
-            with self.subTest(files=files, remove=remove):
-                git(repo, 'reset', '-q', '--hard', candidate)
-                refused = commit(repo, files, remove=remove)
-                with self.assertRaises(op.Refusal):
-                    op.compute_manifest(repo, base, refused, frozenset())
+
+class ManifestPathsOnDiskTests(unittest.TestCase):
+    """AS-1 and PT-2: every manifest path's place in the shared tree, with lstat, before anything stops."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name).resolve()
+        self.addCleanup(self.temporary.cleanup)
+        (self.root / 'rebuild/core').mkdir(parents=True)
+        (self.root / 'rebuild/core/a.py').write_text('one\n')
+        (self.root / 'rebuild/core/a.py').chmod(0o644)
+
+    def manifest(self, rows):
+        return {'paths': {name: ({'status': 'M', 'base_mode': mode} if status == 'M' else {'status': 'A'})
+                          for name, (status, mode) in rows.items()}}
+
+    def test_a_clean_tree_passes(self):
+        detail = op.manifest_paths_on_disk(self.manifest({'rebuild/core/a.py': ('M', '100644'),
+                                                          'rebuild/core/new.py': ('A', None),
+                                                          'cpt-studio/app/new.py': ('A', None)}), root=self.root)
+        self.assertEqual(detail, {'paths': 3, 'added_absent': 2, 'modified_regular': 1})
+
+    def test_every_obstruction_refuses(self):
+        def ignored_env_file(root):
+            (root / 'rebuild/.env').write_text('SECRET=only-copy\n')
+
+        def dangling_link(root):
+            (root / 'cpt-studio/app').mkdir(parents=True)
+            (root / 'cpt-studio/app/new.py').symlink_to('/nonexistent-target')
+
+        def file_where_a_directory_goes(root):
+            (root / 'cpt-studio').write_text('stray\n')
+
+        def linked_directory(root):
+            (root / 'elsewhere').mkdir()
+            (root / 'cpt-studio').symlink_to(root / 'elsewhere')
+
+        def modified_mode(root):
+            (root / 'rebuild/core/a.py').chmod(0o755)
+
+        def modified_link(root):
+            (root / 'rebuild/core/a.py').unlink()
+            (root / 'rebuild/core/a.py').symlink_to(root / 'rebuild/core/other.py')
+        cases = {'ignored_env_file': (ignored_env_file, {'rebuild/.env/notes.md': ('A', None)},
+                                      'manifest_path_prefix_not_a_directory'),
+                 'dangling_link_at_added_path': (dangling_link, {'cpt-studio/app/new.py': ('A', None)},
+                                                 'added_path_obstructed'),
+                 'file_where_a_directory_goes': (file_where_a_directory_goes, {'cpt-studio/app/new.py': ('A', None)},
+                                                 'manifest_path_prefix_not_a_directory'),
+                 'linked_directory': (linked_directory, {'cpt-studio/app/new.py': ('A', None)},
+                                      'manifest_path_prefix_not_a_directory'),
+                 'added_path_exists': (lambda root: None, {'rebuild/core/a.py': ('A', None)}, 'added_path_obstructed'),
+                 'modified_mode_not_declared': (modified_mode, {'rebuild/core/a.py': ('M', '100644')},
+                                                'modified_path_regular_at_base_mode'),
+                 'modified_path_is_a_link': (modified_link, {'rebuild/core/a.py': ('M', '100644')},
+                                             'modified_path_regular_at_base_mode'),
+                 'modified_path_missing': (lambda root: None, {'rebuild/core/gone.py': ('M', '100644')},
+                                           'modified_path_missing')}
+        for name, (setup, rows, label) in cases.items():
+            with self.subTest(case=name), tempfile.TemporaryDirectory() as other:
+                root = Path(other).resolve()
+                (root / 'rebuild/core').mkdir(parents=True)
+                (root / 'rebuild/core/a.py').write_text('one\n')
+                (root / 'rebuild/core/a.py').chmod(0o644)
+                setup(root)
+                with self.assertRaises(op.Refusal) as caught:
+                    op.manifest_paths_on_disk(self.manifest(rows), root=root)
+                self.assertEqual(str(caught.exception), label)
 
 
 class DeclarationTests(GitIsolation):
@@ -158,9 +272,9 @@ class DeclarationTests(GitIsolation):
 
     def repository(self):
         repo = new_repo(self.root)
-        gate = op.SOURCE / 'scripts/lib/declaration.sh'
-        base = commit(repo, {'rebuild/core/a.py': 'one\n', 'rebuild/requirements.txt': 'pypdf==6.21.1\n',
-                             'scripts/lib/declaration.sh': gate.read_bytes()}, 'base')
+        gates = {name: (op.SOURCE / name).read_bytes() for name in op.TRUSTED_GATE_SCRIPTS}
+        base = commit(repo, {'rebuild/core/a.py': 'one\n', 'rebuild/requirements.txt': 'pypdf==6.21.1\n', **gates},
+                      'base')
         code = commit(repo, {'rebuild/core/a.py': 'two\n', 'rebuild/requirements.txt': 'pypdf==6.21.4\n',
                              'docs/notes.md': 'notes\n'}, 'code')
         return repo, base, code
@@ -173,7 +287,8 @@ class DeclarationTests(GitIsolation):
                 'foreign_venv_units': ['quillmd-corti-candidate.service'],
                 'backup': {'report_sha256': 'e' * 64, 'run_id': '20261031T200000Z-0a1b2c3d',
                            'restore_run_id': 'a' * 16},
-                'operator': {name: 'd' * 64 for name in op.OPERATOR_FILES}}
+                'operator': {name: 'd' * 64 for name in op.OPERATOR_FILES},
+                'gate_scripts': op.trusted_gate_scripts(base, root=repo)}
 
     def declare(self, repo, contract, extra=None):
         text = '# Install\n\nThe delta and its baseline.\n\n' + op.contract_block(contract) + '\nStop conditions.\n'
@@ -182,7 +297,7 @@ class DeclarationTests(GitIsolation):
     def checks(self, repo, measured, base, candidate):
         args = SimpleNamespace(base=base, candidate=candidate, declaration=repo / self.RELATIVE)
         checks = op.Checks()
-        with patch.object(op, 'SOURCE', repo):
+        with patch.object(op, 'SOURCE', repo), patch.object(op, 'ROOT', repo):
             result = op.declaration_checks(args, checks, measured, executing=False)
         return result, checks
 
@@ -238,20 +353,22 @@ class DeclarationTests(GitIsolation):
 
     def test_uncommitted_modified_or_misplaced_declarations_refuse(self):
         repo, base, code = self.repository()
+        pins = op.trusted_gate_scripts(base, root=repo)
         path = repo / self.RELATIVE
         path.parent.mkdir(parents=True)
         path.write_text('draft\n')
-        for function in (op.declaration_provenance, op.strict_gate):
-            with self.subTest(function=function.__name__, state='untracked'), self.assertRaises(op.Refusal):
-                function(path, code, source=repo) if function is op.declaration_provenance else function(path, repo)
+        with self.assertRaises(op.Refusal):
+            op.declaration_provenance(path, code, source=repo)
+        with self.assertRaises(op.Refusal):
+            op.strict_gate(path, repo, gate_scripts=pins, root=repo)
         candidate = commit(repo, {}, 'declaration')
         op.declaration_provenance(path, candidate, source=repo)
-        op.strict_gate(path, repo)
+        op.strict_gate(path, repo, gate_scripts=pins, root=repo)
         path.write_text('edited after the commit\n')
         with self.assertRaises(op.Refusal):
             op.declaration_provenance(path, candidate, source=repo)
         with self.assertRaises(op.Refusal):
-            op.strict_gate(path, repo)
+            op.strict_gate(path, repo, gate_scripts=pins, root=repo)
         for wrong in (repo / 'docs/foundation/deploys/x.md', repo / 'docs/foundation/mutations/sub/x.md',
                       repo / 'docs/foundation/mutations/x.txt', Path('relative/docs/foundation/mutations/x.md'),
                       self.root / 'elsewhere/docs/foundation/mutations/x.md'):
@@ -292,6 +409,173 @@ class DeclarationTests(GitIsolation):
                 op.code_manifest_for(full, declared, self.RELATIVE, entries)
         with self.assertRaises(op.Refusal):
             op.code_manifest_for(full, {'code_manifest_sha256': '0' * 64}, self.RELATIVE, [entry])
+
+
+class GateInstrumentTests(GitIsolation):
+    """GI-1: the citation and the strict gate are judged by the base's pinned copies, never by the candidate's."""
+
+    def setUp(self):
+        super().setUp()
+        self.shared = new_repo(self.root, 'shared')
+        self.declaration_lib = (op.SOURCE / 'scripts/lib/declaration.sh').read_bytes()
+        self.base = commit(self.shared, {
+            'scripts/check-citation.sh': '#!/usr/bin/env bash\necho "base checker: no runs for $1"\nexit 1\n',
+            'scripts/lib/runs-api.sh': '# runs api\n', 'scripts/lib/declaration.sh': self.declaration_lib,
+            'rebuild/core/a.py': 'one\n'}, 'base')
+        # The candidate worktree carries a "simplified" checker and a gate that passes everything.
+        self.candidate = self.root / 'candidate'
+        (self.candidate / 'scripts/lib').mkdir(parents=True)
+        (self.candidate / 'scripts/check-citation.sh').write_text(
+            '#!/usr/bin/env bash\necho "**Citation \\u2014 2 of 2 on \\`$1\\`:**"\nexit 0\n')
+        (self.candidate / 'scripts/lib/declaration.sh').write_text('declaration_gate() { return 0; }\n')
+        self.prior = SimpleNamespace(command=engine_module.prior.command)
+
+    def test_gi1_the_citation_runs_the_base_copy_and_refuses_a_commit_without_runs(self):
+        pins = op.trusted_gate_scripts(self.base, root=self.shared)
+        self.assertEqual(set(pins), {'scripts/check-citation.sh', 'scripts/lib/runs-api.sh',
+                                     'scripts/lib/declaration.sh'})
+        with patch.object(op, 'SOURCE', self.candidate), patch.object(op, 'ROOT', self.shared):
+            with self.assertRaises(engine_module.Refusal) as caught:
+                op.citation(self.prior, '3' * 40, pins)
+        self.assertEqual(str(caught.exception), 'bounded_command_failed')
+
+    def test_gi1_the_strict_gate_runs_the_base_copy(self):
+        pins = op.trusted_gate_scripts(self.base, root=self.shared)
+        draft = self.candidate / 'docs/foundation/mutations/20261101-x.md'
+        draft.parent.mkdir(parents=True)
+        draft.write_text('an uncommitted declaration\n')
+        git(self.candidate.parent, 'init', '-q', '-b', 'main', str(self.candidate))
+        with self.assertRaises(op.Refusal) as caught:
+            op.strict_gate(draft, self.candidate, gate_scripts=pins, root=self.shared)
+        self.assertEqual(str(caught.exception), 'strict_declaration_gate')
+
+    def test_gi1_the_shared_tree_copy_must_be_the_base_blob_and_stay_pinned(self):
+        pins = op.trusted_gate_scripts(self.base, root=self.shared)
+        script = self.shared / 'scripts/check-citation.sh'
+        script.write_text(script.read_text() + '# edited in the shared tree\n')
+        with self.assertRaises(op.Refusal) as caught:
+            op.trusted_gate_scripts(self.base, root=self.shared)
+        self.assertEqual(str(caught.exception), 'trusted_gate_script_is_the_base_blob')
+        with self.assertRaises(op.Refusal) as caught:
+            op.verify_gate_scripts(self.shared, pins)
+        self.assertEqual(str(caught.exception), 'gate_script_unchanged')
+        with self.assertRaises(op.Refusal):
+            op.verify_gate_scripts(self.shared, {name: pins[name] for name in list(pins)[:2]})
+
+
+class SharedRepositoryTests(GitIsolation):
+    """GI-2, GI-3/PT-5, PT-2, PT-3: git's own state, merge-time hooks and origin/main, on scratch repositories."""
+
+    def shared(self, name='shared'):
+        repo = new_repo(self.root, name)
+        base = commit(repo, {'rebuild/core/a.py': 'one\n', 'rebuild/core/b.py': 'two\n'}, 'base')
+        return repo, base
+
+    def test_pt2_pt3_git_s_own_state_refuses_in_the_shared_tree(self):
+        repo, base = self.shared()
+        detail = op.shared_tree_at_base(base, root=repo)
+        self.assertEqual(detail['git_state']['index_entries'], 2)
+
+        def assume_unchanged(repo):
+            git(repo, 'update-index', '--assume-unchanged', 'rebuild/core/b.py')
+            (repo / 'rebuild/core/b.py').write_text('edited in the shared tree, hidden from status\n')
+
+        def skip_worktree(repo):
+            git(repo, 'update-index', '--skip-worktree', 'rebuild/core/b.py')
+        cases = {name: (lambda repo, name=name: (repo / '.git' / name).write_bytes(b''), 'git_lock_file_present')
+                 for name in ('index.lock', 'HEAD.lock', 'ORIG_HEAD.lock', 'packed-refs.lock', 'config.lock')}
+        cases.update({
+            'refs/heads/main.lock': (lambda repo: (repo / '.git/refs/heads/main.lock').write_bytes(b''),
+                                     'git_ref_lock_present'),
+            'MERGE_HEAD': (lambda repo: (repo / '.git/MERGE_HEAD').write_text(base + '\n'), 'unfinished_git_operation'),
+            'CHERRY_PICK_HEAD': (lambda repo: (repo / '.git/CHERRY_PICK_HEAD').write_text(base + '\n'),
+                                 'unfinished_git_operation'),
+            'REVERT_HEAD': (lambda repo: (repo / '.git/REVERT_HEAD').write_text(base + '\n'),
+                            'unfinished_git_operation'),
+            'rebase-merge': (lambda repo: (repo / '.git/rebase-merge').mkdir(), 'unfinished_git_operation'),
+            'BISECT_LOG': (lambda repo: (repo / '.git/BISECT_LOG').write_text('x\n'), 'unfinished_git_operation'),
+            'assume-unchanged': (assume_unchanged, 'assume_unchanged_or_skip_worktree_entries'),
+            'skip-worktree': (skip_worktree, 'assume_unchanged_or_skip_worktree_entries')})
+        for name, (setup, label) in cases.items():
+            with self.subTest(state=name):
+                repo, base = self.shared('shared-' + name.replace('/', '-'))
+                setup(repo)
+                with self.assertRaises(op.Refusal) as caught:
+                    op.shared_tree_at_base(base, root=repo)
+                self.assertEqual(str(caught.exception), label)
+
+    def test_gi3_pt5_pre_auto_gc_is_a_merge_time_hook_and_the_act_s_git_runs_no_hook_and_no_gc(self):
+        repo = new_repo(self.root)
+        git(repo, 'config', 'core.hooksPath', 'scripts/hooks')
+        marker = self.root / 'hook-ran'
+        hook = '#!/bin/sh\necho "$0" >> ' + str(marker) + '\nexit 0\n'
+        base = commit(repo, {'rebuild/core/a.py': 'one\n', 'scripts/hooks/pre-commit': '#!/bin/sh\nexit 0\n'})
+        hooks = op.merge_hooks(repo)
+        self.assertIn('scripts/hooks/pre-auto-gc', hooks)
+        with self.assertRaises(op.Refusal):
+            op.classify('scripts/hooks/pre-auto-gc', 'A', hooks=hooks)
+        # A candidate that carries the hook anyway (classify bypassed), and an object store that needs gc.
+        git(repo, 'checkout', '-q', '-b', 'release')
+        (repo / 'scripts/hooks/pre-auto-gc').write_text(hook)
+        (repo / 'scripts/hooks/pre-auto-gc').chmod(0o755)
+        (repo / 'scripts/hooks/post-merge').write_text(hook)
+        (repo / 'scripts/hooks/post-merge').chmod(0o755)
+        candidate = commit(repo, {'rebuild/core/a.py': 'two\n'}, 'candidate')
+        git(repo, 'checkout', '-q', 'main')
+        git(repo, 'config', 'gc.auto', '1')
+        git(repo, 'config', 'gc.autoDetach', 'false')
+        # gc --auto samples objects/17: with gc.auto=1 it is due once that bucket holds more than one loose object.
+        index, bucket = 0, repo / '.git/objects/17'
+        while not bucket.is_dir() or len(list(bucket.iterdir())) < 3:
+            body = b'loose %d\n' % index
+            raw = b'blob %d\0' % len(body) + body
+            digest = hashlib.sha1(raw).hexdigest()
+            if digest.startswith('17'):
+                bucket.mkdir(exist_ok=True)
+                (bucket / digest[2:]).write_bytes(zlib.compress(raw))
+            index += 1
+        with op.act_git_environment():
+            subprocess.run(['git', '-C', str(repo), 'merge', '--ff-only', candidate], capture_output=True,
+                           check=True, env={**os.environ, **GIT_ENV})
+        self.assertEqual(git(repo, 'rev-parse', 'HEAD'), candidate)
+        self.assertFalse(marker.exists())
+        self.assertNotIn('GIT_CONFIG_COUNT', os.environ)    # restored
+        # Control: the same merge without the act's git environment runs both hooks.
+        git(repo, 'reset', '-q', '--hard', base)
+        subprocess.run(['git', '-C', str(repo), 'merge', '--ff-only', candidate], capture_output=True, check=True,
+                       env={**os.environ, **GIT_ENV})
+        self.assertEqual({Path(line).name for line in marker.read_text().split()}, {'post-merge', 'pre-auto-gc'})
+        with patch.dict(os.environ, {'GIT_DIR': str(repo / '.git')}), self.assertRaises(op.Refusal):
+            with op.act_git_environment():
+                pass
+
+    def test_gi2_origin_main_is_read_exactly_on_both_sides(self):
+        origin = self.root / 'origin.git'
+        git(self.root, 'init', '-q', '--bare', '-b', 'main', str(origin))
+        work, other = self.root / 'work', self.root / 'other'
+        git(self.root, 'clone', '-q', str(origin), str(work))
+        commit(work, {'a.txt': 'one\n'}, 'base')
+        git(work, 'push', '-q', 'origin', 'HEAD:refs/heads/main')
+        candidate = commit(work, {'a.txt': 'two\n'}, 'candidate')
+        git(work, 'push', '-q', 'origin', 'HEAD:refs/heads/main')
+        git(work, 'fetch', '-q', 'origin')
+        with patch.object(op, 'ROOT', work), patch.object(op, 'SOURCE', work):
+            self.assertEqual(op.origin_main_is(candidate), {'origin_main': candidate})
+            # main moves on the remote; a branch whose name ends in /refs/heads/main still names the candidate
+            git(self.root, 'clone', '-q', str(origin), str(other))
+            moved = commit(other, {'a.txt': 'three\n'}, 'moved')
+            git(other, 'push', '-q', 'origin', 'HEAD:refs/heads/main')
+            git(work, 'push', '-q', 'origin', candidate + ':refs/heads/decl/refs/heads/main')
+            with self.assertRaises(op.Refusal) as caught:
+                op.origin_main_is(candidate)
+            self.assertEqual(str(caught.exception), 'remote_main_is_candidate')
+            # the tracking ref catches up: now a local branch named origin/main shadows it for `rev-parse origin/main`
+            git(work, 'fetch', '-q', 'origin')
+            self.assertEqual(op.origin_main_is(moved), {'origin_main': moved})
+            git(work, 'branch', 'origin/main', candidate)
+            with self.assertRaises(op.Refusal) as caught:
+                op.origin_main_is(moved)
+            self.assertEqual(str(caught.exception), 'origin_main_unambiguous')
 
 
 class HostReadTests(unittest.TestCase):
@@ -343,36 +627,92 @@ class HostReadTests(unittest.TestCase):
         with self.assertRaises(op.Refusal):
             op.venv_sharing_units(prior, {'bad name; rm': ''})
 
-    def test_live_venv_users_and_the_undeclared_process_refusal(self):
+    def test_pt1_live_venv_users_read_the_executable_and_the_process_s_own_path(self):
+        uid = os.getuid()
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
+            interpreter = root / 'interp'
+            interpreter.write_bytes(b'#!/bin/sh\n')
+            interpreter.chmod(0o755)
             venv = root / 'venv'
             (venv / 'bin').mkdir(parents=True)
+            (venv / 'bin/python3').symlink_to(interpreter)
+            (venv / 'bin/python').symlink_to('python3')
+            sysbin = root / 'sysbin'
+            sysbin.mkdir()
+            (sysbin / 'python3').symlink_to(interpreter)
             link = root / 'worktree-venv'
             link.symlink_to(venv)
-            proc = root / 'proc'
-            processes = {
-                '10': ([str(venv / 'bin/python'), '-m', 'gunicorn'], '0::/system.slice/quillmd-corti-candidate.service\n'),
-                '11': ([str(link / 'bin/python'), '-m', 'pytest'], '0::/user.slice/user-1000.slice/session-3.scope\n'),
-                '12': (['/usr/bin/python3', 'other.py'], '0::/system.slice/other.service\n'),
-                '13': (['.venv/bin/python', 'manage.py'], '0::/system.slice/quillmd-fresh-worker.service\n'),
-                '14': (['python', 'x'], '0::/system.slice/x.service\n')}
-            for pid, (argv, cgroup) in processes.items():
-                (proc / pid).mkdir(parents=True)
-                (proc / pid / 'cmdline').write_bytes(b'\0'.join(a.encode() for a in argv) + b'\0')
-                (proc / pid / 'cgroup').write_text(cgroup)
-            (proc / '13' / 'cwd').symlink_to(root)
             os.symlink('venv', root / '.venv')
+            proc = root / 'proc'
+            corti, worker = 'quillmd-corti-candidate.service', 'quillmd-fresh-worker.service'
+            processes = {   # argv, unit, uid, exe target, environ PATH, cwd
+                '10': ([str(venv / 'bin/python'), '-m', 'gunicorn'], corti, 999, None, None, None),
+                '11': ([str(link / 'bin/python'), '-m', 'pytest'], None, uid, None, None, None),
+                '12': (['/usr/bin/python3', 'other.py'], 'other.service', 999, None, None, None),
+                '13': (['.venv/bin/python', 'manage.py'], worker, 999, None, None, root),
+                '14': (['python', '-m', 'pip'], 'x.service', uid, interpreter, '%s/bin:%s' % (venv, sysbin), None),
+                '15': (['python3', '-c', 'pass'], None, uid, interpreter, '%s:%s/bin' % (sysbin, venv), None),
+                '16': (['python', 'y.py'], None, uid, None, None, None),
+                '17': (['python', 'z.py'], None, 999, None, None, None),
+                '18': ([str(venv / 'bin/python'), 'w'], None, uid, root / 'other-binary', None, None),
+                '19': (['gunicorn: worker [app]'], None, uid, interpreter, '/usr/bin', None),
+                '20': (['nginx: worker process'], 'nginx.service', 999, None, None, None)}
+            for pid, (argv, unit, owner, exe, path, cwd) in processes.items():
+                entry = proc / pid
+                entry.mkdir(parents=True)
+                (entry / 'cmdline').write_bytes(b'\0'.join(a.encode() for a in argv) + b'\0')
+                (entry / 'cgroup').write_text('0::/system.slice/%s\n' % unit if unit else
+                                              '0::/user.slice/user-1000.slice/session-3.scope\n')
+                (entry / 'status').write_text('Name:\tx\nUid:\t%d\t%d\t%d\t%d\n' % ((owner,) * 4))
+                if exe is not None:
+                    (entry / 'exe').symlink_to(exe)
+                if path is not None:
+                    (entry / 'environ').write_bytes(b'HOME=/x\0PATH=' + path.encode() + b'\0')
+                if cwd is not None:
+                    (entry / 'cwd').symlink_to(cwd)
             (proc / 'self').mkdir()
-            users = op.live_venv_users(proc, venv)
-            self.assertEqual(users, [{'pid': 10, 'unit': 'quillmd-corti-candidate.service'},
-                                     {'pid': 11, 'unit': None},
-                                     {'pid': 13, 'unit': 'quillmd-fresh-worker.service'}])
-            with self.assertRaises(op.Refusal):
-                op.no_undeclared_venv_users(['quillmd-corti-candidate.service'], users)
-            allowed = [row for row in users if row['pid'] != 11]
-            self.assertEqual(op.no_undeclared_venv_users(['quillmd-corti-candidate.service'], allowed)['processes'], 2)
-            self.assertEqual(op.live_venv_users(proc, venv, exclude={10, 11, 13}), [])
+            users = op.live_venv_users(proc, venv, uid=uid)
+            self.assertEqual(users, [{'pid': 10, 'unit': corti}, {'pid': 11, 'unit': None},
+                                     {'pid': 13, 'unit': worker}, {'pid': 14, 'unit': 'x.service'},
+                                     {'pid': 16, 'unit': None, 'undetermined': True},
+                                     {'pid': 17, 'unit': None, 'uninspectable': True},
+                                     {'pid': 19, 'unit': None, 'undetermined': True}])
+            with self.assertRaises(op.Refusal) as caught:
+                op.no_undeclared_venv_users([corti], users)
+            self.assertEqual(str(caught.exception), 'undeterminable_operator_interpreter_process')
+            determined = [row for row in users if not row.get('undetermined')]
+            with self.assertRaises(op.Refusal) as caught:
+                op.no_undeclared_venv_users([corti], determined)
+            self.assertEqual(str(caught.exception), 'undeclared_process_on_the_live_venv')
+            allowed = [row for row in determined if row['pid'] not in (11, 14)]
+            self.assertEqual(op.no_undeclared_venv_users([corti], allowed),
+                             {'processes': 2, 'units': [corti, worker], 'uninspectable_other_users': 1})
+            self.assertEqual(op.live_venv_users(proc, venv, exclude={10, 11, 13, 14, 16, 17, 19}, uid=uid), [])
+
+    def test_pt1_a_real_bare_interpreter_on_the_venv_s_path_is_found(self):
+        """PT-1 with real processes: `source .venv/bin/activate && python3 ...` shows only "python3" in argv."""
+        with tempfile.TemporaryDirectory() as temporary:
+            venv = Path(temporary).resolve() / 'venv'
+            (venv / 'bin').mkdir(parents=True)
+            (venv / 'pyvenv.cfg').write_text('home = %s\n' % Path(os.path.realpath(sys.executable)).parent)
+            (venv / 'bin/python3').symlink_to(os.path.realpath(sys.executable))
+            (venv / 'bin/python').symlink_to('python3')
+            code = 'import sys,time; print(sys.prefix, flush=True); time.sleep(30)'
+            started = [subprocess.Popen(['bash', '-c', 'PATH=%s:/usr/bin:/bin exec python3 -B -c "%s"' % (bin_, code)],
+                                        stdout=subprocess.PIPE) for bin_ in (venv / 'bin', '/usr/local/nothing')]
+            try:
+                prefixes = [process.stdout.readline().decode().strip() for process in started]
+                self.assertEqual(prefixes[0], str(venv))     # it IS a process of that venv
+                self.assertNotEqual(prefixes[1], str(venv))
+                found = {row['pid'] for row in op.live_venv_users(venv=venv)}
+                self.assertIn(started[0].pid, found)
+                self.assertNotIn(started[1].pid, found)
+            finally:
+                for process in started:
+                    process.kill()
+                    process.wait()
+                    process.stdout.close()
 
 
 class ReportingTests(unittest.TestCase):
@@ -396,6 +736,7 @@ class ReportingTests(unittest.TestCase):
         self.assertEqual(op.reason(op.Refusal('venv_footprint_changed')), 'venv_footprint_changed')
         self.assertEqual(op.reason(footprint.Refusal('stable_complete_file')), 'stable_complete_file')
         self.assertEqual(op.reason(engine_module.Refusal('owned_units_drained')), 'owned_units_drained')
+        self.assertEqual(op.reason(op.Interrupted('SIGTERM')), 'interrupted_by_SIGTERM')
         self.assertEqual(op.reason(RuntimeError('password=x')), 'RuntimeError')
         self.assertEqual(op.reason(op.Refusal('newline\nin label')), 'Refusal')
 
@@ -411,6 +752,23 @@ class ReportingTests(unittest.TestCase):
             (root / 'open').chmod(0o755)
             with self.assertRaises(op.Refusal):
                 op.write_result(root / 'open/result.json', {})
+
+    def test_as6_signals_raise_interrupted_in_the_main_thread_and_the_handlers_come_back(self):
+        self.assertEqual(set(op.SIGNALS), set(ROUTED_SIGNALS))
+        before = {name: signal.getsignal(getattr(signal, name)) for name in ROUTED_SIGNALS}
+        for name in ROUTED_SIGNALS:
+            with self.subTest(signal=name):
+                with self.assertRaises(op.Interrupted) as caught:
+                    with op.signal_routing():
+                        os.kill(os.getpid(), getattr(signal, name))
+                        wait_for_signal()
+                self.assertEqual(caught.exception.signal_name, name)
+        with op.signal_routing() as state:
+            state['raising'] = False
+            os.kill(os.getpid(), signal.SIGTERM)
+            wait_for_signal()
+            self.assertEqual(state['received'], ['SIGTERM'])
+        self.assertEqual({name: signal.getsignal(getattr(signal, name)) for name in ROUTED_SIGNALS}, before)
 
 
 class EngineBindingTests(unittest.TestCase):
@@ -463,11 +821,17 @@ class EngineBindingTests(unittest.TestCase):
                      and isinstance(node.value, ast.Constant)]
             return [node.value.value for node in sorted(found, key=lambda node: (node.lineno, node.col_offset))]
         inserted = {'baseline_foreign_idle', 'baseline_venv', 'venv_after_stop', 'foreign_services_after_stop',
+                    'configuration_after_stop', 'clinical_files_after_stop', 'git_state_after_stop',
                     'foreign_idle_after_resume', 'venv_after_resume'}
         ours = stages(op.__file__, 'act')
         engine = stages(engine_module.__file__, 'execute')
         self.assertTrue(inserted <= set(ours))
         self.assertEqual([stage for stage in ours if stage not in inserted], engine)
+        # Every re-comparison before publication sits after the stop and before the merge.
+        for stage in ('venv_after_stop', 'foreign_services_after_stop', 'configuration_after_stop',
+                      'clinical_files_after_stop', 'git_state_after_stop'):
+            self.assertLess(ours.index('stop_owned_services'), ours.index(stage))
+            self.assertLess(ours.index(stage), ours.index('source_publication'))
 
 
 class FakeCipher:
@@ -496,6 +860,16 @@ class World:
                          'pending': {'core_job': 0}, 'sequences': {'s': [1, True]}}
         self.services = {self.UNIT: 'MainPID=7\nInvocationID=abc\n'}
         self.faults = {}
+        self.configurations = []        # values for successive configuration reads (else a fixed one)
+        self.inventories = []           # values for successive clinical-file inventories (else a fixed one)
+        self.start_failures = set()     # units whose start helper fails
+        self.start_inert = set()        # units whose `systemctl start` returns but never become active
+        self.gate = {}
+        for relative in op.TRUSTED_GATE_SCRIPTS:
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b'# the base copy of ' + relative.encode() + b'\n')
+            self.gate[relative] = op.sha(path.read_bytes())
         venv_root = root / 'venv'
         (venv_root / 'lib').mkdir(parents=True)
         (venv_root / 'lib/module.py').write_text('x = 1\n')
@@ -519,10 +893,17 @@ class World:
 
             def service(self, action, unit):
                 world.calls.append((action, unit))
+                if action == 'start' and unit in world.start_failures:
+                    raise managed_helper.HelperFailure('deadline')
+                if action == 'start' and unit in world.start_inert:
+                    return
                 world.running[unit] = action == 'start'
 
             def configuration(self):
                 world.fault('configuration')
+                world.calls.append(('configuration',))
+                if world.configurations:
+                    return world.configurations.pop(0)
                 return {'/etc/systemd/system/x.service': {'sha256': 'a' * 64}}
         return Host()
 
@@ -542,12 +923,20 @@ class World:
         self.calls.append(('snapshot',))
         return deepcopy(self.database)
 
+    def inventory(self, root):
+        self.calls.append(('inventory',))
+        if self.inventories:
+            return self.inventories.pop(0)
+        return {'a.pdf': {'sha256': 'b' * 64}}
+
     def publish(self, plan, guard, prepared):
         self.calls.append(('publish',))
         self.fault('publish')
 
     def health(self, revision):
         self.fault('health')
+        self.fault('health_' + ('base' if revision == BASE else 'candidate'))
+        self.calls.append(('health', revision))
         return {'status': 'ok', 'release': revision}
 
     def foreign(self):
@@ -560,6 +949,19 @@ class World:
             host.service('stop', unit)
         return {'all_units_inactive': True}
 
+    def command(self, argv, **options):
+        self.calls.append(('citation', argv[1], options.get('cwd')))
+        return '**Citation \u2014 2 of 2 on `{}`:**\n'.format(argv[2]).encode()
+
+    def verify_original(self, original, guard, prepared):
+        self.fault('verify_original')
+        self.calls.append(('verified_original',))
+
+    def source_state(self):
+        self.fault('source_state')
+        self.calls.append(('source_state',))
+        return {'head': BASE}
+
     def engine(self):
         prior = SimpleNamespace(
             ROOT=self.root, APP=self.app, UNITS=op.OWNED_UNITS, sha=op.sha, write_new=engine_module.prior.write_new,
@@ -568,12 +970,11 @@ class World:
                                            key_at=lambda key: FakeCipher()),
             source_guard=lambda: SimpleNamespace(),
             source_plan=lambda plan, guard: {'before': {}, 'after': {}},
-            publish_source=self.publish,
-            command=lambda argv, **options: self.calls.append(('citation',)) or b'',
+            publish_source=self.publish, command=self.command,
             activation_exclusion=SimpleNamespace(bind_runtime=lambda path: None, hold=self.hold),
             legacy=SimpleNamespace(Host=self.host, operation_locks=self.locks, KEY=Path('/nonexistent'),
                                    static_primitives=lambda: SimpleNamespace(static_inventory=lambda root: {'.': {'kind': 'directory'}})),
-            private_storage=SimpleNamespace(inventory=lambda root: {'a.pdf': {'sha256': 'b' * 64}}),
+            private_storage=SimpleNamespace(inventory=self.inventory),
             foreign_services=self.foreign, await_health=self.health)
         return SimpleNamespace(
             prior=prior, snapshot=self.snapshot, unchanged=engine_module.unchanged,
@@ -582,8 +983,7 @@ class World:
             stop_failed_resume=self.drain,
             failure_diagnostics=lambda error: {'failure_type': type(error).__name__,
                                                'reason': 'protected_operational_failure'},
-            verify_original_before_resume=lambda original, guard, prepared: self.calls.append(('verified_original',)),
-            verify_static_rollback=None)
+            verify_original_before_resume=self.verify_original, verify_static_rollback=None)
 
     def plan(self):
         return {'format': op.FORMAT, 'base': BASE, 'candidate': CANDIDATE, 'source_sha256': {},
@@ -591,11 +991,12 @@ class World:
                 'environment': {}, 'static': [], 'manifest_sha256': 'a' * 64, 'code_manifest_sha256': 'b' * 64,
                 'declaration': {'commit': 'c' * 40, 'sha256': 'd' * 64}, 'backup': {},
                 'venv_footprint_sha256': self.venv['footprint_sha256'], 'foreign_venv_units': [self.UNIT],
-                'plan_sha256': 'e' * 64}
+                'gate_scripts': dict(self.gate), 'plan_sha256': 'e' * 64}
 
     def context(self):
         return {'environment': {'original': self.env}, 'report': {'format': 'preflight'}, 'venv': self.venv,
-                'services': dict(self.services)}
+                'services': dict(self.services),
+                'measured': {'manifest': {'format': op.MANIFEST_FORMAT, 'base': BASE, 'paths': {}}}}
 
 
 class ActTests(unittest.TestCase):
@@ -607,18 +1008,45 @@ class ActTests(unittest.TestCase):
         os.chdir(self.root)
         self.addCleanup(os.chdir, self.cwd)
         self.addCleanup(self.temporary.cleanup)
+        self.stderr = None
 
-    def act(self):
-        world = self.world
-        with redirect_stderr(io.StringIO()):
-            return op.act(world.engine(), world.plan(), world.context(), footprint=footprint,
-                          idle=lambda units: world.idles.pop(0), snapshot_venv=lambda path: world.venvs.pop(0))
+    def act(self, world=None, engine=None):
+        world = world or self.world
+        os.chdir(world.root)
+        self.stderr = io.StringIO()
+        with redirect_stderr(self.stderr):
+            return op.act(engine or world.engine(), world.plan(), world.context(), footprint=footprint,
+                          idle=lambda units: world.idles.pop(0), snapshot_venv=lambda path: world.venvs.pop(0),
+                          source_state=world.source_state)
 
-    def evidence(self, name):
-        return json.loads((self.root / 'evidence' / name).read_text())
+    def fresh(self, name):
+        root = self.root / name
+        root.mkdir()
+        return World(root)
 
-    def services(self):
-        return [call for call in self.world.calls if call[0] in ('start', 'stop')]
+    def evidence(self, name, world=None):
+        return json.loads(((world or self.world).root / 'evidence' / name).read_text())
+
+    def exists(self, name, world=None):
+        return ((world or self.world).root / 'evidence' / name).exists()
+
+    def services(self, world=None):
+        return [call for call in (world or self.world).calls if call[0] in ('start', 'stop')]
+
+    def assert_restored(self, world=None, stage=None):
+        world = world or self.world
+        self.assertEqual(self.services(world)[-3:], [('start', op.OWNED_UNITS[2]), ('start', op.OWNED_UNITS[0]),
+                                                     ('start', op.OWNED_UNITS[1])])
+        resumed = self.evidence('original-release-resumed.json', world)
+        self.assertEqual((resumed['release'], resumed['original_release_serving'], resumed['health']['release']),
+                         (BASE, True, BASE))
+        self.assertTrue(all(resumed['units_active'].values()))
+        self.assertIn(('health', BASE), world.calls)
+        failure = self.evidence('failure.json', world)
+        self.assertEqual((failure['recovery'], failure['publication_attempted']), ('restore', False))
+        if stage:
+            self.assertEqual(failure['stage'], stage)
+        return failure
 
     def test_success_runs_in_the_engine_order_and_changes_only_the_release_stamp(self):
         result, passed = self.act()
@@ -633,9 +1061,18 @@ class ActTests(unittest.TestCase):
         self.assertEqual((self.world.app / '.env').read_bytes(),
                          self.world.env.replace(BASE.encode(), CANDIDATE.encode()))
         self.assertEqual(result['dependency_installs'], 0)
-        self.assertFalse((self.root / 'evidence/failure.json').exists())
+        self.assertFalse(self.exists('failure.json'))
         self.assertEqual(self.evidence('installation-complete.json')['installed_revision'], CANDIDATE)
         self.assertTrue(self.evidence('pre-resume-preservation.json')['venv_exact_before_publication'])
+        self.assertEqual(set(result['postconditions']), set(op.POSTCONDITIONS))
+        # GI-1: the citation ran the base's pinned copy in the shared tree, with the shared tree as cwd.
+        self.assertIn(('citation', str(self.root / 'scripts/check-citation.sh'), self.root), calls)
+        # AS-3/PT-2: configuration, clinical files and git's state measured again after the stop, before the merge.
+        stop, publish = calls.index(('stop', op.OWNED_UNITS[2])), calls.index(('publish',))
+        between = calls[stop:publish]
+        for call in (('configuration',), ('inventory',), ('source_state',)):
+            self.assertIn(call, between)
+        self.assertNotIn('GIT_CONFIG_COUNT', os.environ)
 
     def test_a_venv_change_before_publication_refuses_and_restores_the_original_release(self):
         self.world.venvs = [self.world.venv, self.world.changed_venv]
@@ -644,12 +1081,8 @@ class ActTests(unittest.TestCase):
         self.assertEqual(str(caught.exception), 'installation_failed_inspect_retained_evidence')
         self.assertNotIn(('publish',), self.world.calls)
         self.assertIn(('verified_original',), self.world.calls)
-        self.assertEqual(self.services()[3:], [('start', op.OWNED_UNITS[2]), ('start', op.OWNED_UNITS[0]),
-                                               ('start', op.OWNED_UNITS[1])])
-        failure = self.evidence('failure.json')
-        self.assertEqual((failure['stage'], failure['label'], failure['publication_attempted']),
-                         ('venv_after_stop', 'venv_unchanged_before_publication', False))
-        self.assertEqual(self.evidence('original-release-resumed.json'), {'release': BASE})
+        failure = self.assert_restored(stage='venv_after_stop')
+        self.assertEqual(failure['label'], 'venv_unchanged_before_publication')
         self.assertEqual((self.world.app / '.env').read_bytes(), self.world.env)
 
     def test_busy_venv_sharing_units_refuse_before_anything_stops(self):
@@ -671,7 +1104,54 @@ class ActTests(unittest.TestCase):
         with self.assertRaises(op.Refusal):
             self.act()
         self.assertNotIn(('publish',), self.world.calls)
-        self.assertTrue((self.root / 'evidence/original-release-resumed.json').exists())
+        self.assert_restored(stage='foreign_services_after_stop')
+
+    def test_as3_configuration_files_or_git_state_changed_while_serving_refuse_before_publication_and_restore(self):
+        """AS-3 (and PT-2 after the stop): a change between the baseline and the stop restores, never drains."""
+        cases = {
+            'configuration': (lambda w: w.configurations.extend([{'/etc/nginx/x': 'a'}, {'/etc/nginx/x': 'b'}]),
+                              'configuration_after_stop', 'configuration_preserved_before_publication'),
+            'clinical_files': (lambda w: w.inventories.extend([{'a.pdf': 1}, {'a.pdf': 1, 'b.pdf': 2}]),
+                               'clinical_files_after_stop', 'clinical_files_preserved_before_publication'),
+            'git_state': (lambda w: w.faults.__setitem__('source_state', op.Refusal('git_lock_file_present')),
+                          'git_state_after_stop', 'git_lock_file_present')}
+        for name, (setup, stage, label) in cases.items():
+            with self.subTest(change=name):
+                world = self.fresh(name)
+                setup(world)
+                with self.assertRaises(op.Refusal) as caught:
+                    self.act(world)
+                self.assertEqual(str(caught.exception), 'installation_failed_inspect_retained_evidence')
+                self.assertNotIn(('publish',), world.calls)
+                failure = self.assert_restored(world, stage=stage)
+                self.assertEqual(failure['label'], label)
+
+    def test_as2_a_publication_git_refused_before_any_change_restores_the_original_release(self):
+        """AS-2/PT-2: a merge git refused (another process's index.lock) or a refusal inside publish_source before
+        the merge leaves HEAD at BASE; verify_original_before_resume measures that and the original is restored."""
+        self.world.faults['publish'] = engine_module.Refusal('bounded_command_failed')
+        with self.assertRaises(op.Refusal) as caught:
+            self.act()
+        self.assertEqual(caught.exception.outcome['recovery'], 'restore')
+        self.assertTrue(caught.exception.outcome['original_release_serving'])
+        failure = self.assert_restored(stage='source_publication')
+        self.assertTrue(failure['merge_invoked'])
+        self.assertEqual(failure['original_verification'], {'original_intact': True})
+
+    def test_as2_a_merge_that_moved_the_tree_is_publication_and_leaves_the_units_drained(self):
+        """HEAD.lock: git updated the index and the working tree, then refused the ref: publication began."""
+        self.world.faults['publish'] = engine_module.Refusal('bounded_command_failed')
+        self.world.faults['verify_original'] = engine_module.Refusal('clean_original_checkout_before_recovery')
+        with self.assertRaises(op.Refusal) as caught:
+            self.act()
+        self.assertEqual(str(caught.exception), 'installation_failed_inspect_retained_evidence')
+        self.assertEqual([call[0] for call in self.services()], ['stop', 'stop', 'stop'])
+        failure = self.evidence('failure.json')
+        self.assertEqual((failure['publication_attempted'], failure['recovery'], failure['merge_invoked']),
+                         (True, 'none', True))
+        self.assertEqual(failure['original_verification']['label'], 'clean_original_checkout_before_recovery')
+        self.assertFalse(self.exists('original-release-resumed.json'))
+        self.assertFalse(self.exists('original-recovery-refused.json'))
 
     def test_a_failure_after_publication_leaves_the_units_drained_without_retry(self):
         self.world.faults['snapshot_2'] = op.Refusal('database_moved')
@@ -681,7 +1161,16 @@ class ActTests(unittest.TestCase):
         self.assertEqual([call[0] for call in self.services()], ['stop', 'stop', 'stop'])
         failure = self.evidence('failure.json')
         self.assertTrue(failure['publication_attempted'] and failure['stopped'] and not failure['resume_started'])
-        self.assertFalse((self.root / 'evidence/original-release-resumed.json').exists())
+        self.assertFalse(self.exists('original-release-resumed.json'))
+
+    def test_an_unverifiable_original_is_not_restarted(self):
+        self.world.venvs = [self.world.venv, self.world.changed_venv]
+        self.world.faults['verify_original'] = engine_module.Refusal('new_source_absent_before_recovery')
+        with self.assertRaises(op.Refusal) as caught:
+            self.act()
+        self.assertEqual(str(caught.exception), 'original_recovery_refused_inspect_retained_evidence')
+        self.assertEqual([call[0] for call in self.services()], ['stop', 'stop', 'stop'])
+        self.assertEqual(self.evidence('original-recovery-refused.json')['label'], 'new_source_absent_before_recovery')
 
     def test_a_failed_resume_is_drained_before_the_failure_is_retained(self):
         self.world.faults['health'] = op.Refusal('normal_https_readiness_deadline')
@@ -691,17 +1180,174 @@ class ActTests(unittest.TestCase):
         self.assertTrue(self.evidence('failed-resume-drain.json')['all_units_inactive'])
         self.assertEqual(self.evidence('failure.json')['stage'], 'normal_https_health')
 
+    def test_as4_a_disk_that_fills_after_the_stop_still_restores_every_unit_and_says_so(self):
+        """AS-4(a): ENOSPC on database-after-stop.json, failure.json and the outcome file."""
+        engine = self.world.engine()
+        real = engine.prior.write_new
+
+        def write_new(path, value):
+            if Path(path).name in ('database-after-stop.json', 'failure.json', 'original-release-resumed.json'):
+                raise OSError(errno.ENOSPC, 'No space left on device')
+            return real(path, value)
+        engine.prior.write_new = write_new
+        with self.assertRaises(op.Refusal) as caught:
+            self.act(engine=engine)
+        outcome = caught.exception.outcome
+        self.assertEqual((outcome['recovery'], outcome['original_release_serving'], outcome['failure_json'],
+                          outcome['outcome_file']), ('restore', True, False, False))
+        self.assertEqual(self.services()[3:], [('start', op.OWNED_UNITS[2]), ('start', op.OWNED_UNITS[0]),
+                                               ('start', op.OWNED_UNITS[1])])
+        lines = [json.loads(line.split(op.STAGE_LOG, 1)[1]) for line in self.stderr.getvalue().splitlines()
+                 if line.startswith(op.STAGE_LOG + ' {')]
+        self.assertIn('rebuild_release_outcome', lines[-1])
+        self.assertEqual(lines[-1]['rebuild_release_outcome']['stage'], 'retain_database_after_stop')
+        self.assertTrue(any(line.get('evidence_write_failed') == 'failure.json' for line in lines))
+
+    def test_as4_as5_every_unit_is_started_and_a_restore_counts_only_when_measured(self):
+        """AS-4(b): a failing start never skips the others. AS-5: `start` returning proves nothing by itself."""
+        cases = {'worker_start_fails': lambda w: w.start_failures.add(op.OWNED_UNITS[2]),
+                 'units_never_become_active': lambda w: w.start_inert.update(op.OWNED_UNITS),
+                 'health_does_not_report_base': lambda w: w.faults.__setitem__(
+                     'health_base', engine_module.Refusal('normal_https_readiness_deadline'))}
+        for name, setup in cases.items():
+            with self.subTest(case=name):
+                world = self.fresh(name)
+                world.venvs = [world.venv, world.changed_venv]
+                setup(world)
+                with self.assertRaises(op.Refusal) as caught:
+                    self.act(world)
+                self.assertEqual(str(caught.exception), 'original_restore_unverified_inspect_retained_evidence')
+                self.assertEqual(self.services(world)[3:], [('start', op.OWNED_UNITS[2]),
+                                                            ('start', op.OWNED_UNITS[0]),
+                                                            ('start', op.OWNED_UNITS[1])])
+                self.assertFalse(self.exists('original-release-resumed.json', world))
+                unverified = self.evidence('original-release-restore-unverified.json', world)
+                self.assertFalse(unverified['original_release_serving'])
+                self.assertEqual(self.evidence('failure.json', world)['recovery'], 'restore')
+
+    def test_as6_a_termination_signal_while_the_units_are_stopped_takes_the_failure_path(self):
+        """AS-6: SIGTERM, SIGINT or SIGHUP outside any helper call restores (here: the database read after the
+        stop), and a second signal during the restore is recorded without cutting it short."""
+        before = {name: signal.getsignal(getattr(signal, name)) for name in ROUTED_SIGNALS}
+        for name in ROUTED_SIGNALS:
+            with self.subTest(signal=name):
+                world = self.fresh(name)
+                engine = world.engine()
+                real_snapshot, real_host = engine.snapshot, engine.prior.legacy.Host
+
+                def snapshot(environment, world=world, real_snapshot=real_snapshot, name=name):
+                    if sum(call[0] == 'snapshot' for call in world.calls) == 1:
+                        os.kill(os.getpid(), getattr(signal, name))
+                        wait_for_signal()
+                    return real_snapshot(environment)
+
+                def host(helper, real_host=real_host, world=world):
+                    instance = real_host(helper)
+                    service = instance.service
+
+                    def signalled(action, unit):
+                        if action == 'start' and not any(call[0] == 'start' for call in world.calls):
+                            os.kill(os.getpid(), signal.SIGTERM)
+                            wait_for_signal()
+                        return service(action, unit)
+                    instance.service = signalled
+                    return instance
+                engine.snapshot, engine.prior.legacy.Host = snapshot, host
+                with self.assertRaises(op.Refusal) as caught:
+                    self.act(world, engine)
+                failure = self.assert_restored(world, stage='database_after_stop')
+                self.assertEqual((failure['label'], failure['signals_received']), ('interrupted_by_' + name, [name]))
+                self.assertEqual(caught.exception.outcome['signals_received'], [name, 'SIGTERM'])
+        self.assertEqual({name: signal.getsignal(getattr(signal, name)) for name in ROUTED_SIGNALS}, before)
+
     def test_post_conditions_after_resume_are_reported_for_judgement_not_drained(self):
         self.world.venvs = [self.world.venv, self.world.venv, self.world.changed_venv]
         self.world.idles = [{'idle': True, 'units': {}}, {'idle': False, 'units': {}}]
         result, passed = self.act()
         self.assertFalse(passed)
-        self.assertEqual(result['postconditions'], {'venv_sharing_units_idle_after_resume': False,
+        self.assertEqual(result['postconditions'], {'configuration_preserved_after_resume': True,
+                                                    'foreign_services_preserved_after_resume': True,
+                                                    'venv_sharing_units_idle_after_resume': False,
                                                     'venv_exact_after_resume': False})
         self.assertEqual(result['venv_change']['difference']['added'], ['lib/stray.pyc'])
         self.assertEqual(self.services()[-3:], [('start', op.OWNED_UNITS[2]), ('start', op.OWNED_UNITS[0]),
                                                 ('start', op.OWNED_UNITS[1])])
-        self.assertFalse((self.root / 'evidence/failure.json').exists())
+        self.assertFalse(self.exists('failure.json'))
+
+    def test_as7_after_a_healthy_resume_nothing_drains_the_release(self):
+        """AS-7: a foreign restart, a configuration read that fails, or an interrupt after health passed is
+        reported in installation-complete.json and the act returns for judgement (exit 2)."""
+        def foreign_restart(world, engine):
+            real = engine.prior.foreign_services
+            count = {'n': 0}
+
+            def foreign():
+                count['n'] += 1
+                services = real()
+                if count['n'] >= 4:     # baseline, after the stop, before the resume; then after the resume
+                    services[World.UNIT] = 'MainPID=8\nInvocationID=def\n'
+                return services
+            engine.prior.foreign_services = foreign
+
+        def configuration_timeout(world, engine):
+            real_host = engine.prior.legacy.Host
+
+            def host(helper):
+                instance = real_host(helper)
+                read = instance.configuration
+                count = {'n': 0}
+
+                def configuration():
+                    count['n'] += 1
+                    if count['n'] == 4:
+                        raise managed_helper.HelperFailure('deadline')
+                    return read()
+                instance.configuration = configuration
+                return instance
+            engine.prior.legacy.Host = host
+
+        def interrupt_in_idle(world, engine):
+            answers = iter([{'idle': True, 'units': {}}])
+
+            def idle(units):
+                value = next(answers, None)
+                if value is None:
+                    os.kill(os.getpid(), signal.SIGTERM)
+                    wait_for_signal()
+                return value
+            world.idle_function = idle
+        cases = {'foreign_restart': (foreign_restart, 'foreign_services_preserved_after_resume', None),
+                 'configuration_read_times_out': (configuration_timeout, 'configuration_preserved_after_resume', None),
+                 'interrupt_in_the_idle_window': (interrupt_in_idle, 'venv_sharing_units_idle_after_resume',
+                                                  'SIGTERM')}
+        for name, (setup, failed, interrupted) in cases.items():
+            with self.subTest(case=name):
+                world = self.fresh(name)
+                engine = world.engine()
+                setup(world, engine)
+                idle = getattr(world, 'idle_function', None)
+                os.chdir(world.root)
+                with redirect_stderr(io.StringIO()):
+                    result, passed = op.act(engine, world.plan(), world.context(), footprint=footprint,
+                                            idle=idle or (lambda units: world.idles.pop(0)),
+                                            snapshot_venv=lambda path: world.venvs.pop(0),
+                                            source_state=world.source_state)
+                self.assertFalse(passed)
+                self.assertFalse(result['postconditions'][failed])
+                self.assertEqual(result['interrupted'], interrupted)
+                self.assertEqual([call[0] for call in self.services(world)], ['stop'] * 3 + ['start'] * 3)
+                self.assertFalse(self.exists('failure.json', world))
+                receipt = self.evidence('installation-complete.json', world)
+                self.assertEqual((receipt['installed_revision'], receipt['all_postconditions_passed']),
+                                 (CANDIDATE, False))
+
+    def test_gi1_a_gate_script_changed_after_the_preflight_refuses_before_anything(self):
+        (self.root / 'scripts/check-citation.sh').write_text('#!/usr/bin/env bash\nexit 0\n')
+        with self.assertRaises(op.Refusal) as caught:
+            self.act()
+        self.assertEqual(str(caught.exception), 'gate_script_unchanged')
+        self.assertFalse((self.root / 'evidence').exists())
+        self.assertEqual(self.services(), [])
 
     def test_an_environment_changed_since_the_preflight_refuses_before_any_evidence(self):
         (self.world.app / '.env').write_bytes(self.world.env + b'EXTRA=1\n')
@@ -713,7 +1359,8 @@ class ActTests(unittest.TestCase):
     def test_the_act_refuses_outside_the_permanent_tree(self):
         os.chdir(self.cwd)
         with self.assertRaises(op.Refusal):
-            self.act()
+            op.act(self.world.engine(), self.world.plan(), self.world.context(), footprint=footprint,
+                   source_state=self.world.source_state)
 
 
 class PreflightFlowTests(unittest.TestCase):
@@ -753,15 +1400,18 @@ class PreflightFlowTests(unittest.TestCase):
         modules = {'venv_footprint': fake_footprint, 'rebuild_release_backup': backup}
         patches = {
             'ops_module': lambda name, source=None: modules[name], 'load_engine': lambda: self.engine,
+            'ROOT': self.root, 'git_environment_clean': lambda: {'refused_variables_present': 0},
             'candidate_worktree': lambda candidate: {'head': candidate},
             'shared_tree_at_base': lambda base: {'head': base}, 'origin_main_is': lambda candidate: {},
+            'trusted_gate_scripts': lambda base: {name: 'c' * 64 for name in op.TRUSTED_GATE_SCRIPTS},
             'merge_hooks': lambda: frozenset(), 'compute_manifest': lambda *args: self.manifest,
+            'manifest_paths_on_disk': lambda manifest: {'paths': 1},
             'git': lambda repo, *arguments, **options: b'pypdf==6.21.4\n',
             'venv_sharing_units': lambda prior, services: ['quillmd-corti-candidate.service'],
             'foreign_idle': lambda units: {'idle': True, 'units': {}},
             'live_venv_users': lambda exclude=(): [{'pid': 1, 'unit': 'quillmd-corti-candidate.service'}],
             'locks_free': lambda: {}, 'outside_scheduled_windows': lambda moment: 'ok',
-            'citation': lambda prior, candidate: {'citation': '**Citation — 2 of 2**'},
+            'citation': lambda prior, candidate, gate_scripts: {'citation': '**Citation — 2 of 2**'},
             'operator_hashes': lambda: {name: 'd' * 64 for name in op.OPERATOR_FILES},
             'PENDING_ENVIRONMENT': self.root / 'absent-pending-env'}
         for name, value in patches.items():
@@ -775,6 +1425,9 @@ class PreflightFlowTests(unittest.TestCase):
         report, context = op.preflight(self.args)
         failed = sorted(row['check'] for row in report['checks'] if not row['passed'])
         self.assertEqual(failed, ['declaration_contract', 'declaration_provenance', 'strict_declaration_gate'])
+        rows = [row['check'] for row in report['checks']]
+        for name in ('git_environment_clean', 'trusted_gate_scripts', 'manifest_paths_unobstructed'):
+            self.assertIn(name, rows)
         self.assertEqual(context['environment']['original'], self.environment)
         self.assertNotIn(self.environment.decode().strip(), json.dumps(report, default=str))
         contract = op.contract_from(report['contract_block'])
@@ -793,6 +1446,13 @@ class PreflightFlowTests(unittest.TestCase):
         failed = {row['check'] for row in report['checks'] if not row['passed']}
         self.assertTrue({'manifest_equals_the_preflight', 'venv_sharing_units_idle',
                          'no_undeclared_live_venv_process'} <= failed)
+
+    def test_without_trusted_gate_scripts_the_citation_and_the_strict_gate_cannot_pass(self):
+        with patch.object(op, 'trusted_gate_scripts', lambda base: op.require(False, 'trusted_gate_script_file')):
+            report, _ = op.preflight(self.args)
+        reasons = {row['check']: row.get('reason') for row in report['checks'] if not row['passed']}
+        self.assertEqual((reasons['trusted_gate_scripts'], reasons['citation'], reasons['strict_declaration_gate']),
+                         ('trusted_gate_script_file', 'prerequisite_failed', 'prerequisite_failed'))
 
 
 class CommandLineTests(unittest.TestCase):
@@ -837,7 +1497,8 @@ class CommandLineTests(unittest.TestCase):
                           'foreign_venv_units': []}
         context = {'engine': SimpleNamespace(BASE=None, SOURCE=None, STATIC=None,
                                              prior=SimpleNamespace(BASE=None, SOURCE=None, STATIC=None)),
-                   'measured': {'manifest': manifest, 'manifest_sha256': 'a' * 64, 'backup': {}},
+                   'measured': {'manifest': manifest, 'manifest_sha256': 'a' * 64, 'backup': {},
+                                'gate_scripts': {name: 'e' * 64 for name in op.TRUSTED_GATE_SCRIPTS}},
                    'declaration': {'contract': contract_value, 'provenance': {'commit': 'd' * 40}}}
         return report, context
 
@@ -868,7 +1529,7 @@ class CommandLineTests(unittest.TestCase):
                 op.main(execute)
         preflight.assert_not_called()
 
-    def run_execute(self, preflight_value, act_value=None, act_error=None):
+    def run_execute(self, preflight_value, act_value=None, act_error=None, write_receipt=True):
         execute = self.argv('--execute', '--evidence-directory', str(self.root / 'evidence'),
                             '--manifest-sha256', 'a' * 64)
         os.chdir(op.SOURCE)
@@ -878,7 +1539,8 @@ class CommandLineTests(unittest.TestCase):
             if act_error:
                 raise act_error
             (Path(plan['evidence_directory'])).mkdir(mode=0o700)
-            (Path(plan['evidence_directory']) / 'installation-complete.json').write_text('{}')
+            if write_receipt:
+                (Path(plan['evidence_directory']) / 'installation-complete.json').write_text('{}')
             return act_value
         with patch.dict(os.environ, runner), patch.object(op, 'preflight', return_value=preflight_value), \
                 patch.object(op, 'act', side_effect=act) as called, patch.object(op, 'ROOT', self.root), \
@@ -894,6 +1556,7 @@ class CommandLineTests(unittest.TestCase):
         self.assertEqual(code, 0)
         plan = act.call_args.args[1]
         self.assertEqual((plan['base'], plan['candidate'], plan['static']), (BASE, CANDIDATE, []))
+        self.assertEqual(plan['gate_scripts'], {name: 'e' * 64 for name in op.TRUSTED_GATE_SCRIPTS})
         self.assertEqual(plan['plan_sha256'], op.sha(op.canonical({k: v for k, v in plan.items()
                                                                     if k != 'plan_sha256'})))
         self.assertTrue(json.loads((self.root / 'result.json').read_text())['all_postconditions_passed'])
@@ -902,12 +1565,21 @@ class CommandLineTests(unittest.TestCase):
         shutil.rmtree(self.root / 'evidence')
         code, _ = self.run_execute(self.passing(True), ({'complete': True}, False))
         self.assertEqual(code, 2)
+        (self.root / 'result.json').unlink()
+        shutil.rmtree(self.root / 'evidence')
+        code, _ = self.run_execute(self.passing(True), ({'complete': True, 'receipt_retained': False}, False),
+                                   write_receipt=False)
+        self.assertEqual(code, 2)
+        self.assertIsNone(json.loads((self.root / 'result.json').read_text())['receipt_sha256'])
 
-    def test_execute_failure_is_recorded_with_a_fixed_label(self):
+    def test_execute_failure_is_recorded_with_a_fixed_label_and_the_recovery_outcome(self):
+        refusal = op.Refusal('installation_failed_inspect_retained_evidence')
+        refusal.outcome = {'recovery': 'restore', 'original_release_serving': True}
         with self.assertRaises(op.Refusal):
-            self.run_execute(self.passing(True), act_error=op.Refusal('installation_failed_inspect_retained_evidence'))
-        self.assertEqual(json.loads((self.root / 'result.json').read_text())['label'],
-                         'installation_failed_inspect_retained_evidence')
+            self.run_execute(self.passing(True), act_error=refusal)
+        value = json.loads((self.root / 'result.json').read_text())
+        self.assertEqual((value['label'], value['recovery']),
+                         ('installation_failed_inspect_retained_evidence', refusal.outcome))
 
     def test_a_manifest_that_moved_since_the_preflight_refuses(self):
         report, context = self.passing(True)

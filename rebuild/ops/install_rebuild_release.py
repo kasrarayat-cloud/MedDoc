@@ -34,6 +34,24 @@ line 193 requires the declaration's bytes to contain the candidate's own sha and
 contain the sha of the commit that contains it. The declaration is proven the D4 way (declaration_provenance)
 and bound to the code through its contract; everything else is the engine's. A test pins the correspondence of
 the two stage sequences, so a drift in either one fails CI.
+
+WHAT THE INSTALLER ADDS TO THE ENGINE'S SHAPE (the 2026-11-01 refutation, 22 findings)
+  * Path guards: a dot-named component only where the base already tracks that path; no path whose existing
+    prefix in the shared tree is not a real directory, no added path that already exists in any form (ignored
+    files such as rebuild/.env included); no merge-time or maintenance hook (pre-auto-gc included); no gate
+    instrument and no .gitattributes in the delta.
+  * The citation and the strict declaration gate run from the base's tracked copies in the shared tree, proven
+    byte-equal to their blobs at BASE; origin/main is read as refs/remotes/origin/main and refs/heads/main exactly.
+  * Git's own state in the shared repository (lock files, an unfinished merge, cherry-pick, revert, rebase or
+    bisect, assume-unchanged or skip-worktree entries) refuses, in the preflight and again after the stop.
+  * Configuration, clinical files, the venv, foreign services and git's state are compared again AFTER the stop
+    and BEFORE publication. Publication begins only when git has moved HEAD or the working tree: any refusal
+    before that, a merge git refused included (measured, never assumed), restores the original release.
+  * The failure path is exception-proof. Every unit gets its drain or restore attempt whatever happens to an
+    evidence write; a restore counts only when every unit is active and health reports BASE. SIGTERM, SIGINT and
+    SIGHUP route into that same path. The act's git processes run with hooks and automatic maintenance off.
+  * After a completed, healthy install nothing drains: a later observation (a foreign restart, a failed
+    configuration read, an interrupt) is reported for judgement and the act exits 2.
 """
 import argparse
 from contextlib import ExitStack, contextmanager
@@ -45,9 +63,11 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import signal
 import stat
 import subprocess
 import sys
+import threading
 import time
 
 ROOT = Path('/opt/meddoc-pro')
@@ -82,10 +102,34 @@ OPERATION_UNITS = ('quillmd-fresh-backup.service', 'quillmd-fresh-offsite.servic
                    'quillmd-fresh-backup-alerts.service', 'quillmd-fresh-operations-publisher.service')
 LOCK_FILES = ('legacy-model-activation.lock', 'backup-monitor/capture.lock', 'automatic-offsite/execution.lock',
               'backup-alerts/monitor.lock', 'publication/.activation-publication.lock')
-#: Hooks git can run while `merge --ff-only` updates the index, the ref and the working tree. None may exist at
-#: base, and the candidate may not add one: it would be checked out by the merge and then run by it.
+#: Hooks git can run during `merge --ff-only`: while it updates the index, the ref and the working tree, and in
+#: the automatic maintenance it starts afterwards (`gc --auto` runs pre-auto-gc). None may exist at base, and the
+#: candidate may not add one: it would be checked out by the merge and then run by it.
 MERGE_HOOKS = ('post-merge', 'reference-transaction', 'post-index-change', 'post-checkout', 'pre-merge-commit',
-               'post-rewrite')
+               'post-rewrite', 'pre-auto-gc')
+#: Every git process of the act also runs with hooks and automatic maintenance switched off.
+ACT_GIT_CONFIG = (('core.hooksPath', '/dev/null'), ('maintenance.auto', 'false'), ('gc.auto', '0'))
+#: Environment that would redirect or reconfigure git; refused rather than inherited.
+GIT_ENVIRONMENT_REFUSED = ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY',
+                           'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_COMMON_DIR', 'GIT_NAMESPACE', 'GIT_CONFIG',
+                           'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT')
+#: The gates the act relies on: the citation, the runner and its strict declaration gate. A delta that changes one
+#: refuses (the legacy installer's dependency_byte_identity rule for the same files), and the two the installer
+#: runs itself are run from the base's tracked copies in the shared tree, never from the candidate.
+GATE_INSTRUMENTS = ('scripts/check-citation.sh', 'scripts/lib/runs-api.sh', 'scripts/lib/declaration.sh',
+                    'scripts/run-ruled-mutation.sh', 'scripts/lib/run-watched.sh',
+                    'scripts/lib/container-revision.sh')
+TRUSTED_GATE_SCRIPTS = ('scripts/check-citation.sh', 'scripts/lib/runs-api.sh', 'scripts/lib/declaration.sh')
+#: Git's own lock files and unfinished operations in the shared repository (`rev-parse --git-path` names).
+GIT_LOCKS = ('index.lock', 'HEAD.lock', 'ORIG_HEAD.lock', 'config.lock', 'packed-refs.lock', 'shallow.lock')
+GIT_OPERATIONS = ('MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'REBASE_HEAD', 'rebase-merge', 'rebase-apply',
+                  'sequencer', 'BISECT_LOG', 'BISECT_START')
+#: A bare interpreter name: Python then finds itself, and its venv, through the process's own PATH.
+INTERPRETER_NAME = re.compile(r'python[0-9.]*')
+SIGNALS = ('SIGTERM', 'SIGINT', 'SIGHUP')
+#: Measured after a completed, healthy resume and reported for judgement (exit 2), never drained for.
+POSTCONDITIONS = ('configuration_preserved_after_resume', 'foreign_services_preserved_after_resume',
+                  'venv_sharing_units_idle_after_resume', 'venv_exact_after_resume')
 REFUSED_PARTS = frozenset({'node_modules', '.venv', 'uploads', 'backups', '.git'})
 #: activate_rowan_corti's pinned guard reads every blob through `git cat-file` with a 1 MiB output bound.
 BLOB_LIMIT = 1024 * 1024
@@ -107,6 +151,17 @@ class Refusal(RuntimeError):
     """A fixed, non-sensitive label. Exception text from other code is never retained."""
 
 
+class Interrupted(BaseException):
+    """A termination signal, raised in the main thread so the act's own failure path runs.
+
+    A BaseException, like KeyboardInterrupt, so that no `except Exception` on the way swallows it.
+    """
+
+    def __init__(self, name):
+        super().__init__('interrupted_by_' + name)
+        self.signal_name = name
+
+
 def require(value, label):
     if not value:
         raise Refusal(label)
@@ -125,7 +180,19 @@ def now_utc():
 
 
 def note(stage):
-    print(STAGE_LOG, now_utc().strftime('%Y-%m-%dT%H:%M:%SZ'), 'stage=' + stage, file=sys.stderr, flush=True)
+    """A stage line on stderr (the runner's transcript). A closed stderr never fails the act."""
+    try:
+        print(STAGE_LOG, now_utc().strftime('%Y-%m-%dT%H:%M:%SZ'), 'stage=' + stage, file=sys.stderr, flush=True)
+    except (OSError, ValueError):
+        pass
+
+
+def emit(record):
+    """One JSON line of fixed labels on stderr: the record that survives when an evidence write does not."""
+    try:
+        print(STAGE_LOG, json.dumps(record, sort_keys=True, default=str), file=sys.stderr, flush=True)
+    except (OSError, ValueError):
+        pass
 
 
 def full_sha(value):
@@ -252,6 +319,9 @@ def classify(name, status, *, hooks=frozenset()):
             'canonical_manifest_path')
     require(status in ('A', 'M'), 'add_or_modify_only')
     require(name not in hooks, 'merge_time_git_hook')
+    require(name not in GATE_INSTRUMENTS, 'gate_instrument_in_delta')
+    # Attributes can make the merge's checkout run filter commands or rewrite bytes.
+    require(path.name != '.gitattributes', 'git_attributes_in_delta')
     require(not set(path.parts) & REFUSED_PARTS, 'refused_path_part')
     if path.parts[0] != 'rebuild':
         return 'passenger'
@@ -267,14 +337,31 @@ def classify(name, status, *, hooks=frozenset()):
     return 'runtime'
 
 
-def build_manifest(base, entries, blob, *, hooks=frozenset()):
-    """The whole-repository delta, one row per path; blob(sha1) returns that blob's bytes."""
+def tracked_dot_components(name, base_paths):
+    """A dot-named component only where the base already tracks that path (a tree or a blob).
+
+    The live tree's ignored files and directories are dot names (.env, rebuild/.env, .runtime, .venv, .worktrees);
+    a release may not create one, or write into one, that the base does not track.
+    """
+    parts = PurePosixPath(name).parts
+    for index, part in enumerate(parts):
+        if part.startswith('.'):
+            require('/'.join(parts[:index + 1]) in base_paths, 'untracked_dot_path')
+
+
+def build_manifest(base, entries, blob, *, hooks=frozenset(), base_paths=frozenset()):
+    """The whole-repository delta, one row per path; blob(sha1) returns that blob's bytes.
+
+    ``base_paths`` is every path the base tree tracks, trees included (`git ls-tree -r -t`); without it every dot
+    path refuses.
+    """
     require(full_sha(base), 'full_base_sha')
     require(0 < len(entries) <= MAX_PATHS, 'finite_non_empty_delta')
     paths = {}
     for status, old_mode, new_mode, old_blob, new_blob, name in entries:
         require(name not in paths, 'unique_manifest_path')
         kind = classify(name, status, hooks=hooks)
+        tracked_dot_components(name, base_paths)
         require(new_mode in ('100644', '100755'), 'regular_blob_modes_only')
         if status == 'M':
             require(old_mode in ('100644', '100755'), 'regular_blob_modes_only')
@@ -334,6 +421,13 @@ def merge_hooks(repo=None):
     return frozenset(paths)
 
 
+def base_tree_paths(repo, base):
+    """Every path the base tree tracks, trees included."""
+    raw = git(repo, 'ls-tree', '-r', '-t', '-z', '--name-only', base)
+    require(raw == b'' or raw.endswith(b'\0'), 'nul_terminated_tree_listing')
+    return frozenset(name.decode('utf-8') for name in raw.split(b'\0')[:-1])
+
+
 def compute_manifest(repo, base, candidate, hooks):
     raw = git(repo, 'diff', '--raw', '--no-renames', '-z', '--no-abbrev', base, candidate)
 
@@ -341,7 +435,49 @@ def compute_manifest(repo, base, candidate, hooks):
         size = int(git(repo, 'cat-file', '-s', name).decode().strip())
         require(size <= BLOB_LIMIT, 'blob_within_guard_bound')
         return git(repo, 'cat-file', 'blob', name, limit=BLOB_LIMIT)
-    return build_manifest(base, parse_raw_diff(raw), blob, hooks=hooks)
+    return build_manifest(base, parse_raw_diff(raw), blob, hooks=hooks, base_paths=base_tree_paths(repo, base))
+
+
+def manifest_paths_on_disk(manifest, root=None):
+    """Every manifest path's place in the shared tree, measured with lstat (never following a link).
+
+    Every existing proper prefix must be a real directory: a regular file there (an ignored rebuild/.env), a
+    symbolic link or anything else refuses. An added path must not exist in any form, a dangling link included:
+    `git merge` silently replaces an IGNORED file that stands in its way. A modified path must be a regular file
+    whose mode is its base mode, so the merge changes no mode the manifest does not declare.
+    """
+    root = root or ROOT
+    added = modified = 0
+    for name, row in manifest['paths'].items():
+        parts = PurePosixPath(name).parts
+        for index in range(1, len(parts)):
+            prefix = root.joinpath(*parts[:index])
+            try:
+                info = prefix.lstat()
+            except FileNotFoundError:
+                require(row['status'] == 'A', 'modified_path_parent_missing')
+                break
+            except OSError:
+                raise Refusal('manifest_path_unassessable') from None
+            require(stat.S_ISDIR(info.st_mode), 'manifest_path_prefix_not_a_directory')
+        else:
+            path = root.joinpath(*parts)
+            try:
+                info = path.lstat()
+            except FileNotFoundError:
+                require(row['status'] == 'A', 'modified_path_missing')
+                added += 1
+                continue
+            except OSError:
+                raise Refusal('manifest_path_unassessable') from None
+            require(row['status'] == 'M', 'added_path_obstructed')
+            expected = 0o755 if row['base_mode'] == '100755' else 0o644
+            require(stat.S_ISREG(info.st_mode) and stat.S_IMODE(info.st_mode) == expected,
+                    'modified_path_regular_at_base_mode')
+            modified += 1
+            continue
+        added += 1
+    return {'paths': len(manifest['paths']), 'added_absent': added, 'modified_regular': modified}
 
 
 # ------------------------------------------------------------------------------------ the declaration (D4)
@@ -378,13 +514,42 @@ def declaration_provenance(path, candidate, *, source=None, runner_commit=None):
             'committed_at': git(source, 'log', '-1', '--format=%cI', commit).decode().strip()}
 
 
-def strict_gate(path, source=None):
-    """The runner's own strict gate (scripts/lib/declaration.sh), run read-only in the candidate worktree."""
-    source = source or SOURCE
+def trusted_gate_scripts(base, root=None):
+    """The base's tracked gate scripts in the shared tree, each proven byte-equal to its blob at BASE.
+
+    The citation and the strict declaration gate are judged by these copies, never by the candidate's: a release
+    must not be able to certify itself with a checker it changed. Returns {path: sha256}, pinned in the plan.
+    """
+    root = root or ROOT
+    pins = {}
+    for relative in TRUSTED_GATE_SCRIPTS:
+        path = root / relative
+        info = path.lstat()
+        require(stat.S_ISREG(info.st_mode) and path.resolve(strict=True) == path, 'trusted_gate_script_file')
+        raw = path.read_bytes()
+        require(raw == git(root, 'show', base + ':' + relative), 'trusted_gate_script_is_the_base_blob')
+        pins[relative] = sha(raw)
+    return pins
+
+
+def verify_gate_scripts(root, pins):
+    """The pinned copies are still the bytes on disk, immediately before they run."""
+    require(type(pins) is dict and set(pins) == set(TRUSTED_GATE_SCRIPTS), 'gate_script_pins')
+    for relative, digest in pins.items():
+        path = Path(root) / relative
+        require(stat.S_ISREG(path.lstat().st_mode) and path.resolve(strict=True) == path
+                and sha(path.read_bytes()) == digest, 'gate_script_unchanged')
+    return True
+
+
+def strict_gate(path, source=None, *, gate_scripts, root=None):
+    """The runner's strict gate (scripts/lib/declaration.sh), from the base's copy, read-only in the candidate."""
+    source, root = source or SOURCE, root or ROOT
+    verify_gate_scripts(root, gate_scripts)
     script = '. "$1/scripts/lib/declaration.sh" && declaration_gate "$2" strict "ruled mutation"'
-    result = run(['bash', '-c', script, 'gate', str(source), str(path)], cwd=source, check=False)
+    result = run(['bash', '-c', script, 'gate', str(root), str(path)], cwd=source, check=False)
     require(result.returncode == 0, 'strict_declaration_gate')
-    return {'strict_gate': 'passed', 'output_sha256': sha(result.stdout)}
+    return {'strict_gate': 'passed', 'output_sha256': sha(result.stdout), 'gate_copy': str(root)}
 
 
 def _unique(pairs):
@@ -575,13 +740,80 @@ def database_facts(snapshot):
             'pending': snapshot['pending'], 'migrations': len(snapshot['migrations'])}
 
 
-def live_venv_users(proc=Path('/proc'), venv=None, exclude=()):
-    """Processes whose interpreter path resolves into the live venv's bin directory, with their cgroup unit.
+def _process_uid(entry):
+    for line in (entry / 'status').read_text().splitlines():
+        if line.startswith('Uid:'):
+            return int(line.split()[1])
+    raise Refusal('process_uid')
 
-    Best effort, read-only: cmdline and cgroup are readable for every process; a relative interpreter path is
-    resolved against the process's cwd when that is readable (same user), and skipped otherwise.
+
+def _search_path(entry, name, cwd):
+    """Where the process found ``name`` on ITS OWN PATH, as Python's getpath does for a bare argv[0]."""
+    environ = dict(item.split(b'=', 1) for item in (entry / 'environ').read_bytes().split(b'\0') if b'=' in item)
+    if b'PATH' not in environ:
+        return None
+    for directory in os.fsdecode(environ[b'PATH']).split(os.pathsep):
+        directory = os.path.join(cwd, directory) if cwd and not os.path.isabs(directory) else directory
+        candidate = os.path.join(directory, name)
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return directory
+    return None
+
+
+def venv_verdict(entry, first, *, target_bin, target_root, interpreter):
+    """True, False, or None when this process's use of the venv cannot be determined.
+
+    The executable comes first, read from /proc/<pid>/exe: a symlinked venv runs the system binary (its real path
+    is the venv interpreter's real path), so the exe alone separates "another program" from "a Python that may be
+    the venv's". Which prefix such a Python took is then decided by how it was started: an argv[0] path, or, for a
+    bare name, the process's own PATH. argv alone is never enough: `source .venv/bin/activate && python3 ...` shows
+    only "python3".
     """
-    target = os.path.realpath(str((venv or VENV) / 'bin'))
+    try:
+        link = os.readlink(entry / 'exe')
+        # A binary replaced by a package upgrade reads "<path> (deleted)" for the processes still running it.
+        exe = os.path.realpath(link[:-len(' (deleted)')] if link.endswith(' (deleted)') else link)
+    except OSError:
+        exe = None
+    if exe is not None:
+        if exe == target_root or exe.startswith(target_root + '/'):
+            return True
+        if exe != interpreter:
+            return False
+    cwd = None
+    try:
+        cwd = os.readlink(entry / 'cwd')
+    except OSError:
+        pass
+    if '/' in first:
+        if not first.startswith('/'):
+            if cwd is None:
+                return None
+            first = os.path.join(cwd, first)
+        return os.path.realpath(os.path.dirname(first)) == target_bin
+    if exe is None and not INTERPRETER_NAME.fullmatch(first):
+        return False
+    if not INTERPRETER_NAME.fullmatch(first):
+        return None    # the venv's interpreter under a rewritten process title: cannot tell which prefix
+    try:
+        found = _search_path(entry, first, cwd)
+    except OSError:
+        return None
+    return None if found is None else os.path.realpath(found) == target_bin
+
+
+def live_venv_users(proc=Path('/proc'), venv=None, exclude=(), uid=None):
+    """Processes running the live venv's interpreter, with their cgroup unit.
+
+    Read-only. A process of the operator's own uid whose use of the venv cannot be determined is listed with
+    ``undetermined`` (and refuses). Other users' processes expose only cmdline and cgroup: they are decided by an
+    absolute argv[0] path, and otherwise counted as ``uninspectable`` in the detail.
+    """
+    venv = venv or VENV
+    target_bin = os.path.realpath(str(venv / 'bin'))
+    target_root = os.path.realpath(str(venv))
+    interpreter = os.path.realpath(str(venv / 'bin/python'))
+    uid = os.getuid() if uid is None else uid
     users = []
     for entry in sorted(proc.iterdir(), key=lambda p: p.name):
         if not entry.name.isdigit() or int(entry.name) in exclude:
@@ -589,28 +821,30 @@ def live_venv_users(proc=Path('/proc'), venv=None, exclude=()):
         try:
             argv = (entry / 'cmdline').read_bytes().split(b'\0')
             cgroup = (entry / 'cgroup').read_text()
-        except OSError:
+            owner = _process_uid(entry)
+        except (OSError, Refusal):
             continue
         first = os.fsdecode(argv[0]) if argv and argv[0] else ''
-        if '/' not in first:
-            continue
-        if not first.startswith('/'):
-            try:
-                first = os.path.join(os.readlink(entry / 'cwd'), first)
-            except OSError:
-                continue
-        if os.path.realpath(os.path.dirname(first)) != target:
-            continue
+        if not first:
+            continue    # a kernel thread or a zombie
+        verdict = venv_verdict(entry, first, target_bin=target_bin, target_root=target_root, interpreter=interpreter)
         match = re.search(r'^0::/system\.slice/([^/\n]+\.service)', cgroup, re.M)
-        users.append({'pid': int(entry.name), 'unit': match[1] if match else None})
+        row = {'pid': int(entry.name), 'unit': match[1] if match else None}
+        if verdict:
+            users.append(row)
+        elif verdict is None:
+            users.append(dict(row, undetermined=True) if owner == uid else dict(row, uninspectable=True))
     return users
 
 
 def no_undeclared_venv_users(foreign_units, users):
     allowed = set(OWNED_UNITS) | set(foreign_units) | set(OPERATION_UNITS)
-    strays = [row for row in users if row['unit'] not in allowed]
+    require(not [row for row in users if row.get('undetermined')], 'undeterminable_operator_interpreter_process')
+    strays = [row for row in users if not row.get('uninspectable') and row['unit'] not in allowed]
     require(not strays, 'undeclared_process_on_the_live_venv')
-    return {'processes': len(users), 'units': sorted({row['unit'] for row in users if row['unit']})}
+    venv_users = [row for row in users if not row.get('uninspectable')]
+    return {'processes': len(venv_users), 'units': sorted({row['unit'] for row in venv_users if row['unit']}),
+            'uninspectable_other_users': len(users) - len(venv_users)}
 
 
 # ------------------------------------------------------------------------------------------- the preflight
@@ -653,7 +887,8 @@ class Checks:
 def reason(error):
     """A fixed label for this module's and the engine's refusals; the class name for anything else."""
     label = str(error)
-    if type(error).__name__ in ('Refusal', 'HelperFailure') and re.fullmatch(r'[A-Za-z0-9_.:,/ -]{1,400}', label):
+    if (type(error).__name__ in ('Refusal', 'HelperFailure', 'Interrupted')
+            and re.fullmatch(r'[A-Za-z0-9_.:,/ -]{1,400}', label)):
         return label
     name = type(error).__name__
     return name if re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,79}', name) else 'Exception'
@@ -673,9 +908,13 @@ def preflight(args, *, executing=False):
         return finish(args, checks, measured), context
     prior = engine.prior
     with bound(engine, args.base):
+        checks.run('git_environment_clean', git_environment_clean)
         checks.run('candidate_worktree', candidate_worktree, args.candidate)
         checks.run('shared_tree_at_base', shared_tree_at_base, args.base)
         checks.run('origin_main_is_candidate', origin_main_is, args.candidate)
+        gate_scripts = checks.run('trusted_gate_scripts', trusted_gate_scripts, args.base)
+        if gate_scripts is not None:
+            measured['gate_scripts'] = gate_scripts
         hooks = checks.keep('no_merge_time_hooks', merge_hooks, describe=sorted)
         venv = checks.keep('venv_footprint', footprint.snapshot, VENV, describe=footprint.summary)
         if venv is not None:
@@ -689,6 +928,7 @@ def preflight(args, *, executing=False):
         if manifest is not None:
             measured['manifest_sha256'] = manifest_digest(manifest)
             measured['manifest'] = manifest
+            checks.run('manifest_paths_unobstructed', manifest_paths_on_disk, manifest)
             checks.run('requirements_bound_to_venv_check', admit_requirements, manifest,
                        venv is not None and digest64(venv.get('footprint_sha256')))
             if args.manifest_sha256 is not None:
@@ -735,9 +975,12 @@ def preflight(args, *, executing=False):
                 checks.keep('engine_source_plan', lambda: prior.source_plan(plan, bind_guard(prior.source_guard())),
                             describe=lambda prepared: {'base_files_proven': len(prepared['before']),
                                                        'candidate_files_hashed': len(prepared['after'])})
-        citation_line = checks.run('citation', citation, prior, args.candidate)
-        if citation_line is not None:
-            measured['citation'] = citation_line
+        if gate_scripts is not None:
+            citation_line = checks.run('citation', citation, prior, args.candidate, gate_scripts)
+            if citation_line is not None:
+                measured['citation'] = citation_line
+        else:
+            checks.fail('citation', 'prerequisite_failed')
         operator = checks.run('operator_hashes', operator_hashes)
         if operator is not None:
             measured['operator'] = operator
@@ -756,7 +999,10 @@ def declaration_checks(args, checks, measured, *, executing):
     """D4 and the contract. Before the declaration exists these fail, and the contract to embed is printed."""
     provenance = checks.run('declaration_provenance', declaration_provenance, args.declaration, args.candidate,
                             runner_commit=os.environ.get('RULED_MUTATION_DECL_COMMIT') if executing else None)
-    checks.run('strict_declaration_gate', strict_gate, args.declaration)
+    if measured.get('gate_scripts') is not None:
+        checks.run('strict_declaration_gate', strict_gate, args.declaration, gate_scripts=measured['gate_scripts'])
+    else:
+        checks.fail('strict_declaration_gate', 'prerequisite_failed')
     if provenance is not None:
         measured['declaration'] = provenance
     needed = ('manifest', 'venv', 'requirements_mismatch', 'foreign_venv_units', 'backup', 'operator')
@@ -794,6 +1040,12 @@ def declaration_checks(args, checks, measured, *, executing):
     return {'provenance': provenance, 'contract': declared}
 
 
+def git_environment_clean():
+    """Nothing in the environment redirects or reconfigures git (the act also refuses it, act_git_environment)."""
+    require(not [name for name in GIT_ENVIRONMENT_REFUSED if name in os.environ], 'git_environment_clean')
+    return {'refused_variables_present': 0}
+
+
 def candidate_worktree(candidate):
     require(full_sha(candidate), 'full_candidate_sha')
     top = Path(git(SOURCE, 'rev-parse', '--show-toplevel').decode().strip())
@@ -803,18 +1055,61 @@ def candidate_worktree(candidate):
     return {'worktree': str(SOURCE), 'head': candidate}
 
 
-def shared_tree_at_base(base):
+def git_state(repo=None):
+    """Git's own state in the shared repository, read-only: what would make `merge --ff-only` refuse or half-apply.
+
+    Lock files (index, HEAD, ORIG_HEAD, config, packed-refs, shallow, and any under refs/), an unfinished merge,
+    cherry-pick, revert, rebase or bisect, and index entries hidden from `git status` by assume-unchanged or
+    skip-worktree all refuse.
+    """
+    repo = repo or ROOT
+
+    def git_path(name):
+        value = git(repo, 'rev-parse', '--git-path', name).decode().strip()
+        return Path(value) if Path(value).is_absolute() else repo / value
+
+    def present(path):
+        try:
+            path.lstat()
+        except FileNotFoundError:
+            return False
+        except OSError:
+            raise Refusal('git_state_unassessable') from None
+        return True
+    require(not any(present(git_path(name)) for name in GIT_LOCKS), 'git_lock_file_present')
+    refs = git_path('refs')
+    require(not any(True for _ in refs.rglob('*.lock')) if refs.is_dir() else True, 'git_ref_lock_present')
+    require(not any(present(git_path(name)) for name in GIT_OPERATIONS), 'unfinished_git_operation')
+    entries = git(repo, 'ls-files', '-v', '-z').split(b'\0')
+    hidden = [entry for entry in entries if entry and (entry[:1].islower() or entry[:1] == b'S')]
+    require(not hidden, 'assume_unchanged_or_skip_worktree_entries')
+    return {'lock_files': 0, 'unfinished_operations': 0, 'hidden_index_entries': 0,
+            'index_entries': sum(1 for entry in entries if entry)}
+
+
+def shared_tree_at_base(base, root=None):
+    root = root or ROOT
     require(full_sha(base), 'full_base_sha')
-    require(git(ROOT, 'branch', '--show-current').strip() == b'main'
-            and git(ROOT, 'rev-parse', 'HEAD').decode().strip() == base
-            and not git(ROOT, 'status', '--porcelain', '--untracked-files=no').strip(), 'clean_shared_main_at_base')
-    return {'head': base, 'branch': 'main'}
+    require(git(root, 'branch', '--show-current').strip() == b'main'
+            and git(root, 'rev-parse', 'HEAD').decode().strip() == base
+            and not git(root, 'status', '--porcelain', '--untracked-files=no').strip(), 'clean_shared_main_at_base')
+    return {'head': base, 'branch': 'main', 'git_state': git_state(root)}
 
 
 def origin_main_is(candidate):
-    require(git(ROOT, 'rev-parse', 'origin/main').decode().strip() == candidate, 'origin_main_tracking_ref')
-    remote = git(SOURCE, 'ls-remote', 'origin', 'refs/heads/main', timeout=60).decode().split()
-    require(remote[:1] == [candidate], 'remote_main_is_candidate')
+    """candidate == origin/main, locally (the exact tracking ref) and on the remote (refs/heads/main exactly)."""
+    tracking = git(ROOT, 'rev-parse', '--verify', '--end-of-options', 'refs/remotes/origin/main^{commit}')
+    require(tracking.decode().strip() == candidate, 'origin_main_tracking_ref')
+    # The engine's source_plan reads `rev-parse origin/main`, which a branch or tag named origin/main would win.
+    require(git(ROOT, 'rev-parse', 'origin/main').decode().strip() == candidate
+            and not any(git_ok(ROOT, 'rev-parse', '--verify', '--quiet', '--end-of-options', shadow)
+                        for shadow in ('refs/origin/main', 'refs/tags/origin/main', 'refs/heads/origin/main')),
+            'origin_main_unambiguous')
+    # ls-remote matches its pattern against the TAIL of every ref name: decl/refs/heads/main matches too.
+    rows = [line.split('\t') for line in git(SOURCE, 'ls-remote', 'origin', 'refs/heads/main',
+                                              timeout=60).decode().splitlines()]
+    exact = [row[0] for row in rows if len(row) == 2 and row[1] == 'refs/heads/main']
+    require(len(exact) == 1 and exact[0] == candidate, 'remote_main_is_candidate')
     return {'origin_main': candidate}
 
 
@@ -828,11 +1123,14 @@ def release_stamp(engine, candidate):
     return original
 
 
-def citation(prior, candidate):
-    output = prior.command(['bash', str(SOURCE / 'scripts/check-citation.sh'), candidate], cwd=SOURCE, timeout=120)
+def citation(prior, candidate, gate_scripts, root=None):
+    """The citation, judged by the base's pinned check-citation.sh in the shared tree (never the candidate's)."""
+    root = root or ROOT
+    verify_gate_scripts(root, gate_scripts)
+    output = prior.command(['bash', str(root / 'scripts/check-citation.sh'), candidate], cwd=root, timeout=120)
     lines = [line for line in output.decode(errors='replace').splitlines() if line.startswith('**Citation')]
     require(lines, 'citation_line')
-    return {'citation': lines[-1], 'output_sha256': sha(output)}
+    return {'citation': lines[-1], 'output_sha256': sha(output), 'checker': str(root / 'scripts/check-citation.sh')}
 
 
 def finish(args, checks, measured):
@@ -868,7 +1166,11 @@ def evidence_directory(path):
 
 
 def diagnostics(engine, error):
-    value = engine.failure_diagnostics(error)
+    """Fixed classifications and this module's code locations; never exception text. Never raises."""
+    try:
+        value = engine.failure_diagnostics(error)
+    except BaseException:
+        value = {'failure_type': 'Exception', 'reason': 'protected_operational_failure'}
     value['label'] = reason(error)
     ours, frame = [], error.__traceback__
     while frame:
@@ -880,160 +1182,380 @@ def diagnostics(engine, error):
     return value
 
 
-def act(engine, plan, context, *, footprint, idle=foreign_idle, snapshot_venv=None):
-    """The act, in the engine's own order (activate_core_workflow_repair.py:185-319), D1/D3 checks inserted.
+@contextmanager
+def signal_routing():
+    """SIGTERM, SIGINT and SIGHUP raise Interrupted in the main thread, so they reach the act's failure path.
 
-    Returns (result, postconditions_passed). Raises Refusal on any failure, after the engine's failure handling:
-    a started resume is drained first; automatic recovery only when stopped and publication was not attempted.
+    The same shape as managed_helper.run_helper, which turns SIGTERM into HelperFailure('interrupted') for the
+    length of one helper call (and puts this handler back afterwards). Setting ``state['raising'] = False`` keeps
+    recording signals without raising, while units are being drained or restored or the receipt is written.
+    """
+    state = {'raising': True, 'received': []}
+
+    def handler(number, frame):
+        name = signal.Signals(number).name
+        state['received'].append(name)
+        if state['raising']:
+            raise Interrupted(name)
+    previous = {}
+    if threading.current_thread() is threading.main_thread():
+        for name in SIGNALS:
+            number = getattr(signal, name)
+            previous[number] = signal.signal(number, handler)
+    try:
+        yield state
+    finally:
+        for number, old in previous.items():
+            signal.signal(number, old)
+
+
+@contextmanager
+def act_git_environment():
+    """Every git process of the act runs with hooks and automatic maintenance off (GIT_CONFIG_COUNT entries).
+
+    A merge then runs no hook and no `gc --auto` whatever the configured hooks path holds; the path guards keep
+    refusing hooks in the delta as well. The environment is restored afterwards.
+    """
+    git_environment_clean()
+    values = {'GIT_CONFIG_COUNT': str(len(ACT_GIT_CONFIG))}
+    for index, (key, value) in enumerate(ACT_GIT_CONFIG):
+        values['GIT_CONFIG_KEY_%d' % index] = key
+        values['GIT_CONFIG_VALUE_%d' % index] = value
+    saved = {name: os.environ.get(name) for name in values}
+    os.environ.update(values)
+    try:
+        yield values
+    finally:
+        for name, value in saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
+def publication_preconditions(root, base, manifest):
+    """Measured again after the stop, immediately before the merge: clean main at base, git's own state (locks,
+    unfinished operations, hidden index entries) and every manifest path's place in the tree."""
+    return dict(shared_tree_at_base(base, root=root), manifest_paths=manifest_paths_on_disk(manifest, root=root))
+
+
+def retain(prior, path, value):
+    """One evidence file, best effort: a failed write is reported on stderr and never stops a recovery."""
+    try:
+        prior.write_new(path, value)
+        return True
+    except BaseException as error:
+        emit({'evidence_write_failed': Path(path).name, 'label': reason(error),
+              'errno': getattr(error, 'errno', None)})
+        return False
+
+
+def restore_original(engine, host, plan):
+    """Start every owned unit (worker first), whatever happens to any one start, then MEASURE the result.
+
+    The original release counts as serving only when every start returned, health reports BASE (the forward
+    path's await_health), and every unit is then active with a main PID. `systemctl start` returning 0 proves
+    none of that for a Type=simple unit.
+    """
+    prior = engine.prior
+    starts, errors, units = {}, {}, {}
+    for unit in (prior.UNITS[2], *prior.UNITS[:2]):
+        try:
+            host.service('start', unit)
+            starts[unit] = True
+        except BaseException as error:
+            starts[unit] = False
+            errors['start:' + unit] = diagnostics(engine, error)
+    try:
+        value = prior.await_health(plan['base'])
+        health = {'release': value.get('release'), 'status': value.get('status')} if type(value) is dict else {}
+    except BaseException as error:
+        health = {'label': reason(error)}
+    for unit in prior.UNITS:
+        try:
+            state = host.state(unit)
+            units[unit] = state.get('ActiveState') == 'active' and state.get('MainPID', '0') not in ('', '0')
+        except BaseException as error:
+            units[unit] = False
+            errors['state:' + unit] = diagnostics(engine, error)
+    serving = all(starts.values()) and all(units.values()) and health.get('release') == plan['base']
+    return {'release': plan['base'], 'starts': starts, 'health': health, 'units_active': units,
+            'original_release_serving': serving, 'errors': errors}
+
+
+def failure_path(error, *, engine, host, out, plan, stage, flags, original, guard, prepared, signals):
+    """The act failed before the installation was complete and healthy. Returns the Refusal to raise.
+
+    Exception-proof: whatever happens to an evidence write, every unit gets its drain or restore attempt, and what
+    happened is recorded in failure.json, in an outcome file, on stderr, and in the Refusal's ``outcome`` (which
+    main() writes to --result, in another directory).
+
+      resume started               -> drain every owned unit (the engine's stop_failed_resume)
+      stopped, nothing published   -> restore the original release, verified first and measured after
+      stopped, publication begun   -> the units stay drained; only a newly declared corrective act may follow
+
+    PUBLICATION BEGINS ONLY WHEN GIT HAS MOVED HEAD OR THE WORKING TREE. A refusal inside publish_source before the
+    merge, or a merge git refused (another process's index.lock), leaves HEAD at BASE and the tree clean: the
+    engine's verify_original_before_resume measures exactly that, and only a failed measurement counts as
+    publication. A failure after publish_source returned is always publication.
+    """
+    signals['raising'] = False
+    recovery, verification = 'none', None
+    if flags['resume_started']:
+        recovery = 'drain'
+    elif flags['stopped'] and not flags['publication_completed']:
+        try:
+            engine.verify_original_before_resume(original, guard, prepared)
+            verification, recovery = {'original_intact': True}, 'restore'
+        except BaseException as check:
+            verification = dict(diagnostics(engine, check), original_intact=False)
+            recovery = 'refused' if not flags['publication_started'] else 'none'
+    publication_attempted = flags['publication_completed'] or (flags['publication_started'] and recovery != 'restore')
+    failure = dict(format=FORMAT, complete=False, stage=stage, **diagnostics(engine, error),
+                   stopped=flags['stopped'], resumed=False, resume_started=flags['resume_started'],
+                   publication_attempted=publication_attempted, merge_invoked=flags['publication_started'],
+                   original_verification=verification, recovery=recovery, signals_received=list(signals['received']),
+                   provider_calls=0, automatic_retry=False)
+    outcome = {'stage': stage, 'label': failure['label'], 'recovery': recovery,
+               'publication_attempted': publication_attempted}
+    emit({'rebuild_release_failure': outcome})
+    outcome['failure_json'] = retain(engine.prior, out / 'failure.json', failure)
+    label = 'installation_failed_inspect_retained_evidence'
+    if recovery == 'drain':
+        try:
+            drain = engine.stop_failed_resume(host)
+        except BaseException as drain_error:
+            drain = {'all_units_inactive': False, 'drain_error': diagnostics(engine, drain_error)}
+        outcome['units_drained'] = drain.get('all_units_inactive') is True
+        outcome['outcome_file'] = retain(engine.prior, out / 'failed-resume-drain.json', drain)
+        if not outcome['units_drained']:
+            label = 'failed_resume_drain_incomplete'
+    elif recovery == 'restore':
+        restore = restore_original(engine, host, plan)
+        outcome['original_release_serving'] = restore['original_release_serving']
+        if restore['original_release_serving']:
+            outcome['outcome_file'] = retain(engine.prior, out / 'original-release-resumed.json', restore)
+        else:
+            outcome['outcome_file'] = retain(engine.prior, out / 'original-release-restore-unverified.json', restore)
+            label = 'original_restore_unverified_inspect_retained_evidence'
+    elif recovery == 'refused':
+        outcome['outcome_file'] = retain(engine.prior, out / 'original-recovery-refused.json', verification)
+        label = 'original_recovery_refused_inspect_retained_evidence'
+    outcome['signals_received'] = list(signals['received'])
+    emit({'rebuild_release_outcome': outcome})
+    refusal = Refusal(label)
+    refusal.outcome = outcome
+    return refusal
+
+
+def act(engine, plan, context, *, footprint, idle=foreign_idle, snapshot_venv=None, source_state=None):
+    """The act, in the engine's own order (activate_core_workflow_repair.py:185-319), with the installer's checks
+    inserted (the stage-order test names every insertion).
+
+    Returns (result, postconditions_passed). Raises Refusal on any failure before the install is complete and
+    healthy, after failure_path has drained or restored. ``source_state()`` re-measures the shared tree after the
+    stop (publication_preconditions over prior.ROOT by default).
     """
     prior = engine.prior
     legacy = prior.legacy
     snapshot_venv = snapshot_venv or footprint.snapshot
+    if source_state is None:
+        def source_state():
+            return publication_preconditions(prior.ROOT, plan['base'], context['measured']['manifest'])
     require(Path.cwd().resolve() == prior.ROOT, 'permanent_native_actuation_directory')
-    original = prior.backup_restore.read_private(prior.APP / '.env', 65536)
-    require(original == context['environment']['original'], 'environment_unchanged_since_preflight')
-    active = engine.render_environment(original, plan['candidate'], plan['environment'])
-    guard = bind_guard(prior.source_guard())
-    prepared = prior.source_plan(plan, guard)
-    prior.command(['bash', str(SOURCE / 'scripts/check-citation.sh'), plan['candidate']], cwd=SOURCE, timeout=120)
-    out = Path(plan['evidence_directory'])
-    out.mkdir(mode=0o700)
-    prior.write_new(out / 'plan.json', dict(plan, environment_before_sha256=prior.sha(original)))
-    prior.write_new(out / 'preflight.json', context['report'])
-    cipher = prior.backup_restore.key_at(legacy.KEY)
-    prior.write_new(out / 'environment-before.fernet', cipher.encrypt(original))
-    prior.write_new(out / 'environment-after.fernet', cipher.encrypt(active))
-    require(cipher.decrypt((out / 'environment-before.fernet').read_bytes()) == original,
-            'rollback_environment_decryption')
-    units = plan['foreign_venv_units']
-    venv_before = context['venv']
-    stopped = resumed = resume_started = publication_attempted = False
-    stage = 'static_baseline'
-    host = legacy.Host(prior.managed_helper)
-    with ExitStack() as coordination:
-        try:
-            note(stage)
-            primitives = legacy.static_primitives()
-            primitives.static_delta = prior.static_delta
-            if plan['static']:
-                static_stage, static_before, staged = prior.stage_static(plan, out, primitives)
-                rollback = engine.verify_static_rollback(out / 'static-before.tar', static_before)
-            else:
-                static_stage, staged = None, {}
-                static_before = primitives.static_inventory(prior.APP / 'staticfiles')
-                rollback = {'static_noop': True, 'files': sum(r['kind'] == 'file' for r in static_before.values())}
-            prior.write_new(out / 'rollback-readback.json', dict(environment_decryption_matches=True,
-                            source_revision=plan['base'], static=rollback, live_restore_actions=0))
-            prior.activation_exclusion.bind_runtime(prior.APP / '.runtime')
-            stage = 'coordination_locks'; note(stage)
-            coordination.enter_context(legacy.operation_locks())
-            coordination.enter_context(prior.activation_exclusion.hold(
-                'rebuild-release:' + plan['candidate'][:12], timeout=30))
-            baseline = {'static': static_before}
-            stage = 'baseline_configuration'; baseline['configuration'] = host.configuration()
-            stage = 'baseline_foreign_services'; baseline['services'] = prior.foreign_services()
-            require(baseline['services'] == context['services'], 'foreign_services_unchanged_since_preflight')
-            stage = 'baseline_foreign_idle'; note(stage)
-            baseline['foreign_idle'] = idle(units)
-            require(baseline['foreign_idle']['idle'], 'venv_sharing_units_idle_before_stop')
-            stage = 'baseline_database'; note(stage); baseline['database'] = engine.snapshot(original)
-            stage = 'baseline_clinical_files'
-            baseline['files'] = prior.private_storage.inventory(Path('/var/lib/quillmd/files'))
-            stage = 'baseline_pending_check'; engine.unchanged(baseline['database'], baseline['database'])
-            stage = 'baseline_venv'; note(stage)
-            footprint.require_exact(venv_before, snapshot_venv(prior.APP / '.venv'), 'venv_unchanged_since_preflight')
-            require(venv_before['footprint_sha256'] == plan['venv_footprint_sha256'], 'venv_is_the_declared_venv')
-            baseline['venv'] = footprint.summary(venv_before)
-            stage = 'retain_baseline'
-            prior.write_new(out / 'baseline.json', baseline)
-            prior.write_new(out / 'venv-before.json', venv_before)
-            stage = 'revalidate_before_stop'; note(stage)
-            require(prior.source_plan(plan, guard) == prepared, 'source_cut_unchanged_before_stop')
-            require((prior.APP / '.env').read_bytes() == original, 'environment_unchanged_before_stop')
-            require(primitives.static_inventory(prior.APP / 'staticfiles') == static_before,
-                    'static_unchanged_before_stop')
-            require(all(host.state(unit)['ActiveState'] == 'active' and host.state(unit)['MainPID'] != '0'
-                        for unit in prior.UNITS), 'owned_units_active_before_stop')
-            stage = 'stop_owned_services'; note(stage); stopped = True
-            for unit in prior.UNITS:
-                host.service('stop', unit)
-            stage = 'verify_owned_services_stopped'
-            require(all(host.state(unit)['ActiveState'] == 'inactive' and host.state(unit)['MainPID'] == '0'
-                        for unit in prior.UNITS), 'owned_units_drained')
-            stage = 'database_after_stop'; after_stop = engine.snapshot(original)
-            stage = 'retain_database_after_stop'
-            prior.write_new(out / 'database-after-stop.json', after_stop)
-            stage = 'database_after_stop'; engine.unchanged(baseline['database'], after_stop, health_may_tick=True)
-            stage = 'venv_after_stop'; note(stage)
-            footprint.require_exact(venv_before, snapshot_venv(prior.APP / '.venv'), 'venv_unchanged_before_publication')
-            stage = 'foreign_services_after_stop'
-            require(prior.foreign_services() == baseline['services'], 'foreign_services_preserved_before_publication')
-            stage = 'source_publication'; note(stage); publication_attempted = True
-            prior.publish_source(plan, guard, prepared)
-            stage = 'static_publication'
-            if plan['static']:
-                static_after = primitives.install_static(prior.APP / 'staticfiles', static_stage, static_before, staged)
-            else:
-                static_after = primitives.static_inventory(prior.APP / 'staticfiles')
-                require(static_after == static_before, 'static_noop')
-            stage = 'environment_publication'; note(stage)
-            require((prior.APP / '.env').read_bytes() == original, 'environment_concurrency')
-            temporary = prior.APP / PENDING_ENVIRONMENT.name
-            prior.write_new(temporary, active); temporary.replace(prior.APP / '.env')
-            stage = 'database_before_resume'; before_resume = engine.snapshot(active)
-            stage = 'retain_database_before_resume'
-            prior.write_new(out / 'database-before-resume.json', before_resume)
-            stage = 'database_before_resume'; engine.unchanged(after_stop, before_resume)
-            stage = 'clinical_files_before_resume'
-            require(prior.private_storage.inventory(Path('/var/lib/quillmd/files')) == baseline['files'],
-                    'all_clinical_files_preserved')
-            stage = 'configuration_before_resume'
-            require(host.configuration() == baseline['configuration'], 'configuration_preserved')
-            stage = 'foreign_services_before_resume'
-            require(prior.foreign_services() == baseline['services'], 'foreign_services_preserved')
-            stage = 'retain_preservation'
-            evidence_sha256 = {name: prior.sha((out / name).read_bytes()) for name in
-                               ('baseline.json', 'database-after-stop.json', 'database-before-resume.json',
-                                'venv-before.json')}
-            prior.write_new(out / 'pre-resume-preservation.json', dict(after_stop_database_exact_before_resume=True,
-                            baseline_health_tick_only=True, files_preserved=True, static_inventory=static_after,
-                            evidence_sha256=evidence_sha256, provider_calls=0, migrations_executed=0,
-                            venv_exact_before_publication=True, environment_delta=['QUILLMD_RELEASE_SHA'],
-                            static_sources=list(plan['static'])))
-            stage = 'resume_owned_services'; note(stage); resume_started = True
-            for unit in (prior.UNITS[2], *prior.UNITS[:2]):
-                host.service('start', unit)
-            stage = 'normal_https_health'; health = prior.await_health(plan['candidate'])
-            stage = 'verify_owned_services_resumed'
-            require(all(host.state(unit)['ActiveState'] == 'active' for unit in prior.UNITS), 'owned_units_active')
-            resumed = True
-            stage = 'configuration_after_resume'
-            require(host.configuration() == baseline['configuration'], 'configuration_preserved_after_resume')
-            stage = 'foreign_services_after_resume'
-            require(prior.foreign_services() == baseline['services'], 'foreign_services_preserved_after_resume')
-            # Post-conditions the act cannot cause and draining cannot fix are measured and reported, not drained
-            # for: the installation is complete, and a failed post-condition makes the act exit 2 for judgement.
-            stage = 'foreign_idle_after_resume'; note(stage)
-            postconditions = {}
+    with signal_routing() as signals, act_git_environment():
+        original = prior.backup_restore.read_private(prior.APP / '.env', 65536)
+        require(original == context['environment']['original'], 'environment_unchanged_since_preflight')
+        active = engine.render_environment(original, plan['candidate'], plan['environment'])
+        guard = bind_guard(prior.source_guard())
+        prepared = prior.source_plan(plan, guard)
+        citation(prior, plan['candidate'], plan['gate_scripts'], root=prior.ROOT)
+        out = Path(plan['evidence_directory'])
+        out.mkdir(mode=0o700)
+        prior.write_new(out / 'plan.json', dict(plan, environment_before_sha256=prior.sha(original)))
+        prior.write_new(out / 'preflight.json', context['report'])
+        cipher = prior.backup_restore.key_at(legacy.KEY)
+        prior.write_new(out / 'environment-before.fernet', cipher.encrypt(original))
+        prior.write_new(out / 'environment-after.fernet', cipher.encrypt(active))
+        require(cipher.decrypt((out / 'environment-before.fernet').read_bytes()) == original,
+                'rollback_environment_decryption')
+        units = plan['foreign_venv_units']
+        venv_before = context['venv']
+        flags = dict(stopped=False, resume_started=False, publication_started=False, publication_completed=False)
+        stage = 'static_baseline'
+        host = legacy.Host(prior.managed_helper)
+        with ExitStack() as coordination:
             try:
-                after_idle = idle(units)
-                postconditions['venv_sharing_units_idle_after_resume'] = after_idle['idle']
-            except Exception as error:
-                after_idle = {'error': reason(error)}
-                postconditions['venv_sharing_units_idle_after_resume'] = False
-            stage = 'venv_after_resume'; note(stage)
-            venv_after = None
-            try:
+                note(stage)
+                primitives = legacy.static_primitives()
+                primitives.static_delta = prior.static_delta
+                if plan['static']:
+                    static_stage, static_before, staged = prior.stage_static(plan, out, primitives)
+                    rollback = engine.verify_static_rollback(out / 'static-before.tar', static_before)
+                else:
+                    static_stage, staged = None, {}
+                    static_before = primitives.static_inventory(prior.APP / 'staticfiles')
+                    rollback = {'static_noop': True, 'files': sum(r['kind'] == 'file' for r in static_before.values())}
+                prior.write_new(out / 'rollback-readback.json', dict(environment_decryption_matches=True,
+                                source_revision=plan['base'], static=rollback, live_restore_actions=0))
+                prior.activation_exclusion.bind_runtime(prior.APP / '.runtime')
+                stage = 'coordination_locks'; note(stage)
+                coordination.enter_context(legacy.operation_locks())
+                coordination.enter_context(prior.activation_exclusion.hold(
+                    'rebuild-release:' + plan['candidate'][:12], timeout=30))
+                baseline = {'static': static_before}
+                stage = 'baseline_configuration'; baseline['configuration'] = host.configuration()
+                stage = 'baseline_foreign_services'; baseline['services'] = prior.foreign_services()
+                require(baseline['services'] == context['services'], 'foreign_services_unchanged_since_preflight')
+                stage = 'baseline_foreign_idle'; note(stage)
+                baseline['foreign_idle'] = idle(units)
+                require(baseline['foreign_idle']['idle'], 'venv_sharing_units_idle_before_stop')
+                stage = 'baseline_database'; note(stage); baseline['database'] = engine.snapshot(original)
+                stage = 'baseline_clinical_files'
+                baseline['files'] = prior.private_storage.inventory(Path('/var/lib/quillmd/files'))
+                stage = 'baseline_pending_check'; engine.unchanged(baseline['database'], baseline['database'])
+                stage = 'baseline_venv'; note(stage)
+                footprint.require_exact(venv_before, snapshot_venv(prior.APP / '.venv'), 'venv_unchanged_since_preflight')
+                require(venv_before['footprint_sha256'] == plan['venv_footprint_sha256'], 'venv_is_the_declared_venv')
+                baseline['venv'] = footprint.summary(venv_before)
+                stage = 'retain_baseline'
+                prior.write_new(out / 'baseline.json', baseline)
+                prior.write_new(out / 'venv-before.json', venv_before)
+                stage = 'revalidate_before_stop'; note(stage)
+                require(prior.source_plan(plan, guard) == prepared, 'source_cut_unchanged_before_stop')
+                require((prior.APP / '.env').read_bytes() == original, 'environment_unchanged_before_stop')
+                require(primitives.static_inventory(prior.APP / 'staticfiles') == static_before,
+                        'static_unchanged_before_stop')
+                require(all(host.state(unit)['ActiveState'] == 'active' and host.state(unit)['MainPID'] != '0'
+                            for unit in prior.UNITS), 'owned_units_active_before_stop')
+                stage = 'stop_owned_services'; note(stage); flags['stopped'] = True
+                for unit in prior.UNITS:
+                    host.service('stop', unit)
+                stage = 'verify_owned_services_stopped'
+                require(all(host.state(unit)['ActiveState'] == 'inactive' and host.state(unit)['MainPID'] == '0'
+                            for unit in prior.UNITS), 'owned_units_drained')
+                stage = 'database_after_stop'; after_stop = engine.snapshot(original)
+                stage = 'retain_database_after_stop'
+                prior.write_new(out / 'database-after-stop.json', after_stop)
+                stage = 'database_after_stop'; engine.unchanged(baseline['database'], after_stop, health_may_tick=True)
+                # Everything taken while the units still served is compared again now, before publication: a
+                # change in that window refuses here, and the original release is restored.
+                stage = 'venv_after_stop'; note(stage)
+                footprint.require_exact(venv_before, snapshot_venv(prior.APP / '.venv'),
+                                        'venv_unchanged_before_publication')
+                stage = 'foreign_services_after_stop'
+                require(prior.foreign_services() == baseline['services'], 'foreign_services_preserved_before_publication')
+                stage = 'configuration_after_stop'
+                require(host.configuration() == baseline['configuration'], 'configuration_preserved_before_publication')
+                stage = 'clinical_files_after_stop'; note(stage)
+                require(prior.private_storage.inventory(Path('/var/lib/quillmd/files')) == baseline['files'],
+                        'clinical_files_preserved_before_publication')
+                stage = 'git_state_after_stop'; source_state()
+                stage = 'source_publication'; note(stage); flags['publication_started'] = True
+                prior.publish_source(plan, guard, prepared)
+                flags['publication_completed'] = True
+                stage = 'static_publication'
+                if plan['static']:
+                    static_after = primitives.install_static(prior.APP / 'staticfiles', static_stage, static_before,
+                                                             staged)
+                else:
+                    static_after = primitives.static_inventory(prior.APP / 'staticfiles')
+                    require(static_after == static_before, 'static_noop')
+                stage = 'environment_publication'; note(stage)
+                require((prior.APP / '.env').read_bytes() == original, 'environment_concurrency')
+                temporary = prior.APP / PENDING_ENVIRONMENT.name
+                prior.write_new(temporary, active); temporary.replace(prior.APP / '.env')
+                stage = 'database_before_resume'; before_resume = engine.snapshot(active)
+                stage = 'retain_database_before_resume'
+                prior.write_new(out / 'database-before-resume.json', before_resume)
+                stage = 'database_before_resume'; engine.unchanged(after_stop, before_resume)
+                stage = 'clinical_files_before_resume'
+                require(prior.private_storage.inventory(Path('/var/lib/quillmd/files')) == baseline['files'],
+                        'all_clinical_files_preserved')
+                stage = 'configuration_before_resume'
+                require(host.configuration() == baseline['configuration'], 'configuration_preserved')
+                stage = 'foreign_services_before_resume'
+                require(prior.foreign_services() == baseline['services'], 'foreign_services_preserved')
+                stage = 'retain_preservation'
+                evidence_sha256 = {name: prior.sha((out / name).read_bytes()) for name in
+                                   ('baseline.json', 'database-after-stop.json', 'database-before-resume.json',
+                                    'venv-before.json')}
+                prior.write_new(out / 'pre-resume-preservation.json', dict(
+                    after_stop_database_exact_before_resume=True, baseline_health_tick_only=True,
+                    files_preserved=True, static_inventory=static_after, evidence_sha256=evidence_sha256,
+                    provider_calls=0, migrations_executed=0, venv_exact_before_publication=True,
+                    configuration_and_files_exact_before_publication=True,
+                    environment_delta=['QUILLMD_RELEASE_SHA'], static_sources=list(plan['static'])))
+                stage = 'resume_owned_services'; note(stage); flags['resume_started'] = True
+                for unit in (prior.UNITS[2], *prior.UNITS[:2]):
+                    host.service('start', unit)
+                stage = 'normal_https_health'; health = prior.await_health(plan['candidate'])
+                stage = 'verify_owned_services_resumed'
+                require(all(host.state(unit)['ActiveState'] == 'active' for unit in prior.UNITS), 'owned_units_active')
+            except BaseException as error:
+                try:
+                    refusal = failure_path(error, engine=engine, host=host, out=out, plan=plan, stage=stage,
+                                           flags=flags, original=original, guard=guard, prepared=prepared,
+                                           signals=signals)
+                except BaseException:
+                    emit({'rebuild_release_failure_path_error': True, 'stage': stage})
+                    refusal = Refusal('installation_failed_recovery_state_unknown')
+                raise refusal from None
+            # INSTALLED AND HEALTHY. From here every observation is reported for judgement and nothing drains: a
+            # foreign restart, a failed configuration read or an interrupt is a post-condition the act cannot undo
+            # by stopping a healthy release. An interrupt skips the remaining measurements; the receipt is written.
+            postconditions, interrupted = {}, []
+
+            def observe(name, measure):
+                if interrupted:
+                    postconditions[name] = False
+                    return {'not_measured': 'interrupted'}
+                try:
+                    passed, detail = measure()
+                except Interrupted as signal_error:
+                    signals['raising'] = False      # one interrupt ends the measurements; the receipt follows
+                    interrupted.append(signal_error.signal_name)
+                    postconditions[name] = False
+                    return {'interrupted': signal_error.signal_name}
+                except BaseException as observation_error:
+                    postconditions[name] = False
+                    return {'label': reason(observation_error)}
+                postconditions[name] = passed is True
+                return detail
+
+            def venv_measure():
                 venv_after = snapshot_venv(prior.APP / '.venv')
-                footprint.require_exact(venv_before, venv_after, 'venv_changed_during_the_act')
-                postconditions['venv_exact_after_resume'] = True
-                venv_change = None
-            except Exception as error:
-                postconditions['venv_exact_after_resume'] = False
-                venv_change = {'label': reason(error)}
-                if type(venv_after) is dict and type(venv_after.get('files')) is dict:
-                    venv_change['difference'] = footprint.difference(venv_before['files'], venv_after['files'])
-            passed = all(postconditions.values())
+                try:
+                    footprint.require_exact(venv_before, venv_after, 'venv_changed_during_the_act')
+                except Exception as change_error:
+                    change = {'label': reason(change_error)}
+                    if type(venv_after) is dict and type(venv_after.get('files')) is dict:
+                        change['difference'] = footprint.difference(venv_before['files'], venv_after['files'])
+                    return False, change
+                return True, None
+
+            def idle_measure():
+                value = idle(units)
+                return value['idle'], value
+            observations, after_idle, venv_change = {}, None, None
+            try:
+                stage = 'configuration_after_resume'
+                observations['configuration'] = observe('configuration_preserved_after_resume', lambda: (
+                    host.configuration() == baseline['configuration'], None))
+                stage = 'foreign_services_after_resume'
+                observations['foreign_services'] = observe('foreign_services_preserved_after_resume', lambda: (
+                    prior.foreign_services() == baseline['services'], None))
+                stage = 'foreign_idle_after_resume'; note(stage)
+                after_idle = observe('venv_sharing_units_idle_after_resume', idle_measure)
+                stage = 'venv_after_resume'; note(stage)
+                venv_change = observe('venv_exact_after_resume', venv_measure)
+            except Interrupted as signal_error:      # between two measurements
+                signals['raising'] = False
+                interrupted.append(signal_error.signal_name)
+            signals['raising'] = False
+            for name in POSTCONDITIONS:
+                postconditions.setdefault(name, False)
+            passed = all(postconditions.values()) and not interrupted
             result = dict(format=FORMAT, installed_revision=plan['candidate'], base=plan['base'], complete=True,
                           health=health, migrations_executed=0, provider_calls=0, clinician_decisions_created=0,
                           dependency_installs=0, evidence_sha256=evidence_sha256, plan_sha256=plan['plan_sha256'],
@@ -1042,30 +1564,16 @@ def act(engine, plan, context, *, footprint, idle=foreign_idle, snapshot_venv=No
                           manifest_sha256=plan['manifest_sha256'], environment_delta=['QUILLMD_RELEASE_SHA'],
                           static_sources=list(plan['static']), venv_footprint_sha256=venv_before['footprint_sha256'],
                           postconditions=postconditions, all_postconditions_passed=passed,
+                          observations={key: value for key, value in observations.items() if value is not None},
                           foreign_idle_after_resume=after_idle, venv_change=venv_change,
+                          interrupted=interrupted[0] if interrupted else None,
                           strict_preservation_ends_before_resume=True)
             stage = 'retain_completion'; note(stage)
-            prior.write_new(out / 'installation-complete.json', result)
-            return result, passed
-        except BaseException as error:
-            drain = engine.stop_failed_resume(host) if resume_started else None
-            prior.write_new(out / 'failure.json', dict(format=FORMAT, complete=False, stage=stage,
-                            **diagnostics(engine, error), stopped=stopped, resumed=resumed,
-                            resume_started=resume_started, publication_attempted=publication_attempted,
-                            failed_resume_drain=drain, provider_calls=0, automatic_retry=False))
-            if drain is not None:
-                prior.write_new(out / 'failed-resume-drain.json', drain)
-                require(drain['all_units_inactive'], 'failed_resume_drain_incomplete')
-            if stopped and not publication_attempted and not resume_started:
-                try:
-                    engine.verify_original_before_resume(original, guard, prepared)
-                except BaseException as recovery_error:
-                    prior.write_new(out / 'original-recovery-refused.json', diagnostics(engine, recovery_error))
-                    raise Refusal('original_recovery_refused_inspect_retained_evidence') from None
-                for unit in (prior.UNITS[2], *prior.UNITS[:2]):
-                    host.service('start', unit)
-                prior.write_new(out / 'original-release-resumed.json', {'release': plan['base']})
-            raise Refusal('installation_failed_inspect_retained_evidence') from None
+            result['receipt_retained'] = retain(prior, out / 'installation-complete.json', result)
+            if not result['receipt_retained']:
+                emit({'rebuild_release_installed': plan['candidate'], 'all_postconditions_passed': passed,
+                      'receipt_retained': False})
+            return result, passed and result['receipt_retained']
 
 
 def build_plan(args, context):
@@ -1080,7 +1588,8 @@ def build_plan(args, context):
             'code_manifest_sha256': declaration['contract']['code_manifest_sha256'],
             'declaration': declaration['provenance'], 'backup': measured['backup'],
             'venv_footprint_sha256': declaration['contract']['venv']['footprint_sha256'],
-            'foreign_venv_units': list(declaration['contract']['foreign_venv_units'])}
+            'foreign_venv_units': list(declaration['contract']['foreign_venv_units']),
+            'gate_scripts': dict(measured['gate_scripts'])}
     plan['plan_sha256'] = sha(canonical(plan))
     return plan
 
@@ -1173,13 +1682,18 @@ def main(argv=None):
         try:
             result, passed = act(engine, plan, context, footprint=ops_module('venv_footprint'))
         except BaseException as error:
-            write_result(args.result, {'format': FORMAT, 'complete': False, 'label': reason(error),
-                                       'evidence_directory': str(args.evidence_directory)})
+            # A second record of the outcome, in another directory; a failure to write it never masks the act's.
+            try:
+                write_result(args.result, {'format': FORMAT, 'complete': False, 'label': reason(error),
+                                           'recovery': getattr(error, 'outcome', None),
+                                           'evidence_directory': str(args.evidence_directory)})
+            except BaseException as write_error:
+                emit({'result_write_failed': reason(write_error), 'label': reason(error)})
             raise
+    receipt = Path(plan['evidence_directory']) / 'installation-complete.json'
     write_result(args.result, {'format': FORMAT, 'complete': True, 'all_postconditions_passed': passed,
                                'evidence_directory': str(args.evidence_directory),
-                               'receipt_sha256': sha((Path(plan['evidence_directory']) /
-                                                      'installation-complete.json').read_bytes())})
+                               'receipt_sha256': sha(receipt.read_bytes()) if receipt.is_file() else None})
     print(json.dumps(result, indent=1, sort_keys=True, default=str))
     return 0 if passed else 2
 
