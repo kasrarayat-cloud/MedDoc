@@ -1,0 +1,1225 @@
+{
+ "id": "h4-06",
+ "manifest": {
+  "author_codes": [
+   "45385"
+  ],
+  "class": "4-extent-by-label-and-completeness",
+  "expected_clarifications": [],
+  "expected_context": {
+   "service_date": {
+    "origin_in": [
+     "document"
+    ],
+    "value_in": [
+     "2026-10-27"
+    ]
+   },
+   "setting": {
+    "origin_in": [
+     "document"
+    ],
+    "value_in": [
+     "asc"
+    ]
+   }
+  },
+  "expected_routing": {
+   "families": {
+    "gi.colonoscopy": {
+     "facts": {
+      "extent": {
+       "value_contains_any": [
+        "anastomo",
+        "ileum",
+        "ileal"
+       ]
+      }
+     },
+     "presence": "required",
+     "status_in": [
+      "performed"
+     ]
+    }
+   },
+   "not_performed": [
+    "gi.office_em",
+    "gi.egd",
+    "gi.flex_sig",
+    "gi.eus",
+    "gi.ercp"
+   ]
+  },
+  "incomplete_services": [],
+  "must_not_code": [
+   {
+    "family": "gi.office_em",
+    "reason": "No separately identifiable E/M."
+   },
+   {
+    "family": "gi.flex_sig",
+    "reason": "Not a sigmoidoscopy: the whole remaining colon was examined to the ileocolic anastomosis."
+   }
+  ],
+  "review_plan": {
+   "approve_codes": [
+    "45385"
+   ],
+   "context_edit": {
+    "service_date": "2026-10-27"
+   },
+   "reject": null
+  },
+  "source_sha256": "3a2bfc38b8b3df231b42d137688218109b10317665abde9a95f29d15ec5de284"
+ },
+ "reference_sources": [
+  {
+   "effective_end": "2026-12-31",
+   "effective_start": "2026-10-01",
+   "key": "cms-mue-practitioner-2026q4",
+   "kind": "cms-mue-practitioner",
+   "license_note": "CPT codes are copyright the American Medical Association; descriptors are not imported or displayed. Used for internal synthetic evaluation only; commercial CPT use requires an AMA license.",
+   "publisher": "Centers for Medicare & Medicaid Services (CMS)",
+   "release": "2026-Q4",
+   "scope_note": "Medicare NCCI practitioner MUE values (units per day; not every payer)",
+   "sha256": "4574336755ba4e49b7c8ec07de5b74d3f0b8593e3e6192013631724981180d00",
+   "title": "Medicare NCCI practitioner services MUE table (MCR_MUE_PractitionerServices_Eff_10-01-2026.csv)",
+   "url": "https://www.cms.gov/files/zip/medicare-ncci-2026-q4-practitioner-services-mue-table.zip"
+  },
+  {
+   "effective_end": "2026-12-31",
+   "effective_start": "2026-10-01",
+   "key": "cms-pfs-rvu26d",
+   "kind": "cms-pfs",
+   "license_note": "CPT codes are copyright the American Medical Association; descriptors are not imported or displayed. Used for internal synthetic evaluation only; commercial CPT use requires an AMA license.",
+   "publisher": "Centers for Medicare & Medicaid Services (CMS)",
+   "release": "RVU26D",
+   "scope_note": "Medicare Physician Fee Schedule indicators (not a CPT edition; not payer-specific)",
+   "sha256": "521ff0f4ecbf13b5d99dc1dc04d9f82e5361e55c6b4b6b3033043598bf8406e6",
+   "title": "Medicare Physician Fee Schedule relative value file (PPRRVU2026_Oct_nonQPP.csv)",
+   "url": "https://www.cms.gov/files/zip/rvu26d-updated-08-26-2026.zip"
+  }
+ ],
+ "runs": [
+  {
+   "purpose": "primary",
+   "request_sha256": "b38da8856c4be2351b596026b1e424466c2be92188bb9e002c64a26aae0122b9",
+   "response": {
+    "candidates": [
+     {
+      "alternatives": [],
+      "code": "G8420",
+      "display": "PR CALC BMI NORM PARAMETERS",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1744,
+        "text": "The polyp goes to Brackenfield Pathology Laboratory (fictional), which reports it separately."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "1036F",
+      "display": "PR CURRENT TOBACCO NON-USER",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1744,
+        "text": "The polyp goes to Brackenfield Pathology Laboratory (fictional), which reports it separately."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2057,
+        "start": 1990,
+        "text": "Attested: Evander Quarshie-Moll, MD (fictional), Oct 27, 2026 12:31"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G9903",
+      "display": "PR PT SCRN TBCO ID AS NON USER",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1744,
+        "text": "The polyp goes to Brackenfield Pathology Laboratory (fictional), which reports it separately."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2057,
+        "start": 1990,
+        "text": "Attested: Evander Quarshie-Moll, MD (fictional), Oct 27, 2026 12:31"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8754",
+      "display": "PR DIAS BP LESS 90",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1744,
+        "text": "The polyp goes to Brackenfield Pathology Laboratory (fictional), which reports it separately."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8417",
+      "display": "PR CALC BMI ABV UP PARAM F/U",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1379,
+        "start": 1276,
+        "text": "Anastomosis: widely patent, with healthy mucosa, an intact staple line and no nodularity or recurrence."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1744,
+        "text": "The polyp goes to Brackenfield Pathology Laboratory (fictional), which reports it separately."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "99213",
+      "display": "+PR OFFICE OUTPATIENT VISIT 15 MINUTES",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1379,
+        "start": 1276,
+        "text": "Anastomosis: widely patent, with healthy mucosa, an intact staple line and no nodularity or recurrence."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1744,
+        "text": "The polyp goes to Brackenfield Pathology Laboratory (fictional), which reports it separately."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8752",
+      "display": "PR SYS BP LESS 140",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1379,
+        "start": 1276,
+        "text": "Anastomosis: widely patent, with healthy mucosa, an intact staple line and no nodularity or recurrence."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1744,
+        "text": "The polyp goes to Brackenfield Pathology Laboratory (fictional), which reports it separately."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "3074F",
+      "display": "PR MOST RECENT SYSTOLIC BLOOD PRESSURE < 130 MM HG",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 649,
+        "start": 537,
+        "text": "Stage II (node-negative) adenocarcinoma of the cecum, treated by laparoscopic right hemicolectomy with a stapled"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1744,
+        "text": "The polyp goes to Brackenfield Pathology Laboratory (fictional), which reports it separately."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8753",
+      "display": "PR SYS BP > OR = 140",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1379,
+        "start": 1276,
+        "text": "Anastomosis: widely patent, with healthy mucosa, an intact staple line and no nodularity or recurrence."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "3078F",
+      "display": "PR MOST RECENT DIASTOLIC BLOOD PRESSURE < 80 MM HG",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 230,
+        "start": 200,
+        "text": "Day of procedure: Oct 27, 2026"
+       },
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 649,
+        "start": 537,
+        "text": "Stage II (node-negative) adenocarcinoma of the cecum, treated by laparoscopic right hemicolectomy with a stapled"
+       },
+       {
+        "contextIndex": 0,
+        "end": 2057,
+        "start": 1990,
+        "text": "Attested: Evander Quarshie-Moll, MD (fictional), Oct 27, 2026 12:31"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "99214",
+      "display": "+PR OFFICE/OUTPATIENT ESTABLISHED MOD MDM 30 MIN",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 829,
+        "start": 783,
+        "text": "This is his one-year surveillance colonoscopy."
+       },
+       {
+        "contextIndex": 0,
+        "end": 879,
+        "start": 830,
+        "text": "He took the split-dose preparation as instructed."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "99024",
+      "display": "PR POST-OP FOLLOW-UP VISIT",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 731,
+        "start": 650,
+        "text": "ileocolic anastomosis at Pellingham General Hospital (fictional) on Sep 30, 2025."
+       },
+       {
+        "contextIndex": 0,
+        "end": 879,
+        "start": 830,
+        "text": "He took the split-dose preparation as instructed."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1379,
+        "start": 1276,
+        "text": "Anastomosis: widely patent, with healthy mucosa, an intact staple line and no nodularity or recurrence."
+       }
+      ],
+      "system": "cpt"
+     }
+    ],
+    "codes": [
+     {
+      "alternatives": [
+       {
+        "code": "C78.5",
+        "display": "Secondary malignant neoplasm of large intestine and rectum"
+       },
+       {
+        "code": "Z48.3",
+        "display": "Aftercare following surgery for neoplasm"
+       },
+       {
+        "code": "Z90.49",
+        "display": "Acquired absence of other specified parts of digestive tract"
+       }
+      ],
+      "code": "Z08",
+      "display": "Encounter for follow-up examination after completed treatment for malignant neoplasm",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 829,
+        "start": 783,
+        "text": "This is his one-year surveillance colonoscopy."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "C18.9",
+        "display": "Malignant neoplasm of colon, unspecified"
+       },
+       {
+        "code": "C78.5",
+        "display": "Secondary malignant neoplasm of large intestine and rectum"
+       },
+       {
+        "code": "Z85.030",
+        "display": "Personal history of malignant carcinoid tumor of large intestine"
+       }
+      ],
+      "code": "Z85.038",
+      "display": "Personal history of other malignant neoplasm of large intestine",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 731,
+        "start": 537,
+        "text": "Stage II (node-negative) adenocarcinoma of the cecum, treated by laparoscopic right hemicolectomy with a stapled\nileocolic anastomosis at Pellingham General Hospital (fictional) on Sep 30, 2025."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1641,
+        "start": 1592,
+        "text": "Healthy ileocolic anastomosis without recurrence."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "K91.31",
+        "display": "Postprocedural partial intestinal obstruction"
+       },
+       {
+        "code": "Y83.3",
+        "display": "Surgical operation with formation of external stoma as the cause of abnormal reaction of the patient, or of later complication, without mention of misadventure at the time of the procedure"
+       }
+      ],
+      "code": "Z90.49",
+      "display": "Acquired absence of other specified parts of digestive tract",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 671,
+        "start": 591,
+        "text": "treated by laparoscopic right hemicolectomy with a stapled\nileocolic anastomosis"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1135,
+        "start": 1084,
+        "text": "the cecum and ascending colon were removed in 2025."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "D12.3",
+        "display": "Benign neoplasm of transverse colon"
+       },
+       {
+        "code": "D12.6",
+        "display": "Benign neoplasm of colon, unspecified"
+       }
+      ],
+      "code": "K63.5",
+      "display": "Polyp of colon",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1493,
+        "start": 1408,
+        "text": "Transverse colon: one 5 mm sessile polyp, resected whole by cold snare and recovered."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1698,
+        "start": 1646,
+        "text": "Transverse colon polyp, 5 mm, removed by cold snare."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "K57.90",
+        "display": "Diverticulosis of intestine, part unspecified, without perforation or abscess without bleeding"
+       }
+      ],
+      "code": "K57.30",
+      "display": "Diverticulosis of large intestine without perforation or abscess without bleeding",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1542,
+        "start": 1494,
+        "text": "Descending and sigmoid colon: a few diverticula."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1728,
+        "start": 1702,
+        "text": "Left-sided diverticulosis."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [],
+      "code": "45385",
+      "display": "COLSC FLX W/RMVL OF TUMOR POLYP LESION SNARE TQ",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1698,
+        "start": 1646,
+        "text": "Transverse colon polyp, 5 mm, removed by cold snare."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1728,
+        "start": 1702,
+        "text": "Left-sided diverticulosis."
+       }
+      ],
+      "system": "cpt"
+     }
+    ],
+    "usageInfo": {
+     "creditsConsumed": 0.04432
+    }
+   },
+   "run": "a9c7dcef",
+   "sent": true,
+   "service_date": null,
+   "state": "succeeded"
+  },
+  {
+   "purpose": "primary",
+   "request_sha256": "83712b2fcd3713a53dc101f3d6705c7441140fd235c9e47b5c61997a300cabaf",
+   "response": {
+    "candidates": [
+     {
+      "alternatives": [],
+      "code": "G8420",
+      "display": "PR CALC BMI NORM PARAMETERS",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1744,
+        "text": "The polyp goes to Brackenfield Pathology Laboratory (fictional), which reports it separately."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1972,
+        "start": 1898,
+        "text": "CT surveillance and CEA continue with his oncologist, Teodor Wambui-Faure,"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G9903",
+      "display": "PR PT SCRN TBCO ID AS NON USER",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1744,
+        "text": "The polyp goes to Brackenfield Pathology Laboratory (fictional), which reports it separately."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2057,
+        "start": 1990,
+        "text": "Attested: Evander Quarshie-Moll, MD (fictional), Oct 27, 2026 12:31"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "1036F",
+      "display": "PR CURRENT TOBACCO NON-USER",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1744,
+        "text": "The polyp goes to Brackenfield Pathology Laboratory (fictional), which reports it separately."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2057,
+        "start": 1990,
+        "text": "Attested: Evander Quarshie-Moll, MD (fictional), Oct 27, 2026 12:31"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8754",
+      "display": "PR DIAS BP LESS 90",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1744,
+        "text": "The polyp goes to Brackenfield Pathology Laboratory (fictional), which reports it separately."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8417",
+      "display": "PR CALC BMI ABV UP PARAM F/U",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1744,
+        "text": "The polyp goes to Brackenfield Pathology Laboratory (fictional), which reports it separately."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8752",
+      "display": "PR SYS BP LESS 140",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1379,
+        "start": 1276,
+        "text": "Anastomosis: widely patent, with healthy mucosa, an intact staple line and no nodularity or recurrence."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1744,
+        "text": "The polyp goes to Brackenfield Pathology Laboratory (fictional), which reports it separately."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "99213",
+      "display": "+PR OFFICE OUTPATIENT VISIT 15 MINUTES",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1379,
+        "start": 1276,
+        "text": "Anastomosis: widely patent, with healthy mucosa, an intact staple line and no nodularity or recurrence."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1744,
+        "text": "The polyp goes to Brackenfield Pathology Laboratory (fictional), which reports it separately."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8753",
+      "display": "PR SYS BP > OR = 140",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1744,
+        "text": "The polyp goes to Brackenfield Pathology Laboratory (fictional), which reports it separately."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "3074F",
+      "display": "PR MOST RECENT SYSTOLIC BLOOD PRESSURE < 130 MM HG",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 649,
+        "start": 537,
+        "text": "Stage II (node-negative) adenocarcinoma of the cecum, treated by laparoscopic right hemicolectomy with a stapled"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1744,
+        "text": "The polyp goes to Brackenfield Pathology Laboratory (fictional), which reports it separately."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "3078F",
+      "display": "PR MOST RECENT DIASTOLIC BLOOD PRESSURE < 80 MM HG",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 230,
+        "start": 200,
+        "text": "Day of procedure: Oct 27, 2026"
+       },
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 649,
+        "start": 537,
+        "text": "Stage II (node-negative) adenocarcinoma of the cecum, treated by laparoscopic right hemicolectomy with a stapled"
+       },
+       {
+        "contextIndex": 0,
+        "end": 2057,
+        "start": 1990,
+        "text": "Attested: Evander Quarshie-Moll, MD (fictional), Oct 27, 2026 12:31"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "99024",
+      "display": "PR POST-OP FOLLOW-UP VISIT",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 731,
+        "start": 650,
+        "text": "ileocolic anastomosis at Pellingham General Hospital (fictional) on Sep 30, 2025."
+       },
+       {
+        "contextIndex": 0,
+        "end": 879,
+        "start": 830,
+        "text": "He took the split-dose preparation as instructed."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1379,
+        "start": 1276,
+        "text": "Anastomosis: widely patent, with healthy mucosa, an intact staple line and no nodularity or recurrence."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "99214",
+      "display": "+PR OFFICE/OUTPATIENT ESTABLISHED MOD MDM 30 MIN",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 480,
+        "start": 364,
+        "text": "Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1972,
+        "start": 1898,
+        "text": "CT surveillance and CEA continue with his oncologist, Teodor Wambui-Faure,"
+       },
+       {
+        "contextIndex": 0,
+        "end": 2057,
+        "start": 1990,
+        "text": "Attested: Evander Quarshie-Moll, MD (fictional), Oct 27, 2026 12:31"
+       },
+       {
+        "contextIndex": 1,
+        "end": 27,
+        "start": 0,
+        "text": "Date of service: 2026-10-27"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "45381",
+      "display": "COLSC FLX WITH DIRECTED SUBMUCOSAL NJX ANY SBST",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1493,
+        "start": 1408,
+        "text": "Transverse colon: one 5 mm sessile polyp, resected whole by cold snare and recovered."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1698,
+        "start": 1646,
+        "text": "Transverse colon polyp, 5 mm, removed by cold snare."
+       }
+      ],
+      "system": "cpt"
+     }
+    ],
+    "codes": [
+     {
+      "alternatives": [],
+      "code": "Z12.11",
+      "display": "Encounter for screening for malignant neoplasm of colon",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 101,
+        "start": 68,
+        "text": "Post-Resection Colon Surveillance"
+       },
+       {
+        "contextIndex": 0,
+        "end": 829,
+        "start": 783,
+        "text": "This is his one-year surveillance colonoscopy."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "C18.0",
+        "display": "Malignant neoplasm of cecum"
+       },
+       {
+        "code": "C18.9",
+        "display": "Malignant neoplasm of colon, unspecified"
+       },
+       {
+        "code": "C78.5",
+        "display": "Secondary malignant neoplasm of large intestine and rectum"
+       },
+       {
+        "code": "D01.0",
+        "display": "Carcinoma in situ of colon"
+       },
+       {
+        "code": "D12.0",
+        "display": "Benign neoplasm of cecum"
+       },
+       {
+        "code": "D37.4",
+        "display": "Neoplasm of uncertain behavior of colon"
+       },
+       {
+        "code": "D49.0",
+        "display": "Neoplasm of unspecified behavior of digestive system"
+       },
+       {
+        "code": "Z85.030",
+        "display": "Personal history of malignant carcinoid tumor of large intestine"
+       }
+      ],
+      "code": "Z85.038",
+      "display": "Personal history of other malignant neoplasm of large intestine",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 731,
+        "start": 537,
+        "text": "Stage II (node-negative) adenocarcinoma of the cecum, treated by laparoscopic right hemicolectomy with a stapled\nileocolic anastomosis at Pellingham General Hospital (fictional) on Sep 30, 2025."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1988,
+        "start": 1898,
+        "text": "CT surveillance and CEA continue with his oncologist, Teodor Wambui-Faure,\nMD (fictional)."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "K91.31",
+        "display": "Postprocedural partial intestinal obstruction"
+       },
+       {
+        "code": "Y83.3",
+        "display": "Surgical operation with formation of external stoma as the cause of abnormal reaction of the patient, or of later complication, without mention of misadventure at the time of the procedure"
+       }
+      ],
+      "code": "Z90.49",
+      "display": "Acquired absence of other specified parts of digestive tract",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 731,
+        "start": 591,
+        "text": "treated by laparoscopic right hemicolectomy with a stapled\nileocolic anastomosis at Pellingham General Hospital (fictional) on Sep 30, 2025."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1041,
+        "start": 943,
+        "text": "Reach of the examination: ileocolic anastomosis, with 6 cm of neoterminal ileum viewed through it."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "D12.3",
+        "display": "Benign neoplasm of transverse colon"
+       },
+       {
+        "code": "D12.6",
+        "display": "Benign neoplasm of colon, unspecified"
+       }
+      ],
+      "code": "K63.5",
+      "display": "Polyp of colon",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1493,
+        "start": 1408,
+        "text": "Transverse colon: one 5 mm sessile polyp, resected whole by cold snare and recovered."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1698,
+        "start": 1646,
+        "text": "Transverse colon polyp, 5 mm, removed by cold snare."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "K57.90",
+        "display": "Diverticulosis of intestine, part unspecified, without perforation or abscess without bleeding"
+       }
+      ],
+      "code": "K57.30",
+      "display": "Diverticulosis of large intestine without perforation or abscess without bleeding",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1542,
+        "start": 1494,
+        "text": "Descending and sigmoid colon: a few diverticula."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1728,
+        "start": 1702,
+        "text": "Left-sided diverticulosis."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [],
+      "code": "45385",
+      "display": "COLSC FLX W/RMVL OF TUMOR POLYP LESION SNARE TQ",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1698,
+        "start": 1646,
+        "text": "Transverse colon polyp, 5 mm, removed by cold snare."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1728,
+        "start": 1702,
+        "text": "Left-sided diverticulosis."
+       }
+      ],
+      "system": "cpt"
+     }
+    ],
+    "usageInfo": {
+     "creditsConsumed": 0.050628
+    }
+   },
+   "run": "2a83f7f2",
+   "sent": true,
+   "service_date": "2026-10-27",
+   "state": "succeeded"
+  }
+ ],
+ "stored": {
+  "contexts": [
+   [
+    "gi-context@3",
+    "missing",
+    null
+   ],
+   [
+    "gi-context@3",
+    "user",
+    "2026-10-27"
+   ],
+   [
+    "gi-context@3",
+    "user",
+    "2026-10-27"
+   ]
+  ],
+  "decisions": [],
+  "open_clarifications": [
+   [
+    "proposal",
+    "gi.colonoscopy",
+    "extent"
+   ],
+   [
+    "proposal",
+    "gi.colonoscopy",
+    "extent"
+   ]
+  ],
+  "proposals": [
+   [
+    "1036F",
+    "alternative",
+    "informational",
+    "a3a6f9ee"
+   ],
+   [
+    "3074F",
+    "alternative",
+    "informational",
+    "e5067831"
+   ],
+   [
+    "3078F",
+    "alternative",
+    "informational",
+    "d413e722"
+   ],
+   [
+    "45381",
+    "alternative",
+    "informational",
+    "41b56ff9"
+   ],
+   [
+    "45385",
+    "selected",
+    "needs_clarification",
+    "a9f964e0"
+   ],
+   [
+    "99024",
+    "alternative",
+    "informational",
+    "79e6d316"
+   ],
+   [
+    "99213",
+    "alternative",
+    "informational",
+    "1668f11c"
+   ],
+   [
+    "99214",
+    "alternative",
+    "informational",
+    "e7922b4b"
+   ],
+   [
+    "G8417",
+    "alternative",
+    "informational",
+    "98376ce9"
+   ],
+   [
+    "G8420",
+    "alternative",
+    "informational",
+    "f58f4d24"
+   ],
+   [
+    "G8752",
+    "alternative",
+    "informational",
+    "ec51fee4"
+   ],
+   [
+    "G8753",
+    "alternative",
+    "informational",
+    "e1a29c81"
+   ],
+   [
+    "G8754",
+    "alternative",
+    "informational",
+    "b42ce744"
+   ],
+   [
+    "G9903",
+    "alternative",
+    "informational",
+    "2ff2f41d"
+   ]
+  ],
+  "state": "needs_clarification"
+ },
+ "text_sha256": "21467c72bdf31b1360187f7f597f7ba13d67fb5c444f31aea3133d5f4c6ae319",
+ "walk_answer": "2026-10-27"
+}

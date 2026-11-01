@@ -1,0 +1,57 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Post-Resection Colon Surveillance
+
+Brackenfield Endoscopy Center (fictional)
+
+Billing location: ambulatory surgical center, POS 24
+
+Day of procedure: Oct 27, 2026
+
+Patient identification: Ambrose Takeuchi-Varela (fictional), 67-year-old man
+
+Colonoscopist: Evander Quarshie-Moll, MD (fictional)
+
+Propofol given by: Saskia Lindgren-Afful, CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which
+reports its own service
+
+Prior Surgery and Cancer Care
+
+Stage II (node-negative) adenocarcinoma of the cecum, treated by laparoscopic right hemicolectomy with a stapled
+ileocolic anastomosis at Pellingham General Hospital (fictional) on Sep 30, 2025. No chemotherapy was needed. CEA
+has stayed normal. This is his one-year surveillance colonoscopy. He took the split-dose preparation as instructed.
+
+Observations by Segment
+
+Digital rectal examination: normal.
+
+Reach of the examination: ileocolic anastomosis, with 6 cm of neoterminal ileum viewed through it.
+Cecal intubation: not applicable, because the cecum and ascending colon were removed in 2025.
+Bowel preparation: good in every remaining segment.
+
+Withdrawal time: 10 minutes.
+
+All of the remaining colon was inspected on withdrawal.
+
+Anastomosis: widely patent, with healthy mucosa, an intact staple line and no nodularity or recurrence.
+Neoterminal ileum: normal.
+
+Transverse colon: one 5 mm sessile polyp, resected whole by cold snare and recovered.
+Descending and sigmoid colon: a few diverticula.
+
+Rectum: normal on retroflexion.
+
+Key Points
+
+1. Healthy ileocolic anastomosis without recurrence.
+
+2. Transverse colon polyp, 5 mm, removed by cold snare.
+3. Left-sided diverticulosis.
+
+Further Care
+
+The polyp goes to Brackenfield Pathology Laboratory (fictional), which reports it separately. Next colonoscopy in
+three years if the histology is benign. CT surveillance and CEA continue with his oncologist, Teodor Wambui-Faure,
+MD (fictional).
+
+Attested: Evander Quarshie-Moll, MD (fictional), Oct 27, 2026 12:31

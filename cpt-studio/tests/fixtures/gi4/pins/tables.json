@@ -1,0 +1,22 @@
+{
+ "meta": {
+  "commit": "80df1831d168c4ee83d83c37bac9860690986cf3"
+ },
+ "tables": {
+  "by_kind": {
+   "around": 480,
+   "bidirectional": 96,
+   "em": 1296,
+   "procedure": 2088,
+   "records": 192,
+   "seeded": 1512
+  },
+  "cells": {
+   "MAY": 3029,
+   "MAY (disputed by the review)": 2813,
+   "MUST": 54599,
+   "SHOULD": 15033
+  },
+  "documents": 5664
+ }
+}
