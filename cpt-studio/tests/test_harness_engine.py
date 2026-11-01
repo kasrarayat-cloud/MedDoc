@@ -215,6 +215,20 @@ class MergeTests(SimpleTestCase):
         self.assertEqual(proposal(result, '45385').support['proposed_by'], ['corti'])
         self.assertEqual(proposal(result, '45385').support['participants']['astra']['position'], 'not_proposed')
 
+    def test_a_provider_code_with_no_exact_passage_carries_nothing(self):
+        """Decidable as _second_review reads it: a provider selection excluded for scope or evidence (never
+        reinstatable) does not hide a participant's code; that code is judged as a proposal of its own beside it."""
+        off = EvidenceSpan(0, 0, len(BIOPSY), BIOPSY, True)  # not the text at those offsets
+        alone = run(COLON, corti(('45385', span(COLON, SNARE)), ('45380', off)))
+        self.assertEqual([(p.key, p.bucket, p.reinstatable) for p in alone.proposals if p.code == '45380'],
+                         [('exc:0', 'excluded', False)])
+        result = run(COLON, corti(('45385', span(COLON, SNARE)), ('45380', off)),
+                     [read('astra', [code(COLON, '45380', BIOPSY)])])
+        self.assertEqual([(p.key, p.bucket, p.status, p.support['proposed_by']) for p in result.proposals
+                          if p.code == '45380'],
+                         [('sel:1', 'selected', 'ready', ['astra']), ('exc:0', 'excluded', 'excluded', ['corti'])])
+        self.assertEqual(without_record(proposal(result, '45380', 'excluded')), proposal(alone, '45380'))
+
     def test_a_participant_code_is_judged_by_the_providers_own_path(self):
         """I2: the same code and the same passage give the same proposal whoever proposed it - bucket, status, checks,
         evidence, clarifications and fingerprint."""
