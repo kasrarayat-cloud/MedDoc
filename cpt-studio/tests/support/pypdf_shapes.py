@@ -1455,6 +1455,46 @@ def procedure_box_rows(code: str | None, font: dict | None, *, on: bool) -> byte
                     catalog=f'/AcroForm << /Fields [{fields}] /DR << /Font << /ZaDb 60 0 R >> >> >>')
 
 
+def mixed_procedure_rows(code: str | None, font: dict | None, *, printed: bool) -> bytes:
+    """NR-6: 'Procedures performed:' and three items, each after a glyph (hex ``code`` in /F2, ``font``; None: a readable
+    '-' in Helvetica) at x 72 and the item in Helvetica at x 84; the second, 'Biopsy taken:', has the options Yes and
+    No (No chosen) after it: ZapfDingbats boxes printed before each word (``printed``: 'o' empty, 'n' filled), or
+    AcroForm check boxes tied to the words."""
+    objects = {60: ZAPF}
+    fonts = '/F1 4 0 R /F3 60 0 R'
+    if font is not None:
+        objects.update({6: font[0], **{key: value for key, value in font.items() if key}})
+        fonts += ' /F2 6 0 R'
+    rows, refs, number = [], [], 40
+    for index, item in enumerate((SNARE, 'Biopsy taken:', 'Hemostatic clip placement')):
+        y = 680 - 18 * index
+        glyph = f'/F2 11 Tf 1 0 0 1 72 {y} Tm <{code}> Tj' if code else f'/F1 11 Tf 1 0 0 1 72 {y} Tm (-) Tj'
+        rows.append(f'BT {glyph} /F1 11 Tf 1 0 0 1 84 {y} Tm ({item}) Tj ET')
+        if index != 1:
+            continue
+        if printed:
+            rows.append(f'BT /F3 11 Tf 1 0 0 1 200 {y} Tm (o) Tj /F1 11 Tf 1 0 0 1 215 {y} Tm (Yes) Tj ET\n'
+                        f'BT /F3 11 Tf 1 0 0 1 260 {y} Tm (n) Tj /F1 11 Tf 1 0 0 1 275 {y} Tm (No) Tj ET')
+            continue
+        rows.append(f'BT /F1 11 Tf 1 0 0 1 215 {y} Tm (Yes) Tj ET\nBT /F1 11 Tf 1 0 0 1 275 {y} Tm (No) Tj ET')
+        for word, x, on in (('yes', 200, False), ('no', 260, True)):
+            state = '/Yes' if on else '/Off'
+            objects[number] = (f'<< /Type /Annot /Subtype /Widget /FT /Btn /T (Biopsy_{word}) /V {state} /AS {state} '
+                               f'/Rect [{x} {y - 1} {x + 11} {y + 10}] /F 4 /AP << /N << /Yes {number + 1} 0 R /Off '
+                               f'{number + 2} 0 R >> >> >>').encode()
+            objects[number + 1] = stream('q BT /ZaDb 9 Tf 1 2 Td (4) Tj ET Q', '/Type /XObject /Subtype /Form /BBox [0 0 '
+                                         '11 11] /Resources << /Font << /ZaDb 60 0 R >> >>')
+            objects[number + 2] = stream('', '/Type /XObject /Subtype /Form /BBox [0 0 11 11]')
+            refs.append(f'{number} 0 R')
+            number += 3
+    body = lines([BANNER, 'Date of service: 2026-10-21', PERFORMED], top=740) + '\n' + '\n'.join(rows)
+    if printed:
+        return page_pdf(body, fonts=fonts, extra=objects)
+    fields = ' '.join(refs)
+    return page_pdf(body, fonts=fonts, extra=objects, annots=f'/Annots [{fields}]',
+                    catalog=f'/AcroForm << /Fields [{fields}] /DR << /Font << /ZaDb 60 0 R >> >> >>')
+
+
 def short_form(state: str) -> bytes:
     """R3-MEAN-4: a page of 'Form' in Helvetica, sixteen kanji and kana in the /EUC-H font and one live check box
     Biopsy (/V and /AS ``state``): too little readable text for a layer, but an exact form field."""

@@ -974,10 +974,11 @@ def _I4_lone_marks(text: str, starts: dict, drawn: dict, edits: dict, widgets: l
     - its glyph is a box shape (``box_glyphs``: where each operator whose glyphs pdffonts.box_glyphs reads as a box
       starts on the page, matched to where the row's piece and the operators pypdf joined into it start: ``starts``,
       ``drawn``);
-    - or a row of its list shows a box: a printed or typed box (PRINTED_BOX), a check box's glyph written there
-      (``edits``, _placed_boxes' readings), or a glyph that is a box shape (a list: consecutive lines that are rows, a
-      row whose glyph pypdf wrote on a line of its own taking its label's line, blank lines between them aside; any
-      other line, a heading among them, ends it);
+    - or a row of its list shows a box where a row's box stands, at its start: a printed or typed box (PRINTED_BOX), a
+      check box's glyph written there or at the label after its glyph (``edits``, _placed_boxes' readings), or a glyph
+      that is a box shape (a list: consecutive lines that are rows, a row whose glyph pypdf wrote on a line of its own
+      taking its label's line, blank lines between them aside; any other line, a heading among them, ends it). Boxes
+      later in a row (an item's options) are its own, not its list's: they make no other row's glyph a box (NR-6);
     - or an unchecked check box (``widgets``) lies on its row, tied to nothing there: read as listed, its item would be
       affirmed against the box; a checked one agrees with its item read as listed, and its glyph stays U+FFFD (NR-5);
     and never where a check box's state already governs it, as boxes the row shows of its own do: a printed box on its
@@ -990,7 +991,7 @@ def _I4_lone_marks(text: str, starts: dict, drawn: dict, edits: dict, widgets: l
     size, line, number = len(text), 0, 0
     taken = sorted(edits)
     shapes, rows = _I4_Points(box_glyphs), _I3_Bands(w.rect for w in widgets if not w.on)
-    kinds: dict[int, bool | None] = {}  # line number -> a row (whether it shows a box), or None: a blank line
+    kinds: dict[int, bool | None] = {}  # line number -> a row (whether it shows a box at its start), or None: blank
     candidates: list = []  # (line number, offset, end, mark, glyph a box shape, an unchecked box on its row, own boxes)
 
     def shows_box(start: int, stop: int) -> bool:
@@ -1006,7 +1007,8 @@ def _I4_lone_marks(text: str, starts: dict, drawn: dict, edits: dict, widgets: l
             first += 1
         at = bisect_left(taken, line)
         boxed = first < end and (PRINTED_BOX.search(text, first, end) is not None
-                                 or (at < len(taken) and taken[at] <= end))
+                                 or (at < len(taken) and taken[at] <= end))  # a box anywhere on the line
+        heads = first < end and (PRINTED_BOX.match(text, first) is not None or first in edits)  # one at its start
         found = _I4_row(text, first, end, starts) if first < end and text[first] == UNREAD else None
         if found is not None:
             origin = starts.get(first)
@@ -1016,7 +1018,7 @@ def _I4_lone_marks(text: str, starts: dict, drawn: dict, edits: dict, widgets: l
             if found[2] > end:
                 stop = text.find('\n', found[2])
                 own = own or shows_box(found[2], size if stop < 0 else stop)
-            boxed = boxed or shape
+            heads = heads or shape or found[2] in edits  # its glyph a box shape, or a check box's glyph at its label
             # a check box tied to the row's label writes its glyph there (an edit on the row): one of its own boxes
             candidates.append((number, first, found[0], found[1], shape,
                                origin is not None and rows.meets(origin[1], origin[1]), own))
@@ -1024,8 +1026,8 @@ def _I4_lone_marks(text: str, starts: dict, drawn: dict, edits: dict, widgets: l
                 kinds[number + 1] = kinds.get(number + 1, False)
         if first >= end:
             kinds.setdefault(number, None)
-        elif boxed or found is not None:
-            kinds[number] = kinds.get(number, False) or boxed
+        elif heads or found is not None:
+            kinds[number] = kinds.get(number, False) or heads
         number += 1
         line = end + 1
     listed: dict[int, bool] = {}  # line number -> whether a row of its list shows a box

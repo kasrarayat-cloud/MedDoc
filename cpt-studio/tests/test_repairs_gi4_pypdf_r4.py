@@ -236,6 +236,27 @@ class OptionRowTests(unittest.TestCase):
                 self.assertEqual([reading(result.text, item) for item in ('Cold snare polypectomy', 'Biopsy')],
                                  ['uncertain', 'uncertain'])
 
+    def test_options_on_one_row_make_no_other_rows_glyph_a_box(self):
+        """NR-6: boxes later in a row (an item's options) are its own, not its list's: in a procedure list whose second
+        item's options are boxes (printed, or check boxes tied to 'Yes' and 'No'), the bullets of the other items stay
+        U+FFFD and every item reads as the readable control's does (the installed reader's readings); the list rule had
+        made each of those bullets the mark."""
+        for printed in (True, False):
+            control = extract(shapes.mixed_procedure_rows(None, None, printed=printed))
+            expected = [reading(control.text, item) for item in ('Cold snare polypectomy', 'Biopsy')]
+            self.assertEqual(expected[1], 'negated')
+            for name, code, font in (('/EUC-H bullet', 'A1A6', shapes.euc_font()),
+                                     ('glyph-index bullet', '0B2C', shapes.glyph_index_font())):
+                with self.subTest(name, printed=printed):
+                    result = extract(shapes.mixed_procedure_rows(code, font, printed=printed))
+                    self.assertNotIn('[?]', result.text)
+                    self.assertEqual([reading(result.text, item) for item in ('Cold snare polypectomy', 'Biopsy')],
+                                     expected)
+        starts = {0: (72.0, 704.0, True), 2: (84.0, 704.0, True), 11: (72.0, 686.0, True), 13: (84.0, 686.0, True)}
+        text = f'{UNREAD} Item one\n{UNREAD} Item two: \u2610 Yes \u2612 No'
+        self.assertEqual(_I4_lone_marks(text, starts, {}, {}, []), {})  # the options are line 2's own
+        self.assertEqual(_I4_lone_marks(f'{UNREAD} Item one\n\u2610 Item two', starts, {}, {}, []), {0: (1, '[?]')})
+
     def test_text_beyond_a_piece_that_can_be_read_is_no_label(self):
         yes = (200.0, 703.0, 211.0, 714.0)
         row = _I4_Readable(f'{UNREAD} Diabetes: Yes',
