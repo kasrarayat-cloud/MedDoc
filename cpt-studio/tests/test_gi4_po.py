@@ -8,6 +8,12 @@ reaches it across a heading-like line the layout does not read (h4-05). Every ex
 code (tests/fixtures/gi4/declarations/po.json): the regression replay's offers per member state, the H4 rows read with
 their own and with an empty provider answer, and the guard rows, whose texts the declaration pins by sha256.
 
+The declaration's dated amendment (amendment_20261101), also committed before its code, adds five holds the package's
+own refutation earned - A1 a head field labelled sedation or anaesthesia, A2 the family named on a title line of the
+head, A3 (PO-2) a passage of the item on such a title line, A4 (PO-2) no unread heading naming another occurrence
+anywhere within the reach, A5 no statement that a procedure was called off or not performed which names none - and
+the AMENDED_ROWS that pin each hold (their texts pinned by sha256 there too).
+
 Each tests/test_gi4_po_mutants.py PO_MUTANTS entry removes one guard and is killed by a test HERE (H6, run against
 sealed copies through the harness's mutant machinery). The registry and its anchor check live in that other module on
 purpose: a check that every anchor occurs in this tree fails on every mutated copy, so inside the detector it would
@@ -70,6 +76,90 @@ ROWS = {
     'P-h4-02': (H402, ()),
     'P-h4-05': (H405, ()),
 }
+# The amendment's rows (declaration amendment_20261101): each hold's killing row, the classes it closes, and two
+# positive rows A5 must not hold.
+OUTSIDE = '\n\nSummary of outside records\nThe patient brought copies from Mercy GI.\n' + FILL + COPIED
+COLON_HEAD = ('Surveillance Colonoscopy\nHensley Narrows Surgery Center (fictional)\nProcedure date: October 13, 2026\n'
+              'Gastroenterologist: Lazare Sobczak-Muir, DO (fictional)\nSedation: propofol by Wynona Tarkington-Ezeh, CRNA '
+              '(fictional)\n')
+PRIOR_EUS = ('Prior Studies\nEndoscopic ultrasound at Tamsworth (fictional) on 2025-04-09.\nScope Passage and Views\nA linear '
+             'echoendoscope was introduced by mouth. Views were obtained from the duodenal bulb and the stomach.\n'
+             'Endosonographic Conclusion\nBranch-duct cyst of the pancreatic body, 19 mm.\n')
+COLON_BODY = ('Observations by Segment\nThe colonoscope was advanced to the cecum. Cold forceps biopsies were taken from the '
+              'ascending colon.\nAt a Glance\n1. Biopsies taken; results to follow.\nReport authenticated: Lazare '
+              'Sobczak-Muir, DO (fictional), October 13, 2026 11:52\n')
+
+
+def once(text, old, new):
+    """``text`` with the one occurrence of ``old`` replaced (a row that no longer applies fails loudly)."""
+    assert text.count(old) == 1, old
+    return text.replace(old, new)
+
+
+AMENDED_ROWS = {
+    'A-sedation clinic note titled with the family, Attending field': (
+        B + 'Colonoscopy Follow-up Visit\nDate of service: 10/20/2026\nAttending: Synthetic Attending, MD (fictional)'
+        + OUTSIDE, ()),
+    'A-sedation clinic note titled with the family, sedation named in a sentence': (
+        B + 'Colonoscopy Follow-up Visit\nShe tolerated sedation poorly in the past.\nDate of service: 10/20/2026'
+        + OUTSIDE, ()),
+    'A-sedation consult note, endoscopist field': (
+        B + 'GI Consultation\nDate of service: 10/20/2026\nEndoscopist: Synthetic Endoscopist, MD (fictional)' + OUTSIDE,
+        ()),
+    'A-sedation compact clinic note, copied record at the top': (
+        B + 'Hepatology Clinic Note\nAttending: Synthetic Attending, MD (fictional)\nColonoscopy at Mercy GI\nCecum: '
+        'normal.\nThe entire colon was examined. A 10 mm polyp was removed with a hot snare.\n\nAssessment\nAdenoma '
+        'history.\n', ()),
+    'A-head h4-05 without the head words the PS guard reads': (
+        once(once(H405, 'Performing endoscopist: ', 'Report author: '),
+             'Anesthetic care: monitored anesthesia care by the Tamsworth Department of Anesthesiology (fictional)',
+             'Anesthetic care: MAC by the Tamsworth department (fictional)'), ()),
+    'A-around colonoscopy records review with head fields': (
+        B + 'Colonoscopy Records Review\nDate of service: 10/20/2026\nEndoscopist: Synthetic Endoscopist, MD '
+        '(fictional)\nSedation: none' + OUTSIDE, ()),
+    'A-title colonoscopy report, copied EGD block': (
+        B + COLON_HEAD + '\nObservations\nThe colonoscope was advanced to the cecum. The colon was normal.\n\nCopied from '
+        'the referral packet\nEGD at Mercy GI.\nThe duodenum was normal. A 6 mm gastric polyp was removed with a hot '
+        'snare.\nReport authenticated: Lazare Sobczak-Muir, DO (fictional), October 13, 2026 11:52\n', ()),
+    'A-title short head, a copied EGD line after the head fields': (
+        B + 'Surveillance Colonoscopy\nGastroenterologist: Lazare Sobczak-Muir, DO (fictional)\nSedation: propofol by a '
+        'CRNA (fictional)\nEGD at Mercy GI\nThe duodenum was normal. A 6 mm gastric polyp was removed with a hot snare.\n'
+        'Observations\nThe colonoscope was advanced to the cecum. The colon was normal.\n', ()),
+    'A-evtitle colonoscopy report, EUS review named in the title, copied EUS block': (
+        B + once(COLON_HEAD, 'Surveillance Colonoscopy\n', 'Surveillance Colonoscopy and Endosonography Review\n')
+        + PRIOR_EUS + COLON_BODY, ()),
+    'A-evtitle colonoscopy report, copied prior EUS block': (B + COLON_HEAD + PRIOR_EUS + COLON_BODY, ()),
+    'A-between h4-05, an unread heading naming an earlier EUS far above': (
+        once(H405, 'What the Echoendoscope Showed', 'What the Earlier Echoendoscope Showed'), ()),
+    'A-between h4-05, an earlier EUS report heading opens the runaway part': (
+        once(H405, 'Question to Answer', 'Earlier EUS Report Excerpt'), ()),
+    'A-occurrence h4-05, a lowercase outside-records line above the evidence': (
+        once(H405, CONCL, '\nOutside records' + CONCL), ()),
+    'A-notdone h4-05, the procedure cancelled before sedation': (
+        once(H405, 'Is the possible nodule on MRI tissue or mucin?\n', 'Is the possible nodule on MRI tissue or mucin?\n'
+             'The procedure was cancelled before sedation because the platelet count was 18,000.\n'), ()),
+    'A-notdone h4-05, no endoscopic procedure performed today': (
+        once(H405, 'Is the possible nodule on MRI tissue or mucin?\n', 'Is the possible nodule on MRI tissue or mucin?\n'
+             'No endoscopic procedure was performed today.\n'), ()),
+    'A-notdone h4-05, procedure not performed': (
+        once(H405, 'Is the possible nodule on MRI tissue or mucin?\n', 'Is the possible nodule on MRI tissue or mucin?\n'
+             'Procedure not performed.\n'), ()),
+    'A-notdone h4-02, the lower examination deferred': (
+        once(H402, 'Upper Tract Observations\n', 'Lower examination deferred to next week.\nUpper Tract Observations\n'),
+        ()),
+    'A-notdone h4-02, a cancelled status line': (
+        once(H402, 'Upper Tract Observations\n', 'Status: Cancelled - the patient had eaten breakfast.\nUpper Tract '
+             'Observations\n'), ()),
+    'A-positive h4-05, no other procedures were performed': (
+        once(H405, 'no fine-needle aspiration or biopsy was performed.', 'no fine-needle aspiration or biopsy was '
+             'performed. No other procedures were performed.'), ()),
+    'A-positive h4-02, an earlier procedure cancelled in September': (
+        once(H402, 'Upper Tract Observations\n', 'His first procedure in September was cancelled because of a low '
+             'platelet count.\nUpper Tract Observations\n'), ()),
+}
+AMENDED = DECLARED['amendment_20261101']['guard_rows']['rows']
+
+
 def offers_of(text, codes=(), user_values=None):
     """[family, act, reason, offered] per unresolved item, as the stages read the text (analyze child, the member's
     answer merged, assess child) with a synthetic provider answer: ``codes`` = ((code, exact quote), ...)."""
@@ -88,6 +178,12 @@ def offers_of(text, codes=(), user_values=None):
 
 def declared(offers):
     return [[family, act, reason, po] for family, act, reason, _, po in offers]
+
+
+def amended(offers):
+    """An amendment row's offers as the amended rule makes them: [family, act, reason, installed offer, committed offer
+    (0f2512471), amended offer] -> [family, act, reason, amended offer]."""
+    return [[family, act, reason, po] for family, act, reason, _, _, po in offers]
 
 
 class RegressionOfferTests(SimpleTestCase):
@@ -152,16 +248,16 @@ class GuardRowTests(SimpleTestCase):
     def test_the_rows_are_the_declared_ones(self):
         self.assertEqual(sorted(ROWS), sorted(DECLARED['guard_rows']['rows']))
 
-    def test_a_copied_procedure_in_a_note_without_a_procedure_head(self):  # kills po-document-head
+    def test_a_copied_procedure_in_a_note_without_a_procedure_head(self):  # also held by A1 and A2 (amendment)
         self.check('G-head clinic note, copied colonoscopy')
 
-    def test_a_booking_note_whose_head_names_the_endoscopist(self):  # kills po-document-around
+    def test_a_booking_note_whose_head_names_the_endoscopist(self):  # also held by A2 (amendment)
         self.check('G-around booking with head fields')
 
     def test_a_heading_beyond_the_reach_is_never_a_found_line(self):  # kills po-runaway-within-reach
         self.check('G-reach h4-05, 210 filler lines')
 
-    def test_an_unread_line_naming_another_occurrence(self):  # kills po-runaway-occurrence
+    def test_an_unread_line_naming_another_occurrence(self):  # also held by A4 (amendment)
         self.check('G-occurrence h4-05, previous summary line')
 
     def test_a_denied_mention_of_the_family(self):  # kills po2-family-contradicts
@@ -179,6 +275,70 @@ class GuardRowTests(SimpleTestCase):
     def test_the_positive_controls(self):
         self.check('P-h4-02')
         self.check('P-h4-05')
+
+
+class AmendedGuardRowTests(SimpleTestCase):
+    """The amendment's rows (declaration amendment_20261101): each hold's killing row offers nothing, nor do the classes
+    it closes; A5 does not hold the two positive rows (the texts are pinned by the declaration)."""
+
+    def check(self, name):
+        text, codes = AMENDED_ROWS[name]
+        row = AMENDED[name]
+        self.assertEqual(boot.sha256_text(text), row['text_sha256'], name)
+        self.assertEqual([list(c) for c in codes], row['codes'], name)
+        self.assertEqual(offers_of(text, codes), amended(row['offers']), name)
+
+    def test_the_rows_are_the_declared_ones(self):
+        self.assertEqual(sorted(AMENDED_ROWS), sorted(AMENDED))
+        self.assertFalse(set(AMENDED_ROWS) & set(ROWS))
+
+    def test_a_follow_up_visit_with_an_attending_field(self):  # kills po-document-sedation
+        self.check('A-sedation clinic note titled with the family, Attending field')
+
+    def test_sedation_named_in_a_sentence_is_no_sedation_field(self):  # kills po-sedation-label
+        self.check('A-sedation clinic note titled with the family, sedation named in a sentence')
+
+    def test_consult_and_clinic_notes_with_copied_records(self):  # held by A1 and A2
+        self.check('A-sedation consult note, endoscopist field')
+        self.check('A-sedation compact clinic note, copied record at the top')
+
+    def test_a_head_without_the_words_the_ps_guard_reads(self):  # kills po-document-head
+        self.check('A-head h4-05 without the head words the PS guard reads')
+
+    def test_a_records_review_titled_with_the_family(self):  # kills po-document-around
+        self.check('A-around colonoscopy records review with head fields')
+
+    def test_a_family_named_only_in_a_copied_block(self):  # kills po-family-on-title
+        self.check('A-title colonoscopy report, copied EGD block')
+
+    def test_a_copied_line_after_the_head_fields_is_no_title(self):  # kills po-title-before-fields
+        self.check('A-title short head, a copied EGD line after the head fields')
+
+    def test_a_family_the_title_names_but_the_inventory_takes_from_a_copied_block(self):  # kills po2-evidence-on-title
+        self.check('A-evtitle colonoscopy report, EUS review named in the title, copied EUS block')
+
+    def test_a_prior_study_copied_under_unread_headings(self):  # held by A2 and A3
+        self.check('A-evtitle colonoscopy report, copied prior EUS block')
+
+    def test_an_unread_heading_naming_another_occurrence_far_above(self):  # kills po-runaway-occurrence-between
+        self.check('A-between h4-05, an unread heading naming an earlier EUS far above')
+        self.check('A-between h4-05, an earlier EUS report heading opens the runaway part')
+
+    def test_a_lowercase_occurrence_line_right_above(self):  # kills po-runaway-occurrence
+        self.check('A-occurrence h4-05, a lowercase outside-records line above the evidence')
+
+    def test_a_procedure_called_off_or_not_performed_naming_none(self):  # kills po-document-not-done
+        self.check('A-notdone h4-05, the procedure cancelled before sedation')
+        self.check('A-notdone h4-05, no endoscopic procedure performed today')
+        self.check('A-notdone h4-05, procedure not performed')
+        self.check('A-notdone h4-02, the lower examination deferred')
+        self.check('A-notdone h4-02, a cancelled status line')
+
+    def test_no_other_procedures_is_no_statement_that_none_was_done(self):  # kills po-not-done-other
+        self.check('A-positive h4-05, no other procedures were performed')
+
+    def test_an_earlier_encounter_cancelled_with_its_own_time_is_not_held(self):
+        self.check('A-positive h4-02, an earlier procedure cancelled in September')
 
 
 class RoutingAgreesUnitTests(SimpleTestCase):
@@ -200,7 +360,7 @@ class RoutingAgreesUnitTests(SimpleTestCase):
         start = text.index(needle)
         return Span(start, start + len(needle), needle)
 
-    def test_a_family_routing_never_names_is_no_silent_reading(self):  # kills po-family-read
+    def test_a_family_routing_never_names_is_no_silent_reading(self):  # A2: no title mention, no offer
         routing, inventory, unresolved = self.read(H402, None)
         u = self.item(unresolved, 'gi.egd')  # no passage of its own: only the family reading can decide
         self.assertTrue(engine._routing_agrees(u, inventory, routing, H402, None))
@@ -321,3 +481,73 @@ class HelperTests(SimpleTestCase):
         self.assertTrue(engine._po_todays_procedure_report(H405))
         self.assertFalse(engine._po_todays_procedure_report(ROWS['G-head clinic note, copied colonoscopy'][0]))
         self.assertFalse(engine._po_todays_procedure_report(ROWS['G-around booking with head fields'][0]))
+        for name in ('A-sedation clinic note titled with the family, Attending field',
+                     'A-head h4-05 without the head words the PS guard reads',
+                     'A-around colonoscopy records review with head fields',
+                     'A-notdone h4-05, the procedure cancelled before sedation'):
+            self.assertFalse(engine._po_todays_procedure_report(AMENDED_ROWS[name][0]), name)
+
+    def test_sedation_field(self):  # A1: the label names it
+        field = engine._po_sedation_field
+        for head in ('Sedation: propofol', 'Sedation provider: a CRNA', 'Sedation and airway: propofol',
+                     'Anesthetic care: MAC', 'Anaesthesia: general', 'Type of sedation: moderate', 'Sedation: none'):
+            self.assertTrue(field(B + 'Colonoscopy\n' + head + '\n'), head)
+        for head in ('She tolerated sedation poorly in the past.', 'HPI: She tolerated sedation poorly.',
+                     'Reason for visit: anesthesia for a future colonoscopy', 'Attending: Synthetic Attending, MD',
+                     'Medications: propofol per the CRNA'):
+            self.assertFalse(field(B + 'Colonoscopy\n' + head + '\n'), head)
+        late = B + 'Colonoscopy\n' + ''.join(f'Field {i}: value\n' for i in range(11)) + 'Sedation: propofol\n'
+        self.assertFalse(field(late))  # beyond the head's twelve non-empty lines
+
+    def test_procedure_not_done(self):  # A5
+        says = engine._po_procedure_not_done
+        for line in ('The procedure was cancelled before sedation.', 'The examination was postponed.',
+                     'No endoscopic procedure was performed today.', 'No procedure was performed.',
+                     'Procedure not performed.', 'The exam was not done.', 'The procedure did not take place.',
+                     'Lower examination deferred to next week.', 'Status: Cancelled - the patient had eaten breakfast.',
+                     'Procedure status: not performed', 'Outcome: no-show', 'The patient declined the procedure.'):
+            self.assertTrue(says('Report\n' + line + '\n'), line)
+        for line in ('No other procedures were performed.', 'No further procedure was performed.',
+                     'Because the focus behaved as mucin, no fine-needle aspiration or biopsy was performed.',
+                     'His first procedure in September was cancelled because of a low platelet count.',
+                     'The procedure was not cancelled.', 'The procedure was completed without complication.',
+                     'The colonoscopy was cancelled.', 'The upper examination was aborted at the upper sphincter.',
+                     'Status: completed'):
+            self.assertFalse(says('Report\n' + line + '\n'), line)
+
+    def test_title_lines(self):  # A2 and A3: the head's title lines, before its first field line
+        def titles(text):
+            return [text[a:b] for a, b in engine._po_title_lines(text)]
+        self.assertEqual(titles(H402)[1:], ['Gastroscopy and Sigmoidoscopy for Suspected Gut GVHD',
+                                            'Ardenvale University Hospital (fictional), Endoscopy, Floor 3'])
+        self.assertEqual(titles(H405)[1], 'Pancreatic Endosonography')
+        short = AMENDED_ROWS['A-title short head, a copied EGD line after the head fields'][0]
+        self.assertNotIn('EGD at Mercy GI', titles(short))
+        self.assertIn('Surveillance Colonoscopy', titles(short))
+        self.assertEqual(titles(B + '## Colonoscopy Report ##\nSedation: propofol\n')[1], '## Colonoscopy Report ##')
+        self.assertEqual(titles(B + 'A sentence ends here.\nColonoscopy\n'), [B.strip(), 'Colonoscopy'])
+        self.assertEqual(titles('Indication: ' + 'x' * 400 + '\nColonoscopy\n'), [])  # a long field line ends the title
+
+    def test_unread_line_names_another_occurrence(self):  # A4
+        names = engine._po_unread_line_names_another_occurrence
+        text = AMENDED_ROWS['A-between h4-05, an unread heading naming an earlier EUS far above'][0]
+        lay = sections.layout(text)
+        pos = text.index('Endosonographic Conclusion')
+        lo = text.find('\n', lay.section_at(pos).heading.end)
+        self.assertFalse(sections.under_another_occurrence(text, pos))  # beyond its six lines and 600 characters
+        self.assertTrue(names(text, lo, pos))
+        self.assertFalse(names(H405, H405.find('\n', sections.layout(H405).section_at(pos).heading.end), pos))
+        lower = AMENDED_ROWS['A-occurrence h4-05, a lowercase outside-records line above the evidence'][0]
+        at = lower.index('Endosonographic Conclusion')
+        self.assertFalse(names(lower, lower.find('\n', sections.layout(lower).section_at(at).heading.end), at))
+        self.assertTrue(sections.under_another_occurrence(lower, at))  # the nearest short line, read by PS
+
+    def test_document_facts_are_read_once_per_text(self):
+        jobs = __import__('studio.jobs', fromlist=['x'])
+        jobs.release_routing_caches()
+        self.assertEqual(engine._po_document.cache_info().currsize, 0)
+        first = engine._po_document(H405)
+        self.assertIs(engine._po_document(H405), first)
+        self.assertEqual(engine._po_document.cache_info().hits, 1)
+        jobs.release_routing_caches()  # ROUTING_CACHE_MODULES names this module: the cache is cleared with the others
+        self.assertEqual(engine._po_document.cache_info().currsize, 0)

@@ -1,6 +1,7 @@
-"""GI round 4, package PO, H6: the registry of PO's mutants - one per guard in validation/engine.py's _po_ helpers -
-each killed by tests/test_gi4_po.py (the detector, which holds no check of this registry: an anchor check fails on every
-mutated copy and would kill every mutant by construction). Here every anchor is checked against this tree, so the
+"""GI round 4, package PO, H6: the registry of PO's mutants - at least one per guard in validation/engine.py's _po_
+helpers, the amendment's holds (A1-A5, declaration amendment_20261101) included - each killed by tests/test_gi4_po.py
+(the detector, which holds no check of this registry: an anchor check fails on every mutated copy and would kill every
+mutant by construction). Here every anchor is checked against this tree, so the
 registry cannot rot silently. The harness applies a mutant to a COPY of a sealed export and prints the sha256 after it
 is applied and again after it is restored (ops.gi4.mutants.applied); these entries use the same Mutant record and are
 registered with that machinery at run time, not in ops/gi4/mutants.py.
@@ -12,15 +13,25 @@ from ops.gi4 import boot, mutants
 ENGINE = 'studio/validation/engine.py'
 UNIT = 'unit:tests.test_gi4_po'
 PO_MUTANTS = (
-    mutants.Mutant('po-document-head', "PO: the document's head carries a procedure report's own fields", ENGINE,
-                   '    return gi_sections.procedure_report_head(text) and not gi_sections.around_procedure_title(text)',
-                   '    return not gi_sections.around_procedure_title(text)', UNIT),
+    mutants.Mutant('po-document-head', "PO: the document's head carries a procedure report's own fields (PS guard)",
+                   ENGINE, '    return (gi_sections.procedure_report_head(text)\n', '    return (True\n', UNIT),
+    mutants.Mutant('po-document-sedation', 'PO A1: a head field labelled sedation or anaesthesia', ENGINE,
+                   '            and _po_sedation_field(text)\n', '            and True\n', UNIT),
+    mutants.Mutant('po-sedation-label', 'PO A1: the label, not a word anywhere in a head line, names sedation', ENGINE,
+                   '    return end > 0 and _PO_SEDATION_FIELD.search(text, 0, end) is not None',
+                   '    return end > 0 and gi_sections.PROCEDURE_HEAD.search(text, 0, end) is not None', UNIT),
     mutants.Mutant('po-document-around', 'PO: no head line is the title of a note written around a procedure', ENGINE,
-                   '    return gi_sections.procedure_report_head(text) and not gi_sections.around_procedure_title(text)',
-                   '    return gi_sections.procedure_report_head(text)', UNIT),
-    mutants.Mutant('po-family-read', "PO: routing reads the item's family (never a vacuous reading)", ENGINE,
-                   '    if not mentions or not _po_todays_procedure_report(text):',
-                   '    if not _po_todays_procedure_report(text):', UNIT),
+                   '            and not gi_sections.around_procedure_title(text)\n', '            and True\n', UNIT),
+    mutants.Mutant('po-document-not-done', 'PO A5: no unnamed statement that a procedure was called off or not done',
+                   ENGINE, '            and not _po_procedure_not_done(text))', '            and True)', UNIT),
+    mutants.Mutant('po-not-done-other', 'PO A5: "no other procedures were performed" says nothing was not done',
+                   ENGINE, r'    r"\bno\s+(?!(?:other|further|additional|more|separate|extra|second)\b)(?:[\w-]+\s+){1,2}?"',
+                   r'    r"\bno\s+(?:[\w-]+\s+){1,2}?"', UNIT),
+    mutants.Mutant('po-family-on-title', 'PO A2: routing names the family on a title line of the head', ENGINE,
+                   '    if not named:  # A2', '    if not mentions:  # A2', UNIT),
+    mutants.Mutant('po-title-before-fields', "PO A2: a title stands before the head's first field line", ENGINE,
+                   "                break  # the head's first field line: the title stands before it",
+                   "                pass  # mutant: the head's fields are read through", UNIT),
     mutants.Mutant('po-unreadable-passage', 'PO: a passage outside the text never reads as saying nothing', ENGINE,
                    '            return False\n        readings.append(', '            continue\n        readings.append(',
                    UNIT),
@@ -30,7 +41,12 @@ PO_MUTANTS = (
                    '        return all(_po_says_nothing(status, cues) for _, status, cues in readings)',
                    '        return True', UNIT),
     mutants.Mutant('po2-family-contradicts', 'PO-2: no mention of the family contradicts', ENGINE,
-                   '        return False\n    runaway = [', '        continue\n    runaway = [', UNIT),
+                   '        return False\n    if not any(_po_on_title(titles, pos)',
+                   '        continue\n    if not any(_po_on_title(titles, pos)', UNIT),
+    mutants.Mutant('po2-evidence-on-title', "PO A3: a passage of the item on a title line says nothing", ENGINE,
+                   '    if not any(_po_on_title(titles, pos) and _po_says_nothing(status, cues)\n'
+                   '               for pos, status, cues in readings):  # A3',
+                   '    if False:  # A3', UNIT),
     mutants.Mutant('po2-at-least-one', "PO-2: at least one passage of the item is a runaway section's", ENGINE,
                    '    return any(runaway) and all(', '    return all(', UNIT),
     mutants.Mutant('po-says-nothing-worded', 'PO: a worded doubt says something', ENGINE,
@@ -52,14 +68,12 @@ PO_MUTANTS = (
                    "            or text.count('\\n', lo, pos) > gi_sections.HEADING_REACH_LINES:",
                    '    if lo < 0 or lo >= pos:', UNIT),
     mutants.Mutant('po-runaway-unread-heading', 'PO-2: an unread heading-like line stands between heading and passage',
-                   ENGINE,
-                   '    return gi_sections.beyond_heading_reach(text, lay, pos) and not '
-                   'gi_sections.under_another_occurrence(text, pos)',
-                   '    return not gi_sections.under_another_occurrence(text, pos)', UNIT),
-    mutants.Mutant('po-runaway-occurrence', 'PO-2: the nearest heading-like line names no other occurrence', ENGINE,
-                   '    return gi_sections.beyond_heading_reach(text, lay, pos) and not '
-                   'gi_sections.under_another_occurrence(text, pos)',
-                   '    return gi_sections.beyond_heading_reach(text, lay, pos)', UNIT),
+                   ENGINE, '    return (gi_sections.beyond_heading_reach(text, lay, pos)\n', '    return (True\n', UNIT),
+    mutants.Mutant('po-runaway-occurrence', 'PO-2: the nearest short line above names no other occurrence', ENGINE,
+                   '            and not gi_sections.under_another_occurrence(text, pos)\n', '            and True\n', UNIT),
+    mutants.Mutant('po-runaway-occurrence-between', 'PO A4: no unread heading-like line within the reach names another '
+                   'occurrence', ENGINE, '            and not _po_unread_line_names_another_occurrence(text, lo, pos))',
+                   '            and True)', UNIT),
 )
 
 
