@@ -2509,3 +2509,74 @@ def names_procedure(text: str, start: int, end: int, code: str, service_date: Op
         first += 1  # that sentence ends before the passage starts
     at = bisect.bisect_left(found, first)
     return first <= last and at < len(found) and found[at] <= last
+
+
+# --- independent participants (HARNESS.md 5) ------------------------------------------------------------------------
+# What the engine's merge of Astra's and Fable's readings (engine._Harness) says, worded from data the engine verified:
+# participants' labels, codes, CPT Studio's own family labels and passages of the document found verbatim. No sentence a
+# participant wrote (a basis, a description, a question) is ever quoted.
+
+PARTICIPANTS_SOURCE = 'cpt-studio:harness@1'
+PARTICIPANTS_NEVER_DECIDE = ('A participant never decides a status and agreement never promotes a code: each code '
+                             'it proposes is judged by CPT Studio\'s own readers, with exact evidence, by the same '
+                             'rules as the proposal provider\'s, and its questions are notes that never block.')
+
+
+def participants_summary_check(sentences: Sequence[str]) -> Check:
+    """Each configured participant's state, in its own sentences: which read the document, the codes it proposed and how
+    many it quoted verbatim, and which did not and why (I10: a participant that did not run blocks only itself).
+    Informational, whatever the states: no participant's reading decides anything."""
+    return Check('participants.summary', 'Independent participants', 'info',
+                 f'{" ".join(sentences)} {PARTICIPANTS_NEVER_DECIDE}', PARTICIPANTS_SOURCE)
+
+
+def participants_disagree_check(code: str, items: Sequence[tuple[str, str]]) -> Check:
+    """``items``: (participant label, its quote) for each participant that advises not to code ``code`` because the
+    service was not performed at this encounter, quoting the document verbatim. The contradiction is kept for the
+    reviewer, never voted on: the proposal's status stays the one CPT Studio's own readers decide."""
+    one = len(items) == 1
+    said = f'“{excerpt(items[0][1])}”' if one else '; '.join(f'{label}: “{excerpt(quote)}”' for label, quote in items)
+    return Check('participants.disagree', 'An independent participant advises not to code it', 'warn',
+                 f'{_join([label for label, _ in items])} {"advises" if one else "advise"} not to code {code}: '
+                 f'{"it reads" if one else "they read"} its service as not performed at this encounter ({said}). Kept '
+                 'for the reviewer, never voted on: the status is decided by the document through CPT Studio\'s own '
+                 'readers.', PARTICIPANTS_SOURCE)
+
+
+def participants_services_check(items: Sequence[tuple[str, str, str]]) -> Check:
+    """``items``: (participant label, service label, its quote) for each service a participant reads as performed,
+    quoting the document verbatim, of a kind of which the documented-service reading reads no performed service. Coding
+    completeness is incomplete beside each (engine._Harness.complete)."""
+    kinds = 'that kind' if len(items) == 1 else 'those kinds'
+    said = '; '.join(f'{label} reads a performed {service} (“{excerpt(quote)}”)' for label, service, quote in items)
+    return Check('participants.services', 'Performed services only an independent participant reads', 'warn',
+                 f'{said}. The documented-service reading reads no performed service of {kinds}, so coding '
+                 'completeness is incomplete until a reviewer checks the document.', PARTICIPANTS_SOURCE)
+
+
+def provider_status_beside_participants(provider_status: str, normalized: Optional[NormalizedResponse],
+                                        proposers: Sequence[str]) -> Optional[Check]:
+    """The provider.status check (provider_checks) when the proposal provider proposed nothing and an independent
+    participant's code is a proposal (``proposers``: the labels of the participants whose codes are): its own state as
+    provider_checks words it, never "so there are no CPT proposals" beside a proposal. None where provider_checks says
+    nothing false (a response read, with or without a selected code)."""
+    label = 'Proposal provider'
+    rest = (f'The proposals listed come only from the independent participants ({_join(proposers)}), each judged by '
+            'CPT Studio\'s own readers by the same rules.')
+    if provider_status == 'not_run':
+        return Check('provider.status', label, 'not_verified',
+                     f'The proposal provider was not run for this revision, so it proposed no codes. {rest}',
+                     PROVIDER_SOURCE)
+    if provider_status == 'failed':
+        return Check('provider.status', label, 'fail',
+                     'The proposal provider did not return a usable result (it failed, was not sent or was cancelled), '
+                     f'so it proposed no codes. {rest}', PROVIDER_SOURCE)
+    if provider_status == 'unknown':
+        return Check('provider.status', label, 'warn',
+                     'The proposal provider request was sent but its outcome is unknown, so it proposed no codes; a '
+                     f'workspace member must reconcile it before any new attempt. {rest}', PROVIDER_SOURCE)
+    if normalized is not None and normalized.refused:
+        return Check('provider.status', label, 'fail',
+                     f'The response from {normalized.provider} ({normalized.adapter_version}) was not used, so it '
+                     f'proposed no codes. {rest}', PROVIDER_SOURCE)
+    return None
