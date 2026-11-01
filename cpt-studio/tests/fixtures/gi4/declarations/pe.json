@@ -64,5 +64,29 @@
    "The installed verbs ('advanced', 'passed', 'reached') still read a reach inside an attached report (PE4-advanced, PE5-advanced READY on installed and here): not PE's release, recorded for the round.",
    "Closed hold lists cannot be complete (see pi.json's amendment_20261101_cycle1 known_limits)."
   ]
+ },
+ "amendment_20261101_cycle1_b": {
+  "provenance": "Written on 2026-11-01 BEFORE any code of this amendment, still in cycle 1 of the two refutation-and-fix cycles a releasing family may take (group PI+PE, branch wip/gi4-r2-pipe-20261101 from the integrated head b840ae756, on top of the cycle-1 repair 1bd334478 that amendment_20261101_cycle1 declared). Before handing cycle 1 to the next independent refutation, the repair author probed 1bd334478 with variants of the four findings and found the cycle-1 guards closed only the refutation's own shapes; this amendment declares the further holds. Every movement below is against b840ae756 unless it says 1bd334478. Every key above this one is unchanged: each value is identical, and the only byte added before this key is the comma that separates it.",
+  "probes_of_1bd334478": {
+   "F3 class (45385 held [extent] on installed -> selected/ready on 1bd334478 as on b840ae756)": "PE4's EGD report ('Upper Endoscopy Report', strong head) with the colonoscopy block under a heading no closed list names ('Additional Pages', 8 filler lines, 'Procedure: Colonoscopy.', 'The colonoscope was navigated [steered] to the cecum. A 10 mm sigmoid polyp was removed with a hot snare.', no date, no sign-off); the same block straight after the EGD paragraph and a blank line, with no heading and no filler; and a generic 'Procedure Note' title over the same block. With 'advanced' all three are READY on installed too (an installed false READY PE does not own); 'navigated' and 'steered' were held [extent] there."
+  },
+  "rules": {
+   "head_spans": "The head's procedure names (detect.head_procedure_spans, read on the text as written, one implementation read by PI's S1 and PE's routing-only reach): its title lines (detect._gi4_head: the title-shaped lines among its first 6 non-empty lines, before its first field) and its procedure fields ('Procedure:', 'Procedures performed:', 'Operation:', 'Examination:', 'Exam:', 'Study:'; each read at most 400 characters) among its first 12 non-empty lines, but never past the first heading-like line that follows its first field - the body starts there, so a 'Procedure: Colonoscopy.' line under a later heading or inside a pasted block is the body's, never the head's (the cycle-1 _pi_head_excludes read any such field among the first 12 non-empty lines).",
+   "pe_head_names_family": "A reach read only by a routing-only verb ('steered', 'navigated') counts only for a family the document's head NAMES by routing's own service mentions (the Analysis' mentions, cues.SERVICE_PATTERNS, read only): a mention of gi.egd inside head_spans for the upper landmark table, of gi.colonoscopy or gi.flex_sig for the lower. Positive evidence that today's report documents the family whose endpoint the verb reaches; without it the installed reading stands. Added to the cycle-1 copy guards (in_todays_narrative), which stay."
+  },
+  "movements_vs_b840ae756": {
+   "H1": "EQUAL for every regression document and member state: PE reads only h4-04's 'steered ... into the second part of the duodenum' in the regression set, and h4-04's title names the gastroscopy (gi.egd), so 43251 stays ready with its b840ae756 fingerprint.",
+   "H2": "No movement of any class; the cue inventory is identical.",
+   "H3": "The 75 fixed MUST extent.never-false-incomplete[gi.egd] cells are seeded h4-04 variants: those whose head keeps a title naming the gastroscopy stay fixed; any whose head names no upper endoscopy go back to installed's reading. Measured after and recorded; no new MUST failure against installed.",
+   "H4": "No movement.",
+   "H5": "Unchanged.",
+   "H6": "Two pe- mutants (detector tests.test_gi4_pe): pe-head-family (the head check removed) and pe-head-span-body (a procedure field past the body's first heading read as the head's).",
+   "H7": "Linear: the head's spans once per text (cached), the mentions in them by bisect, memoised per analysis.",
+   "probe_cases": "The F3-class probes above read routing's gi.colonoscopy extent as installed and 45385 held [extent] (the 'advanced' variants stay READY, as installed)."
+  },
+  "known_limits": [
+   "A generic-titled report ('Procedure Note') whose only procedure field sits in the body gives PE no evidence: its 'navigated to the cecum' reads as installed (cost, fail-closed).",
+   "Installed's own reach verbs in a pasted report stay an installed false READY, as recorded."
+  ]
  }
 }
