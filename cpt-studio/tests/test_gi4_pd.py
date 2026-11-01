@@ -412,6 +412,14 @@ class AuthorsOwnSignOffTests(SimpleTestCase):
             self.assertTrue(taken(text, '2026-10-30'), extra)
         same_day = report(closing=SIGNED + 'Co-signed: Ilse Marchetti, MD (fictional), 10/21/2026 11:00\n')
         self.assertTrue(narrows(same_day))  # a co-signature of the same day contradicts nothing
+        # Wave 1 repair cycle 2 (DT-5): _pd_dated_after also holds a line of another day AFTER the own sign-off, so the
+        # lines above are held by both rules; a co-signature or a dictation line of another day BEFORE the own
+        # sign-off is read by this rule alone (the case that still kills pd-closing-days-agree)
+        for extra in ('Co-signed: Ilse Marchetti, MD (fictional), 10/22/2026 08:00\n', 'Dictated: 10/20/2026\n'):
+            text = report(closing=extra + SIGNED)
+            self.assertFalse(context._pd_dated_after(text, text.index(SIGNED) + len(SIGNED) - 1, '2026-10-21'))
+            self.assertTrue(quote_only(text), extra)
+            self.assertTrue(taken(text, '2026-10-30'), extra)
 
     def test_a_date_of_birth_on_a_closing_line_is_never_its_day(self):
         text = report(closing=f'Electronically signed by {ENDO} (DOB 01/01/1970), 10/21/2026 10:05\n')
