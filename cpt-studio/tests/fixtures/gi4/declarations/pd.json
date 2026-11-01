@@ -24,6 +24,7 @@
   "context._PD_OTHER_DATE",
   "context._PD_OWN_VERB",
   "context._PD_PERFORMER",
+  "context._PD_PROCEDURE_LABEL",
   "context._PD_QUOTE_CHARS",
   "context._PD_QUOTE_WINDOW",
   "context._PD_TITLE_CHARS",
@@ -91,7 +92,7 @@
   "amended 2026-11-01 (DS-4): several values narrow nothing - the question quotes the lines and never says 'Conflicting dates of service are documented' for them (F1, D1, D2, C4)",
   "amended 2026-11-01 (CTS-5): rule (a)'s note quotes each differing label's whole line ('Day of procedure: 10/19/2026 Date seen: 10/12/2026 (pre-op clinic)'), never the label and its date alone"
  ],
- "guards_and_mutants": "one killing mutant per guard, each detected by tests.test_gi4_pd (SimpleTestCase, no database): the around-procedure title hold; the last-8-lines reach; the not-a-closing-line words; the installed candidates read apart from the wide ones; plus the prototype's guards PD now carries: corroboration of a single value, the own-reading filter, the worded field's occurrence words, the head reach, and rule (a) taking only installed's date. Amended 2026-11-01: see amendment_20261101.mutants (the guards whose anchors the repair replaces are replaced by the new guards' mutants, one killing mutant each) and amendment_20261101.second_entry.mutants and .third_entry.mutants",
+ "guards_and_mutants": "one killing mutant per guard, each detected by tests.test_gi4_pd (SimpleTestCase, no database): the around-procedure title hold; the last-8-lines reach; the not-a-closing-line words; the installed candidates read apart from the wide ones; plus the prototype's guards PD now carries: corroboration of a single value, the own-reading filter, the worded field's occurrence words, the head reach, and rule (a) taking only installed's date. Amended 2026-11-01: see amendment_20261101.mutants (the guards whose anchors the repair replaces are replaced by the new guards' mutants, one killing mutant each) and amendment_20261101.second_entry.mutants, .third_entry.mutants, .fourth_entry.mutants and .fifth_entry.mutants",
  "deviations_from_the_prototype": [
   "wide and worded candidates are read beside the installed candidates (_pd_wide_candidates) and appended after the installed post-processing, so _installed_service_date_fact reads exactly the installed candidates",
   "_head_end counts lines with sections.head_lines_end (one pass, no backtracking on a long blank line)",
@@ -168,6 +169,15 @@
    "cues_added": [],
    "expected": "measured before coding on the 979 narrowing texts of the H2 corpus: 108 rest on an attestation-only sign-off and none of them has another closing-role line in its closing region; no regression text moves (h4-06's attestation is its only closing line). So no measured count moves (H1, H2, H4 as declared); only shapes like the one above move, from narrowing to the quote-only fact (installed's answers)",
    "mutants": "added pd-attest-sole-line (detector tests.test_gi4_pd). PD census 35 -> 36, total 133 -> 134"
+  },
+  "fifth_entry": {
+   "date": "2026-11-01",
+   "written": "after the fourth entry's code was committed (1cedd811d, pins e1fe8db32), BEFORE this guard's code (same session, still cycle 1); the final proofs on e1fe8db32 were stopped unfinished so that they run once, on this guard's commit",
+   "why": "the session's own refutation probe R8: 'GI Consultation / Seen by: A. Doctor MD / Day of procedure: 11/04/2026 / ... / Electronically signed by A. Doctor MD, 11/04/2026 07:30' - a consultation signed late, on the planned procedure's day - passes every guard (its head names its author, who signs on the label's day) and narrows to the planned day, holding the consultation's own day. A label naming a PROCEDURE's occurrence ('Day of procedure', 'Procedure day', 'Case date', 'Date/Day of case', 'Date performed') dates the procedure; only a procedure's own report is positive evidence that the procedure is the note's encounter",
+   "added_guard": "(5) widened, hold direction only: a wide label naming a procedure's occurrence (_PD_PROCEDURE_LABEL) narrows only when the document's head carries a procedure report's own fields (sections.procedure_report_head, PS's: a sedation or anesthesia line, or a field naming who performed it). Visit and exam labels ('Date seen', 'Exam date', 'Day of visit', 'Day of service', ...) and the worded date-of-service field are read as before",
+   "cues_added": ["context._PD_PROCEDURE_LABEL"],
+   "expected": "measured before coding on the 979 narrowing texts of the H2 corpus: every narrowing by such a label has a procedure report's head (h4-02 'Case date', h4-04 'Date performed', h4-06 'Day of procedure' among them), so no measured text moves (H1, H2, H4 as declared); only shapes like R8 move, from narrowing to the quote-only fact (installed's answers)",
+   "mutants": "added pd-procedure-label-head (detector tests.test_gi4_pd). PD census 36 -> 37, total 134 -> 135"
   }
  }
 }
