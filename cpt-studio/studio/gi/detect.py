@@ -1856,8 +1856,10 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
                          em: bool = False, activities: Optional[int] = None) -> list[tuple[str, str, bool, bool]]:
     """(status, label, about_past, doubt) for every cue that governs the target in one clause. ``em``: the target is
     an E/M documentation mention (see _owned_time_cue). ``activities``: where the list of what an E/M time statement's
-    minutes covered starts (_pv1_activities; GI round 4, C1): no clause cue and no date at or after it governs the
-    target, since they name the visit's own work, not the time's occasion. None (every other caller): as installed."""
+    minutes covered starts (_pv1_activities; GI round 4, C1): no clause cue at or after it governs the target, since
+    such a cue names the visit's own work ("the orders"), not the time's occasion. A date there still does: it may be
+    another visit's ("including the visit on 10/20/2026"), and nothing tells it from the date of a thing reviewed, so it
+    holds as installed. None (every other caller): as installed."""
     text = an.text
     cs, ce = an.lay.window(clause, ts, te, CLAUSE_REACH)
     spans, index, members = _groups(an, cs, ce, ts, te)
@@ -1909,9 +1911,7 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
             label = (f'uncertain: {cue.text}, with no statement whether the procedure had started' if doubt
                      else f'{status}: {cue.text}')
             found.append((status, label, False, doubt))
-    for d in an.dates_in(cs, ce):
-        if activities is not None and d.start >= activities:
-            continue  # GI round 4 (C1): the date of something an E/M time statement covered, not the time's own
+    for d in an.dates_in(cs, ce):  # GI round 4 (C1): a date in an activity list still governs (see the docstring)
         if not _attached(spans, index, d.start, d.end, DATE_REACH):
             continue
         label = text[d.start:d.end]

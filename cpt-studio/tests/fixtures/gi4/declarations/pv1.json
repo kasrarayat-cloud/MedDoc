@@ -57,5 +57,14 @@
   "C2: 'shared decision making' never gives a level",
   "V3: an ultrasound named in an E/M code's negative passage holds it"
  ],
- "cost": "linear: the not-in-person words are matched once per document (memoized) and looked up per E/M mention by bisection; the activity word is one anchored match per time statement; the clause window stays CLAUSE_REACH-bounded"
+ "cost": "linear: the not-in-person words are matched once per document (memoized) and looked up per E/M mention by bisection; the activity word is one anchored match per time statement; the clause window stays CLAUSE_REACH-bounded",
+ "corrections": [
+  {
+   "date": "2026-11-01",
+   "appended_after": "the code commit 41f00172c; everything above is kept as declared before any code",
+   "C1": "NARROWED: a date at or after the activity word still re-times the time statement (only clause cues are skipped). Found by self-probe: 'Total time: 30 minutes, including the visit on 10/20/2026.' read READY on 41f00172c and held on installed; a date reviewed and a date attended read alike, so the release takes neither. No declared movement changes (no regression text, battery row or generated activity list carries a date).",
+   "C2": "GUARD ADDED in 41f00172c: an MDM level read through the new 'Complexity / Level of decision making' label takes the time statement's _another_time hold ('Complexity of decision making: high (at her last visit).' is held); installed's MDM readings are not given it. No declared movement changes.",
+   "corpus": "Measured on 41f00172c: the h2-08 seeds' 'Total time on the date of the encounter' variant was already read on installed, so the fix declared for it did not occur (nothing moved there). The 48 MUST status.not-denied fixes include h208-header next_month visits fixed by C2 (their MDM level is now read), not only C1's activity lists."
+  }
+ ]
 }

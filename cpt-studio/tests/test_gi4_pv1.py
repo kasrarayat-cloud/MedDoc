@@ -2,7 +2,8 @@
 code in tests/fixtures/gi4/declarations/pv1.json). Every case is synthetic.
 
 - C1: an E/M time statement followed directly by "covering", "including" or "spent on" lists the visit's own work;
-  a cue or date after that word never re-times the statement (h4-01's "52 minutes, covering ..., the orders, ...").
+  a clause cue after that word never re-times the statement (h4-01's "52 minutes, covering ..., the orders, ..."); a
+  date after it still does, since it may be another visit's.
 - C2: an inline "Complexity / Level of decision making: X" gives MDM level X; "shared decision making" never does.
 - C4: a performed E/M reading of any kind is held when the note says the patient was not seen in person, was seen by
   telephone or phone call, was a no-show or did not arrive; video and telehealth visits are not held. Installed's
@@ -71,6 +72,12 @@ class ActivityListTests(SimpleTestCase):
 
     def test_a_cue_before_the_activity_word_still_retimes_it(self):  # kills pv1-c1-after-only
         text = OFFICE + 'Total time scheduled: 30 minutes, including counseling and documentation.\n'
+        self.assertNotIn('time_minutes', facts(em(text)))
+
+    def test_a_date_in_the_activity_list_still_retimes_it(self):  # kills pv1-c1-dates-count
+        # another visit's date may place the minutes on another day: held as installed (a date reviewed and a date
+        # attended read alike, so the release takes neither)
+        text = OFFICE + 'Total time: 30 minutes, including the visit on 10/20/2026.\n'
         self.assertNotIn('time_minutes', facts(em(text)))
 
     def test_a_time_at_another_visit_stays_held(self):  # the diagnosis's C1 counterexample, as installed

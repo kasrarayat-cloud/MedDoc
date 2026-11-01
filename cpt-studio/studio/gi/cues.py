@@ -741,7 +741,8 @@ NOT_EM_TIME = rx(r'\b(?:withdrawal|sedation|procedure\s+time|procedural|intra-?s
                  r'cecal|anesthesia|recovery|monitoring)\b')
 # GI round 4 (C1): the word that opens the list of what an E/M time statement's minutes covered, written right after the
 # minutes ("52 minutes, covering her history, ..., the orders, and documentation"; matched at the statement's end). What
-# follows it is the visit's own work, never the time's occasion: detect._em_base_reading reads only the cues before it.
+# follows it is the visit's own work, never the time's occasion: no clause cue after it re-times the statement (a date
+# still does; detect._clause_reading_cues).
 EM_TIME_ACTIVITIES = rx(r'[ \t]*,?[ \t]*(?:covering|including|included|spent\s+(?:on|in)|devoted\s+to|comprising|'
                         r'consisting\s+of|which\s+(?:covered|included))\b')
 # GI round 4 (C4): words saying the encounter was no in-person visit - the patient not seen in person, no in-person

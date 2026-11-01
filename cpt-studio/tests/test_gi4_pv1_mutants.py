@@ -14,6 +14,7 @@ UNIT = 'unit:tests.test_gi4_pv1'
 _HOLD = "        return Reading('uncertain', (f\"{EM_NOT_IN_PERSON}: '{words}'\",), 'cue', doubt=True)"
 _TIME_HOLD = "    if m.kind == 'em-time' or _pv1_decision_label(an, m):"
 _TIME_ONLY = "    if m.kind != 'em-time':\n        return None\n    listed = cues.EM_TIME_ACTIVITIES"
+_DATES = '    for d in an.dates_in(cs, ce):  # GI round 4 (C1): a date in an activity list still governs (see the docstring)\n'
 
 MUTANTS = (
     mutants.Mutant('pv1-c4-hold', 'C4: a performed E/M reading is held when the note may document no in-person visit',
@@ -29,6 +30,9 @@ MUTANTS = (
                    _TIME_HOLD, "    if m.kind == 'em-time':", UNIT),
     mutants.Mutant('pv1-c1-after-only', 'C1: a cue before the activity word still re-times the time statement', DETECT,
                    '        if activities is not None and cue.start >= activities:', '        if activities is not None:',
+                   UNIT),
+    mutants.Mutant('pv1-c1-dates-count', "C1: a date in an activity list still re-times the time statement", DETECT,
+                   _DATES, _DATES + '        if activities is not None and d.start >= activities:\n            continue\n',
                    UNIT),
     mutants.Mutant('pv1-c1-time-only', "C1: only a time statement has an activity list (a visit statement's cues count)",
                    DETECT, _TIME_ONLY, _TIME_ONLY.replace("if m.kind != 'em-time':",
