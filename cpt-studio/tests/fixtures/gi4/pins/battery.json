@@ -1,6 +1,6 @@
 {
  "meta": {
-  "commit": "80df1831d168c4ee83d83c37bac9860690986cf3"
+  "commit": "c9454ee4a2a1e4d15b1d6d773034223400c3440a"
  },
  "rows": {
   "E1 pre-procedure H&P with framed time": {
@@ -118,6 +118,27 @@
     []
    ]
   },
+  "PA1 disagreeing second reader: a plan line it reads nothing in (EUS)": {
+   "43259": [
+    "selected",
+    "needs_clarification",
+    []
+   ]
+  },
+  "PA2 disagreeing second reader: \"No further\" read as uncertain (EUS)": {
+   "43259": [
+    "selected",
+    "needs_clarification",
+    []
+   ]
+  },
+  "PA3 agreeing second reader: a headed prior-procedures line (ERCP)": {
+   "43276": [
+    "excluded",
+    "excluded",
+    []
+   ]
+  },
   "S1 titled colonoscopy, past negation, no head fields": {
    "45378": [
     "selected",
@@ -145,11 +166,9 @@
   },
   "S3h h4-05 counterfactual, EUS code citing the narrative": {
    "43259": [
-    "excluded",
-    "excluded",
-    [
-     "EXCLUDED where the truth says done"
-    ]
+    "selected",
+    "needs_clarification",
+    []
    ]
   },
   "bulb hot snare + planned colonoscopy": {

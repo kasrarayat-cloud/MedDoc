@@ -1,0 +1,327 @@
+{
+ "package": "PA",
+ "summary": "GI round 4, package PA: the agreement gate (studio/validation/engine.py only). When both readers' not-today readings of the code's own deciding passage come only from a section, and that section reaches the passage only across a heading-like line the layout does not read (or from further back than sections.beyond_heading_reach reads: 200 lines or 20,000 characters, fail-closed), the two readings share ONE cause - the layout - and are no agreement: the code is held, never excluded. Two places: _second_reading (the act path of _agreed_not_done and the no-service path of _held_unless_agreed) and _not_the_same_not_done (a documented service read not performed: service_negative). A section whose own heading stands above the passage is the document's own statement and still agrees. Declared movement: EXCLUDED -> held only. Nothing on the request side moves (engine.py is not read there).",
+ "base": "06e6d204e (its cpt-studio is byte-identical to installed 80df1831d168); PA is built on stage A 1e0733feb, whose only studio change is the PS helpers in sections.py (delta NONE)",
+ "declared_before_code": true,
+ "cues_added": [],
+ "movements": {},
+ "replay": "EQUAL",
+ "regression": {
+  "h4-01": "no movement in any member state",
+  "h4-02": "no movement in any member state",
+  "h4-03": "no movement in any member state",
+  "h4-04": "no movement in any member state",
+  "h4-05": "no movement in any member state",
+  "h4-06": "no movement in any member state",
+  "h2-08": "no movement in any member state",
+  "h2-10": "no movement in any member state"
+ },
+ "regression_why": "On installed readings no regression document in any member state reaches the gate with both readings section-only beyond the heading's reach: the only agreements are h4-04's 45378 (service_negative: the inventory reads the colonoscopy negated, \"negated: \\\"not\\\" on its predicate\", own wording, S2) and h2-08's E/M second reading, which already disagrees; h4-05 selects no code. H1 is EQUAL in every state, with both --fixtures and --inputs.",
+ "battery": [
+  [
+   "S3h h4-05 counterfactual, EUS code citing the narrative",
+   "43259",
+   "excluded/excluded",
+   "selected/needs_clarification"
+  ]
+ ],
+ "battery_rows": {
+  "E1 pre-procedure H&P with framed time | 45378": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "E1 pre-procedure H&P with framed time | 99214": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "E2 phone follow-up, framed time by telephone | 99214": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "E3 addendum time about a later review | 99213": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "E4 visit template, time framed, nothing recorded | 99212": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "J1 records review, unnamed family, long gap | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "J2 pasted 2024 report under unknown heading | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "J3 teaching handout | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "J4 records review, colonoscopy named in plan only | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "J5 EGD today + appended outside colonoscopy | 43239": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "J5 EGD today + appended outside colonoscopy | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "J6 records review, family named in copied block | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "J7 records review, completion rows only | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "J8 surveillance office note, prior colonoscopy in history | 45385": {
+   "installed": "excluded/excluded",
+   "PA": "excluded/excluded"
+  },
+  "K1 records review, copied banding narrative | 43244": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "K2 office note with copied EGD named | 43244": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "K3 copied colonoscopy, completion statement | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "S1 titled colonoscopy, past negation, no head fields | 45378": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "S2 untitled two-service, past negation, no head fields | 45378": {
+   "installed": "excluded/excluded",
+   "PA": "excluded/excluded"
+  },
+  "S3 cited the past negation only | 45378": {
+   "installed": "excluded/excluded",
+   "PA": "excluded/excluded"
+  },
+  "S3h h4-05 counterfactual, EUS code citing the narrative | 43259": {
+   "installed": "excluded/excluded",
+   "PA": "selected/needs_clarification",
+   "violations": {
+    "installed": [
+     "EXCLUDED where the truth says done"
+    ],
+    "PA": []
+   }
+  },
+  "bulb hot snare + planned colonoscopy | 43251": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "colonoscope reaches cecum in a plan | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "colonoscope reaches cecum, undated other doc | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "colonoscopy never started | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "colonoscopy report physician time | 45378": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "colonoscopy report physician time | 99213": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "colorectal anastomosis at 15 cm | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "dated history instrument narration | 43235": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "dated history instrument narration | 45378": {
+   "installed": "excluded/excluded",
+   "PA": "excluded/excluded"
+  },
+  "duodenoscope (ERCP) | 43262": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "earlier colonoscopy in EGD indication | 43239": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "earlier colonoscopy in EGD indication | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "elastography + framed time (S-R1) | 99213": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "future visit time | 99213": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "gastroscope to descending colon (sig) | 45331": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "gastroscopy in sig indication | 45330": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "index examination after prior studies | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "index examination after prior studies | 45385": {
+   "installed": "excluded/excluded",
+   "PA": "excluded/excluded"
+  },
+  "last visit time | 99213": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "outside endpoint line, routing silent | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "past negation + today denial | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "polyp details history | 45378": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "polyp details history | 45385": {
+   "installed": "excluded/excluded",
+   "PA": "excluded/excluded"
+  },
+  "report from 2023 (deictic) | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "report from 2023 (deictic) | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "return visit + ultrasound (V3) | 99213": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "sig report, planned colonoscopy | 45338": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "sig report, planned colonoscopy | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "stricture at 30 cm | 45380": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "stricture, cecum named in plan | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "telephone-only time | 99212": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "two services, colon polyp then it | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "two services, snare refers back | 43251": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "two services, snare refers back | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "unpassed pylorus (steered) | 43235": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "withheld label + finding of cecum | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  }
+ },
+ "new_battery_rows": {
+  "PA1 disagreeing second reader: a plan line it reads nothing in (EUS)": {
+   "code": "43259",
+   "truth": "unsupported",
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification",
+   "why": "act_missing (no endosonographic examination act); routing reads the cited plan line planned (\"planned: in one year\"); the documented-service reader reads nothing in it (\"reads nothing in it as done or as not done\"): no agreement, held (installed reason, unchanged by PA)",
+   "under battery-exclusion-needs-agreement": "excluded/excluded (a new violation: EXCLUDED where the truth says done)"
+  },
+  "PA2 disagreeing second reader: \"No further\" read as uncertain (EUS)": {
+   "code": "43259",
+   "truth": "done",
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification",
+   "why": "act_missing; routing reads the cited plan line negated (\"negated: No further\"); the documented-service reader reads it uncertain (\"no other/further: denies only acts beyond the documented ones\"): another reading, no agreement, held (installed reason, unchanged by PA)",
+   "under battery-exclusion-needs-agreement": "excluded/excluded (a new violation: EXCLUDED where the truth says done)"
+  },
+  "PA3 agreeing second reader: a headed prior-procedures line (ERCP)": {
+   "code": "43276",
+   "truth": "not_done",
+   "installed": "excluded/excluded",
+   "PA": "excluded/excluded",
+   "why": "act_missing (no stent-exchange act); both readers read the cited line historical only by its section, and that section's own heading (\"Prior Procedures\") stands directly above it: the document's own statement, agreement stands, excluded (PA's boundary: a headed section still excludes)",
+   "under battery-agreement-never": "selected/needs_clarification (a movement no declaration names)",
+   "under pa-routing-reach": "selected/needs_clarification (a movement no declaration names)"
+  }
+ },
+ "h2": "NONE by construction: engine.py is read neither by the date reader nor by the layout; NEW-SEND 0, NEW-TAKE 0, NEW-HELD 0, SEND->ASK 0, every request byte-identical, mention counts and layouts unchanged, no cue pattern added, changed or removed",
+ "h3": "no movement by construction: H3 observes the readers (context, routing, inventory), never the engine",
+ "h5": "no movement: the state battery (remake, Resume, identical re-save, reuse, decision carry, member-asked offers) does not reach the agreement gate",
+ "h7": "within the limits: the gate adds bounded work only where a section-only agreement is found (sections.beyond_heading_reach: at most 200 lines or 20,000 characters, layout cached)",
+ "fingerprints": "only codes whose bucket, status or checks move: in the battery, S3h's 43259; no live decision is touched (h4-05 selects no code; h4-04's approved 43251 does not reach the gate)",
+ "unit_pins": {
+  "h4-05, 43259 or 43237 citing \"A linear echoendoscope was introduced by mouth.\", the echoendoscopic-views sentence, or both": "excluded -> held (the act path: _second_reading)",
+  "h4-05, 43259 citing only the title": "held -> held",
+  "h4-05 with \"Question to Answer\" and \"Scope Passage and Views\" removed (the narrative under the Prior Studies heading)": "excluded -> excluded",
+  "h4-05 with \"had been introduced\" (the documented-service reader reads its own time word)": "excluded -> excluded",
+  "h4-05 with \"for a remote cyst\" (an attributive time word: both readings section-only)": "excluded -> held",
+  "clinic note, an echoendoscope narrative across an unread heading-like line (no documented EUS service: _held_unless_agreed)": "excluded -> held",
+  "clinic note, the same narrative under the Prior Studies heading": "excluded -> excluded",
+  "procedure note without an EUS title, the EUS sentence across an unread heading-like line (service_negative)": "excluded -> held",
+  "the same, under the Prior Studies heading": "excluded -> excluded",
+  "the same, 210 lines below the Prior Studies heading (beyond the reach read: fail-closed)": "excluded -> held",
+  "clinic note, an earlier EUS line first and the EUS sentence across an unread heading-like line (the service's status cue is the earlier line's own word)": "excluded -> excluded",
+  "ERCP report, \"The biliary stent was exchanged.\" across an unread heading-like line (\"Stent Management\")": "excluded -> held"
+ },
+ "mutants": {
+  "battery-exclusion-needs-agreement (stage A, surviving)": "KILLED on PA by PA1 and PA2 (held -> excluded) and by S3h (held -> excluded)",
+  "battery-agreement-never (stage A)": "KILLED on PA by PA3 (excluded -> held); S3h no longer kills it on PA",
+  "pa-second-reading-one-cause (drop the _second_reading branch)": "KILLED: battery S3h and tests.test_gi4_pa",
+  "pa-not-same-one-cause (drop the _not_the_same_not_done branch)": "KILLED: tests.test_gi4_pa",
+  "pa-routing-reach (no beyond_heading_reach requirement)": "KILLED: battery PA3 and J8, tests.test_gi4_pa",
+  "pa-routing-own-time (a routing time cue of its own no longer excludes)": "KILLED: tests.test_gi4_pa",
+  "pa-routing-section-cue (no section cue required)": "KILLED: tests.test_gi4_pa",
+  "pa-service-own-time (a service time cue of its own no longer excludes)": "KILLED: tests.test_gi4_pa",
+  "pa-service-side-second (the documented-service side of _second_reading not required)": "KILLED: tests.test_gi4_pa",
+  "pa-service-side-not-same (the documented-service side of _not_the_same_not_done not required)": "KILLED: tests.test_gi4_pa"
+ },
+ "not_changed": [
+  "_agreed_not_done (including its act branch: a section-only historical act of the code's kind in the passage still agrees - the \"polyp details history\" and \"index examination\" rows exclude through it, as installed)",
+  "_routing_agrees, _proposal, _select, every reader and every version label"
+ ],
+ "harness_edits": "ops/gi4/battery.py gains the three PA rows; ops/gi4/mutants.py gains the pa-* mutants; tests/test_gi4_battery.py counts them. Pins are re-written from a sealed export of the code commit, in a separate final commit."
+}
