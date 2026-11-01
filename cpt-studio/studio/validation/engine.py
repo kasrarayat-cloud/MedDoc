@@ -702,15 +702,17 @@ def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str
             return replace(found, detail=f'{found.detail} The routing-era reading of the passages it cites also holds '
                                          f'it: {checks.uncertain_reason(old, name)}')
     if found.state == 'not_performed' and old.state == 'not_performed':
-        apart = _not_the_same_not_done(found, old, code)
+        apart = _not_the_same_not_done(found, old, code, text)
         if apart:
             # Both readers read it as not performed, but not the same way (a denial against a plan, an earlier date
             # against a denial) or not from the code's own passage: two different misreadings are no agreement, so it is
-            # held, never excluded (7c8 skeptic, sk:9).
+            # held, never excluded (7c8 skeptic, sk:9). GI round 4 (PA): or the same status from one cause, the section
+            # both readers read (_not_the_same_not_done) - said as the same reading, never as another.
             other = checks.exclusion_reason(old, name).removesuffix(' Reinstate if this code is supported.')
+            how = 'reads it the same way' if _pa_same_not_done(found, old) else 'reads it otherwise'
             return replace(found, state='uncertain', reason='readings_disagree',
                            question=f'Confirm whether {code} was performed on the date of service.',
-                           detail=f'{found.detail} The routing-era reading of the passages it cites reads it otherwise: '
+                           detail=f'{found.detail} The routing-era reading of the passages it cites {how}: '
                                   f'{other} {apart} Held for the reviewer, not excluded.')
         # Excluded by both readers: the reason keeps the routing-era reading too, which quotes the passage that
         # dates, plans or denies the service and says what the code's own passages read.
@@ -758,19 +760,31 @@ def _second_reading(outcome: checks.StatusOutcome, text: str, day: Optional[date
     way (a doubt, another time, a denial against a plan) and at least one thing with the same not-done status. An act
     read done today, another reading, a passage too full to read through, or nothing read at all: no agreement (ec5 and
     7c8, cluster EXCL; sk:7 - a procedure named outside the act vocabulary is read by its name or its predicate), on
-    the page-joined view build() reads (``pages``; 7c8 FORMATS skeptic, sk:11)."""
+    the page-joined view build() reads (``pages``; 7c8 FORMATS skeptic, sk:11). Nor is the same status read only from
+    the section the passage stands in, where routing's reading too is that section's alone and the section reaches the
+    passage only across a heading-like line the layout does not read: one cause, not two readings (GI round 4, PA: the
+    h4-05 counterfactual, a runaway "Prior Studies" section)."""
     decisive = outcome.decisive
     readings = gi_services.passage_readings(text, decisive.start, decisive.end, day, pages)
     if readings is None:
         return 'does not read it through: there is too much in it to read'
     want = _not_done_class(decisive.status)
     agreed = False
+    one_cause = None  # whether routing's reading is its section's alone, beyond the heading's reach (read once)
     for reading, clause in readings:
         if gi_services.done_today(reading):
             return f'reads an act in it as done today: \u201c{checks.excerpt(clause.text)}\u201d'
         if _says_nothing(reading.status, reading.cues):
             continue  # named, with nothing said about it either way
         if reading.status in checks.NEGATIVE and _not_done_class(reading.status) == want:
+            if _section_only_service_reading(reading.cues):
+                if one_cause is None:
+                    one_cause = _section_only_routing_reading(decisive, text)
+                if one_cause:
+                    # GI round 4 (PA): both readers take the time from one section - the layout - so no agreement
+                    # (the words that say so come first: a cue is shown to EXCERPT_CHARS characters)
+                    return (f'reads it the same only by its section: one cause, not two readings; '
+                            f'{_pa_reach(text, decisive.start)} (\u201c{checks.excerpt(clause.text)}\u201d)')
             agreed = True
             continue
         return f'reads it as {reading.status}: \u201c{checks.excerpt(clause.text)}\u201d'
@@ -785,6 +799,70 @@ def _says_nothing(status: str, cues: Sequence[str]) -> bool:
     """A documented-service reading that says nothing either way: silence, or an unchecked box it leaves to routing's
     box reader (services.SAYS_NOTHING)."""
     return status == 'uncertain' and bool(cues) and cues[0] in gi_services.SAYS_NOTHING
+
+
+# GI round 4, package PA (the diagnosis's S3): a not-today reading whose time is only its section's. The documented-
+# service reader writes it "historical: in a history section" or "planned: in a plan section" (services.read_clause);
+# routing's carries its section's cue ("section: history (Prior Studies)") and no time cue of its own. Two such readings
+# share one cause - the section layout both readers read - so where that section reaches the passage only across a
+# heading-like line the layout does not read, they are no agreement: the code is held, never excluded. A section whose
+# own heading stands above the passage is the document's own statement, and its readings still agree.
+_SECTION_ONLY_SERVICES = ('historical: in a history section', 'planned: in a plan section')
+
+
+def _pa_own_time(cue: str) -> bool:
+    """Whether a reading's cue states a not-done time or status: historical, planned, negated or cancelled (GI round 4,
+    PA). A section's own cue (_SECTION_ONLY_SERVICES) is one too."""
+    return cue.startswith(('historical:', 'planned:', 'negated:', 'cancelled:'))
+
+
+def _section_only_service_reading(cues: Sequence[str]) -> bool:
+    """Whether a documented-service reading takes its not-done time only from its section: one of its cues is a
+    section's (_SECTION_ONLY_SERVICES) and every cue that states a time or a status is one (GI round 4, PA). A time
+    word, a date, a denial or a cancellation of its own ("historical: had been", "historical: earlier") is a reading of
+    its own, independent of the layout."""
+    return any(cue in _SECTION_ONLY_SERVICES for cue in cues) \
+        and all(cue in _SECTION_ONLY_SERVICES for cue in cues if _pa_own_time(cue))
+
+
+def _section_only_routing_reading(reading: checks.Reading, text: str = '') -> bool:
+    """Whether routing's reading of the code's own passage takes its time only from its section - its section's cue and
+    no time or status cue of its own ("section: history (Prior Studies)", or a performance statement its section made
+    historical: "performed: was introduced") - AND that section reaches the passage only across a heading-like line the
+    layout does not read as a heading, or from further below its heading than that is read (sections.
+    beyond_heading_reach, fail-closed: a runaway history or plan section; GI round 4, PA). A section whose own heading
+    stands above the passage is the document's own statement: False, and a reading by it still agrees."""
+    if reading.start is None:  # a reading of the whole family has no passage of its own (and no text: no heading)
+        return False
+    if not any(cue.startswith(checks.SECTION_CUE_PREFIX) for cue in reading.cues) \
+            or any(_pa_own_time(cue) for cue in reading.cues):
+        return False
+    return gi_sections.beyond_heading_reach(text, gi_sections.layout(text), reading.start)
+
+
+def _pa_reach(text: str, pos: int, what: str = 'it') -> str:
+    """How the section at ``pos`` reaches it, said for a reading _section_only_routing_reading finds one-cause: from
+    further below its heading than sections.beyond_heading_reach reads (HEADING_REACH_LINES lines or HEADING_REACH_CHARS
+    characters: fail-closed), or else past a heading-like line the layout does not read. Words only; it decides nothing
+    (GI round 4, PA)."""
+    section = gi_sections.layout(text).section_at(pos)
+    heading = section.heading.text.rstrip(':').strip() if section.heading is not None else ''
+    named = f' \u201c{heading}\u201d' if heading else ''
+    lo = text.find('\n', section.heading.end) if section.heading is not None else -1
+    if lo >= 0 and (pos - lo > gi_sections.HEADING_REACH_CHARS
+                    or text.count('\n', lo + 1, pos) >= gi_sections.HEADING_REACH_LINES):
+        return (f'its section{named} reaches {what} from more than {gi_sections.HEADING_REACH_LINES} lines or '
+                f'{gi_sections.HEADING_REACH_CHARS:,} characters below its heading, further than a heading is read')
+    return (f'its section{named} reaches {what} only past a line written as a heading that the layout does not read '
+            'as one')
+
+
+def _pa_same_not_done(found: reconcile.Match, old: checks.StatusOutcome) -> bool:
+    """Whether a documented service read as not performed has the same not-done status as the routing-era reading
+    (_not_done_class): where _not_the_same_not_done still finds them apart, that is one cause, not two readings (GI
+    round 4, PA), and the hold says the two read it the same way."""
+    return found.reason == 'service_negative' and old.decisive is not None \
+        and _not_done_class(found.service.status) == _not_done_class(old.decisive.status)
 
 
 def _agreed_not_done(code: str, outcome: checks.StatusOutcome, service, text: str, day: Optional[date],
@@ -808,11 +886,14 @@ def _agreed_not_done(code: str, outcome: checks.StatusOutcome, service, text: st
     return not _second_reading(outcome, text, day, pages)
 
 
-def _not_the_same_not_done(found: reconcile.Match, old: checks.StatusOutcome, code: str) -> str:
+def _not_the_same_not_done(found: reconcile.Match, old: checks.StatusOutcome, code: str, text: str = '') -> str:
     """Why a documented service or act read as not performed and a not-performed routing-era reading are not the same
     reading, or '' when they are: the same not-done status (_not_done_class: a denied act or service against a plan or a
     history is no agreement; 7c8 skeptic, sk:9). A denial read from another representation of the same item - a form's
-    field line beside its printed box - is the same denial."""
+    field line beside its printed box - is the same denial. A service read as not performed only by its section,
+    against a routing-era reading of the code's own passage that its section alone makes not-today across a
+    heading-like line the layout does not read (_section_only_routing_reading, on ``text``), is the same status from one
+    cause: no agreement either (GI round 4, PA)."""
     decisive = old.decisive
     if decisive is None:
         return ''
@@ -821,6 +902,11 @@ def _not_the_same_not_done(found: reconcile.Match, old: checks.StatusOutcome, co
         if _not_done_class(found.service.status) != want:
             return (f'The documented-service reader reads the {reconcile.service_label(found.service)} as '
                     f'{found.service.status}, the routing-era reading as {decisive.status}: not the same reading.')
+        if _section_only_service_reading(found.service.cues) and _section_only_routing_reading(decisive, text):
+            # GI round 4 (PA): both readers take the service's time from one section - the layout - so no agreement
+            return (f'Both readers read the {reconcile.service_label(found.service)} as {found.service.status} only by '
+                    f'the section it stands in: one cause, not two readings; '
+                    f'{_pa_reach(text, decisive.start, "the passage")}.')
         return ''
     if found.reason == 'act_denied' and want != 'denied':
         profile = reconcile.catalogue.code_profile(code)

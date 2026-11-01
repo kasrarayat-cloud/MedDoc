@@ -4,9 +4,10 @@ merged (jobs._merged_facts), and the assess child (jobs._assess_child) with an i
 In-process and offline: nothing is sent and no database is read.
 
 Permanent rows: the minimal design's 28 cases (its battery.py, verbatim), the judge's J1-J8, K1-K3, E1-E4 and S1-S3
-(judge_battery.py, verbatim), and the h4-05 counterfactual (the judge's F1: 43259 citing the narrative is EXCLUDED as
-installed, the agreement gate's excluding side; package PA declares it moving to held). Each code carries a
-PROVISIONAL truth (no qualified GI coder has reviewed it):
+(judge_battery.py, verbatim), the h4-05 counterfactual (the judge's F1: 43259 citing the narrative is EXCLUDED as
+installed, the agreement gate's excluding side; package PA declares it moving to held), and package PA's PA1-PA3 (the
+gate's second reader: two that disagree, held; one that agrees under its section's own heading, excluded). Each code
+carries a PROVISIONAL truth (no qualified GI coder has reviewed it):
   done             performed today: an exclusion is a violation
   done_incomplete  performed today, incompletely: an exclusion is a violation, and READY needs an incompleteness signal
                    (a modifier consideration or a non-pass check)
@@ -280,6 +281,25 @@ CASES = {
     # runaway "Prior Studies" section, which both readers read as historical from that one section ---
     'S3h h4-05 counterfactual, EUS code citing the narrative': (H405, [('43259', 'A linear echoendoscope was introduced '
                                                                                   'by mouth.', 'done')]),
+    # --- package PA: the agreement gate's second reader (engine._agreed_not_done with no act of the code's kind in its
+    # passage, then engine._second_reading). PA1 and PA2 reach it with a second reader that DISAGREES (held; an
+    # always-agree gate would exclude them), PA3 with one that agrees under the section's own heading (excluded; a gate
+    # that never agrees, or one that ignores the heading's reach, would hold it) ---
+    'PA1 disagreeing second reader: a plan line it reads nothing in (EUS)': (
+        B + 'Endoscopic Ultrasound Report\nDate of service: 10/20/2026\nEndoscopist: Synthetic MD\nSedation: propofol by '
+        'CRNA\n\nProcedure\nA linear echoendoscope was introduced by mouth. The pancreas was examined from the head to the '
+        'tail. A 12 mm cyst was seen in the pancreatic body.\n\nPlan\nReturn in one year with repeat imaging.\n',
+        [('43259', 'Return in one year with repeat imaging.', 'unsupported')]),
+    'PA2 disagreeing second reader: "No further" read as uncertain (EUS)': (
+        B + 'Endoscopic Ultrasound Report\nDate of service: 10/20/2026\nEndoscopist: Synthetic MD\nSedation: propofol by '
+        'CRNA\n\nProcedure\nA linear echoendoscope was introduced by mouth. The pancreas was examined from the head to the '
+        'tail.\n\nPlan\nNo further endoscopic ultrasound is needed; the cyst was examined today.\n',
+        [('43259', 'No further endoscopic ultrasound is needed; the cyst was examined today.', 'done')]),
+    'PA3 agreeing second reader: a headed prior-procedures line (ERCP)': (
+        B + 'ERCP Report\nDate of service: 10/20/2026\nEndoscopist: Synthetic MD\nSedation: propofol by CRNA\n\nPrior '
+        'Procedures\nThe biliary stent was exchanged.\n\nProcedure\nThe duodenoscope was advanced to the second part of the '
+        'duodenum. The bile duct was cannulated and a biliary sphincterotomy was performed.\n',
+        [('43276', 'The biliary stent was exchanged.', 'not_done')]),
 }
 REVIEW_NOTE = ('Provisional author truths; no qualified GI coder has reviewed them. "X|MAY" marks a truth the second '
                'review disputes: J8 (its identity sentence reads like h4-06\'s own), E3 (the judge: arguable), and the '
