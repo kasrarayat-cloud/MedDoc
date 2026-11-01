@@ -107,6 +107,30 @@ class FootprintTests(unittest.TestCase):
         with self.assertRaises(footprint.Refusal):
             footprint.require_exact(before, forged)
 
+    def test_pip_stash_left_by_a_killed_pip_is_residue_never_a_distribution(self):
+        """DEP-1: a killed pip leaves ~demo and ~emo-1.0.dist-info (its METADATA still says demo 1.0)."""
+        site = self.venv / footprint.SITE
+        os.rename(site / 'demo', site / '~emo')
+        os.rename(site / 'demo-1.0.dist-info', site / '~emo-1.0.dist-info')
+        facts = footprint.snapshot(self.venv)['census']
+        self.assertEqual(facts['distributions'], {'other-package': '2.5'})
+        self.assertEqual(facts['pip_residue'], [footprint.SITE + '/~emo', footprint.SITE + '/~emo-1.0.dist-info'])
+        self.assertEqual(footprint.summary(footprint.snapshot(self.venv))['pip_residue'], 2)
+        # With the new version installed beside the stash, the census no longer refuses unique_distribution.
+        (site / 'demo-1.1.dist-info').mkdir()
+        (site / 'demo-1.1.dist-info/METADATA').write_text('Metadata-Version: 2.1\nName: demo\nVersion: 1.1\n')
+        (site / 'demo-1.1.dist-info/RECORD').write_text('demo-1.1.dist-info/RECORD,,\n')
+        facts = footprint.snapshot(self.venv)['census']
+        self.assertEqual(facts['distributions'], {'demo': '1.1', 'other-package': '2.5'})
+        self.assertEqual(len(facts['pip_residue']), 2)
+
+    def test_record_paths_are_venv_relative_and_include_the_record(self):
+        files = footprint.inventory(self.venv)
+        paths = footprint.record_paths(self.venv, files, footprint.SITE + '/demo-1.0.dist-info')
+        self.assertEqual(paths, {footprint.SITE + '/demo/__init__.py',
+                                 footprint.SITE + '/demo/__pycache__/__init__.cpython-312.pyc',
+                                 footprint.SITE + '/demo-1.0.dist-info/RECORD'})
+
     def test_census_reads_only_what_the_footprint_measured(self):
         files = footprint.inventory(self.venv)
         metadata = self.venv / footprint.SITE / 'demo-1.0.dist-info/METADATA'
@@ -119,6 +143,17 @@ class FootprintTests(unittest.TestCase):
         record.write_text(record.read_text() + '../../../../escape.txt,,\n')
         with self.assertRaises(footprint.Refusal):
             footprint.snapshot(self.venv)
+
+    def test_a_directory_the_operator_cannot_list_refuses_instead_of_vanishing(self):
+        """The preflight-truth lens's latent: os.walk skipped unlistable directories without a word."""
+        cache = self.venv / footprint.SITE / 'demo/__pycache__'
+        os.chmod(cache, 0o000)
+        try:
+            with self.assertRaises(footprint.Refusal) as caught:
+                footprint.snapshot(self.venv)
+            self.assertEqual(str(caught.exception), 'unlistable_venv_directory')
+        finally:
+            os.chmod(cache, 0o755)
 
     def test_a_venv_path_through_a_link_refuses(self):
         alias = self.root / 'alias'

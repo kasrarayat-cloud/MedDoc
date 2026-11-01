@@ -22,9 +22,18 @@ Import is inert. ``install_once`` refuses the live venv unless the declared act 
 ``calibrate`` command runs the whole stage on a COPY of the live venv (``cp -a``), relocated in memory only, and
 proves the live venv was not touched. ``fetch`` downloads the three wheels and verifies each sha256 against BOTH
 of PyPI's published surfaces (the JSON API and the PEP 691 simple index).
+
+BEFORE PIP (the 2026-11-01 refutation): no pip residue ('~' stash entries a killed pip leaves) and a complete
+installed population; a PROOF that pip's RECORD-driven uninstall empties each old package's directories (every
+object there is RECORD-listed or at the cpython-312 cache path of a listed module), else refuse; the wheels are
+copied into a private directory made here, proven in place, and installed from those copies only, each pinned by
+sha256 under --require-hashes; the units are proven drained immediately before the pip child. EVERY EXIT records
+its outcome through ``recorder`` ('pip_process' and 'outcome' records), with a MEASURED venv state on any failure
+after pip starts, and every refusal is this module's Refusal (a footprint refusal or a timeout included).
 """
 import argparse
 import base64
+from contextlib import contextmanager
 import csv
 import hashlib
 import importlib
@@ -33,10 +42,13 @@ import json
 import os
 from email.parser import BytesParser
 from pathlib import Path, PurePosixPath
+import posixpath
 import re
+import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 import urllib.parse
 import urllib.request
 import zipfile
@@ -84,12 +96,22 @@ print(json.dumps({'pypdf':pypdf.__version__,'pypdf_file':pypdf.__file__,'pdf_rou
 
 
 class Refusal(RuntimeError):
-    """A fixed, non-sensitive label."""
+    """A fixed, non-sensitive label. Every refusal of this stage is one of these (one_refusal_class)."""
 
 
 def require(value, label):
     if not value:
         raise Refusal(label)
+
+
+@contextmanager
+def one_refusal_class():
+    """A footprint refusal leaves this stage as this module's Refusal, with the same fixed label."""
+    module = footprint()
+    try:
+        yield
+    except module.Refusal as error:
+        raise Refusal(str(error)) from None
 
 
 def sha(raw):
@@ -190,8 +212,76 @@ def wheel(path, package):
             'requires': requires}
 
 
+def private_directory(path, label):
+    """A directory only the operator can write: owned, mode 0700, not a link."""
+    path = Path(path)
+    info = path.lstat()
+    require(path.is_absolute() and stat.S_ISDIR(info.st_mode) and path.resolve(strict=True) == path
+            and info.st_uid == os.getuid() and stat.S_IMODE(info.st_mode) == 0o700, label)
+    return path
+
+
 def wheels(directory):
+    """The three proven wheels; the directory that holds them must be private too (a writer there could swap one)."""
+    private_directory(directory, 'private_wheel_directory')
     return {package: wheel(Path(directory) / WHEELS[package]['filename'], package) for package in sorted(WHEELS)}
+
+
+def private_copies(proven, work):
+    """Copy each proven wheel into a NEW private directory made here, prove each copy in place, and write the
+    requirements file that pins each copy by sha256. pip reads only these copies, under --require-hashes."""
+    private_directory(work, 'private_work_directory')
+    target = Path(tempfile.mkdtemp(prefix='pinned-wheels-', dir=str(work)))
+    copies, lines = {}, []
+    for package in sorted(proven):
+        source = Path(proven[package]['path'])
+        raw = source.read_bytes()
+        require(sha(raw) == WHEELS[package]['sha256'], 'wheel_unchanged_before_copy')
+        path = target / WHEELS[package]['filename']
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        copies[package] = wheel(path, package)
+        lines.append(str(path) + ' --hash=sha256:' + WHEELS[package]['sha256'])
+    requirements = target / 'pinned-requirements.txt'
+    fd = os.open(requirements, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'w') as stream:
+        stream.write('\n'.join(lines) + '\n')
+    private_directory(target, 'private_pinned_wheel_directory')
+    return target, copies, requirements
+
+
+def cache_path(name):
+    """pip 24.0's UninstallPathSet.add: a listed .py also removes importlib.util.cache_from_source(path), with the
+    pip child's own tag and optimization level (cpython-312, -I -B, no -O): __pycache__/<stem>.cpython-312.pyc."""
+    head, tail = posixpath.split(name)
+    return posixpath.join(head, '__pycache__', tail[:-len('.py')] + '.cpython-312.pyc')
+
+
+def uninstall_proof(before, package):
+    """Prove, before pip, that its RECORD-driven uninstall of the old version leaves nothing of the package behind.
+
+    pip removes every RECORD-listed path plus the cpython-312 cache path of each listed module, and renames a
+    directory away whole only when every file under it is in that set. Anything else under the package's import
+    roots or its old dist-info (an opt-1 .pyc, another interpreter's bytecode, an unrecorded file, a file named
+    like the new dist-info) would survive pip and refuse only AFTER it, with the packages already moved. The
+    installed population must also be complete: a RECORD naming files that are gone is a half-uninstalled venv.
+    """
+    module = footprint()
+    old = TRANSITIONS[package][0]
+    files = before['files']
+    listed = module.record_paths(before['venv'], files, SITE + '/' + dist_info(package, old))
+    require(all(files.get(name, {}).get('kind') == 'file' for name in listed), 'complete_installed_record_population')
+    require(all(owned(name, package) for name in listed), 'record_outside_the_package_roots')
+    removed = listed | {cache_path(name) for name in listed if name.endswith('.py')}
+    objects = {name: row for name, row in files.items() if owned(name, package)}
+    require(all(row['kind'] in ('file', 'directory') for row in objects.values()), 'regular_package_objects')
+    left = sorted(name for name, row in objects.items() if row['kind'] == 'file' and name not in removed)
+    require(not left, 'pip_uninstall_would_leave_package_objects')
+    return {'recorded': len(listed), 'files_removed_by_pip': sum(row['kind'] == 'file' for row in objects.values()),
+            'cache_files_removed': sum(name not in listed for name, row in objects.items() if row['kind'] == 'file')}
 
 
 def generated_metadata(package, wheel_path):
@@ -290,25 +380,38 @@ def child_environment():
 
 
 def interpreter(venv, arguments, *, timeout=120, recorder=None, runner=subprocess.run):
-    """One child of the venv's own interpreter (-I -B), child umask 022, parent 077, bounded output."""
+    """One child of the venv's own interpreter (-I -B), child umask 022, parent 077, bounded output.
+
+    The child's record reaches ``recorder`` whatever happens to it, a timeout included (subprocess.run kills the
+    child at the bound and keeps what it printed).
+    """
     require(umask() == 0o077, 'private_parent_umask')
     argv = [str(Path(venv) / 'bin/python'), '-I', '-B', *arguments]
-    result = runner(argv, cwd=str(venv), env=child_environment(), capture_output=True, timeout=timeout,
-                    umask=CHILD_UMASK)
+    timed_out = False
+    try:
+        result = runner(argv, cwd=str(venv), env=child_environment(), capture_output=True, timeout=timeout,
+                        umask=CHILD_UMASK)
+        returncode, stdout, stderr = result.returncode, result.stdout, result.stderr
+    except subprocess.TimeoutExpired as expired:
+        timed_out, returncode = True, None
+        stdout, stderr = expired.stdout or b'', expired.stderr or b''
     require(umask() == 0o077, 'parent_umask_unchanged')
-    require(len(result.stdout) <= 1024 ** 2 and len(result.stderr) <= 1024 ** 2, 'bounded_child_output')
     if recorder is not None:
-        recorder({'argv': argv, 'returncode': result.returncode, 'stdout': result.stdout.decode(errors='replace'),
-                  'stderr': result.stderr.decode(errors='replace'), 'child_umask': '0022', 'parent_umask': '0077',
-                  'network_index': False, 'dependencies_resolved': False})
-    require(result.returncode == 0, 'venv_child_failed')
-    return result.stdout
+        recorder({'record': 'pip_process', 'argv': argv, 'returncode': returncode, 'timed_out': timed_out,
+                  'timeout_seconds': timeout, 'stdout': stdout[:1024 ** 2].decode(errors='replace'),
+                  'stderr': stderr[:1024 ** 2].decode(errors='replace'), 'child_umask': '0022',
+                  'parent_umask': '0077', 'network_index': False, 'dependencies_resolved': False})
+    require(not timed_out, 'venv_child_timeout')
+    require(len(stdout) <= 1024 ** 2 and len(stderr) <= 1024 ** 2, 'bounded_child_output')
+    require(returncode == 0, 'venv_child_failed')
+    return stdout
 
 
-def pip_arguments(proven):
+def pip_arguments(requirements):
+    """pip installs exactly the private copies the requirements file names, each pinned by its sha256."""
     return ['-m', 'pip', '--isolated', '--disable-pip-version-check', 'install', '--no-index', '--no-deps',
-            '--no-cache-dir', '--no-compile', '--only-binary=:all:', '--force-reinstall',
-            *[proven[package]['path'] for package in sorted(TRANSITIONS)]]
+            '--no-cache-dir', '--no-compile', '--only-binary=:all:', '--force-reinstall', '--require-hashes',
+            '-r', str(requirements)]
 
 
 def checks(venv, after, *, runner=subprocess.run):
@@ -328,29 +431,86 @@ def checks(venv, after, *, runner=subprocess.run):
     return value
 
 
-def install_once(venv, wheel_directory, before, *, drained, recorder, live=False, runner=subprocess.run):
+def measured_state(venv, before):
+    """The venv as it is NOW, after a failure once pip started; never raises (what could not be read is said so)."""
+    module = footprint()
+    state = {}
+    try:
+        files = module.inventory(venv)
+        state['difference'] = module.difference(before['files'], files)
+        state['footprint_sha256'] = sha(module.canonical(files))
+        site = SITE + '/'
+        top = sorted(name[len(site):] for name in files if name.startswith(site) and '/' not in name[len(site):])
+        state['site_packages_entries'] = [name for name in top
+                                          if name.startswith('~') or name.split('-')[0] in TRANSITIONS]
+        census = module.census(venv, files)
+        state['versions'] = {package: census['distributions'].get(package) for package in TRANSITIONS}
+        state['pip_residue'] = census['pip_residue']
+    except BaseException as error:
+        state['unmeasured'] = str(error) if isinstance(error, (Refusal, module.Refusal)) else type(error).__name__
+    return state
+
+
+def install_once(venv, wheel_directory, before, *, drained, recorder, live=False, runner=subprocess.run, work=None):
     """THE dependency mutation: one pip process. The caller keeps the units drained and never retries.
 
     pip uninstalls and installs each requirement in turn and rolls back only the one that failed, so a failure
-    part-way can leave an earlier package moved: the receipts say which, and nothing retries automatically.
+    part-way can leave an earlier package moved. Every exit therefore ends with an 'outcome' record: refused before
+    pip (nothing changed), or failed or refused after pip started, with the venv state MEASURED at that moment.
+    ``work`` is a private directory for the pinned wheel copies (a new temporary directory by default).
     """
-    module = footprint()
-    venv = Path(venv)
-    live_path = VENV.exists() and venv.exists() and os.path.samefile(venv, VENV)
-    require(live is live_path and (not live or venv == VENV), 'live_venv_only_through_the_declared_act')
-    require(umask() == 0o077, 'private_parent_umask')
-    forward_only()
-    require(drained() is True, 'owned_units_drained_before_pip')
-    module.require_exact(before, module.snapshot(venv), 'venv_unchanged_since_its_snapshot')
-    require(versions(before) == {p: pair[0] for p, pair in TRANSITIONS.items()}, 'old_versions_installed')
-    proven = wheels(wheel_directory)
-    interpreter(venv, pip_arguments(proven), timeout=PIP_TIMEOUT_SECONDS, recorder=recorder, runner=runner)
-    require(drained() is True, 'owned_units_drained_after_pip')
-    require(wheels(wheel_directory) == proven, 'wheels_unchanged_during_install')
-    after = module.snapshot(venv)
-    proof = transition(before, after, proven)
-    proof['checks'] = checks(venv, after, runner=runner)
-    module.require_exact(after, module.snapshot(venv), 'venv_stable_after_install')
+    stage, pip_started, scratch = 'preconditions', False, []
+    try:
+        with one_refusal_class():
+            module = footprint()
+            venv = Path(venv)
+            live_path = VENV.exists() and venv.exists() and os.path.samefile(venv, VENV)
+            require(live is live_path and (not live or venv == VENV), 'live_venv_only_through_the_declared_act')
+            require(umask() == 0o077, 'private_parent_umask')
+            forward_only()
+            require(drained() is True, 'owned_units_drained_before_pip')
+            module.require_exact(before, module.snapshot(venv), 'venv_unchanged_since_its_snapshot')
+            require(not before['census']['pip_residue'], 'interrupted_pip_residue_in_the_venv')
+            require(versions(before) == {p: pair[0] for p, pair in TRANSITIONS.items()}, 'old_versions_installed')
+            uninstall = {package: uninstall_proof(before, package) for package in sorted(TRANSITIONS)}
+            proven = wheels(wheel_directory)
+            if work is None:
+                work = tempfile.mkdtemp(prefix='rebuild-deps-')
+                scratch.append(work)
+            pinned, copies, requirements = private_copies(proven, work)
+            scratch.append(pinned)
+            # The last check before the child: a unit that started after the first drained() is seen here.
+            require(drained() is True, 'owned_units_drained_immediately_before_pip')
+            stage, pip_started = 'pip', True
+            interpreter(venv, pip_arguments(requirements), timeout=PIP_TIMEOUT_SECONDS, recorder=recorder,
+                        runner=runner)
+            stage = 'after_pip'
+            require(drained() is True, 'owned_units_drained_after_pip')
+            require(wheels(wheel_directory) == proven and {p: wheel(c['path'], p) for p, c in copies.items()}
+                    == copies, 'wheels_unchanged_during_install')
+            after = module.snapshot(venv)
+            proof = transition(before, after, copies)
+            proof['uninstall_proof'] = uninstall
+            proof['checks'] = checks(venv, after, runner=runner)
+            module.require_exact(after, module.snapshot(venv), 'venv_stable_after_install')
+    except BaseException as error:
+        label = str(error) if isinstance(error, Refusal) else type(error).__name__
+        record = {'record': 'outcome', 'outcome': 'refused', 'stage': stage, 'label': label,
+                  'pip_started': pip_started, 'venv_changed': None if pip_started else False}
+        if pip_started:
+            record['measured_after_failure'] = measured_state(venv, before)
+        try:
+            recorder(record)
+        except BaseException:
+            pass    # a recorder that cannot write never masks the refusal itself
+        finally:
+            for path in reversed(scratch):
+                shutil.rmtree(path, ignore_errors=True)
+        raise
+    for path in reversed(scratch):
+        shutil.rmtree(path, ignore_errors=True)
+    recorder({'record': 'outcome', 'outcome': 'installed', 'stage': 'complete', 'label': None, 'pip_started': True,
+              'after_footprint_sha256': after['footprint_sha256'], 'versions': versions(after)})
     return after, proof
 
 
@@ -417,42 +577,80 @@ def save(path, value):
     return {'path': str(path), 'sha256': sha(raw)}
 
 
-def calibrate(copy, wheel_directory, output, *, live_snapshot=None, runner=subprocess.run):
-    """The whole stage on a COPY of the live venv; the live venv's footprint is proven unchanged around it."""
-    module = footprint()
-    copy, output = Path(copy), Path(output)
-    require(copy.is_absolute() and copy.resolve(strict=True) == copy and not copy.is_relative_to(VENV)
-            and not (VENV.exists() and os.path.samefile(copy, VENV)), 'calibration_runs_on_a_copy')
-    require(output.is_absolute() and not output.exists(), 'new_calibration_output')
-    parent = output.parent.lstat()
-    require(stat.S_ISDIR(parent.st_mode) and parent.st_uid == os.getuid() and stat.S_IMODE(parent.st_mode) == 0o700,
-            'private_calibration_parent')
-    output.mkdir(mode=0o700)
-    live_snapshot = live_snapshot or module.snapshot
-    live_before = live_snapshot(VENV)
-    before = module.snapshot(copy)
-    pins = {'before': save(output / 'venv-copy-before.json', before)}
-    process = {}
+#: What a `cp -a` copy keeps of every object; device and inode are a copy's own (and mtime is not compared).
+COPY_FIELDS = ('kind', 'mode', 'uid', 'gid', 'bytes', 'sha256', 'target')
 
-    def record(value):
-        process['pin'] = save(output / 'pip-process.json', value)
-        process['value'] = value
-    after, proof = install_once(copy, wheel_directory, before, drained=lambda: True, recorder=record, runner=runner)
-    pins['after'] = save(output / 'venv-copy-after.json', after)
-    live_after = live_snapshot(VENV)
-    module.require_exact(live_before, live_after, 'live_venv_touched_during_calibration')
-    receipt = {'format': CALIBRATION_FORMAT, 'venv_copy': str(copy), 'live_venv': str(VENV),
-               'live_venv_footprint_sha256': live_before['footprint_sha256'], 'live_venv_unchanged': True,
-               'copy_before': module.summary(before), 'copy_after': module.summary(after),
-               'copy_before_matches_live': before['census'] == live_before['census'],
-               'pip_process': {'pin': process['pin'], 'argv': process['value']['argv'],
-                               'returncode': process['value']['returncode']},
-               'wheels': {p: {'filename': WHEELS[p]['filename'], 'sha256': WHEELS[p]['sha256']} for p in WHEELS},
-               'transition': proof, 'snapshots': pins, 'units_drained': 'not applicable: a copy serves nothing',
-               'helper_sha256': sha(Path(__file__).read_bytes()),
-               'footprint_helper_sha256': sha(Path(module.__file__).read_bytes())}
-    receipt['receipt'] = save(output / 'calibration-receipt.json', receipt)
-    return receipt
+
+def copy_view(files):
+    return {name: {key: row[key] for key in COPY_FIELDS if key in row} for name, row in files.items()}
+
+
+def calibration_copy(copy):
+    """A venv root that is neither the live venv, inside it, nor ANY ancestor of it: checked before anything is read.
+
+    `--venv-copy /opt/meddoc-pro/rebuild` would otherwise pass a one-way guard and have every file under it,
+    rebuild/.env and the key files included, read and hashed into the first snapshot.
+    """
+    copy = Path(copy)
+    require(copy.is_absolute() and not copy.is_symlink() and copy.resolve(strict=True) == copy and copy.is_dir(),
+            'calibration_copy_path')
+    for live in {VENV, Path(os.path.realpath(VENV))}:
+        require(not copy.is_relative_to(live) and not live.is_relative_to(copy), 'calibration_runs_on_a_copy')
+    require(not (VENV.exists() and os.path.samefile(copy, VENV)), 'calibration_runs_on_a_copy')
+    config = copy / 'pyvenv.cfg'
+    require(config.is_file() and not config.is_symlink() and (copy / SITE).is_dir()
+            and not (copy / SITE).is_symlink() and (copy / 'bin/python').exists(), 'calibration_copy_is_a_venv_root')
+    return copy
+
+
+def calibrate(copy, wheel_directory, output, *, live_snapshot=None, runner=subprocess.run):
+    """The whole stage on a COPY of the live venv; the live venv's footprint is proven unchanged around it.
+
+    The copy must equal the live venv path by path (kind, mode, owner, size, sha256, link target) before pip runs,
+    and the live object table is saved with the receipt so that equality can be shown afterwards.
+    """
+    with one_refusal_class():
+        module = footprint()
+        copy, output = calibration_copy(copy), Path(output)
+        require(output.is_absolute() and not output.exists(), 'new_calibration_output')
+        parent = output.parent.lstat()
+        require(stat.S_ISDIR(parent.st_mode) and parent.st_uid == os.getuid()
+                and stat.S_IMODE(parent.st_mode) == 0o700, 'private_calibration_parent')
+        output.mkdir(mode=0o700)
+        live_snapshot = live_snapshot or module.snapshot
+        live_before = live_snapshot(VENV)
+        pins = {'live_before': save(output / 'venv-live-before.json', live_before)}
+        before = module.snapshot(copy)
+        pins['before'] = save(output / 'venv-copy-before.json', before)
+        matches = copy_view(before['files']) == copy_view(live_before['files'])
+        if not matches:
+            pins['copy_difference'] = save(output / 'venv-copy-difference.json', module.difference(
+                copy_view(live_before['files']), copy_view(before['files'])))
+        require(matches, 'calibration_copy_equals_the_live_venv')
+        records = {}
+
+        def record(value):
+            name = value['record']
+            records[name] = {'pin': save(output / (name.replace('_', '-') + '.json'), value), 'value': value}
+        after, proof = install_once(copy, wheel_directory, before, drained=lambda: True, recorder=record,
+                                    runner=runner, work=output)
+        pins['after'] = save(output / 'venv-copy-after.json', after)
+        live_after = live_snapshot(VENV)
+        module.require_exact(live_before, live_after, 'live_venv_touched_during_calibration')
+        process = records['pip_process']
+        receipt = {'format': CALIBRATION_FORMAT, 'venv_copy': str(copy), 'live_venv': str(VENV),
+                   'live_venv_footprint_sha256': live_before['footprint_sha256'], 'live_venv_unchanged': True,
+                   'copy_before': module.summary(before), 'copy_after': module.summary(after),
+                   'copy_before_matches_live': True, 'copy_comparison_fields': list(COPY_FIELDS),
+                   'pip_process': {'pin': process['pin'], 'argv': process['value']['argv'],
+                                   'returncode': process['value']['returncode']},
+                   'outcome': records['outcome']['pin'],
+                   'wheels': {p: {'filename': WHEELS[p]['filename'], 'sha256': WHEELS[p]['sha256']} for p in WHEELS},
+                   'transition': proof, 'snapshots': pins, 'units_drained': 'not applicable: a copy serves nothing',
+                   'helper_sha256': sha(Path(__file__).read_bytes()),
+                   'footprint_helper_sha256': sha(Path(module.__file__).read_bytes())}
+        receipt['receipt'] = save(output / 'calibration-receipt.json', receipt)
+        return receipt
 
 
 def main(argv=None):
@@ -471,8 +669,8 @@ def main(argv=None):
         print(json.dumps(fetch(args.wheels), indent=1, sort_keys=True))
         return 0
     receipt = calibrate(args.venv_copy, args.wheels, args.output)
-    print(json.dumps({key: receipt[key] for key in ('live_venv_unchanged', 'copy_before', 'copy_after', 'pip_process',
-                                                    'receipt')}, indent=1, sort_keys=True))
+    print(json.dumps({key: receipt[key] for key in ('live_venv_unchanged', 'copy_before_matches_live', 'copy_before',
+                                                    'copy_after', 'pip_process', 'receipt')}, indent=1, sort_keys=True))
     return 0
 
 
@@ -481,7 +679,10 @@ if __name__ == '__main__':
         code = main()
     except SystemExit:
         raise
-    except Refusal as refusal:
-        print(json.dumps({'complete': False, 'refused': str(refusal)}), file=sys.stderr)
+    except BaseException as error:
+        # One refusal class leaves (footprint refusals and timeouts are converted inside); anything else is named
+        # by its class only.
+        label = str(error) if isinstance(error, Refusal) else type(error).__name__
+        print(json.dumps({'complete': False, 'refused': label}), file=sys.stderr)
         code = 1
     sys.exit(code)

@@ -5,6 +5,7 @@ The module's literal pins are replaced, for the duration of each test, by one fa
 drained units, no downgrade, the live-venv refusal) is exercised without pip or the network.
 """
 import base64
+from contextlib import redirect_stdout
 import csv
 import hashlib
 import io
@@ -67,6 +68,7 @@ def fake_venv(root):
     venv = root / 'venv'
     site = venv / SITE
     (venv / 'bin').mkdir(parents=True)
+    write(venv / 'bin/python', b'#!/bin/sh\nexit 1\n', 0o755)
     write(venv / 'pyvenv.cfg', b'home = /usr/bin\n')
     packages = {'demo': ('1.0', {'demo/__init__.py': b'OLD = 1\n', 'demo/old_only.py': b'GONE = 1\n'}),
                 'other': ('2.0', {'other/__init__.py': b'OTHER = 1\n'}),
@@ -87,17 +89,28 @@ def fake_venv(root):
 
 
 class FakePip:
-    """pip 24.0's observable effect: RECORD-driven uninstall (cache paths included), then a wheel install."""
+    """pip 24.0's observable effect: hash checking of the requirements file's wheels (--require-hashes), then a
+    RECORD-driven uninstall (cache paths included), then a wheel install from the path the requirements file names."""
 
-    def __init__(self, venv, wheel_path, *, tamper=None, returncode=0):
+    def __init__(self, venv, wheel_path, *, tamper=None, returncode=0, during=None):
         self.venv, self.wheel_path, self.tamper, self.returncode = venv, wheel_path, tamper, returncode
+        self.during = during
         self.calls = []
+        self.installed_from = None
 
     def __call__(self, argv, **options):
         self.calls.append(argv)
         assert options['umask'] == 0o022 and argv[1:3] == ['-I', '-B']
+        if self.during:
+            self.during()
         if self.returncode:
             return subprocess.CompletedProcess(argv, self.returncode, b'', b'ERROR: simulated\n')
+        assert '--require-hashes' in argv
+        requirements = Path(argv[argv.index('-r') + 1])
+        path, option = requirements.read_text().split()
+        if option != '--hash=sha256:' + hashlib.sha256(Path(path).read_bytes()).hexdigest():
+            return subprocess.CompletedProcess(argv, 1, b'', b'ERROR: THESE PACKAGES DO NOT MATCH THE HASHES\n')
+        self.installed_from = wheel_path = Path(path)
         site = self.venv / SITE
         old = site / 'demo-1.0.dist-info'
         for row in csv.reader(io.StringIO((old / 'RECORD').read_text())):
@@ -112,14 +125,14 @@ class FakePip:
             if directory.exists() and not any(directory.iterdir()):
                 directory.rmdir()
         rows = []
-        with zipfile.ZipFile(self.wheel_path) as archive:
+        with zipfile.ZipFile(wheel_path) as archive:
             for info in archive.infolist():
                 if info.filename.endswith('/RECORD'):
                     continue
                 data = archive.read(info)
                 write(site / info.filename, data)
                 rows.append(record_line(info.filename, data))
-        generated = stage.generated_metadata('demo', self.wheel_path)
+        generated = stage.generated_metadata('demo', wheel_path)
         for name, data in generated.items():
             write(self.venv / name, data)
             rows.append(record_line(name[len(SITE) + 1:], data))
@@ -155,20 +168,40 @@ class StageTests(unittest.TestCase):
         umask = os.umask(0o077)
         self.addCleanup(os.umask, umask)
 
-    def install(self, pip=None, *, drained=lambda: True, before=None, live=False, venv=None):
+    def install(self, pip=None, *, drained=lambda: True, before=None, live=False, venv=None, records=None):
         venv = venv or self.venv
         pip = pip or FakePip(venv, self.wheel)
-        records = []
+        records = [] if records is None else records
         before = before or footprint.snapshot(venv)
         after, proof = stage.install_once(venv, self.wheels, before, drained=drained, recorder=records.append,
-                                          live=live, runner=pip)
+                                          live=live, runner=pip, work=self.root)
         return after, proof, records, pip
+
+    def refused_before_pip(self, label, *, venv=None, drained=lambda: True, before=None):
+        venv = venv or self.venv
+        pip, records = FakePip(venv, self.wheel), []
+        with self.assertRaises(stage.Refusal) as caught:
+            self.install(pip, venv=venv, drained=drained, before=before, records=records)
+        self.assertEqual(str(caught.exception), label)
+        self.assertEqual(pip.calls, [])
+        self.assertEqual([r['record'] for r in records], ['outcome'])
+        self.assertEqual((records[0]['outcome'], records[0]['pip_started'], records[0]['venv_changed']),
+                         ('refused', False, False))
+        return records[0]
 
     def test_one_pip_process_moves_only_the_package_and_accounts_for_stray_bytecode(self):
         after, proof, records, pip = self.install()
         self.assertEqual(len(pip.calls), 1)
-        self.assertEqual(pip.calls[0][3:], stage.pip_arguments({'demo': {'path': str(self.wheel)}}))
-        self.assertEqual(records[0]['returncode'], 0)
+        argv = pip.calls[0][3:]
+        self.assertEqual(argv, stage.pip_arguments(argv[-1]))
+        self.assertIn('--require-hashes', argv)
+        self.assertEqual([r['record'] for r in records], ['pip_process', 'outcome'])
+        self.assertEqual((records[0]['returncode'], records[1]['outcome']), (0, 'installed'))
+        # pip read the private, hash-pinned copy, not the operator's wheel directory; the copy is gone afterwards.
+        self.assertNotEqual(pip.installed_from.parent, self.wheels)
+        self.assertEqual(pip.installed_from.parent.parent, self.root)
+        self.assertFalse(pip.installed_from.parent.exists())
+        self.assertEqual(proof['uninstall_proof']['demo']['cache_files_removed'], 1)
         self.assertEqual(proof['changes'], [{'name': 'demo', 'old_version': '1.0', 'new_version': '1.1'}])
         self.assertEqual(proof['unrecorded_bytecode_removed_by_pip_uninstall'],
                          [SITE + '/demo/__pycache__/__init__.cpython-312.pyc'])
@@ -193,34 +226,122 @@ class StageTests(unittest.TestCase):
                 with self.assertRaises((stage.Refusal, footprint.Refusal)):
                     self.install(FakePip(venv, self.wheel, tamper=tamper), venv=venv)
 
-    def test_pip_failure_is_recorded_and_refused_without_retry(self):
-        pip = FakePip(self.venv, self.wheel, returncode=1)
+    def test_pip_failure_is_recorded_with_the_measured_venv_and_refused_without_retry(self):
+        """DEP-3(c): a failure after pip starts records the venv as measured then, not pip's narration."""
+        def half_done():
+            os.rename(self.venv / SITE / 'demo', self.venv / SITE / '~emo')
+        pip = FakePip(self.venv, self.wheel, returncode=1, during=half_done)
         records = []
-        with self.assertRaises(stage.Refusal):
-            stage.install_once(self.venv, self.wheels, footprint.snapshot(self.venv), drained=lambda: True,
-                               recorder=records.append, runner=pip)
-        self.assertEqual((len(pip.calls), records[0]['returncode']), (1, 1))
+        with self.assertRaises(stage.Refusal) as caught:
+            self.install(pip, records=records)
+        self.assertEqual(str(caught.exception), 'venv_child_failed')
+        self.assertEqual((len(pip.calls), records[0]['record'], records[0]['returncode']), (1, 'pip_process', 1))
+        outcome = records[1]
+        self.assertEqual((outcome['record'], outcome['outcome'], outcome['pip_started'], outcome['stage']),
+                         ('outcome', 'refused', True, 'pip'))
+        measured = outcome['measured_after_failure']
+        self.assertEqual(measured['pip_residue'], [SITE + '/~emo'])
+        self.assertEqual(measured['versions'], {'demo': '1.0'})
+        self.assertIn(SITE + '/demo/__init__.py', measured['difference']['removed'])
 
-    def test_units_must_be_drained_before_and_after_the_one_process(self):
-        with self.assertRaises(stage.Refusal):
-            self.install(drained=lambda: False)
+    def test_a_timeout_is_recorded_and_refused_as_this_module_s_refusal(self):
+        """DEP-3(a): the bound's TimeoutExpired leaves a pip record, a measured state and one refusal class."""
+        def runner(argv, **options):
+            raise subprocess.TimeoutExpired(argv, options['timeout'], output=b'Processing demo\n', stderr=b'')
+        records = []
+        with self.assertRaises(stage.Refusal) as caught:
+            self.install(runner, records=records)
+        self.assertEqual(str(caught.exception), 'venv_child_timeout')
+        self.assertEqual((records[0]['timed_out'], records[0]['returncode'], records[0]['stdout']),
+                         (True, None, 'Processing demo\n'))
+        self.assertEqual(records[1]['measured_after_failure']['versions'], {'demo': '1.0'})
+
+    def test_footprint_refusals_leave_as_this_module_s_refusal(self):
+        """DEP-3(b): one refusal class for install_once and calibrate (the act and __main__ catch stage.Refusal)."""
+        before = footprint.snapshot(self.venv)
+        write(self.venv / SITE / 'other/__init__.py', b'changed\n')
+        record = self.refused_before_pip('venv_unchanged_since_its_snapshot', before=before)
+        self.assertEqual(record['label'], 'venv_unchanged_since_its_snapshot')
+
+    def test_units_must_be_drained_before_immediately_before_and_after_the_one_process(self):
+        """DEP-4: a unit that starts after the first check is seen by the one immediately before the child."""
+        self.refused_before_pip('owned_units_drained_before_pip', drained=lambda: False)
         states = iter([True, False])
-        pip = FakePip(self.venv, self.wheel)
-        with self.assertRaises(stage.Refusal):
-            self.install(pip, drained=lambda: next(states))
-        self.assertEqual(len(pip.calls), 1)
+        self.refused_before_pip('owned_units_drained_immediately_before_pip', drained=lambda: next(states))
+        order = []
+
+        def drained():
+            order.append('drained')
+            return True
+        pip = FakePip(self.venv, self.wheel, during=lambda: order.append('pip'))
+        self.install(pip, drained=drained)
+        self.assertEqual(order, ['drained', 'drained', 'pip', 'drained'])
+        states = iter([True, True, False])
+        pip = FakePip(fake_venv(self.root / 'third'), self.wheel)
+        with self.assertRaises(stage.Refusal) as caught:
+            self.install(pip, venv=pip.venv, drained=lambda: next(states))
+        self.assertEqual((str(caught.exception), len(pip.calls)), ('owned_units_drained_after_pip', 1))
 
     def test_a_changed_venv_or_wheel_refuses_before_pip(self):
         before = footprint.snapshot(self.venv)
         write(self.venv / SITE / 'other/__init__.py', b'changed\n')
-        pip = FakePip(self.venv, self.wheel)
-        with self.assertRaises(footprint.Refusal):
-            self.install(pip, before=before)
-        self.assertEqual(pip.calls, [])
+        self.refused_before_pip('venv_unchanged_since_its_snapshot', before=before)
+        write(self.venv / SITE / 'other/__init__.py', b'OTHER = 1\n')
         with zipfile.ZipFile(self.wheel, 'a') as archive:
             archive.writestr('demo/late.py', b'x')
-        with self.assertRaises(stage.Refusal):
-            self.install(FakePip(self.venv, self.wheel))
+        self.refused_before_pip('exact_official_wheel_bytes')
+
+    def test_pip_residue_or_an_incomplete_population_refuses_before_pip(self):
+        """DEP-1: a killed pip's stash, or a RECORD naming files that are gone, refuses before any pip run."""
+        venv = fake_venv(self.root / 'killed')
+        site = venv / SITE
+        os.rename(site / 'demo', site / '~emo')
+        os.rename(site / 'demo-1.0.dist-info', site / '~emo-1.0.dist-info')
+        self.refused_before_pip('interrupted_pip_residue_in_the_venv', venv=venv)
+        venv = fake_venv(self.root / 'partial')
+        (venv / SITE / 'demo/old_only.py').unlink()
+        self.refused_before_pip('complete_installed_record_population', venv=venv)
+
+    def test_pip_uninstall_must_provably_empty_the_package_before_pip_runs(self):
+        """DEP-2: anything pip's RECORD-driven uninstall would leave under the package refuses BEFORE pip."""
+        strays = {'opt1_bytecode': 'demo/__pycache__/__init__.cpython-312.opt-1.pyc',
+                  'other_interpreter_bytecode': 'demo/__pycache__/old_only.cpython-311.pyc',
+                  'unrecorded_file': 'demo/notes.txt', 'unrecorded_dist_info_file': 'demo-1.0.dist-info/extra'}
+        for name, relative in strays.items():
+            with self.subTest(stray=name):
+                venv = fake_venv(self.root / name)
+                write(venv / SITE / relative, b'stray')
+                self.refused_before_pip('pip_uninstall_would_leave_package_objects', venv=venv)
+        venv = fake_venv(self.root / 'new_dist_info_file')
+        write(venv / SITE / 'demo-1.1.dist-info', b'')     # a FILE named like the new dist-info (exp7's trigger)
+        self.refused_before_pip('pip_uninstall_would_leave_package_objects', venv=venv)
+        # The cpython-312 cache file of a RECORDed module is pip's to remove: admitted (fake_venv carries one).
+        self.install()
+
+    def test_wheels_must_sit_in_a_private_directory_and_pip_reads_only_proven_copies(self):
+        """DEP-6: an open wheel directory refuses; a swap in the operator's directory during pip changes nothing."""
+        self.wheels.chmod(0o777)
+        self.refused_before_pip('private_wheel_directory')
+        self.wheels.chmod(0o700)
+        official = self.wheel.read_bytes()
+
+        def swap():                     # a second writer replaces the operator's wheel while pip runs
+            self.wheel.write_bytes(official.replace(b'NEW = 1', b'BAD = 1'))
+        pip = FakePip(self.venv, self.wheel, during=swap)
+        with self.assertRaises(stage.Refusal) as caught:
+            self.install(pip)
+        # pip installed the proven copy; the swapped original is then refused by the re-proof, nothing else moved.
+        self.assertEqual((self.venv / SITE / 'demo/__init__.py').read_bytes(), b'NEW = 1\n')
+        self.assertEqual(str(caught.exception), 'exact_official_wheel_bytes')
+        self.wheel.write_bytes(official)
+        # A copy whose bytes do not match its pin is refused by pip's own hash check, before any uninstall.
+        venv = fake_venv(self.root / 'tampered-copy')
+        copies = stage.private_copies(stage.wheels(self.wheels), self.root)
+        target, _, requirements = copies
+        (target / self.wheel.name).write_bytes(b'not the wheel')
+        result = FakePip(venv, self.wheel)(['python', '-I', '-B', *stage.pip_arguments(requirements)], umask=0o022)
+        self.assertEqual(result.returncode, 1)
+        self.assertTrue((venv / SITE / 'demo-1.0.dist-info').is_dir())
 
     def test_the_live_venv_is_refused_unless_the_declared_act_says_live(self):
         with patch.object(stage, 'VENV', self.venv):
@@ -270,16 +391,70 @@ class StageTests(unittest.TestCase):
                                       runner=FakePip(copy, self.wheel))
             self.assertTrue(receipt['live_venv_unchanged'] and receipt['copy_before_matches_live'])
             self.assertEqual(receipt['transition']['unrecorded_bytecode_after'], 1)
-            for name in ('venv-copy-before.json', 'venv-copy-after.json', 'pip-process.json',
-                         'calibration-receipt.json'):
+            for name in ('venv-live-before.json', 'venv-copy-before.json', 'venv-copy-after.json', 'pip-process.json',
+                         'outcome.json', 'calibration-receipt.json'):
                 self.assertEqual(oct((self.root / 'calibration' / name).stat().st_mode & 0o777), '0o600')
             with self.assertRaises(stage.Refusal):
                 stage.calibrate(live, self.wheels, self.root / 'calibration-2', runner=FakePip(live, self.wheel))
             fresh = self.root / 'copy-3'
             shutil.copytree(live, fresh, symlinks=True)
             touch_live = FakePip(fresh, self.wheel, tamper=lambda site: write(live / 'pyvenv.cfg', b'touched\n'))
-            with self.assertRaises(footprint.Refusal):
+            with self.assertRaises(stage.Refusal) as caught:     # DEP-3(b): one refusal class
                 stage.calibrate(fresh, self.wheels, self.root / 'calibration-3', runner=touch_live)
+            self.assertEqual(str(caught.exception), 'live_venv_touched_during_calibration')
+
+    def test_calibration_refuses_a_copy_that_is_not_the_live_venv_path_by_path(self):
+        """DEP-5: equality is the full footprint (bytes, modes, owners, links), required, printed and kept."""
+        live = fake_venv(self.root / 'live-root')
+        with patch.object(stage, 'VENV', live):
+            for name, change in (('same_size_other_bytes', lambda copy: write(copy / SITE / 'other/__init__.py',
+                                                                              b'OTHER = 2\n')),
+                                 ('mode', lambda copy: (copy / SITE / 'other/__init__.py').chmod(0o600)),
+                                 ('missing_stray', lambda copy: (copy / SITE / 'other/__pycache__/'
+                                                                 '__init__.cpython-312.pyc').unlink())):
+                with self.subTest(change=name):
+                    copy = self.root / ('copy-' + name)
+                    shutil.copytree(live, copy, symlinks=True)
+                    change(copy)
+                    pip = FakePip(copy, self.wheel)
+                    with self.assertRaises(stage.Refusal) as caught:
+                        stage.calibrate(copy, self.wheels, self.root / ('calibration-' + name), runner=pip)
+                    self.assertEqual(str(caught.exception), 'calibration_copy_equals_the_live_venv')
+                    self.assertEqual(pip.calls, [])
+                    self.assertTrue((self.root / ('calibration-' + name) / 'venv-live-before.json').exists())
+                    self.assertTrue((self.root / ('calibration-' + name) / 'venv-copy-difference.json').exists())
+            copy = self.root / 'copy-printed'
+            shutil.copytree(live, copy, symlinks=True)
+            argv = ['calibrate', '--venv-copy', str(copy), '--wheels', str(self.wheels), '--output',
+                    str(self.root / 'calibration-printed')]
+            real = stage.calibrate
+            with patch.object(stage, 'calibrate', lambda c, w, o: real(c, w, o, runner=FakePip(copy, self.wheel))), \
+                    redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(stage.main(argv), 0)
+            self.assertTrue(json.loads(output.getvalue())['copy_before_matches_live'])
+
+    def test_calibration_refuses_an_ancestor_of_the_live_venv_before_reading_anything(self):
+        """DEP-7: the copy guard is two-way and requires a venv root; nothing is snapshotted before it passes."""
+        tree = self.root / 'fake-rebuild'
+        tree.mkdir()
+        write(tree / '.env', b'DUMMY=not-a-secret\n', 0o600)
+        live = fake_venv(tree)            # tree/venv plays the live venv
+        with patch.object(stage, 'VENV', live):
+            for copy, label in ((tree, 'calibration_runs_on_a_copy'), (live / SITE, 'calibration_runs_on_a_copy'),
+                                (self.root, 'calibration_runs_on_a_copy')):
+                with self.subTest(copy=copy):
+                    output = self.root / ('calibration-' + copy.name)
+                    with self.assertRaises(stage.Refusal) as caught:
+                        stage.calibrate(copy, self.wheels, output, runner=FakePip(copy, self.wheel))
+                    self.assertEqual(str(caught.exception), label)
+                    self.assertFalse(output.exists())
+            not_a_venv = self.root / 'plain'
+            (not_a_venv / 'lib').mkdir(parents=True)
+            with self.assertRaises(stage.Refusal) as caught:
+                stage.calibrate(not_a_venv, self.wheels, self.root / 'calibration-plain',
+                                runner=FakePip(not_a_venv, self.wheel))
+            self.assertEqual(str(caught.exception), 'calibration_copy_is_a_venv_root')
+            self.assertFalse((self.root / 'calibration-plain').exists())
 
 
 class ChecksTests(unittest.TestCase):

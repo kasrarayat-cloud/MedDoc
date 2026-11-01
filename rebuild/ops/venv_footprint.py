@@ -35,6 +35,11 @@ LIMIT_METADATA_BYTES = 4 * 1024 ** 2
 #: One exact requirement per line, ``name==version``; anything else (ranges, markers, includes, options,
 #: hashes, URLs) cannot be compared with an installed version and is refused rather than guessed at.
 PIN = re.compile(r'([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)==([A-Za-z0-9][A-Za-z0-9.+!_-]*)')
+#: PEP 508's project-name pattern, as pip applies it to the name part of a ``*.dist-info`` directory. pip stashes
+#: what it is uninstalling under an adjacent name starting with '~' (``~ypdf-6.21.1.dist-info``, ``~ypdf``) and
+#: removes the stash only when the transaction commits, so a killed pip leaves it behind. pip itself ignores such
+#: an entry ("Ignoring invalid distribution ~ypdf"); the census never counts it and reports it as ``pip_residue``.
+PROJECT_NAME = re.compile(r'[A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9._-]*[A-Za-z0-9]')
 
 
 class Refusal(RuntimeError):
@@ -96,7 +101,12 @@ def inventory(venv):
     result = {'.': {'kind': 'directory', 'mode': stat.S_IMODE(info.st_mode), 'uid': info.st_uid,
                     'gid': info.st_gid, 'device': info.st_dev, 'inode': info.st_ino, 'links': info.st_nlink}}
     total = 0
-    for current, directories, files in os.walk(venv, followlinks=False):
+
+    def unlistable(error):
+        # os.walk would otherwise skip a directory it cannot list, and its contents would silently drop out of
+        # the footprint (a new .pyc inside a mode-000 __pycache__ left the footprint unchanged).
+        raise Refusal('unlistable_venv_directory')
+    for current, directories, files in os.walk(venv, followlinks=False, onerror=unlistable):
         for leaf in sorted(directories + files):
             path = Path(current) / leaf
             name = _relative(path.relative_to(venv).as_posix())
@@ -129,11 +139,15 @@ def listed_bytes(venv, files, name, limit=LIMIT_METADATA_BYTES):
 
 
 def census(venv, files):
-    """Distributions, the files their RECORDs list, and every bytecode file no RECORD lists."""
+    """Distributions, the files their RECORDs list, every bytecode file no RECORD lists, and pip's residue."""
     site = PurePosixPath(SITE)
-    dist_infos = sorted(name for name, row in files.items()
-                        if row.get('kind') == 'directory' and PurePosixPath(name).parent == site
-                        and name.endswith('.dist-info'))
+    top = {name: row for name, row in files.items() if PurePosixPath(name).parent == site}
+    residue = sorted(name for name, row in top.items()
+                     if PurePosixPath(name).name.startswith('~')
+                     or (row.get('kind') == 'directory' and name.endswith('.dist-info')
+                         and not PROJECT_NAME.fullmatch(PurePosixPath(name).name[:-len('.dist-info')].split('-')[0])))
+    dist_infos = sorted(name for name, row in top.items()
+                        if row.get('kind') == 'directory' and name.endswith('.dist-info') and name not in residue)
     distributions, recorded = {}, set()
     for dist_info in dist_infos:
         metadata = BytesParser().parsebytes(listed_bytes(venv, files, dist_info + '/METADATA'))
@@ -155,8 +169,23 @@ def census(venv, files):
     return {'distributions': distributions, 'distribution_count': len(distributions),
             'bytecode_files': len(bytecode),
             'unrecorded_bytecode': [name for name in bytecode if name not in recorded],
+            'pip_residue': residue,
             'objects': len(files),
             'file_bytes': sum(row['bytes'] for row in files.values() if row.get('kind') == 'file')}
+
+
+def record_paths(venv, files, dist_info):
+    """The venv-relative paths one installed distribution's RECORD lists (RECORD itself included)."""
+    paths = set()
+    for row in csv.reader(io.StringIO(listed_bytes(venv, files, dist_info + '/RECORD').decode())):
+        if not row:
+            continue
+        require(1 <= len(row) <= 3 and row[0], 'typed_record_row')
+        target = posixpath.normpath(posixpath.join(SITE, row[0]))
+        require(not target.startswith('../') and target != '..' and not posixpath.isabs(target),
+                'record_stays_inside_venv')
+        paths.add(target)
+    return paths
 
 
 def snapshot(venv):
@@ -171,7 +200,7 @@ def summary(value):
     return {'venv': value['venv'], 'footprint_sha256': value['footprint_sha256'],
             'distributions': facts['distribution_count'], 'objects': facts['objects'],
             'file_bytes': facts['file_bytes'], 'bytecode_files': facts['bytecode_files'],
-            'unrecorded_bytecode': len(facts['unrecorded_bytecode'])}
+            'unrecorded_bytecode': len(facts['unrecorded_bytecode']), 'pip_residue': len(facts['pip_residue'])}
 
 
 def difference(before, after, limit=50):
