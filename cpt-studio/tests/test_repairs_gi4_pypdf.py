@@ -72,6 +72,11 @@ class CutStringInAnAppearanceTests(unittest.TestCase):
     NAMES = [name for name in SHAPES if name.startswith(('TXT-1 ', 'n-1 ', 'n-2 '))
              and 'FFFD' not in name and 'page 3' not in name]
 
+    # Round 4 of the repair (R3-MEAN-3): a string in a CMap pypdf decodes with a codec is cut into codes by the CMap's
+    # code space, so the codes before the cut are read and only the cut code is U+FFFD, as the installed reader read
+    # them; a string of a two-byte font cut inside a code cannot be told from one-byte text, and stays unread.
+    CODEC_CUT = {'n-1 stamp 90ms-RKSJ-H cut': '\u3042\ufffd', 'n-1 stamp GBK-EUC-H cut': '\u554a\ufffd'}
+
     def test_an_appearance_pypdf_cannot_decode_keeps_its_place_never_mojibake(self):
         self.assertEqual(len(self.NAMES), 16)
         for name in self.NAMES:
@@ -81,6 +86,9 @@ class CutStringInAnAppearanceTests(unittest.TestCase):
                 self.assertIn(result.messages[1:], ((ANNOTATION,), (FIELDS,)))
                 self.assertEqual(result.messages[0], unread_text(result, 1))
                 line = result.text.rsplit('\n', 1)[1]  # the annotation's text, or 'label: ' and the field's
+                if name in self.CODEC_CUT:
+                    self.assertEqual(line, self.CODEC_CUT[name])
+                    continue
                 self.assertRegex(line, '^([A-Za-z0-9]+: )?\ufffd+$')
                 self.assertFalse(WRONG & set(result.text), result.text)
 

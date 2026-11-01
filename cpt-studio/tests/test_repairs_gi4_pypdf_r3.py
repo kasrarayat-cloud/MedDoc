@@ -27,7 +27,7 @@ from pypdf.generic import DecodedStreamObject
 
 from studio.ingest import Limits, extract_document
 from studio.ingest import pdfannots, pdffonts
-from studio.ingest.pdf import (BOX_GAP_MAX, BOX_SLACK, _decoded, _I3_Bands, _I3_lone_marks, _I3_unclaimed, _Layer,
+from studio.ingest.pdf import (BOX_GAP_MAX, BOX_SLACK, _decoded, _I3_Bands, _I3_unclaimed, _I4_lone_marks, _Layer,
                                _placed_boxes, extract_pdf, unreadable_note)
 from studio.ingest.pdfannots import Button, PageAnnotations
 from studio.ingest.pdfcontent import OptionalContent, analyse_page, readings_for
@@ -242,12 +242,18 @@ class UnreadBoxGlyphTests(unittest.TestCase):
                     self.assertEqual(reading(result.text, item), 'uncertain')
 
     def test_only_a_lone_glyph_at_the_start_of_a_row(self):
+        """Round 4 (R3-MEAN-1, R3-MEAN-2) reads these rows only as checklist rows: here the glyph is drawn where an
+        operator whose glyphs are a box shape starts (its origin among the box glyphs), which round 3 assumed of every
+        lone glyph; tests/test_repairs_gi4_pypdf_r4.py pins the rest."""
+        boxes = [(72.0, 704.0)]
         starts = {0: (72.0, 704.0, True), 2: (90.0, 704.0, True)}
-        self.assertEqual(_I3_lone_marks(f'{UNREAD}\nDiabetes', starts), {0: (2, '[?] ')})
-        self.assertEqual(_I3_lone_marks(f'{UNREAD} Diabetes', {}), {0: (1, '[?]')})
-        self.assertEqual(_I3_lone_marks(f'  {UNREAD}\tDiabetes', {}), {2: (3, '[?]')})
+        self.assertEqual(_I4_lone_marks(f'{UNREAD}\nDiabetes', starts, {}, {}, [], boxes), {0: (2, '[?] ')})
+        self.assertEqual(_I4_lone_marks(f'{UNREAD} Diabetes', {0: (72.0, 704.0, True)}, {}, {}, [], boxes),
+                         {0: (1, '[?]')})
+        self.assertEqual(_I4_lone_marks(f'  {UNREAD}\tDiabetes', {2: (72.0, 704.0, True)}, {}, {}, [], boxes),
+                         {2: (3, '[?]')})
         for text, where in ((f'Biopsy {UNREAD} taken', {}),  # not the start of its row
-                            (f'{UNREAD}{UNREAD} Diabetes', {}),  # two glyphs: a word, not a mark
+                            (f'{UNREAD}{UNREAD}{UNREAD} Diabetes', {}),  # three glyphs: a word, not a mark
                             (f'{UNREAD} ( ) Diabetes', {}),  # a box of its own follows
                             (f'{UNREAD}Diabetes', {}),  # no padding: part of a word
                             (f'{UNREAD}\nDiabetes', {0: (72.0, 704.0, True), 2: (90.0, 686.0, True)}),  # another row
@@ -256,7 +262,7 @@ class UnreadBoxGlyphTests(unittest.TestCase):
                                                      2: (72.0 + BOX_GAP_MAX + 1, 704.0, True)}),  # too far
                             (f'{UNREAD}\nDiabetes', {})):  # where they are drawn is not known
             with self.subTest(repr(text), where=where):
-                self.assertEqual(_I3_lone_marks(text, where), {})
+                self.assertEqual(_I4_lone_marks(text, where, {}, {}, [], boxes), {})
 
 
 class NulValueTests(unittest.TestCase):
@@ -327,9 +333,12 @@ class OneByteCMapTests(unittest.TestCase):
         self.assertTrue(result.text.endswith('\n' + text + 'mm'), result.text)
 
     def test_a_code_the_tounicode_does_not_give(self):
+        """Round 4: where every code the ToUnicode gives is its own character (as here), a code it does not give is
+        read as pypdf reads it, its own ASCII character (the installed reader's reading); RightToLeftTests pins the
+        other case, a code missing from a ToUnicode that gives other characters, which stays U+FFFD."""
         result = extract(shapes.one_byte_cmap_page('Biopsy taken: no', missing='n'))
-        self.assertEqual((result.status, result.messages), ('partial', (unreadable_note([1], 2),)))
-        self.assertTrue(result.text.endswith('\nBiopsy take�: �o'), result.text)
+        self.assertEqual((result.status, result.messages), ('ok', ()))
+        self.assertTrue(result.text.endswith('\nBiopsy taken: no'), result.text)
 
 
 class CodecGapTests(unittest.TestCase):
@@ -348,12 +357,15 @@ class CodecGapTests(unittest.TestCase):
         self.assertEqual((result.status, result.messages), ('partial', (unreadable_note([1], 1),)))
         self.assertTrue(result.text.endswith('\n結腸鏡檢查 正常 � 5 mm'), result.text)
 
-    def test_a_cut_string_is_never_read_code_by_code(self):
+    def test_a_cut_string_is_read_code_by_code(self):
+        """Round 4 (R3-MEAN-3): a string is cut into codes by its CMap's code space, so a code cut short at the end or
+        a byte that starts no code is the only code unread (the installed reader's reading); round 3 wrote every
+        character of such a string as U+FFFD. An odd-length UTF-16BE string still cannot be told apart."""
         result = extract(shapes.cjk_codec_page('/GBK-EUC-H', 'bde1b3a6beb5bcecb2e9b5'))
-        self.assertEqual(result.status, 'partial')
-        self.assertTrue(result.text.endswith('\n' + FFFD * 6), result.text)
-        self.assertIsNone(read_codes(bytes.fromhex('b0a1b5'), 'gbk', {}))  # cut at the end
-        self.assertIsNone(read_codes(bytes.fromhex('b020b0a1'), 'gbk', {}))  # a lead byte no code continues
+        self.assertEqual((result.status, result.messages), ('partial', (unreadable_note([1], 1),)))
+        self.assertTrue(result.text.endswith('\n结肠镜检查' + FFFD), result.text)
+        self.assertEqual(read_codes(bytes.fromhex('b0a1b5'), 'gbk', {}), ['啊', None])  # cut at the end
+        self.assertEqual(read_codes(bytes.fromhex('b020b0a1'), 'gbk', {}), [None, ' ', '啊'])  # no code continues
         self.assertIsNone(read_codes(bytes.fromhex('00410042ff'), 'utf-16-be', {}))  # odd UTF-16BE
         self.assertEqual(read_codes(bytes.fromhex('41a8bfb0a1'), 'gbk', {}), ['A', 'ǹ', '啊'])
         self.assertEqual(read_codes(bytes.fromhex('41c8a1b5b2'), 'cp950', {}), ['A', None, '結'])
@@ -472,10 +484,11 @@ class CostTests(unittest.TestCase):
         self.assertLess(squeezing, 3 * removing + 0.01)
 
     def test_lone_marks_are_found_in_one_pass(self):
-        small = (f'{UNREAD} Diabetes\n' * 20_000) + UNREAD * 40_000
-        large = (f'{UNREAD} Diabetes\n' * 40_000) + UNREAD * 80_000
-        self.assertEqual(len(_I3_lone_marks(small, {})), 20_000)
-        assert_doubles(self, lambda: _I3_lone_marks(small, {}), lambda: _I3_lone_marks(large, {}), 'lone marks')
+        small = '☐ Asthma\n' + (f'{UNREAD} Diabetes\n' * 20_000) + UNREAD * 40_000
+        large = '☐ Asthma\n' + (f'{UNREAD} Diabetes\n' * 40_000) + UNREAD * 80_000
+        self.assertEqual(len(_I4_lone_marks(small, {}, {}, {}, [])), 20_000)  # a list one box glyph of which shows
+        assert_doubles(self, lambda: _I4_lone_marks(small, {}, {}, {}, []),
+                       lambda: _I4_lone_marks(large, {}, {}, {}, []), 'lone marks')
 
         def unclaimed(count: int):
             marks = {10 * index: (10 * index + 1, '[?]') for index in range(count)}

@@ -154,40 +154,59 @@ Never silently partial (`cpt-studio-ingest@4`): content a viewer would show is
 read or reported, and content it would not show is excluded with a message.
 - Text pypdf cannot read as the PDF encodes it is never returned as text, and
   never dropped (pypdf 6.21.4, `cpt-studio-ingest@4`; ACCURACY-RESIDUALS.md,
-  "pypdf 6.21.4", round 3). A string a composite font's CMap cannot decode (an
-  odd byte count in a two-byte CMap, a code Python's codec for the CMap
-  lacks), text in a CMap pypdf does not implement (any predefined CMap outside
-  its table but the UCS-2 and UTF-16 ones, which it reads as UTF-16BE as they
-  encode; an embedded CMap stream, unless its codes are all two bytes, read
-  through an Identity copy, or all one byte, read one byte a code, and the font
-  has a ToUnicode; a dictionary), text in a glyph-index font (Identity, no
-  ToUnicode, no CIDToGIDMap stream: pypdf reads its glyph indices as
-  UTF-16BE), and text in a font pypdf cannot build,
+  "pypdf 6.21.4", rounds 3 and 4); and no reading falls below the installed
+  reader's (pypdf 6.21.2) where it read the source right. A string is cut into
+  the codes its CMap reads by the CMap's code space (Adobe's predefined CMaps'
+  as pdf.js 4.10.38 reads them, `pdffonts.PREDEFINED_CODE_SPACES`, or an
+  embedded CMap's own ranges and those of the predefined CMap it uses). Text
+  pypdf cannot read: a string a composite font's CMap cannot decode (a code
+  cut short, a byte that starts no code, a one-byte code its codec cannot
+  decode alone, a code Python's codec lacks, an odd byte count in a two-byte
+  CMap), text in a CMap pypdf does not implement that has no ToUnicode (any
+  predefined CMap outside its table but the UCS-2 and UTF-16 ones, which it
+  reads as UTF-16BE as they encode; an embedded CMap that cannot be read, or
+  past the document's MAX_DOCUMENT_CMAP_BYTES of embedded CMaps), text in a
+  glyph-index font (Identity, no ToUnicode, no CIDToGIDMap stream: pypdf
+  reads its glyph indices as UTF-16BE), and text in a font pypdf cannot build,
   cannot parse or the resources do not name (it would draw it in a stand-in
-  font that reads every byte as U+FFFD): the walk reads the operator that
-  shows it itself (`_TextPlacement.transcribed`): each code pypdf can read as
-  pypdf reads it, a codec's gap by the CMap's own wider reading (GBK's by GB
-  18030) where one exists, and in place of each character it cannot read (as
-  many as pypdf would have written there, where the string's codes cannot be
-  told apart) the reader's unread character, drawn for extraction in a
+  font that reads every byte as U+FFFD). With a ToUnicode, a CMap pypdf splits
+  otherwise than the CMap does (`pdffonts.Codes`: a predefined CMap it does not
+  implement, two bytes a code as UTF-16BE; an embedded CMap of mixed code
+  lengths or that uses a predefined one, one byte a code) is read as pypdf
+  reads it where it splits the string as the CMap does, any other code by code
+  by the ToUnicode; an embedded CMap of two-byte codes only is read through an
+  Identity copy, one of one-byte codes only one byte a code, each by its
+  ToUnicode (where every code it gives is its own character, a code it does
+  not give as pypdf reads it, its own ASCII character). The walk reads the
+  operator that shows text pypdf cannot read itself
+  (`_TextPlacement.transcribed`): each code pypdf can read as pypdf reads it, a
+  codec's gap by the CMap's own wider reading (GBK's by GB 18030) where one
+  exists, and in place of each code it cannot read (as many characters as
+  pypdf would have written there, where the string's codes cannot be told
+  apart) the reader's unread character, drawn for extraction in a
   `pdffonts.Transcript` font as wide as the operator, so the text keeps its
   place and the words on either side never close up. It is written as
   U+FFFD (outside pypdf's right-to-left ranges, so it never reverses the
-  punctuation after it), or, alone in a typed box or alone at the start of a
-  checklist row, as the unread mark `[?]` (held); counted and named: 'text in
-  a font or encoding this server cannot read as the PDF encodes it; N
-  characters stand in its place as �, or as the unread mark [?] in a box'
-  (partial; N counts what stands in the text's place, as many characters as
-  pypdf would have written there, never the glyphs the page draws). A space
-  in what the walk reads itself is neutral to pypdf, as the space it stands
-  for is, so a right-to-left line keeps its word order. That holds in a page's
-  layer and in an appearance's text; an
-  appearance only compared with a stored value is named unreadable. U+FFFD
-  written so is not readable text: a page of nothing else has no usable text
-  layer, and goes to OCR or is named, as any. `pdffonts.decodes`,
-  `read_codes`, `font_reading` and `FontReadings` (each font, and each font
-  program, embedded CMap, ToUnicode and descendant fonts share, worked out
-  once a document) decide it, from the content walk
+  punctuation after it), or as the unread mark `[?]` (held) alone in a typed
+  box, or, one or two characters of it alone where a checklist row's box
+  stands, on a checklist row (its glyph a box shape, read for this only by the
+  codec of the character set its predefined CMap encodes,
+  `pdffonts.box_glyphs`; a row of its list showing a box glyph or a check box's
+  glyph; or a check box on its row) and not governed by a check box tied to the
+  row; counted and named: 'text in a font or encoding this server cannot read
+  as the PDF encodes it; N characters stand in its place as �, or as the
+  unread mark [?] in a box' (partial; N counts what stands in the text's
+  place, never the glyphs the page draws). A space in what the walk reads
+  itself is neutral to pypdf, as the space it stands for is, so a
+  right-to-left line keeps its word order. That holds in a page's layer and in
+  an appearance's text; an appearance only compared with a stored value is
+  named unreadable. U+FFFD written so is not readable text: a page of nothing
+  else has no usable text layer, and goes to OCR or is named, as any; its
+  labelled block (form-field values and annotation text, read without its
+  fonts) stays, after the OCR text or with the unusable layer.
+  `pdffonts.decodes`, `read_codes`, `font_reading` and `FontReadings` (each
+  font, and each font program, embedded CMap, ToUnicode and descendant fonts
+  share, worked out once a document) decide it, from the content walk
   (`PageContent.unreadable_text`). pypdf reads no text from a form XObject
   without resources of its own, so its text is not judged, and the reader
   gives it no copy with its parent's resources.

@@ -74,7 +74,8 @@ from pypdf.generic import (ArrayObject, ByteStringObject, ContentStream, Diction
                            NullObject, StreamObject)
 from pypdf.generic._font import Font
 
-from .pdffonts import UNREAD, UNREAD_FONT, FontReadings, Transcript, decodes, read_codes, read_string
+from .pdffonts import (MAX_BOX_GLYPH_BYTES, UNREAD, UNREAD_FONT, FontReadings, Transcript, box_glyphs, decodes,
+                       read_codes, read_string)
 
 IDENTITY = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 MAX_FORM_DEPTH = 12  # a form nested deeper is assumed to paint an image over its whole bounding box
@@ -850,6 +851,9 @@ class PageContent:
     # where the text the reader could not read lies on the page (each such operator's glyph box): no check box is tied
     # to page text across it (pdf.py), since what it says (a box's label, or text between) is unknown
     unread_boxes: list = field(default_factory=list, repr=False, compare=False)
+    # where each operator starts on the page (x, y) whose text could not be read and whose glyphs are a box shape and
+    # its padding (pdffonts.box_glyphs): such a glyph at the start of a row is the unread mark (pdf.py)
+    unread_box_glyphs: list = field(default_factory=list, repr=False, compare=False)
 
     @property
     def largest_image_pixels(self) -> int:
@@ -1206,6 +1210,7 @@ class _Walker:
         self.checked: set[int] = set()
         self.readings = readings_for(reader)  # how extraction reads each font, worked out once per document
         self.transcript = Transcript()  # the font operators the reader reads itself are drawn in (_TextPlacement)
+        self.box_shapes: dict = {}  # (id(font dict), strings) -> whether its glyphs are a box (pdffonts.box_glyphs)
 
     def page(self, page) -> PageContent:
         resources = resolved(page.get('/Resources'))
@@ -1302,6 +1307,8 @@ class _Walker:
                         self.content.unreadable_text = True
                         if self.positions and run is not None:
                             self.content.unread_boxes.append(run.box)
+                            if self.box_shape(text.state.font, operator, operands):
+                                self.content.unread_box_glyphs.append((run.place[4], run.place[5]))
                     kept.extend(replacement)
                     changes.append((index, UNREAD_FONT))
                     continue
@@ -1356,6 +1363,17 @@ class _Walker:
         return kept, replaced, bool(changes), tuple(changes)
 
     # Text ------------------------------------------------------------------------
+    def box_shape(self, font, operator, operands) -> bool:
+        """Whether the glyphs a text-showing operator whose text could not be read shows in ``font`` are a box and its
+        padding (pdffonts.box_glyphs), worked out once per font and strings."""
+        strings = tuple(bytes(item) for item in _shown(operator, operands) if isinstance(item, bytes) and item)
+        if font is None or sum(map(len, strings)) > MAX_BOX_GLYPH_BYTES:
+            return False
+        key = (id(font), strings)
+        if key not in self.box_shapes:
+            self.box_shapes[key] = box_glyphs(font, strings)
+        return self.box_shapes[key]
+
     def judge(self, run: _Run | None, graphics: _Graphics) -> str:
         """'offpage', 'clipped', 'unknown' (inside a clipping path this did not follow) or 'shown'."""
         if not self.positions or run is None:

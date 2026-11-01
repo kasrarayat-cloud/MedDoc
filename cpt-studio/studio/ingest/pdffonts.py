@@ -46,19 +46,33 @@
   through a copy with the Identity CMap and its widths by code, so its
   ToUnicode decides every code; one of one-byte codes only (Ghostscript's
   OneByteIdentityH) one byte a code, each by its ToUnicode, its widths by
-  code. An embedded CMap is read in one pass, however malformed.
+  code. An embedded CMap is read in one pass, however malformed, and a
+  document reads at most MAX_DOCUMENT_CMAP_BYTES of embedded CMaps, however
+  many fonts carry one of their own.
+- **Codes a font's CMap splits otherwise than pypdf** (``Codes``): an embedded
+  CMap of one- and two-byte codes (the RKSJ and EUC layouts), or one that uses
+  a predefined CMap (usecmap), which pypdf reads one byte a code; and a
+  predefined CMap pypdf does not implement, which it reads as UTF-16BE, two
+  bytes a code. Each is cut into codes by the CMap's own code space (Adobe's,
+  ``PREDEFINED_CODE_SPACES``, or the embedded one's), and with a ToUnicode a
+  string pypdf splits as the CMap does is read as pypdf reads it (exact by
+  construction: two-byte strings under H, KSC-H, GB-H, ... and one-byte
+  strings of a mixed embedded CMap), any other code by code by the ToUnicode.
 - **Text pypdf cannot read as the PDF encodes it** (``decodes``): a composite
-  font whose CMap pypdf does not implement (it reads the bytes as UTF-16BE,
-  which is what a UCS-2 or UTF-16 CMap encodes and nothing else does), or a
-  string its CMap cannot decode (an odd byte count in a two-byte font, a code
-  its codec lacks), or text in a font pypdf cannot build or the resources do
-  not hold. It is never dropped: the page reader reads the operator showing it
-  itself (``read_codes``: each code pypdf can read as pypdf reads it, a
-  codec's gaps by the CMap's own wider reading, ``CODEC_FALLBACKS``) and
-  draws what it read, for extraction only, in a ``Transcript`` font, with
-  UNREAD in place of each character that cannot be read (as many as pypdf
-  would have written there), so the text keeps its place and is written as
-  U+FFFD, or as the unread mark in a box, and named.
+  font whose CMap pypdf does not implement and that has no ToUnicode (it reads
+  the bytes as UTF-16BE, which is what a UCS-2 or UTF-16 CMap encodes and
+  nothing else does), or a string its CMap cannot decode (an odd byte count in
+  a two-byte font, a code its codec lacks), or text in a font pypdf cannot
+  build or the resources do not hold. It is never dropped: the page reader
+  reads the operator showing it itself (``read_codes``: the string cut into
+  the codes its CMap reads, by the CMap's code space, each code pypdf can read
+  as pypdf reads it, a codec's gaps by the CMap's own wider reading,
+  ``CODEC_FALLBACKS``) and draws what it read, for extraction only, in a
+  ``Transcript`` font, with UNREAD in place of each character that cannot be
+  read (as many as pypdf would have written there, where the codes cannot be
+  told apart), so the text keeps its place and is written as U+FFFD, or as the
+  unread mark in a box, and named. Whether the glyphs of such an operator are a
+  box (``box_glyphs``) is read for the page reader's unread mark only.
 - ``FontReadings`` works each of these out once per font, font program,
   embedded CMap, ToUnicode and descendant for a whole document, and a font
   whose inspection fails (pypdf's structure limits among the reasons) is a
@@ -79,7 +93,7 @@ from pypdf.generic import (ArrayObject, DecodedStreamObject, DictionaryObject, F
                            NumberObject, StreamObject, TextStringObject)
 from pypdf.generic._font import Font
 
-from .symbols import BOX_PAD, SYMBOL_FONTS, as_box
+from .symbols import BOX_HELD_GLYPHS, BOX_OFF_GLYPHS, BOX_ON_GLYPHS, BOX_PAD, SYMBOL_FONTS, as_box
 
 UNMAPPED = ''  # a symbol glyph with no known character: private use, so it is counted and dropped
 SIMPLE_FONTS = frozenset({'/Type1', '/MMType1', '/TrueType'})
@@ -559,17 +573,20 @@ def composite_codec(font) -> str | None:
     return 'utf-16-be' if '-UCS2-' in encoding or '-UTF16-' in encoding else None
 
 
-def decode_plan(font, built: Font | None = None, cache: dict | None = None) -> bool | str | frozenset:
+def decode_plan(font, built: Font | None = None, cache: dict | None = None) -> bool | str | frozenset | Codes:
     """How the strings a font shows are judged (``decodes``), worked out once per font: True when pypdf reads every
-    string as the font encodes it, False when it reads none so, the codec under which a string must decode, or the
-    one-byte codes pypdf reads as the font encodes them. A simple font maps each byte through a code table, unless its
-    /Encoding names a CMap. A glyph-index font gives no code a character (pypdf reads its glyph indices as UTF-16BE,
-    which is not what they encode), so it reads none (False): its text is kept in place as text that cannot be read,
-    never dropped. A composite font whose /Encoding is an embedded CMap of one-byte codes, with a ToUnicode, is read one
-    byte a code, each by its ToUnicode: the codes it gives (a code it does not give pypdf reads as a StandardEncoding
-    guess). Any other composite font needs a CMap pypdf implements under which the whole string decodes: pypdf 6.21.2
-    refused a string that does not (or wrote lone surrogates), and 6.21.4 writes U+FFFD and mojibake. ``built``: pypdf's
-    Font of ``font``, when built already; ``cache``: FontReadings.cache."""
+    string as the font encodes it, False when it reads none so, the codec under which a string must decode, the
+    one-byte codes pypdf reads as the font encodes them, or the ``Codes`` it reads so. A simple font maps each byte
+    through a code table, unless its /Encoding names a CMap. A glyph-index font gives no code a character (pypdf reads
+    its glyph indices as UTF-16BE, which is not what they encode), so it reads none (False): its text is kept in place
+    as text that cannot be read, never dropped. A composite font whose /Encoding is an embedded CMap of one-byte codes,
+    with a ToUnicode, is read one byte a code, each by its ToUnicode: the codes it gives, and (where every code it gives
+    is its own character, as in Ghostscript's conversions of a simple font's text) the codes pypdf reads as their own
+    ASCII character by its StandardEncoding (_guessed). An embedded CMap of codes of more than one length, or one that
+    uses a predefined CMap, and a predefined CMap pypdf does not implement, each with a ToUnicode, are read by their
+    ``Codes``. Any other composite font needs a CMap pypdf implements under which the whole string decodes: pypdf
+    6.21.2 refused a string that does not (or wrote lone surrogates), and 6.21.4 writes U+FFFD and mojibake. ``built``:
+    pypdf's Font of ``font``, when built already; ``cache``: FontReadings.cache."""
     encoding = resolved(font.get('/Encoding'))
     if resolved(font.get('/Subtype')) != '/Type0':
         return not (isinstance(encoding, str) and encoding not in charset_encoding
@@ -577,15 +594,34 @@ def decode_plan(font, built: Font | None = None, cache: dict | None = None) -> b
     if kind(font) == 'glyph-index':
         return False
     to_unicode = resolved(font.get('/ToUnicode'))
-    if isinstance(encoding, StreamObject) and isinstance(to_unicode, StreamObject):
-        layout = _cached(cache, ('layout', id(encoding)), (encoding,), lambda: _cmap_layout(encoding))
+    if not isinstance(to_unicode, StreamObject):
+        codec = composite_codec(font)
+        return False if codec is None else codec
+
+    def pypdf_font() -> Font:
+        return built if built is not None else Font.from_font_resource(font)
+    if isinstance(encoding, StreamObject):
+        layout = _cached(cache, ('layout', id(encoding)), (encoding,), lambda: _cmap_layout(encoding, cache))
         if layout is not None and layout[0] == 1:
             def given() -> frozenset:
-                character_map = (built if built is not None else Font.from_font_resource(font)).character_map
-                return frozenset(code for code in range(256) if chr(code) in character_map)
+                reading = pypdf_font()
+                codes = {code for code in range(256) if chr(code) in reading.character_map}
+                return frozenset(codes | _guessed(reading, codes))
             return _cached(cache, ('given', id(to_unicode)), (to_unicode,), given)
+        if layout is None:
+            space = _cached(cache, ('space', id(encoding)), (encoding,), lambda: _cmap_space(encoding, cache))
+            if space is not None:
+                return _cached(cache, ('codes', id(encoding), id(to_unicode)), (encoding, to_unicode),
+                               lambda: Codes.read_bytes(space, pypdf_font()))
+        return False
     codec = composite_codec(font)
-    return False if codec is None else codec
+    if codec is not None:
+        return codec
+    space = PREDEFINED_CODE_SPACES.get(encoding) if isinstance(encoding, NameObject) else None
+    if space is None:
+        return False
+    return _cached(cache, ('pairs', str(encoding), id(to_unicode)), (to_unicode,),
+                   lambda: Codes.read_pairs(space, pypdf_font()))
 
 
 def decodes(font, string: bytes, plan: bool | str | frozenset | None = None) -> bool:
@@ -599,6 +635,8 @@ def decodes(font, string: bytes, plan: bool | str | frozenset | None = None) -> 
         return plan
     if isinstance(plan, frozenset):
         return all(byte in plan for byte in string)
+    if isinstance(plan, Codes):
+        return plan.whole(string)
     if plan == 'utf-16-be':
         return len(string) % 2 == 0
     try:
@@ -613,104 +651,373 @@ def decodes(font, string: bytes, plan: bool | str | frozenset | None = None) -> 
 # extensions to Big Five (cp950 lacks C87E and C8A1; big5hkscs gives other characters for part of that range), so a
 # code there is named, not read.
 CODEC_FALLBACKS = {'gbk': ('gb18030',), 'gb2312': ('gbk', 'gb18030')}
-# The bytes that may follow a lead byte in a two-byte code of each codec pypdf decodes a predefined CMap with: a lead
-# byte followed by any other byte starts no code (the string is cut, or not in that encoding).
-_TRAIL_BYTES = {'gbk': frozenset(range(0x40, 0xFF)) - {0x7F}, 'gb18030': frozenset(range(0x40, 0xFF)) - {0x7F},
-                'gb2312': frozenset(range(0xA1, 0xFF)), 'cp950': frozenset(range(0x40, 0x7F)) | frozenset(range(0xA1, 0xFF)),
-                'cp932': frozenset(range(0x40, 0x7F)) | frozenset(range(0x80, 0xFD))}
+
+
+class CodeSpace:
+    """A CMap's code space: (code length in bytes, first code, last code) ranges, a code lying in a range when each of
+    its bytes lies between the first and the last code's bytes at its place (Adobe Technical Note 5014: a code space
+    range is a rectangle of byte ranges). ``split`` cuts a string into the codes the CMap reads: at each byte the
+    shortest range the bytes there lie in (pdf.js tries the code lengths in turn), or one byte that starts no code when
+    they lie in none (pdf.js reads one byte there too). One regular expression: a string costs one pass."""
+    __slots__ = ('ranges', 'lengths', '_pattern')
+
+    def __init__(self, ranges):
+        self.ranges = tuple(sorted(set(ranges)))
+        self.lengths = frozenset(length for length, _, _ in self.ranges)
+        parts = []
+        for length, low, high in self.ranges:
+            first, last = low.to_bytes(length, 'big'), high.to_bytes(length, 'big')
+            parts.append(b''.join(b'[\\x%02x-\\x%02x]' % pair for pair in zip(first, last)))
+        self._pattern = re.compile(b'(' + b'|'.join(parts) + b')|(.)', re.S)
+
+    @staticmethod
+    def valid(length: int, low: int, high: int) -> bool:
+        """Whether (length, low, high) is a range a CodeSpace can hold: one to four bytes, each byte of the first code
+        no greater than the last code's at its place."""
+        if not 1 <= length <= 4 or not 0 <= low <= high < 1 << (8 * length):
+            return False
+        return all(a <= b for a, b in zip(low.to_bytes(length, 'big'), high.to_bytes(length, 'big')))
+
+    def split(self, string: bytes) -> list[tuple[bytes, bool]]:
+        """(the code's bytes, whether it lies in the code space) for each code of ``string``, in order."""
+        return [(match.group(), match.lastindex == 1) for match in self._pattern.finditer(string)]
+
+
+# The code spaces of Adobe's predefined CMaps, as pdf.js 4.10.38 reads them from its copy of Adobe's CMap resources
+# (Identity-H and -V, which it builds in, are two bytes a code); the -V CMaps use their -H's.
+_CODE_SPACE_GROUPS = (
+    ('78-H 78-V Add-H Add-V CNS1-H CNS1-V CNS2-H CNS2-V Ext-H Ext-V GB-H GB-V GBT-H GBT-V H KSC-H KSC-V NWP-H NWP-V '
+     'V', ((2, 0x2121, 0x7E7E),)),
+    ('78-RKSJ-H 78-RKSJ-V 78ms-RKSJ-H 78ms-RKSJ-V 90ms-RKSJ-H 90ms-RKSJ-V 90msp-RKSJ-H 90msp-RKSJ-V Add-RKSJ-H '
+     'Add-RKSJ-V Ext-RKSJ-H Ext-RKSJ-V RKSJ-H RKSJ-V',
+     ((1, 0x00, 0x80), (2, 0x8140, 0x9FFC), (1, 0xA0, 0xDF), (2, 0xE040, 0xFCFC))),
+    ('83pv-RKSJ-H 90pv-RKSJ-H 90pv-RKSJ-V',
+     ((1, 0x00, 0x80), (2, 0x8140, 0x9FFC), (1, 0xA0, 0xDF), (2, 0xE040, 0xFCFC), (1, 0xFD, 0xFF))),
+    ('B5-H B5-V ETen-B5-H ETen-B5-V ETenms-B5-H ETenms-B5-V HKdla-B5-H HKdla-B5-V HKm314-B5-H HKm314-B5-V HKm471-B5-H '
+     'HKm471-B5-V', ((1, 0x00, 0x80), (2, 0xA140, 0xFEFE))),
+    ('B5pc-H B5pc-V', ((1, 0x00, 0x80), (2, 0xA140, 0xFCFE), (1, 0xFD, 0xFF))),
+    ('ETHK-B5-H ETHK-B5-V HKscs-B5-H HKscs-B5-V', ((1, 0x00, 0x80), (2, 0x8740, 0xFEFE))),
+    ('HKdlb-B5-H HKdlb-B5-V', ((1, 0x00, 0x80), (2, 0x8E40, 0xFEFE))),
+    ('HKgccs-B5-H HKgccs-B5-V', ((1, 0x00, 0x80), (2, 0x8A40, 0xFEFE))),
+    ('CNS-EUC-H CNS-EUC-V', ((1, 0x00, 0x80), (2, 0xA1A1, 0xFEFE), (4, 0x8EA1A1A1, 0x8EA1FEFE),
+                             (4, 0x8EA2A1A1, 0x8EA2FEFE), (4, 0x8EA3A1A1, 0x8EA3FEFE))),
+    ('78-EUC-H 78-EUC-V EUC-H EUC-V', ((1, 0x00, 0x80), (2, 0x8EA0, 0x8EDF), (2, 0xA1A1, 0xFEFE))),
+    ('GB-EUC-H GB-EUC-V GBT-EUC-H GBT-EUC-V KSC-EUC-H KSC-EUC-V', ((1, 0x00, 0x80), (2, 0xA1A1, 0xFEFE))),
+    ('GBK-EUC-H GBK-EUC-V GBKp-EUC-H GBKp-EUC-V', ((1, 0x00, 0x80), (2, 0x8140, 0xFEFE))),
+    ('GBpc-EUC-H GBpc-EUC-V GBTpc-EUC-H GBTpc-EUC-V', ((1, 0x00, 0x80), (2, 0xA1A1, 0xFCFE), (1, 0xFD, 0xFF))),
+    ('GBK2K-H GBK2K-V', ((1, 0x00, 0x7F), (2, 0x8140, 0xFEFE), (4, 0x81308130, 0xFE39FE39))),
+    ('KSCms-UHC-H KSCms-UHC-V KSCms-UHC-HW-H KSCms-UHC-HW-V', ((1, 0x00, 0x80), (2, 0x8141, 0xFEFE))),
+    ('KSCpc-EUC-H KSCpc-EUC-V', ((1, 0x00, 0x84), (2, 0xA141, 0xFDFE), (1, 0xFE, 0xFF))),
+    ('KSC-Johab-H KSC-Johab-V', ((1, 0x00, 0x80), (2, 0x8441, 0xD3FE), (2, 0xD831, 0xDEFE), (2, 0xE031, 0xF9FE))),
+    ('UniCNS-UCS2-H UniCNS-UCS2-V UniGB-UCS2-H UniGB-UCS2-V UniJIS-UCS2-H UniJIS-UCS2-HW-H UniJIS-UCS2-HW-V '
+     'UniJIS-UCS2-V UniJISPro-UCS2-HW-V UniJISPro-UCS2-V UniKS-UCS2-H UniKS-UCS2-V',
+     ((2, 0x0000, 0xD7FF), (2, 0xE000, 0xFFFF))),
+    ('UniCNS-UTF16-H UniCNS-UTF16-V UniGB-UTF16-H UniGB-UTF16-V UniJIS-UTF16-H UniJIS-UTF16-V UniJIS2004-UTF16-H '
+     'UniJIS2004-UTF16-V UniKS-UTF16-H UniKS-UTF16-V',
+     ((2, 0x0000, 0xD7FF), (4, 0xD800DC00, 0xDBFFDFFF), (2, 0xE000, 0xFFFF))),
+    ('UniCNS-UTF8-H UniCNS-UTF8-V UniGB-UTF8-H UniGB-UTF8-V UniJIS-UTF8-H UniJIS-UTF8-V UniJIS2004-UTF8-H '
+     'UniJIS2004-UTF8-V UniJISPro-UTF8-V UniKS-UTF8-H UniKS-UTF8-V',
+     ((1, 0x00, 0x7F), (2, 0xC080, 0xDFBF), (3, 0xE08080, 0xEFBFBF), (4, 0xF0808080, 0xF7BFBFBF))),
+    ('UniCNS-UTF32-H UniCNS-UTF32-V UniGB-UTF32-H UniGB-UTF32-V UniJIS-UTF32-H UniJIS-UTF32-V UniJIS2004-UTF32-H '
+     'UniJIS2004-UTF32-V UniJISX0213-UTF32-H UniJISX0213-UTF32-V UniJISX02132004-UTF32-H UniJISX02132004-UTF32-V '
+     'UniKS-UTF32-H UniKS-UTF32-V', ((4, 0x00000000, 0x0010FFFF),)),
+    ('Hankaku Hiragana Katakana Roman WP-Symbol', ((1, 0x00, 0xFF),)),
+    ('Identity-H Identity-V', ((2, 0x0000, 0xFFFF),)),
+)
+PREDEFINED_CODE_SPACES = {}
+for _names, _ranges in _CODE_SPACE_GROUPS:
+    _space = CodeSpace(_ranges)
+    PREDEFINED_CODE_SPACES.update({NameObject('/' + _name): _space for _name in _names.split()})
+del _names, _ranges, _space
+# /Identity, which names no CMap (Identity-H and -V are the two), is what some producers write for Identity-H: pypdf
+# reads it as UTF-16BE, two bytes a code, as Identity-H's code space cuts it, so with a ToUnicode its text is read as
+# pypdf reads it (the installed reader's reading); with none, it cannot be read.
+PREDEFINED_CODE_SPACES[NameObject('/Identity')] = PREDEFINED_CODE_SPACES[NameObject('/Identity-H')]
+# The code space by which a string in a CMap pypdf decodes with a codec is cut into codes where the codec cannot decode
+# it whole: that of the CMap pypdf names for the codec. GB-EUC-H's codes are among GBK-EUC-H's (gbk decodes both).
+CODEC_SPACES = {codec: PREDEFINED_CODE_SPACES[NameObject(name)] for codec, name in (
+    ('cp932', '/90ms-RKSJ-H'), ('cp950', '/ETen-B5-H'), ('gbk', '/GBK-EUC-H'), ('gb18030', '/GBK2K-H'),
+    ('gb2312', '/GBpc-EUC-H'))}
+
+
+class Codes:
+    """How pypdf reads a composite font whose codes it splits otherwise than the font's CMap does: ``space``, the CMap's
+    code space; ``width``, the bytes of a code to pypdf (2, as UTF-16BE, for a predefined CMap it does not implement;
+    1, through its encoding, for an embedded CMap); ``texts`` ({code: what pypdf reads for it}), each code pypdf reads
+    as the font encodes it: one the font's ToUnicode gives, or (``_guessed``) one pypdf reads as its own character. A
+    string pypdf reads whole as the font encodes it is one whose codes are all of these, each as wide to the CMap as to
+    pypdf, none reading as UTF-16BE into one character with the next (a surrogate pair); any other is read code by code
+    (``read``), a code not among them unread."""
+    __slots__ = ('space', 'width', 'texts')
+
+    def __init__(self, space: CodeSpace, width: int, texts: dict):
+        self.space, self.width, self.texts = space, width, texts
+
+    @classmethod
+    def read_pairs(cls, space: CodeSpace, reading: Font) -> 'Codes':
+        """A predefined CMap pypdf does not implement: it reads two bytes a code as UTF-16BE, through its map of the
+        ToUnicode (keyed by the code's character)."""
+        return cls(space, 2, {ord(key): value for key, value in reading.character_map.items()
+                              if isinstance(key, str) and len(key) == 1})
+
+    @classmethod
+    def read_bytes(cls, space: CodeSpace, reading: Font) -> 'Codes':
+        """An embedded CMap: pypdf reads one byte a code through its encoding (StandardEncoding, each code the ToUnicode
+        gives as itself), then its map of the ToUnicode; a code of two bytes the ToUnicode gives is read by it too."""
+        character_map = reading.character_map
+        encoding = reading.encoding if isinstance(reading.encoding, dict) else {}
+        given = {code for code in range(256) if chr(code) in character_map}
+        texts = {code: ''.join(character_map.get(char, char) for char in encoding.get(code, chr(code)))
+                 for code in given | _guessed(reading, given)}
+        texts.update((ord(key), value) for key, value in character_map.items()
+                     if isinstance(key, str) and len(key) == 1 and ord(key) > 0xFF)
+        return cls(space, 1, texts)
+
+    def whole(self, string: bytes) -> bool:
+        """Whether pypdf reads all of ``string`` as the font encodes it."""
+        if len(string) % self.width:
+            return False
+        for code, matched in self.space.split(string):
+            if not matched or len(code) != self.width or int.from_bytes(code, 'big') not in self.texts:
+                return False
+        return self.width == 1 or len(string.decode('utf-16-be', 'surrogatepass')) * 2 == len(string)
+
+    def read(self, string: bytes) -> list[str | None]:
+        """What each code of ``string`` reads as (None: unread), the codes cut by the CMap's code space."""
+        return [self.texts.get(int.from_bytes(code, 'big')) if matched else None
+                for code, matched in self.space.split(string)]
+
+
+def _guessed(reading: Font, given: set) -> set:
+    """The one-byte codes pypdf reads as their own ASCII character (its StandardEncoding agrees) that a font's ToUnicode
+    does not give, where every code it gives (``given``) is its own character: the font's codes are its characters (a
+    simple font's text converted to a CID font: Ghostscript's OneByteIdentityH keeps the codes), so pypdf's reading of
+    them is what the font encodes. Where a code the ToUnicode gives is another character, none is guessed."""
+    character_map = reading.character_map
+    if not given or any(character_map.get(chr(code)) != chr(code) for code in given):
+        return set()
+    encoding = reading.encoding if isinstance(reading.encoding, dict) else {}
+    return {code for code in range(0x20, 0x7F) if code not in given and encoding.get(code, chr(code)) == chr(code)}
 
 
 def read_string(string: bytes, plan, character_map: dict) -> list[str]:
     """What a string pypdf reads whole as its font encodes it (decodes) reads as, a piece per character it decodes to,
     as pypdf reads it: decoded by the plan's codec (or one byte a code), then through ``character_map``."""
+    if isinstance(plan, Codes):
+        return plan.read(string)
     if isinstance(plan, str):
         return [character_map.get(char, char) for char in string.decode(plan, 'surrogatepass')]
     return [character_map.get(chr(byte), chr(byte)) for byte in string]
 
 
 def read_codes(string: bytes, plan, character_map: dict) -> list[str | None] | None:
-    """What each code of ``string`` reads as, for a string pypdf cannot read whole as its font encodes it (decodes),
-    where its codes can be told apart: the text pypdf reads for a code it can read (decoded, then through
-    ``character_map``, pypdf's map of the font's ToUnicode), None for a code nothing reads. One-byte codes (a frozenset
-    plan) are read where the ToUnicode gives them. Under a codec, the codes are the codec's (a lead byte and a byte that
-    may follow it, or one byte), each read by the codec or else by the CMap's wider reading (CODEC_FALLBACKS): a code
-    the codec lacks is named, the rest of the string read. None, so that no code of the string is read, where the codes
-    cannot be told apart: a string cut inside a code, a byte no code starts with, a UTF-16BE string of odd length (one-
-    byte text in a two-byte font, or a cut code: reading its pairs would be mojibake), or no plan pypdf reads by. pypdf
-    itself would decode the whole string with U+FFFD for the first byte it cannot decode and go on from the next byte,
-    reading the rest of a two-byte code as the start of another: mojibake."""
+    """What each code of ``string`` reads as, for a string pypdf cannot read whole as its font encodes it (decodes):
+    the text pypdf reads for a code it can read (decoded, then through ``character_map``, pypdf's map of the font's
+    ToUnicode), None for a code nothing reads. One-byte codes (a frozenset plan) are read where pypdf reads them as the
+    font encodes them; ``Codes`` by their texts. Under a codec, the string is cut into the codes of the CMap pypdf names
+    for it (CODEC_SPACES: a one-byte code the codec cannot decode alone, such as Big Five's or GB 2312's 0x80, is one
+    code, never the lead byte of the next); each is read by the codec or else by the CMap's wider reading
+    (CODEC_FALLBACKS), a byte that starts no code, a code cut short at the end and a code no codec reads are unread, and
+    the rest of the string is read. None, so that no code of the string is read, where the codes cannot be told apart:
+    a UTF-16BE string of odd length (one-byte text in a two-byte font, or a cut code: reading its pairs would be
+    mojibake), or no plan pypdf reads by."""
     if isinstance(plan, frozenset):
         return [character_map.get(chr(byte), chr(byte)) if byte in plan else None for byte in string]
-    trail = _TRAIL_BYTES.get(plan) if isinstance(plan, str) else None
-    if trail is None:
+    if isinstance(plan, Codes):
+        return plan.read(string)
+    space = CODEC_SPACES.get(plan) if isinstance(plan, str) else None
+    if space is None:
         return None
     units: list[str | None] = []
-    index = 0
-    while index < len(string):
-        length = 1
-        try:
-            string[index:index + 1].decode(plan)
-        except UnicodeDecodeError as error:
-            if 'incomplete' not in str(error.reason) or index + 1 >= len(string) or string[index + 1] not in trail:
-                return None  # a byte no code starts with, or a code cut short: the codes cannot be told apart
-            length = 2
-        code, text = string[index:index + length], None
-        index += length
-        for codec in (plan, *CODEC_FALLBACKS.get(plan, ())):
-            try:
-                text = code.decode(codec, 'surrogatepass')
-                break
-            except UnicodeDecodeError:
-                continue
+    for code, matched in space.split(string):
+        text = None
+        if matched:
+            for codec in (plan, *CODEC_FALLBACKS.get(plan, ())):
+                try:
+                    text = code.decode(codec, 'surrogatepass')
+                    break
+                except UnicodeDecodeError:
+                    continue
         units.append(None if text is None else ''.join(character_map.get(char, char) for char in text))
     return units
+
+
+# --- whether glyphs that cannot be read are a box ------------------------------------------------------------------
+
+# For each predefined CMap pypdf does not implement, the codec that encodes its character set (JIS X 0208, GB 2312 or
+# KS X 1001 written as row and cell, 21-7E each, are their EUC codes less 0x80 a byte: ``True``), used only to tell
+# whether glyphs that cannot be read are a box: their text stays unread.
+_SHAPES = {}
+for _names, _codec, _rows in (
+        ('EUC-H EUC-V 78-EUC-H 78-EUC-V', 'euc_jp', False),
+        ('H V 78-H 78-V Add-H Add-V Ext-H Ext-V NWP-H NWP-V', 'euc_jp', True),
+        ('78-RKSJ-H 78-RKSJ-V 78ms-RKSJ-H 78ms-RKSJ-V 90msp-RKSJ-H 90msp-RKSJ-V 90pv-RKSJ-H 90pv-RKSJ-V 83pv-RKSJ-H '
+         'Add-RKSJ-H Add-RKSJ-V Ext-RKSJ-H Ext-RKSJ-V RKSJ-H RKSJ-V', 'cp932', False),
+        ('GB-H GB-V GBT-H GBT-V', 'gb2312', True),
+        ('GBT-EUC-H GBT-EUC-V GBTpc-EUC-H GBTpc-EUC-V', 'gb2312', False),
+        ('GBKp-EUC-H GBKp-EUC-V', 'gbk', False),
+        ('KSC-H KSC-V', 'euc_kr', True),
+        ('KSC-EUC-H KSC-EUC-V KSCpc-EUC-H KSCpc-EUC-V', 'euc_kr', False),
+        ('KSCms-UHC-H KSCms-UHC-V KSCms-UHC-HW-H KSCms-UHC-HW-V', 'cp949', False),
+        ('KSC-Johab-H KSC-Johab-V', 'johab', False),
+        ('B5-H B5-V B5pc-H B5pc-V', 'big5', False),
+        ('HKscs-B5-H HKscs-B5-V ETHK-B5-H ETHK-B5-V HKdla-B5-H HKdla-B5-V HKdlb-B5-H HKdlb-B5-V HKgccs-B5-H '
+         'HKgccs-B5-V HKm314-B5-H HKm314-B5-V HKm471-B5-H HKm471-B5-V', 'big5hkscs', False),
+        ('UniCNS-UTF8-H UniCNS-UTF8-V UniGB-UTF8-H UniGB-UTF8-V UniJIS-UTF8-H UniJIS-UTF8-V UniJIS2004-UTF8-H '
+         'UniJIS2004-UTF8-V UniJISPro-UTF8-V UniKS-UTF8-H UniKS-UTF8-V', 'utf-8', False),
+        ('UniCNS-UTF32-H UniCNS-UTF32-V UniGB-UTF32-H UniGB-UTF32-V UniJIS-UTF32-H UniJIS-UTF32-V UniJIS2004-UTF32-H '
+         'UniJIS2004-UTF32-V UniJISX0213-UTF32-H UniJISX0213-UTF32-V UniJISX02132004-UTF32-H UniJISX02132004-UTF32-V '
+         'UniKS-UTF32-H UniKS-UTF32-V', 'utf-32-be', False)):
+    _SHAPES.update({NameObject('/' + _name): (_codec, _rows) for _name in _names.split()})
+del _names, _codec, _rows
+# A box shape that is only ever a box (as typed, routing reads it as one): every unchecked and checked box glyph but
+# the filled square, and the check marks; ■ and the white squares typed as bullets as often are not.
+BOX_SHAPES = frozenset(BOX_OFF_GLYPHS + BOX_ON_GLYPHS) - {'■'} - set(BOX_HELD_GLYPHS)
+MAX_BOX_GLYPH_BYTES = 16  # an operator showing more is not a box and its padding
+
+
+def box_glyphs(font, strings) -> bool:
+    """Whether the glyphs the byte ``strings`` draw in ``font`` (a font dictionary) are a box: one box shape
+    (BOX_SHAPES), or the same one drawn again, with padding (a space, an ideographic space), read by the codec of the
+    character set the font's predefined CMap encodes (_SHAPES). False when that cannot be told: another CMap, a code the
+    codec does not read, a code outside the CMap's code space, or more than a box and its padding. Only the page
+    reader's unread mark reads this; the text stays unread."""
+    if not isinstance(font, DictionaryObject) or sum(map(len, strings)) > MAX_BOX_GLYPH_BYTES:
+        return False
+    encoding = resolved(font.get('/Encoding'))
+    shapes = _SHAPES.get(encoding) if isinstance(encoding, NameObject) else None
+    space = PREDEFINED_CODE_SPACES.get(encoding) if shapes is not None else None
+    if space is None:
+        return False
+    codec, rows = shapes
+    seen = set()
+    for string in strings:
+        for code, matched in space.split(bytes(string)):
+            if not matched:
+                return False
+            try:
+                char = (bytes(byte | 0x80 for byte in code) if rows else code).decode(codec)
+            except UnicodeDecodeError:
+                return False
+            seen.update(part for part in char if part not in PAD_CHARS)
+    return len(seen) == 1 and next(iter(seen)) in BOX_SHAPES
 
 
 # --- reading composite fonts through a copy --------------------------------------------------------------------------
 
 MAX_EMBEDDED_CMAP_BYTES = 1 << 20  # an embedded CMap read for its code lengths and CIDs
+# The embedded CMaps one document reads, all told: each font that carries its own costs a read of its CMap, so without
+# a bound a few megabytes of compressed CMaps (a megabyte each when inflated) cost minutes. Past it, a font whose CMap
+# was not read is a font whose text cannot be read (U+FFFD in its place, named), as a malformed CMap's is.
+MAX_DOCUMENT_CMAP_BYTES = 4 << 20
+_CMAP_SPENT = ('embedded CMap bytes read',)  # FontReadings.cache: the bytes read so far, and each CMap counted
 MAX_CMAP_CODES = 0x10000  # two-byte codes: at most this many, and four times as many range steps
 MAX_WIDTH_STEPS = 1 << 20  # /W entries matched against the CIDs a copy needs
 # The keywords that open and close a CMap's sections: the data is read once, keyword by keyword, so a section that is
 # never closed costs one pass, not a scan to the end of the data for every opening keyword.
 _CMAP_KEYWORD = re.compile(rb'(begin|end)(codespacerange|cidchar|cidrange|notdefchar|notdefrange|bfchar|bfrange)')
 _CMAP_TOKEN = re.compile(rb'<[0-9A-Fa-f\s]*>|[-+]?\d+')
+_CMAP_USES = re.compile(rb'/([^\s()<>\[\]{}/%]+)\s*usecmap')
 _HEX_SPACE = b' \t\r\n\x0c\x00'
 
 
-def _hex_code(token: bytes) -> tuple[int, int] | None:
-    """(the code, its length in bytes) of a hex token of one or two bytes ('<41>', '<00 41>'); None for any other."""
+def _hex_code(token: bytes, longest: int = 2) -> tuple[int, int] | None:
+    """(the code, its length in bytes) of a hex token of one to ``longest`` bytes ('<41>', '<00 41>'); None for any
+    other."""
     if not token.startswith(b'<'):
         return None
     digits = token[1:-1].translate(None, _HEX_SPACE)
-    return (int(digits, 16), len(digits) // 2) if len(digits) in (2, 4) else None
+    return (int(digits, 16), len(digits) // 2) if digits and len(digits) % 2 == 0 and len(digits) <= 2 * longest \
+        else None
 
 
-def _cmap_layout(cmap: StreamObject) -> tuple[int, dict[int, int]] | None:
-    """(the code length in bytes, {code: CID}) of an embedded CMap every code space range of which is one byte long,
-    or every one two bytes long; None for any other (codes of other or mixed lengths, a CMap that uses another, one too
-    large to read here, a malformed section). The data is read in one pass: a section is what lies between its opening
-    and closing keywords, and a section opened before the last one closed, or never closed, is malformed."""
+def _cmap_data(cmap: StreamObject, cache: dict | None) -> bytes | None:
+    """An embedded CMap's data, or None when it cannot be read, holds more than MAX_EMBEDDED_CMAP_BYTES, or the
+    document has read MAX_DOCUMENT_CMAP_BYTES of embedded CMaps already (``cache``: FontReadings.cache, which keeps the
+    count; a CMap is counted once, however often it is read)."""
+    counted = cache.setdefault(_CMAP_SPENT, [0, {}]) if cache is not None else None
+    known = counted[1].get(id(cmap)) if counted is not None else None
+    first = counted is not None and (known is None or known[0] is not cmap)
+    if first and counted[0] >= MAX_DOCUMENT_CMAP_BYTES:
+        return None
     try:
         data = cmap.get_data()
     except (MemoryError, RecursionError):
         raise
     except Exception:
         return None
-    if len(data) > MAX_EMBEDDED_CMAP_BYTES or b'usecmap' in data:
-        return None
-    lengths, codes, steps, opened, spaces = set(), {}, 0, None, 0
+    if first:
+        counted[0] += len(data)
+        counted[1][id(cmap)] = (cmap, len(data))  # the CMap is kept with its count: its id stays its own
+    return data if len(data) <= MAX_EMBEDDED_CMAP_BYTES else None
+
+
+def _cmap_sections(data: bytes, wanted: tuple):
+    """The (section, body) of each of an embedded CMap's sections named in ``wanted``, in order, then None when its
+    sections are malformed (one opened before the last one closed, a closing keyword that closes no section, one never
+    closed). One pass, keyword by keyword: a section is what lies between its opening and closing keywords."""
+    opened = None
     for match in _CMAP_KEYWORD.finditer(data):
         if match.group(1) == b'begin':
             if opened is not None:
-                return None
+                yield None
+                return
             opened = (match.group(2), match.end())
             continue
         if opened is None or opened[0] != match.group(2):
-            return None
+            yield None
+            return
         section, body, opened = opened[0], data[opened[1]:match.start()], None
-        if section not in (b'codespacerange', b'cidchar', b'cidrange'):
-            continue  # a notdef section gives a code no CID of its own; a bf section is a ToUnicode's
+        if section in wanted:
+            yield section, body
+    if opened is not None:
+        yield None
+
+
+def _cmap_space(cmap: StreamObject, cache: dict | None = None) -> CodeSpace | None:
+    """The code space of an embedded CMap (its codespacerange sections, of codes one to four bytes long, and that of the
+    predefined CMap it uses, by usecmap or the stream's /UseCMap name), or None when its data cannot be read
+    (_cmap_data), it uses a CMap that is not a predefined one, a range is malformed, or it holds none."""
+    data = _cmap_data(cmap, cache)
+    if data is None:
+        return None
+    used = resolved(cmap.get('/UseCMap'))
+    if used is not None and not isinstance(used, NameObject):
+        return None  # a CMap stream it uses is not read here
+    ranges = []
+    for name in ([used] if used is not None else []) + ['/' + match.group(1).decode('latin-1')
+                                                          for match in _CMAP_USES.finditer(data)]:
+        space = PREDEFINED_CODE_SPACES.get(name)
+        if space is None:
+            return None
+        ranges.extend(space.ranges)
+    for found in _cmap_sections(data, (b'codespacerange',)):
+        if found is None:
+            return None
+        parsed = [_hex_code(token, 4) for token in _CMAP_TOKEN.findall(found[1])]
+        if not parsed or len(parsed) % 2 or None in parsed:
+            return None
+        for (low, length), (high, other) in zip(parsed[::2], parsed[1::2]):
+            if length != other or not CodeSpace.valid(length, low, high):
+                return None
+            ranges.append((length, low, high))
+    return CodeSpace(ranges) if ranges else None
+
+
+def _cmap_layout(cmap: StreamObject, cache: dict | None = None) -> tuple[int, dict[int, int]] | None:
+    """(the code length in bytes, {code: CID}) of an embedded CMap every code space range of which is one byte long,
+    or every one two bytes long; None for any other (codes of other or mixed lengths, a CMap that uses another, one too
+    large to read here, a malformed section; ``cache``: as _cmap_data). The data is read in one pass: a section is
+    what lies between its opening and closing keywords, and a section opened before the last one closed, or never
+    closed, is malformed."""
+    data = _cmap_data(cmap, cache)
+    if data is None or b'usecmap' in data or '/UseCMap' in cmap:
+        return None
+    lengths, codes, steps, spaces = set(), {}, 0, 0
+    for found in _cmap_sections(data, (b'codespacerange', b'cidchar', b'cidrange')):
+        if found is None:
+            return None
+        section, body = found
         tokens = _CMAP_TOKEN.findall(body)
         if section == b'codespacerange':
             parsed = [_hex_code(token) for token in tokens]
@@ -734,7 +1041,7 @@ def _cmap_layout(cmap: StreamObject) -> tuple[int, dict[int, int]] | None:
             cid = int(group[-1])
             for offset in range(high[0] - low[0] + 1):
                 codes[low[0] + offset] = cid + offset
-    if opened is not None or not spaces or len(lengths) != 1:
+    if not spaces or len(lengths) != 1:
         return None
     return lengths.pop(), codes
 
@@ -837,7 +1144,7 @@ def _identity_copy(font: DictionaryObject, cmap: StreamObject, cache: dict | Non
     (FontReadings.cache): the CMap is read, and the descendant's widths matched to its codes, once a document for all
     the font dictionaries that share them."""
     descendant = _sole_descendant(font)
-    layout = _cached(cache, ('layout', id(cmap)), (cmap,), lambda: _cmap_layout(cmap))
+    layout = _cached(cache, ('layout', id(cmap)), (cmap,), lambda: _cmap_layout(cmap, cache))
     if descendant is None or layout is None or layout[0] != 2:
         return None
     try:
@@ -862,7 +1169,7 @@ def _one_byte_copy(font: DictionaryObject, cmap: StreamObject, cache: dict | Non
     code is its own CID (pypdf reads the font itself so), the CMap is not one of one-byte codes, or pypdf cannot build
     the copy."""
     descendant = _sole_descendant(font)
-    layout = _cached(cache, ('layout', id(cmap)), (cmap,), lambda: _cmap_layout(cmap))
+    layout = _cached(cache, ('layout', id(cmap)), (cmap,), lambda: _cmap_layout(cmap, cache))
     if descendant is None or layout is None or layout[0] != 1 or all(code == cid for code, cid in layout[1].items()):
         return None
     try:

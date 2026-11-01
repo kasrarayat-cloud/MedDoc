@@ -1323,3 +1323,131 @@ def unread_operators(count: int) -> bytes:
     rows = '\n'.join(f'BT /F2 6 Tf {72 + (index % 60) * 8} {720 - (index // 60) % 110 * 6} Td (AB) Tj ET'
                      for index in range(count))
     return with_font(rows, euc_font())
+
+
+# --- round 4: boxes and bullets in fonts whose text cannot be read; codes cut by a CMap's code space --------------
+
+ZAPF = b'<< /Type /Font /Subtype /Type1 /BaseFont /ZapfDingbats >>'
+CHECKLIST = [('A2A2', 'Diabetes'), ('A2A3', 'Hypertension'), ('A2A2', 'Smoker'), ('A2A2', 'Asthma')]  # □ ■ □ □
+GLYPH_BOXES = {'A2A2': '2610', 'A2A3': '2612'}  # glyph indices standing for the same boxes, in a glyph-index font
+PROCEDURES = ['Cold snare polypectomy of the sigmoid polyp', 'Biopsy of the cecum', 'Hemostatic clip placement']
+
+
+def glyph_index_font() -> dict:
+    """An Identity-H font with no ToUnicode and no CIDToGIDMap stream: its codes are glyph indices (objects 6, 8, 9)."""
+    return composite(descendant=8, descriptor=9, cid_to_gid='')
+
+
+def box_rows(shown, font: dict | None = None, *, readable: bool = False) -> bytes:
+    """R3-MEAN-1: the intake checklist, each row's box drawn by ``shown(code)`` (the operators that draw it in /F2,
+    ``font``: the /EUC-H font by default) at x 72 and its item in Helvetica at x 90, one text object a row;
+    ``readable``: a fifth row whose box is ZapfDingbats' (/F3, a box glyph that can be read)."""
+    rows = [f'BT /F2 11 Tf 1 0 0 1 72 {704 - 18 * index} Tm {shown(code, 704 - 18 * index)} /F1 11 Tf 1 0 0 1 90 '
+            f'{704 - 18 * index} Tm ({label}) Tj ET' for index, (code, label) in enumerate(CHECKLIST)]
+    if readable:
+        rows.append('BT /F3 11 Tf 1 0 0 1 72 632 Tm (o) Tj /F1 11 Tf 1 0 0 1 90 632 Tm (Allergies) Tj ET')
+    font = font if font is not None else euc_font()
+    objects = {6: font[0], **{key: value for key, value in font.items() if key}, 10: ZAPF}
+    return page_pdf(lines(INTAKE, top=740, step=18) + '\n' + '\n'.join(rows), fonts='/F1 4 0 R /F2 6 0 R /F3 10 0 R',
+                    extra=objects)
+
+
+def bullet_rows(code: str, font: dict, *, separate: bool = False) -> bytes:
+    """R3-MEAN-2: 'Procedures performed:' and three items, each after a bullet (hex ``code``) in /F2 (``font``) at x 72
+    and the item in Helvetica at x 84; ``separate``: each string its own text object, as ReportLab draws one."""
+    rows = []
+    for index, item in enumerate(PROCEDURES):
+        y = 680 - 18 * index
+        rows.append(drawn('/F2', 72, y, f'<{code}>') + '\n' + drawn('/F1', 84, y, f'({item})') if separate else
+                    f'BT /F2 11 Tf 1 0 0 1 72 {y} Tm <{code}> Tj /F1 11 Tf 1 0 0 1 84 {y} Tm ({item}) Tj ET')
+    return with_font(lines([BANNER, 'Date of service: 2026-10-21', PERFORMED], top=740) + '\n' + '\n'.join(rows), font)
+
+
+def widget_rows(code: str, font: dict) -> bytes:
+    """R3-MEAN-2: a fillable intake form, each row's printed box (hex ``code``) in /F2 (``font``) under an AcroForm
+    check box (Hypertension /Yes, the rest /Off; ZapfDingbats appearances), its item in Helvetica at x 90."""
+    objects = {6: font[0], **{key: value for key, value in font.items() if key}, 60: ZAPF}
+    rows, widgets = [], []
+    for index, (label, on) in enumerate(FORM_ROWS):
+        y = 704 - 18 * index
+        rows.append(f'BT /F2 11 Tf 1 0 0 1 72 {y} Tm <{code}> Tj /F1 11 Tf 1 0 0 1 90 {y} Tm ({label}) Tj ET')
+        number, state = 40 + 3 * index, '/Yes' if on else '/Off'
+        objects[number] = (f'<< /Type /Annot /Subtype /Widget /FT /Btn /T ({label}) /V {state} /AS {state} /Rect [72 '
+                           f'{y - 1} 83 {y + 10}] /F 4 /AP << /N << /Yes {number + 1} 0 R /Off {number + 2} 0 R >> >> '
+                           '>>').encode()
+        objects[number + 1] = stream('q BT /ZaDb 9 Tf 1 2 Td (4) Tj ET Q', '/Type /XObject /Subtype /Form /BBox [0 0 '
+                                     '11 11] /Resources << /Font << /ZaDb 60 0 R >> >>')
+        objects[number + 2] = stream('', '/Type /XObject /Subtype /Form /BBox [0 0 11 11]')
+        widgets.append(f'{number} 0 R')
+    fields = ' '.join(widgets)
+    return page_pdf(lines(INTAKE, top=740, step=18) + '\n' + '\n'.join(rows), fonts='/F1 4 0 R /F2 6 0 R',
+                    extra=objects, annots=f'/Annots [{fields}]',
+                    catalog=f'/AcroForm << /Fields [{fields}] /DR << /Font << /ZaDb 60 0 R >> >> >>')
+
+
+def short_form(state: str) -> bytes:
+    """R3-MEAN-4: a page of 'Form' in Helvetica, sixteen kanji and kana in the /EUC-H font and one live check box
+    Biopsy (/V and /AS ``state``): too little readable text for a layer, but an exact form field."""
+    objects = {6: euc_font()[0], 8: euc_font()[8], 9: euc_font()[9], 60: ZAPF,
+               40: (f'<< /Type /Annot /Subtype /Widget /FT /Btn /T (Biopsy) /V {state} /AS {state} /Rect [72 598 84 '
+                    '610] /F 4 /AP << /N << /Yes 41 0 R /Off 42 0 R >> >> >>').encode(),
+               41: stream('q BT /ZaDb 10 Tf 1 2 Td (4) Tj ET Q', '/Type /XObject /Subtype /Form /BBox [0 0 12 12] '
+                          '/Resources << /Font << /ZaDb 60 0 R >> >>'),
+               42: stream('', '/Type /XObject /Subtype /Form /BBox [0 0 12 12]')}
+    body = ('BT /F1 11 Tf 72 740 Td (Form) Tj ET\n'
+            'BT /F2 11 Tf 72 700 Td <B8A1BABAC6B1B0D5BDF1A4CBA4C4A4A4A4C6B3CEC7A7A4B7A4DEA4B7A4BFA1A3> Tj ET')
+    return page_pdf(body, fonts='/F1 4 0 R /F2 6 0 R', extra=objects, annots='/Annots [40 0 R]',
+                    catalog='/AcroForm << /Fields [40 0 R] /DR << /Font << /ZaDb 60 0 R >> >> >>')
+
+
+def predefined_with_tounicode(cmap: str, codes: str, pairs, face: str = 'Ryumin-Light', ordering: str = 'Japan1',
+                              code_bytes: int = 2, to_unicode_body: bytes | None = None) -> bytes:
+    """R3-CAP-2: the note, then a line of hex ``codes`` in a non-embedded CID font under the predefined CMap ``cmap``
+    (one pypdf does not implement) with a ToUnicode giving each (code, text) of ``pairs`` (``code_bytes`` long), or
+    ``to_unicode_body``."""
+    font = composite(face, encoding=cmap, descendant=8, descriptor=9, ordering=ordering, cid_type='CIDFontType0',
+                     cid_to_gid='', to_unicode_ref='/ToUnicode 7 0 R')
+    font[7] = to_unicode_body if to_unicode_body is not None else to_unicode(pairs=pairs, code_bytes=code_bytes)
+    return with_font(lines(NOTE) + f'\nBT /F2 11 Tf 72 600 Td <{codes}> Tj ET', font)
+
+
+def embedded_cmap_font(cmap: str, pairs, *, code_bytes: int = 1, extra: str = '') -> dict:
+    """R3-CAP-3: a Type0 font whose /Encoding is the embedded CMap body ``cmap`` (object 12; ``extra``: more of its
+    stream dictionary) and whose ToUnicode (object 7) gives each (code, text) of ``pairs``, codes ``code_bytes`` long;
+    a non-embedded CIDFontType0 descendant (objects 6, 8, 9)."""
+    font = composite('GothicBBB-Medium', encoding='12 0 R', descendant=8, descriptor=9, ordering='Japan1',
+                     cid_type='CIDFontType0', cid_to_gid='', to_unicode_ref='/ToUnicode 7 0 R')
+    font[7] = to_unicode(pairs=pairs, code_bytes=code_bytes)
+    font[12] = flate('/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n' + cmap
+                     + 'endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n', f'/Type /CMap {extra}')
+    return font
+
+
+MIXED_CODES = ('4 begincodespacerange\n<00> <80>\n<8140> <9FFC>\n<A0> <DF>\n<E040> <FCFC>\nendcodespacerange\n'
+               '2 begincidrange\n<20> <7E> 1\n<8140> <9FFC> 633\nendcidrange\n')  # the RKSJ layout
+
+
+def many_cmaps(count: int, size: int = 1 << 20) -> bytes:
+    """COST-MANYCMAP-1: ``count`` Type0 fonts, each with its own embedded two-byte CMap of about ``size`` bytes (one
+    cidchar entry repeated, so it compresses to little) and its own ToUnicode, each drawing <3000> ('A')."""
+    entry = '<3000> 34\n'
+    body = ('1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n'
+            + f'{size // len(entry)} begincidchar\n' + entry * (size // len(entry)) + 'endcidchar\n')
+    data = zlib.compress(('/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n' + body
+                          + 'endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n').encode('latin-1'))
+    objects, names = {}, []
+    for index in range(count):
+        base = 100 + 5 * index
+        objects[base] = (f'<< /Type /Font /Subtype /Type0 /BaseFont /ABCDEF+Many /Encoding {base + 1} 0 R '
+                         f'/DescendantFonts [{base + 2} 0 R] /ToUnicode {base + 3} 0 R >>').encode()
+        objects[base + 1] = stream(data, '/Type /CMap /Filter /FlateDecode')
+        objects[base + 2] = (b'<< /Type /Font /Subtype /CIDFontType2 /BaseFont /ABCDEF+Many /CIDSystemInfo << '
+                             b'/Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor %d 0 R '
+                             b'/CIDToGIDMap /Identity /DW 600 >>' % (base + 4))
+        objects[base + 3] = to_unicode(pairs=[(0x3000, 'A')])
+        objects[base + 4] = (b'<< /Type /FontDescriptor /FontName /ABCDEF+Many /Flags 32 /FontBBox [0 -200 1000 900] '
+                             b'/ItalicAngle 0 /Ascent 900 /Descent -200 /CapHeight 700 /StemV 80 >>')
+        names.append(f'/M{index} {base} 0 R')
+    content = lines(NOTE[:3]) + '\n' + '\n'.join(f'BT /M{index} 11 Tf {72 + 12 * (index % 40)} '
+                                                 f'{600 - 14 * (index // 40)} Td <3000> Tj ET' for index in range(count))
+    return page_pdf(content, fonts='/F1 4 0 R ' + ' '.join(names), extra=objects)
