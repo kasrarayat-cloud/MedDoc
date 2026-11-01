@@ -352,7 +352,14 @@ PD_MUTANTS = (
            "        return Fact('service_date', wide[0].value, 'document', _sorted_spans(lines), WIDE_DATE_NOTE)\n", _PD_UNIT),
     # --- Wave 1 repair cycle 2 (pd.json amendment_20261101_cycle2): the integration's STRONG-HEAD HOLD is DROPPED, and
     # its seven mutants (pd-head-hold, -strong, -one-date, -around, -call, -note, -charge-note) are retired with its
-    # code ---
+    # code; one killing mutant per guard of the DT-5 narrow fix of rule (c) ---
+    Mutant('pd-announced-copy', 'a paste or a copy of another report announced in common words narrows nothing '
+           '(DT-5)', _PD_CONTEXT,
+           '    if _PD_ANNOUNCED.search(text):\n        return None  # a paste or a copy of another report',
+           '    if False:\n        return None  # a paste or a copy of another report', _PD_UNIT),
+    Mutant('pd-dated-after-signoff', 'a sign-off the note goes on past with another day narrows nothing (DT-5)',
+           _PD_CONTEXT, '    if own_end >= 0 and len(own) == 1 and _pd_dated_after(text, own_end, next(iter(own))):\n',
+           '    if False:  # mutant: the later day is not read\n', _PD_UNIT),
 )
 # --- package PV1: E/M reading fixes and the C4 holds (detectors tests.test_gi4_pv1 and, for repair cycle 1's guards,
 # tests.test_gi4_pv1_cycle1; moved here from tests/test_gi4_pv1_mutants.py, which now checks this slice). Repair cycle 1

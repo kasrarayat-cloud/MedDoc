@@ -2187,6 +2187,26 @@ _PD_ADDENDUM = cues.rx(r'^[ \t#*_>-]*+(?:addend(?:um|a)|late[ \t]++entry|amendme
                        r'|corrected[ \t]++(?:note|report))\b', cues.FLAGS | re.M)
 _PD_COPIED = cues.rx(r'\b(?:copied|pasted|(?:copy|cut)[ \t-]*+(?:and|&)[ \t-]*+paste\w*|attached|attachments?|imported'
                      r'|scanned|faxed|forwarded|excerpt(?:ed|s)?)\b')
+# Wave 1 repair cycle 2 (pd.json amendment_20261101_cycle2; refutation DT-5 of fbc59ee53): a paste or a copy of another
+# report announced in the common words _PD_COPIED does not list narrows nothing either - "A copy of the outside report
+# follows.", "The outside report reads as follows.", "The report is included below.", "Its report is quoted below.",
+# "From the outside colonoscopy report:", "The following report was received from Mercy GI." A closed list read only to
+# HOLD: a match keeps rule (c) from narrowing (the quote-only fact: every member date taken, as installed); a miss leaves
+# the reading as it was. A copy of the note itself sent elsewhere ("a copy of this note goes to her primary care
+# clinician", h4-01's head) announces no paste and is not read.
+_PD_THING = (r'(?:reports?|records?|notes?|letters?|summar(?:y|ies)|results?|text|documentation|dictation|consultation'
+             r'|correspondence|(?:op(?:erative)?|procedure)[ \t]++note)')
+_PD_ANNOUNCED = cues.rx(
+    r'\bcop(?:y|ies)[ \t]++of\b[^.;:\n]{0,80}?\b(?:follows?|following|below|enclosed|appended|included|reproduced'
+    r'|inserted|here(?:in|with|[ \t]++(?:it[ \t]++)?+is))\b'
+    r'|\b' + _PD_THING + r'\b[^.;\n]{0,60}?\bas[ \t]++follows\b'
+    r'|\b' + _PD_THING + r'[ \t]++(?:(?:is|are)[ \t]++)?+(?:follows?(?![ \t-]*+up)|below)\b'
+    r'|\b(?:included|quoted|reproduced|transcribed|appended|inserted|enclosed|incorporated|duplicated|reprinted'
+    r'|cited)[ \t]++(?:below|here(?:in|with)?+|verbatim|in[ \t]++full|as[ \t]++follows|word[ \t-]++for[ \t-]++word)\b'
+    r'|\bthe[ \t]++following[ \t]++(?:[a-z-]++[ \t]++){0,2}?' + _PD_THING + r'\b'
+    r'|\b(?:from|per)[ \t]++(?:the|his|her|their|an?)[ \t]++(?:[a-z-]++[ \t]++){0,3}?' + _PD_THING + r'[ \t]*+:'
+    r'|\b' + _PD_THING + r'[ \t]++(?:received|obtained)[ \t]++from\b'
+    r'|\bverbatim\b|\bword[ \t-]++for[ \t-]++word\b|\b(?:carried|pulled|brought)[ \t]++forward\b')
 # A call, a phone contact or a message written anywhere as an event (the declaration's third entry: rule (4) widened to
 # the body, hold only): "Call placed on 10/30/2026.", "Spoke with the patient by phone", "Left a voicemail". A field label
 # ("Phone: 555-0100", "Telephone:") and "Recall" are none.
@@ -2324,15 +2344,21 @@ def _pd_signoff_day(text: str, head_end: int) -> Optional[str]:
         or transcription line of another day contradicts it);
     (3) the closing region is the note's own: its last _PD_CLOSING_LINES non-empty lines and never the head (a short
         document whose head is all of it has none); no addendum line after the head; no copied-text announcement
-        anywhere; the sign-off not under a heading-like line naming another occurrence's record
-        (sections.under_another_occurrence);
+        anywhere, in _PD_COPIED's words or in the common words of _PD_ANNOUNCED (Wave 1 repair cycle 2, DT-5: "A copy of
+        the outside report follows."); the sign-off not under a heading-like line naming another occurrence's record
+        (sections.under_another_occurrence); and the note closes with the own sign-off - no date-shaped text after its
+        last line states another day (cycle 2, DT-5: a reviewer's "Reviewed by ..., 10/12/2026" after a pasted
+        report's signature; _pd_dated_after);
     (4) the document is not written around a procedure (_pd_around_procedure), and states no call, phone contact or
         message as an event anywhere (_PD_CALL_PHRASE).
     Dates of birth are never read. One pass over the text after the head, each line read once."""
     if _pd_around_procedure(text) or _PD_COPIED.search(text) or _PD_ADDENDUM.search(text, head_end):
         return None
+    if _PD_ANNOUNCED.search(text):
+        return None  # a paste or a copy of another report announced in common words (cycle 2, DT-5)
     if _PD_CALL_PHRASE.search(text):
         return None  # a note about a call or a message, whatever its title
+    own_end = -1  # where the last own sign-off line ends (cycle 2, DT-5: _pd_dated_after reads what follows it)
     region = max(_pd_closing_start(text), head_end)
     own, days, line_end, performers = set(), set(), -1, None
     signers, verbs, attests = 0, False, False  # the closing region's closing-role lines; how the own sign-off signs
@@ -2359,13 +2385,36 @@ def _pd_signoff_day(text: str, head_end: int) -> Optional[str]:
         if under_another_occurrence(text, start):
             return None  # a copied block's signature
         own |= stated
+        own_end = line_end
         if _PD_OWN_VERB.search(text, start, line_end):
             verbs = True
         else:
             attests = True  # it only attests
     if attests and not verbs and signers > 1:
         return None  # an attestation beside another closing line: a supervising attestation, not the author's sign-off
+    if own_end >= 0 and len(own) == 1 and _pd_dated_after(text, own_end, next(iter(own))):
+        return None  # the note goes on past the own sign-off with another day (cycle 2, DT-5): not its own closing
     return next(iter(own)) if len(own) == 1 and days == own else None
+
+
+def _pd_dated_after(text: str, start: int, day: str) -> bool:
+    """Wave 1 repair cycle 2 (pd.json amendment_20261101_cycle2; refutation DT-5 of fbc59ee53): whether any date-shaped
+    text after ``start`` - the end of the author's own sign-off line - states a day other than ``day`` (ISO), or a date
+    this reader cannot read as that day ("10/12/26"); a date of birth is never read. The note then goes on past that
+    sign-off with another day (a reviewer's "Reviewed by C. Reviewer MD, 10/12/2026 16:00" or "Note completed by ...,
+    10/12/2026" after a pasted outside report's signature), so the sign-off is no closing of the note's own and its day
+    narrows nothing (when unsure, the quote-only fact: installed's answers). Hold-only. Bounded: the text after the
+    sign-off, read once."""
+    for d in _PD_OTHER_DATE.finditer(text, start):
+        lo = max(start, d.start() - _BIRTH_REACH)  # bounded: a birth label is read only in the few characters before
+        nl = text.rfind('\n', lo, d.start())
+        if _BIRTH_BEFORE.search(text, nl + 1 if nl >= 0 else lo, d.start()) is not None:
+            continue  # a date of birth
+        read = FULL_DATE.search(text, d.start(), d.end())  # a weekday before it is read past
+        value = date_from_match(read) if read is not None else None
+        if value is None or value.isoformat() != day:
+            return True
+    return False
 
 
 # GI round 4 (D2; package PD): the words a worded date-of-service field may carry between its label and its colon

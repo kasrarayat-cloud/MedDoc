@@ -22,6 +22,9 @@ DROPPED it (pd.json amendment_20261101_cycle2, committed before the code; refuta
 and CTS2-2): its code is removed, merge_user_values is cycle 1's merge exactly, and DroppedStrongHeadHoldTests pins, on
 the hold's own inputs, the answers installed takes. h4-03's four answers go back to installed's (its known limit).
 
+Cycle 2 also narrows rule (c) for DT-5 (AnnouncedCopyTests): a paste or a copy of another report announced in common
+words (_PD_ANNOUNCED) narrows nothing, nor does a sign-off the note goes on past with another day (_pd_dated_after).
+
 No database (SimpleTestCase): this module is the H6 detector of every PD guard; each guard's killing test says so.
 Every document is synthetic.
 """
@@ -945,6 +948,91 @@ class DroppedStrongHeadHoldTests(SimpleTestCase):
                          ('conflict', context.USER_CONFLICT_NOTE.format(user='2026-10-06',
                                                                        document='2026-10-01 or 2026-10-02')))
         self.assertEqual(context.merge_user_values({'service_date': listed}, {})['service_date'], listed)
+
+
+class AnnouncedCopyTests(SimpleTestCase):
+    """Wave 1 repair cycle 2 (pd.json amendment_20261101_cycle2, declared before the code; refutation DT-5 of
+    fbc59ee53): rule (c) narrows nothing - the quote-only fact, every member date taken as installed takes it - where the
+    text announces a paste or a copy of another report in common words (_PD_ANNOUNCED: "A copy of the outside report
+    follows.", "reads as follows", "included below", "quoted below"), or where the note goes on past the author's own
+    sign-off with another day (_pd_dated_after: a reviewer's "Reviewed by ..., 10/12/2026" after a pasted report's
+    signature). The finding's inputs byte for byte (its F1-F4, F6, I1, I2), and independent variants."""
+
+    CLINIC = (B + 'GI Clinic Note\nPatient: Alex Synthetic (fictional)\nDate performed: 09/03/2026\nFacility: Mercy GI '
+                  '(fictional)\nEndoscopist: B. Farrow MD (fictional)\nHPI\nSeen in clinic on 10/12/2026 to go over the '
+                  'colonoscopy done elsewhere. {announce}\nFindings\nThe colonoscope was advanced to the cecum. A 10 mm '
+                  'polyp was removed with a hot snare.\nImpression: one adenoma removed.\nElectronically signed by B. '
+                  'Farrow MD (fictional), 09/03/2026 10:15\n')
+    COPY_FOLLOWS = 'A copy of the outside report follows.'
+    ANSWERS = ['2026-10-12', '2026-09-03', FAR]
+
+    def finding(self):
+        """The finding's inputs (the dates lens's probes_f.py F1-F4 and F6, probes_i.py I1 and I2), byte for byte."""
+        f1 = self.CLINIC.format(announce=self.COPY_FOLLOWS)
+        rows = {'F1': f1,
+                'F2': self.CLINIC.format(announce='The outside report reads as follows.'),
+                'F3': self.CLINIC.format(announce='The report is included below.'),
+                'F4': self.CLINIC.format(announce='Its report is quoted below.'),
+                'F6': f1.replace('Facility: Mercy GI (fictional)\n', 'Facility: Mercy GI (fictional)\nSedation: '
+                                                                     'propofol (MAC)\n'),
+                'I1': f1 + 'Reviewed by C. Reviewer MD (fictional), 10/12/2026 16:00\n',
+                'I2': f1 + 'Note completed by C. Reviewer MD (fictional), 10/12/2026 16:00\n'}
+        return rows
+
+    def test_the_findings_inputs_take_every_answer(self):
+        for name, text in self.finding().items():
+            with self.subTest(name):
+                self.assertTrue(quote_only(text))
+                every_answer_taken(self, text, self.ANSWERS)
+
+    def test_a_paste_announced_in_common_words(self):  # kills pd-announced-copy
+        for announce in (self.COPY_FOLLOWS, 'The outside report reads as follows.', 'The report is included below.',
+                         'Its report is quoted below.',
+                         # independent variants: other words, the same announcement
+                         'Copies of the outside records follow.', 'The outside colonoscopy report follows.',
+                         'Outside report as follows:', 'The procedure note is reproduced below.', 'The report is below.',
+                         'The following report was received from Mercy GI.', 'From the outside colonoscopy report:',
+                         "Mercy GI's report, verbatim:", 'The letter reads as follows:', 'Previous note carried forward.',
+                         'Report received from Mercy GI.', 'A copy of the report is enclosed here.'):
+            text = self.CLINIC.format(announce=announce)
+            with self.subTest(announce):
+                self.assertIsNotNone(context._PD_ANNOUNCED.search(text))
+                self.assertIsNone(context._PD_COPIED.search(text))  # only the cycle-2 words read it
+                self.assertTrue(quote_only(text))
+                every_answer_taken(self, text, self.ANSWERS)
+
+    def test_a_copy_of_the_note_sent_elsewhere_announces_nothing(self):
+        for line in ('A copy of this report goes to the referring physician.\n',
+                     'A copy of this report was sent to her primary care clinician.\n', 'Copy to: Synthetic PCP\n'):
+            text = report(body_extra=line)
+            with self.subTest(line):
+                self.assertIsNone(context._PD_ANNOUNCED.search(text))
+                self.assertTrue(narrows(text))
+        self.assertTrue(narrows(DOCS['h4-01']['text'], '2026-10-26', '2026-10-27'))  # "a copy of this note goes to ..."
+
+    def test_a_sign_off_the_note_goes_on_past_with_another_day(self):  # kills pd-dated-after-signoff
+        plain = self.CLINIC.format(announce='')  # no announcement: only the later dated line says the note goes on
+        for tail in ('Reviewed by C. Reviewer MD (fictional), 10/12/2026 16:00\n',
+                     'Note completed by C. Reviewer MD (fictional), 10/12/2026 16:00\n'):
+            text = plain + tail
+            with self.subTest(tail):
+                self.assertIsNone(context._PD_ANNOUNCED.search(text))
+                self.assertTrue(quote_only(text))
+                every_answer_taken(self, text, self.ANSWERS)
+        for tail in ('Reviewed by A. Reviewer MD (fictional), 10/30/2026 09:00\n', 'Visit closed 10/30/2026\n',
+                     'Seen and agreed, 10/30/26\n', 'Results discussed with the patient on October 30, 2026.\n'):
+            text = report(tail=tail)  # the note's own sign-off on the label's day, then another day
+            with self.subTest(tail):
+                self.assertTrue(quote_only(text))
+                every_answer_taken(self, text, ['2026-10-21', '2026-10-30', FAR])
+
+    def test_the_same_day_or_a_date_of_birth_after_the_sign_off_still_narrows(self):
+        for tail in ('Printed 10/21/2026 14:02\n', 'Patient DOB: 01/02/1960\n', 'Page 1 of 1\n'):
+            with self.subTest(tail):
+                self.assertTrue(narrows(report(tail=tail)))
+        self.assertFalse(context._pd_dated_after('Signed X, 10/21/2026\nPrinted Oct 21, 2026\n', 0, '2026-10-21'))
+        self.assertTrue(context._pd_dated_after('Signed X, 10/21/2026\nPrinted Oct 22, 2026\n', 20, '2026-10-21'))
+        self.assertTrue(context._pd_dated_after('Signed X\nReviewed 10/22/26\n', 9, '2026-10-21'))  # unreadable: unsure
 
 
 class HelperTests(SimpleTestCase):
