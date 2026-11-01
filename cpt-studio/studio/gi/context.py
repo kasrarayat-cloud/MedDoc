@@ -3297,7 +3297,7 @@ def _span_dates(span) -> set:
                                                                 m.start()) is None) if day}
 
 
-def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> dict[str, Fact]:
+def _merge_member_values(facts: dict[str, Fact], user_values: dict[str, str]) -> dict[str, Fact]:
     """A non-empty user value is encounter metadata: it supplies a fact the document does not give or does not give
     unambiguously (a missing or conflicting documented value), and it agrees with a documented value. A user value
     that DIFFERS from a single documented value is a conflict, kept with both sides, never a silent replacement of the
@@ -3372,11 +3372,18 @@ def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> di
                                  else USER_CONFLICT_NOTE).format(user=value, document=shown))
             continue
         merged[name] = Fact(name, value, 'user', (), USER_NOTE)
+    return merged
+
+
+def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> dict[str, Fact]:
+    """The member's values merged with the document's facts (_merge_member_values: its rules, exactly as before), then
+    the integration's STRONG-HEAD HOLD (pd.json amendment_20261101_integration): a member's answer of another day than a
+    procedure report's own head gives (_HeadHeldFact) is held - only an answer the merge above takes, so nothing new is
+    ever taken or sent, and an answer it holds keeps its own hold and note."""
+    merged = _merge_member_values(facts, user_values)
     documented, answer = facts.get('service_date'), merged.get('service_date')
     if isinstance(documented, _HeadHeldFact) and answer is not None and answer.origin == 'user' \
             and answer.value != documented.head_day:
-        # the integration's STRONG-HEAD HOLD (pd.json amendment_20261101_integration): a member's answer of another day
-        # than a procedure report's own head gives is held - only an answer taken above, so nothing new is taken or sent
         head, also = documented.head_quotes
         merged['service_date'] = Fact('service_date', None, 'conflict', documented.evidence, HEAD_HOLD_NOTE.format(
             user=answer.value, day=documented.head_day, head=head, also=also))
@@ -3460,9 +3467,10 @@ def _head_own_date(text: str) -> Optional[tuple[str, list]]:
 
 
 def _takes_another_day(fact: Fact, day: str) -> bool:
-    """Whether merge_user_values takes a member's answer of another day than ``day`` (ISO) for this documented service
-    date fact - its branches, in its order: the document's own sent date, the narrow release's question (the date it
-    keeps), a documented conflict's values, the dates limiting evidence reads, else any date."""
+    """Whether the merge before the hold (_merge_member_values) takes a member's answer of another day than ``day``
+    (ISO) for this documented service date fact - its branches, in its order: the document's own sent date, the narrow
+    release's question (the date it keeps), a documented conflict's values, the dates limiting evidence reads, else any
+    date."""
     if fact.origin == 'document' and fact.value:
         return str(fact.value) != day
     own = charge_date_own(fact)
