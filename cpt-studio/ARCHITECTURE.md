@@ -152,30 +152,47 @@ Encrypted/corrupt/oversized/too-many-pages files fail with a specific message.
 
 Never silently partial (`cpt-studio-ingest@4`): content a viewer would show is
 read or reported, and content it would not show is excluded with a message.
-- Text pypdf cannot read as the PDF encodes it is never returned as text
-  (pypdf 6.21.4, `cpt-studio-ingest@4`; ACCURACY-RESIDUALS.md, "pypdf 6.21.4"). A
-  string a composite font's CMap cannot decode (an odd byte count in a
-  two-byte CMap), text in a CMap pypdf does not implement (any predefined CMap
-  outside its table but the UCS-2 and UTF-16 ones, which it reads as UTF-16BE
-  as they encode; an embedded CMap stream, unless it has two-byte codes only
-  and the font a ToUnicode; a dictionary), and text in a font pypdf cannot
-  build, cannot parse or the resources do not name (it would draw it in a
-  stand-in font that reads every byte as U+FFFD): in a page's own content the
-  operator that shows it is drawn, for extraction, in `pdffonts.unread_font`
-  (codes as wide as its strings, so pypdf spaces the text around it as before),
-  dropped, and the page named (partial): the rest of the layer, and the
-  labelled block, are read; a page left with no usable text layer goes to OCR
-  or is named, as any. In an annotation's appearance the annotation is
-  unreadable (named, partial). `pdffonts.decodes`, `font_reading` and
-  `FontReadings` (each font worked out once a document) decide it, from the
-  content walk (`PageContent.unreadable_text`). pypdf reads no text from a form
-  XObject without resources of its own, so its text is not judged, and the
-  reader gives it no copy with its parent's resources.
+- Text pypdf cannot read as the PDF encodes it is never returned as text, and
+  never dropped (pypdf 6.21.4, `cpt-studio-ingest@4`; ACCURACY-RESIDUALS.md,
+  "pypdf 6.21.4", round 3). A string a composite font's CMap cannot decode (an
+  odd byte count in a two-byte CMap, a code Python's codec for the CMap
+  lacks), text in a CMap pypdf does not implement (any predefined CMap outside
+  its table but the UCS-2 and UTF-16 ones, which it reads as UTF-16BE as they
+  encode; an embedded CMap stream, unless its codes are all two bytes, read
+  through an Identity copy, or all one byte, read one byte a code, and the font
+  has a ToUnicode; a dictionary), and text in a font pypdf cannot build,
+  cannot parse or the resources do not name (it would draw it in a stand-in
+  font that reads every byte as U+FFFD): the walk reads the operator that
+  shows it itself (`_TextPlacement.transcribed`): each code pypdf can read as
+  pypdf reads it, a codec's gap by the CMap's own wider reading (GBK's by GB
+  18030) where one exists, and in place of each character it cannot read (as
+  many as pypdf would have written there, where the string's codes cannot be
+  told apart) the reader's unread character, drawn for extraction in a
+  `pdffonts.Transcript` font as wide as the operator, so the text keeps its
+  place and the words on either side never close up. It is written as
+  U+FFFD (outside pypdf's right-to-left ranges, so it never reverses the
+  punctuation after it), or, alone in a typed box or alone at the start of a
+  checklist row, as the unread mark `[?]` (held); counted and named: 'N
+  characters in a font or encoding this server cannot read as the PDF encodes
+  it; they are shown as � in place of the text, or as the unread mark [?] in a
+  box' (partial). That holds in a page's layer and in an appearance's text; an
+  appearance only compared with a stored value is named unreadable. U+FFFD
+  written so is not readable text: a page of nothing else has no usable text
+  layer, and goes to OCR or is named, as any. `pdffonts.decodes`,
+  `read_codes`, `font_reading` and `FontReadings` (each font, and each font
+  program, embedded CMap, ToUnicode and descendant fonts share, worked out
+  once a document) decide it, from the content walk
+  (`PageContent.unreadable_text`). pypdf reads no text from a form XObject
+  without resources of its own, so its text is not judged, and the reader
+  gives it no copy with its parent's resources.
 - U+FFFD in what a page returns (its layer or its labelled block) is named:
   'characters the PDF does not encode as valid text; they are shown as �',
   whether a lone surrogate was replaced or a ToUnicode, a stored value or the
-  reader's own decoding wrote it. A failed result returns no text and never
-  carries that notice.
+  reader's own decoding wrote it (U+FFFD in place of text that could not be
+  read is named on its own, above). A failed result returns no text and never
+  carries either notice. A stored value or /Contents that names no character
+  (nothing, or only a NUL: a C string's terminator) shows nothing: what the
+  appearance draws is read; a NUL ending a value is a terminator, not a glyph.
 - Glyph names are read by the Adobe Glyph List specification (section 2: the
   list's own entry; else the name up to its first period, each '_' component
   a name the list holds, 'uni' and groups of four upper-case hex digits, or
@@ -323,7 +340,8 @@ Every printed box is then placed where it is drawn (`_I2_Places`) and widgets
   /Kids) and FreeText / stamp text are read into a labelled block after the page
   text; the headers `[PDF form fields on page N]` and `[PDF annotation text on
   page N]` are fixed. A field whose stored value differs from what its
-  appearance draws, or any XFA form, makes the result partial. The comparison
+  appearance draws (named once a field, however many widgets show it), or any
+  XFA form, makes the result partial. The comparison
   first applies Acrobat's standard formats to the value (`AFNumber_Format`,
   `AFPercent_Format`, `AFDate_FormatEx`, `AFDate_Format`, `AFTime_Format`,
   `AFTime_FormatEx`, `AFSpecial_Format`, exactly one call with literal

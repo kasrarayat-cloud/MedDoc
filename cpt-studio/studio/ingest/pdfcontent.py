@@ -74,7 +74,7 @@ from pypdf.generic import (ArrayObject, ByteStringObject, ContentStream, Diction
                            NullObject, StreamObject)
 from pypdf.generic._font import Font
 
-from .pdffonts import UNREAD_FONT, FontReadings, decodes, unread_codes
+from .pdffonts import UNREAD, UNREAD_FONT, FontReadings, Transcript, decodes, read_codes, read_string
 
 IDENTITY = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 MAX_FORM_DEPTH = 12  # a form nested deeper is assumed to paint an image over its whole bounding box
@@ -836,8 +836,9 @@ class PageContent:
     obscured_text: bool = False  # text kept that a viewer may not show (see _Paint, and paths not followed)
     struck_text: bool = False  # text kept that a line painted over it strikes through
     # text kept that pypdf cannot read as the PDF encodes it (pdffonts.decodes; a font it cannot build, or none):
-    # pypdf would write U+FFFD or mojibake for it, so the operator showing it is drawn, for extraction, in
-    # pdffonts.unread_font, and the page is named (pdf.py)
+    # pypdf would write U+FFFD or mojibake for it, so the operator showing it is read here and drawn, for extraction,
+    # in the walk's pdffonts.Transcript font, each character that cannot be read pdffonts.UNREAD in its place
+    # (_TextPlacement.transcribed); pdf.py writes it as U+FFFD and names the page
     unreadable_text: bool = False
     paint: _Paint | None = field(default=None, repr=False, compare=False)
     # (baseline, start, end, font size, where its first and last glyphs that draw something start and end, one
@@ -905,11 +906,22 @@ class _TextState:
     tf: list | None = None
 
 
+def _space_threshold(built, missing: bool) -> float:
+    """The TJ adjustment (thousandths of an em) from which pypdf's extraction adds a space between the strings it
+    separates: 95% of half the font's space width, as pypdf measures it (a font whose space has no width as 200, as
+    pypdf's extract_text sets it; the stand-in for a font the resources do not hold as 250; unread_font as 200)."""
+    if built is None:
+        width = 250.0 if missing else 200.0
+    else:
+        width = built.space_width if built.character_widths.get(built.space_char, 0) != 0 else 200.0
+    return width / 2 * 0.95
+
+
 class _TextPlacement:
     """Where a content stream draws its text (PDF 32000-1 9.3-9.4), in page space."""
 
     def __init__(self, resources, fonts: dict, graphics: _Graphics, measured: dict | None = None,
-                 trims: dict | None = None, plan=None):
+                 trims: dict | None = None, plan=None, built=None, transcript: Transcript | None = None):
         try:
             table = resolved(resources.get('/Font'))
         except (MemoryError, RecursionError):
@@ -921,6 +933,8 @@ class _TextPlacement:
         self.measured = {} if measured is None else measured  # (id(font dict), string) -> (glyphs, spaces, widths)
         self.trims = {} if trims is None else trims  # (id(font dict), string) -> its whitespace ends (_I2_trim)
         self.plan = plan  # font dict -> pdffonts.decode_plan of what extraction reads for it (FontReadings.plan)
+        self.built = built  # font dict -> pypdf's Font of what extraction reads for it, or None (FontReadings.built)
+        self.transcript = transcript  # the walk's pdffonts.Transcript: the font transcribed operators are drawn in
         self.graphics = graphics
         self.matrix = self.line = IDENTITY
         self.nothing = False  # the last run drew nothing: a zero font size, or a matrix that flattens it
@@ -969,32 +983,61 @@ class _TextPlacement:
     def move(self, tx: float, ty: float) -> None:
         self.matrix = self.line = multiply((1.0, 0.0, 0.0, 1.0, tx, ty), self.line)
 
-    def readable(self, operator, operands) -> bool:
-        """Whether pypdf reads the strings a text-showing operator shows as its font encodes them: there is a font,
-        pypdf builds it (or the copy extraction reads in its place), and every string decodes (pdffonts.decodes, by
-        the font's plan, worked out once per font)."""
-        strings = [item for item in _shown(operator, operands) if isinstance(item, bytes) and item]
+    def transcribed(self, operator, operands) -> tuple[list, int] | None:
+        """None when pypdf reads every string a text-showing operator shows as its font encodes it: there is a font,
+        pypdf builds it (or the copy extraction reads in its place), and every string decodes (pdffonts.decodes, by the
+        font's plan, worked out once per font). Else (the operations that replace the operator in the text extraction
+        reads, how many characters of it could not be read): its line move (' and "), then, in the walk's
+        pdffonts.Transcript font, what each of its codes reads as where pypdf can read it (pdffonts.read_codes), and
+        UNREAD in place of each character that cannot be read (as many as pypdf would have written there, where no code
+        of the string can be read), with a space where pypdf would add one for a TJ adjustment; all as wide as pypdf
+        measures the operator's strings, at its font size; then the font that was set restored (by Tf when the stream
+        set it, else by q/Q, as pypdf starts each form's content with none). Text pypdf cannot read is never dropped:
+        its place is kept, so the text on either side of it never closes up into a sentence the page does not say."""
+        items = _shown(operator, operands)
+        strings = [item for item in items if isinstance(item, bytes) and item]
         if not strings:
-            return True
+            return None
         font = self.state.font
-        if font is None:
-            return False  # pypdf draws it in a stand-in font that reads every byte as U+FFFD, or in none
-        plan = self.plan(font) if self.plan is not None else None
-        return all(decodes(font, string, plan) for string in strings)
-
-    def unread(self, operator, operands) -> list:
-        """The operations that replace a text-showing operator whose text pypdf cannot read as the PDF encodes it, in
-        the text extraction reads: its line move (' and "), then codes of pdffonts.unread_font as wide as its strings
-        are as pypdf measures them, at its font size, and the font that was set restored (by Tf when the stream set
-        it, else by q/Q, as pypdf starts each form's content with none)."""
-        widths = sum(self.measure(item)[2] for item in _shown(operator, operands)
-                     if isinstance(item, (bytes, str)) and not isinstance(item, NameObject))
-        show = ([ByteStringObject(unread_codes(widths))], b'Tj')
+        plan = (self.plan(font) if self.plan is not None else None) if font is not None else False
+        if font is not None and all(decodes(font, string, plan) for string in strings):
+            return None
+        built = self.built(font) if font is not None and self.built is not None else None
+        character_map = built.character_map if built is not None else {}
+        threshold = _space_threshold(built, font is None)
+        units: list[str] = []
+        width, unread = 0.0, 0
+        for item in items:
+            if isinstance(item, (bytes, str)) and not isinstance(item, NameObject):
+                if not item:
+                    continue
+                width += self.measure(item)[2]
+                if isinstance(item, str):  # text pypdf takes as it is
+                    units.append(str(item))
+                    continue
+                string = bytes(item)
+                if built is None:
+                    codes = None
+                elif decodes(font, string, plan):  # a string of the operator pypdf reads as the font encodes it
+                    codes = read_string(string, plan, character_map)
+                else:
+                    codes = read_codes(string, plan, character_map)
+                if codes is None:  # no code of it can be read: as many characters as pypdf would write for it
+                    codes = [None] * self.measure(item)[0]
+                for unit in codes:
+                    if unit is None:
+                        unread += 1
+                        units.append(UNREAD)
+                    elif unit:
+                        units.append(unit)
+            elif units and not units[-1].endswith(' ') and abs(number(item)) >= threshold:
+                units.append(' ')  # pypdf adds a space for an adjustment of half a space or more
+        show = ([ByteStringObject(self.transcript.show(units, width))], b'Tj')
         selected = ([NameObject(UNREAD_FONT), FloatObject(self.state.size)], b'Tf')
         moves = state_only(operator, operands)
         if self.state.tf is not None:
-            return moves + [selected, show, (list(self.state.tf), b'Tf')]
-        return moves + [([], b'q'), selected, show, ([], b'Q')]
+            return moves + [selected, show, (list(self.state.tf), b'Tf')], unread
+        return moves + [([], b'q'), selected, show, ([], b'Q')], unread
 
     def run(self, operator, operands) -> _Run | None:
         """Apply a text-showing operator: where what it shows lies, or None when there is nothing to measure
@@ -1155,6 +1198,7 @@ class _Walker:
         self.active: set[int] = set()  # forms being walked: a form that draws itself is not walked again
         self.checked: set[int] = set()
         self.readings = readings_for(reader)  # how extraction reads each font, worked out once per document
+        self.transcript = Transcript()  # the font operators the reader reads itself are drawn in (_TextPlacement)
 
     def page(self, page) -> PageContent:
         resources = resolved(page.get('/Resources'))
@@ -1176,6 +1220,7 @@ class _Walker:
         kept, replaced, _, changes = self.walk(operations, resources, graphics, 0, self.content.placements, [],
                                                len(resources) > 0)
         self.content.operations = kept
+        self.transcript.finish()
         self.paint.finish()
         self.content.obscured_text = self.content.obscured_text or self.paint.obscured
         self.content.struck_text = self.paint.struck
@@ -1191,8 +1236,8 @@ class _Walker:
         ``placements`` and the opaque rectangles to ``covers`` (both in the space the walk starts in); ``changes``
         names each operation not kept as it was, so equal filtered copies can be shared. ``extracted``: whether pypdf
         reads this stream's text at all (it reads none from a form without resources of its own), so that its text is
-        judged (PageContent.unreadable_text) and text it cannot read is drawn, for extraction, in
-        pdffonts.unread_font."""
+        judged (PageContent.unreadable_text) and text it cannot read is read here (_TextPlacement.transcribed) and
+        drawn, for extraction, in the walk's pdffonts.Transcript font."""
         graphics = graphics.copy()
         graphics.text.tf = None  # pypdf reads every content stream from its own start, with no font set
         kept: list = []
@@ -1203,7 +1248,8 @@ class _Walker:
         marked: list[bool] = []  # per open BMC/BDC: whether it hides what it encloses
         properties = resolved(resources.get('/Properties'))
         xobjects = resolved(resources.get('/XObject'))
-        text = _TextPlacement(resources, self.text_fonts, graphics, self.measured, self._I2_trims, self.plan)
+        text = _TextPlacement(resources, self.text_fonts, graphics, self.measured, self._I2_trims, self.plan,
+                              self.readings.built, self.transcript)
         path, pending = _Path(), None
         for index, (operands, operator) in enumerate(operations):
             hidden = any(marked)
@@ -1238,16 +1284,18 @@ class _Walker:
                         self.content.clipped_text = self.content.clipped_text or shows_text(operands)
                     kept.extend(state_only(operator, operands))
                     continue
-                unread = extracted and not text.readable(operator, operands)
+                transcribed = text.transcribed(operator, operands) if extracted else None
                 if self.positions and run is not None and shows_text(operands):
                     self.shown(run, graphics, verdict)
                 elif self.positions and text.nothing and shows_text(operands):
                     self.paint.obscured = True  # zero-size glyphs show nothing: kept, named
-                if unread:  # pypdf would write U+FFFD or mojibake for it: drawn, for extraction, as unread text
-                    self.content.unreadable_text = True
-                    if self.positions and run is not None:
-                        self.content.unread_boxes.append(run.box)
-                    kept.extend(text.unread(operator, operands))
+                if transcribed is not None:  # pypdf would write U+FFFD or mojibake for some of it: read here instead
+                    replacement, unread = transcribed
+                    if unread:
+                        self.content.unreadable_text = True
+                        if self.positions and run is not None:
+                            self.content.unread_boxes.append(run.box)
+                    kept.extend(replacement)
                     changes.append((index, UNREAD_FONT))
                     continue
             elif operator in TEXT_STATE or operator == b'Tr':
@@ -1677,8 +1725,8 @@ class _Walker:
     def mapped_fonts(self, resources, changes=()) -> dict:
         """{font name: the font extraction reads in its place} for the fonts ``resources`` names that have one: simple
         symbol fonts and fonts pypdf 6.21.4 reads otherwise than the PDF encodes them (their copy, pdffonts.mapped_font),
-        and fonts pypdf cannot build (pdffonts.unread_font: all their text is drawn in it, and pypdf would fail on the
-        font, not reading the rest of the stream's text). With unread_font under its own name when ``changes`` (a
+        and fonts pypdf cannot build (pdffonts.unread_font: pypdf would fail on the font, reading none of the stream's
+        text, and every operator showing text in it was transcribed). With the walk's Transcript font when ``changes`` (a
         walk's) drew text in it."""
         mapped = {}
         for key, font in self.fonts_of(resources):
@@ -1692,7 +1740,7 @@ class _Walker:
             elif copy is not None:
                 mapped[key] = copy
         if any(isinstance(change, tuple) and change[1] == UNREAD_FONT for change in changes):
-            mapped[UNREAD_FONT] = self.readings.unread
+            mapped[UNREAD_FONT] = self.transcript.font()
         return mapped
 
 
@@ -1815,6 +1863,7 @@ def visible_form(xobject, reader, optional: OptionalContent, resources) -> Visib
     walker = _Walker(reader, optional, (0.0, 0.0, 0.0, 0.0))
     defaults = resources if isinstance(resources, DictionaryObject) else DictionaryObject()
     form = walker.form(xobject, defaults, 0, own_text(xobject, defaults))
+    walker.transcript.finish()
     target = form.replacement if form.replacement is not None else xobject
     return VisibleForm(target, walker.content.damaged, walker.content.hidden_text, list(form.placements),
                        list(walker.content.images), tuple(form.covers), walker.content.unreadable_text)

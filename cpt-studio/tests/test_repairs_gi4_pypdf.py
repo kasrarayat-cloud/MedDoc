@@ -4,12 +4,14 @@ judged by what the document shows, and equality with 6.21.2 is a safety net only
 Every document is synthetic and built in tests/support/pypdf_shapes.py from raw PDF syntax; nothing is read from disk.
 The documents go through the real extraction child, with OCR unavailable and with stand-in OCR tools, so the tests
 see the statuses, notices and OCR routing an upload gets. Text pypdf cannot read as the font encodes it is never
-returned as text: an appearance that shows it is unreadable (partial); on a page, the operator that shows it is dropped
-and the page named (partial), the rest of its layer read, and a page left with no usable text layer goes to OCR or is
-named. A glyph that names no character alone in a typed box is the unread mark '[?]', never an empty box.
+returned as text, and never dropped (round 3 of the repair): each character pypdf would have written for it is U+FFFD
+in its place, in a page's layer or in an appearance's text, counted and named (partial); the rest of the layer is read,
+and a page left with no usable text layer goes to OCR or is named. A glyph that names no character alone in a typed
+box is the unread mark '[?]', never an empty box.
 """
 from __future__ import annotations
 
+import re
 import tempfile
 import time
 import unittest
@@ -22,7 +24,8 @@ from pypdf.generic._font import Font
 
 from studio.ingest import Limits, extract_document
 from studio.ingest import _child as child_module
-from studio.ingest.pdf import (DAMAGED, LIMIT_REACHED, PASSWORD, SECTIONS_LOST, _ING_UNREAD_NOTE, extract_pdf)
+from studio.ingest.pdf import (DAMAGED, LIMIT_REACHED, PASSWORD, SECTIONS_LOST, _ING_UNREAD_NOTE, extract_pdf,
+                               unreadable_note)
 from studio.ingest.pdfcontent import IDENTITY, ORIENTATIONS, _ING_glyphs
 from studio.ingest.pdffonts import agl_text, decodes, pypdf_reads_by_number, undecodable, unread_in_boxes
 from studio.ingest.text import INGEST_VERSION, caused_by, from_memory
@@ -32,7 +35,6 @@ from tests.test_repairs_ingest_r2 import reading, undecodable_note
 
 PDF = 'application/pdf'
 SHAPES = shapes.shapes()
-UNREADABLE = 'Page {n} has a form field or annotation whose text could not be read.'
 NO_LAYER = 'Page {n} has no usable text layer and OCR is not available on this server.'
 NO_TEXT = 'No text could be read from the PDF.'
 INVALID = 'Page 1 contains characters the PDF does not encode as valid text; they are shown as \ufffd.'
@@ -42,9 +44,14 @@ ANNOTATION = ('Page 1 has text added as PDF annotations; it was read and added a
 FIELDS = ('Page 1 has PDF form fields; their values were read and added after the page text, labelled as form '
           'fields.')
 OCR_READ = 'Page {n} was read with OCR; OCR can misread characters \u2014 check evidence against the original.'
-UNREAD_TEXT = ('{pages} text in a font or encoding this server cannot read as the PDF encodes it; that text was not '
-               'extracted, so check it against the original.')
 MOJIBAKE = set('\ufffd\u2612') | {chr(code) for code in range(0x3400, 0xA000)}  # what pypdf 6.21.4 wrote
+WRONG = MOJIBAKE - {'\ufffd'}  # what pypdf wrote that is not a mark of text that could not be read
+
+
+def unread_text(result, *pages) -> str:
+    """The notice naming the text the reader could not read on ``pages``: as many characters as the result shows as
+    U+FFFD (none of these documents holds another)."""
+    return unreadable_note(list(pages), result.text.count('\ufffd'))
 
 
 def extract(data: bytes, ocr=None):
@@ -58,30 +65,37 @@ def body(text: str) -> str:
 
 class CutStringInAnAppearanceTests(unittest.TestCase):
     """TXT-1, n-1, n-2 (block): a string an appearance shows that its font cannot decode (an odd byte count in a
-    two-byte CMap, one-byte text in a two-byte font) is not read: the annotation is unreadable, named, partial."""
+    two-byte CMap, one-byte text in a two-byte font) is not read as text: in the appearance's text, as the annotation
+    or field reads it, each character pypdf would have written for it is U+FFFD in its place, named with its count
+    (partial); never pypdf's mojibake (round 3 of the repair; rounds 1 and 2 left the whole annotation unread)."""
 
     NAMES = [name for name in SHAPES if name.startswith(('TXT-1 ', 'n-1 ', 'n-2 '))
              and 'FFFD' not in name and 'page 3' not in name]
 
-    def test_an_appearance_pypdf_cannot_decode_is_unreadable_never_mojibake(self):
+    def test_an_appearance_pypdf_cannot_decode_keeps_its_place_never_mojibake(self):
         self.assertEqual(len(self.NAMES), 16)
         for name in self.NAMES:
             with self.subTest(name):
                 result = extract(SHAPES[name])
-                self.assertEqual((result.status, result.messages), ('partial', (UNREADABLE.format(n=1),)))
-                self.assertTrue(result.text.endswith('Interventions:'), result.text)  # no labelled block
-                self.assertFalse(MOJIBAKE & set(result.text), result.text)
+                self.assertEqual(result.status, 'partial')
+                self.assertIn(result.messages[1:], ((ANNOTATION,), (FIELDS,)))
+                self.assertEqual(result.messages[0], unread_text(result, 1))
+                line = result.text.rsplit('\n', 1)[1]  # the annotation's text, or 'label: ' and the field's
+                self.assertRegex(line, '^([A-Za-z0-9]+: )?\ufffd+$')
+                self.assertFalse(WRONG & set(result.text), result.text)
 
     def test_the_page_beside_it_and_a_page_layer_cut_the_same_way(self):
-        """Page 3 draws the note in Helvetica, which pypdf reads as the PDF encodes it, and the cut string: only the
-        cut string is dropped, and the page named (round 2 of the repair; ingest@4 at first left all of page 3
-        unread)."""
+        """Page 3 draws the note in Helvetica, which pypdf reads as the PDF encodes it, and the cut string: the cut
+        string is U+FFFD in its place, the note read and the page named (round 2 of the repair dropped the string;
+        ingest@4 at first left all of page 3 unread)."""
         for ocr in (False, True):
             with FakeOcr() as fake:
                 result = extract(SHAPES['n-1 page 2 stamp cut, page 3 layer cut'], ocr=fake.tools if ocr else None)
             self.assertEqual((result.status, result.messages, result.ocr_pages),
-                             ('partial', (UNREAD_TEXT.format(pages='Page 3 has'), UNREADABLE.format(n=2)), ()))
-            self.assertEqual([page.strip() for page in result.text.split('\n\n')], [shapes.NOTE_TEXT] * 3)
+                             ('partial', (unread_text(result, 2, 3), ANNOTATION.replace('Page 1', 'Page 2')), ()))
+            self.assertEqual([page.strip() for page in result.text.split('\n\n')],
+                             [shapes.NOTE_TEXT, shapes.NOTE_TEXT, '[PDF annotation text on page 2]\n\ufffd\ufffd\ufffd',
+                              shapes.NOTE_TEXT + '\n\ufffd\ufffd\ufffd'])
 
     def test_a_whole_string_in_the_same_font_is_read(self):
         result = extract(shapes.annotated(shapes.shown('004100420043')))
@@ -129,37 +143,41 @@ class UnimplementedCMapTests(unittest.TestCase):
 
 
 class CutStringInThePageTests(unittest.TestCase):
-    """TXT-7, n-3 and the page layer: a cut string in the page's own text is dropped (the operator showing it), so
-    pypdf's U+FFFD, and whatever a ToUnicode entry for code FFFD turns it into (a checked box, 'X'), never reaches the
-    text; the page is named, and the rest of its layer, in fonts pypdf reads as the PDF encodes them, is read (round 2
-    of the repair: the smallest unit is the operator, not the page)."""
+    """TXT-7, n-3 and the page layer: a cut string in the page's own text is not read as text, so pypdf's U+FFFD, and
+    whatever a ToUnicode entry for code FFFD turns it into (a checked box, 'X'), never reaches the text: each character
+    pypdf would have written for it is U+FFFD in its place, counted and named, and the rest of the layer, in fonts pypdf
+    reads as the PDF encodes them, is read (round 2 of the repair: the operator, not the page, is the unit; round 3: it
+    keeps its place, never dropped)."""
 
     NAMES = [name for name in SHAPES if name.startswith(('TXT-7 ', 'n-3 ', 'page layer '))]
 
-    def test_the_cut_string_is_dropped_and_named_and_the_page_read(self):
+    def test_the_cut_string_keeps_its_place_and_is_named_and_the_page_read(self):
         self.assertEqual(len(self.NAMES), 9)
         for name in self.NAMES:
             for ocr in (False, True):
                 with self.subTest(name, ocr=ocr), FakeOcr() as fake:
                     result = extract(SHAPES[name], ocr=fake.tools if ocr else None)
                     self.assertEqual((result.status, result.messages, result.ocr_pages),
-                                     ('partial', (UNREAD_TEXT.format(pages='Page 1 has'),), ()))
-                    self.assertEqual(result.text.strip(), shapes.NOTE_TEXT)
+                                     ('partial', (unread_text(result, 1),), ()))
+                    self.assertRegex(result.text.strip(), '^' + re.escape(shapes.NOTE_TEXT) + '\n\ufffd+$')
+                    self.assertNotIn('\u2612', result.text)
 
-    def test_the_page_beside_keeps_its_text_and_the_unreadable_string_adds_none(self):
-        """Page 2's note is read; the cut string, or the lines in a CMap pypdf does not implement, add nothing."""
+    def test_the_page_beside_keeps_its_text_and_the_unreadable_string_is_marked(self):
+        """Page 2's note is read; the cut string, or the lines in a CMap pypdf does not implement, are U+FFFD in their
+        places: as many as pypdf would have written (the cut string's two whole codes and the cut byte; each line's
+        bytes read two a character)."""
         cjk = shapes.composite('HYSMyeongJo-Medium', encoding='/KSCms-UHC-H', descendant=8, descriptor=9,
                                ordering='Korea1', cid_type='CIDFontType0', cid_to_gid='')
-        for label, data in (('cut string', shapes.beside_plain_page('BT /F2 11 Tf 72 600 Td <00410042FF> Tj ET',
-                                                                     shapes.identity_font())),
-                            ('unimplemented CMap', shapes.beside_plain_page(
-                                shapes.lines(shapes.CJK_TEXT, top=600, font='/F2'), cjk))):
+        for label, data, marked in (
+                ('cut string', shapes.beside_plain_page('BT /F2 11 Tf 72 600 Td <00410042FF> Tj ET',
+                                                        shapes.identity_font()), ['\ufffd' * 3]),
+                ('unimplemented CMap', shapes.beside_plain_page(shapes.lines(shapes.CJK_TEXT, top=600, font='/F2'), cjk),
+                 ['\ufffd' * -(-len(line) // 2) for line in shapes.CJK_TEXT])):
             with self.subTest(label):
                 result = extract(data)
-                self.assertEqual((result.status, result.messages),
-                                 ('partial', (UNREAD_TEXT.format(pages='Page 2 has'),)))
+                self.assertEqual((result.status, result.messages), ('partial', (unread_text(result, 2),)))
                 self.assertEqual(result.text.count(shapes.NOTE_TEXT), 2)
-                self.assertEqual(result.text.replace(shapes.NOTE_TEXT, '').strip(), '')  # only the line breaks
+                self.assertEqual(result.text.replace(shapes.NOTE_TEXT, '').split(), marked)
 
 
 class ReplacementCharacterNoticeTests(unittest.TestCase):
@@ -278,17 +296,16 @@ class FontBuildTests(unittest.TestCase):
         self.assertEqual((result.status, result.messages), ('ok', (FIELDS,)))
         self.assertTrue(result.text.endswith('[PDF form fields on page 1]\nField: Value'), result.text)
 
-    def test_a_font_pypdf_cannot_build_is_not_read_as_replacement_characters(self):
+    def test_a_font_pypdf_cannot_build_is_unread_text_in_its_place(self):
         """pypdf draws the text of a font it cannot build in a stand-in font that reads every byte as U+FFFD, under
-        either version: that text is unreadable, so the line in it is dropped and the page named; the note beside it,
-        in Helvetica, is read."""
-        for name in ('unbuildable: a composite font whose descendant is no dictionary',
-                     'unbuildable: a simple font whose descriptor is no dictionary'):
+        either version: that text cannot be read, so it is U+FFFD in its place, a character for each byte, counted and
+        named (round 3: never dropped); the note beside it, in Helvetica, is read."""
+        for name, count in (('unbuildable: a composite font whose descendant is no dictionary', 6),
+                            ('unbuildable: a simple font whose descriptor is no dictionary', 30)):
             with self.subTest(name):
                 result = extract(SHAPES[name])
-                self.assertEqual((result.status, result.messages),
-                                 ('partial', (UNREAD_TEXT.format(pages='Page 1 has'),)))
-                self.assertEqual(result.text.strip(), shapes.NOTE_TEXT)
+                self.assertEqual((result.status, result.messages), ('partial', (unreadable_note([1], count),)))
+                self.assertEqual(result.text.strip(), shapes.NOTE_TEXT + '\n' + '\ufffd' * count)
 
     def test_a_built_in_name_that_is_no_character_is_counted(self):
         result = extract(SHAPES['TXT-6 font used'])
@@ -305,9 +322,12 @@ class CompositeEncodingTests(unittest.TestCase):
         for name in [name for name in SHAPES if name.startswith('TXT-5 ')]:
             with self.subTest(name):
                 result = extract(SHAPES[name])
-                self.assertEqual((result.status, result.messages), ('partial', (NO_LAYER.format(n=2),)))
-                # page 2 adds only the line break between its two dropped strings
-                self.assertEqual([page.strip() for page in result.text.split('\n\n')], [shapes.NOTE_TEXT, ''])
+                # page 2 holds only text no code of which can be read: U+FFFD in its places, so no usable text layer
+                self.assertEqual((result.status, result.messages),
+                                 ('partial', (NO_LAYER.format(n=2), unreadable_note([2], 78))))
+                pages = [page.strip() for page in result.text.split('\n\n')]
+                self.assertEqual((pages[0], set(pages[1]) - {'\n'}, pages[1].count('\ufffd')),
+                                 (shapes.NOTE_TEXT, {'\ufffd'}, 78))
                 with FakeOcr() as fake:
                     ocred = extract(SHAPES[name], ocr=fake.tools)
                 self.assertEqual((ocred.status, ocred.ocr_pages), ('ok', (2,)))

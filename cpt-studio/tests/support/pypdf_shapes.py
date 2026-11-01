@@ -1104,3 +1104,213 @@ def heavy_shapes() -> dict[str, bytes]:
             'parser-05 40 pages of 52,000 entries': page_entries(40, 52_000),
             'parser-05 control: 40 pages of 49,000 entries': page_entries(40, 49_000),
             'parser-06 92,000 pages of 22 entries': page_entries(92_000, 22)}
+
+
+# --- round 3: text that cannot be read keeps its place ------------------------------------------------------------
+
+INTAKE = ['Synthetic intake form for parser testing only: no patient content.',
+          'Medical history (mark each that applies):']
+# Each row: a label as ReportLab writes ASCII under a CIDFont('HeiseiMin-W3', 'EUC-H'), then its typed box and item.
+INTAKE_ROWS = [('tounyou-', '( ) Diabetes'), ('kouketsu', '(X) Hypertension'), ('kitsuen-', '( ) Smoker'),
+               ('zensoku-', '( ) Asthma')]
+
+
+def euc_font() -> dict:
+    """ReportLab's CIDFont shape: HeiseiMin-W3 under /EUC-H, a CMap pypdf does not implement (objects 6, 8, 9)."""
+    return composite('HeiseiMin-W3', encoding='/EUC-H', descendant=8, descriptor=9, ordering='Japan1',
+                     cid_type='CIDFontType0', cid_to_gid='')
+
+
+def drawn(font: str, x: float, y: float, shown: str) -> str:
+    """One string as ReportLab's drawString writes it: its own text object, placed by Tm, ending its line (T*)."""
+    return f'BT {font} 11 Tf 13.2 TL 1 0 0 1 {x} {y} Tm {shown} Tj T* ET'
+
+
+def label_rows(*, one_object: bool = False, label_after: bool = False) -> bytes:
+    """RTL-1: an intake checklist, each row a label in the /EUC-H font at x 72 and, at x 160 on its baseline, the row's
+    typed box and item in Helvetica, each drawn as ReportLab draws a string; ``one_object``: both in one text object;
+    ``label_after``: the box row first and the label on the line after it."""
+    rows = []
+    for index, (label, item) in enumerate(INTAKE_ROWS):
+        y = 704 - 36 * index
+        if one_object:
+            rows.append(f'BT /F2 11 Tf 1 0 0 1 72 {y} Tm ({label}) Tj /F1 11 Tf 1 0 0 1 160 {y} Tm ({esc(item)}) Tj ET')
+        elif label_after:
+            rows.append(drawn('/F1', 72, y, f'({esc(item)})') + '\n' + drawn('/F2', 72, y - 18, f'(JP: {label})'))
+        else:
+            rows.append(drawn('/F2', 72, y, f'({label})') + '\n' + drawn('/F1', 160, y, f'({esc(item)})'))
+    return with_font(lines(INTAKE, top=740, step=18) + '\n' + '\n'.join(rows), euc_font())
+
+
+def answer_rows() -> bytes:
+    """RTL-1: answers in parentheses after a label in the /EUC-H font: 'H. pylori' (-), 'Stool occult blood' (+)."""
+    rows = []
+    for index, (item, label, answer) in enumerate((('H. pylori', 'pirori', '(-)'),
+                                                   ('Stool occult blood', 'senketsu', '(+)'))):
+        y = 704 - 18 * index
+        rows.append(drawn('/F1', 72, y, f'({item})') + '\n' + drawn('/F2', 160, y, f'({label})') + '\n'
+                    + drawn('/F1', 240, y, f'({esc(answer)})'))
+    return with_font(lines(['Synthetic questionnaire for parser testing only: no patient content.'], top=740) + '\n'
+                     + '\n'.join(rows), euc_font())
+
+
+def negation(kind: str) -> bytes:
+    """DROP-NEG-1: 'Biopsy was ' and 'taken.' in Helvetica round 'not ' in a font whose text cannot be read: 'euc' (the
+    /EUC-H font), 'missing' (a name the resources do not hold), 'odd' (an Identity-H font, the word an odd byte count)."""
+    shown = {'euc': '/F2 11 Tf (not ) Tj', 'missing': '/F9 11 Tf (not ) Tj', 'odd': '/F2 11 Tf <006E006F007420> Tj'}
+    content = lines(NOTE) + f'\nBT /F1 11 Tf 72 600 Td (Biopsy was ) Tj {shown[kind]} /F1 11 Tf (taken.) Tj ET'
+    return with_font(content, identity_font() if kind == 'odd' else euc_font())
+
+
+def box_glyph_rows(*, one_object: bool = False) -> bytes:
+    """DROP-BOX-1: a checklist whose box glyphs ('□' and '■', EUC-JP A2A2 and A2A3) are drawn in the /EUC-H font and
+    whose labels are in Helvetica 18 pt right of them on their baselines, each string drawn as ReportLab draws one;
+    ``one_object``: glyph and label in one text object (one line of the layer)."""
+    rows = []
+    for index, (code, label) in enumerate((('A2A2', 'Diabetes'), ('A2A3', 'Hypertension'), ('A2A2', 'Smoker'),
+                                           ('A2A2', 'Asthma'))):
+        y = 704 - 18 * index
+        if one_object:
+            rows.append(f'BT /F2 11 Tf 1 0 0 1 72 {y} Tm <{code}> Tj /F1 11 Tf 1 0 0 1 90 {y} Tm ({label}) Tj ET')
+        else:
+            rows.append(drawn('/F2', 72, y, f'<{code}>') + '\n' + drawn('/F1', 90, y, f'({label})'))
+    return with_font(lines(INTAKE, top=740, step=18) + '\n' + '\n'.join(rows), euc_font())
+
+
+def nul_value(kind: str) -> bytes:
+    """NUL-VALUE-1: 'field': a text field /V <FEFF0000> (only a NUL) whose appearance draws 'Screening colonoscopy';
+    'terminated': its value is that text and a NUL; 'free text': a FreeText /Contents <FEFF0000> whose appearance draws
+    'Reviewer note: polyp removed'."""
+    if kind == 'free text':
+        objects = {26: (b'<< /Type /Annot /Subtype /FreeText /Rect [72 480 300 500] /F 4 /DA (/Helv 10 Tf 0 g) '
+                        b'/Contents <FEFF0000> /AP << /N 27 0 R >> >>'),
+                   27: stream('BT /Helv 10 Tf 2 4 Td (Reviewer note: polyp removed) Tj ET',
+                              '/Type /XObject /Subtype /Form /BBox [0 0 228 20] /Resources << /Font << /Helv 4 0 R >> >>')}
+        return page_pdf(lines(NOTE), extra=objects, annots='/Annots [26 0 R]')
+    value = '<FEFF0000>' if kind == 'field' else utf16('Screening colonoscopy\x00')
+    objects = {26: (f'<< /Type /Annot /Subtype /Widget /FT /Tx /T (Indication) /V {value} /Rect [72 480 300 500] /F 4 '
+                    f'/AP << /N 27 0 R >> >>').encode(),
+               27: stream('/Tx BMC BT /Helv 10 Tf 2 4 Td (Screening colonoscopy) Tj ET EMC',
+                          '/Type /XObject /Subtype /Form /BBox [0 0 228 20] /Resources << /Font << /Helv 4 0 R >> >>')}
+    return page_pdf(lines(NOTE), extra=objects, annots='/Annots [26 0 R]', catalog='/AcroForm << /Fields [26 0 R] >>')
+
+
+def one_byte_cmap_page(text: str, *, cid_offset: int = 0, missing: str = '') -> bytes:
+    """CAP-R2-1: ``text`` in a Type0 font whose /Encoding is an embedded CMap of one-byte codes (Ghostscript's
+    OneByteIdentityH: codespace <00> <FF>, the codes CIDs ``cid_offset`` above them), with /W by CID (a space 250,
+    anything else 500, the digits 600) and a one-byte ToUnicode giving each byte of the text its character, but those
+    of ``missing``; the note before it in Helvetica."""
+    encoded = text.encode('latin-1')
+    cmap = stream('/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo << /Registry (Adobe) '
+                  '/Ordering (Identity) /Supplement 0 >> def\n/CMapName /OneByteIdentityH def\n/CMapType 1 def\n'
+                  f'1 begincodespacerange\n<00> <FF>\nendcodespacerange\n1 begincidrange\n<00> <FF> {cid_offset}\n'
+                  'endcidrange\nendcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n',
+                  '/Type /CMap /CMapName /OneByteIdentityH /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) '
+                  '/Supplement 0 >>')
+    widths = ' '.join(f'{code + cid_offset} [{250 if code == 32 else 600 if 48 <= code <= 57 else 500}]'
+                      for code in sorted(set(encoded)))
+    font = composite('ABCDEF+DejaVuSans', encoding='12 0 R', descendant=8, descriptor=9, widths=f'/W [{widths}]',
+                     to_unicode_ref='/ToUnicode 7 0 R')
+    font[7] = to_unicode(pairs=[(code, chr(code)) for code in sorted(set(encoded)) if chr(code) not in missing],
+                         code_bytes=1)
+    font[12] = cmap
+    return with_font(lines(NOTE) + f'\nBT /F2 11 Tf 72 600 Td <{encoded.hex().upper()}> Tj ET', font)
+
+
+def cjk_codec_page(cmap: str, codes: str, face: str = 'STSong-Light', ordering: str = 'GB1') -> bytes:
+    """CAP-R2-2: the note in Helvetica, then a line ``codes`` (hex) in a CID font under the predefined ``cmap``."""
+    font = composite(face, encoding=cmap, descendant=8, descriptor=9, ordering=ordering, cid_type='CIDFontType0',
+                     cid_to_gid='')
+    return with_font(lines(NOTE) + f'\nBT /F2 11 Tf 72 600 Td <{codes}> Tj ET', font)
+
+
+def shared_cmap_fonts(count: int, *, unclosed: int = 0) -> bytes:
+    """R2-COST-G: ``count`` Type0 font dictionaries sharing one embedded two-byte CMap (a code for each of 4,096 CIDs),
+    one ToUnicode and one descendant, each showing <0041>; ``unclosed``: the CMap instead holds that many bytes of
+    unclosed 'begincidchar' sections (R2-COST-A)."""
+    if unclosed:
+        body = 'begincidchar\n' * (unclosed // 13)
+    else:
+        body = ('1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n'
+                + ''.join(f'100 begincidchar\n' + '\n'.join(f'<{code:04X}> {code}' for code in range(start, start + 100))
+                          + '\nendcidchar\n' for start in range(0, 4000, 100)))
+    objects = {12: flate('/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n' + body
+                         + 'endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n', '/Type /CMap'),
+               7: to_unicode(pairs=[(0x41, 'A')]),
+               8: (b'<< /Type /Font /Subtype /CIDFontType2 /BaseFont /ABCDEF+Shared /CIDSystemInfo << /Registry (Adobe) '
+                   b'/Ordering (Identity) /Supplement 0 >> /FontDescriptor 9 0 R /CIDToGIDMap /Identity /DW 500 '
+                   b'/W [65 [600]] >>'),
+               9: (b'<< /Type /FontDescriptor /FontName /ABCDEF+Shared /Flags 32 /FontBBox [0 -200 1000 900] '
+                   b'/ItalicAngle 0 /Ascent 900 /Descent -200 /CapHeight 700 /StemV 80 >>')}
+    names = []
+    for index in range(count):
+        objects[100 + index] = (b'<< /Type /Font /Subtype /Type0 /BaseFont /ABCDEF+Shared /Encoding 12 0 R '
+                                b'/DescendantFonts [8 0 R] /ToUnicode 7 0 R >>')
+        names.append(f'/G{index} {100 + index} 0 R')
+    content = lines(NOTE[:3]) + '\n' + '\n'.join(f'BT /G{index} 11 Tf 72 {600 - (index % 40) * 12} Td <0041> Tj ET'
+                                                  for index in range(count))
+    return page_pdf(content, fonts='/F1 4 0 R ' + ' '.join(names), extra=objects)
+
+
+def shared_marked_fonts(count: int, padding: int) -> bytes:
+    """R2-MEM-B: ``count`` Identity-H font dictionaries sharing one ToUnicode of ``padding`` bytes of comment, one entry
+    with an empty destination and the printable ASCII range, each showing 'Polyp k' (two-byte codes)."""
+    cmap = ('%' + 'x' * padding + '\n/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n'
+            '/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n/CMapName /Synthetic-UCS def\n'
+            '/CMapType 2 def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n1 beginbfchar\n<0001> <>\n'
+            'endbfchar\n1 beginbfrange\n<0020> <007E> <0020>\nendbfrange\nendcmap\n'
+            'CMapName currentdict /CMap defineresource pop\nend\nend\n')
+    objects = {7: flate(cmap), 8: (b'<< /Type /Font /Subtype /CIDFontType2 /BaseFont /ABCDEF+Marked /CIDSystemInfo '
+                                   b'<< /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor 9 0 R '
+                                   b'/CIDToGIDMap /Identity /DW 500 >>'),
+               9: (b'<< /Type /FontDescriptor /FontName /ABCDEF+Marked /Flags 32 /FontBBox [0 -200 1000 900] '
+                   b'/ItalicAngle 0 /Ascent 900 /Descent -200 /CapHeight 700 /StemV 80 >>')}
+    names = []
+    for index in range(count):
+        objects[100 + index] = (b'<< /Type /Font /Subtype /Type0 /BaseFont /ABCDEF+Marked /Encoding /Identity-H '
+                                b'/DescendantFonts [8 0 R] /ToUnicode 7 0 R >>')
+        names.append(f'/G{index} {100 + index} 0 R')
+    shown = ''.join(f'{ord(char):04X}' for char in 'Polyp k')
+    content = lines(NOTE[:3]) + '\n' + '\n'.join(f'BT /G{index} 11 Tf 72 {600 - (index % 40) * 12} Td <{shown}> Tj ET'
+                                                  for index in range(count))
+    return page_pdf(content, fonts='/F1 4 0 R ' + ' '.join(names), extra=objects)
+
+
+def widgets_beside_unread(widgets: int, unread: int) -> bytes:
+    """R2-COST-D: one unchecked check-box field with ``widgets`` widget kids in a band with no text near it, and
+    ``unread`` operators showing 'AB' in the /EUC-H font in rows below it."""
+    kids = ' '.join(f'{100 + index} 0 R' for index in range(widgets))
+    objects = {20: f'<< /FT /Btn /T (Consent) /V /Off /Kids [{kids}] >>'.encode(),
+               21: stream('', '/Type /XObject /Subtype /Form /BBox [0 0 8 8]')}
+    for index in range(widgets):
+        x = 72 + (index % 60) * 8
+        objects[100 + index] = (f'<< /Type /Annot /Subtype /Widget /Parent 20 0 R /AS /Off /F 4 '
+                                f'/Rect [{x} 600 {x + 8} 608] /AP << /N << /Off 21 0 R >> >> >>').encode()
+    rows = '\n'.join(f'BT /F2 4 Tf {72 + (index % 60) * 8} {460 - (index // 60) % 100 * 4} Td (AB) Tj ET'
+                     for index in range(unread))
+    return with_font(lines(NOTE[:3]) + '\n' + rows, euc_font(), extra=objects, annots=f'/Annots [{kids}]',
+                     catalog='/AcroForm << /Fields [20 0 R] >>')
+
+
+def long_value_widgets(widgets: int, length: int) -> bytes:
+    """R2-COST-E: one text field whose value (a stream) is ``length`` characters of note prose, shown by ``widgets``
+    widget kids sharing one appearance that draws 'See attached notes.'."""
+    prose = ('Indication: screening colonoscopy; prep adequate; withdrawal 8 minutes. ' * (length // 72 + 1))[:length]
+    kids = ' '.join(f'{100 + index} 0 R' for index in range(widgets))
+    objects = {20: f'<< /FT /Tx /T (Notes) /V 22 0 R /Kids [{kids}] >>'.encode(),
+               21: stream('/Tx BMC BT /Helv 9 Tf 2 2 Td (See attached notes.) Tj ET EMC',
+                          '/Type /XObject /Subtype /Form /BBox [0 0 100 12] /Resources << /Font << /Helv 4 0 R >> >>'),
+               22: flate(prose)}
+    for index in range(widgets):
+        y = 700 - (index % 50) * 12
+        objects[100 + index] = (f'<< /Type /Annot /Subtype /Widget /Parent 20 0 R /F 4 /Rect [300 {y} 400 {y + 12}] '
+                                f'/AP << /N 21 0 R >> >>').encode()
+    return page_pdf(lines(NOTE[:3]), extra=objects, annots=f'/Annots [{kids}]',
+                    catalog='/AcroForm << /Fields [20 0 R] >>')
+
+
+def unread_operators(count: int) -> bytes:
+    """Transcription cost: ``count`` operators showing 'AB' in the /EUC-H font, sixty to a row."""
+    rows = '\n'.join(f'BT /F2 6 Tf {72 + (index % 60) * 8} {720 - (index // 60) % 110 * 6} Td (AB) Tj ET'
+                     for index in range(count))
+    return with_font(rows, euc_font())

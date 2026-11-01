@@ -74,7 +74,7 @@ from pypdf.generic import ArrayObject, DecodedStreamObject, DictionaryObject, Na
 from .pdfcontent import (OptionalContent, appearance_matrix, as_list, clip, form_shows_text, multiply, number,
                          object_key, page_box, raw_entry, rectilinear, resolved, transformed_box, visible_form)
 from .pdfformat import displayed_texts
-from .pdffonts import BoxGuard, not_valid_text, undecodable
+from .pdffonts import SPACE, UNREAD, BoxGuard, not_valid_text, undecodable
 from .text import canonicalize, non_space_count
 
 HIDDEN_FLAGS = 2 | 32  # Hidden, NoView (PDF 32000-1 12.5.3)
@@ -90,6 +90,12 @@ STRIKE_MARKS = frozenset({'/StrikeOut', '/Redact'})
 QUAD_MARKUP = frozenset({'/Highlight', '/Underline', '/Squiggly', '/StrikeOut', '/Redact'})
 FILLED_SHAPES = frozenset({'/Square', '/Circle'})  # drawn from /IC (their interior colour) without an appearance
 _WHITESPACE = re.compile(r'\s+')
+# Whitespace and every character pdffonts.undecodable names (NUL and the other control codes, private use,
+# noncharacters): what ``squeezed`` removes, in one pass of the regular expression engine.
+_SQUEEZED = re.compile(r'[\s\x00-\x1f\x7f-\x9f\ue000-\uf8ff\ufdd0-\ufdef\ufffe\uffff'
+                       + ''.join(f'\\U000{plane:X}fffe\\U000{plane:X}ffff' for plane in range(1, 15))
+                       + r'\U000f0000-\U0010ffff]+')
+_SUSPECT = re.compile(r'[^\x20-\x7e\xa0-\ud7ff]')  # a character outside these: every one undecodable names is one
 _TAGS = re.compile(r'<[^>]*>')
 BOX_MARKS = frozenset({'X', 'x', '\u2713', '\u2714'})  # what a typed or stamped mark over a printed box says
 MARKED = frozenset({'/FreeText', '/Stamp'})
@@ -117,6 +123,9 @@ class PageAnnotations:
     hidden_text: bool = False  # an appearance held text in optional content that is hidden by default
     undecodable: int = 0  # characters dropped from what is written: they name no glyph
     boxed: int = 0  # unread characters alone in a typed box, written as '?' (pdffonts.BoxGuard)
+    # characters of an appearance's text that could not be read as the PDF encodes them (pdffonts.UNREAD), kept in
+    # place in what is written (the page reader writes them as U+FFFD), or in an unread mark
+    unread: int = 0
     boxes: list = field(default_factory=list)  # (rect, checked) of each displayed check box
     buttons: list = field(default_factory=list)  # rect of each displayed check box or radio button
     widgets: list = field(default_factory=list)  # Button of each displayed check box or radio button
@@ -182,14 +191,20 @@ class _Reader:
         self.found = found
         self.lines: dict[int, int] = {}  # id(terminal field) -> index in found.fields
         self.painted = None  # the appearance read for the current annotation: (stream, VisibleForm)
+        self.drawn = ''  # its text squeezed (squeezed), what a stored value or /Contents is compared with
         self.groups: dict = {}  # id(terminal field) -> (options set, {kid key: place in /Kids}), read once per field
+        # id(terminal field) -> (field, its value, the value squeezed, what its format may display, squeezed), read once
+        # per field: a field's widgets share its value, however long it is and however many widgets show it
+        self.values: dict = {}
+        self.appearances: dict = {}  # id(appearance stream) -> (stream, VisibleForm, its text): each read once a page
+        self.mismatched: set = set()  # id(terminal field) of each field named as showing another text: named once
 
     def read(self, annotation) -> None:
         subtype = resolved(annotation.get('/Subtype'))
         if subtype in NOT_DRAWN:
             return
         shown = self.displayed(annotation)
-        self.painted = None
+        self.painted, self.drawn = None, ''
         written = len(self.found.texts)
         if subtype == '/Widget':
             self.widget(annotation, shown)
@@ -249,19 +264,18 @@ class _Reader:
                 self.found.widgets.append(Button(rect, on, radio, option, id(info.node)))
             self.add_line(info, line, replace=on)
             return
-        value = choice_text(info) if info.kind == '/Ch' else value_text(info.value) if info.kind == '/Tx' else ''
+        value, compared, displayed = self.value(info)
         appearance = self.appearance_text(widget)
-        if value.strip():
+        if compared:  # a value that names a character: a value of only NUL (a terminator) shows nothing
             line = f'{info.label}: {value}'
             comparable = info.kind == '/Tx' or bool(info.flags & FIELD_COMBO)
-            drawn = squeezed(appearance or '')
             # An appearance that exists is what viewers draw, even when it draws nothing or is in a hidden layer.
             drawing = normal_appearance(widget) is not None
             if shown and comparable and not self.regenerated and drawing:
-                if appearance is None:  # what it shows cannot be read: not a known disagreement, but unread
-                    self.found.unreadable += 1
-                elif drawn != squeezed(value) and drawn not in {squeezed(text)
-                                                                 for text in displayed_texts(info.script, value)}:
+                if appearance is None or UNREAD in appearance:
+                    self.found.unreadable += 1  # what it shows cannot be read: not a known disagreement, but unread
+                elif self.drawn != compared and self.drawn not in displayed() and id(info.node) not in self.mismatched:
+                    self.mismatched.add(id(info.node))
                     self.found.mismatched.append(info.label)
         elif appearance is None:
             self.found.unreadable += shown
@@ -279,6 +293,22 @@ class _Reader:
         if rect is not None:  # what it shows ('X' typed over a printed box) is not read as a check: the box is unread
             self.found.unread_marks.append(rect)
         self.add_line(info, line, replace=False)
+
+    def value(self, info: _Field) -> tuple[str, str, object]:
+        """(the field's value as read, the value squeezed ('' when it names no character), a function giving the texts
+        its format action may display for it, squeezed), worked out once per field."""
+        key = id(info.node)
+        known = self.values.get(key)
+        if known is None or known[0] is not info.node:
+            value = choice_text(info) if info.kind == '/Ch' else value_text(info.value) if info.kind == '/Tx' else ''
+            cell: list = []
+
+            def displayed() -> set:
+                if not cell:
+                    cell.append({squeezed(text) for text in displayed_texts(info.script, value)})
+                return cell[0]
+            known = self.values[key] = (info.node, value, squeezed(value), displayed)
+        return known[1], known[2], known[3]
 
     def group(self, info: _Field) -> tuple[bool, dict]:
         """(whether the field is a set of options, {kid key: its first place in /Kids}), read once per field: a
@@ -310,7 +340,10 @@ class _Reader:
         (pdffonts.BoxGuard)."""
         out, guard, opener = [], BoxGuard(), 0
         for char in text:
-            if undecodable(char) or not_valid_text(char):
+            if char == UNREAD:  # text that could not be read: kept in its place (written as U+FFFD), counted
+                guard.unread(True)
+                self.found.unread += 1
+            elif undecodable(char) or not_valid_text(char):
                 guard.unread(True)
                 if undecodable(char):
                     self.found.undecodable += 1
@@ -326,25 +359,25 @@ class _Reader:
 
     # Other annotations -------------------------------------------------------------
     def free_text(self, annotation, shown: bool) -> None:
-        contents = keep_nul(text_of(annotation.get('/Contents'))).strip('\n')
-        if not contents.strip():
+        contents = stored_text(text_of(annotation.get('/Contents'))).strip('\n')
+        if not squeezed(contents):  # no character (nothing, or only a NUL terminator): its rich text, else what it shows
             contents = rich_text(annotation.get('/RC'))
+        given = bool(squeezed(contents))
         if self.appearance_hidden(annotation):  # it draws nothing, so what /Contents says is not shown
-            self.found.hidden += bool(contents.strip()) or self.hidden_appearance_shows_text(annotation)
+            self.found.hidden += given or self.hidden_appearance_shows_text(annotation)
             return
         appearance = self.appearance_text(annotation)
-        text = contents if contents.strip() else (appearance or '').strip('\n')
+        text = contents if given else (appearance or '').strip('\n')
         if not text.strip():
             self.found.unreadable += shown and appearance is None
             return
         if not shown:
             self.found.hidden += 1
             return
-        drawn = squeezed(appearance or '')
-        if contents.strip() and normal_appearance(annotation) is not None:
-            if appearance is None:  # what it shows cannot be read: not a known disagreement, but unread
-                self.found.unreadable += 1
-            elif drawn != squeezed(contents):
+        if given and normal_appearance(annotation) is not None:
+            if appearance is None or UNREAD in appearance:
+                self.found.unreadable += 1  # what it shows cannot be read: not a known disagreement, but unread
+            elif self.drawn != squeezed(contents):
                 self.found.mismatched.append('text annotation')
         self.found.texts.append(self.clean(text))
 
@@ -432,15 +465,24 @@ class _Reader:
         return stream is not None and self.optional.visible(raw_entry(stream, '/OC'))
 
     def appearance_text(self, annotation) -> str | None:
-        """The text the normal appearance draws ('' when it draws none), or None when it cannot be read."""
+        """The text the normal appearance draws ('' when it draws none), or None when it cannot be read. Text in it that
+        pypdf cannot read as the PDF encodes it is pdffonts.UNREAD in its place (the page walk transcribed it), never
+        U+FFFD and mojibake. Each appearance stream is read once a page, however many annotations show it."""
         stream = normal_appearance(annotation)
         if stream is None or not self.optional.visible(raw_entry(stream, '/OC')):
             return ''
-        form = visible_form(stream, self.page.pdf, self.optional, self.defaults)
-        self.painted = (stream, form)
+        known = self.appearances.get(id(stream))
+        if known is None or known[0] is not stream:
+            form = visible_form(stream, self.page.pdf, self.optional, self.defaults)
+            text = self.drawn_text(form)
+            known = self.appearances[id(stream)] = (stream, form, text, squeezed(text or ''))
+        self.painted, self.drawn = (stream, known[1]), known[3]
+        self.found.hidden_text = self.found.hidden_text or known[1].hidden_text
+        return known[2]
+
+    def drawn_text(self, form) -> str | None:
         stream = form.stream
-        self.found.hidden_text = self.found.hidden_text or form.hidden_text
-        if form.damaged or form.unreadable_text:  # pypdf would write U+FFFD or mojibake for what it draws
+        if form.damaged:
             return None
         if not isinstance(resolved(stream.get('/Resources')), DictionaryObject) and self.defaults is not None:
             copy = DecodedStreamObject()  # an appearance relying on the form's default resources
@@ -454,7 +496,7 @@ class _Reader:
             copy[NameObject('/Resources')] = self.defaults
             stream = copy
         try:
-            return keep_nul(self.page.extract_xform_text(stream, (0, 90, 180, 270), 200.0))
+            return keep_nul(self.page.extract_xform_text(stream, (0, 90, 180, 270), 200.0)).replace(SPACE, ' ')
         except (MemoryError, RecursionError):
             raise
         except Exception:
@@ -543,25 +585,31 @@ def choice_text(info: _Field) -> str:
     """The option(s) a choice field shows: an export value is shown as its display text."""
     shown = []
     for value in as_list(info.value):
-        text = text_of(value)
+        text = stored_text(text_of(value))
         for option in info.options:
             option = resolved(option)
-            if isinstance(option, (list, ArrayObject)) and len(option) >= 2 and text_of(option[0]) == text:
-                text = text_of(option[1])
+            if isinstance(option, (list, ArrayObject)) and len(option) >= 2 and stored_text(text_of(option[0])) == text:
+                text = stored_text(text_of(option[1]))
                 break
         if text:
             shown.append(text)
-    return keep_nul('; '.join(shown))
+    return '; '.join(shown)
 
 
 def value_text(value) -> str:
     value = resolved(value)
     if isinstance(value, StreamObject):  # a long or rich-text value
         try:
-            return keep_nul(value.get_data().decode('utf-8', 'replace'))
+            return stored_text(value.get_data().decode('utf-8', 'replace'))
         except Exception:
             return ''
-    return keep_nul(text_of(value))
+    return stored_text(text_of(value))
+
+
+def stored_text(text: str) -> str:
+    """A stored value or /Contents as keep_nul reads it, without the NULs it ends with: a C string's terminator,
+    which no viewer shows and which names no glyph (a value of only NUL is empty: the appearance is what shows)."""
+    return keep_nul(text).rstrip('\x00')
 
 
 def rich_text(value) -> str:
@@ -619,8 +667,10 @@ def one_line(text: str) -> str:
 
 def squeezed(text: str) -> str:
     """``text`` as compared with another: no whitespace, and none of the characters that name no glyph (which the
-    labelled block drops)."""
-    return ''.join(char for char in _WHITESPACE.sub('', text) if not undecodable(char))
+    labelled block drops): regular expression passes, never a Python call per character, the wide class of _SQUEEZED
+    only over text that holds a character it may remove (_SUSPECT)."""
+    text = _WHITESPACE.sub('', text)
+    return _SQUEEZED.sub('', text) if _SUSPECT.search(text) else text
 
 
 def keep_nul(text: str) -> str:

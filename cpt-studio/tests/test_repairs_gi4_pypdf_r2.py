@@ -19,14 +19,20 @@ from pypdf.generic import ArrayObject, NameObject
 
 from studio.ingest import Limits, extract_document
 from studio.ingest import pdffonts
-from studio.ingest.pdf import _ING_UNREAD_NOTE, UNREADABLE_TEXT, _decoded, extract_pdf
+from studio.ingest.pdf import _ING_UNREAD_NOTE, _decoded, extract_pdf, unreadable_note
 from tests.support import pypdf_shapes as shapes
 from tests.test_ingest import FakeOcr
 from tests.test_repairs_ingest_r2 import reading, undecodable_note
 
 PDF = 'application/pdf'
 UNREAD_BOX = _ING_UNREAD_NOTE.format(pages='Page 1', has='has')
-UNREAD_TEXT = UNREADABLE_TEXT.format(pages='Page {n}', has='has')
+
+def unread_text(result, page: int = 1) -> str:
+    """The notice naming the text the reader could not read on ``page``: as many characters as the result shows as
+    U+FFFD (none of these documents holds another)."""
+    return unreadable_note([page], result.text.count('\ufffd'))
+
+
 UNREADABLE = 'Page {n} has a form field or annotation whose text could not be read.'
 ANNOTATION = ('Page 1 has text added as PDF annotations; it was read and added after the page text, labelled as '
               'annotation text.')
@@ -230,48 +236,53 @@ class EmbeddedCMapTests(unittest.TestCase):
 
 
 class OperatorUnitTests(unittest.TestCase):
-    """CL-3, F1 (block): text pypdf cannot read as the PDF encodes it costs the operator that shows it, dropped and
-    named, never the page: the rest of the page's layer, in fonts pypdf reads as the PDF encodes them, and its
-    labelled form-field block (read from /V and /AS, without any font) are read, and the page is not sent to OCR."""
+    """CL-3, F1 (block): text pypdf cannot read as the PDF encodes it costs the operator that shows it, never the page:
+    each character pypdf would have written for it is U+FFFD in its place (round 3: never dropped), counted and named;
+    the rest of the page's layer, in fonts pypdf reads as the PDF encodes them, and its labelled form-field block (read
+    from /V and /AS, without any font) are read, and the page is not sent to OCR."""
 
     def test_a_line_in_an_unimplemented_cmap_beside_correct_lines(self):
-        """CL-3: ReportLab's CIDFont shape, one ASCII line under /EUC-H below a note in Helvetica."""
+        """CL-3: ReportLab's CIDFont shape, one ASCII line under /EUC-H below a note in Helvetica: the line's 29 bytes
+        are 15 characters as pypdf reads them (two bytes each), each U+FFFD."""
         for ocr in (False, True):
             with self.subTest(ocr=ocr), FakeOcr() as fake:
                 result = extract(shapes.cid_line_page(), ocr=fake.tools if ocr else None)
                 self.assertEqual((result.status, result.messages, result.ocr_pages),
-                                 ('partial', (UNREAD_TEXT.format(n=1),), ()))
-                self.assertEqual(result.text.strip(), shapes.NOTE_TEXT)
+                                 ('partial', (unreadable_note([1], 15),), ()))
+                self.assertEqual(result.text.strip(), shapes.NOTE_TEXT + '\n' + '\ufffd' * 15)
 
     def test_a_form_page_keeps_its_labelled_block(self):
         """F1 (block): one footer line in a font pypdf cannot build (/Widths holding a name), a font the resources
-        do not hold, or an odd-length Identity-H string: the check boxes' exact states and the field's value stay."""
-        for name, footer, font in (('unbuildable font', '(Form 12-B rev 3)', shapes.UNBUILDABLE_WIDTHS),
-                                   ('missing font', '(Form 12-B rev 3)', None),
-                                   ('odd-length Identity-H', '<0046006F0072006D0020003100>', shapes.identity_font())):
+        do not hold, or an odd-length Identity-H string: the check boxes' exact states and the field's value stay, and
+        the footer is U+FFFD in its place."""
+        for name, footer, font, count in (('unbuildable font', '(Form 12-B rev 3)', shapes.UNBUILDABLE_WIDTHS, 15),
+                                          ('missing font', '(Form 12-B rev 3)', None, 15),
+                                          ('odd-length Identity-H', '<0046006F0072006D0020003100>',
+                                           shapes.identity_font(), 7)):
             for ocr in (False, True):
                 with self.subTest(name, ocr=ocr), FakeOcr() as fake:
                     result = extract(shapes.live_form(footer, font), ocr=fake.tools if ocr else None)
                     self.assertEqual((result.status, result.messages, result.ocr_pages),
-                                     ('partial', (UNREAD_TEXT.format(n=1), FIELDS.format(n=1)), ()))
+                                     ('partial', (unreadable_note([1], count), FIELDS.format(n=1)), ()))
                     self.assertTrue(result.text.endswith('[PDF form fields on page 1]\n' + BLOCK), result.text)
                     self.assertIn('Medical history (form check boxes):', result.text)
+                    self.assertIn('Indication:\n' + '\ufffd' * count + '\n\n', result.text)
                     self.assertEqual(reading(result.text, 'Diabetes', 1), 'negated')
 
     def test_an_unchecked_box_beside_text_that_could_not_be_read_is_unsure(self):
-        """The box's own label is dropped (unread): the next piece within its reach, 'Biopsy taken', may not be its
-        label, so the unchecked box is written as the unread mark before it (an empty box there would negate the
+        """The box's own label could not be read (U+FFFD in its place): it, not 'Biopsy taken', may be what the box
+        stands for, so the unchecked box is written as the unread mark before it (an empty box there would negate the
         biopsy): held, named; its state stays in the block."""
         result = extract(shapes.box_beside_unread())
         self.assertEqual(result.status, 'partial')
-        self.assertEqual(result.messages, (UNREAD_TEXT.format(n=1), FIELDS.format(n=1)))
-        self.assertIn('[?] Biopsy taken', result.text)
+        self.assertEqual(result.messages, (unreadable_note([1], 1), FIELDS.format(n=1)))
+        self.assertIn('[?] \ufffd Biopsy taken', result.text)
         self.assertTrue(result.text.endswith('[PDF form fields on page 1]\nConsent: not checked'), result.text)
         self.assertEqual(reading(result.text, 'Biopsy'), 'uncertain')
 
     def test_the_form_page_after_a_cover_page(self):
         result = extract(shapes.live_form('(Form 12-B rev 3)', shapes.UNBUILDABLE_WIDTHS, pages=2))
-        self.assertEqual((result.status, result.messages), ('partial', (UNREAD_TEXT.format(n=2), FIELDS.format(n=2))))
+        self.assertEqual((result.status, result.messages), ('partial', (unreadable_note([2], 15), FIELDS.format(n=2))))
         self.assertTrue(result.text.endswith('[PDF form fields on page 2]\n' + BLOCK), result.text)
 
 
@@ -291,13 +302,14 @@ class FormWithoutResourcesTests(unittest.TestCase):
                 self.assertEqual(reading(result.text, 'Diabetes'), 'negated')
 
     def test_a_form_with_resources_of_its_own(self):
-        """With its own font it is read; with resources that do not hold its font, its text is unread and named."""
+        """With its own font it is read; with resources that do not hold its font, its text is unread: U+FFFD in its
+        place, a character for each byte pypdf's stand-in font would have read, and named."""
         result = extract(shapes.flattened_field(own_resources='/Font << /Helv 4 0 R >>'))
         self.assertEqual((result.status, result.messages), ('ok', ()))
         self.assertTrue(result.text.endswith('Indication:\nScreening colonoscopy'), result.text)
         result = extract(shapes.flattened_field(own_resources='/ProcSet [/PDF /Text]'))
-        self.assertEqual((result.status, result.messages), ('partial', (UNREAD_TEXT.format(n=1),)))
-        self.assertNotIn('�', result.text)
+        self.assertEqual((result.status, result.messages), ('partial', (unreadable_note([1], 21),)))
+        self.assertTrue(result.text.endswith('Indication:\n' + '\ufffd' * len('Screening colonoscopy')), result.text)
 
 
 class StructureLimitInFontTests(unittest.TestCase):
@@ -315,8 +327,8 @@ class StructureLimitInFontTests(unittest.TestCase):
         for where in ('page', 'descendants'):
             with self.subTest(where):
                 result = extract(shapes.over_the_limit(where))
-                self.assertEqual((result.status, result.messages), ('partial', (UNREAD_TEXT.format(n=1),)))
-                self.assertEqual(result.text.strip(), shapes.NOTE_TEXT)
+                self.assertEqual((result.status, result.messages), ('partial', (unread_text(result),)))
+                self.assertRegex(result.text.strip(), '^' + shapes.NOTE_TEXT.replace('.', '[.]') + '\n\ufffd+$')
         result = extract(shapes.over_the_limit('unused'))
         self.assertEqual((result.status, result.messages, result.text), ('ok', (), shapes.NOTE_TEXT))
 

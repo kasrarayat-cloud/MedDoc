@@ -1024,20 +1024,19 @@ class PaddingInsideAStringTests(unittest.TestCase):
 
     def test_a_next_column_in_a_font_the_page_does_not_have_is_unread(self):
         """The next column in MAC's text object set in a font the page's resources do not hold: pypdf draws it in its
-        stand-in font, U+FFFD for every byte, so that operator is dropped and the page named (cpt-studio-ingest@4,
-        ACCURACY-RESIDUALS.md "pypdf 6.21.4", round 2: the operator, not the page, is the unit). The rest of the
-        layer is read. MAC's unchecked box is on a row holding that unread text, which may run on from MAC: '[?] MAC',
-        as until ingest@3 (when the column was read as U+FFFD); an empty box before MAC is never written (round 1 of
-        ingest@4 left the page unread)."""
-        from studio.ingest.pdf import UNREADABLE_TEXT
+        stand-in font, U+FFFD for every byte, which is what the reader writes in its place, a character a byte, and the
+        page is named (cpt-studio-ingest@4, ACCURACY-RESIDUALS.md "pypdf 6.21.4", round 3: text that cannot be read is
+        never dropped). The rest of the layer is read. MAC's unchecked box is on a row holding that unread text, which
+        may run on from MAC: '[?] MAC', as until ingest@3 (when the column was read as U+FFFD); an empty box before
+        MAC is never written (round 1 of ingest@4 left the page unread)."""
+        from studio.ingest.pdf import unreadable_note
         from tests.test_repairs_ingest_pdf import esc
         result = extracted(column_row(tail=f'[(MAC) -3000] TJ /XX 11 Tf ({esc(SENTENCE)}) Tj'))
-        self.assertEqual((result.status, result.messages[0]),
-                         ('partial', UNREADABLE_TEXT.format(pages='Page 1', has='has')))
+        self.assertEqual((result.status, result.messages[0]), ('partial', unreadable_note([1], len(SENTENCE))))
         self.assertIn(f'{UNREAD} MAC', result.text)
         self.assertNotIn('\u2610 MAC', result.text)
         self.assertNotIn(SENTENCE, result.text)
-        self.assertNotIn('\ufffd', result.text)
+        self.assertIn('\ufffd' * len(SENTENCE), result.text)
 
     def test_word_spaces_inside_the_string_keep_the_glyph(self):
         """Controls: padding no wider than 0.6 em past one word space at its own width (two extra Helvetica spaces,
