@@ -175,11 +175,18 @@ PARTICIPANT_READ_TIMEOUT_SECONDS = 300
 PARTICIPANT_SEND_DEADLINE_SECONDS = 330
 PARTICIPANT_MAX_REQUEST_BYTES = 24 * 1024 * 1024
 PARTICIPANT_MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+# harness@2 (HARNESS.md 11.2): a participant phase may call CPT Studio's reference tools, so one run is a loop of at
+# most PARTICIPANT_MAX_EXCHANGES HTTP exchanges, each read within PARTICIPANT_EXCHANGE_READ_TIMEOUT_SECONDS, the whole
+# loop within PARTICIPANT_LOOP_DEADLINE_SECONDS - below STALE_RUNNING_SECONDS, so a live loop is never swept as dead.
+PARTICIPANT_MAX_EXCHANGES = 4
+PARTICIPANT_EXCHANGE_READ_TIMEOUT_SECONDS = 240
+PARTICIPANT_LOOP_DEADLINE_SECONDS = 540
+PARTICIPANT_MAX_TOOL_RESULT_BYTES = 256 * 1024  # one tool result, as returned to the participant
 # The assess stage routes the document again (validation's span readings read that routing's analysis) and then
 # validates, so it has the analyze stage's time and memory and as much again for the validation: a document the analyze
 # stage read within its limits is never sent and then left unassessed for repeating that work (round 7 bounded:1).
 JOB_DEADLINE_SECONDS = {'extract': 300, 'analyze': 60, 'predict': 180, 'assess': 120, 'review2': 180,
-                        'astra': 360, 'fable': 360}
+                        'astra': 600, 'fable': 600, 'astra_peer': 600, 'fable_peer': 600}
 # Routing and context extraction run in a forked child under these (studio/bounded.py): the stage's deadline
 # above, this growth of address space past what the worker already uses, and a shorter wall clock when a
 # member's context change runs the extraction inside a web request.

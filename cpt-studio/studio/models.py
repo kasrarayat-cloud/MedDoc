@@ -239,7 +239,8 @@ class ProviderRun(models.Model):
     # had no supported proposal, sent once per revision and service date (ARCHITECTURE 5.11). ``scope`` records what it
     # was for: the excerpt's offsets in the revision text and the unresolved items.
     # 'independent': a harness participant's (Astra, Fable) own reading of the revision (HARNESS.md 2), never Corti's.
-    PRIMARY, SECOND_REVIEW, INDEPENDENT = 'primary', 'second_review', 'independent'
+    # 'peer_review': its phase-2 run, made after every first assessment was frozen (HARNESS.md 11.1)
+    PRIMARY, SECOND_REVIEW, INDEPENDENT, PEER_REVIEW = 'primary', 'second_review', 'independent', 'peer_review'
     # scope['held'] of a run deliberately not sent: the service date is a member-vs-document conflict (jobs.stage_predict)
     HELD_MEMBER_DATE_CONFLICT = 'member_date_conflict'
     purpose = models.CharField(max_length=16, default=PRIMARY)
@@ -337,6 +338,30 @@ class Clarification(models.Model):
         ordering = ['created_at']
 
 
+class FindingConfirmation(ImmutableModel):
+    """A reviewer-confirmed answer to an open question (HARNESS.md 11.3): the passage a participant located, accepted by
+    an owner or reviewer with an attestation. Append-only and bound to its revision: a new revision's assessment never
+    reads it. The service date never comes this way (it enters through the context as the member's date)."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    encounter = models.ForeignKey(Encounter, on_delete=models.PROTECT, related_name='finding_confirmations')
+    revision = models.ForeignKey(SourceRevision, on_delete=models.PROTECT, related_name='finding_confirmations')
+    clarification = models.ForeignKey(Clarification, on_delete=models.PROTECT, related_name='confirmations')
+    scope = models.CharField(max_length=12)  # service | proposal
+    fact = models.CharField(max_length=40)
+    family = models.CharField(max_length=40)
+    proposal_key = models.CharField(max_length=40, blank=True)
+    value = models.CharField(max_length=200)
+    spans = models.JSONField()  # [{start, end, text, page}]: exact slices of the revision text
+    located_by = models.JSONField(default=list)  # the participants whose quote it was
+    runs = models.JSONField(default=list)  # their run ids
+    confirmed_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='+')
+    attestation = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+
 class Decision(ImmutableModel):
     APPROVE, REJECT, REINSTATE, REVOKE, CONFIRM = 'approve', 'reject', 'reinstate', 'revoke', 'confirm'
     ACTIONS = [(APPROVE, 'Approve'), (REJECT, 'Reject'), (REINSTATE, 'Reinstate for review'), (REVOKE, 'Revoke decision'),
@@ -378,6 +403,9 @@ class Job(models.Model):
     EXTRACT, ANALYZE, PREDICT, ASSESS, REVIEW2 = 'extract', 'analyze', 'predict', 'assess', 'review2'
     ASTRA, FABLE = 'astra', 'fable'  # the harness participants' stages (HARNESS.md 2), run after predict
     PARTICIPANT_KINDS = (ASTRA, FABLE)
+    # harness@2 (HARNESS.md 11.1): each participant's peer review, after every first assessment is frozen
+    ASTRA_PEER, FABLE_PEER = 'astra_peer', 'fable_peer'
+    PEER_KINDS = (ASTRA_PEER, FABLE_PEER)
     QUEUED, RUNNING, SUCCEEDED, FAILED, UNKNOWN, CANCELLED = 'queued', 'running', 'succeeded', 'failed', 'unknown', 'cancelled'
     TERMINAL = {SUCCEEDED, FAILED, UNKNOWN, CANCELLED}
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -466,6 +494,51 @@ class ReferenceCodeFact(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=['source', 'code', 'modifier'], name='one_fact_row_per_code_modifier')]
         indexes = [models.Index(fields=['code'])]
+
+
+class ProviderExchange(models.Model):
+    """One HTTP exchange of a participant run's tool loop (HARNESS.md 11.2): what was sent (stored form; a PDF original
+    is named by sha256, never its bytes), what came back, exactly. A run's own request and response fields hold its first
+    request and its final response; every turn is here."""
+    id = models.BigAutoField(primary_key=True)
+    run = models.ForeignKey(ProviderRun, on_delete=models.PROTECT, related_name='exchanges')
+    turn = models.PositiveSmallIntegerField()  # 1-based
+    request_body = models.JSONField()
+    request_sha256 = models.CharField(max_length=64)
+    state = models.CharField(max_length=10)  # succeeded | failed | unknown | not_sent
+    http_status = models.PositiveIntegerField(null=True, blank=True)
+    response_bytes = models.BinaryField(blank=True, default=bytes)
+    response_sha256 = models.CharField(max_length=64, blank=True)
+    latency_ms = models.FloatField(null=True, blank=True)
+    usage = models.JSONField(default=dict)
+    provider_request_id = models.CharField(max_length=120, blank=True)
+    response_id = models.CharField(max_length=140, blank=True)
+    error = models.TextField(blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['run', 'turn']
+        constraints = [models.UniqueConstraint(fields=['run', 'turn'], name='one_exchange_per_run_turn')]
+
+
+class ToolCall(models.Model):
+    """A reference tool call a participant made, as CPT Studio executed it (HARNESS.md 11.2): the tool trace. ``refs``
+    lists every reference the result returned (passage keys and 'fact:<source>:<code>:<field>' refs), each dated by its
+    source in ``result``; a participant's references_used is checked against these."""
+    id = models.BigAutoField(primary_key=True)
+    exchange = models.ForeignKey(ProviderExchange, on_delete=models.PROTECT, related_name='tool_calls')
+    call_id = models.CharField(max_length=120)
+    tool = models.CharField(max_length=40)
+    arguments = models.JSONField()
+    result = models.JSONField()
+    result_sha256 = models.CharField(max_length=64)
+    refs = models.JSONField(default=list)
+    executed_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ['exchange', 'id']
+        constraints = [models.UniqueConstraint(fields=['exchange', 'call_id'], name='one_tool_call_per_exchange_id')]
 
 
 class PassageSource(models.Model):
