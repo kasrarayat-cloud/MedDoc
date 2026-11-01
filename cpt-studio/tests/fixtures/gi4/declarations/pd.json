@@ -10,6 +10,7 @@
   "context._PD_ADDENDUM",
   "context._PD_AROUND_WORDS",
   "context._PD_ATTEST",
+  "context._PD_CALL_PHRASE",
   "context._PD_CLOSING_LINES",
   "context._PD_COPIED",
   "context._PD_CREDENTIAL",
@@ -90,7 +91,7 @@
   "amended 2026-11-01 (DS-4): several values narrow nothing - the question quotes the lines and never says 'Conflicting dates of service are documented' for them (F1, D1, D2, C4)",
   "amended 2026-11-01 (CTS-5): rule (a)'s note quotes each differing label's whole line ('Day of procedure: 10/19/2026 Date seen: 10/12/2026 (pre-op clinic)'), never the label and its date alone"
  ],
- "guards_and_mutants": "one killing mutant per guard, each detected by tests.test_gi4_pd (SimpleTestCase, no database): the around-procedure title hold; the last-8-lines reach; the not-a-closing-line words; the installed candidates read apart from the wide ones; plus the prototype's guards PD now carries: corroboration of a single value, the own-reading filter, the worded field's occurrence words, the head reach, and rule (a) taking only installed's date. Amended 2026-11-01: see amendment_20261101.mutants (the guards whose anchors the repair replaces are replaced by the new guards' mutants, one killing mutant each) and amendment_20261101.second_entry.mutants",
+ "guards_and_mutants": "one killing mutant per guard, each detected by tests.test_gi4_pd (SimpleTestCase, no database): the around-procedure title hold; the last-8-lines reach; the not-a-closing-line words; the installed candidates read apart from the wide ones; plus the prototype's guards PD now carries: corroboration of a single value, the own-reading filter, the worded field's occurrence words, the head reach, and rule (a) taking only installed's date. Amended 2026-11-01: see amendment_20261101.mutants (the guards whose anchors the repair replaces are replaced by the new guards' mutants, one killing mutant each) and amendment_20261101.second_entry.mutants and .third_entry.mutants",
  "deviations_from_the_prototype": [
   "wide and worded candidates are read beside the installed candidates (_pd_wide_candidates) and appended after the installed post-processing, so _installed_service_date_fact reads exactly the installed candidates",
   "_head_end counts lines with sections.head_lines_end (one pass, no backtracking on a long blank line)",
@@ -149,6 +150,15 @@
    "cues_added": ["context._PD_NAME_BACK", "context._PD_NAME_BEFORE", "context._PD_NAME_SUFFIX", "context._PD_NOT_NAME"],
    "expected": "against the first entry (its uncommitted code, the H2 corpus, measured with a scratch model of this rule): of its 1,075 narrowing texts about 979 still narrow - the 4 regression texts h4-01, h4-02, h4-04 and h4-06 among them, each signed by the performer its head names - and about 96 generated procedure reports whose head names no performer become quote-only (every answer taken, as installed); nothing else moves. Against installed and b840ae756: inside the first entry's declared bounds (NEW-SEND 0 and NEW-TAKE 0 against installed; NEW-HELD lower; TAKEN->HELD 0 against b840ae756; SEND->ASK and requests unchanged). H1 as the first entry declares (h4-01, h4-02, h4-04, h4-06 narrowed exactly as on b840ae756; h4-03 quote-only with its four recorded HARD failures); H4 EQUAL; H3 no MUST or SHOULD regression against installed (date cells only fall back to installed's)",
    "mutants": "pd-attest-performer is replaced by pd-signoff-names-performer (every sign-off verb needs the head's performer); added pd-performer-whole-name (the surname ends the signer's name), pd-performer-first-name (the first name agrees) and pd-signoff-short-line (a sign-off line is at most 240 characters); the anchors of pd-own-not-cosign, pd-not-closing-words and pd-dictated-only follow the restructured lines. PD census 31 -> 34, total 129 -> 132"
+  },
+  "third_entry": {
+   "date": "2026-11-01",
+   "written": "after the second entry's code, BEFORE this guard's code (same session, still cycle 1)",
+   "why": "binding rule (4)'s broadened detection reads the head (titles, cells, kind fields). The judge's F7 call note with a neutral title and its kind written only in the body - 'Endoscopy Unit Note / Author: Synthetic Nurse, RN / Day of procedure: 11/04/2026 / Call placed on 10/30/2026. / Signed: Synthetic Nurse, RN, 11/04/2026 07:10' - passes every other guard (the head names its author, who signs on the planned day) and narrows to the planned day, holding the call's own day",
+   "added_guard": "(4) widened, hold direction only: no narrowing when the document anywhere states a call, a phone contact or a message as an event (_PD_CALL_PHRASE: called, calling, phoned, messaged, texted, e-mailed, voicemail, 'left a (voice) message', 'phone/telephone call|encounter|visit|contact|conversation', 'call placed|made|received|returned|back', 'by|over the|on the|via (tele)phone'); a field label such as 'Phone: 555-0100' or 'Telephone:' and 'Recall' are none",
+   "cues_added": ["context._PD_CALL_PHRASE"],
+   "expected": "measured before coding with the phrase list on the second entry's 979 narrowing texts of the H2 corpus: none carries such a phrase, and no regression text does - so no measured text moves (H1, H2 counts and H4 as the second entry declares); only shapes like the one above move, from narrowing to the quote-only fact (installed's answers)",
+   "mutants": "added pd-no-call-phrase (detector tests.test_gi4_pd). PD census 34 -> 35, total 132 -> 133"
   }
  }
 }
