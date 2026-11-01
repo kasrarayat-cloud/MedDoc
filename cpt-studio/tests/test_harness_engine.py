@@ -108,7 +108,7 @@ def read(provider, codes=(), **kwargs):
 
 
 def corti(*codes):
-    """The proposal provider's selected codes: (code, quote) pairs, each quote exact in COLON-like texts."""
+    """The proposal provider's selected codes: (code, evidence span) pairs, each span exact in its text."""
     return [ProviderCode('selected', 'cpt', value, 'UNVERIFIED PROVIDER WORDING', (quote,)) for value, quote in codes]
 
 
