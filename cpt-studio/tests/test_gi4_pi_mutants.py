@@ -26,9 +26,16 @@ class MutantRegistryTests(SimpleTestCase):
 
     def test_each_is_registered_once_in_the_merged_registry(self):
         names = [m.name for m in mutants.MUTANTS]
-        self.assertEqual(len(PI_MUTANTS), 24)  # 18 declared, pi-office-visit, the Wave 1 repair's 4
+        self.assertEqual(len(PI_MUTANTS), 11)  # 18 declared, pi-office-visit, the Wave 1 repair's 4
         # (amendment_20261101_cycle1), less pi-carry-lesion-start (withdrawn with its code: amendment_20261101_cycle1_b),
-        # plus pi-carry-lesion-heading (amendment_20261101_cycle1_c) and pi-head-not-today (amendment_20261101_cycle1_d)
+        # plus pi-carry-lesion-heading (amendment_20261101_cycle1_c) and pi-head-not-today (amendment_20261101_cycle1_d):
+        # 24; then cycle 2 (amendment_20261101_cycle2) retired E1's and A1's 16 with their code and added the 3
+        # pi-reach-binding* mutants of S1's binding rule: 11
+        retired = {'pi-e1-section', 'pi-e1-occurrence', 'pi-e1-extent-word', 'pi-e1-occurrence-word',
+                   'pi-e1-routing-positive', 'pi-carry-part', 'pi-carry-part-kind', 'pi-carry-performed',
+                   'pi-carry-region', 'pi-carry-reach', 'pi-carry-paragraph', 'pi-carry-field', 'pi-carry-two-named',
+                   'pi-carry-lesion', 'pi-carry-lesion-paragraph', 'pi-carry-lesion-heading'}
+        self.assertEqual(retired & set(names), set())
         for m in PI_MUTANTS:
             self.assertEqual(names.count(m.name), 1, m.name)
             self.assertIs(mutants.BY_NAME[m.name], m)
