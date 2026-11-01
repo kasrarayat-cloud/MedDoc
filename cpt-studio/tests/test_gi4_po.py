@@ -61,18 +61,16 @@ PA_ROWS_OFFERS = {
     'PA3 agreeing second reader: a headed prior-procedures line (ERCP)': {
         'own': [['gi.ercp', '', 'no_proposal', True]], 'empty': [['gi.ercp', '', 'no_proposal', True]]},
 }
-# UNDECLARED: two offer-battery cells the integrated tree moves where NO declaration names the movement (po.json pins
-# them otherwise; pa.json and pv1.json never ran this battery). Recorded by the Wave 1 integration, not declared away:
-# po.json is unchanged and stays the expectation for every other cell, and these two are pinned at the measured value,
-# with PO's declared value checked to differ, until a declaration or a ruling settles them.
-#   S3h, own answer: PA's declared hold of 43259 (pa.json: excluded -> selected/needs_clarification) gives the EUS family
-#     a held proposal, so the 'no_proposal' item PO declared its offer on no longer exists (PA alone measures the same).
-#   telephone-only time, empty answer: PV1's C4 hold (pv1.json: telephone wording holds every E/M reading) no longer
+# U1 and U2: two offer-battery cells the integrated tree moves where offer_battery.rows says otherwise (pa.json and
+# pv1.json never ran this battery). The Wave 1 integration measured them and pinned them here as UNDECLARED; the cycle-2
+# integration declared them with their measured rows (po.json integration_20261101_cycle2, px_b), which these tests read.
+# offer_battery.rows stays the expectation for every other cell, and PO's own value is still checked to differ here.
+#   U1, S3h, own answer: PA's declared hold of 43259 (pa.json: excluded -> selected/needs_clarification) gives the EUS
+#     family a held proposal, so the 'no_proposal' item PO declared its offer on no longer exists (PA alone the same).
+#   U2, telephone-only time, empty answer: PV1's C4 hold (pv1.json: telephone wording holds every E/M reading) no longer
 #     reads the visit as performed, so installed's offered 'no_proposal' office-visit item is gone (PV1 alone the same).
-UNDECLARED_OFFERS = {
-    ('S3h h4-05 counterfactual, EUS code citing the narrative', 'own'): [],
-    ('telephone-only time', 'empty'): [],
-}
+INTEGRATION_OFFERS = {(c['row'], c['answer']): c['integrated']
+                      for c in DECLARED['integration_20261101_cycle2']['px_b']['cells']}
 H402, H405 = DOCS['h4-02']['text'], DOCS['h4-05']['text']
 B = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
 FILL = ''.join(f'Line {i} of the outside summary lists medications and allergies in detail.\n' for i in range(8))
@@ -280,6 +278,8 @@ class OfferBatteryTests(SimpleTestCase):
 
     def test_every_row_offers_as_declared(self):
         rows = DECLARED['offer_battery']['rows']
+        self.assertEqual(sorted(INTEGRATION_OFFERS), [('S3h h4-05 counterfactual, EUS code citing the narrative', 'own'),
+                                                      ('telephone-only time', 'empty')])  # U1 and U2, nothing else
         self.assertEqual(sorted(set(battery.CASES) - set(rows)), sorted(PA_ROWS_OFFERS))  # PA's rows only
         self.assertEqual(sorted(set(rows) - set(battery.CASES)), [])
         for name, (text, codes) in battery.CASES.items():
@@ -288,8 +288,8 @@ class OfferBatteryTests(SimpleTestCase):
                 with self.subTest(name, answer=answer):
                     if name in PA_ROWS_OFFERS:
                         self.assertEqual(got[answer], PA_ROWS_OFFERS[name][answer])
-                    elif (name, answer) in UNDECLARED_OFFERS:
-                        self.assertEqual(got[answer], UNDECLARED_OFFERS[(name, answer)])
+                    elif (name, answer) in INTEGRATION_OFFERS:
+                        self.assertEqual(got[answer], INTEGRATION_OFFERS[(name, answer)])
                         self.assertNotEqual(got[answer], declared(rows[name][answer]))  # still unlike PO's declaration
                     else:
                         self.assertEqual(got[answer], declared(rows[name][answer]))

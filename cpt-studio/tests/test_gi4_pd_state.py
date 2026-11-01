@@ -10,12 +10,14 @@ counts every send).
   it: the primary request is now dateless (the cost of the ask: one dateless request), 2026-10-19 is held and sends
   nothing, 2026-10-18 sends one dated request, byte-identical to the one installed sent, and a re-save sends nothing.
 - the Wave 1 repair (PD, cycle 1), CTS-6: the live consequence the install declaration records (pd.json
-  amendment_20261101, cts6_recorded_consequence), pinned here as recorded behaviour - jobs.py is not changed. An
-  encounter whose stages ran under the installed reading (patched in) is re-extracted with this reader at a member's
-  context save of ANY field: (i) a rule (a) document sends ONE new dateless primary request and the approval whose status
-  moves is invalidated; answering the installed date sends nothing new and returns READY, but the approval stays
-  invalidated; re-saving that date first sends nothing and carries the decision; (ii) a rule (c) narrowing document
-  holds a member date of another day entered before the install: nothing is sent.
+  amendment_20261101, cts6_recorded_consequence; reproduced at the cycle-2 integration against installed and recorded
+  as a known limit, pd.json integration_20261101_cycle2), pinned here as recorded behaviour. An encounter whose stages
+  ran under the installed reading and labels (gi-context@3, patched in) is re-extracted with this reader at a member's
+  context save of ANY field, its new context labelled gi-context@4 (jobs.CONTEXT_VERSION): (i) a rule (a) document
+  sends ONE new dateless primary request and the approval whose status moves is invalidated; answering the installed
+  date sends nothing new and returns READY, but the approval stays invalidated; re-saving that date first sends
+  nothing and carries the decision; (ii) a rule (c) narrowing document holds a member date of another day entered
+  before the install: nothing is sent.
 Every document is synthetic.
 """
 import datetime as dt
@@ -112,6 +114,8 @@ class WideDateStateTests(TestCase):
         self.assertFalse(models.Job.objects.filter(encounter_id=encounter_id, kind=models.Job.REVIEW2).exists())
 
 
+# installed 80df1831d168's context labels: every stage of an encounter recorded before the install ran under them
+INSTALLED_LABELS = {'CONTEXT_VERSION': 'gi-context@3', 'EARLIER_CONTEXT_VERSIONS': ('gi-context@1', 'gi-context@2')}
 # CTS-6's document (the refuter's PD-06 colonoscopy report): installed sends 2026-10-19; this reader asks it (rule (a))
 RULE_A = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy Report\n'
           'Date of service: 10/19/2026\nDate seen: 10/12/2026 in clinic; procedure today\nEndoscopist: Synthetic MD\n'
@@ -162,7 +166,8 @@ def installed_reading(text, service_date):
 @override_settings(**LIVE)
 class RecordedInstallConsequenceTests(TestCase):
     """CTS-6: what an encounter recorded before the install meets at its first context save after it (recorded for the
-    install declaration; jobs.py unchanged)."""
+    install declaration). Before the install every stage runs under installed 80df1831d168's labels (INSTALLED_LABELS:
+    its context is gi-context@3, now an earlier version) as well as its reading."""
 
     def setUp(self):
         self.ws = f.workspace()
@@ -179,8 +184,10 @@ class RecordedInstallConsequenceTests(TestCase):
             response = self.client.post('/api/encounters', {'text': text, 'synthetic_attestation': 'yes'})
         self.assertEqual(response.status_code, 201, response.content)
         encounter_id = response.json()['id']
-        with mock.patch('studio.gi.context.extract_context', return_value=installed_reading(text, installed_date)):
-            self.drain()  # extract, analyze, predict and assess under the installed reading
+        with mock.patch.multiple(jobs, **INSTALLED_LABELS), \
+                mock.patch('studio.gi.context.extract_context', return_value=installed_reading(text, installed_date)):
+            self.drain()  # extract, analyze, predict and assess under the installed reading and labels
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).current_context.version, 'gi-context@3')
         return encounter_id
 
     def post(self, path, data):
@@ -217,7 +224,8 @@ class RecordedInstallConsequenceTests(TestCase):
         invalidation = models.DecisionInvalidation.objects.get(decision=approved)
         self.assertIn('service date: 2026-10-19 \u2192 asked', invalidation.reason)
         context = models.Encounter.objects.get(pk=encounter_id).current_context
-        self.assertEqual((context.facts['service_date']['origin'], context.version), ('conflict', 'gi-context@3'))
+        self.assertEqual((context.facts['service_date']['origin'], context.version), ('conflict', jobs.CONTEXT_VERSION))
+        self.assertEqual(jobs.CONTEXT_VERSION, 'gi-context@4')  # the save read it under this revision's rules and label
         self.post(f'/api/encounters/{encounter_id}/context', {'service_date': '2026-10-19'})
         self.drain()
         self.assertEqual(self.provider.sent, [dated, dateless])  # the retained dated run is reused: nothing new
@@ -236,7 +244,8 @@ class RecordedInstallConsequenceTests(TestCase):
 
     def test_a_narrowed_document_holds_a_member_date_of_another_day(self):  # CTS-6 (ii)
         encounter_id = self.start(NARROWED, None)
-        with mock.patch('studio.gi.context.extract_context', return_value=installed_reading(NARROWED, None)):
+        with mock.patch.multiple(jobs, **INSTALLED_LABELS), \
+                mock.patch('studio.gi.context.extract_context', return_value=installed_reading(NARROWED, None)):
             self.post(f'/api/encounters/{encounter_id}/context', {'service_date': '2026-10-30'})
             self.drain()  # before the install: installed takes the member's 2026-10-30 and sends it
         sent = list(self.provider.sent)
