@@ -37,11 +37,15 @@ class MutantRegistryTests(SimpleTestCase):
         names = [m.name for m in mutants.MUTANTS]
         census = {p: [n for n in names if n.startswith(prefixes)] for p, prefixes in mutants.PACKAGE_PREFIXES.items()}
         self.assertEqual({p: len(v) for p, v in census.items()},
-                         {'PS': 7, 'PA': 13, 'PD': 11, 'PV1': 17, 'PE': 10, 'PI': 19, 'PO': 21})
+                         {'PS': 7, 'PA': 13, 'PD': 35, 'PV1': 17, 'PE': 10, 'PI': 19, 'PO': 21})
         stage_a = [n for n in names if n.startswith(mutants.STAGE_A_PREFIXES)]
         self.assertEqual(len(stage_a), 11)
         self.assertEqual(sorted(sum(census.values(), []) + stage_a), sorted(names))  # every name in one place only
-        self.assertEqual(len(names), 109)
+        # the Wave 1 repair (PD, cycle 1): PD's 11 became 35 - six kept, three re-anchored on the repaired code
+        # (pd-closing-last-lines, pd-not-closing-words, pd-wide-never-own), two retired with the code they guarded
+        # (pd-around-title, pd-corroboration), and 26 new: one killing mutant per new guard (pd.json
+        # amendment_20261101 and its second and third entries)
+        self.assertEqual(len(names), 133)
         for package, slice_ in (('PD', mutants.PD_MUTANTS), ('PV1', mutants.PV1_MUTANTS), ('PE', mutants.PE_MUTANTS),
                                 ('PI', mutants.PI_MUTANTS), ('PO', mutants.PO_MUTANTS)):
             self.assertEqual([m.name for m in slice_], census[package], package)
