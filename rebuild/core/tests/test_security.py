@@ -26,6 +26,18 @@ from core.models import Encounter, Department, Job, LedgerEntry, Membership, Org
 from core.security import private_path
 
 
+def synthetic_pdf(label):
+    """A one-page flat PDF naming the scope, byte-reproducible."""
+    from io import BytesIO
+    from reportlab.pdfgen import canvas
+    buffer = BytesIO()
+    document = canvas.Canvas(buffer, invariant=1)
+    document.drawString(30, 780, f"synthetic {label} original")
+    document.showPage()
+    document.save()
+    return buffer.getvalue()
+
+
 class SyntheticFixture:
     def make_scope(self, label="xray", organization=None, original_bytes=None):
         user = User.objects.create_user(username=label, email=f"{label}@synthetic.invalid", verified_at=timezone.now())
@@ -33,7 +45,9 @@ class SyntheticFixture:
         department = Department.objects.create(organization=org, name=label)
         Membership.objects.create(user=user, department=department, role="clinician")
         patient = Patient.objects.create(department=department, display_name=f"SYNTHETIC {label}", reference=label, created_by=user)
-        blob = f"synthetic {label} original".encode() if original_bytes is None else original_bytes
+        # A real, clean PDF: a PDF original is checked for active content before it is served
+        # (finding P1), and opaque bytes recorded as a PDF are refused there, correctly.
+        blob = synthetic_pdf(label) if original_bytes is None else original_bytes
         # Opaque bytes exercise authorization/accounting, not Word preparation.
         # Keep this single-call legacy protocol fixture outside semantic Word admission.
         kind = 'docx' if original_bytes is not None else 'pdf'

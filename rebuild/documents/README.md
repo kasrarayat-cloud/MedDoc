@@ -103,8 +103,23 @@ explicit processing limits, never silent truncation.
 
 DOCX validation rejects path traversal, duplicate ZIP entries, symlinks, encrypted
 ZIP parts, excessive expansion, DTD/entities, macros, active/embedded content
-and external relationships. PDF object validation rejects encrypted documents,
-actions/JavaScript, XFA, attachments, external resources and active annotations.
+and external relationships. PDF validation rejects encrypted documents,
+actions/JavaScript, XFA, attachments, external resources and active annotations
+in two independent layers: `pdf_raw.py` scans the file's exact bytes without any
+PDF parser (every revision, every dictionary, hidden objects and every decoded
+object stream; anything it cannot read completely is refused as `unreadable_pdf`),
+then pypdf reads the same bytes and its walk, a single-catalog rule and its own
+recovery reports form the second layer. Both run on upload, on every fill, and
+before a stored PDF original is downloaded (`check_original`) — also before a
+stored PDF EXPORT is downloaded, on the export's form original, never on the export
+itself (it holds the doctor's words and may be up to 30 MiB). A worker failure of
+`check_original` (`parser_timeout`, `parser_failed`, `sandbox_unavailable`, the last
+also when the worker cannot even be started) is not a verdict about the file;
+callers say "try again" and keep the doctor's input (`core.template_source`). The
+QuillMD worker runs the same check on an encounter's PDF form immediately before
+every provider call for it, and fails that job unsent when the form is refused or
+the check could not run. See
+`docs/rebuild/security-readiness.md` for what this does and does not guarantee.
 The parser is not a substitute for future antivirus/CDR or an independent security
 assessment. Synthetic tests prove actual kernel denials for file reads, network
 sockets and process creation.

@@ -530,6 +530,14 @@ def run(job):
     from .jobs import settle_semantic_stages
     from .billing import release
     try:
+        # ⚠️ P1 round 4: the PDF form guard, before anything on this provider path (a no-op for the Word
+        # forms semantic definitions exist for today). A refusal, or a check that could not run, fails the
+        # job below with no stage sent, nothing charged and the hold released.
+        from .template_source import provider_refusal
+        refusal=provider_refusal(job.encounter.template_version.template)
+        if refusal:
+            from .generation_errors import NoProviderRequest
+            raise NoProviderRequest(refusal)
         proposal,definitions=_bound_proposal(job)
         check=ai_stages.execute_stage(job=job,stage=STAGE,attempt=1,payload=proposal['payload'],
             schema=proposal['schema'],instructions=proposal['instructions'],config=job.config)

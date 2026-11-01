@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from collections import Counter
+from contextlib import contextmanager
 from datetime import datetime
+import io
 import json
-from pathlib import PurePosixPath
+import logging
+from pathlib import Path, PurePosixPath
 import re
 import stat
 from urllib.parse import unquote
@@ -19,10 +22,14 @@ from pypdf import PdfReader, PdfWriter
 from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject
 from reportlab.pdfbase.pdfmetrics import stringWidth
 
+# ⚠️ pdf_raw MUST be imported here, at import time: the worker imports this module BEFORE it
+# applies Landlock, and after that nothing in the application tree is readable.
 if __package__:
     from .tab_form import inspect_tabs, fill_tabs, _answer_tab, WARNINGS as TAB_WARNINGS
+    from . import pdf_raw
 else:  # Isolated worker imports this module directly.
     from tab_form import inspect_tabs, fill_tabs, _answer_tab, WARNINGS as TAB_WARNINGS
+    import pdf_raw
 
 MAX_FIELDS = 200
 MAX_ANSWER = 100_000
@@ -452,9 +459,143 @@ def replace_span(paragraph, start, end, answer):
         fail("The placeholder spans unsupported Word content.", "unsupported_structure")
 
 
+#: Annotation subtypes that play, embed or launch something. Shared by inspection and the download
+#: check; pdf_raw.ACTIVE_ANNOTATIONS is the same set without slashes.
+ACTIVE_ANNOTATIONS = frozenset(("/FileAttachment", "/RichMedia", "/Movie", "/Sound", "/Screen", "/3D"))
+
+#: The templates of pypdf's log records (logger_warning) that report a recovery which DROPS or
+#: REPLACES part of the file's declared structure. Read from the source of pypdf 6.21.1, 6.21.2 and
+#: 6.21.4; the same templates in all three except where marked. strict=True does not stop any of
+#: these, and pypdf resolves objects lazily, so they can fire during the walk, page flattening,
+#: field reading and PdfWriter.append — the guard covers the whole operation.
+#: ⚠️ This is the SECOND layer. A template list only ever matches what pypdf said in the versions
+#: it was read from; pdf_raw is what refuses an unknown recovery's hidden content.
+PYPDF_STRUCTURE_RECOVERIES = frozenset((
+    "Previous trailer cannot be read: %(args)s",                              # xref section in the /Prev chain dropped
+    "XRef object at %(xref_stm)d can not be read, some object may be missing",  # hybrid /XRefStm dropped
+    "Object ID %(idnum)d,%(generation)d ref repaired",                        # xref offset wrong: first regex match used
+    "Object %(idnum)d %(generation)d found",                                  # not in the xref: first regex match used
+    "Object %(idnum)d %(generation)d not defined.",                           # referenced, found nowhere
+    "entry %(num)d in Xref table invalid but object found",                   # invalid entry: first match used
+    "entry %(num)d in Xref table invalid; object not found",                  # invalid entry: object dropped
+    "Invalid/Truncated xref table. Rebuilding it.",                           # table replaced by a rebuild
+    "parsing for Object Streams",                                             # (inside that rebuild)
+    "found %(actual_count)d objects within Object(%(object_number)d,%(generation_number)d) whereas %(expected)d expected",
+    'Cannot find "/Root" key in trailer',                                     # catalog recovery
+    "Invalid Root object in trailer",
+    'Searching object with "/Catalog" key',
+    "Root found at %(obj_reference)r",
+    "Possible root found at %(root_ref)r, but missing /Catalog key",
+    "CAUTION: startxref found while searching for %%EOF. The file might be truncated and some data "
+    "might not be read.",                                                     # a revision after the last %%EOF dropped
+    # Logged only with strict=False, which the engine never uses, or just before a strict-mode
+    # exception that refuses the file anyway; kept so that a change of mode, or of pypdf's own
+    # strictness, cannot open them silently.
+    "Invalid parent xref., rebuild xref",
+    "found startxref pointing to a previous revision after a corrupt one",
+    "incorrect startxref pointer(%(xref_issue_nr)d)",
+    "Ignoring wrong pointing object %(id)d %(gen)d (offset %(offset)d)",
+    "Value /N %(n)d for object %(stmnum)d exceeds maximum allowed value %(max_n)d. Limiting to %(max_n)d.",
+    "Clamping XRef count from %(old_count)d to %(new_count)d to fit stream size.",
+    "Cross-reference stream encodes no entry data.",
+    "Invalid stream (index %(index)d) within object %(obj_num)d 0: %(exc)s",
+    # 6.21.2 and 6.21.4 only (6.21.1 raises or reads these differently):
+    "Invalid /N (%(n)d) or /First (%(first)d) in object stream %(stmnum)d; ignoring the stream.",
+    "Invalid object number (%(objnum)d) or offset (%(offset)d) in object stream %(stmnum)d; skipping the entry.",
+    # 6.21.4 only:
+    "Negative XRef count %(count)d, using 0.",
+))
+
+#: Test switch, never turned off in production: True lets tests prove that pdf_raw ALONE refuses
+#: every hidden-content fixture, with this second layer silent.
+PYPDF_RECOVERY_GUARD = True
+
+
+class _PypdfRecoveries(logging.Handler):
+    """Collects the templates of pypdf's warnings while one document is read and written."""
+
+    def __init__(self):
+        super().__init__(logging.WARNING)
+        self.templates = []
+
+    def emit(self, record):
+        self.templates.append(record.msg if isinstance(record.msg, str) else str(record.msg))
+
+
+@contextmanager
+def _pypdf_recoveries():
+    """⚠️ Nothing configures logging in the worker, so pypdf's warnings used to fall through to
+    logging.lastResort, i.e. to stderr, which the parent captures and discards. That log was the
+    only place pypdf said it had dropped a section."""
+    logger = logging.getLogger("pypdf")
+    handler = _PypdfRecoveries()
+    level = logger.level
+    logger.addHandler(handler)
+    if logger.getEffectiveLevel() > logging.WARNING:
+        logger.setLevel(logging.WARNING)
+    try:
+        yield handler
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(level)
+
+
+def _refuse_recoveries(recoveries):
+    if PYPDF_RECOVERY_GUARD and recoveries is not None and any(
+            template in PYPDF_STRUCTURE_RECOVERIES for template in recoveries.templates):
+        _refuse_unreadable()
+
+
+def _refuse_unreadable():
+    fail("This PDF could not be read completely, so it cannot be checked for active content. Save it as "
+         "a new PDF and upload it again.", "unreadable_pdf")
+
+
+def _refuse_active():
+    # One sentence for every PDF action refusal: the upload page's hint is keyed on its wording.
+    fail("PDF actions, attachments, XFA, and external resources are not accepted.", "unsafe_upload")
+
+
+def _refuse_active_annotation():
+    fail("Active PDF annotations are not accepted.", "unsafe_upload")
+
+
+def _refuse_encrypted():
+    fail("Encrypted PDFs are not accepted.", "unsafe_upload")
+
+
+def _open_pdf(path):
+    """The raw scan of the exact bytes, then pypdf reading those same bytes (never the path again).
+
+    ⚠️ The raw scan is the guarantee (pdf_raw's docstring says why); everything after it is the
+    second layer. Reading the bytes once means the writer in a fill appends exactly what was
+    scanned: pypdf itself reads a path into a BytesIO, so the parse is unchanged.
+    """
+    data = Path(path).read_bytes()
+    try:
+        pdf_raw.scan(data)
+        kind = None
+    except pdf_raw.Refusal as refusal:
+        kind = refusal.kind
+    if kind == "active":
+        _refuse_active()
+    if kind == "annotation":
+        _refuse_active_annotation()
+    if kind == "encrypted":
+        _refuse_encrypted()
+    if kind is not None:
+        _refuse_unreadable()
+    return PdfReader(io.BytesIO(data), strict=True)
+
+
 def _scan_pdf(reader):
+    # ⚠️ ONE CATALOG. reader.root_object, which pages, fields and PdfWriter.append read, silently
+    # searches for another /Type /Catalog object when the trailer's /Root is not one, while the
+    # walk below starts from the trailer: the export could then carry annotations nobody checked.
+    if "/Root" not in reader.trailer or reader.root_object is not reader.trailer["/Root"]:
+        _refuse_unreadable()
     if reader.is_encrypted:
-        fail("Encrypted PDFs are not accepted.", "unsafe_upload")
+        _refuse_encrypted()
     if len(reader.pages) > 100:
         fail("PDF templates are limited to 100 pages.", "upload_limit")
     forbidden = {"/JavaScript", "/JS", "/OpenAction", "/AA", "/A", "/EmbeddedFiles", "/EmbeddedFile", "/EF", "/Launch", "/RichMediaContent", "/XFA", "/URI", "/SubmitForm", "/ImportData"}
@@ -474,7 +615,7 @@ def _scan_pdf(reader):
             fail("The PDF object graph is too large.", "upload_limit")
         if isinstance(obj, DictionaryObject):
             if forbidden.intersection(obj.keys()) or str(obj.get("/Type", "")) == "/EmbeddedFile":
-                fail("PDF actions, attachments, XFA, and external resources are not accepted.", "unsafe_upload")
+                _refuse_active()
             stack.extend(obj.values())
         elif isinstance(obj, (ArrayObject, list)):
             stack.extend(obj)
@@ -504,8 +645,20 @@ def qualified_name(widget):
     fail("The PDF field hierarchy is too deep.")
 
 
+def pdf_check(path):
+    """Safety only, for serving a stored original: every active-content rule of pdf_inspect
+    (raw scan, pypdf walk, one catalog, annotation subtypes) and none of its field rules."""
+    reader = _open_pdf(path)
+    _scan_pdf(reader)
+    for page in reader.pages:
+        for ref in page.get("/Annots", []):
+            if ref.get_object().get("/Subtype") in ACTIVE_ANNOTATIONS:
+                _refuse_active_annotation()
+    return reader
+
+
 def pdf_inspect(path):
-    reader = PdfReader(path, strict=True)
+    reader = _open_pdf(path)
     _scan_pdf(reader)
     acro = reader.trailer["/Root"].get("/AcroForm")
     if acro is None:
@@ -520,8 +673,8 @@ def pdf_inspect(path):
             widget = ref.get_object()
             if widget.get("/Subtype") == "/Widget":
                 widgets.setdefault(qualified_name(widget), []).append((page_index, widget))
-            elif widget.get("/Subtype") in {"/FileAttachment", "/RichMedia", "/Movie", "/Sound", "/Screen", "/3D"}:
-                fail("Active PDF annotations are not accepted.", "unsafe_upload")
+            elif widget.get("/Subtype") in ACTIVE_ANNOTATIONS:
+                _refuse_active_annotation()
     fields = []
     for key, value in raw_fields.items():
         if value.get("/FT") is None and value.get("/Kids"):
@@ -804,9 +957,21 @@ def display_labels(document, fields):
 
 
 def process(workspace, request):
+    if request["format"] == "pdf":
+        # pypdf's recoveries are judged after reading AND after writing: it resolves lazily.
+        with _pypdf_recoveries() as recoveries:
+            result = _process(workspace, request, recoveries)
+            _refuse_recoveries(recoveries)
+            return result
+    return _process(workspace, request, None)
+
+
+def _process(workspace, request, recoveries):
     fmt = request["format"]
     path = workspace / ("input." + fmt)
     warnings = []
+    if request["operation"] == "check" and fmt != "pdf":
+        fail("Unsupported operation.")      # stored DOCX originals are served without re-inspection
     if fmt == "docx":
         stored = request.get("mapping") if request.get("operation") == "fill" else None
         try:
@@ -834,7 +999,13 @@ def process(workspace, request):
         # would otherwise discover only by reading the exported form and finding it blank.
         warnings = notes + warnings
     elif fmt == "pdf":
+        if request["operation"] == "check":
+            pdf_check(path)
+            _refuse_recoveries(recoveries)
+            return {"format": "pdf", "checked": True, "adapter": "pypdf", "sandbox": "landlock+seccomp"}
         reader, fields = pdf_inspect(path)
+        # Before anything is filled or written from this reader.
+        _refuse_recoveries(recoveries)
         warnings = ["PDF text fields only. Answers must fit visibly; overflow is rejected."]
     else:
         fail("Unsupported document format.")

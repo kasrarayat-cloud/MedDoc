@@ -173,8 +173,21 @@ class AuthorizationAndPayerRefutation(TestCase):
         from core.jobs import run_one
         reserve(self.job, Decimal("0.2"))
         result = ({}, Decimal("0.125"), {"input_tokens": 100}, {"input_per_million": "1250"}, "synthetic-provider", "known_file_write_failure", False)
-        with patch("core.jobs.generation.generate", return_value=result), patch("pathlib.Path.open", side_effect=OSError("synthetic receipt storage full")):
+        real_open = Path.open
+
+        def storage_full(path, mode="r", *args, **kwargs):
+            # A full disk fails WRITES; reads still work. Since P1 round 4 the worker reads before the provider call (its
+            # PDF form guard reads the stored original, absent here, so the guard passes it). Failing every open, as this
+            # test once did, stops the job at that guard with no provider call, and the cost below is never observed.
+            if any(flag in mode for flag in "wxa+"):
+                raise OSError("synthetic receipt storage full")
+            return real_open(path, mode, *args, **kwargs)
+
+        with patch("core.jobs.generation.generate", return_value=result) as provider, patch("pathlib.Path.open", storage_full):
             run_one()
+        self.assertEqual(provider.call_count, 1)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.result_path, "", "the injected write failure must have stopped the result file")
         receipt = ProviderReceipt.objects.filter(job=self.job).first()
         self.assertIsNotNone(receipt, "Known provider cost must survive failure to store clinical result bytes")
         self.assertEqual(receipt.actual_cost, Decimal("0.125"))
