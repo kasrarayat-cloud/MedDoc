@@ -40,6 +40,35 @@ class Mutant:
 
 
 MUTANTS = (
+    # --- package PS: the shared helpers (killed by their own unit tests) ---
+    Mutant('ps-head-lines-blank', 'head_lines_end skips whitespace-only lines', 'studio/gi/sections.py',
+           '        if _NON_BLANK.search(text, start, end):\n            count, found = count + 1, end',
+           '        if True:\n            count, found = count + 1, end',
+           'unit:tests.test_gi4_sections'),
+    Mutant('ps-procedure-head-reach', 'procedure_report_head reads the head only', 'studio/gi/sections.py',
+           '    return end > 0 and PROCEDURE_HEAD.search(text, 0, end) is not None',
+           '    return PROCEDURE_HEAD.search(text) is not None', 'unit:tests.test_gi4_sections'),
+    Mutant('ps-around-title-field', 'around_procedure_title: a field is no title', 'studio/gi/sections.py',
+           '                    and not _TITLE_FIELD.search(line) and AROUND_PROCEDURE_WORDS.search(line):',
+           '                    and AROUND_PROCEDURE_WORDS.search(line):', 'unit:tests.test_gi4_sections'),
+    Mutant('ps-around-title-sentence', 'around_procedure_title: a sentence is no title', 'studio/gi/sections.py',
+           "            if line and len(line) <= AROUND_PROCEDURE_TITLE_CHARS and line[-1] not in '.!?;,' \\",
+           '            if line and len(line) <= AROUND_PROCEDURE_TITLE_CHARS \\', 'unit:tests.test_gi4_sections'),
+    Mutant('ps-under-occurrence-head', 'under_another_occurrence reads the heading-like line above',
+           'studio/gi/sections.py',
+           '            return bool(ANOTHER_OCCURRENCE_HEAD.search(line))\n        end = start - 1\n    return False\n\n\n'
+           'HEADING_REACH_LINES',
+           '            return False\n        end = start - 1\n    return False\n\n\nHEADING_REACH_LINES',
+           'unit:tests.test_gi4_sections'),
+    Mutant('ps-beyond-reach-fail-closed', 'beyond_heading_reach fails closed past its reach', 'studio/gi/sections.py',
+           '    if pos - lo > HEADING_REACH_CHARS:\n        return True',
+           '    if pos - lo > HEADING_REACH_CHARS:\n        return False', 'unit:tests.test_gi4_sections'),
+    Mutant('ps-beyond-reach-heading-like', 'beyond_heading_reach finds an unread heading-like line',
+           'studio/gi/sections.py',
+           "                and all(w[:1].isupper() for w in _HEADING_WORD.findall(line) if len(w) >= 4):\n"
+           "            return True",
+           "                and all(w[:1].isupper() for w in _HEADING_WORD.findall(line) if len(w) >= 4):\n"
+           "            return False", 'unit:tests.test_gi4_sections'),
     # --- H1's three planted controls (the replay must differ on each) ---
     Mutant('ctl-date-charge-answer', "the charge-block question takes only the installed reading's date",
            'studio/gi/context.py', "if value == own else", "if True else", 'replay'),

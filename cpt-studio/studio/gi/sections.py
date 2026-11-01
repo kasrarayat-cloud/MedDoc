@@ -1222,3 +1222,147 @@ def _segments(text: str, cuts: list[int]) -> list[tuple[int, int]]:
         if span:
             out.append(span)
     return out
+
+
+# --- GI round 4, package PS: shared helpers for the later packages ---------------------------------------------------
+# New functions only. Nothing in this module, in the date reader (context.py), in routing or in the inventory calls them
+# yet, so every layout and every date fact is unchanged (GI round 4 harness, H2(a)). Each one only ever HOLDS: a caller
+# reads True as a reason not to release (a wide date label, an instrument's reach, an exclusion's agreement), never as a
+# reason to read something as today's. Every one does bounded work per call: a fixed number of lines and characters.
+
+_NON_BLANK = re.compile(r'\S')
+
+
+def head_lines_end(text: str, lines: int = 12) -> int:
+    """The end of the first ``lines`` non-empty lines of ``text`` (a document's head): the end of the last such line
+    read, or of the last non-empty line when the text has fewer; 0 when it has none. A whitespace-only line is not
+    counted. One pass over the lines it reads."""
+    count, start, found, size = 0, 0, 0, len(text)
+    while count < lines and start <= size:
+        nl = text.find('\n', start)
+        end = size if nl < 0 else nl
+        if _NON_BLANK.search(text, start, end):
+            count, found = count + 1, end
+        if nl < 0:
+            break
+        start = nl + 1
+    return found
+
+
+PROCEDURE_HEAD_LINES = 12  # the head lines read for a procedure report's own fields
+# A procedure report's own head field (the GI round 4 judge's guard 1, F4): a line naming sedation or anesthesia, or a
+# field naming who performed the procedure. A line that only says "Attending" in a sentence is no field.
+PROCEDURE_HEAD = re.compile(
+    r'^[ \t]*+(?:(?:proceduralist|endoscopist|operator|performing[ \t]++(?:physician|endoscopist)|gastroenterologist'
+    r'|colonoscopist|attending(?:[ \t]++physician)?+)[ \t]*+:'
+    r'|[^\n]*?\b(?:sedation|anesthesia|anaesthesia|propofol|CRNA|midazolam)\b)', re.A | re.I | re.M)
+
+
+def procedure_report_head(text: str, lines: int = PROCEDURE_HEAD_LINES) -> bool:
+    """Whether the document's head (its first ``lines`` non-empty lines) carries a procedure report's own fields: a
+    sedation or anesthesia line (sedation, anesthesia, propofol, CRNA, midazolam), or a field naming who performed it
+    (proceduralist, endoscopist, operator, performing physician or endoscopist, gastroenterologist, colonoscopist,
+    attending). Positive evidence that the document is the procedure's own report (GI round 4, F4: a records review, a
+    pasted outside report and an education handout have none): a release that requires it fails closed without it."""
+    end = head_lines_end(text, lines)
+    return end > 0 and PROCEDURE_HEAD.search(text, 0, end) is not None
+
+
+AROUND_PROCEDURE_TITLE_LINES = 6  # the head lines read for a title
+AROUND_PROCEDURE_TITLE_CHARS = 80  # a longer line is no title
+# The words of a title of a note written around a procedure, not of its report (GI round 4, PS; a closed list, read only
+# to hold): booking, scheduling, pre-procedure or pre-op, telephone, phone, call, instructions, consent, education,
+# handout, correspondence, letter, records review.
+AROUND_PROCEDURE_WORDS = re.compile(
+    r'\b(?:booking|scheduling|pre-?procedure|pre-?op(?:erative)?|telephone|phone|call|instructions?|consent|education'
+    r'|handout|correspondence|letter|records?[ \t]++review)\b', re.A | re.I)
+_TITLE_FIELD = re.compile(r':[ \t]*+\S')  # a colon with a value after it: a field, never a title
+
+
+def around_procedure_title(text: str, lines: int = AROUND_PROCEDURE_TITLE_LINES) -> bool:
+    """Whether one of the document's first ``lines`` non-empty lines is the title of a note written AROUND a procedure
+    rather than the procedure's own report: a booking or scheduling note, a pre-procedure or pre-op note, a telephone
+    or phone call, instructions, a consent, education or a handout, correspondence or a letter, a records review
+    ("Pre-procedure telephone call", "Endoscopy booking", "Patient Education Handout", "GI Records Review"). A title is
+    a stand-alone line of at most AROUND_PROCEDURE_TITLE_CHARS characters with no sentence end and no field value of its
+    own ("Phone: 555-0100" is a field, "Call placed on 10/30." a sentence). Hold-only (GI round 4, F7 and J1-J3): True
+    is a reason not to read a wide date label or an instrument's reach; False says nothing about the document."""
+    end = head_lines_end(text, lines)
+    start = 0
+    while start < end:
+        nl = text.find('\n', start, end)
+        line_end = end if nl < 0 else nl
+        if line_end - start <= 4 * AROUND_PROCEDURE_TITLE_CHARS:  # a long line is never read for a title
+            line = text[start:line_end].strip().lstrip('#*_>').rstrip('#*_').strip()  # without its markup
+            if line and len(line) <= AROUND_PROCEDURE_TITLE_CHARS and line[-1] not in '.!?;,' \
+                    and not _TITLE_FIELD.search(line) and AROUND_PROCEDURE_WORDS.search(line):
+                return True
+        if nl < 0:
+            break
+        start = nl + 1
+    return False
+
+
+# A heading-like line naming another occurrence's record ("Outside records reviewed", "Index Examination", "Prior
+# report"; the minimal design's ANOTHER_OCCURRENCE_HEAD, GI round 4). Read only to HOLD: a reach or an endpoint under such
+# a line documents nothing of today.
+ANOTHER_OCCURRENCE_HEAD = re.compile(r'\b(?:outside|prior|previous(?:ly)?|earlier|index|last|old|history|historical|'
+                                     r'records?|copied|copy|pasted|referral|referring)\b', re.A | re.I)
+OCCURRENCE_HEAD_LINES = 6  # lines read back for such a line (bounded work per position)
+OCCURRENCE_HEAD_REACH = 600  # characters read back in all (a long line is read only near the position)
+
+
+def under_another_occurrence(text: str, pos: int, lo: int = 0) -> bool:
+    """Whether the text before ``pos`` on its own line, or the nearest heading-like line above it (a short line with no
+    sentence end, at most OCCURRENCE_HEAD_LINES back, within OCCURRENCE_HEAD_REACH characters and not before ``lo``),
+    names another occurrence's record (ANOTHER_OCCURRENCE_HEAD). Hold-only."""
+    lo = max(lo, pos - OCCURRENCE_HEAD_REACH)
+    line_start = text.rfind('\n', lo, pos) + 1
+    if ANOTHER_OCCURRENCE_HEAD.search(text, max(line_start, lo), pos):
+        return True
+    end = line_start - 1
+    for _ in range(OCCURRENCE_HEAD_LINES):
+        if end <= lo:
+            return False
+        start = text.rfind('\n', lo, end) + 1
+        line = text[max(start, lo):end].strip()
+        if line and len(line) <= 60 and line[-1] not in '.;!?:' and any(c.isalpha() for c in line):
+            return bool(ANOTHER_OCCURRENCE_HEAD.search(line))
+        end = start - 1
+    return False
+
+
+HEADING_REACH_LINES = 200  # lines read back from a passage to its section's heading (bounded work per passage)
+HEADING_REACH_CHARS = 20000  # and characters: a heading further back is beyond reach (fail-closed)
+_HEADING_WORD = re.compile(r"[A-Za-z][A-Za-z'’-]*")
+
+
+def beyond_heading_reach(text: str, lay: Layout, pos: int) -> bool:
+    """Whether a heading-like line this layout does not read as a heading (a short stand-alone line with no sentence
+    end, written as a heading: "Question to Answer", "Scope Passage and Views") stands between the heading of the
+    section at ``pos`` and the line of ``pos``, so that the section's kind reaches ``pos`` only because the layout
+    reads no heading there (GI round 4, S3: a runaway history section is one cause, never two readers' agreement). Also
+    True where that heading is more than HEADING_REACH_LINES lines or HEADING_REACH_CHARS characters back
+    (fail-closed). False for text before the first heading."""
+    section = lay.section_at(pos)
+    if section.heading is None:
+        return False
+    lo = text.find('\n', section.heading.end)  # the heading's own line (its label's answer) is never such a line
+    if lo < 0 or lo >= pos:
+        return False
+    if pos - lo > HEADING_REACH_CHARS:
+        return True
+    end = text.rfind('\n', lo, pos)
+    for _ in range(HEADING_REACH_LINES):
+        if end <= lo:
+            return False
+        start = text.rfind('\n', lo, end) + 1
+        line = text[max(start, lo):end].strip()
+        # a short stand-alone line written as a heading: every word of four letters or more opens with a capital, no
+        # field (no colon), no list item, no sentence end - never a wrapped sentence's part ("The surgeon recommended")
+        if line and len(line) <= 60 and line[0].isalpha() and line[-1] not in '.;:!?,' and ':' not in line \
+                and not _LIST_ITEM.match(line) and len(line.split()) >= 2 \
+                and all(w[:1].isupper() for w in _HEADING_WORD.findall(line) if len(w) >= 4):
+            return True
+        end = start - 1
+    return True
