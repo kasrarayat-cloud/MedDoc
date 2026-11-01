@@ -318,6 +318,16 @@ class ExtractionIssue:
 
 
 @dataclass(frozen=True)
+class ReferenceUse:
+    """A reference a participant says it relied on (HARNESS.md 11.2): a passage_key or 'fact:<source_key>:<code>:<field>'
+    from its own tool results. ``retrieved`` is CPT Studio's check, never the participant's claim: True only when that
+    participant's own tool results in the same run contained it."""
+    ref: str
+    use: str
+    retrieved: bool = False
+
+
+@dataclass(frozen=True)
 class ParticipantReading:
     provider: str  # 'astra' | 'fable'
     adapter_version: str
@@ -334,16 +344,73 @@ class ParticipantReading:
     problems: tuple[str, ...] = ()
     refused: bool = False  # the whole reading was not used and none of it was read; problems say why
     unverified_quotes: int = 0
+    references_used: tuple[ReferenceUse, ...] = ()  # harness-reading@2 (HARNESS.md 11.2)
+
+
+PEER_POSITIONS = ('supports', 'disputes', 'cannot_tell')
+
+
+@dataclass(frozen=True)
+class QuestionAnswer:
+    question_id: str  # the open clarification's id as the peer request named it
+    settled: bool  # False: the participant says the document does not settle it
+    value: str
+    evidence: tuple[LocatedQuote, ...] = ()
+
+
+@dataclass(frozen=True)
+class CodePosition:
+    code: str
+    position: str  # PEER_POSITIONS
+    reason: str
+    evidence: tuple[LocatedQuote, ...] = ()
+
+
+@dataclass(frozen=True)
+class PeerReview:
+    """A participant's phase-2 output (HARNESS.md 11.1), made after its own first reading was frozen and with the frozen
+    peer conclusions and CPT Studio's open questions in view. Recorded apart from the frozen reading; never replaces it."""
+    provider: str
+    adapter_version: str
+    review_version: str  # studio.participants.prompt.PEER_VERSION
+    requested_model: str
+    returned_model: str
+    frozen_inputs: tuple[tuple[str, str], ...] = ()  # (input name, sha256) of each frozen output the request showed
+    answers: tuple[QuestionAnswer, ...] = ()
+    positions: tuple[CodePosition, ...] = ()
+    additional_codes: tuple[ParticipantCode, ...] = ()  # first proposed after peer review: never independent
+    references_used: tuple[ReferenceUse, ...] = ()
+    problems: tuple[str, ...] = ()
+    refused: bool = False
+    unverified_quotes: int = 0
 
 
 @dataclass(frozen=True)
 class ParticipantInput:
-    """What the validation engine reads of one CONFIGURED participant (HARNESS.md 5). A participant disabled on this
+    """What the validation engine reads of one CONFIGURED participant (HARNESS.md 5, 11). A participant disabled on this
     installation is never passed, so with none configured the engine's input is () and its output is unchanged (I1)."""
     provider: str
     state: str  # PARTICIPANT_STATES
-    reading: Optional[ParticipantReading] = None  # present only when state == 'read'
+    reading: Optional[ParticipantReading] = None  # present only when state == 'read' (the frozen phase-1 reading)
     reason: str = ''
+    peer_state: str = ''  # '' before phase 2; otherwise one of PARTICIPANT_STATES for its peer-review run
+    peer: Optional[PeerReview] = None  # present only when peer_state == 'read'
+
+
+@dataclass(frozen=True)
+class ConfirmedFinding:
+    """A reviewer-confirmed answer to an open question (HARNESS.md 11.3): a fact the cited passage documents, located by
+    a participant and confirmed by an owner or reviewer with an attestation. The service date never comes this way; it
+    enters through the context as the member's date."""
+    scope: str  # service | proposal
+    fact: str  # e.g. extent | performed_status | em_basis: the open clarification's own fact
+    family: str
+    proposal_key: str  # '' for a service-scope question
+    value: str
+    evidence: tuple[EvidenceSpan, ...]  # exact slices of the revision text
+    located_by: tuple[str, ...]  # the participants whose quote it was
+    confirmed_by: str  # the reviewer's label
+    confirmation_id: str
 
 
 # --- JSON round-trip ------------------------------------------------------------

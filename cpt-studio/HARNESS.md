@@ -118,7 +118,7 @@ The engine (`studio/validation/engine.py`) gains one input, `participants: tuple
   its own, with origin `participant` and its proposers named, when it is in scope with exact (located) evidence.
   Otherwise it is listed as informational, with why.
 - **I3: agreement never promotes.** Two or three participants proposing a code changes nothing about its status.
-- **Contradictions are kept, never voted on.** When a participant says a code should not be coded because its service
+- **Contradictions are kept, never voted on** (amended by 11.3: a contradiction offered with a located passage can also become a correction candidate). When a participant says a code should not be coded because its service
   was not performed at this encounter, and gives located evidence, that proposal gets a WARN check
   `participants.disagree` quoting it.
   - The status is still decided by the source text through the local readers.
@@ -126,7 +126,7 @@ The engine (`studio/validation/engine.py`) gains one input, `participants: tuple
 - **Missing services.** A participant service documented as `performed` with located evidence, in a family the
   documented-service inventory reads no performed service of, makes coding completeness `incomplete`, with the
   participant's quote.
-- **Clarification questions.** Questions that block the reviewed report still come only from the local readers' rules
+- **Clarification questions** (amended by 11.3: an open question can now be answered by a reviewer-confirmed located passage). Questions that block the reviewed report still come only from the local readers' rules
   ("focused questions only where needed"). A participant's own questions are shown as notes and never block.
 
 **Retrieval** happens in the assess stage's parent process, which has database access, before the bounded child runs.
@@ -275,3 +275,157 @@ parsing take away. The image gains no dependency.
   makes a new request.
 - **Shared extraction.** Participants read CPT Studio's extracted text, and see the original file only for PDF uploads.
   For Word documents and pasted text they share CPT Studio's extraction.
+
+## 11. harness@2: the owner's corrections of 2026-11-01
+
+The owner's second instruction of 2026-11-01 amends sections 2 to 10. Where this section and an earlier one differ, this
+section governs. The earlier text is kept so the change can be seen.
+
+### 11.1 Two phases: frozen independent assessments, then peer review
+
+```
+predict (Corti) -> astra -> fable -> assess #1 -> astra_peer -> fable_peer -> assess #2 (final)
+```
+
+**Phase 1: independent assessments, frozen.**
+- Corti, Astra and Fable may run one after another. Each first assessment is still built from the same source revision
+  alone, as section 3 says.
+- Each phase-1 run (purpose `independent`) is final once it finishes, and is never changed.
+- `assess #1` records the sha256 of every frozen phase-1 output: Corti's response bytes, and each model participant's
+  normalized reading in canonical JSON. It also records the revision and the text sha256 they were all built from.
+- **I5 still holds for phase 1:** no participant sees a peer's conclusion or a CPT Studio reading.
+
+**Phase 2: peer review, after the freeze.** Job kinds `astra_peer` and `fable_peer`; purpose `peer_review`.
+- **When a participant takes part.** Only when its own phase-1 reading exists (state `read`). A participant whose first
+  assessment failed never gets a first look that has already seen its peers.
+- **When the stage may build its request.** Only when every configured participant's phase-1 run for the revision is
+  terminal.
+- **What the request contains:**
+  - the same framed document;
+  - its own frozen reading;
+  - the frozen peer conclusions: Corti's selected codes with their evidence passages (never Corti's `display` text),
+    and the other model's reading;
+  - CPT Studio's rule-based reading after `assess #1`: its open questions, its held and excluded codes, and their
+    reasons, labelled as a reading that may be wrong;
+  - the sha256 of each frozen input, so the record shows exactly what was shown.
+- **What it asks:**
+  1. Answer each open question with a value and verbatim evidence, or say the document does not settle it.
+  2. Take a position on each code where the participant and a peer differ: supports, disputes or cannot tell, with
+     evidence.
+  3. Name any documented service still uncoded, with evidence.
+- **The output** (`harness-peer@1`) is recorded separately from the frozen phase-1 reading and never replaces it.
+- A code first proposed in phase 2 is marked **proposed after peer review**, never as independent.
+
+**Phase 3: reconciliation.** `assess #2` reconciles from source evidence and rules, as section 5 says, reading both
+phases. When no model participant is configured, there is no phase 2 and no second assess, which preserves **I1**.
+
+### 11.2 Participants retrieve their own references (tools), kept apart from the reconciliation's
+
+**Two local tools.** In both phases each model participant may call two tools. CPT Studio executes them against its pinned
+CMS sources; nothing is fetched from the web, and no vendor web-search tool is enabled.
+- `cms_code_facts(codes, date_of_service)` returns the PFS indicators (status, global days, multiple procedure,
+  endoscopic base, PC/TC) and the MUE value, MAI and rationale for each code. Each comes with its source key, release,
+  effective window and sha256. No descriptor is ever returned.
+- `cms_policy_passages(topic, codes)` returns the dated verbatim passages for a topic: PFS indicator definitions, NCCI
+  Policy Manual Chapter VI endoscopy rules, or Claims Processing Manual multiple-endoscopy rules.
+
+**What is recorded.**
+- Every tool call is a tool trace: the participant, phase and turn, the tool, its arguments, the passage keys and facts
+  returned with each one's source release and effective window, the sha256 of the result, and the time.
+- The reading gains `references_used`: the references the participant says it relied on.
+- Each one is checked against that participant's own tool results. A reference cited but never retrieved by that
+  participant is marked `cited_not_retrieved`, and is never shown as retrieved.
+
+**The records stay apart.** The UI, the API, both reports and the trace view keep these separate:
+1. the references each participant retrieved;
+2. the references each participant used;
+3. the references the reconciliation retrieved (section 5, `Assessment.retrieval`).
+
+**The tool loop.**
+- One participant phase is one ProviderRun, holding the provider lock for the whole loop.
+- It runs at most 4 HTTP exchanges, each a recorded `ProviderExchange`: request body and sha256, raw response and
+  sha256, status, latency, usage, request ids.
+- The tool calls of each exchange are recorded as `ToolCall` rows.
+- Per-exchange read timeout: 240 s. The loop's deadline is 540 s, below `STALE_RUNNING_SECONDS`.
+- An exchange with an unknown outcome makes the run unknown. Nothing is retried automatically.
+- The thinking and reasoning items each vendor returns are passed back unchanged, as the vendors require:
+  - Anthropic: append-only history, with thinking blocks unchanged;
+  - OpenAI: `store: false`, with encrypted reasoning items passed back.
+
+### 11.3 Source-supported corrections of shared date, status and extent readings
+
+A participant's finding can correct a false hold. It does this as the reviewer-confirmed answer to the open question the
+hold raised, never by agreement and never on its own. This is the documented path.
+
+1. **Candidates.**
+   - For each open clarification, CPT Studio collects candidate answers from:
+     - the frozen phase-1 readings: `date_of_service`, and each service's status and extent with their evidence;
+     - the phase-2 answers.
+   - A candidate is offered only when two checks pass:
+     - its quote is located verbatim in the revision text (I7);
+     - a deterministic consistency check passes for the fact:
+       - date: the passage contains that date;
+       - extent: the passage names the landmark;
+       - status: the passage is not in a history, plan or indication section;
+       - E/M basis: the passage states the time or the level.
+   - A candidate that fails either check is shown as unverified, with why, and cannot be accepted.
+2. **Confirmation.** An owner or reviewer accepts one candidate with an attestation: "I read this passage in the source
+   document; it documents <value> for this encounter."
+   - The confirmation is an immutable `FindingConfirmation`: the clarification, the revision, the fact, the value, the
+     exact passage spans, the participant(s) that located it, the run ids, the reviewer, the attestation and the time.
+   - It is audited.
+   - A new revision invalidates it, as it does decisions.
+3. **Effect.**
+   - **Date of service:** the confirmed date enters as the member's date, through the existing context path (I8 and
+     every existing date safeguard apply). It carries the passage as provenance.
+   - **Status, extent and E/M basis:** the engine reads the confirmed fact as documented by the cited passage. It is
+     labelled "confirmed from <participant>'s located passage by <reviewer>" everywhere, never as the reader's own
+     reading.
+   - The assessment re-runs. The code may become READY. It is approved only by a separate decision.
+4. **Safeguards that do not change:**
+   - agreement among participants never confirms anything;
+   - a candidate needs a located passage and its consistency check;
+   - a confirmation needs a reviewer and an attestation;
+   - approval stays separate;
+   - an excluded code's existing path (Reinstate) is unchanged;
+   - nothing is automatic.
+
+An automatic release, a rule that re-reads a located passage and lifts a hold with no reviewer, is NOT built. Releasing
+rules failed to converge under refutation in round 4, and the owner's safeguards rule out a release nobody confirmed.
+
+### 11.4 Omitted services keep their origin (restates section 5)
+
+**An omitted service can be proposed.** A model participant can propose a documented service Corti omitted. The proposal
+keeps:
+- its actual origin: the participant's name, and its phase (independent, or after peer review);
+- its own located evidence.
+
+**It is never relabelled as Corti's.** It is never approved automatically. The UI says plainly: "Proposed by Fable; Corti
+did not propose this code."
+
+### 11.5 Verification and verdicts
+
+**Completion is the installed website, with the harness enabled, verified live.** It requires:
+- genuine Corti, Astra and Fable responses;
+- reference-stage evidence: participant tool traces and reconciliation retrieval;
+- a persisted synthetic review;
+- a reload;
+- an actual reviewed download.
+
+Corti-only parity and replay are prerequisites, never completion.
+
+**The final report gives three separate verdicts:**
+- functional completion;
+- clinical validation (independently established);
+- content-use permissions (D3 and D4).
+
+The doctor-facing demonstration is never called ready while any required dependency is unresolved.
+
+### 11.6 Content-use rules (D3, D4 stay open)
+
+- No agreement is accepted. No synthetic-testing exemption is inferred.
+- No download term is bypassed. In particular, the NCCI PTP quarterly change file, which is a direct link, is not
+  downloaded.
+- CPT Studio's own wording must not imply an exemption. Any text such as "used for internal synthetic evaluation only"
+  is a statement of current use, never a claim of permission.
+- The remaining licensing requirements are prepared for the owner in `docs/cpt-harness/licensing-requirements-20261101.md`.
