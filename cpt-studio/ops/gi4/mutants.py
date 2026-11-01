@@ -350,32 +350,16 @@ PD_MUTANTS = (
     Mutant('pd-wide-never-own', "a narrowed wide label is never the note's own date (never sent)", _PD_CONTEXT,
            "        return Fact('service_date', None, 'missing', _sorted_spans(lines), WIDE_DATE_NOTE)\n",
            "        return Fact('service_date', wide[0].value, 'document', _sorted_spans(lines), WIDE_DATE_NOTE)\n", _PD_UNIT),
-    # --- the integration of Wave 1 repair cycle 1: the STRONG-HEAD HOLD (pd.json amendment_20261101_integration), one
-    # killing mutant per guard of the hold: the hold itself, the strong head (never PS's weak one), the one-date field,
-    # no note around a procedure (rule (c)'s broadened detection, a call or a message stated), and its notes ---
-    Mutant('pd-head-hold', "a member's answer of another day than a procedure report's own head gives is held", _PD_CONTEXT,
-           "    if isinstance(documented, _HeadHeldFact) and answer is not None and answer.origin == 'user' \\\n",
-           "    if False and isinstance(documented, _HeadHeldFact) and answer is not None and answer.origin == 'user' \\\n",
-           _PD_UNIT),
-    Mutant('pd-head-strong', "only the strong head holds (detect.todays_procedure_report, never PS's procedure_report_head)",
-           _PD_CONTEXT, '    if not detect.todays_procedure_report(text):\n        return None\n    if _pd_around_procedure(text):\n',
-           '    if not (procedure_report_head(text) and detect._gi4_head(text).own_dates):\n        return None\n'
-           '    if _pd_around_procedure(text):\n', _PD_UNIT),
-    Mutant('pd-head-one-date', "the head's own-date field gives exactly one date", _PD_CONTEXT,
-           '            if _PD_OTHER_DATE.search(text, m.end(), brk.start() if brk else line_end) is not None:\n',
-           '            if False:\n', _PD_UNIT),
-    Mutant('pd-head-around', 'no hold in a note written around a procedure (the broadened detection)', _PD_CONTEXT,
-           '    if _pd_around_procedure(text):\n        return None  # a booking, a call, a consent',
-           '    if False:\n        return None  # a booking, a call, a consent', _PD_UNIT),
-    Mutant('pd-head-call', 'no hold where the document states a call, a phone contact or a message', _PD_CONTEXT,
-           '    if _PD_CALL_PHRASE.search(text) is not None:\n        return None  # a call or a message written as an event',
-           '    if False:\n        return None  # a call or a message written as an event', _PD_UNIT),
-    Mutant('pd-head-note', "the hold's fact says which answers are held (never 'a member's date is taken')", _PD_CONTEXT,
-           '            note = HEAD_DATE_NOTE.format(day=day, head=quote, also=also)\n',
-           '            pass  # mutant: the note as made\n', _PD_UNIT),
-    Mutant('pd-head-charge-note', "rule (a)'s question says the date it keeps is held too", _PD_CONTEXT,
-           '            note = fact.note + _HEAD_CHARGE_NOTE.format(day=day, own=own)\n',
-           '            note = fact.note\n', _PD_UNIT),
+    # --- Wave 1 repair cycle 2 (pd.json amendment_20261101_cycle2): the integration's STRONG-HEAD HOLD is DROPPED, and
+    # its seven mutants (pd-head-hold, -strong, -one-date, -around, -call, -note, -charge-note) are retired with its
+    # code; one killing mutant per guard of the DT-5 narrow fix of rule (c) ---
+    Mutant('pd-announced-copy', 'a paste or a copy of another report announced in common words narrows nothing '
+           '(DT-5)', _PD_CONTEXT,
+           '    if _PD_ANNOUNCED.search(text):\n        return None  # a paste or a copy of another report',
+           '    if False:\n        return None  # a paste or a copy of another report', _PD_UNIT),
+    Mutant('pd-dated-after-signoff', 'a sign-off the note goes on past with another day narrows nothing (DT-5)',
+           _PD_CONTEXT, '    if own_end >= 0 and len(own) == 1 and _pd_dated_after(text, own_end, next(iter(own))):\n',
+           '    if False:  # mutant: the later day is not read\n', _PD_UNIT),
 )
 # --- package PV1: E/M reading fixes and the C4 holds (detectors tests.test_gi4_pv1 and, for repair cycle 1's guards,
 # tests.test_gi4_pv1_cycle1; moved here from tests/test_gi4_pv1_mutants.py, which now checks this slice). Repair cycle 1
@@ -847,6 +831,18 @@ PO_MUTANTS = (
     Mutant('po1-no-service', "PO-1 P1: no inventory, or no service of the item, is no evidence", _PO_ENGINE,
            '    if service is None:\n        return False\n    for a in service.acts:\n',
            '    if service is None:\n        return True\n    for a in service.acts:\n', _PO_UNIT),
+    # --- PO, Wave 1 repair cycle 2 (po.json amendment_20261101_cycle2; refutation PO1-PASTED-ACT-OFFER): C1, nothing
+    # offered where the document says its procedure was called off or not done today; C2, P1's act under no
+    # heading-like line further up naming another record ---
+    Mutant('po1-called-off', 'PO-1 C1: no offer where the document says its procedure was called off or not done '
+           'today, whatever a pasted act elsewhere says', _PO_ENGINE,
+           '        if _po_called_off(text):  # C1 (cycle 2): the document says its procedure was called off or not '
+           'done today\n            return False\n',
+           '        pass  # mutant: C1 removed\n', _PO_UNIT),
+    Mutant('po1-act-record-heading', "PO-1 C2: P1's act is under no heading-like line further up naming another "
+           'record or an attachment', _PO_ENGINE,
+           '               and not _po_under_another_record(text, ev.start)\n',
+           '               and True  # mutant: C2 removed\n', _PO_UNIT),
 )
 MUTANTS += PD_MUTANTS + PV1_MUTANTS + PE_MUTANTS + PI_MUTANTS + PO_MUTANTS
 # Every round-4 package's mutants by name prefix (the census in tests/test_gi4_mutants.py holds each exactly once);

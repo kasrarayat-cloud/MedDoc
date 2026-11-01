@@ -1478,5 +1478,338 @@
    "a done-today item whose acts are read only historical or planned by a runaway section, or only from a procedure line, a box or a field, loses its PO-1 offer (A-evtitle, svc-28)",
    "PO-2 is unchanged: it offers on a passage that is not today only by a runaway section across an unread heading, with its own A3/A4 holds; it does not need P1 (h4-05 has no act read performed)"
   ]
+ },
+ "amendment_20261101_cycle2": {
+  "date": "2026-11-01",
+  "cycle": "Wave 1 repair, CYCLE 2 of at most 2 for PO-1's releasing family (the round's rule): a third refutation of PO-1 drops it and records it as a known limit",
+  "base": "fbc59ee53 (its cpt-studio equals the integrated cycle-1 head 5fa531d1a); every movement below is against it unless it says installed",
+  "written": "by Wave 1 repair cycle 2, group PD+PO+PA, BEFORE the code; the code was modelled in a scratch copy of the sealed fbc59ee53 export and every number below is that model's (scratch: /home/claude/cpt-studio-gi4-20261031/w1c2/pdpopa)",
+  "why": "refutation PO1-PASTED-ACT-OFFER (procedures-and-offers lens, refuting fbc59ee53): PO-1 still offered a second review for a service called off today - F4's own text - as soon as the document carried one act pasted from another record. P1 (_po_done_in_body) guards the act's passage only with sections.under_another_occurrence, which reads 6 lines and 600 characters back and knows no attachment word, so an act 9 lines under 'Previous Report' or 'Outside Report', right under 'Attached Report', or under no heading at all gave PO-1 its positive evidence; a pre-colonoscopy assessment with the outside report pasted 9 lines down was offered the same way. Reproduced on fbc59ee53 with the finding's inputs byte for byte: every variant offered (True); installed and the control without the pasted act offer nothing",
+  "rule_added": {
+   "C1 (PO-1 only)": "PO-1 offers nothing where the document says that its procedure was called off, cancelled or not done today, whatever a pasted act elsewhere says (engine._po_called_off, read once per text): _PO_CALLED_OFF, a closed list read anywhere in the text and only to hold - 'did not | could not | chose not to | decided not to | unable to go ahead', 'did not | chose not to | decided not to proceed' (alone or 'with the <procedure>', never 'proceed beyond'), 'the scope | colonoscope | ... was not | never inserted | introduced', 'nothing (further | else | more) was done | performed today', '<will be | was | has been ...> rebooked | rescheduled | postponed | called off', 'called off', 'not done | performed | carried out | undertaken | attempted | started | begun today', 'no <procedure> (was done) today', 'sent home without the <procedure>', '<procedure> aborted | abandoned | stopped before insertion | sedation | ...', 'the case was cancelled', 'cancelled today | on arrival | at the time-out | before ...'. A procedure begun and stopped ('could not be advanced beyond', 'unable to proceed beyond') is an incomplete one, a performed reading, and is not read; nor is an earlier encounter's cancellation with its own time",
+   "C2 (PO-1's P1)": "P1's act is no evidence where the nearest heading-like line above its passage - a short line (at most 60 characters) with a letter and no sentence end, as sections.under_another_occurrence reads one, a closing colon allowed - names another occurrence's record (sections.ANOTHER_OCCURRENCE_HEAD: 'Previous Report', 'Outside Report') or an attachment (_PO_RECORD_WORDS: attached, attachment, enclosed, enclosure, scanned, faxed, imported, excerpt, appended, external, received), read back as far as a section's heading may stand (sections.HEADING_REACH_LINES lines, HEADING_REACH_CHARS characters) - engine._po_under_another_record, beside under_another_occurrence, which still reads the act's own line",
+   "hold-only": "each withholds offers and offers nothing new: no offer goes False -> True, and no request, date, routing, inventory, proposal, question, check or completeness state moves",
+   "unchanged": "PO-2, A1-A5, the head guard, P1's other conditions and installed's own rule (an item routing reads done today is offered as before)"
+  },
+  "expected": {
+   "H1": "EQUAL against fbc59ee53 in every offer (--fixtures): h4-02's two PO-1 items keep their offers in all six states, h4-05's PO-2 item in all nine. The branch's only replay movements are PD's drop (h4-03's states, pd.json amendment_20261101_cycle2)",
+   "H2": "NONE by construction (engine.py only)",
+   "H3": "no movement (H3 observes the readers, never the engine)",
+   "H4": "0 movements in the 50 rows (fbc59ee53 -> model); the offer battery (own and empty answers) as declared before",
+   "H5": "no movement (the PO state tests offer h4-02 and h4-05 as before)",
+   "offer corpus": "the 5,768 texts (empty and base answers, both member states): 0 offers move and nothing else moves - 14,735 unresolved items, 9,586 offered on fbc59ee53 and the same 9,586 on the model",
+   "earlier rows": "the guard rows, the amendment_20261101 rows and the amendment_20261101_r2 rows keep their declared offers",
+   "rows": {
+    "about": "synthetic rows tests/test_gi4_po.py reads (C2_ROWS; text sha256 pinned here before the code), an empty provider answer; [family, act, reason, installed offer, fbc59ee53 offer, cycle-2 offer] per unresolved item. The 'PO1 ...' rows are the refutation's inputs byte for byte; 'C1 ...' and 'C2 ...' rows are independent variants, each a killing row of its guard (C1 alone: the 'PO1' rows under no heading or a neutral one and every 'C1' row; C2 alone: the pre-colonoscopy rows); the controls keep their offers; 'C1 cost' is a recorded cost",
+    "rows": {
+     "C1 cost, an act done today and a clinic visit rescheduled": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "076b79eb55e05ba07e2dd99ab3f21f2756cd2c4c84db29e6affa9e5f664d1019"
+     },
+     "C1 nothing further was done today": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "4b00b550ef351c0d5745c2b491aba665aa1ee936889dbc90d52d3c8dd5f7f646"
+     },
+     "C1 sent home without the procedure": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "63050d39b6bae3139071cf9ce44b69e47eae8f0494ebb6449a9605d354a4f0e9"
+     },
+     "C1 the case was called off": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "8b577e114c269490505335044b1b992d73dfb347f08c4cb3ada13203ab3eddda"
+     },
+     "C1 the scope was never introduced": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "05dc1c0ebd7f5b46538be17b9924177bce6c3c91f8890ee5ba88493192fea670"
+     },
+     "C1 we chose not to proceed": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "1c979384722ecbd1bc20be14d11e9eaadc7337e7495ddab038a254e5fbbee685"
+     },
+     "C2 control, an act done today": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        true
+       ]
+      ],
+      "text_sha256": "0c40b27c93ec2ee1f93c97df59d6e578864b9959b778529ea88c54067686bf2e"
+     },
+     "C2 control, an act done today under its own heading below an outside report": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        true
+       ]
+      ],
+      "text_sha256": "c38f1555c575f6f6578682c889d19279c9c1c8182cf4639ed078cca8cd19a081"
+     },
+     "C2 pre-colonoscopy assessment, act 10 lines under a prior-report heading": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "f4278a61fb3ef72e9c7c5dbaa033476d6241d0d448fd87d113bd60c8270ce453"
+     },
+     "C2 pre-colonoscopy assessment, act 9 lines under a scanned-pages heading": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "c3c0e773d684b2939aedff6bab9be19b83f34ddbfa87c242e999937ebf853074"
+     },
+     "C2 pre-colonoscopy assessment, act 9 lines under an enclosed-pages heading": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "04c134296c8846c3c0b23012db378ccdf51b47f3e30a5a798c2575036aa8faf3"
+     },
+     "C2 pre-colonoscopy assessment, act right under an attached-report heading": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "059ff562467e80878d4610e3c30fd199acf7b18ff895c7461d7cdf475b240c85"
+     },
+     "PO1 EUS called off at the time-out, outside FNA": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.eus",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "52b7536509e7e7e8069270262ba11d99c4a488da6b90bfc8068f271a510e85d1"
+     },
+     "PO1 called off, act pasted 9 lines under a neutral heading": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "8a1a0d5504c5ecb0d5b980e1a6a8dc4011690b8fef3e9563511bbbabcea638d2"
+     },
+     "PO1 called off, act pasted 9 lines under a previous-report heading": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "40035d911f877f60f3978da8cc38c44b3dd2cdcf8bc424508f680f2098d55551"
+     },
+     "PO1 called off, act pasted 9 lines under an outside-report heading": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "0f076dea0f5e80876b396b83c48b5aa8242d122c9a7bab044e0c2e3fab6bef42"
+     },
+     "PO1 called off, act pasted under an attached-report heading": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "416916fc2bdc8ba641008e88f64a85f915a3f92ff42bdeb8cfcb13584b87b156"
+     },
+     "PO1 called off, act pasted under no heading": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "48fd34e3d83d6addcab887b59a5c4f4f5c4dd30f7c70a20959bf72c5505fb62c"
+     },
+     "PO1 called off, no act pasted (control)": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        false,
+        false
+       ]
+      ],
+      "text_sha256": "9cc08026e41760e57dd387d780c6c98e92a0df80bba978840dbc081d0e399ef5"
+     },
+     "PO1 called off, outside report signed in 2024": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "00fbe76d100deb94421ae404dffc047c0da4f8749d9d018e32cf5002dbc029bc"
+     },
+     "PO1 pre-colonoscopy assessment, act pasted 9 lines under an outside-report heading": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "0909eae406fd04b0ef48f5d063d90ba9055b963d7e02d906ee2d727c127a7248"
+     }
+    }
+   },
+   "measured_before_code": "the code applied to a scratch copy of the sealed export of fbc59ee53 (engine.py sha256 31d6d5697142fa78 -> the model), read with the committed harness: H1 --fixtures against fbc59ee53 and installed, H4 against both, the rows on installed 80df1831d168, fbc59ee53 and the model, the offer corpus observed on fbc59ee53 and on the model, and each guard switched off alone to find its killing rows"
+  },
+  "mutants": {
+   "po1-called-off": "unit: CycleTwoOfferTests.test_a_procedure_called_off_in_other_words",
+   "po1-act-record-heading": "unit: CycleTwoOfferTests.test_an_act_pasted_under_another_records_heading_further_up",
+   "po1-act-occurrence (unchanged anchor)": "unit: DoneInBodyUnitTests.test_an_act_with_another_occurrence_named_on_its_own_line_is_none - C2 now also reads the line above an act, so the case of an 'Outside records' line right above is held by both guards; the occurrence named on the act's own line is read by under_another_occurrence alone",
+   "census": "PO 28 -> 30"
+  },
+  "known_limits": [
+   "C1 is a closed list read anywhere and only to hold: a procedure called off in words it does not list, with an act pasted under no heading or under one naming no other record ('Additional Pages'), is still offered; and a report of an act done today whose text says something else was rescheduled, postponed or called off ('Her clinic visit will be rescheduled') loses its PO-1 offer (the 'C1 cost' row; installed offers none there either; measured on the offer corpus: no such text)",
+   "C2 reads only the NEAREST heading-like line above the act: a pasted block whose own short lines (a grid row, a short field line) stand between the act and its outside heading reads as today's, and a pre-procedure note under a title outside sections.AROUND_PROCEDURE_WORDS that says nothing called off, with an act pasted into its own section and no heading of another record above it, is still offered",
+   "both guards withhold only offers; the offer is the member's to ask for, once per revision and date, and no stage sends anything for it"
+  ]
  }
 }

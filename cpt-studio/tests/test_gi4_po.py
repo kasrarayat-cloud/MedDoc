@@ -20,6 +20,12 @@ reader reads an act of the item's own service performed by an act predicate of i
 another occurrence. Hold-only. Its R2_ROWS pin [installed, b840ae756, cycle 1] offers per item, and it moves one
 amendment row (A-evtitle, copied prior EUS block: its colonoscopy offer True -> False), declared there.
 
+The third dated amendment (amendment_20261101_cycle2, Wave 1 repair cycle 2, declared before its code; refutation
+PO1-PASTED-ACT-OFFER of fbc59ee53) adds two holds to PO-1: C1, nothing is offered where the document says its
+procedure was called off, cancelled or not done today, whatever a pasted act elsewhere says (engine._po_called_off);
+C2, P1's act is no evidence under a heading-like line further up naming another occurrence's record or an attachment
+(engine._po_under_another_record). Its C2_ROWS pin [installed, fbc59ee53, cycle 2] offers per item.
+
 Each tests/test_gi4_po_mutants.py PO_MUTANTS entry removes one guard and is killed by a test HERE (H6, run against
 sealed copies through the harness's mutant machinery). The registry and its anchor check live in that other module on
 purpose: a check that every anchor occurs in this tree fails on every mutated copy, so inside the detector it would
@@ -774,7 +780,8 @@ class DoneInBodyUnitTests(SimpleTestCase):
         outside = dataclasses.replace(self.act, evidence=(Span(len(H402) + 5, len(H402) + 9, 'gone'),))
         self.assertFalse(engine._po_done_in_body(self.u, self.with_acts(outside), H402))
 
-    def test_an_act_under_a_line_naming_another_occurrence_is_none(self):  # kills po1-act-occurrence
+    def test_an_act_under_a_line_naming_another_occurrence_is_none(self):  # since cycle 2 C2 holds it too (the next
+        # test kills po1-act-occurrence: the occurrence named on the act's own line, which only that guard reads)
         ev = self.act.evidence[0]
         line_start = H402.rfind('\n', 0, ev.start) + 1
         text = H402[:line_start] + 'Outside records\n' + H402[line_start:]  # its own line, right above the act's
@@ -789,3 +796,191 @@ class DoneInBodyUnitTests(SimpleTestCase):
         self.assertTrue(engine._po_done_in_body(dataclasses.replace(self.u, act=self.act.kind), self.with_acts(self.act),
                                                 H402))
         self.assertFalse(engine._po_done_in_body(dataclasses.replace(self.u, act=other), self.with_acts(self.act), H402))
+
+    def test_an_act_with_another_occurrence_named_on_its_own_line_is_none(self):  # kills po1-act-occurrence
+        # Wave 1 repair cycle 2: C2 (_po_under_another_record) reads the heading-like line above an act, so the case above
+        # is held by both guards; sections.under_another_occurrence alone also reads the act's own line before it
+        ev = self.act.evidence[0]
+        line_start = H402.rfind('\n', 0, ev.start) + 1
+        prefix = 'Outside records: '
+        text = H402[:line_start] + prefix + H402[line_start:]
+        moved = dataclasses.replace(self.act, evidence=(Span(ev.start + len(prefix), ev.end + len(prefix), ev.text),))
+        pos = moved.evidence[0].start
+        self.assertEqual(text[pos:moved.evidence[0].end], H402[ev.start:ev.end])
+        self.assertTrue(sections.under_another_occurrence(text, pos))
+        self.assertFalse(engine._po_under_another_record(text, pos))  # the line above names no other record
+        self.assertTrue(engine._po_done_in_body(self.u, self.with_acts(self.act), H402))  # the control
+        self.assertFalse(engine._po_done_in_body(self.u, self.with_acts(moved), text))
+
+
+# --- Wave 1 repair cycle 2 (po.json amendment_20261101_cycle2; refutation PO1-PASTED-ACT-OFFER of fbc59ee53) ----------
+C2 = DECLARED['amendment_20261101_cycle2']
+C2_DECLARED = C2['expected']['rows']['rows']
+IDA = ('Colonoscopy for Iron Deficiency Anemia\nDate of service: 10/20/2026\nEndoscopist: Synthetic MD\nSedation: propofol '
+       'by CRNA\n\n')
+NOT_AHEAD = ('Assessment\nShe reported eating breakfast this morning despite the instructions. After discussion we did not '
+             'go ahead, and she will be rebooked next week with a two-day preparation.\n')
+PAGES = ''.join(f'Line {i} of these pages lists medications and allergies in detail.\n' for i in range(8))
+HOT_SNARE = 'A 10 mm sigmoid polyp was removed with a hot snare.\n'
+EUS_HEAD = ('Endoscopic Ultrasound for Pancreatic Cyst\nDate of service: 10/20/2026\nEndoscopist: Synthetic MD\nSedation: '
+            'propofol by CRNA\n\n')
+PRE_HEAD = ('Pre-colonoscopy Assessment\nDate of service: 10/20/2026\nEndoscopist: Synthetic MD\nSedation: propofol '
+            'planned, by CRNA\n\n')
+NPO = 'Assessment\nNPO since midnight. Consent signed. Escorted to the procedure suite.\n'
+TODAY = 'Findings\nA 4 mm polyp in the sigmoid colon was removed with cold snare.\n'
+# (text, codes): the cycle-2 rows, byte for byte as declared (codes: (code, quote); none = an empty provider answer)
+C2_ROWS = {
+    # the refutation's inputs (PO1-PASTED-ACT-OFFER), byte for byte: a called-off report with one act pasted from another
+    # record, and its control without the act
+    'PO1 called off, act pasted under an attached-report heading': (
+        B + IDA + NOT_AHEAD + '\nAttached Report\n' + HOT_SNARE, ()),
+    'PO1 called off, act pasted 9 lines under a neutral heading': (
+        B + IDA + NOT_AHEAD + '\nAdditional Pages\n' + PAGES + HOT_SNARE, ()),
+    'PO1 called off, act pasted 9 lines under an outside-report heading': (
+        B + IDA + NOT_AHEAD + '\nOutside Report\n' + PAGES + HOT_SNARE, ()),
+    'PO1 called off, act pasted under no heading': (B + IDA + NOT_AHEAD + '\n' + HOT_SNARE, ()),
+    'PO1 called off, no act pasted (control)': (B + IDA + NOT_AHEAD, ()),
+    'PO1 called off, outside report signed in 2024': (
+        B + IDA + NOT_AHEAD + '\nOutside Report\n' + PAGES + HOT_SNARE + 'Report signed by the Mercy GI endoscopist on '
+        '03/02/2024.\n', ()),
+    'PO1 called off, act pasted 9 lines under a previous-report heading': (
+        B + IDA + NOT_AHEAD + '\nPrevious Report\n' + PAGES + HOT_SNARE, ()),
+    'PO1 EUS called off at the time-out, outside FNA': (
+        B + EUS_HEAD + 'Assessment\nAt the time-out her potassium was 2.6, so we did not go ahead; she will be rebooked '
+        'once it is corrected.\n\nOutside Report\n' + PAGES + 'Fine-needle aspiration of the pancreatic cyst was performed '
+        'with a 22-gauge needle.\n', ()),
+    'PO1 pre-colonoscopy assessment, act pasted 9 lines under an outside-report heading': (
+        B + PRE_HEAD + NPO + '\nOutside Report\n' + PAGES + HOT_SNARE, ()),
+    # C1, independent variants: the procedure called off in other words, an act pasted under no heading
+    'C1 the case was called off': (
+        B + IDA + 'Assessment\nThe case was called off after the time-out because her potassium was 2.6.\n\n' + HOT_SNARE,
+        ()),
+    'C1 sent home without the procedure': (
+        B + IDA + 'Assessment\nShe had eaten breakfast and was sent home without the procedure.\n\n' + HOT_SNARE, ()),
+    'C1 nothing further was done today': (
+        B + IDA + 'Assessment\nThe preparation was poor; nothing further was done today.\n\n' + HOT_SNARE, ()),
+    'C1 the scope was never introduced': (
+        B + IDA + 'Assessment\nHer blood pressure was 210/120, so the scope was never introduced.\n\n' + HOT_SNARE, ()),
+    'C1 we chose not to proceed': (
+        B + IDA + 'Assessment\nHer INR was 3.4. We chose not to proceed, and she will return next week.\n\n'
+        + HOT_SNARE, ()),
+    # C2, independent variants: a pre-procedure note that says nothing called off, the act pasted under another record's
+    # heading further up than sections.under_another_occurrence reads
+    'C2 pre-colonoscopy assessment, act 10 lines under a prior-report heading': (
+        B + PRE_HEAD + NPO + '\nPrior Report\n' + PAGES + 'Line 8 of these pages lists the problem list in detail.\n'
+        + HOT_SNARE, ()),
+    'C2 pre-colonoscopy assessment, act 9 lines under an enclosed-pages heading': (
+        B + PRE_HEAD + NPO + '\nEnclosed Pages\n' + PAGES + HOT_SNARE, ()),
+    'C2 pre-colonoscopy assessment, act 9 lines under a scanned-pages heading': (
+        B + PRE_HEAD + NPO + '\nScanned Pages From Mercy GI\n' + PAGES + HOT_SNARE, ()),
+    'C2 pre-colonoscopy assessment, act right under an attached-report heading': (
+        B + PRE_HEAD + NPO + '\nAttached Report\n' + HOT_SNARE, ()),
+    # controls: an act done today under the report's own heading keeps its offer, an outside report above it or not
+    'C2 control, an act done today under its own heading below an outside report': (
+        B + IDA + 'Outside Report\n' + PAGES + '\n' + TODAY, ()),
+    'C2 control, an act done today': (B + IDA + TODAY, ()),
+    # a recorded cost of C1 (a closed list read anywhere, fail-closed): an act done today, and a visit rescheduled
+    'C1 cost, an act done today and a clinic visit rescheduled': (
+        B + IDA + TODAY + '\nPlan\nHer clinic visit will be rescheduled to go over the pathology.\n', ()),
+}
+
+
+def cycle_two(offers):
+    """A cycle-2 row's offers as the cycle-2 rule makes them: [family, act, reason, installed offer, fbc59ee53 offer,
+    cycle-2 offer] -> [family, act, reason, cycle-2 offer]."""
+    return [[family, act, reason, po] for family, act, reason, _, _, po in offers]
+
+
+class CycleTwoOfferTests(SimpleTestCase):
+    """PO-1 offers nothing where the document says its procedure was called off, cancelled or not done today, whatever a
+    pasted act elsewhere says (C1, engine._po_called_off), and P1's act is no evidence under a heading-like line further
+    up naming another occurrence's record or an attachment (C2, engine._po_under_another_record): the refutation's rows
+    lose their offers, each guard's killing rows offer nothing, and an act done today under the report's own heading
+    still offers (the texts are pinned by the declaration)."""
+
+    def check(self, name):
+        text, codes = C2_ROWS[name]
+        row = C2_DECLARED[name]
+        self.assertEqual(boot.sha256_text(text), row['text_sha256'], name)
+        self.assertEqual([list(c) for c in codes], row['codes'], name)
+        self.assertEqual(offers_of(text, codes), cycle_two(row['offers']), name)
+
+    def test_the_rows_are_the_declared_ones(self):
+        self.assertEqual(sorted(C2_ROWS), sorted(C2_DECLARED))
+        self.assertFalse(set(C2_ROWS) & (set(ROWS) | set(AMENDED_ROWS) | set(R2_ROWS)))
+
+    def test_the_refutations_rows_offer_nothing(self):  # held by C1 and C2 together, or by one of them
+        for name in sorted(n for n in C2_ROWS if n.startswith('PO1 ')):
+            with self.subTest(name):
+                self.check(name)
+
+    def test_a_procedure_called_off_in_other_words(self):  # kills po1-called-off
+        for name in ('PO1 called off, act pasted under no heading', 'PO1 called off, act pasted 9 lines under a neutral '
+                     'heading', 'C1 the case was called off', 'C1 sent home without the procedure',
+                     'C1 nothing further was done today', 'C1 the scope was never introduced',
+                     'C1 we chose not to proceed'):
+            with self.subTest(name):
+                self.check(name)
+
+    def test_an_act_pasted_under_another_records_heading_further_up(self):  # kills po1-act-record-heading
+        for name in ('PO1 pre-colonoscopy assessment, act pasted 9 lines under an outside-report heading',
+                     'C2 pre-colonoscopy assessment, act 10 lines under a prior-report heading',
+                     'C2 pre-colonoscopy assessment, act 9 lines under an enclosed-pages heading',
+                     'C2 pre-colonoscopy assessment, act 9 lines under a scanned-pages heading',
+                     'C2 pre-colonoscopy assessment, act right under an attached-report heading'):
+            with self.subTest(name):
+                self.check(name)
+
+    def test_an_act_done_today_under_its_own_heading_still_offers(self):
+        for name in ('C2 control, an act done today', 'C2 control, an act done today under its own heading below an '
+                     'outside report'):
+            with self.subTest(name):
+                self.check(name)
+
+    def test_the_recorded_cost_of_c1(self):  # a closed list read anywhere: a done report's rescheduled visit holds too
+        self.check('C1 cost, an act done today and a clinic visit rescheduled')
+
+
+class CalledOffAndRecordHeadingUnitTests(SimpleTestCase):
+    """C1's words (engine._PO_CALLED_OFF) and C2's line (engine._po_under_another_record), read alone."""
+
+    def tearDown(self):
+        __import__('studio.jobs', fromlist=['x']).release_routing_caches()
+
+    def test_called_off_words(self):
+        for line in ('After discussion we did not go ahead, and she will be rebooked next week.',
+                     'At the time-out her potassium was 2.6, so we did not go ahead.', 'The scope was not inserted.',
+                     'She was rebooked for next week; nothing further was done today.', 'The case was called off.',
+                     'She was sent home without the procedure.', 'We decided not to proceed with the colonoscopy.',
+                     'We chose not to proceed.', 'The colonoscope was never introduced.', 'The case was cancelled.',
+                     'Cancelled at the time-out because of a potassium of 2.6.', 'No colonoscopy today.',
+                     'The examination was not performed today.', 'The procedure was aborted before insertion.',
+                     'The procedure has been postponed by a week.', 'She will be rescheduled.'):
+            with self.subTest(line):
+                self.assertTrue(engine._po_called_off(B + line + '\n'))
+
+    def test_what_is_no_procedure_called_off(self):
+        for line in ('The colonoscope could not be advanced beyond the splenic flexure.',  # begun: an incomplete one
+                     'We were unable to proceed beyond the stricture.', 'No other procedures were performed today.',
+                     'The procedure was completed without complications.', 'Repeat colonoscopy in three years.',
+                     'His first procedure in September was cancelled because of a low platelet count.',
+                     'The polyp was not removed today.', 'Biopsies were taken; nothing further was found.'):
+            with self.subTest(line):
+                self.assertFalse(engine._po_called_off(B + line + '\n'))
+
+    def test_the_heading_like_line_above_an_act(self):
+        act = HOT_SNARE.rstrip('\n')
+        for heading, held in (('Previous Report', True), ('Outside Report', True), ('Attached Report', True),
+                              ('Enclosed Pages', True), ('Scanned Pages From Mercy GI', True),
+                              ('Outside colonoscopy report:', True), ('Additional Pages', False), ('Findings', False),
+                              ('Large Bowel Narrative', False)):
+            text = B + IDA + NOT_AHEAD + '\n' + heading + '\n' + PAGES + HOT_SNARE
+            with self.subTest(heading):
+                self.assertEqual(engine._po_under_another_record(text, text.index(act)), held)
+        # the nearest such line governs: today's heading below an outside report reads nothing
+        text = B + IDA + 'Outside Report\n' + PAGES + '\n' + TODAY
+        self.assertFalse(engine._po_under_another_record(text, text.index('A 4 mm polyp')))
+        # bounded: a heading beyond sections.HEADING_REACH_LINES lines is never read
+        far = B + IDA + 'Outside Report\n' + ''.join(f'Line {i} of these pages lists the problem list.\n'
+                                                      for i in range(sections.HEADING_REACH_LINES + 5)) + HOT_SNARE
+        self.assertFalse(engine._po_under_another_record(far, far.index(act)))
