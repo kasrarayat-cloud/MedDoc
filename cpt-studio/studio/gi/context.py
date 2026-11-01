@@ -20,9 +20,8 @@ from datetime import date
 from typing import Optional
 
 from studio.gi import cues
-from studio.gi.sections import (ADDENDUM_HEADER, DOCUMENT_PART, HEADINGS, PROCEDURE_HEAD_LINES, Layout,
-                                around_procedure_title, head_lines_end, layout, procedure_report_head,
-                                under_another_occurrence)
+from studio.gi.sections import (ADDENDUM_HEADER, DOCUMENT_PART, HEADINGS, Layout, around_procedure_title, head_lines_end,
+                                layout, procedure_report_head, under_another_occurrence)
 from studio.types import CONTEXT_FACTS, Fact, Span
 
 SETTINGS = ('office', 'hospital_outpatient', 'asc', 'inpatient', 'emergency', 'telehealth')
@@ -3186,10 +3185,7 @@ def _evidence_spans(c: _Candidate, answers: Optional[set] = None) -> tuple[Span,
 @functools.lru_cache(maxsize=16)
 def _context(text: str) -> tuple[Fact, ...]:
     lay = layout(text)
-    found = _service_dates(text, lay)
-    # the integration's STRONG-HEAD HOLD (_head_holds): the fact as made, marked where a procedure report's own head
-    # gives one date, so that merge_user_values holds a member's answer of another day
-    service_date = _head_holds(text, found, _charge_block_asks(text, lay, _service_date_fact(found)))
+    service_date = _charge_block_asks(text, lay, _service_date_fact(_service_dates(text, lay)))
     settings_found = _settings(text, lay)
     setting = (_fact('setting', settings_found) if settings_found is not None else
                Fact('setting', None, 'missing', (), TOO_MANY_SETTINGS_NOTE.format(limit=SETTING_STATEMENT_LIMIT)))
@@ -3297,7 +3293,7 @@ def _span_dates(span) -> set:
                                                                 m.start()) is None) if day}
 
 
-def _merge_member_values(facts: dict[str, Fact], user_values: dict[str, str]) -> dict[str, Fact]:
+def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> dict[str, Fact]:
     """A non-empty user value is encounter metadata: it supplies a fact the document does not give or does not give
     unambiguously (a missing or conflicting documented value), and it agrees with a documented value. A user value
     that DIFFERS from a single documented value is a conflict, kept with both sides, never a silent replacement of the
@@ -3373,147 +3369,3 @@ def _merge_member_values(facts: dict[str, Fact], user_values: dict[str, str]) ->
             continue
         merged[name] = Fact(name, value, 'user', (), USER_NOTE)
     return merged
-
-
-def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> dict[str, Fact]:
-    """The member's values merged with the document's facts (_merge_member_values: its rules, exactly as before), then
-    the integration's STRONG-HEAD HOLD (pd.json amendment_20261101_integration): a member's answer of another day than a
-    procedure report's own head gives (_HeadHeldFact) is held - only an answer the merge above takes, so nothing new is
-    ever taken or sent, and an answer it holds keeps its own hold and note."""
-    merged = _merge_member_values(facts, user_values)
-    documented, answer = facts.get('service_date'), merged.get('service_date')
-    if isinstance(documented, _HeadHeldFact) and answer is not None and answer.origin == 'user' \
-            and answer.value != documented.head_day:
-        head, also = documented.head_quotes
-        merged['service_date'] = Fact('service_date', None, 'conflict', documented.evidence, HEAD_HOLD_NOTE.format(
-            user=answer.value, day=documented.head_day, head=head, also=also))
-    return merged
-
-
-# --- GI round 4, Wave 1 repair cycle 1 integration: the STRONG-HEAD HOLD (pd.json amendment_20261101_integration) -----
-# A procedure report's OWN head - an own-date field, a proceduralist field and a sedation field as labelled fields, one
-# own date, no review or result title: detect.todays_procedure_report, the strong head PI+PE's cycle 1 reads for E1,
-# imported and never copied - whose own-date field gives exactly one date states the date of service of the report's own
-# case. A member's answer of ANY other day is then HELD (asked): never narrowed, never taken, never sent. Only an answer
-# merge_user_values would otherwise take is held (TAKEN -> HELD), so nothing is taken or sent that was not (NEW-SEND and
-# NEW-TAKE stay 0), and the 'none' state - the fact's origin, value and evidence, the request, every reader's date - is
-# unchanged. The hold's question quotes the head's own-date line and every other line the date reader reads as this
-# case's own date of service (a case-room ledger's "Service date logged for this case: ..."), each whole (CTS-5).
-HEAD_DATE_NOTE = ("This procedure report's own head gives its date of service as {day} ({head}){also}. This service "
-                  "does not send that date by itself, so the date is asked; a member's answer of any other day is held.")
-# the narrow release's and rule (a)'s question keep their note, which readers read (charge_date_problem): this sentence
-# follows it, names no document line (so the question's own markers stay its last) and says the date it keeps is held too
-_HEAD_CHARGE_NOTE = " This procedure report's own head gives its date of service as {day}, so an answer of {own} is held too."
-HEAD_HOLD_NOTE = (_USER_CONFLICT_PREFIX + "{user}; this procedure report's own head gives its date of service as {day} "
-                  '({head}){also}. Both are kept and neither is used: correct the metadata, clear it, or add an addendum '
-                  'to the document.')
-_HEAD_ALSO = ', and the document also states {lines}'
-_HEAD_OTHER_LINES = 3  # the other lines a note quotes, at most (each whole: CTS-5)
-
-
-class _HeadHeldFact(Fact):
-    """The service date fact of a procedure report whose own head gives one date (_head_holds). ``head_day`` (ISO) and
-    ``head_quotes`` (the head's own-date line and the other lines, quoted) are what merge_user_values holds a member's
-    answer of another day with (HEAD_HOLD_NOTE). Stored, compared and shown as the plain Fact it copies (the same fields,
-    plain JSON through to_jsonable): only merge_user_values reads the hold, from a freshly extracted fact (the analyze
-    child's, carried by pickle), as it reads every span class here (_QuotedSpan, _ElsewhereSpan)."""
-
-    def __eq__(self, other):
-        return isinstance(other, Fact) and (self.name, self.value, self.origin, self.evidence, self.note) == (
-            other.name, other.value, other.origin, other.evidence, other.note)
-
-    __hash__ = Fact.__hash__
-
-
-def _head_held(fact: Fact, note: str, day: str, head: str, also: str) -> _HeadHeldFact:
-    held = _HeadHeldFact(fact.name, fact.value, fact.origin, fact.evidence, note)
-    object.__setattr__(held, 'head_day', day)  # a frozen dataclass: set once, here
-    object.__setattr__(held, 'head_quotes', (head, also))
-    return held
-
-
-def _head_own_date(text: str) -> Optional[tuple[str, list]]:
-    """(the day as ISO, [(line start, line end, match), ...]) of a procedure report's own head whose own-date field gives
-    exactly one date - no other date-shaped text in the field (_PD_OTHER_DATE up to the field's break or its line's end) -
-    or None. The strong head is detect.todays_procedure_report's (imported lazily: detect imports this module), and so is
-    its one own date (detect._gi4_head); its own-date fields are the lines _gi4_head reads: the same head lines, markdown
-    lead, labels and dates. A note written around a procedure is no procedure report, whatever its head's fields: under
-    rule (c)'s broadened detection (_pd_around_procedure) or stating a call or a message (_PD_CALL_PHRASE), its "Day of
-    procedure" is the planned procedure's, and its own day must stay a member's answer (the plan's F7 must-hold)."""
-    from studio.gi import detect
-    if not detect.todays_procedure_report(text):
-        return None
-    if _pd_around_procedure(text):
-        return None  # a booking, a call, a consent, instructions, a letter, a review... (titles, cells, kind fields)
-    if _PD_CALL_PHRASE.search(text) is not None:
-        return None  # a call or a message written as an event, wherever it stands
-    day = detect._gi4_head(text).own_dates[0]  # one own date: the strong head's own condition
-    end, start, lines = head_lines_end(text, PROCEDURE_HEAD_LINES), 0, []
-    while start < end:
-        nl = text.find('\n', start, end)
-        line_end = end if nl < 0 else nl
-        body = detect._GI4_MARKUP.match(text, start, line_end).end()
-        m = (SERVICE_DATE.match(text, body, line_end) or WIDE_SERVICE_DATE.match(text, body, line_end)) \
-            if body < line_end else None
-        if m is not None and date_from_match(m) == day:
-            brk = _FIELD_BREAK.search(text, m.end(), line_end)
-            if _PD_OTHER_DATE.search(text, m.end(), brk.start() if brk else line_end) is not None:
-                return None  # the own-date field gives more than one date
-            lines.append((start, line_end, m))
-        if nl < 0:
-            break
-        start = nl + 1
-    return (day.isoformat(), lines) if lines else None
-
-
-def _takes_another_day(fact: Fact, day: str) -> bool:
-    """Whether the merge before the hold (_merge_member_values) takes a member's answer of another day than ``day``
-    (ISO) for this documented service date fact - its branches, in its order: the document's own sent date, the narrow
-    release's question (the date it keeps), a documented conflict's values, the dates limiting evidence reads, else any
-    date."""
-    if fact.origin == 'document' and fact.value:
-        return str(fact.value) != day
-    own = charge_date_own(fact)
-    if own is not None:
-        return own != day
-    listed = documented_values(fact)
-    if listed:
-        return any(value != day for value in listed)
-    if fact.origin in ('missing', 'conflict') and fact.evidence and _limits_answers(fact):
-        readings = _date_readings(fact.evidence)
-        return readings is not None and any(value != day for value in readings)
-    return True
-
-
-def _head_holds(text: str, found: tuple[_Candidate, ...], fact: Fact) -> Fact:
-    """The service date fact of a procedure report whose own head gives one date (_head_own_date), marked so that
-    merge_user_values holds a member's answer of any other day (_HeadHeldFact); every other fact exactly as made. Its
-    origin, value and evidence never change. Where the date is asked and a member's answer of another day would be
-    taken, its note says so: HEAD_DATE_NOTE replaces a note no reader reads; the narrow release's and rule (a)'s question
-    keeps its note, which charge_date_problem reads, and _HEAD_CHARGE_NOTE follows it; a documented conflict's note is
-    its values (documented_values) and stays exactly as made. Bounded: the head once; the other lines each quoted once,
-    at most _HEAD_OTHER_LINES of them."""
-    head = _head_own_date(text)
-    if head is None:
-        return fact
-    day, lines = head
-    rows, seen = _Rows(text), {ls for ls, _, _ in lines}
-    quote = ', '.join(_pd_line(text, ls, le, m.start(), m.end())[1] for ls, le, m in lines)
-    others = []
-    for c in sorted((c for c in found if c.source == 'label' and c.reading == 'own' and c.form == 'read' and c.value
-                     and not c.doubt), key=lambda c: (c.value == day, c.span.start)):
-        ls, le = rows.line(c.span.start)
-        if ls not in seen:  # every other line this reader reads as this case's own date of service, each once
-            seen.add(ls)
-            others.append(c.quote or _pd_line(text, ls, le, c.span.start, c.span.end)[1])
-            if len(others) == _HEAD_OTHER_LINES:
-                break
-    also = _HEAD_ALSO.format(lines=', '.join(others)) if others else ''
-    note = fact.note
-    if fact.value is None and _takes_another_day(fact, day):  # asked, and an answer of another day would be taken
-        own = charge_date_own(fact)
-        if own is not None:  # the narrow release's or rule (a)'s question: the date it keeps is held too
-            note = fact.note + _HEAD_CHARGE_NOTE.format(day=day, own=own)
-        elif not documented_values(fact):  # a documented conflict's note is its values (documented_values): as made
-            note = HEAD_DATE_NOTE.format(day=day, head=quote, also=also)
-    return _head_held(fact, note, day, quote, also)
