@@ -1,0 +1,61 @@
+{
+ "package": "PV1",
+ "summary": "GI round 4, package PV1: E/M reading fixes (C1, C2) and the C4 holds, plus V3's hold-only nouns. Edits only cues.EM_TIME_ACTIVITIES, NOT_IN_PERSON, NOT_IN_PERSON_TITLE (new) and MDM_LEVEL (a third prefix sharing the 'level' group; read only by detect); detect._em_base_reading, _clause_reading_cues and _cue_reading (an 'activities' parameter, default None = installed), _not_in_person, EM_NOT_IN_PERSON, EM_ANOTHER_TIME and new _pv1_* helpers; checks._VAL_SERVICE_NOUNS. Nothing context.py or sections.py reads changes, so the request side cannot move: no cue the freeze inventories is added or changed, and the date channel, every request's bytes, every layout and both mention counts are unchanged. Every movement is in routing's gi.office_em reading and the E/M codes that follow it. Declared before any code was written; the base is installed 80df1831d168 (stage A's head 1e0733feb equals it on every pin).",
+ "base": "80df1831d168c4ee83d83c37bac9860690986cf3",
+ "rules": {
+  "C1": "an E/M time statement followed directly by 'covering', 'including', 'spent on' (or the prototype's synonyms) lists the visit's own work: clause cues and dates at or after that word never re-time the statement; cues before it still do; em-time mentions only",
+  "C2": "an inline 'complexity of decision making: X' / 'level of decision making: X' (':' or '-' after the label) gives MDM level X; 'shared decision making' never gives a level; the existing 'medical decision making' / 'MDM' readings are unchanged",
+  "C4": "a performed E/M reading of any kind (visit statement, heading, time, MDM) is held (uncertain, doubt) when the note says the patient was not seen in person, has no in-person contact, was seen by telephone or phone call (telephone/phone encounter, call, visit, follow-up, note; by/via/over the telephone or phone; telephonic; audio-only), was a no-show or did not arrive/attend/show up: anywhere outside plan and history sections, in a head title line whatever its section, or in the E/M statement's own sentence. Video, telehealth and virtual visits are NOT held. A reading installed already holds or reads not-performed is returned unchanged (no exclusion becomes a hold through C4)",
+  "C4-time": "installed's _another_time now also holds a performed E/M time statement ('Total time at her last visit was 40 minutes.')",
+  "V3": "_VAL_SERVICE_NOUNS gains imaging and laboratory nouns (ultrasound, sonogram, sonography, elastography, CT, MRI, MRCP, x-ray, scan, blood work, panel); it only turns an E/M code's own negative reading about another service into a hold"
+ },
+ "cues_added": [],
+ "movements": {},
+ "battery": [
+  ["telephone-only time", "99212", "selected/ready", "selected/needs_clarification"],
+  ["last visit time", "99213", "selected/ready", "selected/needs_clarification"]
+ ],
+ "battery_note": "Every other row is expected unchanged in bucket and status: E2, E3 and E4 have no E/M mention on installed (their framed time is PV2's), 'future visit time' and 'return visit + ultrasound (V3)' are already held for the same reasons, and no non-E/M row carries C1, C2 or C4 wording. The two movements remove two of installed's five known violations (both C4 E/M READYs); no new violation.",
+ "replay": {
+  "h4-01": {
+   "every state": "routing gi.office_em stays performed and gains em_basis=time+mdm, time_minutes=52 (C1: 'the orders' after 'covering' no longer re-times L39) and mdm_level=moderate (C2: L40 'Complexity of decision making: moderate.'); its mentions read performed only (installed: performed and planned); gi.egd and gi.colonoscopy unchanged",
+   "none": "99204 stays selected/needs_clarification (the date is unknown: context.service_date fails); its em_basis clarification and the 'planned: orders' status warning go; fingerprint changes",
+   "walk 2026-10-26": "99204 selected/needs_clarification -> selected/ready (the plan's expectation: em_basis time+mdm, both provider passages show the visit, no 'planned: orders' warning); fingerprint changes",
+   "other dated states (doc:2026-10-14, doc:2026-11-02, doc:2026-11-23, doc:2026-12-14, far 1998-01-01, minus1, plus1)": "99204 selected/needs_clarification -> selected/ready: installed's date channel accepts every one of these answers (D1/D2, package PD's), and nothing PV1 reads depends on the date (L8, L39 and L40 carry none). PV1 changes no date: these states are fixed by PD, which lands before PV1",
+   "completeness and offers": "may move with 99204's status (fewer unresolved items); the four quality codes stay excluded by scope.cpt",
+   "unchanged": "the date channel, every request sha256, the HARD failures"
+  },
+  "h2-08": "EQUAL in the compact replay (no gi.office_em mention: its framed time is PV2's). V3 may change the wording of 99215's service.status check (the planned 'Surveillance ultrasound in six months.' becomes a hold about another service) without moving its bucket, status or check statuses",
+  "h4-02": "EQUAL",
+  "h4-03": "EQUAL",
+  "h4-04": "EQUAL",
+  "h4-05": "EQUAL",
+  "h4-06": "EQUAL",
+  "h2-10": "EQUAL"
+ },
+ "corpus": {
+  "expected fixes": [
+   "MUST em.not-office-basis and MUST status.not-performed[gi.office_em]: telephone and no-show visits that state a time or an MDM level (C4)",
+   "MUST em.time-not-another-occurrence: 'Total time at her last visit was 40 minutes.' (C4-time)",
+   "MUST status.not-denied[gi.office_em] and SHOULD status.performed[gi.office_em]: visits whose only E/M statement is a time with an activity list naming 'the orders' or 'the referral' (C1; the h2-08 seeds' 'Total time on the date of the encounter' variant)",
+   "SHOULD em.time-read: the h4-01 time phrase with its activity list (generated office visits and the h4-01 and h2-08 seeds)",
+   "SHOULD em.mdm-read: 'Complexity of decision making: moderate.' (C2)"
+  ],
+  "expected regressions": [
+   "SHOULD status.performed[gi.office_em] only where a visit's sole E/M statement is another visit's time ('h208' header, last_visit time, no MDM): that statement is now held, so the family reads uncertain, never planned or historical"
+  ],
+  "MUST": "no MUST cell that passes on installed fails"
+ },
+ "state": "H5 (tests.test_gi4_state) unchanged: h4-04 and the synthetic colonoscopy carry no E/M reading",
+ "guards": [
+  "C4 hold in _em_base_reading",
+  "C4 head title lines read whatever their section",
+  "C4 the E/M statement's own sentence read whatever its section",
+  "C4-time: _another_time on a performed E/M time",
+  "C1: cues before the activity word still re-time the statement",
+  "C1: em-time mentions only (a visit statement's cues are never skipped)",
+  "C2: 'shared decision making' never gives a level",
+  "V3: an ultrasound named in an E/M code's negative passage holds it"
+ ],
+ "cost": "linear: the not-in-person words are matched once per document (memoized) and looked up per E/M mention by bisection; the activity word is one anchored match per time statement; the clause window stays CLAUSE_REACH-bounded"
+}
