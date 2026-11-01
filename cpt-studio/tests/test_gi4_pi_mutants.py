@@ -26,7 +26,7 @@ class MutantRegistryTests(SimpleTestCase):
 
     def test_each_is_registered_once_in_the_merged_registry(self):
         names = [m.name for m in mutants.MUTANTS]
-        self.assertEqual(len(PI_MUTANTS), 19)  # the 18 declared and pi-office-visit (pi.json, after_measurement)
+        self.assertEqual(len(PI_MUTANTS), 23)  # 18 declared, pi-office-visit, and the Wave 1 repair's 4 (amendment_20261101_cycle1)
         for m in PI_MUTANTS:
             self.assertEqual(names.count(m.name), 1, m.name)
             self.assertIs(mutants.BY_NAME[m.name], m)

@@ -3712,8 +3712,11 @@ def _pe_routing_reach(an: Analysis, pre: str, post: str, found: re.Match, depth:
       the duodenum" says nothing of where the gastroscope went;
     - the document is no note written around a procedure (_pe_around_procedure: a letter, a booking, a handout, a records
       review quoting a report);
-    - the verb is under no line naming another occurrence's record (sections.under_another_occurrence: "Outside Records"
-      over "At Mercy GI the colonoscope was navigated to the cecum")."""
+    - the verb lies inside today's procedure narrative (in_todays_narrative, the copy guards PI's S1 and E1 read too:
+      never in an attached or outside report, under a line naming another occurrence's record - "Outside Records" over
+      "At Mercy GI the colonoscope was navigated to the cecum" - after a sign-off or a statement that a copy follows, in a
+      block dated another day, or in unit statistics; GI round 4 Wave 1 repair, F3: "Attached Report" ten lines above
+      "The colonoscope was navigated to the cecum", signed 03/02/2024, had read the cecum reached)."""
     if not re.match(r'(?:steered|navigated)\b', found.group(0), re.A | re.I):
         return False  # every other verb of the pattern is cues.REACHED_BEFORE's, which read no reach here
     if depth < _S2_expected_depth(an, table):
@@ -3725,7 +3728,8 @@ def _pe_routing_reach(an: Analysis, pre: str, post: str, found: re.Match, depth:
         return False
     if _pe_around_procedure(an):
         return False
-    return not gi_sections.under_another_occurrence(an.text, at - len(pre) + found.start())
+    verb = at - len(pre) + found.start()
+    return in_todays_narrative(an.text, verb, an.service_date, (at - len(pre), at + len(post)))
 
 
 def _pe_reach_doubted(before: str, span: str, post: str) -> bool:
@@ -3795,6 +3799,301 @@ def _pe_endoscope_moved(before: str, span: str) -> bool:
     for last in re.finditer(r'\b(?:(?P<scope>' + scope + r')|' + accessory + r')\b', before, re.A | re.I):
         pass
     return last is not None and last.group('scope') is not None
+
+
+# --- GI round 4 Wave 1 repair, cycle 1 (packages PE and PI): today's procedure report and today's narrative ---------
+# One implementation of the copy guards the round's releasing readers share: PE's routing-only reach (_pe_routing_reach,
+# above) and PI's instrument reach (S1) and endpoint extent (E1) in studio/gi/services.py, which reads them from here.
+# The refutation of b840ae756 read each release inside another record: an attached outside colonoscopy report in today's
+# EGD note (F1, F3), unit statistics under a plan heading (F1) and a later pathology review copying a colonoscopy report
+# (F2). A releasing reader therefore reads only inside TODAY'S procedure narrative - never in an attached, pasted,
+# copied, quoted or outside report, unit statistics, education, plan narration or a later review. Everything below only
+# HOLDS: False keeps the installed reading. The document is read once per text (cached; jobs.release_routing_caches
+# clears it), and each passage then in bounded windows.
+
+_GI4_MARKUP = re.compile(r'[ \t]*+[#*_>]*+[ \t]*+')  # a line's markdown lead, never a list bullet
+_GI4_FIELD = re.compile(r"(?P<label>[A-Za-z][A-Za-z0-9 \t/&()'’-]{0,59}?)[ \t]*+:[ \t]*+(?P<value>\S)", re.A)
+_GI4_FIELD_VALUE = re.compile(r':[ \t]*+\S')  # a colon with a value after it: a field line, never a heading
+_GI4_LIST_ITEM = re.compile(r'(?:\(?\d{1,3}[.)]|[a-z][.)]|[-*\u2022\u2013\u2014])[ \t]', re.A)
+# The head's own fields (the binding rule of the repair: the proceduralist and sedation fields as FIELDS, never words
+# anywhere). A proceduralist field is labelled with sections.PROCEDURE_HEAD's field names, without 'attending' (a review's
+# or a visit's attending is no proceduralist: F2's 'Attending:' review); a sedation field's label names sedation, a
+# sedative, anesthesia or an anesthetic, propofol, midazolam, fentanyl, MAC or a CRNA, and its value is no denial.
+_GI4_PROCEDURALIST = re.compile(r'(?:proceduralist|endoscopist|operator|performing (?:physician|endoscopist)'
+                                r'|gastroenterologist|colonoscopist)s?', re.A)
+_GI4_SEDATION = re.compile(r'\b(?:sedation|sedatives?|an(?:a)?esthe(?:sia|tics?|tists?|siology|siologists?)|propofol'
+                           r'|midazolam|fentanyl|mac|crna)\b', re.A)
+_GI4_NO_SEDATION = re.compile(r'(?:none|no|nil|n/?a|not[ \t]+(?:applicable|given|used|required|needed|administered|done)'
+                              r'|unsedated|without)\b|-+[ \t]*$', re.A | re.I)
+# A head title that names a later review, a result or another record: the document is no procedure's own report of
+# today (a closed list, read only to hold; sections.around_procedure_title holds the notes written around a procedure).
+_GI4_TITLE_HOLD = re.compile(r'\b(?:review(?:ed|s)?|pathology|histology|histopathology|results?|addend(?:um|a)'
+                             r'|follow[- ]?up|discharge|transfer|cop(?:y|ies|ied)|attached|attachments?|scanned|outside'
+                             r'|external|prior|previous|transcripts?|transcribed|excerpts?)\b', re.A | re.I)
+# A heading-like line that opens a foreign block, which runs on to the end of the document: an attachment or a copy, an
+# outside or external report or record (a closed list, read only to hold).
+_GI4_ATTACHED = re.compile(r'\b(?:attached|attachments?|scanned|enclosed|enclosures?|cop(?:y|ies|ied)|pasted|imported'
+                           r'|forwarded|faxed|appended|appendix|excerpts?|excerpted|quoted|transcribed|transcripts?'
+                           r'|reproduced|uploaded)\b|\b(?:outside|external)[ \t]+(?:[\w-]+[ \t]+){0,2}?(?:reports?'
+                           r'|records?|pages?|documents?|notes?|letters?|results?|studies|study|summar(?:y|ies))\b',
+                           re.A | re.I)
+# A sign-off line: today's report, or another one, ends there (its signer, a colon, "by" or a date follows the word).
+_GI4_SIGN_OFF = re.compile(r'(?:(?:report|note|document|study)[ \t]+)?(?:(?:electronically|digitally)[ \t]+)?(?:e-?)?'
+                           r'(?:signed|co-?signed|counter-?signed|attested|authenticated|dictated|finali[sz]ed|verified)'
+                           r'\b|(?:signature|attestation|authentication)\b', re.A | re.I)
+_GI4_SIGNER = re.compile(r':|\bby\b|\d{1,2}[/:.]\d{1,2}|\b(?:19|20)\d{2}\b|\b(?:MD|DO|RN|NP|PA-C|CRNA|MBBS|FRCP)\b', re.A)
+# A statement that a copy follows (a closed list, read only to hold): "its report is copied below", "see attached".
+_GI4_COPY = re.compile(
+    r'\b(?:cop(?:y|ied)|pasted|attached|enclosed|reproduced|appended|scanned|transcribed|quoted|excerpted|imported)'
+    r'[ \t]+(?:below|here(?:in|with)?|hereafter|as[ \t]+follows)\b'
+    r'|\b(?:reports?|records?|notes?|pages?|documents?|letters?|summar(?:y|ies)|results?|copies)[ \t]+(?:is|are|was'
+    r'|were|has[ \t]+been|have[ \t]+been)[ \t]+(?:copied|pasted|attached|enclosed|reproduced|appended|scanned|imported'
+    r'|forwarded|faxed|included|transcribed)\b'
+    r'|\bsee[ \t]+(?:the[ \t]+)?(?:attached|enclosed|scanned)\b'
+    r'|\b(?:a|the)[ \t]+cop(?:y|ies)[ \t]+of[ \t]+(?:the|her|his|their|its|an?|this|that)\b', re.A | re.I)
+# A governing heading that names education or instructions (a closed list, read only to hold).
+_GI4_EDUCATION = re.compile(r'\b(?:education(?:al)?|instructions?|handouts?|leaflets?|what[ \t]+(?:happens|to[ \t]+'
+                            r'expect)|preparing[ \t]+for|how[ \t]+to|faq|frequently[ \t]+asked)\b', re.A | re.I)
+# A governing heading below the head's own fields that names a facility: another place's record (closed, hold-only).
+_GI4_FACILITY = re.compile(r'(?i:\b(?:hospitals?|cent(?:er|re)s?|clinics?|institutes?|associates|infirmary|healthcare'
+                           r'|medical[ \t]+(?:group|cent(?:er|re))|health[ \t]+(?:system|care)|partners|practice)\b)'
+                           r'|\b(?!(?:Upper|Lower|UPPER|LOWER|The|Our|Your|His|Her)\b)[A-Z][A-Za-z]+[ \t]+GI\b', re.A)
+# Unit statistics or a generalisation in the passage's own sentence ("In our unit the colonoscope reached the cecum in
+# 98 of 100 patients"): no account of today's examination (a closed list, read only to hold).
+_GI4_GENERAL = re.compile(
+    r'\b(?:in|of|for|among)[ \t]+(?:\d+|most|many|all|nearly[ \t]+all|almost[ \t]+all|the[ \t]+majority[ \t]+of|some'
+    r'|few|our|these|such)[ \t]+(?:of[ \t]+)?(?:\d+[ \t]+)?(?:patients|cases|procedures|examinations|exams|studies'
+    r'|people|adults|individuals|colonoscopies|endoscopies)\b'
+    r'|\b\d+(?:\.\d+)?[ \t]*(?:%|percent\b)'
+    r'|\b(?:in|at|across)[ \t]+our[ \t]+(?:unit|practice|cent(?:er|re)|department|hospital|experience|series|clinic)\b'
+    r'|\b(?:usually|typically|generally|normally|routinely|commonly|often|sometimes|rarely|ordinarily)\b', re.A | re.I)
+_GI4_BLOCK_CHARS = 2000  # a passage's block is read at most this far on each side (bounded work per passage)
+_GI4_SENTENCE_CHARS = 1000  # and its own sentence this far
+_GI4_HEADING_CHARS = 60  # a heading-like line is short
+
+
+@dataclass
+class _Gi4Head:
+    own_dates: tuple  # the calendar dates of the head's own-date fields
+    proceduralist: bool
+    sedation: bool
+    fields_end: int  # the end of the head's last own field line (0: none)
+    titles: tuple  # (start, end) of the head's title lines
+
+
+@dataclass
+class _Gi4Marks:
+    line_starts: list
+    heads: list  # starts of the heading-like lines
+    head_ends: list
+    flags: list  # per heading-like line: (names another record or education, a facility, a history/plan/indication kind)
+    blanks: list  # starts of the blank lines
+    signoffs: list  # starts of the sign-off lines below the head's own fields
+    dates: tuple  # context.find_dates(text)
+    date_starts: list
+    foreign: int  # where the first foreign block opens (len(text) + 1: none)
+    beyond: dict = field(default_factory=dict)  # line start -> sections.beyond_heading_reach (memo)
+
+
+def _gi4_line(text: str, start: int, end: int) -> str:
+    """The line [start, end) without its markdown lead and surrounding blanks ('' for a long line: never a heading)."""
+    if end - start > 4 * _GI4_HEADING_CHARS:
+        return ''
+    body = _GI4_MARKUP.match(text, start, end).end()
+    return text[body:end].strip().rstrip('#*_').strip()
+
+
+def _gi4_heading_like(line: str) -> bool:
+    """A short stand-alone line written as a heading: letters, no sentence end, no field value, no list item."""
+    return (0 < len(line) <= _GI4_HEADING_CHARS and line[-1] not in '.;!?,' and any(c.isalpha() for c in line)
+            and not _GI4_FIELD_VALUE.search(line) and not _GI4_LIST_ITEM.match(line))
+
+
+@functools.lru_cache(maxsize=16)
+def _gi4_head(text: str) -> _Gi4Head:
+    """The head's own fields (its first sections.PROCEDURE_HEAD_LINES non-empty lines) and its title lines (the
+    title-shaped lines among its first sections.AROUND_PROCEDURE_TITLE_LINES non-empty lines, before its first field)."""
+    end = gi_sections.head_lines_end(text, gi_sections.PROCEDURE_HEAD_LINES)
+    own, proceduralist, sedation, fields_end, titles = [], False, False, 0, []
+    start, seen, fielded = 0, 0, False
+    while start < end:
+        nl = text.find('\n', start, end)
+        line_end = end if nl < 0 else nl
+        body = _GI4_MARKUP.match(text, start, line_end).end()
+        if body < line_end:
+            seen += 1
+            date_m = ctx.SERVICE_DATE.match(text, body, line_end) or ctx.WIDE_SERVICE_DATE.match(text, body, line_end)
+            field_m = _GI4_FIELD.match(text, body, line_end)
+            own_field = False
+            if date_m is not None and ctx.date_from_match(date_m) is not None:
+                own.append(ctx.date_from_match(date_m))
+                own_field = True
+            if field_m is not None:
+                fielded = True
+                label = ' '.join(field_m.group('label').lower().split())
+                if _GI4_PROCEDURALIST.fullmatch(label):
+                    proceduralist = own_field = True
+                if _GI4_SEDATION.search(label) \
+                        and not _GI4_NO_SEDATION.match(text, field_m.start('value'), line_end):
+                    sedation = own_field = True
+            if own_field:
+                fields_end = line_end
+            if not fielded and seen <= gi_sections.AROUND_PROCEDURE_TITLE_LINES:
+                line = _gi4_line(text, start, line_end)
+                if line and len(line) <= gi_sections.AROUND_PROCEDURE_TITLE_CHARS and line[-1] not in '.!?;,':
+                    titles.append((start, line_end))
+        if nl < 0:
+            break
+        start = nl + 1
+    return _Gi4Head(tuple(own), proceduralist, sedation, fields_end, tuple(titles))
+
+
+def todays_procedure_report(text: str) -> bool:
+    """Positive evidence that ``text`` (as written) is today's procedure report, by a STRONG head: among its first
+    sections.PROCEDURE_HEAD_LINES non-empty lines, each a labelled field at the start of its line, an own-date field
+    (a label the date reader reads as the service date, installed or wide, with a calendar date as its value), a
+    proceduralist field and a sedation field (_gi4_head); its own-date fields name one day only; and no title line names
+    a later review, a result or another record (_GI4_TITLE_HOLD). GI round 4 Wave 1 repair (F2): sections.
+    procedure_report_head took any 'Attending:' line, or the word 'sedation' anywhere in a head line, as that evidence."""
+    head = _gi4_head(text)
+    if not head.own_dates:  # an own-date field
+        return False
+    if len(set(head.own_dates)) != 1:  # one own date only
+        return False
+    if not head.proceduralist:  # a proceduralist field
+        return False
+    if not head.sedation:  # a sedation field
+        return False
+    return not any(_GI4_TITLE_HOLD.search(text, s, e) for s, e in head.titles)
+
+
+def _gi4_today(text: str, service_date: Optional[date]) -> Optional[date]:
+    """The day a passage's dates are read against: the head's one own date, else the effective service date."""
+    own = set(_gi4_head(text).own_dates)
+    return next(iter(own)) if len(own) == 1 else service_date
+
+
+def _gi4_other_day(mention, today: Optional[date]) -> bool:
+    return today is None or ctx.compare_to_service(mention, today) != 0
+
+
+@functools.lru_cache(maxsize=16)
+def _gi4_marks(text: str, today: Optional[date]) -> _Gi4Marks:
+    """The document read once for in_todays_narrative: its lines, heading-like lines with their verdicts, blank lines,
+    sign-off lines, dates and where its first foreign block opens."""
+    head = _gi4_head(text)
+    lay = layout(text)
+    dates = ctx.find_dates(text)
+    date_starts = [d.start for d in dates]
+    line_starts, heads, head_ends, flags, blanks, signoffs = [], [], [], [], [], []
+    foreign = len(text) + 1
+    start, size = 0, len(text)
+    while start <= size:
+        nl = text.find('\n', start)
+        end = size if nl < 0 else nl
+        line_starts.append(start)
+        body = _GI4_MARKUP.match(text, start, end).end()
+        if body >= end:
+            blanks.append(start)
+        else:
+            line = _gi4_line(text, start, end)
+            if _gi4_heading_like(line):
+                lo = bisect.bisect_left(date_starts, start)
+                dated = False
+                for d in dates[lo:]:
+                    if d.start >= end:
+                        break
+                    dated = dated or _gi4_other_day(d, today)
+                section = lay.section_at(start)
+                kind = section.heading is not None and section.start == start \
+                    and section.kind in ('history', 'plan', 'indication')
+                words = bool(gi_sections.ANOTHER_OCCURRENCE_HEAD.search(line) or _GI4_ATTACHED.search(line)
+                             or _GI4_EDUCATION.search(line))
+                facility = start >= head.fields_end and _GI4_FACILITY.search(line) is not None
+                heads.append(start)
+                head_ends.append(end)
+                flags.append((words, facility, kind))
+                if _GI4_ATTACHED.search(line) and start < foreign:  # a foreign block: an attachment or a copy
+                    foreign = start
+                if dated and start < foreign:  # a foreign block: a heading dated another day
+                    foreign = start
+            if start >= head.fields_end and _GI4_SIGN_OFF.match(text, body, end) \
+                    and _GI4_SIGNER.search(text, body, min(end, body + 400)):
+                signoffs.append(start)
+                if start < foreign:  # a foreign block: today's report, or another, signed off above the passage
+                    foreign = start
+        if nl < 0:
+            break
+        start = nl + 1
+    copy = _GI4_COPY.search(text, head.fields_end)
+    if copy is not None and copy.start() < foreign:  # a foreign block: a statement that a copy follows
+        foreign = copy.start()
+    return _Gi4Marks(line_starts, heads, head_ends, flags, blanks, signoffs, dates, date_starts, foreign)
+
+
+def in_todays_narrative(text: str, pos: int, service_date: Optional[date] = None, span=None) -> bool:
+    """Whether the passage at ``pos`` of ``text`` (as written) lies inside today's procedure narrative, for a releasing
+    reader (GI round 4 Wave 1 repair, cycle 1: PE's routing-only reach, PI's S1 and E1). Fail closed; every one of these
+    holds:
+    - no foreign block opens before it (_gi4_marks: a heading-like line naming an attachment or a copy or dated another
+      day, a sign-off line below the head's own fields, a statement that a copy follows);
+    - its governing heading-like line - the nearest one above its line, within sections.HEADING_REACH_LINES lines and
+      HEADING_REACH_CHARS characters (beyond that: no release) - names no other record or occasion, no education and,
+      below the head's own fields, no facility, and is no history, plan or indication heading of the layout (one
+      dated another day has opened a foreign block already);
+    - its block (between blank lines or heading-like lines, at most _GI4_BLOCK_CHARS each side) carries no date other
+      than today's and no sign-off line;
+    - its own sentence (``span``) states no unit statistics or generalisation;
+    - it is not under another occurrence (sections.under_another_occurrence) and not beyond heading reach
+      (sections.beyond_heading_reach).
+    "Today" is the head's one own date, else ``service_date``, else none (then every date holds)."""
+    today = _gi4_today(text, service_date)
+    marks = _gi4_marks(text, today)
+    if pos >= marks.foreign:  # a foreign block opened above the passage
+        return False
+    li = bisect.bisect_right(marks.line_starts, pos) - 1
+    line_start = marks.line_starts[li]
+    i = bisect.bisect_left(marks.heads, line_start) - 1
+    governing = marks.heads[i] if i >= 0 else 0
+    if line_start - governing > gi_sections.HEADING_REACH_CHARS \
+            or li - bisect.bisect_right(marks.line_starts, governing) + 1 > gi_sections.HEADING_REACH_LINES:
+        return False  # its heading lies beyond reach: no release
+    if i >= 0:
+        words, facility, kind = marks.flags[i]  # (a heading dated another day opened a foreign block above)
+        if words:  # the governing heading names another record or occasion, or education
+            return False
+        if facility:  # a facility's heading below the head's own fields
+            return False
+        if kind:  # a history, plan or indication heading
+            return False
+    lo = max(pos - _GI4_BLOCK_CHARS, marks.head_ends[i] if i >= 0 else 0)
+    if pos >= _gi4_head(text).fields_end:
+        lo = max(lo, _gi4_head(text).fields_end)
+    b = bisect.bisect_left(marks.blanks, line_start) - 1
+    if b >= 0:
+        lo = max(lo, marks.blanks[b])
+    hi = pos + _GI4_BLOCK_CHARS
+    b = bisect.bisect_right(marks.blanks, line_start)
+    if b < len(marks.blanks):
+        hi = min(hi, marks.blanks[b])
+    j = bisect.bisect_right(marks.heads, line_start)
+    if j < len(marks.heads):
+        hi = min(hi, marks.heads[j])
+    for d in marks.dates[bisect.bisect_left(marks.date_starts, lo):]:
+        if d.start >= hi:
+            break
+        if _gi4_other_day(d, today):  # another day's date in the passage's block
+            return False
+    k = bisect.bisect_left(marks.signoffs, lo)
+    if k < len(marks.signoffs) and marks.signoffs[k] < hi:  # a sign-off line in the passage's block
+        return False
+    if span is not None and _GI4_GENERAL.search(text, span[0], min(span[1], span[0] + _GI4_SENTENCE_CHARS)):
+        return False  # unit statistics or a generalisation
+    if gi_sections.under_another_occurrence(text, pos):
+        return False
+    if line_start not in marks.beyond:
+        marks.beyond[line_start] = gi_sections.beyond_heading_reach(text, layout(text), pos)
+    return not marks.beyond[line_start]
 
 
 _DEPTH_FIGURE = re.compile(r'\d{1,3}\s*cm\b', re.A | re.I)
