@@ -978,7 +978,8 @@ def _I4_lone_marks(text: str, starts: dict, drawn: dict, edits: dict, widgets: l
       (``edits``, _placed_boxes' readings), or a glyph that is a box shape (a list: consecutive lines that are rows, a
       row whose glyph pypdf wrote on a line of its own taking its label's line, blank lines between them aside; any
       other line, a heading among them, ends it);
-    - or a check box (``widgets``) lies on its row;
+    - or an unchecked check box (``widgets``) lies on its row, tied to nothing there: read as listed, its item would be
+      affirmed against the box; a checked one agrees with its item read as listed, and its glyph stays U+FFFD (NR-5);
     and never where a check box's state already governs it, as boxes the row shows of its own do: a printed box on its
     line or its label's, or a check box's glyph written there (a check box tied to the row's label, an edit at the
     label; or the item's options, '� Diabetes: ☐ Yes ☒ No', which routing reads, as it read them beside the installed
@@ -988,9 +989,9 @@ def _I4_lone_marks(text: str, starts: dict, drawn: dict, edits: dict, widgets: l
     mark, on the item's line, the item is held. One pass over the lines, then one over the rows."""
     size, line, number = len(text), 0, 0
     taken = sorted(edits)
-    shapes, rows = _I4_Points(box_glyphs), _I3_Bands(w.rect for w in widgets)
+    shapes, rows = _I4_Points(box_glyphs), _I3_Bands(w.rect for w in widgets if not w.on)
     kinds: dict[int, bool | None] = {}  # line number -> a row (whether it shows a box), or None: a blank line
-    candidates: list = []  # (line number, offset, end, mark, glyph a box shape, a check box on its row, own boxes)
+    candidates: list = []  # (line number, offset, end, mark, glyph a box shape, an unchecked box on its row, own boxes)
 
     def shows_box(start: int, stop: int) -> bool:
         """Whether text[start:stop] (one line) shows a printed box or holds an edit (a check box's glyph written)."""

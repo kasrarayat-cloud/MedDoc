@@ -157,9 +157,11 @@ class BulletAndWidgetTests(unittest.TestCase):
         its start is the unread mark; a check box tied to the row's label governs it instead."""
         starts = {0: (72.0, 704.0, True), 2: (90.0, 704.0, True)}
         text = f'{UNREAD} Diabetes'
-        widget = mock.Mock(rect=(400.0, 702.0, 410.0, 712.0))
+        widget = mock.Mock(rect=(400.0, 702.0, 410.0, 712.0), on=False)
         self.assertEqual(_I4_lone_marks(text, starts, {}, {}, [widget]), {0: (1, '[?]')})
         self.assertEqual(_I4_lone_marks(text, starts, {}, {}, []), {})
+        checked = mock.Mock(rect=widget.rect, on=True)  # agrees with its item read as listed (NR-5)
+        self.assertEqual(_I4_lone_marks(text, starts, {}, {}, [checked]), {})
         self.assertEqual(_I4_lone_marks(text, starts, {}, {2: (2, '\u2610 ')}, [widget]), {})  # tied: it governs
         self.assertEqual(_I4_lone_marks(f'\u2612 Smoker\n{text}', {9: starts[0], 11: starts[2]}, {}, {}, []),
                          {9: (10, '[?]')})  # another row of its list shows a box
@@ -203,7 +205,7 @@ class OptionRowTests(unittest.TestCase):
     def test_the_rows_own_boxes_govern_it(self):
         text = f'{UNREAD} Diabetes: Yes No'
         starts = {0: (72.0, 704.0, True), 2: (84.0, 704.0, True)}
-        widget = mock.Mock(rect=(200.0, 703.0, 211.0, 714.0))
+        widget = mock.Mock(rect=(200.0, 703.0, 211.0, 714.0), on=False)
         options = {12: (12, '☐ '), 16: (16, '☒ ')}  # the options' glyphs, written before 'Yes' and 'No'
         self.assertEqual(_I4_lone_marks(text, starts, {}, options, [widget]), {})
         self.assertEqual(_I4_lone_marks(text, starts, {}, options, [widget], [(72.0, 704.0)]), {})  # a box shape too
@@ -211,6 +213,28 @@ class OptionRowTests(unittest.TestCase):
         alone = f'{UNREAD}\nDiabetes: Yes No'  # the glyph on a line of its own: its label's line is the row's
         self.assertEqual(_I4_lone_marks(alone, starts, {}, {12: (12, '☐ ')}, [widget]), {})
         self.assertEqual(_I4_lone_marks(alone, starts, {}, {}, [widget]), {0: (2, '[?] ')})
+
+    def test_a_check_box_tied_to_nothing_after_its_item(self):
+        """NR-5: a check box after a procedure with nothing after it is tied to nothing, so its state is not written on
+        the row. Checked, it agrees with its item read as listed: the bullet that cannot be read stays U+FFFD and the
+        procedure reads performed, as the installed reader read it (the mark held it); unchecked, the item read as
+        listed would be affirmed against the box: held, as the readable control's is not (routing's field-line rule
+        reads a row that starts with its label from the form block)."""
+        control = extract(shapes.procedure_box_rows(None, None, on=True))
+        self.assertEqual(reading(control.text, 'Cold snare polypectomy'), 'performed')
+        for name, code, font in (('/EUC-H bullet', 'A1A6', shapes.euc_font()),
+                                 ('glyph-index bullet', '0B2C', shapes.glyph_index_font())):
+            with self.subTest(name, on=True):
+                result = extract(shapes.procedure_box_rows(code, font, on=True))
+                self.assertNotIn('[?]', result.text)
+                self.assertIn(f'{FFFD} Cold snare polypectomy of the sigmoid polyp\n', result.text)
+                self.assertEqual([reading(result.text, item) for item in ('Cold snare polypectomy', 'Biopsy')],
+                                 ['performed', 'performed'])
+            with self.subTest(name, on=False):
+                result = extract(shapes.procedure_box_rows(code, font, on=False))
+                self.assertIn('[?] Cold snare polypectomy of the sigmoid polyp\n', result.text)
+                self.assertEqual([reading(result.text, item) for item in ('Cold snare polypectomy', 'Biopsy')],
+                                 ['uncertain', 'uncertain'])
 
     def test_text_beyond_a_piece_that_can_be_read_is_no_label(self):
         yes = (200.0, 703.0, 211.0, 714.0)
