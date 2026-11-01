@@ -16,7 +16,9 @@ from docx.oxml.ns import qn
 from docx.text.paragraph import Paragraph
 from lxml import etree
 from pypdf import PdfReader, PdfWriter
-from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject
+from pypdf.errors import PdfReadError
+from pypdf.generic import (ArrayObject, ContentStream, DictionaryObject, IndirectObject, NameObject, NumberObject,
+                           StreamObject)
 from reportlab.pdfbase.pdfmetrics import stringWidth
 
 if __package__:
@@ -504,6 +506,138 @@ def qualified_name(widget):
     fail("The PDF field hierarchy is too deep.")
 
 
+FONT_ENCODING_REFUSAL = ("PDF appearance metrics currently support the standard Helvetica font only: a field's font {}, "
+                         "so an exported answer could lose letters or fail to paint.")
+
+
+def glyph_name_read_differently(glyph):
+    """True when pypdf 6.21.4 reads this /Differences glyph name as a character an answer can hold
+    and 6.21.1 and 6.21.2 do not.
+
+    pypdf 6.21.4 reads any name beginning "uni" (else "u") whose remainder `int(x, 16)` accepts as
+    that character; 6.21.1 and 6.21.2 left it unread, and no glyph-list name parses to printable
+    ASCII (only /ue parses at all, to U+000E), so for these characters the two readings never agree.
+    The painter then puts the letter at this code on 6.21.4 only. Measured with pdf.js, on 6.21.4:
+    /uni006d or /u41 (spellings outside the Adobe Glyph List form) paint NOTHING there, so the
+    stored answer is right and the letter is missing; even a valid /uni006D at a code other than
+    the letter's own is painted at the wrong width, so the letters after it overlap. 6.21.1 and
+    6.21.2 painted every one of them like an ordinary form.
+
+    Only printable ASCII can reach the painter (check_pdf_capacity refuses the rest), so a name read
+    as any other character changes nothing an export shows, on any version, and is left alone.
+    """
+    if glyph.startswith("uni"):
+        remainder = glyph[3:]
+    elif glyph.startswith("u"):
+        remainder = glyph[1:]
+    else:
+        return False
+    try:
+        return 0x20 <= int(remainder, 16) <= 0x7E
+    except ValueError:
+        return False
+
+
+def font_encoding_problem(font):
+    """Why every supported pypdf would not paint this font's encoding the same way, or None.
+
+    ⚠️ JUDGED HERE, AT INSPECTION, AND NEVER BY PARSING THE FONT WITH PYPDF — that parse is the
+    thing that differs. On 6.21.4 a /BaseEncoding that is an array or a dictionary raises TypeError
+    in every fill, even a blank one, after the upload was accepted (F3); a /Differences glyph name
+    6.21.4 alone reads as an answer letter loses or misplaces that letter in the painted answer (F2).
+    The outcome of this check depends on no pypdf version, so it is the same, and explicit, on
+    6.21.1, 6.21.2 and 6.21.4.
+
+    /Differences entries must be codes from 0 to 255 and direct names, because pypdf and viewers read
+    anything else differently. Measured with pdf.js: an INDIRECT /uni006d is read as a letter by 6.21.4
+    and the letter is missing, as for the name; a STRING entry makes pdf.js paint none of the answer
+    whenever the painter keeps that font, which 6.21.4 does for (/uni006d) and every version does for
+    (/A) at an unused code; a NEGATIVE code wraps to the top of pypdf's table on every version, so
+    `-56 /A` painted "Amy" as "Èmy". A real number is a glyph name to pypdf and a code to pdf.js.
+    """
+    if "/Encoding" not in font:
+        return None
+    encoding = font["/Encoding"]
+    if isinstance(encoding, NameObject):
+        return None
+    if not isinstance(encoding, DictionaryObject) or isinstance(encoding, StreamObject):
+        return "has a character encoding that is neither a name nor a dictionary"
+    if "/BaseEncoding" in encoding and not isinstance(encoding["/BaseEncoding"], NameObject):
+        return "names its base encoding with something other than an encoding name"
+    if "/Differences" not in encoding:
+        return None
+    differences = encoding["/Differences"]
+    if not isinstance(differences, ArrayObject):
+        return "has a list of character differences that is not a list"
+    for item in differences:  # raw entries: the painter does not resolve an indirect one either
+        if isinstance(item, NameObject):
+            if glyph_name_read_differently(str(item)[1:]):
+                return ("names a letter by a character-code glyph name (such as /uni006D or /u41), which pypdf "
+                        "versions and PDF viewers paint differently")
+        elif not (isinstance(item, NumberObject) and 0 <= item <= 255):
+            return "has a character difference that is neither a code from 0 to 255 nor a glyph name"
+    return None
+
+
+def painted_font_names(appearance):
+    """Every font name pypdf's appearance painter can take from this /DA, and /Helv, its default.
+
+    The painter reads the LAST complete `Tf` with its own content-stream parser, and uses /Helv when
+    the string will not parse or holds none. This takes every `Tf` font operand that parser yields,
+    a superset that does not depend on which one it keeps.
+    """
+    names = {"/Helv"}
+    data = getattr(appearance, "original_bytes", None)
+    if data is None:
+        return names
+    stream = ContentStream(None, None)
+    stream.set_data(data)
+    try:
+        operations = stream.operations
+    except PdfReadError:
+        return names
+    names.update(str(operands[0]) for operands, operator in operations
+                 if operator == b"Tf" and operands and isinstance(operands[0], NameObject))
+    return names
+
+
+def check_painted_fonts(widget, acro):
+    """Refuse when any font the fill can paint this widget with has an encoding versions disagree on.
+
+    ⚠️ THE PAINTER CHOOSES THE FONT, NOT pdf_inspect's OWN READING. pdf_inspect takes the FIRST `Tf`
+    in /DA with a regex and looks it up in the AcroForm's /DR. pypdf's painter takes the LAST
+    complete `Tf` (or /Helv) and looks it up in the /DR the WIDGET inherits before the AcroForm's.
+    Measured on 6.21.4: a second `Tf`, a `%` comment before one, an unparsable tail and a widget-level
+    /DR each left an ordinary checked /Helv while the painter used an F3 font, and the fill failed
+    after the upload had been accepted. So every name either reading can take is checked, in every
+    /DR either can consult — every widget, because the painter matches widgets by name, not by the
+    field tree.
+    """
+    appearance = inherited(widget, "/DA", acro.get("/DA"))
+    appearance = appearance.get_object() if isinstance(appearance, IndirectObject) else appearance
+    names = painted_font_names(appearance)
+    first = re.search(r"/([^\s]+)\s+([\d.]+)\s+Tf", str(appearance))
+    if first:
+        names.add("/" + first.group(1))
+    for resources in (acro.get("/DR"), inherited(widget, "/DR", None)):
+        resources = resources.get_object() if isinstance(resources, IndirectObject) else resources
+        if resources is None:
+            continue
+        fonts = resources.get("/Font") if isinstance(resources, DictionaryObject) else None
+        fonts = fonts.get_object() if isinstance(fonts, IndirectObject) else fonts
+        if not isinstance(resources, DictionaryObject) or not isinstance(fonts, (DictionaryObject, type(None))):
+            fail(FONT_ENCODING_REFUSAL.format("has font resources that are not dictionaries"), "unsupported_font")
+        for name in sorted(names) if fonts is not None else ():
+            font = fonts.get(name)
+            font = font.get_object() if isinstance(font, IndirectObject) else font
+            if font is None:
+                continue  # not in /DR: the painter builds the standard font itself
+            problem = (font_encoding_problem(font) if isinstance(font, DictionaryObject)
+                       else "has a font resource that is not a dictionary")
+            if problem:
+                fail(FONT_ENCODING_REFUSAL.format(problem), "unsupported_font")
+
+
 def pdf_inspect(path):
     reader = PdfReader(path, strict=True)
     _scan_pdf(reader)
@@ -557,6 +691,10 @@ def pdf_inspect(path):
                        "locator": {"pdf_field": key}, "max_length": int(value.get("/MaxLen", 0)), "capacity": capacities})
     if not fields:
         fail("The PDF has no supported visible fields.", "no_fields")
+    # Last, so a form already refused for another reason keeps that refusal and its upload hint.
+    for appearances in widgets.values():
+        for _, widget in appearances:
+            check_painted_fonts(widget, acro)
     return reader, fields
 
 
