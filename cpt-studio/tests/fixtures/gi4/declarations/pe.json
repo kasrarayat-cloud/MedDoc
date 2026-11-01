@@ -122,5 +122,9 @@
   "shared_guards": "PI's E1, one reader of the shared copy guards (in_todays_narrative through services._pi_todays_statement, todays_procedure_report through services._pi_own_report), is dropped (pi.json amendment_20261101_cycle2). The guards are unchanged and keep their readers: PE's routing-only reach (in_todays_narrative, head_procedure_spans), PI's S1 (all three) and package PD's strong-head hold (todays_procedure_report). Every pe-today-* and pe-head-* mutant keeps its detector, tests.test_gi4_pe, which reads the guards directly.",
   "record_corrected": "after_measurement_20261101_cycle1's cost_on_the_regression_set ('h4-03 43244 and h4-06 45385 READY (E1 under their strong heads)') stops being true with E1's drop: both are held [extent] again, as installed. PE's own release is untouched: h4-04's EGD extent stays the second part of the duodenum in every member state and 43251 keeps fingerprint 9d6bff8e in the walk state.",
   "movements_vs_fbc59ee53": "H1: h4-04 EQUAL (PE's release and PI's S1 both kept). H2: none. H3: no cell from PE. H4: none. H6: the 32 PE mutants unchanged, run again on the code commit's sealed export."
+ },
+ "after_measurement_20261101_cycle2": {
+  "provenance": "Written on 2026-11-01 AFTER measurement, as a record: it changes no declaration above it. Code commit 8caa74cad (group PI, cycle 2). Every key above this one is unchanged: each value is identical, and the only byte added before this key is the comma that separates it.",
+  "measured": "As amendment_20261101_cycle2 declared: H6 32 of 32 PE mutants killed on copies of the sealed export of 8caa74cad (each applied and restored with sha256 printed, the detector baseline passing); tests.test_gi4_pe 37 of 37 and tests.test_gi4_pe_mutants pass; H1 h4-04 EQUAL against fbc59ee53 in every member state (the EGD extent the second part of the duodenum, 43251 READY with fingerprint 9d6bff8e in the walk state); H2 no movement; H4 no movement."
  }
 }
