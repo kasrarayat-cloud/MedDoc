@@ -3707,7 +3707,7 @@ def _pe_routing_reach(an: Analysis, pre: str, post: str, found: re.Match, depth:
       title lines and procedure fields; GI round 4 Wave 1 repair, amendment_20261101_cycle1_b: an 'Upper Endoscopy
       Report' whose pasted colonoscopy block sat under 'Additional Pages', or under no heading, had read the cecum
       reached);
-    - the verb lies inside today's procedure narrative (in_todays_narrative, the copy guards PI's S1 and E1 read too:
+    - the verb lies inside today's procedure narrative (in_todays_narrative, the copy guards PI's S1 reads too:
       never in an attached or outside report, under a line naming another occurrence's record - "Outside Records" over
       "At Mercy GI the colonoscope was navigated to the cecum" - after a sign-off or a statement that a copy follows, in a
       block dated another day, or in unit statistics; GI round 4 Wave 1 repair, F3: "Attached Report" ten lines above
@@ -3800,7 +3800,8 @@ def _pe_endoscope_moved(before: str, span: str) -> bool:
 
 # --- GI round 4 Wave 1 repair, cycle 1 (packages PE and PI): today's procedure report and today's narrative ---------
 # One implementation of the copy guards the round's releasing readers share: PE's routing-only reach (_pe_routing_reach,
-# above) and PI's instrument reach (S1) and endpoint extent (E1) in studio/gi/services.py, which reads them from here.
+# above) and PI's instrument reach (S1) in studio/gi/services.py, which reads them from here. PI's endpoint extent
+# (E1) read them too until Wave 1 repair cycle 2 dropped it (pi.json amendment_20261101_cycle2).
 # The refutation of b840ae756 read each release inside another record: an attached outside colonoscopy report in today's
 # EGD note (F1, F3), unit statistics under a plan heading (F1) and a later pathology review copying a colonoscopy report
 # (F2). A releasing reader therefore reads only inside TODAY'S procedure narrative - never in an attached, pasted,
@@ -4095,8 +4096,8 @@ def _gi4_marks(text: str, today: Optional[date]) -> _Gi4Marks:
 
 def in_todays_narrative(text: str, pos: int, service_date: Optional[date] = None, span=None) -> bool:
     """Whether the passage at ``pos`` of ``text`` (as written) lies inside today's procedure narrative, for a releasing
-    reader (GI round 4 Wave 1 repair, cycle 1: PE's routing-only reach, PI's S1 and E1). Fail closed; every one of these
-    holds:
+    reader (GI round 4 Wave 1 repair, cycle 1: PE's routing-only reach and PI's S1; PI's E1 read it too until Wave 1
+    repair cycle 2 dropped it). Fail closed; every one of these holds:
     - no foreign block opens before it (_gi4_marks: a heading-like line naming an attachment or a copy or dated another
       day, a sign-off line below the head's own fields, a statement that a copy follows);
     - its governing heading-like line - the nearest one above its line, within sections.HEADING_REACH_LINES lines and
