@@ -36,7 +36,7 @@ from .validation.engine import assess as run_assessment
 
 log = logging.getLogger(__name__)
 
-CONTEXT_VERSION = 'gi-context@3'
+CONTEXT_VERSION = 'gi-context@4'
 # Context versions recorded under other rules: a stage remakes such a context before it sends or assesses anything
 # (_remade_context), and no second review is offered or sent on one (_second_review_bounds, stage_review2).
 # - gi-context@1 (the installed revision 057a7d39) kept a member's value as plain metadata;
@@ -44,7 +44,12 @@ CONTEXT_VERSION = 'gi-context@3'
 #   recorded context says 2026-10-05 where the third round's binding reads a conflict with its charge block's
 #   2026-10-06. Kept current, it was re-sent by a predict queued or stopped at the install, a reconciliation or a second
 #   review, and assessed as documented (refutation of the integrated third round, STATE-1 and STATE-2).
-EARLIER_CONTEXT_VERSIONS = ('gi-context@1', 'gi-context@2')
+# - gi-context@3 (80df1831d168, the third round's narrow release) read the dates as GI round 4 no longer does: round 4
+#   asks a date @3 sent where the note's own head states another day (PD's rule (a)), takes only the day a procedure
+#   note's own sign-off states (rule (c)) and places headings by PS's section reach, so a context @3 recorded can say a
+#   date the current rules ask or hold, and a stage would send and assess it as documented (interpretation 49;
+#   pd.json integration_20261101_cycle2).
+EARLIER_CONTEXT_VERSIONS = ('gi-context@1', 'gi-context@2', 'gi-context@3')
 MEMBER_DATE_CONFLICT_MESSAGE = ('Nothing was sent: the service date entered as encounter metadata differs from the '
                                 'documented one. Correct or clear the metadata (or add an addendum), and the request is '
                                 'made for the agreed date.')

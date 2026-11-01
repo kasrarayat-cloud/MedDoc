@@ -292,8 +292,9 @@ class GuardTests(SimpleTestCase):
 
 # --- GI round 4 Wave 1 repair, cycle 1: the shared copy guards (detect.todays_procedure_report and
 # detect.in_todays_narrative; declared in pe.json and pi.json, amendment_20261101_cycle1). One implementation, read by
-# PE's routing-only reach here and by PI's S1 and E1 (tests/test_gi4_pi.py). Each text below holds by exactly ONE guard,
-# so the guard's mutant (ops/gi4/mutants.py, pe-today-*) is killed by its own behaviour. ---
+# PE's routing-only reach here and by PI's S1 (tests/test_gi4_pi.py; PI's E1 read them too until Wave 1 repair cycle 2
+# dropped it). Each text below holds by exactly ONE guard, so the guard's mutant (ops/gi4/mutants.py, pe-today-*) is
+# killed by its own behaviour. ---
 FILL = ''.join(f'Line {i} of the outside summary lists medications and allergies in detail.\n' for i in range(8))
 FIELDS = ('Date performed: October 19, 2026\nGastroenterologist: Synthetic Gastroenterologist, MD (fictional)\n'
           'Sedation and airway: propofol given by a CRNA (fictional)\n')

@@ -8,6 +8,8 @@
  *     --docs OUT_FROM_GENERATE --manifest ops/verification/manifest.json --out EVIDENCE_DIR \
  *     [--only gi-01,gi-03] [--deadline-seconds 300] [--stop-on-failure] [--allow-live-provider]
  *     [--encounter ENCOUNTER_ID] [--no-auto-approve]
+ *   node ops/verify_browser.cjs --base-url https://cpt.quillmd.com --password-file PASSWORD_FILE --username NAME \
+ *     --acceptance-reviewer --docs OUT_FROM_GENERATE --manifest ACCEPTANCE_MANIFEST --out EVIDENCE_DIR [--only ...]
  *
  * --encounter attaches to an EXISTING encounter instead of uploading (with exactly one --only id): nothing is uploaded,
  * and nothing is done to it until it is shown to be that manifest document's - an uploaded document by its stored
@@ -53,6 +55,31 @@
  * (actor_kind "agent"), so every decision is recorded and labelled as agent review. The
  * password is never printed or written. TLS is verified normally.
  *
+ * --password-file FILE with --username NAME signs in instead, as ops/verify_login.py takes them (one way or the other,
+ * never both): FILE holds only the password - one trailing line break (LF or CRLF) is not part of it - and must be a
+ * regular file no group or other user may read or write (mode 0600 or stricter), checked on the descriptor that is
+ * read; its content is never quoted. The session must then be NAME's. The password is never printed, logged or
+ * written: a DEBUG that would turn on a Playwright log carrying it (pw:api's call log, pw:channel, pw:protocol,
+ * pw:server:channel) is refused before anything is read, and the evidence and every line printed are scrubbed of it in
+ * each form verify_login.py's Secret names.
+ *
+ * --acceptance-reviewer: the ordinary-reviewer acceptance test (CPT Studio GI interpretation 63, which overrides 40 for
+ * it). It signs in with --password-file and --username only, and the session must be that account: a HUMAN account
+ * (actor_kind "human") with an active reviewer membership in the workspace (role "reviewer", can_review). It implies
+ * --no-auto-approve and makes approvals only - of the ready selected codes the document's review_plan.approve_codes
+ * names, never a code of a family its must_not_code lists and never one a second review added. It makes no rejection (a
+ * review_plan.reject is not carried out), confirms no exclusion, asks no second review, and saves the context only as a
+ * review_plan.context_edit asks: the clarification the document needs, answered once (the same save is not made
+ * again) and recorded as a clarification answer, not a coding decision. What it does not do is recorded as skipped.
+ * Every approval's note is review_notes.approve, which must say "session-made synthetic acceptance-test approval, not a
+ * human review" and be one the review screen and the server keep verbatim - no surrounding whitespace, no carriage
+ * return, at most the note field's 600 characters, no NUL or lone surrogate - both checked before anything is uploaded,
+ * as agent mode checks its own label, since an approval cannot be taken back. After the reload each
+ * decision must be recorded as the signed-in reviewer's - their label, reviewer_kind "human" - with the note kept
+ * verbatim, and its code card must show it approved, not as an agent's, naming that reviewer; the acknowledgement the
+ * app stored and the card's badge and decision line are recorded as the app holds and shows them, never judged against
+ * a text of the walk's own. The evidence records mode "acceptance_reviewer".
+ *
  * Per document, through the ordinary UI: New document -> upload the file (or paste the
  * text) -> tick the synthetic attestation -> submit; wait for processing by polling
  * GET /api/encounters/<id> with the page's own session, within the deadline; check
@@ -90,8 +117,25 @@ const INCOMPLETE_SIGNAL = /incomplete|discontinu|reduced|\b5[23]\b/i;
 const AGENT_LABEL = 'agent-executed synthetic review';
 // Every note the walk writes on a decision says what made it (review_notes are checked before anything is uploaded).
 const NOTE_LABEL = /agent-executed synthetic/i;
-const USAGE = 'usage: verify_browser.cjs --base-url URL --credentials FILE --docs DIR --manifest FILE --out DIR '
-  + '[--only IDS] [--deadline-seconds N] [--stop-on-failure] [--allow-live-provider] [--encounter ID] [--no-auto-approve]';
+// --acceptance-reviewer (CPT Studio GI interpretation 63): what every acceptance-test approval's note says, checked in
+// review_notes before anything is uploaded and on every decision after the reload.
+const ACCEPTANCE_LABEL = 'session-made synthetic acceptance-test approval, not a human review';
+const ACCEPTANCE_NOTE_LABEL = new RegExp(ACCEPTANCE_LABEL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+// studio/templates/studio/index.html #reviewNote maxlength: Playwright's fill types into the field, which cuts a longer
+// note; the unit tests hold it to the template.
+const REVIEW_NOTE_MAX = 600;
+// Python's str.strip also strips these, which JavaScript's trim keeps (studio/review.py record_decision strips the note).
+const PYTHON_ONLY_SPACE = new Set([0x1c, 0x1d, 0x1e, 0x1f, 0x85]);
+// ops/verify_login.py MAX_CREDENTIALS_BYTES: a larger password file is refused.
+const MAX_PASSWORD_FILE_BYTES = 64 * 1024;
+// The Playwright debug logs that carry a call's parameters or the browser protocol, so a typed password
+// (playwright-core: the api call log records fill("<value>"), channel every command, protocol every CDP message,
+// server:channel the server's side of the channel).
+const PASSWORD_LOGS = ['pw:api', 'pw:channel', 'pw:protocol', 'pw:server:channel'];
+const WITHHELD = '[password withheld]';
+const USAGE = 'usage: verify_browser.cjs --base-url URL (--credentials FILE | --password-file FILE --username NAME) '
+  + '--docs DIR --manifest FILE --out DIR [--only IDS] [--deadline-seconds N] [--stop-on-failure] [--allow-live-provider] '
+  + '[--encounter ID] [--no-auto-approve] [--acceptance-reviewer]';
 const ENCOUNTER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ISO_DATE = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
 // studio/jobs.py MEMBER_DATE_CONFLICT_MESSAGE: the error of the not-sent run jobs._member_date_hold records for a member
@@ -130,9 +174,11 @@ const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep
 class UsageError extends Error {}
 
 function parseArgs(argv) {
-  const flags = new Set(['stop-on-failure', 'allow-live-provider', 'no-auto-approve']);
-  const values = new Set(['base-url', 'credentials', 'docs', 'manifest', 'out', 'only', 'deadline-seconds', 'encounter']);
-  const opts = { only: null, deadlineSeconds: 300, stopOnFailure: false, allowLiveProvider: false, noAutoApprove: false };
+  const flags = new Set(['stop-on-failure', 'allow-live-provider', 'no-auto-approve', 'acceptance-reviewer']);
+  const values = new Set(['base-url', 'credentials', 'password-file', 'username', 'docs', 'manifest', 'out', 'only',
+    'deadline-seconds', 'encounter']);
+  const opts = { only: null, deadlineSeconds: 300, stopOnFailure: false, allowLiveProvider: false, noAutoApprove: false,
+    acceptanceReviewer: false };
   for (let i = 0; i < argv.length; i += 1) {
     const [name, inline] = argv[i].replace(/^--/, '').split(/=(.*)/s);
     if (!argv[i].startsWith('--')) throw new UsageError(`unexpected argument ${argv[i]}`);
@@ -149,7 +195,22 @@ function parseArgs(argv) {
     }
   }
   for (const name of ['baseUrl', 'credentials', 'docs', 'manifest', 'out']) {
-    if (!opts[name]) throw new UsageError(`missing --${name.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)}`);
+    if (name === 'credentials' && opts.passwordFile !== undefined) continue;  // a password file signs in instead
+    if (!opts[name]) {
+      throw new UsageError(`missing --${name.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)}${name === 'credentials' ? ' (or --password-file with --username)' : ''}`);
+    }
+  }
+  // ops/verify_login.py's two ways to sign in: a credentials file, or a password file for the account --username names
+  if (opts.passwordFile !== undefined) {
+    if (opts.credentials !== undefined) throw new UsageError('--credentials and --password-file are mutually exclusive: give one way to sign in');
+    if (!String(opts.username ?? '').trim()) throw new UsageError('--password-file needs --username, the account it signs in');
+  } else if (opts.username !== undefined) {
+    throw new UsageError('--username goes with --password-file; a --credentials file names its own account');
+  }
+  if (opts.acceptanceReviewer) {
+    // the reviewer's password is read only as a private password file, never through the credentials reader
+    if (opts.passwordFile === undefined) throw new UsageError('--acceptance-reviewer signs the reviewer in with --password-file and --username, not a --credentials file');
+    opts.noAutoApprove = true;  // implied: nothing is approved that review_plan.approve_codes does not name
   }
   let url;
   try {
@@ -477,17 +538,20 @@ function fromSecondReview(p) {
 // options.mustNotCode: a code of a family the document's must_not_code lists is never approved (must_not_code_held; a
 // list naming one is a plan_conflict). An explicit review_plan.approve_codes list, or options.noAutoApprove without one,
 // limits approvals to the codes it names (not_in_approve_codes, approve_codes_unmatched); the designated rejection never
-// takes a code the list names.
+// takes a code the list names. options.acceptanceReviewer: approvals only, of the codes review_plan.approve_codes names
+// (implying the explicit list); no designated rejection, and no code a second review added is decided (second_review_held),
+// whatever review_plan.second_review.approve_codes says.
 function planDecisions(enc, reviewPlan, notes, options = {}) {
-  const approveSecond = new Set((reviewPlan?.second_review?.approve_codes || []).map(String));
+  const acceptance = Boolean(options.acceptanceReviewer);
+  const approveSecond = new Set(acceptance ? [] : (reviewPlan?.second_review?.approve_codes || []).map(String));
   const listed = Array.isArray(reviewPlan?.approve_codes) ? reviewPlan.approve_codes.map(String) : null;
-  const explicit = Boolean(options.noAutoApprove) || listed !== null;
+  const explicit = acceptance || Boolean(options.noAutoApprove) || listed !== null;
   const named = new Set(listed || []);
   const mustNot = new Set((options.mustNotCode || []).map(item => item.family));
   const ready = proposalsOf(enc).filter(p => p.bucket === 'selected' && p.status === 'ready' && p.decision_state === 'undecided'
     && (p.allowed_actions || []).includes('approve') && (!fromSecondReview(p) || approveSecond.has(p.code)));
   const namedPrimary = p => explicit && !fromSecondReview(p) && named.has(p.code);
-  const rule = reviewPlan?.reject;
+  const rule = acceptance ? null : reviewPlan?.reject;
   let designated = null;
   if (rule) {
     const family = ready.filter(p => p.family === rule.family && (p.allowed_actions || []).includes('reject') && !namedPrimary(p));
@@ -508,7 +572,9 @@ function planDecisions(enc, reviewPlan, notes, options = {}) {
   const describe = code => {
     const p = proposalsOf(enc).find(item => item.code === code);
     if (!p) return `${code} (not proposed)`;
-    if (fromSecondReview(p)) return `${code} (second review: needs review_plan.second_review.approve_codes)`;
+    if (fromSecondReview(p)) {
+      return `${code} (second review: ${acceptance ? 'the acceptance reviewer decides no code a second review added' : 'needs review_plan.second_review.approve_codes'})`;
+    }
     if (p.bucket !== 'selected') return `${code} (${p.bucket})`;
     return `${code} (${p.decision_state !== 'undecided' ? p.decision_state : p.status})`;
   };
@@ -553,9 +619,66 @@ function checkDecisionLabels(made, enc, mustNotCode) {
   };
 }
 
+// --acceptance-reviewer: every decision this run made, as the reloaded encounter records it - an approval, the signed-in
+// reviewer's (``account``: their label, reviewer_kind human), with the note the walk wrote kept verbatim and saying it
+// is a session-made synthetic acceptance-test approval; and none approved a code of a family must_not_code lists. The
+// acknowledgement the app stored and the code card's badge and decision line are recorded as the app holds and shows
+// them - never judged against a text of the walk's own.
+function checkAcceptanceDecisions(made, enc, mustNotCode, account, cards = []) {
+  const history = enc?.decisions?.history || [];
+  const mustNot = new Set((mustNotCode || []).map(item => item.family));
+  const familyOf = d => d.family || proposalsOf(enc).find(p => p.id === d.proposal_id)?.family;
+  const label = account?.label;
+  const recorded = made.filter(d => d.http_status === 201);
+  const labels = recorded.map(d => {
+    const entry = history.find(h => (d.decision_id ? h.id === d.decision_id : h.proposal_id === d.proposal_id && h.action === d.action && !h.invalidated)) || null;
+    const card = cards.find(c => c.id === `card-${d.proposal_id}`) || null;
+    return {
+      code: d.code, action: d.action, decision_id: d.decision_id || null, recorded: Boolean(entry), approval: d.action === 'approve',
+      human: entry?.reviewer_kind === 'human', reviewer: entry ? entry.reviewer ?? null : null,
+      reviewer_is_account: Boolean(entry) && typeof label === 'string' && Boolean(label) && entry.reviewer === label,
+      note_kept: Boolean(entry) && entry.note === d.note, note_labelled: Boolean(entry) && ACCEPTANCE_NOTE_LABEL.test(entry.note || ''),
+      acknowledgement: entry ? entry.acknowledgement ?? null : null,
+      acknowledgement_is_session_attestation: Boolean(entry) && typeof account?.acknowledgement === 'string'
+        && entry.acknowledgement === account.acknowledgement,
+      card_badge: card ? card.badge : null, card_insight: card ? card.insight : null,
+    };
+  });
+  const required = ['recorded', 'approval', 'human', 'reviewer_is_account', 'note_kept', 'note_labelled'];
+  const wrong = labels.filter(l => required.some(key => !l[key]));
+  const approved = recorded.filter(d => d.action === 'approve' && mustNot.has(familyOf(d)));
+  return {
+    labels,
+    checks: [
+      check('decisions.labelled', 'hard', wrong.length === 0, !labels.length ? 'no decision was made'
+        : wrong.length ? `not recorded as the reviewer's labelled acceptance-test approval: ${wrong.map(l => `${l.code} ${l.action} (${required.filter(key => !l[key]).join(', ')})`).join('; ')}`
+          : `${labels.length} approval(s), each recorded as ${JSON.stringify(label)}'s (human) with its note kept verbatim, saying "${ACCEPTANCE_LABEL}"`),
+      check('decisions.never_approved_must_not_code', 'hard', approved.length === 0, approved.length
+        ? `approved a code of a must_not_code family: ${approved.map(d => `${d.code} (${familyOf(d)})`).join(', ')}`
+        : `no approval of a code in ${mustNot.size ? [...mustNot].join(', ') : 'a must_not_code family (none listed)'}`),
+    ],
+  };
+}
+
+// Why a note the walk writes through the review screen would not be recorded exactly as written (null when it would):
+// app.js submitReview trims it and record_decision strips it, the note field takes REVIEW_NOTE_MAX characters and reads
+// a carriage return as a line feed, and the API refuses a NUL or a lone surrogate (api.py UNSTORABLE).
+function noteNotVerbatim(note) {
+  const units = [...note].map(char => char.codePointAt(0));
+  if (note !== note.trim() || PYTHON_ONLY_SPACE.has(units[0]) || PYTHON_ONLY_SPACE.has(units[units.length - 1])) {
+    return 'it begins or ends with whitespace, which the page trims and the server strips';
+  }
+  if (note.length > REVIEW_NOTE_MAX) return `it is longer than the ${REVIEW_NOTE_MAX} characters the note field takes`;
+  if (note.includes('\r')) return 'it holds a carriage return, which the note field reads as a line feed';
+  if (units.some(point => point === 0 || (point >= 0xd800 && point <= 0xdfff))) return 'it holds a NUL or a lone surrogate, which the server refuses';
+  return null;
+}
+
 // Before any upload: the manifest's plan for a document can be carried out as written, and every note it would write
-// says what made the decision.
-function planProblems(doc, notes = {}) {
+// says what made the decision. options.acceptanceReviewer: the walk writes approvals only, so the one note it writes,
+// review_notes.approve, must say it is a session-made synthetic acceptance-test approval and be one the screen and the
+// server keep verbatim.
+function planProblems(doc, notes = {}, options = {}) {
   const problems = [];
   const id = doc?.id ?? '?';
   const plan = doc?.review_plan || {};
@@ -587,6 +710,15 @@ function planProblems(doc, notes = {}) {
     if (!Array.isArray(codes) || codes.some(code => typeof code !== 'string' || !code.trim()) || new Set(codes).size !== codes.length) {
       problems.push(`${id}: review_plan.approve_codes must be a list of distinct, non-empty codes`);
     }
+  }
+  if (options.acceptanceReviewer) {
+    if (!(typeof notes.approve === 'string' && ACCEPTANCE_NOTE_LABEL.test(notes.approve))) {
+      problems.push(`review_notes approve must say "${ACCEPTANCE_LABEL}" (${id} would write it on every approval)`);
+    } else if (noteNotVerbatim(notes.approve)) {
+      // an approval cannot be taken back: one whose note the screen or the server would change is not made at all
+      problems.push(`review_notes approve could not be kept verbatim through the review screen: ${noteNotVerbatim(notes.approve)}`);
+    }
+    return problems;
   }
   // confirm and second_review_approve have labelled fallbacks (planConfirmations' own note, notes.approve): checked if given
   const unlabelled = [['approve', true], ['reject', Boolean(plan.reject)], ['confirm', false], ['second_review_approve', false]]
@@ -849,6 +981,8 @@ function checkContextEdit(before, after, settled, plan, edit, uploadDate) {
 // processing settled, or null): nothing sent or held, every run unchanged, and - soft - only a re-check, which the
 // screen's form refuses to send itself (editContext sends it through the page's api() client).
 function identicalSaveChecks(after, settled, identical) {
+  // --acceptance-reviewer answers the clarification once: the same save is not made again, so nothing is judged of it
+  if (identical.skipped) return [skip('context_edit.identical_save', identical.skipped)];
   const out = [];
   let rechecked = null;
   if (identical.http_status !== 201 || !settled) {
@@ -1040,7 +1174,8 @@ function checkReadiness(enc) {
   return out;
 }
 
-function checkPersistence(decisions, before, after, reloaded) {
+// reviewerKind: the actor kind every decision this run made must be recorded with (human under --acceptance-reviewer).
+function checkPersistence(decisions, before, after, reloaded, reviewerKind = 'agent') {
   const out = [
     check('persist.revision', 'hard', [after, reloaded].every(e => e.revision?.id === before.revision?.id && e.revision?.number === before.revision?.number),
       `revision ${before.revision?.number} (${before.revision?.id}) -> ${after.revision?.number} -> ${reloaded.revision?.number} after reload`),
@@ -1051,7 +1186,7 @@ function checkPersistence(decisions, before, after, reloaded) {
     const p = proposalsOf(reloaded).find(item => item.id === d.proposal_id);
     const want = DECISION_STATES[d.action];
     const entry = history.find(h => h.proposal_id === d.proposal_id && h.action === d.action && !h.invalidated);
-    const ok = p?.decision_state === want && p.decision?.reviewer_kind === 'agent' && p.decision?.note === d.note && Boolean(entry);
+    const ok = p?.decision_state === want && p.decision?.reviewer_kind === reviewerKind && p.decision?.note === d.note && Boolean(entry);
     out.push(check(`persist.decision.${d.code}`, 'hard', ok,
       `state ${p?.decision_state} (want ${want}), reviewer_kind ${p?.decision?.reviewer_kind}, note ${p?.decision?.note === d.note ? 'kept' : 'changed'}, history ${entry ? 'yes' : 'missing'}`));
   }
@@ -1087,10 +1222,20 @@ function checkEvidenceMarks(enc, marks, cards) {
   return out;
 }
 
-function checkDecisionDom(decisions, enc, cards, candidates = []) {
+// options.acceptance: each decision is an approval whose code card shows it approved - not as an agent's - and names the
+// reviewer; the rest of the card is recorded (checkAcceptanceDecisions), not judged.
+function checkDecisionDom(decisions, enc, cards, candidates = [], options = {}) {
   return decisions.filter(d => d.http_status === 201).map(d => {
     const proposal = proposalsOf(enc).find(p => p.id === d.proposal_id);
     const reviewer = proposal?.decision?.reviewer || '';
+    if (options.acceptance) {
+      const card = cards.find(c => c.id === `card-${d.proposal_id}`);
+      if (d.action !== 'approve') return check(`dom.decision.${d.code}`, 'hard', false, `a ${d.action} decision: the acceptance reviewer makes approvals only`);
+      const badgeOk = Boolean(card) && /^Approved/.test(card.badge) && !/agent/i.test(card.badge);
+      const insightOk = Boolean(card) && Boolean(reviewer) && card.insight.includes(reviewer);
+      return check(`dom.decision.${d.code}`, 'hard', badgeOk && insightOk,
+        card ? `badge "${card.badge}"${badgeOk ? '' : ' (not an approval shown as the reviewer\'s)'}; decision line ${insightOk ? `names the reviewer ${reviewer}` : 'lacks the reviewer'}` : 'no code card after reload');
+    }
     if (d.action === 'confirm') {
       // A confirmed exclusion stays an excluded candidate, which has no code card: its candidate row carries the
       // decision line and the undo button (round 5, pipeline:3).
@@ -1180,6 +1325,120 @@ function loadCredentials(file) {
   return { username: creds.username, password: creds.password, groupOrOtherReadable: mode !== 0 };
 }
 
+// ops/verify_login.py _read_private: the content and mode of a private regular file, checked on the descriptor that is
+// read; a file a group or other user may read or write is refused before a byte of it is read.
+function readPrivate(file, what) {
+  let fd;
+  try {
+    fd = fs.openSync(file, 'r');
+  } catch (error) {
+    throw new UsageError(`cannot open the ${what} ${file}: ${String(error.message).split(',')[0]}`);
+  }
+  try {
+    const info = fs.fstatSync(fd);
+    if (!info.isFile()) throw new UsageError(`the ${what} ${file} is not a regular file`);
+    const mode = info.mode & 0o7777;
+    if (mode & 0o077) {
+      throw new UsageError(`the ${what} ${file} has mode ${mode.toString(8).padStart(4, '0')}: a group or other user may read `
+        + 'or write it; make it private (chmod 600) and keep it so');
+    }
+    const chunks = [];
+    let total = 0;
+    for (;;) {
+      const chunk = Buffer.alloc(65536);
+      const read = fs.readSync(fd, chunk, 0, chunk.length, null);
+      if (!read) break;
+      total += read;
+      if (total > MAX_PASSWORD_FILE_BYTES) throw new UsageError(`the ${what} ${file} is over ${MAX_PASSWORD_FILE_BYTES} bytes`);
+      chunks.push(chunk.subarray(0, read));
+    }
+    return { content: Buffer.concat(chunks), mode };
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+// ops/verify_login.py load_password_file: a private file holding only the password; one trailing line break (LF or
+// CRLF) is not part of it. Its content is never quoted.
+function loadPasswordFile(file, username) {
+  const { content, mode } = readPrivate(file, 'password file');
+  let password;
+  try {
+    password = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(content);
+  } catch {
+    throw new UsageError(`the password file ${file} is not UTF-8 text`);
+  }
+  if (password.endsWith('\n')) {
+    password = password.slice(0, -1);
+    if (password.endsWith('\r')) password = password.slice(0, -1);
+  }
+  if (!password || /[\r\n]/.test(password)) throw new UsageError(`the password file ${file} must hold one non-empty line`);
+  return { username, password, source: 'password_file', mode };
+}
+
+// What the evidence keeps of the sign-in: the account, never its password (a credentials file's record is as before).
+function credentialsRecord(creds) {
+  if (creds.source === 'password_file') {
+    return { username: creds.username, source: 'password_file', file_mode: creds.mode.toString(8).padStart(4, '0') };
+  }
+  return { username: creds.username, file_group_or_other_readable: creds.groupOrOtherReadable };
+}
+
+// Whether DEBUG could turn on a Playwright log that carries the password (PASSWORD_LOGS). The debug package reads DEBUG as
+// names split by commas or whitespace, '*' matching anything; older releases read each name as a regular expression. A
+// name is matched both ways, an unreadable one counts, and a '-' exclusion is never relied on.
+function debugMayLog(value) {
+  const escape = text => text.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+  return String(value ?? '').split(/[\s,]+/).filter(name => name && !name.startsWith('-')).some(name => {
+    const glob = new RegExp(`^${escape(name).replace(/\*/g, '.*')}$`);
+    let regex;
+    try {
+      regex = new RegExp(`^${name.replace(/\*/g, '.*?')}$`);
+    } catch {
+      return true;
+    }
+    return PASSWORD_LOGS.some(log => glob.test(log) || regex.test(log));
+  });
+}
+
+// ops/verify_login.py Secret: every form in which a password could reach an output - as typed, percent- and
+// form-encoded, HTML-escaped, inside a JSON string - longest first.
+function secretForms(password) {
+  const text = String(password);
+  const html = quote => {
+    const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return quote ? escaped.replace(/"/g, '&quot;').replace(/'/g, '&#x27;') : escaped;
+  };
+  const json = JSON.stringify(text).slice(1, -1);
+  const forms = new Set([text, html(true), html(false), json,
+    json.replace(/[\u007f-\uffff]/g, c => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`)]);
+  try {
+    const percent = encodeURIComponent(text);
+    const strict = percent.replace(/[!'()*]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+    for (const form of [percent, strict, strict.replace(/%20/g, '+'), new URLSearchParams([['p', text]]).toString().slice(2)]) forms.add(form);
+  } catch {
+    // a lone surrogate has no percent-encoded form, and a UTF-8 password file cannot hold one
+  }
+  return [...forms].filter(Boolean).sort((a, b) => b.length - a.length);
+}
+
+// ``value`` (text, or a JSON value: keys and strings) with every form of the password replaced.
+function scrubSecret(value, forms) {
+  if (typeof value === 'string') return forms.reduce((text, form) => text.split(form).join(WITHHELD), value);
+  if (Array.isArray(value)) return value.map(item => scrubSecret(item, forms));
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [scrubSecret(key, forms), scrubSecret(item, forms)]));
+  }
+  return value;
+}
+
+// --acceptance-reviewer: the signed-in reviewer as the session serves them, which each decision must be recorded as.
+function reviewerAccount(session) {
+  const user = session?.user || {};
+  return { username: user.username ?? null, label: user.label ?? null, actor_kind: user.actor_kind ?? null,
+    acknowledgement: session?.acknowledgement ?? null };
+}
+
 function loadInputs(opts) {
   const manifest = readJson(opts.manifest, 'manifest');
   const generated = readJson(path.join(opts.docs, 'generated.json'), 'generated index');
@@ -1191,7 +1450,7 @@ function loadInputs(opts) {
   const unknown = (opts.only || []).filter(id => !known.has(id));
   if (unknown.length) throw new UsageError(`unknown document ids: ${unknown.join(', ')}`);
   const selected = manifest.documents.filter(d => !opts.only || opts.only.includes(d.id));
-  const problems = [...new Set(selected.flatMap(doc => planProblems(doc, manifest.review_notes || {})))];
+  const problems = [...new Set(selected.flatMap(doc => planProblems(doc, manifest.review_notes || {}, { acceptanceReviewer: opts.acceptanceReviewer })))];
   if (problems.length) throw new UsageError(`the manifest cannot be carried out as written: ${problems.join('; ')}`);
   const documents = selected.map(doc => {
     const file = path.join(opts.docs, doc.delivery.file);
@@ -1230,9 +1489,24 @@ async function login(page, base, creds) {
   return response.json();
 }
 
+// opts.acceptanceReviewer: the account --username names, a HUMAN one, in an active reviewer membership (CPT Studio GI
+// interpretation 63); otherwise an agent account, as before (and, signed in with a password file, the one named).
 function sessionProblems(session, opts) {
   const problems = [];
-  if (session.user?.actor_kind !== 'agent') problems.push(`the account is a ${session.user?.actor_kind} account; decisions must be recorded as agent review`);
+  const named = opts.username;
+  const other = named !== undefined && session.user?.username !== named
+    ? `the session is ${JSON.stringify(session.user?.username ?? null)}'s, not the named account ${JSON.stringify(named)}'s` : null;
+  if (opts.acceptanceReviewer) {
+    if (typeof named !== 'string' || !named) problems.push('no account was named (--username)');
+    else if (other) problems.push(other);
+    if (session.user?.actor_kind !== 'human') {
+      problems.push(`the account's actor kind is ${JSON.stringify(session.user?.actor_kind ?? null)}: the acceptance test is made through the ordinary (human) reviewer account`);
+    }
+    if (session.role !== 'reviewer') problems.push(`the account's role in this workspace is ${JSON.stringify(session.role ?? null)}: the acceptance test is made through a reviewer membership`);
+  } else {
+    if (session.user?.actor_kind !== 'agent') problems.push(`the account is a ${session.user?.actor_kind} account; decisions must be recorded as agent review`);
+    if (other) problems.push(other);
+  }
   if (session.can_review !== true) problems.push('the account cannot review in this workspace');
   if (session.synthetic_only !== true) problems.push('the workspace does not report synthetic_only');
   if (session.provider_mode === 'disabled') problems.push('provider_mode is disabled, so no proposals would be produced');
@@ -1405,7 +1679,8 @@ async function submitContextForm(page, id, value) {
 // review_plan.context_edit: one save through the form, its processing awaited by read-only polling; then the same values
 // saved again. The reloaded form holds the saved values and refuses that save without sending it, so it is sent as a
 // stale page or a repeated request would send it: through the page's own api() client, with the body the form sent.
-async function editContext(page, base, id, plan, deadlineAt, history) {
+// repeat false (--acceptance-reviewer): the one save only, as a reviewer answers a clarification; identical.skipped says so.
+async function editContext(page, base, id, plan, deadlineAt, history, { repeat = true } = {}) {
   const value = plan.clear_member_date ? '' : plan.service_date;
   const out = { asked_at: isoNow(), form: null, posted: null, http_status: null, error: null, timed_out: false, after: null,
     identical: { via: null, form_posted: null, form_toast: null, http_status: null, error: null, timed_out: false }, settled: null };
@@ -1416,6 +1691,11 @@ async function editContext(page, base, id, plan, deadlineAt, history) {
   const first = await waitForProcessing(page, base, id, deadlineAt, history);
   out.after = first.enc;
   if (first.timedOut) return { ...out, timed_out: true };
+  if (!repeat) {
+    out.identical.skipped = 'not made: the acceptance reviewer answers the clarification once, so the same save is not made again';
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    return out;
+  }
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForReviewScreen(page);
@@ -1515,6 +1795,9 @@ async function verifyDocument(page, opts, manifest, item, sink) {
     error: null, result: null,
   };
   const add = items => record.assertions.push(...items);
+  // --acceptance-reviewer: approvals only, and a context save only as the clarification the document needs (opts.account
+  // is the signed-in reviewer each decision must be recorded as)
+  const acceptance = Boolean(opts.acceptanceReviewer);
   try {
     await page.goto(`${opts.baseUrl}/`, { waitUntil: 'domcontentloaded' });
     let id;
@@ -1569,7 +1852,8 @@ async function verifyDocument(page, opts, manifest, item, sink) {
       add(checkContextEdit(enc, null, null, editPlan, edit, doc.upload?.service_date || null));
     } else if (editing) {
       if (stopRequested(opts.out)) throw new Error('stopped: a STOP file is present; the context was not edited');
-      const edit = await editContext(page, opts.baseUrl, id, editPlan, started + opts.deadlineSeconds * 1000, record.state_history);
+      const edit = await editContext(page, opts.baseUrl, id, editPlan, started + opts.deadlineSeconds * 1000, record.state_history,
+        { repeat: !acceptance });
       // the date named before the edit (a clear) or the edited one: what the request must carry, never read back from it
       const wanted = edit.after ? (editPlan.clear_member_date ? documentedServiceDate(enc, editPlan).date : editPlan.service_date) : null;
       record.context_edit = {
@@ -1578,6 +1862,8 @@ async function verifyDocument(page, opts, manifest, item, sink) {
         error: edit.error, timed_out: edit.timed_out, identical: edit.identical,
         request_date: edit.after ? wanted : null,
         expected_request_sha256: edit.after ? primaryRequestSha256(edit.after.revision?.text || '', wanted) : null,
+        // the reviewer answered the clarification the document needs: that is not a coding decision
+        ...(acceptance ? { clarification_answer: true, coding_decision: false } : {}),
       };
       if (edit.after) saveSnapshot(record, docDir, opts.out, 'after_context_edit', edit.after);
       if (edit.identical_view) saveSnapshot(record, docDir, opts.out, 'after_identical_context_save', edit.identical_view);
@@ -1596,7 +1882,9 @@ async function verifyDocument(page, opts, manifest, item, sink) {
       }
     }
     const secondPlan = secondReviewPlan(doc);
-    if (secondPlan) {
+    if (secondPlan && acceptance) {
+      add([skip('second_review.asked', 'not asked: the acceptance reviewer asks no second review (review_plan.second_review is not carried out)')]);
+    } else if (secondPlan) {
       if (stopRequested(opts.out)) throw new Error('stopped: a STOP file is present; the second review was not asked for');
       const ask = await askSecondReview(page, opts.baseUrl, id, current, started + opts.deadlineSeconds * 1000, record.state_history);
       record.second_review = { offered: ask.offered, asked_at: ask.asked_at, http_status: ask.http_status, error: ask.error, timed_out: ask.timed_out };
@@ -1614,16 +1902,25 @@ async function verifyDocument(page, opts, manifest, item, sink) {
           .map(a => ({ ...a, id: `after_second_review.${a.id}` })));
       }
     }
-    const plan = planDecisions(current, doc.review_plan, manifest.review_notes, { mustNotCode: doc.must_not_code, noAutoApprove: opts.noAutoApprove });
-    if (plan.second_review_held.length) add([check('decisions.second_review_held', 'soft', false, `left undecided (not in review_plan.second_review.approve_codes): ${plan.second_review_held.join(', ')}`)]);
+    const plan = planDecisions(current, doc.review_plan, manifest.review_notes, { mustNotCode: doc.must_not_code, noAutoApprove: opts.noAutoApprove, acceptanceReviewer: acceptance });
+    if (plan.second_review_held.length) add([check('decisions.second_review_held', 'soft', false, `left undecided (${acceptance ? 'the acceptance reviewer decides no code a second review added' : 'not in review_plan.second_review.approve_codes'}): ${plan.second_review_held.join(', ')}`)]);
     if (plan.must_not_code_held.length) add([check('decisions.must_not_code_held', 'soft', false, `left undecided, never approved (the manifest's must_not_code lists their family): ${plan.must_not_code_held.join(', ')}`)]);
     if (plan.plan_conflicts.length) add([check('decisions.plan_conflict', 'hard', false, `approve_codes names a code of a family must_not_code lists; not approved: ${plan.plan_conflicts.join(', ')}`)]);
-    if (plan.not_in_approve_codes.length) add([check('decisions.not_in_approve_codes', 'soft', false, `left undecided (not named in review_plan.approve_codes${opts.noAutoApprove ? '; --no-auto-approve' : ''}): ${plan.not_in_approve_codes.join(', ')}`)]);
+    if (plan.not_in_approve_codes.length) add([check('decisions.not_in_approve_codes', 'soft', false, `left undecided (not named in review_plan.approve_codes${acceptance ? '; --acceptance-reviewer' : opts.noAutoApprove ? '; --no-auto-approve' : ''}): ${plan.not_in_approve_codes.join(', ')}`)]);
     if (plan.approve_codes_unmatched.length) add([check('decisions.approve_codes_unmatched', 'soft', false, `named in review_plan.approve_codes but not a ready selected code: ${plan.approve_codes_unmatched.join(', ')}`)]);
     record.designated_rejection = plan.decisions.find(d => d.designated)?.code || null;
     if (plan.designated_missing) add([check('decisions.designated_rejection', 'soft', false, `no ready selected proposal in ${doc.review_plan.reject.family} to reject`)]);
-    const confirmations = planConfirmations(current, doc.must_not_code, manifest.review_notes);
-    for (const decision of [...plan.decisions, ...confirmations]) record.decisions.push(await decide(page, id, decision));
+    const confirmable = planConfirmations(current, doc.must_not_code, manifest.review_notes);
+    const confirmations = acceptance ? [] : confirmable;
+    const deciding = [...plan.decisions, ...confirmations];
+    if (acceptance) {  // what an agent walk would also do is recorded as not done; nothing but an approval is ever sent
+      if (doc.review_plan?.reject) add([skip('decisions.rejection', 'not made: the acceptance reviewer makes no rejection (review_plan.reject is not carried out)')]);
+      if (confirmable.length) add([skip('decisions.confirmations', `not made: the acceptance reviewer confirms no exclusion; left undecided: ${confirmable.map(d => d.code).join(', ')}`)]);
+      // the planner makes approvals only; this is the last check before an act that cannot be taken back
+      const other = deciding.filter(d => d.action !== 'approve');
+      if (other.length) throw new Error(`refusing to decide: the acceptance reviewer makes approvals only, and the plan holds ${other.map(d => `${d.action} ${d.code}`).join(', ')}`);
+    }
+    for (const decision of deciding) record.decisions.push(await decide(page, id, decision));
     record.timings.decisions_done_at = isoNow();
     add(record.decisions.map(d => check(`decision.${d.action}.${d.code}`, 'hard', d.http_status === 201 && !d.error, d.error || `HTTP ${d.http_status}${d.ui_updated === false ? '; the card did not update within 30 s' : ''}`)));
     const afterDecisions = await fetchEncounter(page, opts.baseUrl, id);
@@ -1635,9 +1932,11 @@ async function verifyDocument(page, opts, manifest, item, sink) {
     const reloaded = await fetchEncounter(page, opts.baseUrl, id);
     saveSnapshot(record, docDir, opts.out, 'after_reload', reloaded);
     const after = await readDom(page);
-    add(checkPersistence(record.decisions, current, afterDecisions, reloaded));
-    add(checkDecisionDom(record.decisions, reloaded, after.cards, after.candidates));
-    const labels = checkDecisionLabels(record.decisions, reloaded, doc.must_not_code);
+    add(checkPersistence(record.decisions, current, afterDecisions, reloaded, acceptance ? 'human' : 'agent'));
+    add(checkDecisionDom(record.decisions, reloaded, after.cards, after.candidates, { acceptance }));
+    const labels = acceptance
+      ? checkAcceptanceDecisions(record.decisions, reloaded, doc.must_not_code, opts.account || {}, after.cards)
+      : checkDecisionLabels(record.decisions, reloaded, doc.must_not_code);
     record.decision_labels = labels.labels;
     add(labels.checks);
     add(checkReadiness(reloaded));
@@ -1682,8 +1981,19 @@ async function checkOriginal(page, base, id, delivery) {
   return check('original.preserved', 'hard', digest === delivery.sha256, `GET original answered ${response.status()}; sha256 ${digest} vs uploaded ${delivery.sha256}`);
 }
 
-function writeEvidence(file, evidence) {
-  fs.writeFileSync(file, `${JSON.stringify(evidence, null, 2)}\n`);
+// forms (a password-file sign-in, secretForms): the evidence is scrubbed of the password, and where a form survives the
+// scrub (it spans the JSON's own syntax) nothing that holds it is written (ops/verify_login.py write_evidence).
+function writeEvidence(file, evidence, forms = null) {
+  if (!forms) {
+    fs.writeFileSync(file, `${JSON.stringify(evidence, null, 2)}\n`);
+    return;
+  }
+  let text = `${JSON.stringify(scrubSecret(evidence, forms), null, 2)}\n`;
+  if (forms.some(form => text.includes(form))) {
+    text = `${JSON.stringify({ schema: evidence.schema, run_id: evidence.run_id,
+      run_error: 'the evidence would have held the password; it was not written' }, null, 2)}\n`;
+  }
+  fs.writeFileSync(file, text);
 }
 
 async function main(argv) {
@@ -1693,8 +2003,11 @@ async function main(argv) {
   try {
     opts = parseArgs(argv);
     if (/pw:(api|\*)|(^|,)\*($|,)/.test(process.env.DEBUG || '')) throw new UsageError('refusing to run with DEBUG=pw:api: Playwright would log the password');
+    if (opts.passwordFile !== undefined && debugMayLog(process.env.DEBUG)) {
+      throw new UsageError(`refusing to run with DEBUG=${process.env.DEBUG}: a Playwright call, channel or protocol log would carry the password`);
+    }
     inputs = loadInputs(opts);
-    creds = loadCredentials(opts.credentials);
+    creds = opts.passwordFile !== undefined ? loadPasswordFile(opts.passwordFile, opts.username) : loadCredentials(opts.credentials);
     if (fs.existsSync(path.join(opts.out, 'evidence.json'))) throw new UsageError(`${opts.out} already holds evidence.json; use a fresh --out directory`);
   } catch (error) {
     if (!(error instanceof UsageError)) throw error;
@@ -1703,15 +2016,20 @@ async function main(argv) {
   }
   fs.mkdirSync(opts.out, { recursive: true });
   const evidenceFile = path.join(opts.out, 'evidence.json');
+  // a password-file sign-in: every line printed and the evidence are scrubbed of the password
+  const forms = creds.source === 'password_file' ? secretForms(creds.password) : null;
+  const print = text => process.stdout.write(forms ? scrubSecret(text, forms) : text);
   const { chromium } = require(PLAYWRIGHT);
   const evidence = {
-    schema: EVIDENCE_SCHEMA, run_id: `verify-${isoNow().replace(/[-:.]/g, '')}-${crypto.randomBytes(4).toString('hex')}`,
+    schema: EVIDENCE_SCHEMA, ...(opts.acceptanceReviewer ? { mode: 'acceptance_reviewer' } : {}),
+    run_id: `verify-${isoNow().replace(/[-:.]/g, '')}-${crypto.randomBytes(4).toString('hex')}`,
     started_at: isoNow(), finished_at: null, base_url: opts.baseUrl, synthetic_only: true,
     manifest: { path: path.resolve(opts.manifest), sha256: inputs.manifestSha }, docs_dir: path.resolve(opts.docs),
     options: { only: opts.only, deadline_seconds: opts.deadlineSeconds, stop_on_failure: opts.stopOnFailure, allow_live_provider: opts.allowLiveProvider,
-               encounter: opts.encounter || null, no_auto_approve: opts.noAutoApprove },
+               encounter: opts.encounter || null, no_auto_approve: opts.noAutoApprove,
+               ...(opts.acceptanceReviewer ? { acceptance_reviewer: true } : {}) },
     environment: { node: process.version, playwright: require(path.join(PLAYWRIGHT, 'package.json')).version, browser: null },
-    credentials: { username: creds.username, file_group_or_other_readable: creds.groupOrOtherReadable },
+    credentials: credentialsRecord(creds),
     session: null, documents: [], summary: null, run_error: null,
   };
   const browser = await chromium.launch({ headless: true });
@@ -1733,31 +2051,33 @@ async function main(argv) {
     evidence.session = await login(page, opts.baseUrl, creds);
     const problems = sessionProblems(evidence.session, opts);
     if (problems.length) throw new Error(`refusing to upload: ${problems.join('; ')}`);
+    // --acceptance-reviewer: each decision must be recorded as the reviewer this session serves
+    const walk = opts.acceptanceReviewer ? { ...opts, account: reviewerAccount(evidence.session) } : opts;
     for (const item of inputs.documents) {
       if (stopRequested(opts.out)) {
         evidence.run_error = 'stopped: a STOP file is present in the evidence directory; no further upload was made';
-        process.stdout.write(`${evidence.run_error}\n`);
+        print(`${evidence.run_error}\n`);
         break;
       }
-      process.stdout.write(`${item.doc.id} ${item.delivery.format} ... `);
-      const record = await verifyDocument(page, opts, inputs.manifest, item, sink);
+      print(`${item.doc.id} ${item.delivery.format} ... `);
+      const record = await verifyDocument(page, walk, inputs.manifest, item, sink);
       evidence.documents.push(record);
-      writeEvidence(evidenceFile, evidence);
+      writeEvidence(evidenceFile, evidence, forms);
       const failed = record.assertions.filter(a => a.status === 'fail').map(a => a.id);
-      process.stdout.write(`${record.result}${record.error ? ` (${record.error})` : ''}${failed.length ? ` [${failed.join(', ')}]` : ''}\n`);
+      print(`${record.result}${record.error ? ` (${record.error})` : ''}${failed.length ? ` [${failed.join(', ')}]` : ''}\n`);
       if (record.result === 'fail' && opts.stopOnFailure) break;
     }
   } catch (error) {
     evidence.run_error = String(error && error.message || error).split('\n')[0];
-    process.stdout.write(`run stopped: ${evidence.run_error}\n`);
+    print(`run stopped: ${evidence.run_error}\n`);
   } finally {
     await browser.close();
     evidence.finished_at = isoNow();
     const passed = evidence.documents.filter(d => d.result === 'pass').length;
     evidence.summary = { selected: inputs.documents.length, verified: evidence.documents.length, passed, failed: evidence.documents.length - passed };
-    writeEvidence(evidenceFile, evidence);
+    writeEvidence(evidenceFile, evidence, forms);
   }
-  process.stdout.write(`evidence: ${evidenceFile}\n${JSON.stringify(evidence.summary)}\n`);
+  print(`evidence: ${evidenceFile}\n${JSON.stringify(evidence.summary)}\n`);
   const complete = !evidence.run_error && evidence.summary.verified === evidence.summary.selected;
   return complete && evidence.summary.failed === 0 ? 0 : 1;
 }
@@ -1775,6 +2095,8 @@ module.exports = {
   checkDecisionLabels, planProblems, MEMBER_DATE_HOLD_MESSAGE, PROVIDER_SYSTEMS,
   documentedServiceDate, quotedDates, USER_CONFLICT_NOTE, USER_ELSEWHERE_NOTE,
   checkQuestionEdit, questionEditPreconditions, openDateQuestions, identicalSaveChecks, verifyDocument,
+  ACCEPTANCE_LABEL, REVIEW_NOTE_MAX, checkAcceptanceDecisions, loadPasswordFile, credentialsRecord, debugMayLog, secretForms, scrubSecret,
+  writeEvidence, reviewerAccount, main,
 };
 
 if (require.main === module) {

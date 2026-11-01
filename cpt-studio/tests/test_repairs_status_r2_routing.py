@@ -95,7 +95,9 @@ def clarified(proposal):
 
 class VersionTests(unittest.TestCase):
     def test_the_routing_version_is_bumped_once(self):
-        self.assertEqual(detect.ROUTING_VERSION, 'gi-routing@4')
+        # @5: GI round 4 routing reads differently from installed 80df1831d168's @4 (PE's routing-only reach, PV1's C4,
+        # C4-time and EMR-9 holds, PS's section reach; pd.json integration_20261101_cycle2)
+        self.assertEqual(detect.ROUTING_VERSION, 'gi-routing@5')
 
 
 GI03_LINE = 'Colonoscopy with cold snare polypectomy and cold forceps biopsy.'

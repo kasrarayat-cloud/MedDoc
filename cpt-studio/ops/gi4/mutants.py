@@ -350,52 +350,34 @@ PD_MUTANTS = (
     Mutant('pd-wide-never-own', "a narrowed wide label is never the note's own date (never sent)", _PD_CONTEXT,
            "        return Fact('service_date', None, 'missing', _sorted_spans(lines), WIDE_DATE_NOTE)\n",
            "        return Fact('service_date', wide[0].value, 'document', _sorted_spans(lines), WIDE_DATE_NOTE)\n", _PD_UNIT),
-    # --- the integration of Wave 1 repair cycle 1: the STRONG-HEAD HOLD (pd.json amendment_20261101_integration), one
-    # killing mutant per guard of the hold: the hold itself, the strong head (never PS's weak one), the one-date field,
-    # no note around a procedure (rule (c)'s broadened detection, a call or a message stated), and its notes ---
-    Mutant('pd-head-hold', "a member's answer of another day than a procedure report's own head gives is held", _PD_CONTEXT,
-           "    if isinstance(documented, _HeadHeldFact) and answer is not None and answer.origin == 'user' \\\n",
-           "    if False and isinstance(documented, _HeadHeldFact) and answer is not None and answer.origin == 'user' \\\n",
-           _PD_UNIT),
-    Mutant('pd-head-strong', "only the strong head holds (detect.todays_procedure_report, never PS's procedure_report_head)",
-           _PD_CONTEXT, '    if not detect.todays_procedure_report(text):\n        return None\n    if _pd_around_procedure(text):\n',
-           '    if not (procedure_report_head(text) and detect._gi4_head(text).own_dates):\n        return None\n'
-           '    if _pd_around_procedure(text):\n', _PD_UNIT),
-    Mutant('pd-head-one-date', "the head's own-date field gives exactly one date", _PD_CONTEXT,
-           '            if _PD_OTHER_DATE.search(text, m.end(), brk.start() if brk else line_end) is not None:\n',
-           '            if False:\n', _PD_UNIT),
-    Mutant('pd-head-around', 'no hold in a note written around a procedure (the broadened detection)', _PD_CONTEXT,
-           '    if _pd_around_procedure(text):\n        return None  # a booking, a call, a consent',
-           '    if False:\n        return None  # a booking, a call, a consent', _PD_UNIT),
-    Mutant('pd-head-call', 'no hold where the document states a call, a phone contact or a message', _PD_CONTEXT,
-           '    if _PD_CALL_PHRASE.search(text) is not None:\n        return None  # a call or a message written as an event',
-           '    if False:\n        return None  # a call or a message written as an event', _PD_UNIT),
-    Mutant('pd-head-note', "the hold's fact says which answers are held (never 'a member's date is taken')", _PD_CONTEXT,
-           '            note = HEAD_DATE_NOTE.format(day=day, head=quote, also=also)\n',
-           '            pass  # mutant: the note as made\n', _PD_UNIT),
-    Mutant('pd-head-charge-note', "rule (a)'s question says the date it keeps is held too", _PD_CONTEXT,
-           '            note = fact.note + _HEAD_CHARGE_NOTE.format(day=day, own=own)\n',
-           '            note = fact.note\n', _PD_UNIT),
+    # --- Wave 1 repair cycle 2 (pd.json amendment_20261101_cycle2): the integration's STRONG-HEAD HOLD is DROPPED, and
+    # its seven mutants (pd-head-hold, -strong, -one-date, -around, -call, -note, -charge-note) are retired with its
+    # code; one killing mutant per guard of the DT-5 narrow fix of rule (c) ---
+    Mutant('pd-announced-copy', 'a paste or a copy of another report announced in common words narrows nothing '
+           '(DT-5)', _PD_CONTEXT,
+           '    if _PD_ANNOUNCED.search(text):\n        return None  # a paste or a copy of another report',
+           '    if False:\n        return None  # a paste or a copy of another report', _PD_UNIT),
+    Mutant('pd-dated-after-signoff', 'a sign-off the note goes on past with another day narrows nothing (DT-5)',
+           _PD_CONTEXT, '    if own_end >= 0 and len(own) == 1 and _pd_dated_after(text, own_end, next(iter(own))):\n',
+           '    if False:  # mutant: the later day is not read\n', _PD_UNIT),
 )
 # --- package PV1: E/M reading fixes and the C4 holds (detectors tests.test_gi4_pv1 and, for repair cycle 1's guards,
 # tests.test_gi4_pv1_cycle1; moved here from tests/test_gi4_pv1_mutants.py, which now checks this slice). Repair cycle 1
 # (2026-11-01) re-anchored the guards whose code it rewrote, removed pv1-c2-opens-sentence and pv1-quote-window (their
-# guards are gone: a refused label is no mention, so it is never quoted) and added one mutant per guard it adds ---
+# guards are gone: a refused label is no mention, so it is never quoted) and added one mutant per guard it adds. Repair
+# cycle 2 (pv1.json amendment_20261101_cycle2) DROPPED C1 and C2: their 23 mutants (C1's, C2's and the visit evidence's)
+# are retired with their code, pv1-other-visit and pv1-emr9-mdm-other-visit are re-anchored (their call lost C2's
+# argument; same mutation), and pv1-line-quote-sentence guards the PV1C2-08 text fix (54 - 23 + 1 = 32) ---
 _PV1_DETECT, _PV1_CUES, _PV1_CHECKS = 'studio/gi/detect.py', 'studio/gi/cues.py', 'studio/validation/checks.py'
 _PV1_UNIT = 'unit:tests.test_gi4_pv1'
 _PV1_CYCLE1 = 'unit:tests.test_gi4_pv1_cycle1'
+_PV1_CYCLE2 = 'unit:tests.test_gi4_pv1_cycle2'
 _PV1_HOLD = "        return Reading('uncertain', (f\"{EM_NOT_IN_PERSON}: '{words}'\",), 'cue', doubt=True)"
-_PV1_TIME_ONLY = "    if m.kind != 'em-time':\n        return None\n    return cues.EM_TIME_ACTIVITIES"
-_PV1_DATES = '    for d in an.dates_in(cs, ce):  # GI round 4 (C1): a date in an activity list still governs (see the docstring)\n'
-_PV1_SKIP = '        if activities is not None and cue.start >= activities and _pv1_activity_work(cue):'
-_PV1_PLAN_NOUN = '    return noun is not None and noun.match(cue.text) is not None'
 _PV1_OTHER_STATEMENTS = "    if m.kind in ('em-time', 'em-mdm'):\n        other = _pv1_other_time(an, m)"
 _PV1_CONTACT_PLAN = "    if any(c.status == 'planned' for c in an.cues_in(cs, ce)) or _PV1_PREFERS.search(text, cs, ce):"
 _PV1_REVIEWED = ('    return _PV1_ACTIVITY_NOUN.search(text, cut, pos) is not None and _PV1_LIST_TIME.search(text, cut, item_end) '
                  'is None')
 _PV1_SCAN = "        for s, e in spans:\n            if an.lay.section_at(s).kind == 'history':"
-_PV1_EXAM_TEST = ('        if not _PV1_NO_EXAM.match(rest) and _PV1_EXAM_CONTENT.search(rest) and not '
-                  '_PV1_REPORTED.search(rest):')
 _PV1_ITEM_BOUND = ('    for count, (x, y) in enumerate(spans[i:i + _PV1_ITEM_MATCHES + 1]):\n        if y > end:\n            break\n'
                    '        if count < _PV1_ITEM_MATCHES and work is not None')
 # C4's session-2 synonyms in cues.NOT_IN_PERSON, from their comment to their last alternative (exact source text)
@@ -444,70 +426,18 @@ PV1_MUTANTS = (
     _pv1('pv1-another-time', "C4-time: installed's _another_time holds a performed E/M time statement",
          '    held = _pv1_another_time(an, m, work)', '    held = None', _PV1_UNIT),
     _pv1('pv1-c2-another-time', 'C4-time and EMR-9: a decision-making statement takes the other-time holds (installed\'s '
-         'MDM reading and a read label)', _PV1_OTHER_STATEMENTS,
+         'MDM reading; C2\'s label was dropped in repair cycle 2)', _PV1_OTHER_STATEMENTS,
          _PV1_OTHER_STATEMENTS.replace("m.kind in ('em-time', 'em-mdm')", "m.kind == 'em-time'")),
-    _pv1('pv1-c1-after-only', 'C1: a cue before the activity word still re-times the time statement', _PV1_SKIP,
-         '        if activities is not None and _pv1_activity_work(cue):', _PV1_UNIT),
-    _pv1('pv1-c1-plan-work', 'C1: after the activity word only a planned cue is skipped (a cancellation or a history '
-         'still re-times the statement)', _PV1_SKIP, '        if activities is not None and cue.start >= activities:',
-         _PV1_UNIT),
-    _pv1('pv1-c1-planned-time', 'C1: a planned time after the activity word still re-times the statement (only a noun of '
-         "the visit's planning work is skipped)", _PV1_PLAN_NOUN, '    return True', _PV1_UNIT),
-    _pv1('pv1-c1-dates-count', 'C1: a date in an activity list still re-times the time statement', _PV1_DATES,
-         _PV1_DATES + '        if activities is not None and d.start >= activities:\n            continue\n', _PV1_UNIT),
-    _pv1('pv1-c1-time-only', "C1: only a time statement has an activity list (a visit statement's cues count)",
-         _PV1_TIME_ONLY, _PV1_TIME_ONLY.replace("if m.kind != 'em-time':", "if m.kind not in ('em-time', 'em-visit'):"),
-         _PV1_UNIT),
-    _pv1('pv1-c2-shared', '"shared decision making" never gives an MDM level (a label and its separator)',
-         r"               r'|\b(?:complexity|level)\s+of\s+decision[- ]making[ \t]*[:\-][ \t]*)'",
-         r"               r'|\b(?:\w+\s+)?(?:of\s+)?decision[- ]making\b[^.;\n]{0,60}?)'", _PV1_UNIT, _PV1_CUES),
     _pv1('pv1-v3-ultrasound', "V3: an ultrasound named in an E/M code's negative passage holds the E/M",
          'labs?|ultrasounds?|sonograms?|', 'labs?|sonograms?|', _PV1_UNIT, _PV1_CHECKS),
     _pv1('pv1-c4-synonyms', 'C4 (session 2): "the patient was not seen", a visit-type field naming the telephone, '
          '"missed her appointment" and "left without being seen" hold every E/M reading', _PV1_SYNONYMS, '', _PV1_UNIT,
          _PV1_CUES),
     _pv1('pv1-other-visit', 'C4-time: another visit named by a preposition, with or without a determiner, holds a time '
-         'statement', '    other = _pv1_other_visit(an, s, max(e, m.end), label, work)', '    other = None', _PV1_UNIT),
+         'statement', '    other = _pv1_other_visit(an, s, max(e, m.end), work)', '    other = None', _PV1_UNIT),
     _pv1('pv1-other-visit-window', 'H7 (session 2): the other-visit quote is cut from a bounded window of its match',
          "        return ' '.join(an.text[x:min(y, x + _PV1_QUOTE_WINDOW)].split())[:_PV1_QUOTE]",
          "        return ' '.join(an.text[x:y].split())[:_PV1_QUOTE]", _PV1_UNIT),
-    # --- repair cycle 1: C2, kept only with positive evidence of today's office visit, otherwise not read ---
-    _pv1('pv1-c2-drop', 'C2: a label refused its release is no mention at all (installed\'s reading)',
-         '    an.em = _pv1_read_labels(an)', '    an.em = an.em'),
-    _pv1('pv1-c2-office-visit', "C2: the label is read only where the note documents today's in-person office visit",
-         '    why = _pv1_office_visit(an)', '    why = None'),
-    _pv1('pv1-c2-kept-c4', 'C2: where C4 holds the document, the visit\'s own label is kept and held with the rest',
-         '                 or (held and _pv1_statement_refused(an, m) is None))', '                 or False)'),
-    _pv1('pv1-c2-kept-own', 'C2: under C4 only the visit\'s own label is kept (another note\'s is not read)',
-         '                 or (held and _pv1_statement_refused(an, m) is None))', '                 or held)'),
-    _pv1('pv1-c2-opens-line', 'C2 and C1: the statement must open its own line',
-         '    line_start = _pv1_line_start(text, m.start)', "    line_start = text.rfind('\\n', 0, m.start) + 1"),
-    _pv1('pv1-c2-history-section', 'C2 and C1: a statement in a history or indication section is not the visit\'s own',
-         "    if an.lay.section_at(m.start).kind in ('history', 'indication'):", '    if False:'),
-    _pv1('pv1-c2-governing', 'C2 and C1: the heading-like line governing the statement names no other occurrence',
-         '    if governing is not None and _pv1_names_another_occurrence(an, *governing):', '    if False:'),
-    _pv1('pv1-c2-section-heading', 'C2 and C1: no heading-like line further up the statement\'s section names another '
-         'occurrence (a pasted prior note)', '    above = _pv1_section_heading_above(an, m.start, line_start)',
-         '    above = None'),
-    _pv1('pv1-c2-line-rest', "C2 and C1: the rest of the statement's line names no other visit, time or date",
-         '    words = _pv1_names_another_occurrence(an, m.end, line_end, rest=True)', '    words = None'),
-    _pv1('pv1-visit-exam', 'visit evidence: an exam or vital signs with content', '    if not _pv1_exam_with_content(text):',
-         '    if False:'),
-    _pv1('pv1-visit-setting', "visit evidence: the document's own office setting",
-         "    if setting.origin != 'document' or setting.value != 'office':", '    if False:'),
-    _pv1('pv1-visit-not-a-visit', 'visit evidence: no telephone, portal, message, e-consult, no-show or cancelled word',
-         '    words = _pv1_first_signal(an, _PV1_NOT_A_VISIT, everywhere=False)', '    words = None'),
-    _pv1('pv1-visit-procedure-day', 'visit evidence: no procedure-day word (H&P, ASA, airway, today\'s colonoscopy)',
-         '    words = _pv1_first_signal(an, _PV1_PROCEDURE_DAY, everywhere=True)', '    words = None'),
-    _pv1('pv1-visit-around-title', 'visit evidence: no title of a note written around a procedure',
-         '    if gi_sections.around_procedure_title(text):', '    if False:'),
-    _pv1('pv1-visit-reported', 'visit evidence: reported values or another visit\'s exam are no exam', _PV1_EXAM_TEST,
-         '        if not _PV1_NO_EXAM.match(rest) and _PV1_EXAM_CONTENT.search(rest):'),
-    _pv1('pv1-c1-office-visit', "C1: the plan-work skip applies only with the visit's evidence and its own statement",
-         '    if _pv1_office_visit(an) is not None or _pv1_statement_refused(an, m) is not None:', '    if False:'),
-    _pv1('pv1-c1-nouns', "C1: only a noun of the visit's planning work is skipped ('scheduled' is not)",
-         "_PV1_PLAN_WORK = {'ordered': re.compile(r'orders?\\Z', re.A | re.I),",
-         "_PV1_PLAN_WORK = {'scheduled': re.compile(r'.*'), 'ordered': re.compile(r'orders?\\Z', re.A | re.I),"),
     # --- repair cycle 1: C4 holds only on a statement of today's encounter type ---
     _pv1('pv1-c4-today-mode', "C4: only a statement of today's encounter type holds the document",
          '            if _pv1_todays_mode(an, s, e):', '            if True:'),
@@ -541,6 +471,9 @@ PV1_MUTANTS = (
          '        done = [m for m in an.em if _pv1_held_by_c4(an, readings[m])]', '        done = []'),
     _pv1('pv1-line-quote', 'CTS-2: the C4 cue quotes at most _PV1_LINE_QUOTE characters of its line',
          '    if len(line) <= _PV1_LINE_QUOTE and not cut_left and not cut_right:', '    if True:'),
+    _pv1('pv1-line-quote-sentence', 'PV1C2-08 (repair cycle 2, text only): a long line\'s C4 quote is the sentence holding '
+         'its words when that sentence fits, so it keeps its subject', '    if len(sentence) <= _PV1_LINE_QUOTE:',
+         '    if False:', _PV1_CYCLE2),
     # --- repair cycle 1: C4-time (EMR-7) and the EMR-9 holds ---
     _pv1('pv1-c4time-reviewed', "EMR-7: an activity-list item that is today's work on an earlier event names no other "
          'occasion', _PV1_REVIEWED, '    return False'),
@@ -551,7 +484,7 @@ PV1_MUTANTS = (
     _pv1('pv1-emr9-paren', 'EMR-9: a parenthesis right after the minutes is read for another visit',
          "        spans.append((*paren.span('inside'), False))", '        pass'),
     _pv1('pv1-emr9-mdm-other-visit', "EMR-9: installed's MDM reading takes the prepositional other-visit hold",
-         '        other = _pv1_other_visit(an, min(cs, m.start), m.end, False)', '        other = None'),
+         '        other = _pv1_other_visit(an, min(cs, m.start), m.end)', '        other = None'),
     _pv1('pv1-emr9-shared', "EMR-9: an MDM level read after 'shared' is held",
          "    if m.kind == 'em-mdm' and _PV1_SHARED_LEAD.search(an.text, max(0, m.start - 16), m.start):", '    if False:'),
     _pv1('pv1-cost-item-bound', 'H7: at most _PV1_ITEM_MATCHES reviewed prepositional matches are passed over, then held',
@@ -593,7 +526,8 @@ PE_MUTANTS = (
            '    return in_todays_narrative(an.text, verb, an.service_date, (at - len(pre), at + len(post)))',
            '    return True', _PE_UNIT),
     # --- GI round 4 Wave 1 repair, cycle 1: the shared copy guards of today's procedure report and narrative
-    # (detect.todays_procedure_report, detect.in_todays_narrative), read by PE's routing-only reach and PI's S1 and E1 ---
+    # (detect.todays_procedure_report, detect.in_todays_narrative), read by PE's routing-only reach and PI's S1 (PI's E1 too
+    # until its drop in Wave 1 repair cycle 2) ---
     Mutant('pe-today-head-date', "the strong head: an own-date field", _PE_DETECT,
            '    if not head.own_dates:  # an own-date field\n        return False',
            '    if False:  # an own-date field\n        return False', _PE_UNIT),
@@ -673,13 +607,20 @@ PE_MUTANTS = (
 # --- package PI: the inventory (detector tests.test_gi4_pi; moved here from tests/test_gi4_pi_mutants.py, which now
 # checks this slice; its (name, guard, path, old, new, detector) tuples are Mutant records here) ---
 _PI_UNIT = 'unit:tests.test_gi4_pi'
+# GI round 4 Wave 1 repair cycle 2 (pi.json amendment_20261101_cycle2): E1 and A1 were DROPPED with their code, and their
+# 16 mutants retired with it (pi-e1-section, pi-e1-occurrence, pi-e1-extent-word, pi-e1-occurrence-word,
+# pi-e1-routing-positive; pi-carry-part, pi-carry-part-kind, pi-carry-performed, pi-carry-region, pi-carry-reach,
+# pi-carry-paragraph, pi-carry-field, pi-carry-two-named, pi-carry-lesion, pi-carry-lesion-paragraph,
+# pi-carry-lesion-heading). Kept: S1's and W1's 8, unchanged but for the three descriptions that named E1. New: one
+# killing mutant per part of S1's binding rule (pi-reach-binding*).
 PI_MUTANTS = (
-    Mutant('pi-reach-head', 'the reach and E1 need a STRONG procedure report head (Wave 1 repair: '
-           'detect.todays_procedure_report replaces sections.procedure_report_head)', 'studio/gi/services.py',
+    Mutant('pi-reach-head', 'the reach needs a STRONG procedure report head (Wave 1 repair: '
+           'detect.todays_procedure_report replaces sections.procedure_report_head; E1, which read it too, was dropped '
+           'in cycle 2)', 'studio/gi/services.py',
            '    return detect.todays_procedure_report(text) and not _sections.around_procedure_title(text)',
            '    return not _sections.around_procedure_title(text)', _PI_UNIT),
-    Mutant('pi-reach-around-title', 'the reach and E1 are never read in a note written around a procedure',
-           'studio/gi/services.py',
+    Mutant('pi-reach-around-title', 'the reach is never read in a note written around a procedure (as E1 was not, '
+           'until its drop in cycle 2)', 'studio/gi/services.py',
            '    return detect.todays_procedure_report(text) and not _sections.around_procedure_title(text)',
            '    return detect.todays_procedure_report(text)', _PI_UNIT),
     Mutant('pi-reach-occurrence', "the reach is read only inside today's procedure narrative (Wave 1 repair: the shared "
@@ -689,47 +630,10 @@ PI_MUTANTS = (
     Mutant('pi-reach-date', 'the reach is never read in a clause carrying a date', 'studio/gi/services.py',
            '                    if own_report[0] and not _dates_in(dates, cs, ce) \\',
            '                    if own_report[0] \\', _PI_UNIT),
-    Mutant('pi-carry-part', 'a paragraph carries its service within its own part only', 'studio/gi/services.py',
-           "    if part_start != part.start or part.kind in ('history', 'plan', 'indication'):",
-           "    if part.kind in ('history', 'plan', 'indication'):", _PI_UNIT),
-    Mutant('pi-carry-part-kind', 'never into a history, plan or indication part', 'studio/gi/services.py',
-           "    if part_start != part.start or part.kind in ('history', 'plan', 'indication'):",
-           '    if part_start != part.start:', _PI_UNIT),
-    Mutant('pi-carry-performed', 'the carried family is one documented performed', 'studio/gi/services.py',
-           '    if len(done) < 2 or family not in done:', '    if len(done) < 2:', _PI_UNIT),
-    Mutant('pi-carry-region', 'every site the statement names is one the carried family reaches', 'studio/gi/services.py',
-           '    if named and not named <= FAMILY_REGIONS.get(family, frozenset()):', '    if False:', _PI_UNIT),
-    Mutant('pi-carry-reach', 'within CARRY_REACH characters', 'studio/gi/services.py',
-           'CARRY_REACH = 1500  # A1:', 'CARRY_REACH = 10 ** 9  # A1:', _PI_UNIT),
-    Mutant('pi-carry-paragraph', 'no blank line between', 'studio/gi/services.py',
-           '    if pos - end > CARRY_REACH or (pos > end and PARAGRAPH_BREAK.search(text, end, pos)):',
-           '    if pos - end > CARRY_REACH:', _PI_UNIT),
-    Mutant('pi-carry-field', 'never a field or check-box row', 'studio/gi/services.py',
-           '                                      field_row=_field_or_box_line(text, ms, me), lesion_carry=lesion_carry)',
-           '                                      field_row=False, lesion_carry=lesion_carry)', _PI_UNIT),
-    Mutant('pi-carry-two-named', 'a sentence naming two families clears the carry', 'studio/gi/services.py',
-           '            elif carrying and named_here:\n                carry = None',
-           '            elif False:\n                carry = None', _PI_UNIT),
-    Mutant('pi-e1-section', 'E1: never from a history or plan section of the layout', 'studio/gi/services.py',
-           "        if _sections.layout(t).section_at(pos).kind in ('history', 'plan'):\n            return True",
-           '        if False:\n            return True', _PI_UNIT),
-    Mutant('pi-e1-occurrence', "E1: only inside today's procedure narrative (Wave 1 repair: the shared copy guards, which "
-           'read under_another_occurrence now)', 'studio/gi/services.py',
-           '        if text and not _pi_todays_statement(text, span):', '        if False:', _PI_UNIT),
-    Mutant('pi-e1-extent-word', 'E1: never from a statement carrying an extent word', 'studio/gi/services.py',
-           '        if EXTENT_WORD.search(span.text) or (text and _pi_not_today_place(text, span.start)):',
-           '        if text and _pi_not_today_place(text, span.start):', _PI_UNIT),
-    Mutant('pi-e1-occurrence-word', 'E1: never a landmark an earlier-occurrence word leads in its statement',
-           'studio/gi/services.py',
-           '            if any(not _sections.ANOTHER_OCCURRENCE_HEAD.search(span.text, 0, m.start())\n'
-           '                   for m in pattern.finditer(span.text)):',
-           '            if any(True for m in pattern.finditer(span.text)):', _PI_UNIT),
-    Mutant('pi-office-visit', 'the reach and E1 are never read in an office visit note (routing reads the visit done)',
-           'studio/gi/services.py',
+    Mutant('pi-office-visit', 'the reach is never read in an office visit note (routing reads the visit done; E1, which '
+           'read it too, was dropped in cycle 2)', 'studio/gi/services.py',
            "    if visit is not None and visit.status in POSITIVE:\n        return False",
            '    if False:\n        return False', _PI_UNIT),
-    Mutant('pi-e1-routing-positive', "E1: never where routing reads the family done today", 'studio/validation/checks.py',
-           '                    and (finding is None or finding.status not in POSITIVE):', '                    and True:', _PI_UNIT),
     Mutant('pi-w1-another-stent', 'W1: dropped only beside another stent performed (hold-only)', 'studio/gi/services.py',
            "            if any(a.kind == 'stent' and a.status == 'performed' and a.id not in phantom for a in d.acts):",
            '            if True:', _PI_UNIT),
@@ -738,21 +642,24 @@ PI_MUTANTS = (
            "evidence, replacing cycle 1's hold-only 'the head excludes')", 'studio/gi/services.py',
            '    if family not in _pi_head_families(original, routing):\n        return False',
            '    if False:\n        return False', _PI_UNIT),
-    Mutant('pi-carry-lesion', "A1: a carry the paragraph's lesion carry stands against holds (a misbinding never binds)",
-           'studio/gi/services.py',
-           "        return ''  # GI round 4 Wave 1 repair (F5): the lesion carry is another family's - hold, never bind",
-           "        pass  # GI round 4 Wave 1 repair (F5): the lesion carry is another family's - hold, never bind",
-           _PI_UNIT),
-    Mutant('pi-carry-lesion-paragraph', 'A1: the lesion carry stands only within its paragraph (no blank line between)',
-           'studio/gi/services.py', '        return False  # a blank line: the paragraph, and its lesion carry, ended',
-           '        pass  # a blank line: the paragraph, and its lesion carry, ended', _PI_UNIT),
-    # --- amendment_20261101_cycle1_c ---
-    Mutant('pi-carry-lesion-heading', 'A1: the lesion carry lapses at a line written as a heading between it and the act',
-           'studio/gi/services.py', '    return not _pi_heading_between(text, end, pos)', '    return True', _PI_UNIT),
     # --- amendment_20261101_cycle1_d ---
     Mutant('pi-head-not-today', "S1: a head name routing reads as not done today names no family", 'studio/gi/services.py',
            '                     if not any(a < m.end() and m.start() < b for a, b in elsewhere))',
            '                     if True)', _PI_UNIT),
+    # --- amendment_20261101_cycle2: S1 never decides the binding of an act or lesion A1 used to carry ---
+    Mutant('pi-reach-binding', 'where more than one family is read performed, a family S1 alone reads performed takes no '
+           "part in pass 3's one-performed-family fallback (those shapes bind as installed binds them)",
+           'studio/gi/services.py',
+           '        binding_families = [f for f in performed_families if f not in reach_only] \\\n',
+           '        binding_families = performed_families \\\n', _PI_UNIT),
+    Mutant('pi-reach-binding-own', "only there: where S1's family is the only family read performed, it still takes an "
+           'act or lesion nothing else gives a family, as before cycle 2', 'studio/gi/services.py',
+           "            if len([f for f in performed_families if f != 'gi.office_em']) > 1 else performed_families\n",
+           '            if True else performed_families\n', _PI_UNIT),
+    Mutant('pi-reach-binding-installed', 'an installed performed reading of the family (after its reach) puts it back '
+           'into the fallback', 'studio/gi/services.py',
+           '                    reach_only.discard(family)  # an installed reading states it performed too\n',
+           '                    pass  # mutant: an installed reading never puts the family back\n', _PI_UNIT),
 )
 # --- package PO: second-review offers, the amendment A1-A5 included (detector tests.test_gi4_po; moved here from
 # tests/test_gi4_po_mutants.py, which now checks this slice) ---
@@ -847,6 +754,18 @@ PO_MUTANTS = (
     Mutant('po1-no-service', "PO-1 P1: no inventory, or no service of the item, is no evidence", _PO_ENGINE,
            '    if service is None:\n        return False\n    for a in service.acts:\n',
            '    if service is None:\n        return True\n    for a in service.acts:\n', _PO_UNIT),
+    # --- PO, Wave 1 repair cycle 2 (po.json amendment_20261101_cycle2; refutation PO1-PASTED-ACT-OFFER): C1, nothing
+    # offered where the document says its procedure was called off or not done today; C2, P1's act under no
+    # heading-like line further up naming another record ---
+    Mutant('po1-called-off', 'PO-1 C1: no offer where the document says its procedure was called off or not done '
+           'today, whatever a pasted act elsewhere says', _PO_ENGINE,
+           '        if _po_called_off(text):  # C1 (cycle 2): the document says its procedure was called off or not '
+           'done today\n            return False\n',
+           '        pass  # mutant: C1 removed\n', _PO_UNIT),
+    Mutant('po1-act-record-heading', "PO-1 C2: P1's act is under no heading-like line further up naming another "
+           'record or an attachment', _PO_ENGINE,
+           '               and not _po_under_another_record(text, ev.start)\n',
+           '               and True  # mutant: C2 removed\n', _PO_UNIT),
 )
 MUTANTS += PD_MUTANTS + PV1_MUTANTS + PE_MUTANTS + PI_MUTANTS + PO_MUTANTS
 # Every round-4 package's mutants by name prefix (the census in tests/test_gi4_mutants.py holds each exactly once);

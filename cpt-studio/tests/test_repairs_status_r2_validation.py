@@ -741,5 +741,7 @@ class Status1GuardTests(EngineCase):
 
 class EngineVersionTests(SimpleTestCase):
     def test_the_engine_version_is_bumped_once(self):
-        # @4: the documented-service inventory decides the codes it matches (ARCHITECTURE 5.9-5.11)
-        self.assertEqual(ENGINE_VERSION, 'cpt-studio-validation@4')
+        # @4: the documented-service inventory decides the codes it matches (ARCHITECTURE 5.9-5.11); @5: GI round 4's
+        # engine reads differently from installed 80df1831d168's @4 (PA's one-cause holds, PO's second-review offers,
+        # V3's nouns; pd.json integration_20261101_cycle2)
+        self.assertEqual(ENGINE_VERSION, 'cpt-studio-validation@5')

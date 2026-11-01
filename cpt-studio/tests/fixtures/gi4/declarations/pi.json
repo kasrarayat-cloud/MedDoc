@@ -171,5 +171,122 @@
   "H6": "56 of 56 PE and PI mutants killed on the sealed export of 8a92da33c, each applied and restored with sha256 printed, both detector baselines passing. The first battery on 6183c1289 found 3 survivors whose tests no longer reached their guard alone (pe-around-procedure, pe-today-head-date, pi-carry-region); c4d867353 pinned each alone again, behaviour unchanged.",
   "lens_and_probes": "The 139 refutation lens cases read on 8a92da33c exactly as on 1bd334478 (every input of F1, F2, F3 and F5 as installed). The repair author's own probes of 1bd334478 (the F1, F3 and F5 classes of amendment _b, the planned-head probe of _d) read as installed, except the recorded known-limit shape: a pasted block of a family the title names as today's.",
   "cost_on_the_regression_set": "None: every release is kept. h4-03 43244 and h4-06 45385 READY (E1 under their strong heads), h4-04 45378 held [extent, performed_status] (S1, its title naming both procedures), h4-04 43251 READY with its b840ae756 fingerprint."
+ },
+ "amendment_20261101_cycle2": {
+  "provenance": "Written on 2026-11-01 BEFORE any code of GI round 4 Wave 1 repair cycle 2, group PI (branch wip/gi4-c2-pi-20261101 at fbc59ee53, whose cpt-studio equals the integrated cycle-1 head 5fa531d1a). Cycle 2 is the second and last of the two refutation-and-fix cycles the plan allows a releasing family (design-out plan.txt, 'Rules for the round'): E1 and A1 met cycle-2 findings and are DROPPED, not fixed. A drop removes the rule's code so the shapes it governed read as installed (80df1831d168; origin/main's cpt-studio is identical), changes its tests to pin installed's reading of their own inputs, retires its mutants and leaves the known limits below. Every movement is against fbc59ee53 unless it names installed. Every key above this one is unchanged: each value is identical, and the only byte added before this key is the comma that separates it.",
+  "findings_reproduced": {
+   "method": "Each reproduced before this amendment on a sealed git-archive export of fbc59ee53 and of installed, offline (sockets and database connections refused, provider disabled), through jobs._analyze_child, _merged_facts and _assess_child as ops/gi4/battery.py runs them, with the refutation's own inputs (refute-w1c2/lens-procedures-offers/work/cases1, cases2, cases4, cases6 and cases10, read only).",
+   "PI-E1-NEG-ENDPOINT (blocking)": "Reproduced. h4-03 with the pylorus out of view and 'Duodenal bulb and descending duodenum: not assessed today.' (also 'not evaluated', 'normal on the CT'): 43244 selected/ready, inventory extent 'second part of duodenum' ('duodenal bulb' with 'not evaluated'); h4-06 stopped in the sigmoid colon with 'Neoterminal ileum: not assessed today.' (also 'not evaluated'): 45385 selected/ready, extent 'terminal ileum'. Installed: needs_clarification [extent] in each. The 'not reached' controls are held on both trees.",
+   "PI-A1-HEADING-LAPSE-REBINDS (major)": "Reproduced. The finding's text with its 'Polypectomy' sub-heading (also 'Intervention', 'Treatment', 'Removal', 'Therapeutic Intervention', 'Polyp Removal', and the asides 'It looked similar to the polyps found at the colonoscopy just completed.' and 'Colonoscopy findings are listed above.'): the gastric hot snare binds to the colonoscopy, 45378 selected/ready becomes needs_clarification [base_included] and a colonoscopy snare item is offered for a second review; in the reverse text 43235 is held [base_included] with an EGD snare item. Installed: the snare unattributed, 45378 (43235) READY, no item.",
+   "S1-TITLE-HOLD-FOLLOWUP (minor)": "Reproduced. h4-04 titled 'Gastroscopy Then Follow-up Colonoscopy': the strong head fails on 'Follow-up', S1 is silent and 45378 is excluded/excluded, as installed. Recorded as a known limit below; S1 is kept unchanged."
+  },
+  "dropped": {
+   "E1": "The extent read from the inventory's own endpoint statement. Removed: services._ENDPOINT_TABLE, EXTENT_WORD, _PI_E1_SPANS, _pi_not_today_place, _pi_todays_statement, _endpoint_named and the E1 block of _finish; validation/checks.required_fact_states's service parameter and its extent branch (installed's signature and body again); validation/engine._proposal's service= argument (installed's call again). The extent is routing's alone again, as installed.",
+   "A1": "The paragraph carry, with the cycle-1 lesion carry and its heading lapse. Removed: services.PARAGRAPH_BREAK, CARRY_REACH, _pi_carried, _pi_lesion_against, _pi_heading_between and every carry, carrying and lesion-carry line of _build's pass 3 (its sentence loop and its named_here read are installed's again)."
+  },
+  "kept": "S1 (the instrument as the subject of its own reach) with every guard cycle 1 gave it (the strong head, no around-procedure title, no office visit routing reads done, no date in its clause, inside today's narrative, a family the head names, named as today's); the instrument-subject reach predicate the plan lists as 'ACT_VERB (instrument-subject predicate)' (_PI_REACH_AFTER and _pi_reaches: ACT_VERB itself was never widened); W1 (an indwelling stent's state); and package PE's REACHED_BEFORE_ROUTING (pe.json amendment_20261101_cycle2). S1's code reads two helpers E1 shared, _pi_today_report and _pi_own_report: both stay, their code unchanged (their docstrings no longer name E1 as a reader). No cycle-2 finding stands against any of them.",
+  "s1_depended_on_a1": "Measured before this amendment, on the sealed export with E1's and A1's only entry points disabled in-process (services._endpoint_named and services._pi_carried returning ''), and again with their code removed in a scratch copy (replay and battery identical to that probe): S1's reading of h4-04 DEPENDED ON A1. S1 reads the colonoscope's reach as performed, so _build reads two families performed and installed's fallback for an act or lesion that its part, name and site leave to no family (_family_for_act: 'the one service documented as performed takes it') no longer applies; on fbc59ee53 A1's carry bound h4-04's unsited 'A hot snare was closed around the stalk 5 mm below the head' to the upper endoscopy instead. With A1's code removed and nothing else, that act is unattributed: h4-04's 43251 stays READY but gains evidence.support=warn whose detail ('None of the provider passages shows snare removal') is false of the passages it cites, its fingerprint moves (walk 9d6bff8e -> 98965e33, none fa8a41b1 -> bca330ac), and the rectal polyps bind to no service - which is neither S1's behaviour on fbc59ee53 nor installed's binding.",
+  "rules": {
+   "s1_never_decides_binding": "Kept S1's behaviour, exactly so: where more than one family is read performed (the office visit not counted, as A1 did not count it: A1's domain, the shapes its carry decided), pass 3 binds an act or lesion that its part, name and site leave to no family by the families installed reads performed. A family S1 alone reads performed - no title, statement or installed instrument reading states it performed (reach_only; an installed performed reading of it, before or after its reach, puts it back) - is left out of _family_for_act's performed list there. So A1's shapes bind exactly as installed binds them, and S1 changes a service's own reading, never which service such an act or lesion goes to. Where S1's family is the only family read performed (S1's own domain, which A1 never read), it still takes such an act or lesion, as on fbc59ee53. Every binding this changes against fbc59ee53 is one A1 made, and each goes back to installed's."
+  },
+  "movements_vs_fbc59ee53": {
+   "H1": "h4-03 and h4-06 read as installed in every member state: the inventory's extent '' (E1 gone); 43244 (h4-03) and 45385 (h4-06) selected/needs_clarification [extent] with facts.required=warn, their fingerprints installed's (h4-03 walk 5002e2b1, none a3d43056; h4-06 walk a9f964e0, none 8e19dbe1); completeness incomplete. Expectations that fail again, as on installed: SOFT approvable[43244] and INFO author-code-ready[43244] (h4-03), SOFT approvable[45385] and INFO author-code-ready[45385] (h4-06). No HARD expectation moves (h2-08 18/18, h2-10 9/9, h4-01 18/18, h4-02 14/14, h4-03 17/17, h4-04 14/14, h4-05 17/17, h4-06 16/16). h4-01, h4-02, h4-04, h4-05, h2-08 and h2-10 EQUAL: h4-04 keeps S1 (45378 held [extent, performed_status], 43251 READY with fingerprint 9d6bff8e); its rectal polyps bind to the upper endoscopy again, as installed, which no replay field records. Walk READY codes: 99204 (h4-01), 43251 (h4-04), 43274 (h2-10).",
+   "H2": "No movement of any class: services, checks and engine are read after the request is built, no constant context.py or sections.py reads changes, services.mention_count is unchanged. Against installed the Wave 1 union's classes as before; NEW-SEND 0, NEW-TAKE 0.",
+   "H3": "Measured on the scratch copy before this amendment. fbc59ee53 -> drop: MUST binding.lower-not-on-upper regressed in 25 documents (S-h4-04-*: the rectal lesion on the upper endoscopy again, as installed) and no other cell moves. installed -> drop: every cell as installed -> fbc59ee53 except binding.lower-not-on-upper (fixed 25 there, 0 here); no MUST regression against installed. Removing A1's code alone, without the rule above, moved no H3 cell (the rectal lesions then bind to no service at all); it is not taken, for the reason in s1_depended_on_a1.",
+   "H4": "No movement in the 50 permanent rows and 60 codes, fingerprints included (measured on the scratch copy).",
+   "H5": "Unchanged (the state battery reads h4-04's 43251, which does not move).",
+   "H6": "Retired with their code (16): pi-e1-section, pi-e1-occurrence, pi-e1-extent-word, pi-e1-occurrence-word, pi-e1-routing-positive, pi-carry-part, pi-carry-part-kind, pi-carry-performed, pi-carry-region, pi-carry-reach, pi-carry-paragraph, pi-carry-field, pi-carry-two-named, pi-carry-lesion, pi-carry-lesion-paragraph, pi-carry-lesion-heading. Kept (8): pi-reach-head, pi-reach-around-title, pi-reach-occurrence, pi-reach-date, pi-office-visit, pi-w1-another-stent, pi-reach-family, pi-head-not-today (the descriptions of the first two and pi-office-visit no longer name E1). New (3), one per part of the rule above: pi-reach-binding (S1's family left out of the fallback where more than one family is read performed), pi-reach-binding-own (only there: S1's own domain keeps it), pi-reach-binding-installed (an installed performed reading puts the family back). PI 24 -> 11; the merged registry 233 -> 220.",
+   "H7": "Removal only; the rule above adds one set lookup per family read performed.",
+   "lens_cases": "Every E1 and A1 input of the cycle-2 refutation reads exactly as installed, fingerprints included (the 77 of its 100 cases that name E1, A1, S1 or a regression document), except h4-04's six title inputs, where the kept S1 and PE read (the EGD's extent the second part of the duodenum, by PE; the colonoscopy held, never excluded, by S1, except under the Follow-up title; acts and lesions bound as installed binds them), and PA's twelve E1c inputs (PA's movement, unchanged from fbc59ee53); the other lenses' 23 cases read exactly as on fbc59ee53."
+  },
+  "tests": "tests/test_gi4_pi.py: every E1 and A1 test is kept and changed to pin installed's reading of its own input (each named in the code commit's message); a test that called removed code (required_fact_states's service parameter, CARRY_REACH, _pi_heading_between) pins installed's signature or the code's absence instead. New tests from the findings' own inputs plus independent variants (PI-E1-NEG-ENDPOINT, PI-A1-HEADING-LAPSE-REBINDS), for the rule above (h4-04 itself, its unsited-snare shape, an installed reading after S1, S1's own domain) and pinning the S1-TITLE-HOLD-FOLLOWUP limit. tests/test_gi4_pi_mutants.py and the census in tests/test_gi4_mutants.py count the retired and new mutants. The shared pins (tests/fixtures/gi4/pins) are NOT re-pinned here: the integrator regenerates them after merging every group, so tests.test_gi4_replay's h4-03 and h4-06 comparisons fail until then.",
+  "known_limits": [
+   "E1 dropped: where routing reads no extent ('The duodenal bulb and descending duodenum were normal.', 'Neoterminal ileum: normal.'), a performed EGD's or colonoscopy's extent stays a question, as installed: h4-03's 43244 and h4-06's 45385 are held [extent] in every member state and the member confirms the furthest extent reached. S1's reach statement gives no extent through E1 either (on fbc59ee53 E1 read 'The colonoscope reached the cecum.' as a completion statement), so a base code S1 releases stays held [extent] where routing reads none.",
+   "A1 dropped: an act or lesion that its part, name and site leave to no family binds as installed binds it - unattributed where installed reads two families performed (the F5 and heading-lapse shapes), and to the one family installed reads performed even where it belongs to the other: h4-04's rectal polyps are the upper endoscopy's again (MUST binding.lower-not-on-upper as installed in the 25 seeded h4-04 documents), and an unsited cold snare after 'The colonoscope reached the cecum.' goes to the upper endoscopy where installed reads only that one performed.",
+   "S1-TITLE-HOLD-FOLLOWUP: the strong head's closed title-hold list (detect._GI4_TITLE_HOLD) matches anywhere in today's own title, so a report titled with a routine word for today's procedure ('Follow-up', 'Results', 'Prior', 'Previous') loses S1 and reads as installed: h4-04 titled 'Gastroscopy Then Follow-up Colonoscopy' gives 45378 excluded/excluded, installed's false exclusion from 'She has never had a colonoscopy.'. A cost of failing closed, never worse than installed; kept, not fixed (S1 unchanged in cycle 2)."
+  ]
+ },
+ "after_measurement_20261101_cycle2": {
+  "provenance": "Written on 2026-11-01 AFTER measurement, as a record: it changes no declaration above it. Declaration commit 1330a5aea, code commit 8caa74cad; each tool ran on a sealed git-archive export of 8caa74cad (and of fbc59ee53 and installed 80df1831d168 as bases), offline, with the code commit's own harness. Every key above this one is unchanged: each value is identical, and the only byte added before this key is the comma that separates it.",
+  "H1": "Fixtures, every member state. fbc59ee53 -> 8caa74cad: 42 paths, all h4-03's (21) and h4-06's (21), exactly the declared ones; h2-08, h2-10, h4-01, h4-02, h4-04 and h4-05 EQUAL. installed -> 8caa74cad: not one path that installed -> fbc59ee53 lacks, and those 42 paths are back at installed's values. HARD per document (installed / fbc59ee53 / 8caa74cad): h2-08 18/18, 18/18, 18/18; h2-10 9/9, 9/9, 9/9; h4-01 11/18, 18/18, 18/18; h4-02 10/14, 14/14, 14/14; h4-03 13/17, 17/17, 17/17; h4-04 9/14, 14/14, 14/14; h4-05 17/17, 17/17, 17/17; h4-06 11/16, 16/16, 16/16. No HARD expectation moves against fbc59ee53 (installed's HARD failures are the date.sends-only-the-truth states PD fixes, fixed on both trees). Expectations that fail again, as on installed: h4-03 SOFT approvable[43244] and INFO author-code-ready[43244], h4-06 SOFT approvable[45385] and INFO author-code-ready[45385] (SOFT h4-03 1/5, h4-06 1/5). Walk READY: 99204 (h4-01), 43251 (h4-04, fingerprint 9d6bff8e), 43274 (h2-10). Controls: the head against itself EQUAL; the three planted mutations differ (98, 30 and 44 paths).",
+  "H2": "fbc59ee53 -> 8caa74cad, no declaration: no movement of any class over 52,231 texts and 283,460 text x member states (NEW-SEND 0, NEW-TAKE 0, NEW-HELD 0, SEND->ASK 0); layout identical; 201,052 requests unchanged; mention counts unchanged; 328 cue patterns, none changed or added; the gate holds. installed -> 8caa74cad with the Wave 1 union declaration: NEW-SEND 0, NEW-TAKE 0, NEW-HELD 5,709, SEND->ASK 1,391, FACT-CHANGED 14,439, 206,761 requests unchanged, cue patterns +48 (PS and PD), identical to the cycle-1 integration's measurement of e8c60375e; the tool's 'GATE FAILS: SEND->ASK = 1391, declared 1386' is that union declaration's PD count, which this package does not move.",
+  "H3": "5,664 documents, 0 reader errors on either tree. fbc59ee53 -> 8caa74cad: MUST binding.lower-not-on-upper regressed in 25 documents (S-h4-04-*: the rectal lesion on the upper endoscopy again, as installed) and no other cell moves. installed -> 8caa74cad: no MUST regression; every cell as installed -> fbc59ee53 except binding.lower-not-on-upper (fixed 25 there, none here).",
+  "H4": "fbc59ee53 -> 8caa74cad: 0 movements in 50 rows and 60 codes, 0 new violations. installed -> 8caa74cad with the union declaration: 3 movements, all declared (S3h h4-05 counterfactual 43259, 99213, 99212), 0 undeclared, 0 new violations.",
+  "H5": "tests.test_gi4_state, test_gi4_pd_state and test_gi4_po_state pass (127.0.0.1:55461, suffix c2pi), in the tests/test_gi4_*.py run below.",
+  "H6": "11 of 11 PI mutants and 32 of 32 PE mutants killed on copies of the sealed export of 8caa74cad, each applied and restored with sha256 printed (every restore equal to the original bytes: services.py 585f8fe62f30876b for PI's 11, detect.py 6ca301cc94962334 for PE's 32), both detector baselines passing. The new mutants are killed by their own behaviour: pi-reach-binding by six tests (the S1BindingTests h4-04 and unsited-snare tests, the h4-04 and bidirectional binding tests, the reach-as-performed test), pi-reach-binding-own by test_s1_s_own_domain_keeps_its_family alone, pi-reach-binding-installed by test_an_installed_reading_after_the_reach_puts_the_family_back alone; pi-reach-head, pi-reach-around-title and pi-office-visit, which E1 shared, are killed by S1 tests.",
+  "tests": "tests/test_gi4_*.py (21 modules, 464 tests) on the sealed export: 463 pass. The one failure is tests.test_gi4_replay.ReplayTests.test_the_replay_equals_installed_in_every_member_state, whose 22 differing paths are exactly the declared h4-03 and h4-06 movement against the pins written on fbc59ee53 (not re-pinned here: the integrator regenerates the shared pins). Full Django suite (manage.py test tests) on a copy of the export: 4,049 tests in 1,829 s, every one passing or skipped (3 skipped) except that same declared pin test; manage.py check clean and makemigrations --check reporting no changes; the ops tests 211 of 211.",
+  "lens_cases": "The cycle-2 refutation's 100 cases on 8caa74cad: 33 move against fbc59ee53 - 28 to installed's reading exactly, fingerprints included, and h4-04's 5 title inputs to installed's binding with S1 and PE kept - and the other 67 read as on fbc59ee53. Of the 63 cases the lens named E1 or A1, 51 read exactly as installed and 12 are PA's E1c inputs, unchanged from fbc59ee53.",
+  "cost_on_the_regression_set": "h4-03's 43244 and h4-06's 45385 held [extent] again in every member state (the E1 drop's known limit); h4-04 exactly as on fbc59ee53 (45378 held [extent, performed_status], 43251 READY with fingerprint 9d6bff8e); h2-10's 43274 and h4-01's 99204 READY as before."
+ },
+ "integration_20261101_cycle2": {
+  "date": "2026-11-01",
+  "written": "by the Wave 1 repair cycle 2 integration on fix/cpt-studio-gi4-interpretation-20261101 (merges 4bbac86d7 PD+PO+PA, 96b2a1372 PV1, 5bc13d6d1 PI, 488e8093e the acceptance tool; comments 18ccea7a5; pins 53ccc98c0), BEFORE the label code it declares. Every row was measured offline or on the throwaway database (127.0.0.1:55461) on sealed exports of installed 80df1831d168, b840ae756, fbc59ee53 and the merged head 18ccea7a5, whose readings the label code does not move (scratch: /home/claude/cpt-studio-gi4-20261031/w1c2/integ)",
+  "px_c": {
+   "what": "h4-04's 43251: the installed live approval (the retained live state: approve 43251 on fingerprint 92e16310) is invalidated at h4-04's next assessment after the install. Not a defect: the reading moved, by S1, as after_measurement recorded on b840ae756",
+   "measured": {
+    "installed 80df1831d168, walk (2026-10-19)": [
+     "selected",
+     "ready",
+     "92e16310d388a9854d0c69d7ada5861cd4645f12c40c4dab79f05eddc1f6ab1c",
+     [
+      [
+       "routing.family",
+       "warn"
+      ],
+      [
+       "service.status",
+       "warn"
+      ]
+     ]
+    ],
+    "fbc59ee53, walk": [
+     "selected",
+     "ready",
+     "9d6bff8eb00fe89ae3b9faeefed0a475c9ba47182b5a02ad013ac822f0c99d72",
+     [
+      [
+       "routing.family",
+       "warn"
+      ],
+      [
+       "service.status",
+       "warn"
+      ],
+      [
+       "pfs.endoscopic_base",
+       "info"
+      ]
+     ]
+    ],
+    "merged head 18ccea7a5, walk": [
+     "selected",
+     "ready",
+     "9d6bff8eb00fe89ae3b9faeefed0a475c9ba47182b5a02ad013ac822f0c99d72",
+     [
+      [
+       "routing.family",
+       "warn"
+      ],
+      [
+       "service.status",
+       "warn"
+      ],
+      [
+       "pfs.endoscopic_base",
+       "info"
+      ]
+     ]
+    ],
+    "none (every tree)": [
+     "selected",
+     "needs_clarification",
+     "fa8a41b1ad6d1dc0b3b46a595aa05456220c36298d30a5d2327d87c1ff8924b7"
+    ],
+    "45378 beside it, walk": "installed excluded/excluded (85b857ab); fbc59ee53 and the merged head selected/needs_clarification (78ecf6ba), S1's reach read performed"
+   },
+   "why": "the walk request (e89468e0) and its retained answer (442e8f3e) are the same on every tree; what moves is 45378 beside 43251 - held (selected) instead of excluded since S1 reads the colonoscope's reach - so a second endoscopic base code stands beside 43251, whose checks gain pfs.endoscopic_base (info). The fingerprint reads [check id, status] (engine._fingerprint), so it moves; nothing about 43251 itself moves (READY, its evidence, its status). The other dated states hold the member's answer since PD (no 43251 proposal there on fbc59ee53 or the merged head); installed was ready in each",
+   "consequence": "the live approval is not carried (review._carry_decisions carries a decision only to a proposal of the same fingerprint) and is invalidated with a recorded reason naming the change (\"the checks for 43251 changed\") at h4-04's next assessment: the first stage that remakes its gi-context@3 context (a member's save, Resume, a reconciliation) or the member's next date answer. Nothing happens at the install itself: a reload runs no stage. The reviewer approves again on 9d6bff8e. It is the only decision in the eight retained live states (tests/fixtures/gi4/regression/*.json stored.decisions)",
+   "inventory_label": "the inventory's label moves to gi-services@2 (and its check source to cpt-studio:gi-services@2) with this integration (pd.json integration_20261101_cycle2.px_a); no fingerprint reads it"
+  }
  }
 }

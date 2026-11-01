@@ -38,9 +38,17 @@ class MutantRegistryTests(SimpleTestCase):
         names = [m.name for m in mutants.MUTANTS]
         census = {p: [n for n in names if n.startswith(prefixes)] for p, prefixes in mutants.PACKAGE_PREFIXES.items()}
         self.assertEqual({p: len(v) for p, v in census.items()},
-                         {'PS': 7, 'PA': 33, 'PD': 44, 'PV1': 54, 'PE': 32, 'PI': 24, 'PO': 28})  # Wave 1 repair cycle 1 (PA, PO, PV1, PE, PI, PD)
+                         {'PS': 7, 'PA': 33, 'PD': 39, 'PV1': 32, 'PE': 32, 'PI': 11, 'PO': 30})  # Wave 1 repair cycle 1 (PA, PO, PV1, PE, PI, PD)
+        # Wave 1 repair cycle 2: PV1 54 -> 32 (pv1.json amendment_20261101_cycle2: C1 and C2 dropped, their 23 mutants
+        # retired with their code; pv1-line-quote-sentence added for the PV1C2-08 text fix)
+        # Wave 1 repair cycle 2 (group PI, pi.json amendment_20261101_cycle2): PI 24 -> 11, E1's 5 and A1's 11 mutants
+        # retired with the code they guarded (both rules dropped), 3 added for S1's binding rule (pi-reach-binding*)
         # and its integration: PD +7, one killing mutant per guard of the STRONG-HEAD HOLD (pd.json
-        # amendment_20261101_integration: pd-head-hold, -strong, -one-date, -around, -call, -note, -charge-note)
+        # amendment_20261101_integration: pd-head-hold, -strong, -one-date, -around, -call, -note, -charge-note);
+        # then Wave 1 repair cycle 2 (group PD+PO+PA): PD -7 +2, the hold DROPPED and its seven mutants retired with
+        # its code, and one killing mutant per guard of rule (c)'s DT-5 fix (pd.json amendment_20261101_cycle2:
+        # pd-announced-copy, pd-dated-after-signoff); PO +2, one per new hold (po.json amendment_20261101_cycle2:
+        # po1-called-off, po1-act-record-heading)
         # PE +19, PI +4: the Wave 1 repair, cycle 1 (pe.json and pi.json, amendment_20261101_cycle1); then PE +2 and PI -1
         # (amendment_20261101_cycle1_b: the head must name the family; pi-carry-lesion-start withdrawn with its code) and
         # PI +1 (amendment_20261101_cycle1_c: pi-carry-lesion-heading) and PE +1, PI +1 (amendment_20261101_cycle1_d:
@@ -52,13 +60,14 @@ class MutantRegistryTests(SimpleTestCase):
         # (pd-closing-last-lines, pd-not-closing-words, pd-wide-never-own), two retired with the code they guarded
         # (pd-around-title, pd-corroboration), and 28 new: one killing mutant per new guard (pd.json
         # amendment_20261101 and its second to fifth entries)
-        self.assertEqual(len(names), 233)
+        self.assertEqual(len(names), 195)  # 233 - 7 + 2 + 2 (Wave 1 repair cycle 2, group PD+PO+PA); then -22 (PV1's drop)
+        # and -16 + 3 (group PI): the merged registry's own count
         for package, slice_ in (('PD', mutants.PD_MUTANTS), ('PV1', mutants.PV1_MUTANTS), ('PE', mutants.PE_MUTANTS),
                                 ('PI', mutants.PI_MUTANTS), ('PO', mutants.PO_MUTANTS)):
             self.assertEqual([m.name for m in slice_], census[package], package)
             detectors = {f'unit:tests.test_gi4_{package.lower()}'}
-            if package == 'PV1':  # repair cycle 1's guards are killed by its own test module
-                detectors.add('unit:tests.test_gi4_pv1_cycle1')
+            if package == 'PV1':  # repair cycles 1's and 2's guards are killed by their own test modules
+                detectors |= {'unit:tests.test_gi4_pv1_cycle1', 'unit:tests.test_gi4_pv1_cycle2'}
             self.assertEqual({m.detector for m in slice_}, detectors, package)
 
 
