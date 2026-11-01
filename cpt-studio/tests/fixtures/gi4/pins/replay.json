@@ -1750,7 +1750,7 @@
   },
   "h4-03": {
    "fact": [
-    "conflict",
+    "missing",
     null
    ],
    "failed_hard": [],
@@ -1758,10 +1758,10 @@
     "doc:2026-10-08": {
      "answer": "2026-10-08",
      "completeness": [
-      "complete_pending_review",
-      0
+      "incomplete",
+      1
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.egd",
@@ -1770,21 +1770,26 @@
        "second part of duodenum"
       ]
      ],
-     "offers": [],
-     "proposals": [
+     "offers": [
       [
-       "43244",
-       "selected",
-       "ready",
-       "9cc969467811"
+       "gi.egd",
+       "no_proposal",
+       true
       ]
      ],
-     "questions": [],
-     "request": "2b828dd3ad5a9e65",
-     "response": "COUNTERFACTUAL",
+     "proposals": [],
+     "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ]
+     ],
+     "request": "",
+     "response": "held",
      "routing": {},
-     "sends": "2026-10-08",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "doc:2026-10-09": {
      "answer": "2026-10-09",
@@ -3191,6 +3196,6 @@
   }
  },
  "meta": {
-  "commit": "93b583f1c02eed99b990f8a8965a8048e1ee7c63"
+  "commit": "e04439146eecebec4b6f77eaf7987e0f5f880766"
  }
 }
