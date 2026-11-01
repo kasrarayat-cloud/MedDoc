@@ -9,6 +9,7 @@ round-4 engine), I2 (a participant's code is judged only by the proposal provide
 """
 from dataclasses import replace
 from datetime import date
+from pathlib import Path
 
 from django.test import SimpleTestCase
 
@@ -43,6 +44,9 @@ BIOPSY = 'was biopsied with cold forceps'
 CECUM = 'The colonoscope was advanced to the cecum'
 PLAN = 'Plan: Surveillance colonoscopy in three years.'
 COLON_PLAN = COLON + PLAN + '\n'
+# The GI round 2 regression office note h2-08 (a committed synthetic fixture): its closing charge block asks the date.
+H208 = (Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'regression' / 'h2-08.txt').read_text(encoding='utf-8')
+CHARGED = 'a 6 mm polyp in the sigmoid colon was removed with a cold snare'
 
 
 def info(key, kind, release):
@@ -228,6 +232,25 @@ class MergeTests(SimpleTestCase):
                           if p.code == '45380'],
                          [('sel:1', 'selected', 'ready', ['astra']), ('exc:0', 'excluded', 'excluded', ['corti'])])
         self.assertEqual(without_record(proposal(result, '45380', 'excluded')), proposal(alone, '45380'))
+
+    def test_a_provider_candidate_is_no_proposal(self):
+        """A code the provider only listed (a candidate, never selected) carries nothing: a participant's code of the
+        same number is judged as a proposal of its own, and the provider's listing stays an alternative."""
+        candidate = ProviderCode('candidate', 'cpt', '45378', 'UNVERIFIED PROVIDER WORDING', (span(COLON, CECUM),))
+        result = run(COLON, [*corti(('45385', span(COLON, SNARE))), candidate],
+                     [read('astra', [code(COLON, '45378', CECUM)])])
+        self.assertEqual([(p.key, p.bucket, p.support['proposed_by']) for p in result.proposals if p.code == '45378'],
+                         [('sel:1', 'selected', ['astra']), ('alt:0', 'alternative', [])])
+        self.assertEqual(proposal(result, '45378', 'alternative').support['participants']['astra']['position'],
+                         'proposed')
+
+    def test_stated_values_outside_the_schema_are_counted_never_shown(self):
+        odd = replace(code(COLON, '45380', BIOPSY, modifiers=('59', 'XS', f'{OWN_WORDS} modifier')),
+                      units=f'{OWN_WORDS} units', confidence=f'{OWN_WORDS} confidence')
+        result = run(COLON, corti(('45385', span(COLON, SNARE))), [read('astra', [odd])])
+        detail = proposal(result, '45380').support['participants']['astra']['detail']
+        self.assertIn('stated units none; modifiers 59, XS; confidence none (3 other values not shown)', detail)
+        self.assertNotIn(OWN_WORDS, canonical_json(result).decode('utf-8'))
 
     def test_a_participant_code_is_judged_by_the_providers_own_path(self):
         """I2: the same code and the same passage give the same proposal whoever proposed it - bucket, status, checks,
@@ -483,6 +506,24 @@ class EncounterTests(SimpleTestCase):
         # with nothing a participant proposed, the provider's own words stand
         nothing = run(COLON, (), [read('astra')], provider_status='failed')
         self.assertIn('there are no CPT proposals', encounter_check(nothing, 'provider.status').detail)
+
+    def test_a_participant_code_is_read_on_the_date_a_provider_answer_is_read(self):
+        """I2 with I10: under the provider's failure, with a member's date in conflict with the document, a
+        participant's code is read on the date a provider's answer is read (the closing charge block's own date, GI
+        round 3), so its decision is the one the provider's own path gives. Read with no date, the report's dated
+        colonoscopy line would read as not established on the date of service."""
+        text = H208.replace('Assessment and plan\n', f'Colonoscopy on 2026-10-05: {CHARGED}.\nAssessment and plan\n', 1)
+        self.assertIn(CHARGED, text)
+        facts = gi_context.merge_user_values(gi_context.extract_context(text), {'service_date': '2026-10-06'})
+        self.assertEqual(facts['service_date'].origin, 'conflict')
+        kwargs = dict(text=text, pages=(), context=facts, routing=detect.route(text, None), reference=REFERENCE,
+                      service_date=None)
+        by_provider = proposal(assess(**kwargs, normalized=NormalizedResponse('corti', 'test@1', tuple(
+            corti(('45385', span(text, CHARGED))))), provider_status='succeeded'), '45385')
+        by_participant = proposal(assess(**kwargs, normalized=None, provider_status='failed',
+                                         participants=(read('astra', [code(text, '45385', CHARGED)]),)), '45385')
+        self.assertEqual(decision(by_participant), decision(by_provider))
+        self.assertEqual(check(by_participant, 'service.status').status, 'pass')
 
     def test_reference_lookups_go_through_the_one_prefetched_lookup(self):
         """The assess child has no database: a participant's code is looked up in the stage's prefetched lookup, so the

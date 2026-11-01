@@ -21,8 +21,8 @@ from studio.gi.profiles import DETECTED_FAMILIES, PROFILES, PROFILES_VERSION, Se
 from studio.participants import LABELS as PARTICIPANT_LABELS, PARTICIPANTS as PARTICIPANT_ORDER
 from studio.participants import VENDORS as PARTICIPANT_VENDORS
 from studio.reference.store import PFS, applied_sources
-from studio.types import (CONTEXT_FACTS, PARTICIPANT_STATES, AssessmentResult, Check, ClarificationSpec, CodeReference,
-                          EvidenceSpan, Fact, FamilyFinding, LocatedQuote, NormalizedResponse, PageSpan,
+from studio.types import (CONFIDENCES, CONTEXT_FACTS, PARTICIPANT_STATES, AssessmentResult, Check, ClarificationSpec,
+                          CodeReference, EvidenceSpan, Fact, FamilyFinding, LocatedQuote, NormalizedResponse, PageSpan,
                           ParticipantInput, ProposalAssessment, ProviderCode, ReferenceLookup, ReferenceSourceInfo,
                           RoutingResult, ServiceMention, sha256_json)
 from studio.gi.detect import DOUBT_PREFIX, UNESTABLISHED
@@ -2794,15 +2794,19 @@ class _Harness:
 
     @staticmethod
     def _stated(entries) -> str:
-        """What a participant stated with a code: units, modifiers (only those shaped as one) and confidence."""
-        units = ', '.join(str(entry.units) for entry in entries)
+        """What a participant stated with a code: its units, modifiers and confidence, each shown only in the shape the
+        reading's schema allows (a whole number, two characters, one of CONFIDENCES); any other value is counted, never
+        shown, so no wording of the participant's own reaches the record."""
+        units = [str(entry.units) for entry in entries if type(entry.units) is int]
         modifiers = [m for entry in entries for m in entry.modifiers
                      if isinstance(m, str) and MODIFIER_SHAPE.fullmatch(m)]
-        others = sum(len(entry.modifiers) for entry in entries) - len(modifiers)
-        stated = f'stated units {units}; modifiers {", ".join(dict.fromkeys(modifiers)) or "none"}'
-        if others:
-            stated += f' ({others} other value{"s" if others != 1 else ""} not shown)'
-        return stated + '; confidence ' + ', '.join(dict.fromkeys(str(entry.confidence) for entry in entries))
+        confidences = [entry.confidence for entry in entries if entry.confidence in CONFIDENCES]
+        others = (2 * len(entries) - len(units) - len(confidences)
+                  + sum(len(entry.modifiers) for entry in entries) - len(modifiers))
+        stated = (f'stated units {", ".join(units) or "none"}; '
+                  f'modifiers {", ".join(dict.fromkeys(modifiers)) or "none"}; '
+                  f'confidence {", ".join(dict.fromkeys(confidences)) or "none"}')
+        return stated + (f' ({others} other value{"s" if others != 1 else ""} not shown)' if others else '')
 
     def _state_sentence(self, p: ParticipantInput) -> str:
         reason = checks.excerpt(str(p.reason or '')).rstrip('.')
