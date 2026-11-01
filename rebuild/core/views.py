@@ -413,7 +413,10 @@ def encounter_new(request):
                 form.add_error('template_version',CURRENT_MAPPING_ERROR)
                 return render(request,'encounter_form.html',{'form':form,'has_patients':form.fields['patient'].queryset.exists()},status=409)
             from .semantic_preparation import validated_semantic_definitions
-            try: validated_semantic_definitions(current)
+            from .template_source import assert_pdf_template_usable
+            try:
+                validated_semantic_definitions(current)
+                assert_pdf_template_usable(current.template)      # DL-2: a refused PDF original never starts an encounter
             except ValidationError as exc:
                 form.add_error('template_version', error_message(exc))
                 return render(request,'encounter_form.html',{'form':form,'has_patients':form.fields['patient'].queryset.exists()},status=409)
@@ -984,9 +987,25 @@ def finalize(request,pk):
 def export(request,pk):
     e=get_object_or_404(scoped(Encounter,request.user),pk=pk,status='finalized')
     path=private_path(e.export_path)
-    if hashlib.sha256(path.read_bytes()).hexdigest()!=e.export_sha256:return HttpResponse('Export integrity check failed.',status=409)
+    payload=path.read_bytes()
+    if hashlib.sha256(payload).hexdigest()!=e.export_sha256:return HttpResponse('Export integrity check failed.',status=409)
+    kind=e.template_version.template.format.lower()
+    if kind=='pdf':
+        # ⚠️ FINDING DL-1: a stored PDF export was served after a sha256 check only. New exports are
+        # built from originals the gate now re-checks, but an export FINALIZED BEFORE this repair can
+        # still carry active content pypdf's root recovery copied out of such an original into a form
+        # every viewer reads. So every stored PDF export is run through the same isolated-worker
+        # active-content check as an original before it is served; a refusal serves nothing.
+        from documents import check_original,DocumentError
+        try:check_original(path,expected_sha256=e.export_sha256)
+        except DocumentError as exc:
+            audit(request.user,'encounter.export_refused',e.pk,department=e.department,code=exc.code)
+            return HttpResponse('This document cannot be downloaded: '+str(exc),status=409,content_type='text/plain; charset=utf-8')
     audit(request.user,'encounter.export',e.pk,department=e.department)
-    return FileResponse(path.open('rb'),as_attachment=True,filename=f'quillmd-{str(e.pk)[:8]}.{e.template_version.template.format.lower()}')
+    # The hashed bytes are the bytes served: the file is not opened a second time.
+    response=FileResponse(BytesIO(payload),as_attachment=True,filename=f'quillmd-{str(e.pk)[:8]}.{kind}')
+    response['X-Content-Type-Options']='nosniff'
+    return response
 
 def voice_standard():
     """The displayed per-recording limit and the length that fits it, from the same quote an upload is checked against."""

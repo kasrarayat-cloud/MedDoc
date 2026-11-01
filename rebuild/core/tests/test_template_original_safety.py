@@ -19,7 +19,8 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from docx import Document
 
-from core.models import AuditEvent, Department, Membership, Organization, Template, User
+from core.models import (AuditEvent, Department, Encounter, Membership, Organization, Patient, Template,
+                         TemplateVersion, User)
 from core.security import private_path
 from documents.test_pdf_active_content import form, p1_trigger, after_eof
 
@@ -229,3 +230,148 @@ class CheckStoredOriginalsCommand(TestCase):
         self.assertEqual((AuditEvent.objects.count(), Template.objects.count()), (audit_rows, templates))
         with self.assertRaises(CommandError):
             call_command("check_pdf_originals", output=str(output), stdout=StringIO())
+
+
+@override_settings(**TEST_SETTINGS)
+class ExportDownloadSafety(TestCase):
+    """Finding DL-1 (defence in depth). A stored PDF EXPORT is run through the same active-content
+    check as an original before it is served, so an export finalized before the P1 repair — which
+    could carry a script pypdf's root recovery copied out of an unsafe original — is refused, not
+    served. New exports are already built from checked originals. (The live rebuild has no PDF
+    templates today; this closes exports written before the repair.)"""
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        override = override_settings(MEDIA_ROOT=Path(directory.name))
+        override.enable()
+        self.addCleanup(override.disable)
+        self.user = User.objects.create_user(username="export-safety", email="export-safety@synthetic.invalid",
+                                             verified_at=timezone.now())
+        organization = Organization.objects.create(name="Synthetic export safety")
+        self.department = Department.objects.create(organization=organization, name="Synthetic exports")
+        Membership.objects.create(user=self.user, department=self.department, role="clinician")
+        self.patient = Patient.objects.create(department=self.department, display_name="SYNTHETIC export",
+                                              reference="export", created_by=self.user)
+        self.client.force_login(self.user)
+
+    def finalized_encounter(self, export_bytes, fmt="pdf"):
+        template = Template.objects.create(department=self.department, name="Synthetic form", format=fmt,
+                                           original_name="synthetic." + fmt, original_path="originals/x." + fmt,
+                                           sha256=hashlib.sha256(b"original").hexdigest(), created_by=self.user)
+        version = TemplateVersion.objects.create(template=template, number=1, created_by=self.user, fields=[
+            {"key": "Symptoms", "label": "Symptoms", "kind": "text", "locator": {"pdf_field": "Symptoms"}}])
+        relative = "exports/%s.%s" % (hashlib.sha256(export_bytes).hexdigest()[:16], fmt)
+        path = private_path(relative)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(export_bytes)
+        encounter = Encounter.objects.create(department=self.department, patient=self.patient,
+                                             template_version=version, created_by=self.user,
+                                             service_date=timezone.localdate(), notes="Symptoms: synthetic",
+                                             answers={"Symptoms": {"text": "x", "status": "supported", "reviewed": True,
+                                                                   "evidence": []}})
+        encounter.status = "finalized"
+        encounter.export_path = relative
+        encounter.export_sha256 = hashlib.sha256(export_bytes).hexdigest()
+        encounter.finalized_at = timezone.now()
+        encounter.finalized_by = self.user
+        encounter.save()
+        return encounter
+
+    def test_a_stored_pdf_export_with_a_hidden_script_is_refused_not_served(self):
+        encounter = self.finalized_encounter(p1_trigger("type"))
+        response = self.client.get("/encounters/%s/export/" % encounter.pk)
+        self.assertEqual(response.status_code, 409)
+        self.assertFalse(getattr(response, "streaming", False))
+        self.assertNotIn(b"%PDF", response.content)
+        self.assertIn(b"PDF actions, attachments, XFA, and external resources are not accepted.", response.content)
+        refused = AuditEvent.objects.get(action="encounter.export_refused", target=str(encounter.pk))
+        self.assertEqual(refused.details, {"code": "unsafe_upload"})
+        self.assertFalse(AuditEvent.objects.filter(action="encounter.export", target=str(encounter.pk)).exists())
+
+    def test_a_stored_pdf_export_pypdf_cannot_read_completely_is_refused(self):
+        encounter = self.finalized_encounter(p1_trigger("type", payload=False))
+        response = self.client.get("/encounters/%s/export/" % encounter.pk)
+        self.assertEqual(response.status_code, 409)
+        self.assertIn(b"could not be read completely", response.content)
+        self.assertEqual(AuditEvent.objects.get(action="encounter.export_refused",
+                                                target=str(encounter.pk)).details, {"code": "unreadable_pdf"})
+
+    def test_a_clean_pdf_export_is_served_with_nosniff(self):
+        data = form()
+        encounter = self.finalized_encounter(data)
+        response = self.client.get("/encounters/%s/export/" % encounter.pk)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(b"".join(response.streaming_content), data)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertEqual(response["X-Content-Type-Options"], "nosniff")
+        self.assertEqual(AuditEvent.objects.filter(action="encounter.export", target=str(encounter.pk)).count(), 1)
+        self.assertFalse(AuditEvent.objects.filter(action="encounter.export_refused").exists())
+
+
+@override_settings(**TEST_SETTINGS)
+class RefusedTemplateNotUsable(TestCase):
+    """Finding DL-2. A PDF template whose stored original the download gate refuses is turned away
+    at the two earliest points — encounter creation and every provider enqueue — not only at
+    finalize, so the doctor never spends a paid generation on a form that can never produce a
+    document."""
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        override = override_settings(MEDIA_ROOT=Path(directory.name))
+        override.enable()
+        self.addCleanup(override.disable)
+        self.user = User.objects.create_user(username="refused-tmpl", email="refused-tmpl@synthetic.invalid",
+                                             verified_at=timezone.now())
+        organization = Organization.objects.create(name="Synthetic refused")
+        self.department = Department.objects.create(organization=organization, name="Synthetic forms")
+        Membership.objects.create(user=self.user, department=self.department, role="clinician")
+        self.patient = Patient.objects.create(department=self.department, display_name="SYNTHETIC refused",
+                                              reference="refused", created_by=self.user)
+        self.client.force_login(self.user)
+
+    def stored_template(self, original, name="Synthetic legacy form", relative=None):
+        relative = relative or ("originals/%s.pdf" % hashlib.sha256(original).hexdigest()[:16])
+        template = Template.objects.create(department=self.department, name=name, format="pdf",
+                                           original_name="synthetic.pdf", original_path=relative,
+                                           sha256=hashlib.sha256(original).hexdigest(), created_by=self.user)
+        path = private_path(template.original_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(original)
+        version = TemplateVersion.objects.create(template=template, number=1, created_by=self.user, fields=[
+            {"key": "Symptoms", "label": "Symptoms", "kind": "text", "locator": {"pdf_field": "Symptoms"}}])
+        return template, version
+
+    def test_the_guard_refuses_a_refused_original_and_passes_a_clean_one(self):
+        from core.template_source import assert_pdf_template_usable
+        from django.core.exceptions import ValidationError
+        refused_template, _ = self.stored_template(p1_trigger("type"), name="Refused form")
+        with self.assertRaises(ValidationError) as caught:
+            assert_pdf_template_usable(refused_template)
+        self.assertIn("can no longer be used", "; ".join(caught.exception.messages))
+        clean_template, _ = self.stored_template(form(), name="Clean form")
+        assert_pdf_template_usable(clean_template)      # no raise
+
+    def test_encounter_creation_is_refused_for_a_refused_template(self):
+        template, version = self.stored_template(p1_trigger("nosize"))
+        response = self.client.post("/encounters/new/", {"patient": self.patient.pk, "template_version": version.pk,
+                                                         "notes": "Symptoms: synthetic", "synthetic_only": "on",
+                                                         "service_date": timezone.localdate().isoformat()})
+        self.assertEqual(response.status_code, 409)
+        self.assertContains(response, "can no longer be used", status_code=409)
+        self.assertFalse(Encounter.objects.filter(template_version=version).exists())
+
+    def test_generation_enqueue_is_refused_before_any_provider_call(self):
+        from core.jobs import enqueue
+        from django.core.exceptions import ValidationError
+        template, version = self.stored_template(p1_trigger("widew"))
+        # An encounter that already exists (e.g. created before the repair) must still not buy a generation.
+        encounter = Encounter.objects.create(department=self.department, patient=self.patient,
+                                             template_version=version, created_by=self.user,
+                                             service_date=timezone.localdate(), notes="Symptoms: synthetic")
+        with self.assertRaises(ValidationError) as caught:
+            enqueue(encounter, self.user, kind="generation")
+        self.assertIn("can no longer be used", "; ".join(caught.exception.messages))
+        from core.models import Job
+        self.assertFalse(Job.objects.filter(encounter=encounter).exists())

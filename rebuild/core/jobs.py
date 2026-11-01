@@ -221,6 +221,10 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     e=Encounter.objects.select_for_update().get(pk=encounter.pk)
     membership(user,e.department)
     if e.status=='finalized': raise ValidationError('Finalized documents are immutable.')
+    # DL-2: a PDF form the download gate now refuses must not buy a provider call. Checked here,
+    # the single choke point for generation and transcription, before any quote or send.
+    from .template_source import assert_pdf_template_usable
+    assert_pdf_template_usable(e.template_version.template)
     if expected_revision is not None and e.revision!=expected_revision:
         raise ValidationError('Source notes changed after the quote. Reload and review the current notes before submitting.')
     if kind=='generation' and not e.notes.strip():
