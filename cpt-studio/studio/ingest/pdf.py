@@ -884,7 +884,7 @@ class _I4_Readable:
 
     def left_of(self, rect) -> float | None:
         """Where the nearest piece that can be read starts left of ``rect`` (by more than BOX_SLACK) on its rows; None
-        when none does, or past _ING_MAX_ROWS rows (as if none did: text that could not be read there may be a label)."""
+        when none does, or past _ING_MAX_ROWS rows (as if none did: text that cannot be read there may be a label)."""
         x0, y0, x1, y1 = rect
         rows = self.pieces.around(y0, y1)
         best = None
@@ -979,13 +979,13 @@ def _I4_lone_marks(text: str, starts: dict, drawn: dict, edits: dict, widgets: l
       row whose glyph pypdf wrote on a line of its own taking its label's line, blank lines between them aside; any
       other line, a heading among them, ends it);
     - or a check box (``widgets``) lies on its row;
-    and never where a check box's state already governs it: a check box tied to the row's label (an edit at the label),
-    or boxes the row shows of its own (a printed box on its line or its label's, or a check box's glyph written there:
-    the item's options, '� Diabetes: ☐ Yes ☒ No', which routing reads, as it read them beside the installed reader's
-    mojibake). Anything else (a bullet or list marker in a font that cannot be read, under a procedure list) is left as
-    U+FFFD, its item as listed, as the installed reader's mojibake left it. The glyph is otherwise a box whose state
-    cannot be read: written as U+FFFD it would leave its item to read as listed (affirmed); as the unread mark, on the
-    item's line, the item is held. One pass over the lines, then one over the rows."""
+    and never where a check box's state already governs it, as boxes the row shows of its own do: a printed box on its
+    line or its label's, or a check box's glyph written there (a check box tied to the row's label, an edit at the
+    label; or the item's options, '� Diabetes: ☐ Yes ☒ No', which routing reads, as it read them beside the installed
+    reader's mojibake). Anything else (a bullet or list marker in a font that cannot be read, under a procedure list)
+    is left as U+FFFD, its item as listed, as the installed reader's mojibake left it. The glyph is otherwise a box
+    whose state cannot be read: written as U+FFFD it would leave its item to read as listed (affirmed); as the unread
+    mark, on the item's line, the item is held. One pass over the lines, then one over the rows."""
     size, line, number = len(text), 0, 0
     taken = sorted(edits)
     shapes, rows = _I4_Points(box_glyphs), _I3_Bands(w.rect for w in widgets)
@@ -1016,9 +1016,9 @@ def _I4_lone_marks(text: str, starts: dict, drawn: dict, edits: dict, widgets: l
                 stop = text.find('\n', found[2])
                 own = own or shows_box(found[2], size if stop < 0 else stop)
             boxed = boxed or shape
-            if found[2] not in edits:  # a check box tied to the row's label governs it
-                candidates.append((number, first, found[0], found[1], shape,
-                                   origin is not None and rows.meets(origin[1], origin[1]), own))
+            # a check box tied to the row's label writes its glyph there (an edit on the row): one of its own boxes
+            candidates.append((number, first, found[0], found[1], shape,
+                               origin is not None and rows.meets(origin[1], origin[1]), own))
             if found[2] > end:  # its label is the next line's: that line is the row's
                 kinds[number + 1] = kinds.get(number + 1, False)
         if first >= end:
