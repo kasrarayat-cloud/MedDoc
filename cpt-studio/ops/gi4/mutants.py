@@ -371,6 +371,11 @@ PE_MUTANTS = (
     Mutant('pe-head-span-body', "the head's procedure fields never reach past the body's first heading", _PE_DETECT,
            "                break  # the body's first heading: nothing after it is the head's",
            "                pass  # the body's first heading: nothing after it is the head's", _PE_UNIT),
+    # --- amendment_20261101_cycle1_d ---
+    Mutant('pe-head-not-today', 'a head mention routing reads as not done today (planned, historical, cancelled, negated) '
+           'names no family', _PE_DETECT,
+           '                if m.family in families and _generic_reading(an, m.start, m.end).status not in NOT_TODAY:',
+           '                if m.family in families:', _PE_UNIT),
 )
 # --- package PI: the inventory (detector tests.test_gi4_pi; moved here from tests/test_gi4_pi_mutants.py, which now
 # checks this slice; its (name, guard, path, old, new, detector) tuples are Mutant records here) ---
@@ -438,7 +443,7 @@ PI_MUTANTS = (
     # --- GI round 4 Wave 1 repair, cycle 1 ---
     Mutant('pi-reach-family', 'S1 reads a reach only for a family the head NAMES (amendment_20261101_cycle1_b: positive '
            "evidence, replacing cycle 1's hold-only 'the head excludes')", 'studio/gi/services.py',
-           '    if family not in _pi_head_families(original):\n        return False',
+           '    if family not in _pi_head_families(original, routing):\n        return False',
            '    if False:\n        return False', _PI_UNIT),
     Mutant('pi-carry-lesion', "A1: a carry the paragraph's lesion carry stands against holds (a misbinding never binds)",
            'studio/gi/services.py',
@@ -451,6 +456,10 @@ PI_MUTANTS = (
     # --- amendment_20261101_cycle1_c ---
     Mutant('pi-carry-lesion-heading', 'A1: the lesion carry lapses at a line written as a heading between it and the act',
            'studio/gi/services.py', '    return not _pi_heading_between(text, end, pos)', '    return True', _PI_UNIT),
+    # --- amendment_20261101_cycle1_d ---
+    Mutant('pi-head-not-today', "S1: a head name routing reads as not done today names no family", 'studio/gi/services.py',
+           '                     if not any(a < m.end() and m.start() < b for a, b in elsewhere))',
+           '                     if True)', _PI_UNIT),
 )
 # --- package PO: second-review offers, the amendment A1-A5 included (detector tests.test_gi4_po; moved here from
 # tests/test_gi4_po_mutants.py, which now checks this slice) ---

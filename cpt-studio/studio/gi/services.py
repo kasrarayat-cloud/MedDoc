@@ -2902,16 +2902,22 @@ def _pi_todays_statement(text: str, span: Span) -> bool:
     return detect.in_todays_narrative(_ORIGINAL.get() or text, span.start, None, (span.start, span.end))
 
 
-def _pi_head_families(text: str) -> frozenset:
+def _pi_head_families(text: str, routing=None) -> frozenset:
     """The families the head of ``text`` (as written) names by SERVICES' own names in its title lines and procedure
     fields (detect.head_procedure_spans: never past the body's first heading), the one head PE reads too (GI round 4
-    Wave 1 repair, amendment_20261101_cycle1_b)."""
+    Wave 1 repair, amendment_20261101_cycle1_b) - never by a name routing reads as not done today (``routing``'s own
+    mention there is planned, historical, cancelled or negated: 'Procedure: EGD with biopsy; colonoscopy next year',
+    amendment_20261101_cycle1_d). Without a routing result no status is read, as _pi_today_report reads none."""
     from studio.gi import detect  # local: detect imports context, which this module also imports
-    return frozenset(f for s, e in detect.head_procedure_spans(text) for f, _, pattern in SERVICES
-                     if pattern.search(text, s, e))
+    spans = detect.head_procedure_spans(text)
+    elsewhere = [(m.span.start, m.span.end)
+                 for f in (routing.findings if routing is not None and hasattr(routing, 'findings') else ())
+                 for m in f.mentions if m.status in detect.NOT_TODAY and any(s <= m.span.start < e for s, e in spans)]
+    return frozenset(f for s, e in spans for f, _, pattern in SERVICES for m in pattern.finditer(text, s, e)
+                     if not any(a < m.end() and m.start() < b for a, b in elsewhere))
 
 
-def _pi_todays_reach(text: str, family: str, pos: int, ss: int, se: int, service_date) -> bool:
+def _pi_todays_reach(text: str, family: str, pos: int, ss: int, se: int, service_date, routing=None) -> bool:
     """Whether S1's reach at ``pos`` (its sentence [ss, se)) is today's: inside today's procedure narrative (detect.
     in_todays_narrative on the document as written) and of a family the head NAMES (_pi_head_families: positive evidence
     that today's report documents it). GI round 4 Wave 1 repair: a reach in an attached report or in unit statistics
@@ -2919,7 +2925,7 @@ def _pi_todays_reach(text: str, family: str, pos: int, ss: int, se: int, service
     after the cycle-1 guards (amendment_20261101_cycle1_b, which replaced the hold-only 'head excludes' rule)."""
     from studio.gi import detect  # local: detect imports context, which this module also imports
     original = _ORIGINAL.get() or text
-    if family not in _pi_head_families(original):
+    if family not in _pi_head_families(original, routing):
         return False  # the head names no such family: no positive evidence that today's report documents it
     if not detect.in_todays_narrative(original, pos, service_date, (ss, se)):
         return False
@@ -3689,7 +3695,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     if not own_report:
                         own_report.append(_pi_today_report(text, routing))
                     if own_report[0] and not _dates_in(dates, cs, ce) \
-                            and _pi_todays_reach(text, family, m.start(), ss, se, service_date):
+                            and _pi_todays_reach(text, family, m.start(), ss, se, service_date, routing):
                         reading = Reading('performed', reading.cues + (_PI_REACH_CUE,))
                 bounded_span = _span(text, *_bounded_clause(text, clause, m.start(), m.end()))
                 if reading.status == 'performed' and family in drafts and any(

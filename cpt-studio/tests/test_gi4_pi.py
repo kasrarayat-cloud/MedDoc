@@ -435,6 +435,18 @@ class RefutationF1Tests(SimpleTestCase):
         text = BOTH_TITLE + UPPER_PART + 'Large Bowel\nThe colonoscope reached the cecum on 10/19/2026.\n'
         self.assertNotIn(services._PI_REACH_CUE, service(read(text), 'gi.colonoscopy').cues)
 
+    def test_never_for_a_family_the_head_names_only_as_not_done_today(self):
+        # amendment_20261101_cycle1_d: 'colonoscopy next year' in the head's procedure field names nothing
+        reach = UPPER_PART + 'Large Bowel\nThe colonoscope reached the cecum. No polyps were seen.\n'
+        planned = B + 'Procedure Note\n' + FIELDS + 'Procedure: EGD; colonoscopy next year\n' + reach
+        self.assertIn('gi.colonoscopy', services._pi_head_families(planned))  # by name alone
+        self.assertNotIn('gi.colonoscopy', services._pi_head_families(planned, detect.route(planned, DAY)))
+        s = service(read(planned), 'gi.colonoscopy')
+        self.assertTrue(s is None or services._PI_REACH_CUE not in s.cues)
+        # named as today's, the colonoscopy counts (here the procedure line itself already states it performed)
+        both = planned.replace('Procedure: EGD; colonoscopy next year', 'Procedure: EGD and colonoscopy')
+        self.assertIn('gi.colonoscopy', services._pi_head_families(both, detect.route(both, DAY)))
+
     def test_never_in_an_office_visit_note_with_procedure_fields(self):
         # a strong head whose title names both procedures, but routing reads the office visit done: the office-visit
         # check alone holds the reach

@@ -453,6 +453,15 @@ class HeadNamesFamilyTests(SimpleTestCase):
             yield f'no heading, no filler, {verb}', e + block
             yield f'generic title, {verb}', e.replace('Upper Endoscopy Report', 'Procedure Note') + 'Additional Pages\n' \
                 + self.NEUTRAL + block
+        # amendment_20261101_cycle1_d: a head that names the colonoscopy only as not done today names nothing
+        block = self.BLOCK.format(verb='navigated')
+        for tag, title, field in (('field planned', 'Procedure Note', 'Procedure: EGD with biopsy; colonoscopy next year\n'),
+                                  ('field deferred', 'Procedure Note', 'Procedure: EGD with biopsy; colonoscopy deferred\n'),
+                                  ('title prior', 'EGD after Prior Colonoscopy', ''),
+                                  ('title not done', 'EGD; Colonoscopy Not Done', '')):
+            head = e.replace('Upper Endoscopy Report', title).replace('Sedation: propofol by CRNA\n',
+                                                                      'Sedation: propofol by CRNA\n' + field)
+            yield f'head {tag}', head + 'Additional Pages\n' + self.NEUTRAL + block
 
     def test_routing_reads_no_extent_there(self):
         for name, text in self.shapes():

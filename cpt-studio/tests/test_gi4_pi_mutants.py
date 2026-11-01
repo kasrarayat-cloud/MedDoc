@@ -26,9 +26,9 @@ class MutantRegistryTests(SimpleTestCase):
 
     def test_each_is_registered_once_in_the_merged_registry(self):
         names = [m.name for m in mutants.MUTANTS]
-        self.assertEqual(len(PI_MUTANTS), 23)  # 18 declared, pi-office-visit, the Wave 1 repair's 4
+        self.assertEqual(len(PI_MUTANTS), 24)  # 18 declared, pi-office-visit, the Wave 1 repair's 4
         # (amendment_20261101_cycle1), less pi-carry-lesion-start (withdrawn with its code: amendment_20261101_cycle1_b),
-        # plus pi-carry-lesion-heading (amendment_20261101_cycle1_c)
+        # plus pi-carry-lesion-heading (amendment_20261101_cycle1_c) and pi-head-not-today (amendment_20261101_cycle1_d)
         for m in PI_MUTANTS:
             self.assertEqual(names.count(m.name), 1, m.name)
             self.assertIs(mutants.BY_NAME[m.name], m)

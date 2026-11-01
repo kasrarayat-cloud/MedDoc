@@ -4017,7 +4017,9 @@ def _pe_head_names(an: Analysis, table) -> bool:
     (cues.SERVICE_PATTERNS, the Analysis' mentions) inside head_procedure_spans: gi.egd for the upper landmarks,
     gi.colonoscopy or gi.flex_sig for the lower. Positive evidence that today's report documents the family a
     routing-only reach would complete (GI round 4 Wave 1 repair, amendment_20261101_cycle1_b: an EGD report's pasted
-    colonoscopy block under a heading no closed list names had read the cecum reached). Memoised per analysis."""
+    colonoscopy block under a heading no closed list names had read the cecum reached). A mention routing reads as not
+    done today names nothing (amendment_20261101_cycle1_d: 'Procedure: EGD with biopsy; colonoscopy next year' over a
+    pasted colonoscopy block). Memoised per analysis."""
     key = ('pe-head-names', table is cues.UPPER_LANDMARKS)
     if key not in an.memo:
         families = ('gi.egd',) if table is cues.UPPER_LANDMARKS else ('gi.colonoscopy', 'gi.flex_sig')
@@ -4025,7 +4027,8 @@ def _pe_head_names(an: Analysis, table) -> bool:
         for s, e in head_procedure_spans(an.text):
             i = bisect.bisect_left(an._service_starts, s)
             while i < len(an.services) and an.services[i].start < e:
-                if an.services[i].family in families:
+                m = an.services[i]
+                if m.family in families and _generic_reading(an, m.start, m.end).status not in NOT_TODAY:
                     named = True
                     break
                 i += 1
