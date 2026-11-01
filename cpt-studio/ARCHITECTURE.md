@@ -194,14 +194,16 @@ read or reported, and content it would not show is excluded with a message.
   box, or, one or two characters of it alone where a checklist row's box
   stands, on a checklist row (its glyph a box shape, read for this only by the
   codec of the character set its predefined CMap encodes,
-  `pdffonts.box_glyphs`; a row of its list showing a box glyph or a check box's
-  glyph; or a check box on its row) and not governed by a check box tied to the
-  row or by boxes the row shows of its own (a printed box or a check box's glyph
-  on its line: an item's options, '� Diabetes: ☐ Yes ☒ No'); an unchecked check
-  box beside such text on its row is unsure (`[?]`) only where that text may be
-  its label (left of it, no text that can be read starting between them) or
-  lies right of it (before the piece it is tied to, or running on from that
-  piece); counted and named: 'text in a font or encoding this server cannot
+  `pdffonts.box_glyphs`; a row of its list showing, at its start, a box glyph or
+  a check box's glyph; or an unchecked check box on its row, tied to nothing
+  there, a checked one agreeing with its item read as listed) and not governed
+  by a check box tied to the row or by boxes the row shows of its own (a printed
+  box or a check box's glyph on its line: an item's options, '� Diabetes: ☐ Yes
+  ☒ No', which are that row's, not its list's); an unchecked check box beside
+  such text on its row is unsure (`[?]`) only where that text may be its label
+  (left of it, no text that can be read starting between them) or lies right
+  of it (before the piece it is tied to, or running on from that piece);
+  counted and named: 'text in a font or encoding this server cannot
   read as the PDF encodes it; N characters stand in its place as �, or as the
   unread mark [?] in a box' (partial; N counts what stands in the text's
   place, never the glyphs the page draws). A space in what the walk reads

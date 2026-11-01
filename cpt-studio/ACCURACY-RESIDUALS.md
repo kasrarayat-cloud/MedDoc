@@ -1268,8 +1268,9 @@ round 3's rule, which stands (**text that cannot be read is never deleted**), an
 the installed reader's where it read the source right** (a placeholder or a hold where it read exact text is a
 regression), and **the unread mark '[?]' is written only on a checklist row**, never where a check box's state governs
 the spot, a box glyph's string of two characters being a box as one of one character is. Measuring every finding input
-of rounds 1 to 3 against the first of them found two more readings below the installed reader's (NR-1 and NR-2
-below), each confirmed the same way and repaired. Each repaired reading is pinned by
+of rounds 1 to 3 against the first of them found three more readings below the installed reader's (NR-1 to NR-3
+below), and measuring that repair on fillable and printed option rows and on procedure lists found three more
+(NR-4 to NR-6); each was confirmed the same way and repaired. Each repaired reading is pinned by
 `tests/test_repairs_gi4_pypdf_r4.py` (documents built in `tests/support/pypdf_shapes.py`; the cost bound by a count of
 what is read and a doubling test), and routing's reading (`studio.gi.detect.status_for_span`) of every finding's text
 was checked. The engine label stays `cpt-studio-ingest@4`: no reader of this branch was ever installed.
@@ -1280,12 +1281,16 @@ was checked. The engine label stays `cpt-studio-ingest@4`: no reader of this bra
 | R3-MEAN-2 (major) | the lone-mark rule wrote '[?]' for any lone glyph that cannot be read at a line's start, a check of no checklist: bullets under 'Procedures performed:' (/EUC-H '・', glyph indices) held every procedure; printed boxes under check boxes lost the check boxes' exact /AS states, and a glyph-index printed box became text beside each unchecked box | bullets: 'ꆦ Cold snare polypectomy ...' (or dropped): performed; /EUC-H printed boxes: Hypertension historical, the rest uncertain; glyph-index printed boxes: exact (Hypertension historical, the rest negated) | every procedure uncertain; every check-box row uncertain | bullets '� Cold snare polypectomy ...': performed; check-box rows '� ☒ Hypertension', '� ☐ Diabetes': historical and negated, exact in both (the /EUC-H form better than installed) | **confirmed, repaired**: the mark only on a checklist row (below); a check box tied to the row governs it; text that cannot be read lying under a check box is its printed box, neither text beside it nor its label |
 | R3-MEAN-3 (minor) | a codec string that ends in a lead byte or holds a byte that starts no code was unread whole (GBK: 'No biopsy was taken.' and B0; 'No biopsy', FF, ' was taken.') | 'No biopsy was taken.�', 'No biopsy� was taken.': negated, the invalid-text notice | 21 U+FFFD: 'biopsy' gone, the negation lost | the installed text: negated; 1 character named | **confirmed, repaired**: a string is cut into the codes its CMap reads by the CMap's code space; a code cut short or a byte that starts no code is the only one unread |
 | R3-MEAN-4 (minor) | a short page whose other text cannot be read had no usable layer, and its form block went with it: failed with no text (its notice saying the fields were read), or replaced by OCR text; the checked box (14 characters) lost, the unchecked one (17) kept | 'Form', the line as mojibake, '[PDF form fields on page 1] Biopsy: checked', with or without OCR | failed; with OCR the block gone | partial: 'Form', the line as U+FFFD, then the block, named ('no usable text layer', the unreadable-text notice, the form fields); with OCR the OCR text, then the block | **confirmed, repaired**: a page's labelled block is read without its fonts, so no OCR of the page and no unusable layer takes it away |
-| COST-MANYCMAP-1 (major) | each font carrying its own embedded CMap cost a read of it, with no bound on the document: 800 fonts, each with a 1 MiB CMap, in 2.55 MB ran to the 240 s deadline | ok, 1.9 s (`<3000>` read as '0') | failed at 240 s | partial, 4.1 s, 93 MiB (318 KB: 3.0 s; 636 KB: 3.3 s): the CMaps the bound admits read, each <3000> the ToUnicode's 'A'; the rest named as text that cannot be read | **confirmed, repaired**: a document reads at most `MAX_DOCUMENT_CMAP_BYTES` (4 MiB) of embedded CMaps; past it a font whose CMap was not read is text that cannot be read, named (the 935 files' largest is 4 KB) |
+| COST-MANYCMAP-1 (major) | each font carrying its own embedded CMap cost a read of it, with no bound on the document: 800 fonts, each with a 1 MiB CMap, in 2.55 MB ran to the 240 s deadline | ok, 3.2 s side by side (`<3000>` read as '0') | failed at 240 s | ok, 5.3 s, 93 MiB (318 KB: 3.5 s; 636 KB: 3.7 s): every <3000> the ToUnicode's 'A' | **confirmed, repaired**: a document reads at most `MAX_DOCUMENT_CMAP_BYTES` (4 MiB) of embedded CMaps; past it a font whose CMap was not read is read by the code space its ToUnicode declares (NR-3), which pypdf parses anyway (the 935 files' largest embedded CMap is 4 KB) |
 | R3-CAP-1 (minor) | a one-byte code the codec cannot decode alone (0x80 under GB-EUC-H, GBK-EUC-H, ETen-B5-H, ETenms-B5-H; 0x80 and 0xFD-0xFF under GBpc-EUC-H) taken for a lead byte: the next letter eaten ('�iopsy'), Big Five read out of step ('痕G' for '結果'), a GB 2312 line unread whole | each line exact, the code '�', named as invalid text | as the finding | the installed text, the code '�', named | **confirmed, repaired**: the CMap's code space makes it a one-byte code (pdf.js reads 0x80 as a glyph with no text and 0xFD as '©'; the installed reader's '�' is kept) |
 | R3-CAP-2 (minor) | a predefined CMap pypdf does not implement, with a ToUnicode (H, V, GB-H, KSC-H, EUC-H, B5pc-H, ...): every character U+FFFD, a page of it failed or was OCRed | exact for strings of two-byte codes; mixed one- and two-byte strings mojibake | U+FFFD; failed or OCRed | exact, and the mixed strings too ('Polyp 6 mm 切除。', '대장내시경 검사 결과 정상') | **confirmed, repaired**: pypdf reads two bytes a code as UTF-16BE, the CMap's own split of a string of two-byte codes: read as pypdf reads it where the splits agree (and no two codes pair into one character), any other string code by code by its ToUnicode |
 | R3-CAP-3 (minor) | an embedded CMap of mixed one- and two-byte codes (the RKSJ layout), or one that uses a predefined CMap (usecmap, /UseCMap), with a ToUnicode: every character U+FFFD, a page of it failed | exact (pypdf reads one byte a code, each by the ToUnicode); a kanji line mojibake | U+FFFD; failed or OCRed | exact, the kanji line too ('大腸内視鏡') | **confirmed, repaired**: read by its code space, its own ranges and the used CMap's, as R3-CAP-2 |
 | NR-1 (the lenses' notes) | a one-byte embedded CMap whose ToUnicode lacks codes that are their own characters (the space, the digits, punctuation): 'No�biopsy�was�taken.', a date as '����-��-��' | exact (pypdf's StandardEncoding guess) | U+FFFD in place: the negation uncertain, the date's historical cue lost | exact | **confirmed, repaired**: where every code the ToUnicode gives is its own character (a simple font's text converted by Ghostscript keeps its codes), a code it does not give is read as pypdf reads it, its own ASCII character; where a code it gives is another character (Hebrew glyphs on Latin codes), none is guessed |
 | NR-2 (the capability lens's exclusion) | /Encoding /Identity, which names no CMap, with a ToUnicode: a page of it failed | exact | failed, or OCRed | exact | **repaired**: read as Identity-H, as pypdf reads it (pdf.js shows nothing for it: the ToUnicode decides the text) |
+| NR-3 (round 2's cost inputs) | an embedded CMap that cannot be read (R2-COST-A's: sections never closed, no code space; one that uses a CMap other than a predefined one; one past the bound) with a ToUnicode: its font's text unread | the 'A' the ToUnicode gives <0041> (pypdf reads one byte a code) | U+FFFD, partial | 'A', ok | **repaired**: read by the code space its ToUnicode declares, which PDF 32000-1 9.10.3 requires to be consistent with the encoding CMap; with none declared there, unread, named |
+| NR-4 (measuring the repair) | a glyph that cannot be read before an item whose options are boxes on its row ('・ Diabetes: ☐ Yes ☒ No', check boxes tied to the option words or printed ZapfDingbats boxes): the unread mark, the row's own boxes making it a checklist row; beside check boxes the glyph also made each unchecked option '[?]' (round 2's rule counted any text on a box's row that could not be read) | every item read by its options (Hypertension historical, Diabetes negated), the glyph as mojibake or dropped | every item uncertain ('[?] Diabetes: [?] Yes ☒ No'), as at the round's first repair | '� Diabetes: ☐ Yes ☒ No': every item as installed in the option rows of the 20 documents measured (bullets in /EUC-H and glyph indices, an /EUC-H box, a readable control; the two whose check box is tied to nothing are set out below) | **confirmed, repaired**: boxes the row shows of its own govern it (no glyph at its start is the mark there, a box shape included); text that cannot be read left of a check box, beyond a piece of text that can be read, is not its label |
+| NR-5 (measuring the repair) | a check box after its item with no text after it, tied to nothing (its state not written on the row), made its row a checklist row: a bullet that cannot be read became the unread mark, so a checked box held its item ('[?] Consent signed') | performed (the bullet as mojibake or dropped) | every procedure held (round 3 marked every lone glyph); at the round's first repair the checked one | '� Consent signed': performed, in the 6 procedure-list documents measured | **confirmed, repaired**: a checked check box tied to nothing agrees with its item read as listed, so only an unchecked one makes its row a checklist row (read as listed, its item would be affirmed against the box: held) |
+| NR-6 (measuring the repair) | a list showed a box when any of its rows did, wherever the box stood: one item's options ('Biopsy taken: ☐ Yes ■ No') made the bullets of the other items the unread mark | 'Cold snare polypectomy' performed | held ('[?] Cold snare polypectomy'), round 3 and the first repair alike | U+FFFD, performed, in the 6 mixed procedure lists measured | **confirmed, repaired**: a row shows its list a box only where a row's box stands, at its start; boxes later in a row are its own |
 
 What the reader does now, where it differs from round 3's rules above (which this replaces where they disagree):
 
@@ -1299,38 +1304,49 @@ What the reader does now, where it differs from round 3's rules above (which thi
   starts no code or a code no codec reads unread; only an odd-length UTF-16BE string still cannot be told apart.
 - **A CMap pypdf splits otherwise than the CMap does** (`pdffonts.Codes`), with a ToUnicode: a predefined CMap pypdf
   does not implement (two bytes a code to pypdf, as UTF-16BE), an embedded CMap of mixed code lengths or that uses a
-  predefined one (one byte a code), and /Identity (as Identity-H). A string whose codes pypdf splits as the CMap does,
-  each given by the ToUnicode (and, as UTF-16BE, none pairing with the next into one character), is read as pypdf
-  reads it; any other code by code by the ToUnicode, a code it does not give unread. With no ToUnicode such text
-  cannot be read, as before.
+  predefined one (one byte a code), an embedded CMap that cannot be read (malformed, using a CMap other than a
+  predefined one, or past the document's bound) by the code space its ToUnicode declares (PDF 32000-1 9.10.3 requires it
+  to be consistent with the encoding), and /Identity (as Identity-H). A string whose codes pypdf splits as the CMap
+  does, each given by the ToUnicode (and, as UTF-16BE, none pairing with the next into one character), is read as pypdf
+  reads it; any other code by code by the ToUnicode, a code it does not give unread. With no ToUnicode such text cannot
+  be read, as before.
 - **A one-byte embedded CMap's missing codes**: where every code its ToUnicode gives is its own character, a code it
   does not give is read as pypdf reads it, its own ASCII character (pypdf's StandardEncoding agrees); otherwise unread.
-- **The unread mark on a checklist row.** One or two characters that cannot be read, alone where a row's box stands
-  (the first thing on its line, then padding and the row's text; or alone on its line, the next line starting just
-  right of it on its baseline), are the unread mark '[?]' only where the row is a checklist row: its glyph is a box
-  shape (an unchecked or checked box glyph or a check mark, not the filled square nor a white square typed as a bullet
-  as often, read for this alone by the codec of the character set its predefined CMap encodes,
-  `pdffonts.box_glyphs`); or a row of its list shows a box glyph that can be read, a check box's glyph written there,
-  or a glyph that is a box shape (a list: consecutive rows, a row whose glyph pypdf wrote on a line of its own taking
-  its label's line, blank lines aside; a heading ends it); or a check box lies on its row. Never where a check box tied
-  to the row's label governs it. Anything else (a bullet in a font that cannot be read) is U+FFFD and its item reads
-  as listed, as the installed reader's mojibake left it. A glyph-index glyph names nothing, so a glyph-index box is a
-  box only by its list or a check box.
+- **The unread mark on a checklist row.** One or two characters that cannot be read, alone where a row's box stands (the
+  first thing on its line, then padding and the row's text; or alone on its line, the next line starting just right of
+  it on its baseline), are the unread mark '[?]' only where the row is a checklist row: its glyph is a box shape (an
+  unchecked or checked box glyph or a check mark, not the filled square nor a white square typed as a bullet as often,
+  read for this alone by the codec of the character set its predefined CMap encodes, `pdffonts.box_glyphs`); or a row of
+  its list shows, at its start, a box glyph that can be read, a check box's glyph written there, or a glyph that is a
+  box shape (an item's options later in its row are that row's own: NR-6; a list: consecutive rows, a row whose glyph
+  pypdf wrote on a line of its own taking its label's line, blank lines aside; a heading ends it); or an unchecked check
+  box lies on its row, tied to nothing there (a checked one agrees with its item read as listed: NR-5). Never where
+  boxes the row shows of its own govern it: a check box tied to the row's label, or the item's options (a printed box or
+  a check box's glyph on its line or its label's: '� Diabetes: ☐ Yes ☒ No', NR-4), a box shape included. Anything else
+  (a bullet in a font that cannot be read) is U+FFFD and its item reads as listed, as the installed reader's mojibake
+  left it. A glyph-index glyph names nothing, so a glyph-index box is a box only by its list or a check box.
 - **Under a check box**: text that cannot be read lying under a check box (within its width, give or take BOX_SLACK)
   is its printed box: it neither makes the box unsure as text beside it would, nor is it the box's label to its left.
+- **Beside a check box**: text that cannot be read on a check box's row makes an unchecked box unsure ('[?]') only where
+  it may be the box's label (left of it, no piece of text that can be read starting between them) or lies right of it
+  (before the piece the box is tied to, or running on from that piece); a bullet before an item whose options the boxes
+  are is neither (round 2's rule counted any such text on the row: NR-4).
 - **The labelled block stays.** A page read with OCR keeps its labelled block after the OCR text (form-field values
   and annotation text, read without the page's fonts), and so does a page with no usable layer and no OCR, whose
   layer and block are returned (partial, named) where the document would otherwise fail with no text; the form-field
   and annotation notices are given for such a page, and the notices about the block's own text.
 - **Cost.** A document reads at most `MAX_DOCUMENT_CMAP_BYTES` (4 MiB) of embedded CMaps, each counted once however
-  often it is read (each at most 1 MiB, as before); past it a font whose CMap was not read is text that cannot be
-  read. A code space is one regular expression: a string costs one pass. Whether an operator's glyphs are a box shape
-  is worked out once per font and strings, and only for an operator of at most 16 bytes whose text could not be read.
+  often it is read (each at most 1 MiB, as before); past it a font whose CMap was not read is read by its ToUnicode's
+  code space (or, with none declared there, is text that cannot be read). A code space is one regular expression: a
+  string costs one pass. Whether an operator's glyphs are a box shape is worked out once per font and strings, and only
+  for an operator of at most 16 bytes whose text could not be read. Whether text that cannot be read may be a check
+  box's label costs a bisection a row of the box (the nearest piece that can be read on its left, `pdf._I4_Readable`),
+  beside the bounded scan of its row's unread text it always made.
 
-Ordinary files, re-measured on this reader's committed tree (`a26d21cfd`): the 935 files of round 3's comparison read
+Ordinary files, re-measured on this reader's committed tree (`5f13484ba`): the 935 files of round 3's comparison read
 through the real child by the installed reader on 6.21.2 and this reader on 6.21.4, with OCR unavailable and with
-stand-in OCR tools. 834 read identically and 101 differ: the same 101 files as round 3, which this reader reads
-exactly as round 3's does (all 935). Every difference was judged by the source:
+stand-in OCR tools. 834 read identically and 101 differ: the same 101 files as round 3, which this reader reads exactly
+as round 3's does (all 935). Every difference was judged by the source:
 
 | files | installed (6.21.2) | this reader | by the source |
 |---|---|---|---|
@@ -1341,21 +1357,21 @@ exactly as round 3's does (all 935). Every difference was judged by the source:
 | 2 fpdf2 CID-keyed CFF files using more than 255 glyphs | ok, mojibake from code 0x100 on | ok, every character exact | the installed reading is wrong |
 
 None is a placeholder or a hold where the installed reader read exact text: no regression. Time over the 935 files with
-OCR unavailable: this reader 512 s (the longest file 2.9 s), four files at a time at a load of 13 to 15 on 14 cores; the
-installed reader 862 s in round 3's pass, under another load, so only the peak memory compares: the child's peak
-resident memory was at most 138.6 MiB against 138.8 MiB.
+OCR unavailable: this reader 654 s (the longest file 3.7 s), four files at a time beside this round's gates and cost
+pass (load 17.02 on 14 cores at the end); the installed reader 862 s in round 3's pass, under another load, so only the
+peak memory compares: the child's peak resident memory was at most 137.9 MiB against 138.8 MiB.
 
 Every finding input of rounds 1 to 3, re-measured the same way (round 1's 90 text inputs, round 2's 34, round 3's own 7,
 the 25 check-box documents and the round-3 refutation's 47 meaning and 52 capability inputs differ from the installed
-reader in 49, 15, 6, 0, 32 and 17). Each difference from the installed reader was judged by the source; the ones a
-mechanical check flags (U+FFFD or '[?]' where the installed line held neither, or a routing reading the installed reader
-had and this reader changes) are of these kinds, none a reading below the installed reader's where it read the source
-right:
+reader in 49, 15, 6, 0, 32 and 17; on `5f13484ba` every one reads as on the first repair's last commit, `737cce0c1`).
+Each difference from the installed reader was judged by the source; the ones a mechanical check flags (U+FFFD or '[?]'
+where the installed line held neither, or a routing reading the installed reader had and this reader changes) are of
+these kinds, none a reading below the installed reader's where it read the source right:
 
 - a checklist whose box glyphs cannot be read but are box shapes (DROP-BOX-1's ReportLab input, round 3's own rows, the
   meaning lens's /EUC-H variants): held, where the installed reader read every unchecked item as affirmed;
-- a glyph that names no character alone in brackets (round 1's F3, F4 and F5 inputs: a NUL, an empty or U+FFFE
-  ToUnicode entry, '/u20', a private-use code): '[?]', held, where the installed reader read '[]' (negated) or '[U+FFFE]'
+- a glyph that names no character alone in brackets (round 1's F3, F4 and F5 inputs: a NUL, an empty or U+FFFE ToUnicode
+  entry, '/u20', a private-use code): '[?]', held, where the installed reader read '[]' (negated) or '[U+FFFE]'
   (affirmed), as round 1 ruled;
 - glyph-index text (round 3's GI-1 inputs, the bullets and boxes of the meaning lens): U+FFFD in place where the
   installed reader dropped it ('Biopsy was taken.' for a negation; a stamp's 'QRW'); readings otherwise unchanged;
@@ -1375,102 +1391,125 @@ test of them is updated, as is round 3's of a cut string (the codes are read, th
 ToUnicode of its own characters does not give (read as pypdf reads it). The pinned check-box documents of round 3
 (`tests/test_repairs_gi4_pypdf_r3.py`, DROP-BOX-1) read as before: their box glyphs are box shapes.
 
-Cost and limits, each read through the real child one file at a time, the installed reader and this reader
-(`a26d21cfd`) in two processes side by side (the host's load average was 13.5 to 16.3 on 14 cores throughout, from other
-work and this round's gates, so a time compares within its row only):
+The repair measured on its own ground (NR-4 to NR-6): 32 synthetic documents (`inputs/r4-nr456.list` in the round's
+scratch: intake rows whose glyph at the start is an /EUC-H bullet, a glyph-index bullet, an /EUC-H box or a readable
+dash, before check boxes tied to 'Yes' and 'No', before printed options, or before a check box tied to nothing at the
+row's end or over the glyph, named for its item or not; and procedure lists whose last row shows a box after its item,
+or whose second item's options are boxes, printed or check boxes), each read through the real child by the installed
+reader, round 3's, the first repair's last commit (`737cce0c1`) and this reader, in both modes. Round 3 held items the
+installed reader read in 16 of them, the first repair in 14; this reader reads 26 exactly as the installed reader does.
+Of the other 6, four (`over_euc`, `right_euc`, `rightnamed_euc`, `rightnamed_gi`) hold every row where the installed
+reader held every row, and now read each checked row right (historical); the last two are the rows of a check box tied
+to nothing beside a glyph-index bullet (`right_gi`, `over_gi`): their checked rows read right where the installed reader
+held them, and their unchecked rows are held where the installed reader, having dropped the glyph, let routing's
+field-line rule read them negated (set out below).
+
+Cost and limits, each read through the real child one file at a time, the installed reader and this reader (`5f13484ba`)
+in two processes side by side (the host's load average was 15.4 to 23.6 on 14 cores while they ran, from other work and
+this round's gates, so a time compares within its row only):
 
 | shape | installed (6.21.2) | this reader (6.21.4) |
 |---|---|---|
-| R2-COST-A: an embedded CMap of 64 KiB of unclosed sections (no code space) | ok, 0.5 s, 49 MiB | partial, 0.6 s, 50 MiB, text differs |
-| R2-COST-A: the same, 128 KiB | ok, 0.4 s, 50 MiB | partial, 0.6 s, 50 MiB, text differs |
-| R2-COST-A: the same, 256 KiB | ok, 0.5 s, 50 MiB | partial, 0.5 s, 50 MiB, text differs |
-| R2-COST-A: the same, 512 KiB | ok, 0.5 s, 50 MiB | partial, 0.5 s, 51 MiB, text differs |
-| R2-COST-A: the same, 1 MiB | ok, 0.4 s, 52 MiB | partial, 0.6 s, 52 MiB, text differs |
-| R2-COST-A control: one valid embedded CMap | ok, 0.5 s, 50 MiB | ok, 0.7 s, 57 MiB, same text |
-| R2-MEM-B: 4 font dictionaries sharing a 1 MiB ToUnicode with an empty destination | ok, 0.7 s, 54 MiB | ok, 0.7 s, 55 MiB, same text |
-| R2-MEM-B: 24 sharing a 32 MiB one | ok, 27.3 s, 190 MiB | ok, 30.4 s, 223 MiB, same text |
-| R2-MEM-B: 48 sharing a 32 MiB one | ok, 56.3 s, 190 MiB | ok, 56.8 s, 222 MiB, same text |
-| R2-COST-D: 1 widget, 100,000 unread operators (/EUC-H) | ok, 6.2 s, 209 MiB | partial, 11.7 s, 256 MiB, text differs |
-| R2-COST-D: 30,000 widgets, 1 unread operator | ok, 6.5 s, 191 MiB | partial, 7.2 s, 192 MiB, text differs |
-| R2-COST-D: 1,000 widgets, 10,000 unread operators | ok, 1.0 s, 67 MiB | partial, 1.5 s, 71 MiB, text differs |
-| R2-COST-D: the same, one-byte strings in an Identity-H font | failed, 0.9 s, 60 MiB | partial, 1.9 s, 71 MiB, text differs |
-| R2-COST-D control: the same, readable two-byte strings | ok, 1.3 s, 67 MiB | ok, 1.1 s, 67 MiB, same text |
-| R2-COST-D control: the same, in Helvetica | ok, 1.2 s, 70 MiB | ok, 1.2 s, 71 MiB, same text |
-| R2-COST-D: 3,000 widgets, 20,000 unread operators | ok, 1.9 s, 91 MiB | partial, 2.9 s, 98 MiB, text differs |
-| R2-COST-D: 30,000 widgets, 100,000 unread operators | ok, 14.2 s, 346 MiB | partial, 19.3 s, 390 MiB, text differs |
-| R2-COST-D control: the same, in Helvetica | ok, 14.2 s, 379 MiB | ok, 14.6 s, 380 MiB, same text |
-| R2-COST-E: 200 widgets of a field whose value is 350,000 characters | partial, 3.4 s, 53 MiB | partial, 0.7 s, 53 MiB, same text |
-| R2-COST-E: 1,000 such widgets | partial, 16.6 s, 53 MiB | partial, 1.1 s, 53 MiB, same text |
-| R2-COST-E: 4,000 such widgets | partial, 67.1 s, 64 MiB | partial, 1.8 s, 64 MiB, same text |
-| R2-COST-E control: 200 widgets, a short value | partial, 0.6 s, 50 MiB | partial, 0.6 s, 50 MiB, same text |
-| R2-COST-E control: 4,000 widgets, a short value | partial, 4.5 s, 62 MiB | partial, 1.1 s, 61 MiB, same text |
-| transcription (cost lens note): 350,000 unread operators, 37 KB | ok, 25.1 s, 619 MiB | partial, 58.3 s, 785 MiB, text differs |
-| R2-COST-G: 100 font dictionaries sharing one embedded two-byte CMap | ok, 0.6 s, 50 MiB | ok, 0.7 s, 58 MiB, same text |
-| R2-COST-G: 900 sharing it | ok, 0.9 s, 68 MiB | ok, 1.1 s, 69 MiB, same text |
-| round 1 COST-2: 10 Type 1 fonts sharing a 4 MiB program, 1 page | ok, 1.3 s, 115 MiB | ok, 1.7 s, 116 MiB, same text |
-| round 1 COST-2: 64 such fonts, 1 page | ok, 1.4 s, 115 MiB | ok, 1.8 s, 116 MiB, same text |
-| round 1 COST-2: 64 such fonts, 10 pages | ok, 2.9 s, 116 MiB | ok, 3.9 s, 116 MiB, same text |
-| round 1 COST-1: a 1,000,000-character /BaseFont, 200 strings | ok, 1.0 s, 70 MiB | ok, 1.5 s, 70 MiB, same text |
-| round 1 COST-1: the same, 3,000 strings | ok, 2.7 s, 70 MiB | ok, 2.8 s, 70 MiB, same text |
-| round 1 COST-1: a 4,000-byte /BaseFont name, 2,000 strings | ok, 0.4 s, 50 MiB | ok, 0.6 s, 50 MiB, same text |
-| round 1 COST-1: the same name, 50 TJ of 10,000 glyph-index strings | ok, 26.1 s, 221 MiB | failed, 9.6 s, 260 MiB, text differs |
-| round 1 COST-1 control: a short name, 45 TJ of 10,000 glyph-index strings | ok, 21.0 s, 204 MiB | failed, 6.7 s, 239 MiB, text differs |
-| round 1 COST-2: one such font in 60 appearances | ok, 1.1 s, 115 MiB | ok, 1.7 s, 116 MiB, same text |
-| round 1 COST-2: one such font in 600 appearances | ok, 3.6 s, 116 MiB | ok, 4.3 s, 116 MiB, same text |
-| round 1 d1: a 99,998-entry /Differences font in 60 appearances | partial, 2.0 s, 59 MiB | partial, 2.3 s, 60 MiB, same text |
-| round 1 LIMIT-1: an appearance font past the array limit | partial, 1.0 s, 59 MiB | partial, 0.9 s, 60 MiB, same text |
-| round 1 LIMIT-1 control: 99,999 elements | partial, 0.8 s, 59 MiB | partial, 1.5 s, 60 MiB, same text |
-| round 1 LIMIT-1: the same, on page 40 of 40 | partial, 1.1 s, 59 MiB | partial, 1.2 s, 60 MiB, same text |
-| round 1 LIMIT-1: /DescendantFonts past the limit, used by the page | failed, 0.7 s, 58 MiB | partial, 0.7 s, 59 MiB, text differs |
-| round 1 LIMIT-1: a font past the limit only listed in the resources | failed, 0.7 s, 59 MiB | ok, 1.1 s, 60 MiB, text differs |
-| round 1 MEM-1: 10,000,000 private-use glyphs (900 s deadline) | ok, 123.8 s, 152 MiB | ok, 121.5 s, 133 MiB, same text |
-| round 1 MEM-1: 74,000,000 private-use glyphs (900 s deadline) | ok, 225.8 s, 645 MiB | ok, 229.4 s, 645 MiB, same text |
-| COST-MANYCMAP-1: 3 fonts, each with its own 1 MiB embedded CMap, each used | ok, 0.5 s, 51 MiB | ok, 1.5 s, 59 MiB, text differs |
-| COST-MANYCMAP-1: 30 such fonts, each used | ok, 0.5 s, 50 MiB | partial, 2.5 s, 61 MiB, text differs |
-| COST-MANYCMAP-1: 100 such fonts, listed, none used | ok, 0.7 s, 51 MiB | ok, 0.8 s, 52 MiB, same text |
-| COST-MANYCMAP-1: 100 such fonts, each used (318 KB) | ok, 0.8 s, 51 MiB | partial, 3.0 s, 62 MiB, text differs |
-| COST-MANYCMAP-1: 200 such fonts, each used (636 KB) | ok, 1.2 s, 52 MiB | partial, 3.3 s, 62 MiB, text differs |
-| COST-MANYCMAP-1: 800 such fonts, each used (2.55 MB) | ok, 2.0 s, 79 MiB | partial, 4.1 s, 93 MiB, text differs |
+| R2-COST-A: an embedded CMap of 64 KiB of unclosed sections (no code space) | ok, 0.9 s, 50 MiB | ok, 0.5 s, 50 MiB, same text |
+| R2-COST-A: the same, 128 KiB | ok, 0.4 s, 50 MiB | ok, 0.9 s, 50 MiB, same text |
+| R2-COST-A: the same, 256 KiB | ok, 0.9 s, 50 MiB | ok, 0.7 s, 50 MiB, same text |
+| R2-COST-A: the same, 512 KiB | ok, 1.1 s, 50 MiB | ok, 0.6 s, 50 MiB, same text |
+| R2-COST-A: the same, 1 MiB | ok, 0.7 s, 52 MiB | ok, 0.9 s, 51 MiB, same text |
+| R2-COST-A control: one valid embedded CMap | ok, 0.7 s, 50 MiB | ok, 1.1 s, 57 MiB, same text |
+| R2-MEM-B: 4 font dictionaries sharing a 1 MiB ToUnicode with an empty destination | ok, 1.0 s, 54 MiB | ok, 1.1 s, 55 MiB, same text |
+| R2-MEM-B: 24 sharing a 32 MiB one | ok, 47.2 s, 190 MiB | ok, 50.7 s, 223 MiB, same text |
+| R2-MEM-B: 48 sharing a 32 MiB one | ok, 91.5 s, 190 MiB | ok, 89.3 s, 222 MiB, same text |
+| R2-COST-D: 1 widget, 100,000 unread operators (/EUC-H) | ok, 9.2 s, 208 MiB | partial, 18.6 s, 256 MiB, text differs |
+| R2-COST-D: 30,000 widgets, 1 unread operator | ok, 9.9 s, 191 MiB | partial, 9.1 s, 192 MiB, text differs |
+| R2-COST-D: 1,000 widgets, 10,000 unread operators | ok, 2.1 s, 67 MiB | partial, 3.1 s, 71 MiB, text differs |
+| R2-COST-D: the same, one-byte strings in an Identity-H font | failed, 1.5 s, 60 MiB | partial, 2.7 s, 71 MiB, text differs |
+| R2-COST-D control: the same, readable two-byte strings | ok, 1.7 s, 66 MiB | ok, 1.7 s, 67 MiB, same text |
+| R2-COST-D control: the same, in Helvetica | ok, 1.4 s, 70 MiB | ok, 1.9 s, 71 MiB, same text |
+| R2-COST-D: 3,000 widgets, 20,000 unread operators | ok, 2.8 s, 91 MiB | partial, 4.0 s, 98 MiB, text differs |
+| R2-COST-D: 30,000 widgets, 100,000 unread operators | ok, 18.7 s, 346 MiB | partial, 28.6 s, 387 MiB, text differs |
+| R2-COST-D control: the same, in Helvetica | ok, 17.3 s, 379 MiB | ok, 21.6 s, 380 MiB, same text |
+| R2-COST-E: 200 widgets of a field whose value is 350,000 characters | partial, 5.5 s, 53 MiB | partial, 1.3 s, 53 MiB, same text |
+| R2-COST-E: 1,000 such widgets | partial, 21.3 s, 53 MiB | partial, 1.2 s, 54 MiB, same text |
+| R2-COST-E: 4,000 such widgets | partial, 82.0 s, 64 MiB | partial, 2.4 s, 63 MiB, same text |
+| R2-COST-E control: 200 widgets, a short value | partial, 0.6 s, 50 MiB | partial, 0.8 s, 50 MiB, same text |
+| R2-COST-E control: 4,000 widgets, a short value | partial, 4.5 s, 62 MiB | partial, 1.5 s, 61 MiB, same text |
+| transcription (cost lens note): 350,000 unread operators, 37 KB | ok, 28.7 s, 619 MiB | partial, 69.0 s, 785 MiB, text differs |
+| R2-COST-G: 100 font dictionaries sharing one embedded two-byte CMap | ok, 0.7 s, 50 MiB | ok, 1.1 s, 57 MiB, same text |
+| R2-COST-G: 900 sharing it | ok, 1.1 s, 68 MiB | ok, 1.3 s, 69 MiB, same text |
+| round 1 COST-2: 10 Type 1 fonts sharing a 4 MiB program, 1 page | ok, 1.9 s, 115 MiB | ok, 2.8 s, 116 MiB, same text |
+| round 1 COST-2: 64 such fonts, 1 page | ok, 2.4 s, 115 MiB | ok, 2.4 s, 116 MiB, same text |
+| round 1 COST-2: 64 such fonts, 10 pages | ok, 4.6 s, 116 MiB | ok, 6.6 s, 116 MiB, same text |
+| round 1 COST-1: a 1,000,000-character /BaseFont, 200 strings | ok, 1.8 s, 70 MiB | ok, 2.4 s, 70 MiB, same text |
+| round 1 COST-1: the same, 3,000 strings | ok, 2.4 s, 70 MiB | ok, 1.7 s, 70 MiB, same text |
+| round 1 COST-1: a 4,000-byte /BaseFont name, 2,000 strings | ok, 0.6 s, 50 MiB | ok, 1.1 s, 50 MiB, same text |
+| round 1 COST-1: the same name, 50 TJ of 10,000 glyph-index strings | ok, 41.6 s, 221 MiB | failed, 13.5 s, 258 MiB, text differs |
+| round 1 COST-1 control: a short name, 45 TJ of 10,000 glyph-index strings | ok, 33.0 s, 203 MiB | failed, 10.8 s, 239 MiB, text differs |
+| round 1 COST-2: one such font in 60 appearances | ok, 2.4 s, 115 MiB | ok, 3.0 s, 115 MiB, same text |
+| round 1 COST-2: one such font in 600 appearances | ok, 6.8 s, 116 MiB | ok, 7.8 s, 116 MiB, same text |
+| round 1 d1: a 99,998-entry /Differences font in 60 appearances | partial, 2.9 s, 59 MiB | partial, 2.7 s, 60 MiB, same text |
+| round 1 LIMIT-1: an appearance font past the array limit | partial, 1.0 s, 59 MiB | partial, 2.0 s, 60 MiB, same text |
+| round 1 LIMIT-1 control: 99,999 elements | partial, 1.6 s, 59 MiB | partial, 1.3 s, 59 MiB, same text |
+| round 1 LIMIT-1: the same, on page 40 of 40 | partial, 2.0 s, 59 MiB | partial, 1.9 s, 60 MiB, same text |
+| round 1 LIMIT-1: /DescendantFonts past the limit, used by the page | failed, 1.0 s, 58 MiB | partial, 1.2 s, 58 MiB, text differs |
+| round 1 LIMIT-1: a font past the limit only listed in the resources | failed, 2.0 s, 59 MiB | ok, 1.7 s, 60 MiB, text differs |
+| round 1 MEM-1: 10,000,000 private-use glyphs (900 s deadline) | ok, 152.2 s, 132 MiB | ok, 150.6 s, 152 MiB, same text |
+| round 1 MEM-1: 74,000,000 private-use glyphs (900 s deadline) | ok, 316.8 s, 646 MiB | ok, 323.4 s, 645 MiB, same text |
+| COST-MANYCMAP-1: 3 fonts, each with its own 1 MiB embedded CMap, each used | ok, 0.5 s, 51 MiB | ok, 2.1 s, 58 MiB, text differs |
+| COST-MANYCMAP-1: 30 such fonts, each used | ok, 0.7 s, 50 MiB | ok, 3.1 s, 61 MiB, text differs |
+| COST-MANYCMAP-1: 100 such fonts, listed, none used | ok, 1.0 s, 51 MiB | ok, 0.9 s, 51 MiB, same text |
+| COST-MANYCMAP-1: 100 such fonts, each used (318 KB) | ok, 0.9 s, 51 MiB | ok, 3.5 s, 62 MiB, text differs |
+| COST-MANYCMAP-1: 200 such fonts, each used (636 KB) | ok, 1.4 s, 51 MiB | ok, 3.7 s, 63 MiB, text differs |
+| COST-MANYCMAP-1: 800 such fonts, each used (2.55 MB) | ok, 3.2 s, 78 MiB | ok, 5.3 s, 93 MiB, text differs |
 | cost lens: 50 fonts with their own embedded CMaps of 90,000 entries (21 MB) | failed, 0.0 s, 0 MiB | failed, 0.0 s, 0 MiB, same text |
-| cost lens: 380,000 identical unread operators, a dense page | ok, 7.7 s, 215 MiB | partial, 10.6 s, 220 MiB, text differs |
-| cost lens: the same, each at its own font size | ok, 16.7 s, 381 MiB | partial, 18.2 s, 387 MiB, text differs |
-| cost lens: the same, each its own two-byte code | ok, 9.6 s, 221 MiB | partial, 11.6 s, 227 MiB, text differs |
-| cost lens: 300 GBK-EUC-H strings of 1,000 codes, all valid | ok, 1.6 s, 53 MiB | ok, 1.4 s, 54 MiB, same text |
-| cost lens: the same, a code gbk lacks last in each | ok, 1.7 s, 53 MiB | ok, 1.9 s, 54 MiB, text differs |
-| cost lens: the same, a lead byte no code continues in each | ok, 1.6 s, 53 MiB | partial, 1.9 s, 54 MiB, same text |
-| cost lens: 350,000 unread operators drawn off the page | ok, 7.7 s, 165 MiB | ok, 7.0 s, 165 MiB, same text |
-| cost lens: 200,000 identical unread operators | failed, 8.5 s, 321 MiB | failed, 8.7 s, 323 MiB, same text |
-| cost lens: 350,000 identical unread operators | failed, 8.6 s, 331 MiB | failed, 9.3 s, 332 MiB, same text |
-| cost lens: 200,000 unread operators, each at its own size | failed, 9.9 s, 324 MiB | failed, 8.5 s, 324 MiB, same text |
-| cost lens: 350,000 unread operators, each at its own size | failed, 10.2 s, 338 MiB | failed, 8.9 s, 338 MiB, same text |
+| cost lens: 380,000 identical unread operators, a dense page | ok, 9.8 s, 214 MiB | partial, 12.8 s, 219 MiB, text differs |
+| cost lens: the same, each at its own font size | ok, 20.1 s, 380 MiB | partial, 20.3 s, 383 MiB, text differs |
+| cost lens: the same, each its own two-byte code | ok, 12.1 s, 221 MiB | partial, 15.6 s, 228 MiB, text differs |
+| cost lens: 300 GBK-EUC-H strings of 1,000 codes, all valid | ok, 1.9 s, 53 MiB | ok, 2.2 s, 54 MiB, same text |
+| cost lens: the same, a code gbk lacks last in each | ok, 1.8 s, 53 MiB | ok, 2.0 s, 54 MiB, text differs |
+| cost lens: the same, a lead byte no code continues in each | ok, 1.7 s, 53 MiB | partial, 2.5 s, 54 MiB, same text |
+| cost lens: 350,000 unread operators drawn off the page | ok, 10.3 s, 164 MiB | ok, 9.3 s, 165 MiB, same text |
+| cost lens: 200,000 identical unread operators | failed, 10.4 s, 321 MiB | failed, 10.8 s, 322 MiB, same text |
+| cost lens: 350,000 identical unread operators | failed, 10.0 s, 330 MiB | failed, 10.4 s, 332 MiB, same text |
+| cost lens: 200,000 unread operators, each at its own size | failed, 9.0 s, 324 MiB | failed, 11.1 s, 323 MiB, same text |
+| cost lens: 350,000 unread operators, each at its own size | failed, 10.6 s, 338 MiB | failed, 10.1 s, 338 MiB, same text |
 
 The new bound is pinned in process (`ManyCMapTests`): with 12 and with 24 fonts each carrying a 900 KiB embedded CMap,
 the bytes of embedded CMap read are equal and within `MAX_DOCUMENT_CMAP_BYTES` and one CMap, and twice the fonts cost at
-most about twice the time; with four small ones each is read exactly.
+most about twice the time; past the bound each font is read by its ToUnicode's code space, and with four small ones each
+is read through its CMap. NR-4's label rule is pinned the same way (`OptionRowTests`): twice the rows of check boxes
+beside text that cannot be read cost about twice the time.
 
 The gates, run as `scripts/ci/verify-cpt-studio.sh` runs them (without `pip_audit`, which queries a network service), on
-a git archive of the committed tree `a26d21cfd` under pypdf 6.21.4, on the disposable test database on 127.0.0.1:55461
+a git archive of the committed tree `5f13484ba` under pypdf 6.21.4, on the disposable test database on 127.0.0.1:55461
 only (an archive, so the worktree was not read while they ran): the system and migration checks pass; the Django suite
-ran 3,694 tests, 3 skipped, all passing (2,065 s, under a host load of 10 to 16 on 14 cores, the corpus and cost passes
+ran 3,701 tests, 3 skipped, all passing (2,584 s, under a host load of 10 to 28 on 14 cores, the corpus and cost passes
 running beside it); the ops (211 tests, `test_install` and `test_verify_downloads` among those passing), verification
 (37, `test_generate` among them) and browser-verifier (61 passing, none failing, the named test among them) suites pass.
+The round's first repair ran 3,694 tests the same way on `a26d21cfd` and 3,695 on `737cce0c1`, all passing.
 
-Each of the 18 mutations, each reverting one repair of this round on a copy of the committed tree (applied and checked
-present in the copy; the worktree's `studio/` and `tests/` and the archive hashed before and after: untouched), was
-killed by the round's tests: a box glyph that cannot be read is one character only; no glyph is known as a box shape;
-every lone glyph is a box (no checklist row needed); a check box tied to the row does not govern it; text under a check
-box is text beside it; a glyph under a check box is its label; a string with a byte outside the code space is unread
-whole; 0x80 under ETen-B5-H is a lead byte; OCR text replaces the form block; an unread page's form block is no text; a
-predefined CMap pypdf does not implement is unread, ToUnicode or not; /Identity is no CMap; an embedded CMap of mixed
-code lengths, or one that uses another, is not read; no bound on the embedded CMaps a document reads; no code guessed
-from a ToUnicode of its own characters; codes UTF-16BE pairs into one character are read whole; a mixed embedded CMap's
-two-byte codes are not read by its ToUnicode; a list of boxes runs on over a heading. Two needed a second run, said here
-so the record is whole: the fourth's anchor was taken before the list rule was restructured and did not apply (the
-harness refused it, 0 occurrences of 1), and run again on its new text it was killed; the eighteenth's first form also
-left the page's last list unclosed, so no list gave any row context and the heading test, which asks only that no mark
-is written, could not tell it from the rule: it survived its own run, and run against the glyph-index boxes' test, which
-wants marks from a list that ends the page, it is killed; its form that changes the rule alone was killed. Unmutated,
-every test they name passes (19 in the baseline run; the heading test in the round's runs and the gates).
+Each of the 25 mutations, each reverting one repair of this round on a copy of the committed tree (`5f13484ba`; applied
+and checked present in the copy; the worktree's `studio/` and `tests/` and the archive hashed before and after:
+untouched), was killed by the round's tests: a box glyph that cannot be read is one character only; no glyph is known as
+a box shape; every lone glyph is a box (no checklist row needed); a check box tied to the row does not govern it, nor
+any box on its line; text under a check box is text beside it; a glyph under a check box is its label; a string with a
+byte outside the code space is unread whole; 0x80 under ETen-B5-H is a lead byte; OCR text replaces the form block; an
+unread page's form block is no text; a predefined CMap pypdf does not implement is unread, ToUnicode or not; /Identity
+is no CMap; an embedded CMap of mixed code lengths, or one that uses another, is not read; no bound on the embedded
+CMaps a document reads; no code guessed from a ToUnicode of its own characters; codes UTF-16BE pairs into one character
+are read whole; a mixed embedded CMap's two-byte codes are not read by its ToUnicode; a list of boxes runs on over a
+heading; an embedded CMap that cannot be read is not read by its ToUnicode's code space; a row's own boxes do not govern
+it; any text that cannot be read on a box's row makes it unsure; text left of a box may be its label whatever can be
+read between them; a row whose label is the next line's takes no boxes from that line; a checked check box tied to
+nothing makes its row a checklist row; a box anywhere on a row shows its list a box. Unmutated, the 27 tests they name
+pass. Three needed a second run, said here so the record is whole: the fourth's anchor was taken before the list rule
+was restructured and did not apply (the harness refused it, 0 occurrences of 1), and run again on its new text it was
+killed; the eighteenth's first form also left the page's last list unclosed, so no list gave any row context and the
+heading test, which asks only that no mark is written, could not tell it from the rule: it survived its own run, and run
+against the glyph-index boxes' test, which wants marks from a list that ends the page, it is killed; its form that
+changes the rule alone was killed. And on `899114881` (NR-4's repair) the fourth survived: a check box tied to the row's
+label writes its glyph on the row, which makes it one of the row's own boxes, so the guard it removed decided nothing.
+The guard was removed (`a4b9997ba`, no reading changed) and the fourth re-pointed at the own-boxes rule's line, where it
+is killed.
 
 Remaining after round 4, each read as said (round 3's table above stands where this does not replace it):
 
@@ -1480,9 +1519,10 @@ Remaining after round 4, each read as said (round 3's table above stands where t
 | the filled square '■' (or a white square typed as a bullet) alone, its shape read | a box only in a list that shows another box, else U+FFFD and the item as listed | a bullet as often as a box, as routing reads it typed |
 | a box glyph after its label, or a box of three or more characters to pypdf | U+FFFD, not the mark | only one or two characters at a row's start are taken for its box |
 | a box glyph under CNS1-H, CNS2-H or CNS-EUC-H (CNS 11643), or Hankaku, Hiragana, Katakana, Roman or WP-Symbol | read as a glyph-index box is: a box only by its list or a check box | no codec here encodes those character sets, so its shape is not read |
-| a check box over a printed box that cannot be read, tied to nothing | the printed box '[?]' on a checklist row (the check box makes it one) | the check box's state is not written there; its row is held |
+| an unchecked check box on a row, tied to nothing there (its label left of it with nothing after it, or beyond reach of the printed box it lies over), on a row that starts with a glyph that cannot be read | the glyph '[?]': the row held (beside a checked one the glyph is U+FFFD and the item reads as listed, which agrees with it: NR-5) | the check box's state is not written on the row, and routing's field-line rule reads it from the form block only for a row that starts with its label. The installed reader dropped a glyph-index glyph and so let that rule read the state (Diabetes negated where unchecked); kept, as round 3's rule requires, the glyph stops it, and as U+FFFD it would leave the item to read as listed (affirmed): held, and set out for the owner |
+| a glyph that cannot be read at the start of a row that shows boxes of its own (the item's options, or a second column's box) | U+FFFD, not the mark: the row's items read by the boxes it shows, as routing read them beside the installed reader's mojibake | those boxes govern the row (NR-4); a second column's box is read by routing as governing its line, as it was beside the installed reader |
 | text in a CMap pypdf does not implement with no ToUnicode | as many U+FFFD as pypdf would have written (two bytes a character), named | the codes are cut by the code space for reading, but the count follows pypdf's reading, as round 3's did |
 | a one-byte code pdf.js reads that the codec cannot decode alone (GBpc-EUC-H's 0xFD-0xFF as © ™ …, 0x80 under the GB and Big Five CMaps) | U+FFFD, named (the installed reader's reading) | no codec here reads them; pdf.js uses Adobe's CMap and its CID to Unicode table |
-| an embedded CMap that uses a CMap other than a predefined one, or past the document's 4 MiB of embedded CMaps | its text unread, named | the used CMap is not read here; the bound is the cost finding's repair |
+| an embedded CMap that cannot be read (malformed, using a CMap other than a predefined one, or past the document's 4 MiB) whose font has no ToUnicode or one that declares no code space | its text unread, named | only an embedded CMap or its ToUnicode's code space tells its codes apart |
 | /Encoding /Identity with no ToUnicode | its text unread, named | it names no CMap: only a ToUnicode gives its codes text |
 | text shown with no font in effect (a font set inside q/Q) | U+FFFD, named | see above: the owner's call |
