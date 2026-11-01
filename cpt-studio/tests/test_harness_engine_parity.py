@@ -3,8 +3,9 @@ round-4 engine's.
 
 Each case below is a synthetic document with the proposal provider's answer (or its failure), read by the real routing,
 the real inventory and the engine. PINNED holds sha256_json of each result as the round-4 engine made it - this module
-loaded, unchanged, against an export of 01f39cd5d (the harness branch's base: the round-4 engine with the participant
-types added and no participant read) - so any change to what the engine makes without participants fails here, not
+loaded, unchanged, against an export of 80f2f2dc8 (the harness branch once the integrated round 4, 443e67032, was
+merged: the round-4 engine, cpt-studio-validation@5, with the participant types added and no participant read;
+re-pinned 2026-11-01 from 01f39cd5d's digests because round 4's own declared integration moved every result) - so any change to what the engine makes without participants fails here, not
 only the fields the H1 replay and the H4 battery compare. ``cases`` uses only what that tree already had; nothing here
 imports a name the harness added, except inside a test.
 
@@ -119,17 +120,17 @@ def cases():
 
 # sha256_json(assess(**cases()[name])) as the round-4 engine (01f39cd5d) computed it.
 PINNED = {
-    'a-conflict-in-the-record': '12bf0be004f9cd2bad8097b68567afa1eb38f5f6ecda8eb573a3c826cca784c2',
-    'member-date-conflict-answered': 'db540f282eb078397db874363667f58050dcd0f07344ada82c6161691714afa9',
-    'member-date-conflict-failed': 'f523f8f8d43a860fd3b74085e72052e18453421685177900f99a1bef6d0241db',
-    'polypectomy-and-a-candidate': 'e8bcb0b1e3022a44ad53a39a46d4f3940c33178ccc4889894705a091e55c696b',
-    'provider-failed': '8ddc4fae9bab546f1fa29534cf5d39eed36d415e7afadceb2f3bc8d025cdff96',
-    'provider-not-run': 'e6a8d6abdae3c0681f438ab30af4cf09ee425028d0c11c58f691a508b7123ea5',
-    'provider-unknown': 'a39fa8e2a1c910c8976d9b9d4358b05de6cbdcd866519396f9faa51899048fb3',
-    'response-refused': 'ae0dfa33aa83cbc92af59fc4b27b54f070225c698ed938c855d5e6bd32aafdc5',
-    'second-review': 'a748250fc720aad65503f76f2d4421a458b8ba4bc835f795221537daca4715da',
-    'two-codes-a-plan-code-and-hcpcs': '907432e07892703d0be3a9695d2e329c5f9eab347d47da3cfadf094d275b5370',
-    'visit-beside-a-procedure': 'eb1d86c83903e91de4e0b96954f5370b4d3488233e386580baeb57852a258225',
+    'a-conflict-in-the-record': '56bfb9d670246f8e273f2ef0c94233156e4ad42adcd55f3b41d9c127e3a41790',
+    'member-date-conflict-answered': 'b8d9143f2a191a43e1996232248d9eea5f4aed11edead710662c810082a39f6a',
+    'member-date-conflict-failed': '11dce38a21d7bfe99e71c8308dfa51554cc3c8acfddcf92096bc74fd37021e30',
+    'polypectomy-and-a-candidate': '6266883946d2e024d60921333824f731023392849c7362a7c543828f4c2670b1',
+    'provider-failed': '7911a61ccac8af8588aabc73da8f235785e41374b99d43c2e5c498d4248c1561',
+    'provider-not-run': '77b709b85f84c42e370be5b5da651253a7e4671fd77ef677931649aae72ac09e',
+    'provider-unknown': '91241f08d5cba8050805be354e299074269af844ee311b284669e68ef223a0e0',
+    'response-refused': '87c30945c50d030b6ef3d8e2c3efa2122b01ebfde990160430b02a1117b86d15',
+    'second-review': '2f6ea32af604ae231507c52c3201a96f625b40ca5fd717eabc0334f1366ed009',
+    'two-codes-a-plan-code-and-hcpcs': '44fb2821e53e3ecf3bf7281b283da9276d5047e662b80b3e31b6cecf6f2d428e',
+    'visit-beside-a-procedure': '49eca85a58b6e13c6190293adae2702d68f4bd4d102e600039f5d948db650598',
 }
 
 

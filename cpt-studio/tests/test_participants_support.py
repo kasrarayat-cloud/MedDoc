@@ -24,8 +24,8 @@ from studio.types import PageSpan
 FIXTURES = Path(__file__).resolve().parent / 'fixtures' / 'participants'
 FIXTURE_SHA256 = {
     'colonoscopy.note.txt': '9436025908574d0e062d54bc450521b378f013a55f4530fab1457a234b9c3d67',
-    'astra-colonoscopy.response.json': '3dbf772629e4602abade6e33ffe9590706918b58bcb32527dae7c587b65ebbc1',
-    'fable-colonoscopy.response.json': '7ac0b2b1698fd9e61f7c41527b780c3e8a70803bd4ccca559e6e11c7683d9989',
+    'astra-colonoscopy.response.json': 'f544bc0a2b76299c4f9b367d028411f3cc2b710c75daa17d43e59f7451a781e1',
+    'fable-colonoscopy.response.json': 'c8884bd5da425fed5186c934ddecb8fd58b5e48115874e3e4ff384c0653ce34c',
 }
 NOTE = (FIXTURES / 'colonoscopy.note.txt').read_bytes().decode('utf-8')
 PAGE_BREAK = 343  # page 2 of the note starts here (README)
@@ -212,6 +212,6 @@ def code(value='45385', **fields) -> dict:
 
 def empty_reading(**fields) -> dict:
     reading = {'date_of_service': {'value': '', 'evidence': []}, 'services': [], 'codes': [], 'not_coded': [],
-               'clarifications': [], 'extraction_issues': []}
+               'clarifications': [], 'extraction_issues': [], 'references_used': []}
     reading.update(fields)
     return reading

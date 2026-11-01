@@ -30,7 +30,7 @@ from datetime import date
 from typing import Optional
 
 from studio.participants import prompt
-from studio.types import (EvidenceSpan, ExtractionIssue, LocatedQuote, ParticipantCode, ParticipantLesion,
+from studio.types import (EvidenceSpan, ExtractionIssue, ReferenceUse, LocatedQuote, ParticipantCode, ParticipantLesion,
                           ParticipantNotCoded, ParticipantQuestion, ParticipantReading, ParticipantService)
 
 REFUSED = 'The reading was not used: '  # every refusal problem starts so; the reason follows
@@ -45,6 +45,7 @@ MAX_LESIONS = 64  # per service
 MAX_MODIFIERS = 16  # per code
 MAX_SERVICE_IDS = 64  # per item
 MAX_EXTRACTION_ISSUES = 64
+MAX_REFERENCES = 64  # references_used entries (harness-reading@2, HARNESS.md 11.2)
 MAX_SPANS = 8  # occurrences located per quote
 MIN_QUOTE_CHARACTERS = 8  # non-space characters a quote needs before it is located at all
 CODE = re.compile(r'[0-9]{4}[0-9A-Z]')
@@ -55,7 +56,8 @@ _ITEM_LISTS = {'evidence': (MAX_QUOTES, 'quotes'), 'lesions': (MAX_LESIONS, 'les
                'modifiers': (MAX_MODIFIERS, 'modifiers'), 'service_ids': (MAX_SERVICE_IDS, 'service ids')}
 _TOP_LISTS = (('services', MAX_SERVICES, 'services'), ('codes', MAX_CODES, 'codes'),
               ('not_coded', MAX_NOT_CODED, 'not-coded items'), ('clarifications', MAX_QUESTIONS, 'clarifications'),
-              ('extraction_issues', MAX_EXTRACTION_ISSUES, 'extraction issues'))
+              ('extraction_issues', MAX_EXTRACTION_ISSUES, 'extraction issues'),
+              ('references_used', MAX_REFERENCES, 'references used'))
 _SCHEMA_KEYWORDS = frozenset({'type', 'properties', 'required', 'additionalProperties', 'items', 'enum'})
 _DATE = re.compile(r'[0-9]{4}-[0-9]{2}-[0-9]{2}')
 _RECORDED_MODEL = re.compile(r'[\x21-\x7e]{1,100}')  # fits ProviderRun.returned_model
@@ -417,11 +419,16 @@ class _Reader:
                                      'document has; it was not used.')
                 continue
             issues.append(ExtractionIssue(page=item['page'], issue=item['issue']))
+        # harness-reading@2: what the participant says it relied on. ``retrieved`` stays False here: only CPT Studio's
+        # check against that participant's own tool results in the same run may set it (HARNESS.md 11.2), and a run
+        # without tools retrieved nothing.
+        references = tuple(ReferenceUse(ref=item['ref'], use=item['use'], retrieved=False)
+                           for item in parsed['references_used'])
         return ParticipantReading(
             reading_version=prompt.READING_VERSION, date_of_service=value, date_evidence=date_evidence,
             services=tuple(services), codes=tuple(codes), not_coded=tuple(not_coded), questions=tuple(questions),
             extraction_issues=tuple(issues), problems=tuple(self.problems), refused=False,
-            unverified_quotes=self.unverified, **self.identity)
+            unverified_quotes=self.unverified, references_used=references, **self.identity)
 
     def unknown_services(self, where: str, service_ids, ids: set) -> None:
         unknown = sum(1 for item in service_ids if item not in ids)

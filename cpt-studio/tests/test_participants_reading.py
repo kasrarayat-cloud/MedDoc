@@ -50,7 +50,7 @@ class _GoodAnswerContract:
         self.assertEqual((result.refused, result.problems, result.unverified_quotes), (False, (), 0))
         self.assertEqual((result.provider, result.adapter_version, result.reading_version, result.requested_model,
                           result.returned_model),
-                         (self.module.NAME, self.module.ADAPTER_VERSION, 'harness-reading@1', self.module.MODEL,
+                         (self.module.NAME, self.module.ADAPTER_VERSION, 'harness-reading@2', self.module.MODEL,
                           self.module.MODEL))
         self.assertEqual(result.date_of_service, '2026-10-21')
         (procedure,) = result.services
