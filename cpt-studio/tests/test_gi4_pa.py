@@ -213,6 +213,21 @@ class PredicateTests(SimpleTestCase):
         # and on another text than the passage's (no heading reaches it)
         self.assertFalse(engine._section_only_routing_reading(self.reading(H405, N1, section), ''))
 
+    def test_every_not_done_status_a_reader_states_itself_is_its_own_reading(self):
+        # a plan word or a cancellation is a reading of its own as much as a time word or a denial, on either side of
+        # the gate: every status checks.NEGATIVE knows is one (a status added there and not here fails this pin)
+        for status in checks.NEGATIVE:
+            self.assertTrue(engine._pa_own_time(f'{status}: a word of its own'), status)
+        for cue in ('performed: was introduced', 'section: history (Prior Studies)', 'uncertain: no performance '
+                    'statement', 'incomplete: could not be advanced'):
+            self.assertFalse(engine._pa_own_time(cue), cue)
+        self.assertFalse(engine._section_only_service_reading(('planned: in a plan section', 'planned: in one year')))
+        self.assertFalse(engine._section_only_service_reading(('planned: in a plan section', 'cancelled: aborted')))
+        section = 'section: history (Prior Studies)'
+        self.assertTrue(engine._section_only_routing_reading(self.reading(H405, N1, section), H405))  # the control
+        for own in ('planned: in one year', 'cancelled: aborted', 'historical: earlier', 'negated: No further'):
+            self.assertFalse(engine._section_only_routing_reading(self.reading(H405, N1, own, section), H405), own)
+
     def test_the_words_for_how_the_section_reaches_the_passage(self):
         near = engine._pa_reach(H405, H405.index(N1))
         self.assertEqual(near, 'its section “Prior Studies” reaches it only past a line written as a heading '
