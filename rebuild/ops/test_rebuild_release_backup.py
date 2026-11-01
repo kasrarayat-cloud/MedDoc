@@ -256,9 +256,18 @@ class BackupStepTests(unittest.TestCase):
         self.assertEqual((report['complete'], report['failure'], report['backup']['timed_out']),
                          (False, 'backup_command_failed', True))
 
+    def installed_tool(self):
+        # The installed_tool row reads the LIVE app's backup tool and interpreter; stand-ins keep these tests the same on
+        # a CI runner, which has no /opt/meddoc-pro/rebuild.
+        tool, python = self.root / 'installed-backup_restore.py', self.root / 'installed-python'
+        tool.write_text('# stand-in for the installed backup tool\n')
+        python.write_text('# stand-in for the installed interpreter\n')
+        return patch.multiple(backup, TOOL=tool, PYTHON=python)
+
     def test_preflight_refuses_reused_or_public_paths_and_credentials_inside_the_output(self):
         fake = SimpleNamespace(reason=installer.reason, pinned_bytes=lambda: {}, locks_free=lambda: {},
                                outside_scheduled_windows=lambda moment: 'ok')
+        self.enterContext(self.installed_tool())
         rows = {row['check']: row['passed'] for row in backup.preflight(self.args(), fake)}
         self.assertTrue(all(rows.values()), rows)
         (self.root / 'attempt-01').mkdir(mode=0o700)
@@ -275,8 +284,8 @@ class BackupStepTests(unittest.TestCase):
         fake = SimpleNamespace(reason=installer.reason, pinned_bytes=lambda: {}, locks_free=lambda: {},
                                outside_scheduled_windows=lambda moment: 'ok')
         argv = ['--output', str(self.root / 'attempt-01'), '--report', str(self.root / 'report.json')]
-        with patch.object(backup, 'installer', return_value=fake), patch.object(backup, 'execute') as execute, \
-                redirect_stdout(io.StringIO()) as output:
+        with self.installed_tool(), patch.object(backup, 'installer', return_value=fake), \
+                patch.object(backup, 'execute') as execute, redirect_stdout(io.StringIO()) as output:
             self.assertEqual(backup.main(argv), 0)
         execute.assert_not_called()
         plan = json.loads(output.getvalue())

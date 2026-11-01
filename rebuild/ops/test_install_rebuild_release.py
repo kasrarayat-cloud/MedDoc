@@ -917,9 +917,18 @@ class SharedRepositoryTests(GitIsolation):
         self.assertEqual(git(repo, 'rev-parse', 'HEAD'), candidate)
         self.assertFalse(marker.exists())
         self.assertNotIn('GIT_CONFIG_COUNT', os.environ)    # restored
-        # Control: the same merge without the act's git environment runs both hooks.
+        # Some git versions no longer start gc --auto from a merge on their own, so the act's environment is also
+        # proved against an explicit gc --auto while the loose objects that make it due are still there.
+        with op.act_git_environment():
+            subprocess.run(['git', '-C', str(repo), 'gc', '--auto'], capture_output=True, check=True,
+                           env={**os.environ, **GIT_ENV})
+        self.assertFalse(marker.exists())
+        # Control: without the act's git environment the merge runs post-merge, and gc --auto runs pre-auto-gc (from
+        # the merge itself where git still starts it, otherwise from the explicit call).
         git(repo, 'reset', '-q', '--hard', base)
         subprocess.run(['git', '-C', str(repo), 'merge', '--ff-only', candidate], capture_output=True, check=True,
+                       env={**os.environ, **GIT_ENV})
+        subprocess.run(['git', '-C', str(repo), 'gc', '--auto'], capture_output=True, check=True,
                        env={**os.environ, **GIT_ENV})
         self.assertEqual({Path(line).name for line in marker.read_text().split()}, {'post-merge', 'pre-auto-gc'})
         with patch.dict(os.environ, {'GIT_DIR': str(repo / '.git')}), self.assertRaises(op.Refusal):
