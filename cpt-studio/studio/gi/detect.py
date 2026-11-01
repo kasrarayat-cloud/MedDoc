@@ -3964,7 +3964,7 @@ def todays_procedure_report(text: str) -> bool:
     head = _gi4_head(text)
     if not head.own_dates:  # an own-date field
         return False
-    if len(set(head.own_dates)) != 1:  # one own date only
+    if len(set(head.own_dates)) > 1:  # one own date only (a second one names another day: whose report is it?)
         return False
     if not head.proceduralist:  # a proceduralist field
         return False

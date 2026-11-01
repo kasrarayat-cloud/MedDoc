@@ -154,6 +154,12 @@ INSTALLED = {
     # --- guard: a note written around a procedure ---
     'a referral letter': (B + 'Referral Letter\nDate of service: 10/19/2026\nColonoscopy Report\nThe colonoscope was '
                               'navigated to the cecum.\n', {COLON: ('performed', None)}),
+    # (Wave 1 repair, amendment_20261101_cycle1_b: the referral letter's head names no family, so the head rule holds it
+    # too; this note's title names the colonoscopy and its 'Findings' passage passes every copy guard, so the
+    # around-procedure guard alone holds it - measured on installed 80df1831d168: performed, no extent)
+    'a telephone note naming the colonoscopy': (B + 'Colonoscopy Telephone Note\nDate of service: 10/19/2026\nFindings\n'
+                                                    'The colonoscope was navigated to the cecum.\n',
+                                                {COLON: ('performed', None)}),
     # --- guard: under a line naming another occurrence's record ---
     'outside records': (B + 'Colonoscopy Report\nDate of service: 10/19/2026\nFindings\nThe colonoscope could not be '
                             'advanced beyond the sigmoid colon because of a stricture.\nOutside Records\nAt Mercy GI the '

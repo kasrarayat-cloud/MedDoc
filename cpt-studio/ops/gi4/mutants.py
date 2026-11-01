@@ -305,8 +305,10 @@ PE_MUTANTS = (
            '    if not head.own_dates:  # an own-date field\n        return False',
            '    if False:  # an own-date field\n        return False', _PE_UNIT),
     Mutant('pe-today-head-one-date', 'the strong head: its own-date fields name one day only', _PE_DETECT,
-           '    if len(set(head.own_dates)) != 1:  # one own date only\n        return False',
-           '    if False:  # one own date only\n        return False', _PE_UNIT),
+           '    if len(set(head.own_dates)) > 1:  # one own date only (a second one names another day: whose report is it?)\n'
+           '        return False',
+           '    if False:  # one own date only (a second one names another day: whose report is it?)\n        return False',
+           _PE_UNIT),
     Mutant('pe-today-head-proceduralist', 'the strong head: a proceduralist field (never "Attending:")', _PE_DETECT,
            '    if not head.proceduralist:  # a proceduralist field\n        return False',
            '    if False:  # a proceduralist field\n        return False', _PE_UNIT),

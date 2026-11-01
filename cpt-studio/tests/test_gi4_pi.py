@@ -171,8 +171,12 @@ class ParagraphCarryTests(SimpleTestCase):
         self.assertEqual(self.snares(TOP + BOTH + '\nNursing record\n' + self.SNARE), [])
 
     def test_a_site_the_carried_family_cannot_reach(self):
-        text = (TOP + 'The colonoscope reached the cecum. The gastroscope was advanced to the second part of the duodenum. '
-                'A polyp in the sigmoid colon was removed with a cold snare.\nNext colonoscopy in ten years.\n')
+        # both families performed by the passive reach installed reads (amendment_20261101_cycle1_b: under a head that
+        # names neither, S1 no longer reads 'The colonoscope reached the cecum.'), so the paragraph carries the upper
+        # endoscopy, whose reach no sigmoid site lies in
+        text = (TOP + 'The colonoscope was advanced to the cecum. The gastroscope was advanced to the second part of the '
+                'duodenum. A polyp in the sigmoid colon was removed with a cold snare.\nNext colonoscopy in ten years.\n')
+        self.assertEqual([s.status for s in read(text).services], ['performed', 'performed'])
         self.assertEqual([f for f, _ in self.snares(text)], [])  # never the upper endoscopy's
 
     BIDIRECTIONAL = ('Stomach and Duodenum\nThe gastroscope was advanced to the second part of the duodenum. In the '
