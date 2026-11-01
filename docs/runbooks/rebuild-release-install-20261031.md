@@ -46,12 +46,19 @@ with a test):
 - **Trusted gates.** The citation and the strict declaration gate run from the base's tracked copies in the shared
   tree, each proven byte-equal to its blob at `BASE` and pinned by sha256 in the plan. `origin/main` is read as
   `refs/remotes/origin/main` (nothing may shadow it) and as exactly `refs/heads/main` on the remote.
-- **Git's own state** refuses, in the shared repository and in the candidate worktree the installer runs from:
-  lock files, an unfinished merge, cherry-pick, revert, rebase or bisect, assume-unchanged or skip-worktree entries,
-  and any `refs/replace` entry. A rebase is unfinished only while `rebase-merge/` or `rebase-apply/` exists, which
-  is how git decides. A lone `.git/REBASE_HEAD` is what a finished rebase leaves behind (`--continue`, `--skip` and
-  `--quit` all leave it). The live repository has had one since 2026-08-10. It is recorded as `observed` in the
-  row's detail. It is never refused and never removed.
+- **Git's own state** refuses, in the shared tree and in the candidate worktree the installer runs from: a lock
+  that changes `git merge --ff-only` in that worktree (its own `index.lock`, `HEAD.lock` or `ORIG_HEAD.lock`, or the
+  lock of the branch it has checked out, `refs/heads/main.lock` in the shared tree), an unfinished merge,
+  cherry-pick, revert, rebase or bisect there, assume-unchanged or skip-worktree entries, and any `refs/replace`
+  entry. Measured on git 2.43: with `index.lock` or `ORIG_HEAD.lock` held the merge refuses before changing
+  anything; with `HEAD.lock` or `refs/heads/main.lock` held it moves the index and the working tree and then refuses.
+  The locks that other worktrees' ordinary git writes take in the shared common directory (`config.lock`,
+  `packed-refs.lock`, another branch's or a remote's ref lock) change neither the checkout nor the merge (measured:
+  it fast-forwards as usual with each held). They are recorded as `observed_locks` and never refused. A rebase is
+  unfinished only while `rebase-merge/` or `rebase-apply/` exists, which is how git decides. A lone
+  `.git/REBASE_HEAD` is what a finished rebase leaves behind (`--continue`, `--skip` and `--quit` all leave it). The
+  live repository has had one since 2026-08-10. It is recorded as `observed` in the row's detail. It is never
+  refused and never removed.
 - **No replace objects.** Every git process, the installer's own and every child's, reads the objects behind the
   certified shas (`GIT_NO_REPLACE_OBJECTS=1`, `--no-replace-objects`, `core.useReplaceRefs=false`).
 - **The candidate worktree is proven before anything is imported from it.** Its git state must be clean, as above.
@@ -62,14 +69,19 @@ with a test):
   only when git has moved `HEAD` or the working tree. A refusal before that restores the original release, a merge
   git refused included. First every child process of the act is reaped, so no merge can still be running. Then the
   original is measured intact: the engine's `verify_original_before_resume`, plus the same shared-tree measurement
-  as before the merge, git's own state included. It is never assumed.
+  as before the merge, git's own state included. It is never assumed. While the only failure is a held lock that
+  changes the merge, it is measured again every second for about 30 s before the units are left drained.
 - **Exception-proof recovery.** Every unit gets its drain or restore attempt whatever happens to an evidence write
   or to releasing the locks. A restore counts only when every unit is active and health reports `BASE`. Every git
   process of the act runs with hooks, automatic maintenance and replace objects switched off.
-- **Signals are blocked, never handled.** SIGTERM, SIGINT and SIGHUP are blocked for the whole act, so nothing
-  interrupts a stage, a helper call, a child's start or the recovery. They are taken only at checkpoints between
-  stages. Before publication, a signal takes the automatic recovery. After it, the signal is recorded and the act
-  runs to completion (exit 2). Step 7 has the details.
+- **Signals sent to the act's process are blocked, never handled.** Every signal that could end it (every
+  catchable terminating signal and every real-time one; SIGPIPE stays ignored) is blocked for the whole act. They are
+  taken only at checkpoints between stages and once more immediately before `git merge`. Before the merge, a signal
+  takes the automatic recovery; from the merge on it is recorded and the act runs to completion (exit 2). **That is
+  not a licence to signal it.** Under the runner a signal to the act's process group or to its parent `timeout`
+  gets the act SIGKILLed 15 s later wherever it is, or ends `timeout` and leaves the act running unwatched; a group
+  signal can also abort a unit action, because the docker helper client unblocks it; and Ctrl-C or a hangup in a
+  terminal reaches only the runner. Nobody may signal the act. Step 7 has the details.
 - **Nothing drains a healthy install.** After health on the candidate, these are reported for judgement (exit 2):
   a foreign restart, a failed configuration read, a signal, locks that could not be released, or a result file that
   could not be written.
@@ -100,10 +112,17 @@ the stage order to the engine's.
   and `/proc` keeps only the directory it is in now: a test that changes directory looks like it left the venv. Such
   a process is undetermined and refuses the preflight (`undeterminable_operator_interpreter_process`), whichever
   venv it really runs on.
+- During step 7 no other operator process runs on the host: no other session or agent, loop, scheduled job of
+  ours, cleanup or test, until the act has exited. Any of them could signal the act (step 7: nobody may) or take a
+  git lock it measures.
 - Run no plain `git` command in `/opt/meddoc-pro` during step 7 (use `git --no-optional-locks`): a plain
   `git status` takes the index lock, and a merge that meets it refuses. The act is then spent. It restores the
-  original release only if git's state is clean again when the restore measures it. While a lock is still there, the
-  units stay drained (`original_recovery_refused` or `recovery: none`) until someone inspects them.
+  original release only if git's state is clean again when the restore measures it: while only such a lock fails the
+  measurement it measures again every second for about 30 s. A lock still there after that leaves the units drained
+  (`original_recovery_refused` or `recovery: none`) until someone inspects them. A git write in another worktree takes
+  its locks in the shared common directory (`config.lock`, `packed-refs.lock`, its own branch's or a remote's ref
+  lock); those change neither the shared tree's checkout nor the merge, are recorded (`observed_locks`) and never
+  refuse.
 - Run no synthetic workflow, upload or provider call during step 7. The engine's database baseline is taken while
   the units still serve, and any row written before the stop, other than a health tick, refuses the act. That
   refusal comes before publication, so the original release is restarted automatically.
@@ -184,10 +203,12 @@ Every run of the installer, a preflight or the act, needs a `--result` path that
 - the candidate worktree: at the candidate, tracked-clean, git's own state clean (no hidden index entry), and nothing
   untracked in `rebuild/ops`. This row runs before any module is imported from the worktree; if it fails, the module
   and engine rows fail as `prerequisite_failed`;
-- the shared tree clean on `main` at `BASE`, with no git lock file, no unfinished merge, cherry-pick, revert,
-  rebase (`rebase-merge/` or `rebase-apply/`) or bisect, no assume-unchanged or skip-worktree entry and no
-  `refs/replace` entry. The live repository's lone `REBASE_HEAD` appears as `"observed": ["REBASE_HEAD"]` in the
-  row's `git_state`. That is expected: it does not fail the row. Do not remove it;
+- the shared tree clean on `main` at `BASE`, with none of the locks that change the merge (`index.lock`,
+  `HEAD.lock`, `ORIG_HEAD.lock`, `refs/heads/main.lock`), no unfinished merge, cherry-pick, revert, rebase
+  (`rebase-merge/` or `rebase-apply/`) or bisect, no assume-unchanged or skip-worktree entry and no `refs/replace`
+  entry. The live repository's lone `REBASE_HEAD` appears as `"observed": ["REBASE_HEAD"]` in the row's
+  `git_state`. That is expected: it does not fail the row. Do not remove it. A lock another worktree's git write
+  holds in the common directory at that moment appears under `observed_locks`; it does not fail the row either;
 - `origin/main` equal to the candidate, locally (`refs/remotes/origin/main`, unshadowed) and on the remote
   (`refs/heads/main` exactly);
 - the trusted gate scripts: the shared tree's `check-citation.sh`, `lib/runs-api.sh` and `lib/declaration.sh` are
@@ -304,13 +325,24 @@ Record `measured.manifest_sha256`; it becomes `MANIFEST`.
 
 ## 7. The act (about 5 minutes; the units are down about 1-3 minutes)
 
+Run it non-interactively: detached from any terminal (`setsid --fork`, so no Ctrl-C, Ctrl-\ or hangup can reach the
+runner or the act), from a session that will outlive it, with the ceiling raised far above its worst duration, and
+with no other operator process running on the host until it has exited (Roles and standing rules).
+
 ```
 mkdir -m 0700 $R/evidence
-cd $X && bash $X/scripts/run-ruled-mutation.sh --declaration $X/$DECL -- \
+cd $X && RULED_ACT_MAX_SECS=86400 setsid --fork bash $X/scripts/run-ruled-mutation.sh --declaration $X/$DECL -- \
   $PY -I -B $X/rebuild/ops/install_rebuild_release.py --execute \
   --base $BASE --candidate $CANDIDATE --declaration $X/$DECL --backup-report $R/backup-report-01.json \
-  --result $R/act-01.json --evidence-directory $R/evidence/act-01 --manifest-sha256 $MANIFEST
+  --result $R/act-01.json --evidence-directory $R/evidence/act-01 --manifest-sha256 $MANIFEST \
+  </dev/null >$R/act-01.transcript 2>&1
+tail -f $R/act-01.transcript        # Ctrl-C here stops only tail
 ```
+
+`setsid --fork` returns at once; the runner then runs in its own session with no controlling terminal. The runner's
+last lines in the transcript are `RULED MUTATION — FINISHED at <time>, exit <code>`: that code is the exit in the
+table below. Until that line appears, signal nothing (below), and do not close or log out of the session it was
+started from: stopping a session's scope signals every process in it.
 
 The installer refuses before anything if:
 
@@ -324,34 +356,63 @@ The installer refuses before anything if:
 - any preflight row fails;
 - the manifest differs from `MANIFEST`.
 
-**The runner's ceiling must exceed the act's worst duration.** Leave `RULED_ACT_MAX_SECS` at its default, 3600 s,
-or raise it; never lower it for this act. The act takes about 5 minutes. Every child and helper call in it is
-bounded: unit actions 170 s each, configuration reads 30 s, systemctl reads 60-180 s, database statements 90 s,
-health 45 s, and reaping a left-over child 120 s. From its first statement the act blocks SIGTERM, SIGINT and SIGHUP,
-so the ceiling's SIGTERM interrupts nothing: it is taken at the next checkpoint like any other signal (below). The
-SIGKILL that `timeout -k 15` sends 15 s later is the only thing that can still cut the act. It cuts it wherever it
-is, a restore included, with no failure path and no outcome file. The runner then exits **137**, not 124: `timeout`
-reports 128+9 when it had to SIGKILL, and `run_watched` prints its ceiling banner only for 124, so 137 is the only
-sign (measured on this host: the same ceiling exits 124 for a child that dies of SIGTERM, 137 for one that blocks it).
-After an exit of 137 or 124, inspect the units at once, then read stderr and whatever evidence exists.
+**The ceiling can only cut the act, never protect it: set it far above any duration the act can have.**
+`run_watched` starts the act as `timeout -k 15 $RULED_ACT_MAX_SECS <act>`. When the ceiling fires, `timeout` sends
+SIGTERM to the act's whole process group and SIGKILL 15 s later; the SIGKILL ends the act wherever it is, a restore
+or the resume included, with no failure path and no outcome file. The act normally takes about 5 minutes, and every
+child and helper call in it is bounded: unit actions 170 s each, configuration reads 30 s, one systemctl read of up
+to 60 s per running service in each of four snapshots, one database statement of up to 90 s per table in each of
+three snapshots, health 45 s, reaping a left-over child 120 s, the restore's lock wait about 30 s. Those bounds have
+not been summed into a proven worst case (the number of services and tables is the host's), so the command above sets
+`RULED_ACT_MAX_SECS=86400`. Never run it with the 3600 s default or lower.
 
-**Signals during the act.** SIGTERM, SIGINT and SIGHUP stay blocked from the act's first statement until the process
-exits. No handler runs: not the installer's (it has none), not the SIGTERM handler that the managed docker helper
-installs for each call, not Ctrl-C's KeyboardInterrupt. So no signal interrupts a stage, a helper call, a child's
-start, or the drain or restore. Every child the act starts (git, the docker helper client, `bash`, `systemctl`)
-inherits the blocked mask, and a child that keeps it can be stopped only by SIGKILL. git keeps it (measured: a git
-child survives SIGTERM, SIGINT and SIGHUP and stops on SIGKILL), so a `kill` of the installer or of its process group
-cannot stop a merge half-way. A pending signal is taken only at the checkpoints between stages, and recorded with
-its sender's pid and uid (`signal_records`). Two signals of the same kind that arrive between two checkpoints are
-one record.
+**Nobody may signal the act, by any route, until the runner has printed its FINISHED line.** What a signal does
+depends on where it lands. Measured on this host on 2026-11-01, on the installer's real act over the suite's fakes
+under the real `run_watched` (nothing live was run, docker included):
 
-- Taken **before publication**, a signal takes the automatic recovery, exactly as a refusal does. Before the stop,
-  nothing was stopped, so nothing is restored. After the stop, the units are restored once the original is measured
-  intact. Signals during the restore are recorded and do not cut it short.
-- Taken **from publication on**, a signal is recorded and the act runs to completion: resume, health, every
-  post-condition, the receipt. Then it exits 2 for judgement (`interrupted`, `signals_received`). If the act fails
-  after that for another reason, the failure path runs as usual.
-- A signal that arrives after the receipt is recorded in `--result` (`signals_after_the_act`) and the exit is 2.
+- **Sent to the act's own process only** (`kill <installer pid>`): every signal that could end it is blocked from
+  its first statement until it exits: every catchable signal whose default action ends a process (SIGTERM, SIGINT,
+  SIGHUP, SIGQUIT, SIGUSR1, SIGUSR2, SIGALRM, SIGVTALRM, SIGPROF, SIGXCPU, SIGXFSZ, SIGIO, SIGPWR, SIGSTKFLT and the
+  fault signals when sent by kill) and every real-time one. SIGPIPE is left to the interpreter's SIG_IGN, so it is
+  neither fatal nor recorded. No handler runs: not the installer's (it has none), not the SIGTERM handler the
+  managed docker helper installs for each call, not Ctrl-C's KeyboardInterrupt. Such a signal interrupts no stage,
+  helper call, child's start, drain or restore. It is taken at the next checkpoint and recorded with its number,
+  sender pid and uid (`signal_records`); two standard signals of the same kind between two checkpoints are one
+  record. Taken **before the merge** it takes the automatic recovery, exactly as a refusal does: before the stop
+  nothing is restored, after it the units are restored once the original is measured intact; the last such
+  checkpoint is immediately before `publish_source` runs `git merge`, after its own re-checks and file proofs.
+  Taken **from the merge on**, it is recorded and the act runs to completion (resume, health, every post-condition,
+  the receipt) and exits 2 (`interrupted`, `signals_received`). After the receipt it is recorded in `--result`
+  (`signals_after_the_act`), exit 2. A C child keeps the blocked mask (measured: a git child survives SIGTERM, SIGINT
+  and SIGHUP and stops only on SIGKILL), so no signal stops a merge half-way.
+- **Sent to the act's process group or to `timeout`** (`kill -TERM -<pgid>`, `kill <timeout pid>`, or `pkill -f` on
+  the installer's path, which timeout's command line also carries): under the runner the act's parent is `timeout`,
+  and timeout leads the act's process group. A SIGTERM, SIGINT, SIGHUP or SIGQUIT that reaches timeout is forwarded
+  to the whole group; a SIGALRM fires timeout's ceiling, which sends the group SIGTERM. Either is followed 15 s later
+  by SIGKILL. The act is gone 15 s after the signal wherever it is (measured for SIGTERM to the group and to timeout,
+  and SIGQUIT and SIGALRM to timeout: in the restore after two of three starts; in the resume with the admin unit
+  never started), with no outcome file, and the runner exits 137 unless the act happened to finish within those 15 s.
+  Any other terminating signal that reaches timeout ends timeout itself, and so does a SIGKILL sent to timeout: the
+  runner exits 128 + its number at once (measured: 138 for SIGUSR1, 137 for SIGKILL, 2.6 s after the signal) and the
+  act runs on, unwatched, to its own end (measured: it installed, or recorded the group's SIGUSR1 and restored, about
+  26 s later). Its later stage lines are lost from the transcript; its evidence and `--result` are not.
+  A group signal also reaches the docker helper client of a unit action in flight. It is a Go binary, and the Go
+  runtime unblocks the signals it handles (measured on a Go stand-in under the act's mask: SIGHUP, SIGINT, SIGQUIT,
+  SIGTERM, SIGABRT, SIGPROF, SIGSTKFLT, the fault signals and SIGRTMIN unblocked on every thread; it died of SIGTERM).
+  docker forwards the signals it receives into the helper container (its sig-proxy, which subscribes to every signal;
+  read from the binary and docker's documentation, docker was not run). That start or stop fails: before publication
+  the failure path then restores (unverified if a start failed); once the resume has started it drains the new
+  release.
+- **From a terminal** (Ctrl-C, Ctrl-\, a hangup): when the runner runs in a terminal they reach only the runner,
+  because `timeout` moved the act out of the terminal's foreground process group. The runner dies at once, the act
+  runs on detached and records nothing, and the runner's verdict is never printed (measured: the act went on to
+  install). Started as above, with `setsid --fork` and no terminal, the runner has no controlling terminal and they
+  reach neither it nor the act (measured).
+- **SIGKILL** ends the act wherever it is. **SIGSTOP** (or SIGTSTP, SIGTTIN, SIGTTOU, which stop rather than end a
+  process) freezes it, units and all, until SIGCONT.
+
+If the act must be stopped anyway, the only way is SIGKILL, and the only recovery is a separately declared reverse
+act (the rollback act, below): inspect the units at once and declare it.
 
 Then it acts in the engine's order. It checks the venv footprint at the baseline, after the stop (before
 publication) and after the resume. It checks the venv-sharing units for idleness at the baseline and after the
@@ -374,10 +435,15 @@ assuming it:
    manifest path unobstructed.
 
 If the measurement fails, nothing is started. That happens if git moved the index or the working tree (as with a
-held `HEAD.lock`), or if git's state is not clean (a lock left behind, or one held by another process). A changed
-`rebuild/.env` also fails it: the original is then not intact. If the merge was invoked, publication counts as
-begun (`recovery: none`). Otherwise the original recovery is refused (`recovery: refused`). In both cases the units
-stay drained.
+held `HEAD.lock`), or if git's state is not clean: an unfinished operation, or a lock that changes the merge (the
+shared tree's `index.lock`, `HEAD.lock`, `ORIG_HEAD.lock` or `refs/heads/main.lock`) that git left behind or that
+another process still holds. While such a lock is the only failure, the measurement is taken again every second for
+about 30 s, so a lock a `git status` holds for a moment does not strand the units; every measurement is recorded in
+`original_verification.measurements`, with the lock it saw. The locks another worktree's git write takes in the
+common directory (`config.lock`, `packed-refs.lock`, another branch's or a remote's ref lock) never fail it; a
+passing measurement lists them under `observed_locks`. A changed `rebuild/.env` also fails it: the original is then
+not intact. If the merge was invoked, publication counts as begun (`recovery: none`). Otherwise the original recovery
+is refused (`recovery: refused`). In both cases the units stay drained.
 
 **The failure path.** `failure.json` is written first: stage, fixed label, `recovery` (`restore`, `drain`,
 `refused` or `none`), `publication_attempted`, `merge_invoked`, `original_verification`, `children` (reaped and
@@ -394,9 +460,11 @@ gets its restore or drain attempt, the locks are released (a failure there is re
 
 If an evidence write fails, the same record is printed on stderr as one line
 `[rebuild-release] {"rebuild_release_outcome": {...}}` (the runner's transcript), and `--result` carries it under
-`recovery`. A signal taken before publication takes this same path. Signals that arrive while units are being
-restored or drained are recorded in the outcome (`signals_received`) and never cut the recovery short; only the
-runner's SIGKILL can, so read `failure.json` and the outcome file after any 137 or 124.
+`recovery`. A signal taken before the merge takes this same path. A signal sent to the act's own process while units
+are being restored or drained is recorded in the outcome (`signals_received`) and does not cut the recovery short.
+A signal sent to its process group or to `timeout` can: the SIGKILL that follows 15 s later, or the failed start or
+stop of a unit action whose docker client it reached. So read `failure.json` and the outcome file after any exit
+other than 0 or 2.
 
 | exit | meaning | next |
 |---|---|---|
@@ -407,6 +475,9 @@ runner's SIGKILL can, so read `failure.json` and the outcome file after any 137 
 | 1, `original_recovery_refused_inspect_retained_evidence` | the original could not be verified; nothing was started | read `original-recovery-refused.json`; the units are drained. |
 | 1, `failed_resume_drain_incomplete` | the resume failed and a unit could not be proven stopped | read `failed-resume-drain.json`; inspect the units at once. |
 | 1, `installation_failed_recovery_state_unknown` | the failure path itself failed | inspect the units and stderr at once. |
+| 137 | SIGKILL. Either the act was cut wherever it was: 15 s after the ceiling, or 15 s after a SIGTERM, SIGINT, SIGHUP, SIGQUIT or SIGALRM reached `timeout` (a signal to the act's process group, to timeout, or a `pkill -f` on the installer's path), or by a direct SIGKILL. Or `timeout` itself was SIGKILLed and the act is still running. The runner prints its ceiling banner only for 124, never for 137. | first find out whether the act still runs: `pgrep -a -f 'install_rebuild_release.py --execute'` from an interactive shell (it lists the act, and its timeout while that lives; inside a `bash -c` it would also list its own command line). If anything is listed, signal nothing: wait until nothing is, then read `--result` and the evidence. If nothing is: inspect the units at once, then `failure.json`, the outcome file, `--result` and the transcript. A cut act is answered only by a separately declared act. **Never re-run.** |
+| 124 | the ceiling fired: `timeout` sent the act SIGTERM (blocked, recorded if a checkpoint came) and the act then ended on its own within 15 s | as for 137; with the ceiling at 86400 s this means the act ran for a day. |
+| any other 128 + n | signal n ended `timeout`, not the act, which blocks it (138 SIGUSR1, 140 SIGUSR2, 141 SIGPIPE, ...): the act may still be running, unwatched, its later stage lines lost. Only a fault the kernel delivers whatever the mask (132 SIGILL, 134 SIGABRT, 135 SIGBUS, 136 SIGFPE, 139 SIGSEGV) can mean that the act itself died. | as for 137. |
 
 Evidence (private, mode 0700): `plan.json`, `preflight.json`, `environment-before.fernet`,
 `environment-after.fernet`, `rollback-readback.json`, `baseline.json`, `venv-before.json`,
@@ -472,7 +543,7 @@ exists, a failure after publication is answered by a newly declared corrective a
 | step 3 | Any FAIL other than the three declaration rows; a requirements mismatch other than filelock, msgpack and pypdf; `new_dot_paths` other than the two cpt-studio files; a static name or a migration; venv-sharing units other than the Corti pair, or not idle; undeclared live-venv processes; locks held; pending provider work; a citation that is not 2 of 2; a contract that surprises the reader. |
 | step 4 | CI is red on the PR or on the merge commit; the merge adds anything but the declaration; `diff CODE CANDIDATE` is not exactly `A $DECL`. |
 | step 6 | Any FAIL, a backup report older than 12 hours, or a contract mismatch (the venv, foreign units, backup or code changed since step 3: redo steps 2-6 as needed). |
-| step 7 | Exit 1 (read `failure.json`; never re-run); exit 2 (judge; units are serving the candidate); exit 137 or 124 (the runner's ceiling SIGKILLed the act wherever it was: inspect the units at once). |
+| step 7 | Anyone signals the act, its process group or its `timeout`, or any other operator process runs, before the runner's FINISHED line; exit 1 (read `failure.json`; never re-run); exit 2 (judge; units are serving the candidate); exit 137, 124 or any other 128 + n (the act was cut wherever it was, or runs on unwatched: find out whether it still runs, signal nothing, inspect the units at once; never re-run). |
 | step 8 | Health is not the candidate, a unit is inactive, the venv footprint changed, a Corti unit restarted, the shared tree is not clean `main` at `CANDIDATE`, or the mismatch is not exactly the declared one. |
 
 ## What this act never does
