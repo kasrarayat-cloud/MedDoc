@@ -1750,10 +1750,15 @@
   },
   "h4-03": {
    "fact": [
-    "conflict",
+    "missing",
     null
    ],
-   "failed_hard": [],
+   "failed_hard": [
+    "date.sends-only-the-truth[doc:2026-10-09]",
+    "date.sends-only-the-truth[far]",
+    "date.sends-only-the-truth[minus1]",
+    "date.sends-only-the-truth[plus1]"
+   ],
    "states": {
     "doc:2026-10-08": {
      "answer": "2026-10-08",
@@ -1789,10 +1794,10 @@
     "doc:2026-10-09": {
      "answer": "2026-10-09",
      "completeness": [
-      "incomplete",
-      1
+      "complete_pending_review",
+      0
      ],
-     "held": true,
+     "held": false,
      "inventory": [
       [
        "gi.egd",
@@ -1801,34 +1806,29 @@
        "second part of duodenum"
       ]
      ],
-     "offers": [
+     "offers": [],
+     "proposals": [
       [
-       "gi.egd",
-       "no_proposal",
-       true
+       "43244",
+       "selected",
+       "ready",
+       "f863fdf70846"
       ]
      ],
-     "proposals": [],
-     "questions": [
-      [
-       "encounter",
-       "",
-       "service_date"
-      ]
-     ],
-     "request": "",
-     "response": "held",
+     "questions": [],
+     "request": "e36f1d3c3d4c3b80",
+     "response": "COUNTERFACTUAL",
      "routing": {},
-     "sends": "HELD",
-     "taken": false
+     "sends": "2026-10-09",
+     "taken": true
     },
     "far": {
      "answer": "1998-01-01",
      "completeness": [
-      "incomplete",
-      1
+      "complete_pending_review",
+      0
      ],
-     "held": true,
+     "held": false,
      "inventory": [
       [
        "gi.egd",
@@ -1837,34 +1837,29 @@
        "second part of duodenum"
       ]
      ],
-     "offers": [
+     "offers": [],
+     "proposals": [
       [
-       "gi.egd",
-       "no_proposal",
-       true
+       "43244",
+       "selected",
+       "ready",
+       "b08868bbef2d"
       ]
      ],
-     "proposals": [],
-     "questions": [
-      [
-       "encounter",
-       "",
-       "service_date"
-      ]
-     ],
-     "request": "",
-     "response": "held",
+     "questions": [],
+     "request": "b95e363e8cd1c3ab",
+     "response": "COUNTERFACTUAL",
      "routing": {},
-     "sends": "HELD",
-     "taken": false
+     "sends": "1998-01-01",
+     "taken": true
     },
     "minus1": {
      "answer": "2026-10-05",
      "completeness": [
-      "incomplete",
-      1
+      "complete_pending_review",
+      0
      ],
-     "held": true,
+     "held": false,
      "inventory": [
       [
        "gi.egd",
@@ -1873,26 +1868,21 @@
        "second part of duodenum"
       ]
      ],
-     "offers": [
+     "offers": [],
+     "proposals": [
       [
-       "gi.egd",
-       "no_proposal",
-       true
+       "43244",
+       "selected",
+       "ready",
+       "e449d7503f52"
       ]
      ],
-     "proposals": [],
-     "questions": [
-      [
-       "encounter",
-       "",
-       "service_date"
-      ]
-     ],
-     "request": "",
-     "response": "held",
+     "questions": [],
+     "request": "263a866bf34dfde4",
+     "response": "COUNTERFACTUAL",
      "routing": {},
-     "sends": "HELD",
-     "taken": false
+     "sends": "2026-10-05",
+     "taken": true
     },
     "none": {
      "answer": null,
@@ -1934,10 +1924,10 @@
     "plus1": {
      "answer": "2026-10-07",
      "completeness": [
-      "incomplete",
-      1
+      "complete_pending_review",
+      0
      ],
-     "held": true,
+     "held": false,
      "inventory": [
       [
        "gi.egd",
@@ -1946,26 +1936,21 @@
        "second part of duodenum"
       ]
      ],
-     "offers": [
+     "offers": [],
+     "proposals": [
       [
-       "gi.egd",
-       "no_proposal",
-       true
+       "43244",
+       "selected",
+       "ready",
+       "464b756b960d"
       ]
      ],
-     "proposals": [],
-     "questions": [
-      [
-       "encounter",
-       "",
-       "service_date"
-      ]
-     ],
-     "request": "",
-     "response": "held",
+     "questions": [],
+     "request": "aa47a7b913650de3",
+     "response": "COUNTERFACTUAL",
      "routing": {},
-     "sends": "HELD",
-     "taken": false
+     "sends": "2026-10-07",
+     "taken": true
     },
     "walk": {
      "answer": "2026-10-06",
@@ -3191,6 +3176,6 @@
   }
  },
  "meta": {
-  "commit": "0bc71a481d79849aeeaaabb45b7d2fb82def6c8f"
+  "commit": "4b690ae5c70304e59719ecd4637b755f5787bc28"
  }
 }
