@@ -219,6 +219,8 @@ PD_MUTANTS = (
     Mutant('pd-signoff-short-line', 'a sign-off line is at most _PD_QUOTE_CHARS characters', _PD_CONTEXT,
            '        if start < region or not stated or line_end - start > _PD_QUOTE_CHARS:\n',
            '        if start < region or not stated:\n', _PD_UNIT),
+    Mutant('pd-attest-sole-line', "a line that only attests signs only as the closing region's sole closing-role line", _PD_CONTEXT,
+           '    if attests and not verbs and signers > 1:\n', '    if False:\n', _PD_UNIT),
     Mutant('pd-dictated-only', 'a dictation line alone is no sign-off', _PD_CONTEXT,
            '            continue  # a dictation line alone\n',
            '            pass  # mutant: a dictation line alone signs\n', _PD_UNIT),
@@ -226,8 +228,12 @@ PD_MUTANTS = (
            '    return next(iter(own)) if len(own) == 1 and days == own else None\n',
            '    return next(iter(own)) if len(own) == 1 else None\n', _PD_UNIT),
     Mutant('pd-region-not-head', "the closing region never reaches into the head (a short document's head is no closing)", _PD_CONTEXT,
-           '    region = max(_pd_closing_start(text), head_end)\n    own, days, line_end, performers = set(), set(), -1, None\n    for m in _CLOSING_ROLE.finditer(text, head_end):\n',
-           '    region = _pd_closing_start(text)\n    own, days, line_end, performers = set(), set(), -1, None\n    for m in _CLOSING_ROLE.finditer(text, region):\n', _PD_UNIT),
+           '    region = max(_pd_closing_start(text), head_end)\n    own, days, line_end, performers = set(), set(), -1, None\n'
+           '    signers, verbs, attests = 0, False, False  # the closing region\'s closing-role lines; how the own sign-off signs\n'
+           '    for m in _CLOSING_ROLE.finditer(text, head_end):\n',
+           '    region = _pd_closing_start(text)\n    own, days, line_end, performers = set(), set(), -1, None\n'
+           '    signers, verbs, attests = 0, False, False  # the closing region\'s closing-role lines; how the own sign-off signs\n'
+           '    for m in _CLOSING_ROLE.finditer(text, region):\n', _PD_UNIT),
     Mutant('pd-closing-last-lines', "the author's sign-off is read only among the last 8 non-empty lines", _PD_CONTEXT,
            '    region = max(_pd_closing_start(text), head_end)\n',
            '    region = head_end\n', _PD_UNIT),

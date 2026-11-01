@@ -2305,7 +2305,9 @@ def _pd_signoff_day(text: str, head_end: int) -> Optional[str]:
     (1) an own sign-off among the closing region's lines states a day, and all of them state the same one: a line of at
         most _PD_QUOTE_CHARS characters that signs, authenticates, finalizes (_PD_OWN_VERB) or attests (_PD_ATTEST) and
         names a performer or author the head's fields name (_pd_signed_by; the declaration's second entry) - never
-        _PD_NOT_OWN, never a consent, order, request, booking or call line;
+        _PD_NOT_OWN, never a consent, order, request, booking or call line; a line that only attests counts only as the
+        closing region's sole closing-role line (the fourth entry: h4-06's "Attested:"; beside a fellow's signature it
+        is a supervising attestation);
     (2) every closing-role line after the head states that day or no day (a co-signature, an attestation, a dictation
         or transcription line of another day contradicts it);
     (3) the closing region is the note's own: its last _PD_CLOSING_LINES non-empty lines and never the head (a short
@@ -2321,6 +2323,7 @@ def _pd_signoff_day(text: str, head_end: int) -> Optional[str]:
         return None  # a note about a call or a message, whatever its title
     region = max(_pd_closing_start(text), head_end)
     own, days, line_end, performers = set(), set(), -1, None
+    signers, verbs, attests = 0, False, False  # the closing region's closing-role lines; how the own sign-off signs
     for m in _CLOSING_ROLE.finditer(text, head_end):
         if m.start() < line_end:
             continue  # this line was read already (bounded: each line once)
@@ -2331,6 +2334,7 @@ def _pd_signoff_day(text: str, head_end: int) -> Optional[str]:
                                               if _BIRTH_BEFORE.search(text, max(start, d.start() - _BIRTH_REACH),
                                                                       d.start()) is None) if day}
         days |= stated
+        signers += start >= region  # every closing-role line of the closing region, dated or not
         if start < region or not stated or line_end - start > _PD_QUOTE_CHARS:
             continue  # not in the closing region, no day, or a line too long to be a sign-off
         if _PD_NOT_CLOSING.search(text, start, line_end) or _PD_NOT_OWN.search(text, start, line_end):
@@ -2343,6 +2347,12 @@ def _pd_signoff_day(text: str, head_end: int) -> Optional[str]:
         if under_another_occurrence(text, start):
             return None  # a copied block's signature
         own |= stated
+        if _PD_OWN_VERB.search(text, start, line_end):
+            verbs = True
+        else:
+            attests = True  # it only attests
+    if attests and not verbs and signers > 1:
+        return None  # an attestation beside another closing line: a supervising attestation, not the author's sign-off
     return next(iter(own)) if len(own) == 1 and days == own else None
 
 

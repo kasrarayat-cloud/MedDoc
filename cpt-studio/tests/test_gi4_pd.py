@@ -436,6 +436,15 @@ class SignedByThePerformerTests(SimpleTestCase):
                         'Report finalized by Halvorsen-Ode 10/21/2026\n'):
             self.assertTrue(narrows(report(closing=closing)), closing)
 
+    def test_an_attestation_signs_only_as_the_closings_sole_line(self):  # kills pd-attest-sole-line (the fourth entry)
+        for closing in (f'Electronically signed by Ilse Marchetti, MD (fictional)\nAttested by {ENDO}, 10/21/2026 10:05\n',
+                        f'Dictated by Ilse Marchetti, MD (fictional)\nAttested: {ENDO}, 10/21/2026 10:05\n'):
+            text = report(closing=closing)  # a fellow's undated line, then the head performer's supervising attestation
+            self.assertTrue(quote_only(text), closing)
+            every_answer_taken(self, text, ['2026-10-21', '2026-10-30', FAR])
+        self.assertTrue(narrows(report(closing=f'Attested: {ENDO}, 10/21/2026 10:05\n')))  # h4-06's: its only line
+        self.assertTrue(narrows(report(closing=SIGNED + f'Attested: {ENDO}, 10/21/2026 10:06\n')))  # his own signature
+
     def test_a_sign_off_line_longer_than_the_quote_limit_is_none(self):  # kills pd-signoff-short-line
         line = f'Electronically signed by {ENDO}, 10/21/2026 10:05' + '; workstation Endo Suite Four session' * 6
         self.assertGreater(len(line), context._PD_QUOTE_CHARS)
