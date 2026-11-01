@@ -21,6 +21,7 @@ import subprocess
 import tempfile
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.messages import get_messages
 from django.core import signing
 from django.core.exceptions import ValidationError
@@ -637,10 +638,10 @@ class CheckUnavailableIsNotAVerdict(SyntheticPractice, TestCase):
             response = self.client.post("/encounters/new/", {"patient": self.patient.pk, "template_version": version.pk,
                                                              "notes": "Symptoms: synthetic words kept", "synthetic_only": "on",
                                                              "service_date": timezone.localdate().isoformat()})
-        self.assertEqual(response.status_code, 503)
-        self.assertContains(response, "could not check this form right now", status_code=503)
-        self.assertContains(response, "synthetic words kept", status_code=503)       # the doctor's notes are kept
-        self.assertNotContains(response, "can no longer be used", status_code=503)
+        self.assertEqual(response.status_code, 409)
+        self.assertContains(response, "could not check this form right now", status_code=409)
+        self.assertContains(response, "synthetic words kept", status_code=409)       # the doctor's notes are kept
+        self.assertNotContains(response, "can no longer be used", status_code=409)
         self.assertFalse(Encounter.objects.filter(template_version=version).exists())
         encounter = self.encounter(version)
         with check_times_out():
@@ -691,9 +692,10 @@ class RecordingKeptWhenTheFormCannotBeChecked(SyntheticPractice, TestCase):
         encounter = self.encounter(version)
         with check_times_out():
             response = self.dictate(encounter, "kept")
-        self.assertEqual(response.status_code, 503)
-        self.assertContains(response, "could not check this form right now", status_code=503)
-        self.assertNotContains(response, "can no longer be used", status_code=503)
+        self.assertEqual(response.status_code, 409)               # never 5xx: Django saves no session on one
+        self.assertIn(settings.SESSION_COOKIE_NAME, response.cookies)        # so this page extends the session
+        self.assertContains(response, "could not check this form right now", status_code=409)
+        self.assertNotContains(response, "can no longer be used", status_code=409)
         self.assertFalse(Job.objects.filter(encounter=encounter).exists())
         self.assertEqual(len(self.recordings()), 1)                                   # kept, not deleted
         offered = AuditEvent.objects.get(action="voice.check_unavailable", target=str(encounter.pk))
@@ -713,7 +715,7 @@ class RecordingKeptWhenTheFormCannotBeChecked(SyntheticPractice, TestCase):
         encounter, response, kept = self.kept()
         with check_times_out():
             again = self.decide(encounter, response, "retry")
-        self.assertEqual(again.status_code, 503)
+        self.assertEqual(again.status_code, 409)
         self.assertEqual(self.recordings(), [Path(kept).name])
         self.assertFalse(Job.objects.filter(encounter=encounter).exists())
         self.assertEqual(self.decide(encounter, again, "retry").status_code, 302)
@@ -745,13 +747,13 @@ class RecordingKeptWhenTheFormCannotBeChecked(SyntheticPractice, TestCase):
         clock, now = at(25)
         with clock, now, check_times_out():
             renewed = self.decide(encounter, response, "retry")                    # the first offer, still valid
-        self.assertEqual(renewed.status_code, 503)
+        self.assertEqual(renewed.status_code, 409)
         self.assertEqual(AuditEvent.objects.filter(action="voice.check_unavailable").count(), 2)
         with patch("core.jobs.timezone.now", return_value=start + timedelta(minutes=41)):
             self.assertEqual(reap_abandoned_voice_uploads(), 0)                  # the newer offer still holds it
         self.assertEqual(self.recordings(), [Path(kept).name])
         # The renewed page is 10 minutes old, but the first offer ended at 30: nothing is sent. (Only the
-        # signing clock moves here: a 503 page does not extend the session, which ends at 30 minutes too.)
+        # signing clock moves here, so the session's own 30-minute expiry plays no part in the outcome.)
         clock, _ = at(35)
         with clock:
             late = self.decide(encounter, renewed, "retry")

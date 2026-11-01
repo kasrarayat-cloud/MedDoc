@@ -420,15 +420,14 @@ def encounter_new(request):
                 form.add_error('template_version',CURRENT_MAPPING_ERROR)
                 return render(request,'encounter_form.html',{'form':form,'has_patients':form.fields['patient'].queryset.exists()},status=409)
             from .semantic_preparation import validated_semantic_definitions
-            from .template_source import assert_pdf_template_usable,PdfTemplateCheckUnavailable
+            from .template_source import assert_pdf_template_usable
             try:
                 validated_semantic_definitions(current)
                 assert_pdf_template_usable(current.template)      # DL-2: a refused PDF original never starts an encounter
             except ValidationError as exc:
-                # SI-4: a check that could not run is "try again" (503); the form keeps everything entered.
+                # SI-4: a check that could not run says "try again" instead; the form keeps everything entered.
                 form.add_error('template_version', error_message(exc))
-                return render(request,'encounter_form.html',{'form':form,'has_patients':form.fields['patient'].queryset.exists()},
-                              status=503 if isinstance(exc,PdfTemplateCheckUnavailable) else 409)
+                return render(request,'encounter_form.html',{'form':form,'has_patients':form.fields['patient'].queryset.exists()},status=409)
             e=Encounter(department=data['patient'].department,patient=data['patient'],template_version=data['template_version'],created_by=request.user,notes=data['notes'],service_date=data['service_date']);e.full_clean(exclude=['notes','answers','finalized_at','finalized_by','export_path','export_sha256']);e.save()
             audit(request.user,'encounter.create',e.pk,department=e.department)
         return redirect('encounter_detail',pk=e.pk)
@@ -1122,7 +1121,9 @@ def recording_kept(request,e,relative,quoted,revision,unavailable,first_offered=
                          'sha256':hashlib.sha256(private_path(relative).read_bytes()).hexdigest(),'config':quoted,
                          'first_offered':first_offered},salt='voice-retry')
     audit(request.user,'voice.check_unavailable',e.pk,department=e.department,code=unavailable.code,path=relative)
-    return render(request,'voice_retry.html',{'encounter':e,'message':error_message(unavailable),'retry':retry},status=503)
+    # 409, like the over-limit page, never 5xx: Django saves no session on a 5xx response, so the doctor's
+    # session would not be extended by this page and could end before the offer does.
+    return render(request,'voice_retry.html',{'encounter':e,'message':error_message(unavailable),'retry':retry},status=409)
 
 @require_POST
 def voice_retry(request,pk):
