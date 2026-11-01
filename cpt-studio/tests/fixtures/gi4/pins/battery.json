@@ -1,6 +1,6 @@
 {
  "meta": {
-  "commit": "80df1831d168c4ee83d83c37bac9860690986cf3"
+  "commit": "a39f982a0f6a5ceebfb4a1192dd88bb162266c9d"
  },
  "rows": {
   "E1 pre-procedure H&P with framed time": {
@@ -273,10 +273,8 @@
   "last visit time": {
    "99213": [
     "selected",
-    "ready",
-    [
-     "READY where the truth says not done today"
-    ]
+    "needs_clarification",
+    []
    ]
   },
   "outside endpoint line, routing silent": {
@@ -353,10 +351,8 @@
   "telephone-only time": {
    "99212": [
     "selected",
-    "ready",
-    [
-     "READY where the truth says not done today"
-    ]
+    "needs_clarification",
+    []
    ]
   },
   "two services, colon polyp then it": {
