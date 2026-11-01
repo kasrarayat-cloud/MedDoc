@@ -592,8 +592,10 @@ class RefusedTemplateNotUsable(SyntheticPractice, TestCase):
         template, version = self.stored_template(p1_trigger("type"))
         encounter = self.encounter(version, status="review")
         token = signing.dumps({"contract": semantic_revalidation.CONTRACT, "binding": {}}, salt=semantic_revalidation.SALT)
-        with self.assertRaises(PdfTemplateRefused):
+        with self.assertRaises(PdfTemplateRefused) as caught:
             semantic_revalidation.enqueue(encounter, self.user, token, encounter.revision)
+        # The guard's verdict, not the recheck's own later refusal of this empty binding.
+        self.assertIn("can no longer be used", caught.exception.messages[0])
         self.assertFalse(Job.objects.filter(encounter=encounter).exists())
 
 
@@ -607,8 +609,12 @@ class CheckUnavailableIsNotAVerdict(SyntheticPractice, TestCase):
     username = "check-unavailable"
 
     def test_worker_failures_are_try_again_and_verdicts_are_refusals(self):
+        # ⚠️ The codes are stated here, not read from the code under test: iterating CHECK_UNAVAILABLE_CODES
+        # let a mutation that emptied it pass this loop vacuously (found by the round-3 mutation run).
+        failures = ("parser_timeout", "parser_failed", "sandbox_unavailable", "source_unavailable", "source_changed")
+        self.assertEqual(CHECK_UNAVAILABLE_CODES, frozenset(failures))
         template, _ = self.stored_template(form())
-        for code in sorted(CHECK_UNAVAILABLE_CODES):
+        for code in failures:
             with self.subTest(code=code), worker_failure(code), self.assertRaises(PdfTemplateCheckUnavailable) as caught:
                 assert_pdf_template_usable(template)
             self.assertEqual(caught.exception.code, code)
