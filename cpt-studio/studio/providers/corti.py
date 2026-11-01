@@ -174,22 +174,25 @@ class CortiProvider:
             raise _NotSent('The deadline passed before the coding request was sent; nothing was sent.')
         headers = {'Authorization': f'Bearer {token}', 'Tenant-Name': credentials.tenant,
                    'Content-Type': 'application/json', 'Accept': 'application/json'}
+        # The URL actually called, environment included (HARNESS.md 6), is recorded on every outcome that may have
+        # reached it; a request that provably never left records none.
+        url = CODING_URL.format(environment=credentials.environment)
         started = monotonic()
         try:
-            response = session.post(CODING_URL.format(environment=credentials.environment), data=body,
-                                    headers=headers, timeout=timeouts, allow_redirects=False, stream=True)
+            response = session.post(url, data=body, headers=headers, timeout=timeouts, allow_redirects=False,
+                                    stream=True)
         except Exception as exc:
             if _never_connected(exc):
                 raise _NotSent(f'The Corti coding service could not be reached ({type(exc).__name__}); '
                                'nothing was sent.') from None
-            return _unknown(exc, started)
+            return _unknown(exc, started, endpoint=url)
         status, request_id = None, ''
         try:
             status = response.status_code
             request_id = _request_id(response.headers)
             raw = _read_capped(response, self.max_response_bytes, deadline)
         except Exception as exc:
-            return _unknown(exc, started, status, request_id)
+            return _unknown(exc, started, status, request_id, endpoint=url)
         finally:
             with suppress(Exception):
                 response.close()
@@ -202,7 +205,7 @@ class CortiProvider:
         return RawExchange(outcome='succeeded' if status == 200 else 'failed', sent=True, http_status=status,
                            response_bytes=raw, response_sha256=hashlib.sha256(raw).hexdigest(),
                            latency_ms=latency, usage=usage, usage_basis=USAGE_BASIS if usage else '',
-                           provider_request_id=request_id, error=error)
+                           provider_request_id=request_id, error=error, endpoint=url)
 
 
 class _NotSent(Exception):
@@ -223,9 +226,10 @@ def _never_connected(exc: Exception) -> bool:
     return isinstance(cause, MaxRetryError) and isinstance(cause.reason, NewConnectionError)
 
 
-def _unknown(exc: Exception, started: float, status: Optional[int] = None, request_id: str = '') -> RawExchange:
+def _unknown(exc: Exception, started: float, status: Optional[int] = None, request_id: str = '',
+             endpoint: str = '') -> RawExchange:
     return RawExchange(outcome='unknown', sent=True, http_status=status, latency_ms=_elapsed_ms(started),
-                       provider_request_id=request_id,
+                       provider_request_id=request_id, endpoint=endpoint,
                        error=f'The coding request may have reached Corti, but no complete response was read '
                              f'({_describe(exc)}). The outcome is unknown; reconcile it before any new attempt.')
 
