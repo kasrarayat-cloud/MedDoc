@@ -107,9 +107,12 @@ class ActivityListTests(SimpleTestCase):
         self.assertNotIn('time_minutes', facts(em(text)))
 
     def test_a_visit_statement_never_skips_its_own_cues(self):  # kills pv1-c1-time-only
-        text = B + ('Date of service: 10/26/2026\nOffice visit, including review of the biopsy results, is scheduled '
-                    'for next month.\nEstablished patient\n')
-        self.assertNotEqual(mention(em(text), 'Office visit').status, 'performed')
+        # the second sentence carries only a plan word, which a time statement's activity list would skip (session 2:
+        # with 'next month' alone a planned time governs either way, so it no longer tells the guard is there)
+        for words in ('is scheduled for next month', 'is scheduled'):
+            text = B + (f'Date of service: 10/26/2026\nOffice visit, including review of the biopsy results, {words}.\n'
+                        'Established patient\n')
+            self.assertEqual(mention(em(text), 'Office visit').status, 'planned', words)
 
     def test_only_a_time_statement_has_an_activity_list(self):
         an = detect._analysis(OFFICE + 'Total time: 40 minutes, covering the orders.\n', DAY)[0]
