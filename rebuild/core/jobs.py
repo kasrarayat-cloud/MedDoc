@@ -221,10 +221,6 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     e=Encounter.objects.select_for_update().get(pk=encounter.pk)
     membership(user,e.department)
     if e.status=='finalized': raise ValidationError('Finalized documents are immutable.')
-    # DL-2: a PDF form the download gate now refuses must not buy a provider call. Checked here,
-    # the single choke point for generation and transcription, before any quote or send.
-    from .template_source import assert_pdf_template_usable
-    assert_pdf_template_usable(e.template_version.template)
     if expected_revision is not None and e.revision!=expected_revision:
         raise ValidationError('Source notes changed after the quote. Reload and review the current notes before submitting.')
     if kind=='generation' and not e.notes.strip():
@@ -614,6 +610,12 @@ def run_semantic_job(job):
     answers=None
     try:
         e=job.encounter
+        # ⚠️ P1 round 4: the PDF form guard, before anything on this provider path (a no-op for the Word
+        # forms semantic definitions exist for today). A refusal, or a check that could not run, ends the
+        # job unsent below: no stage is sent, nothing is charged, the hold is released.
+        from .template_source import provider_refusal
+        refusal=provider_refusal(e.template_version.template)
+        if refusal: raise NoProviderRequest(refusal)
         try:
             definitions=require_generation(e.template_version)
         except ValidationError as exc:
@@ -744,6 +746,15 @@ def run_one():
     provider_returned=False
     try:
         e=job.encounter
+        # ⚠️ P1 ROUND 4 (2026-11-01): THE PDF FORM GUARD, immediately before the provider path (admission, the
+        # provider slot, then the call), for every generation and transcription however and whenever it was
+        # queued. Round 3 checked at enqueue and so had to keep and re-offer a dictated recording when the check
+        # could not run; here a refusal, or a check that could not run, fails the job as not processed below —
+        # no provider call, nothing charged, the hold released — and the recording stays the job's input, as for
+        # any failed job.
+        from .template_source import provider_refusal
+        refusal=provider_refusal(e.template_version.template)
+        if refusal: raise NoProviderRequest(refusal)
         from .preparation_campaign import provider_slot
         from . import testing_authority
         if testing_authority.identity(job.config):
@@ -869,25 +880,18 @@ def cancel(job,user):
     audit(user,'job.cancelled',job.pk,department=job.encounter.department,kind=job.kind)
     return job
 
-#: Audit actions that record an upload kept for the doctor's decision: an over-limit quote, or a form that could not be
-#: checked right now (SI-4, core.views.recording_kept). Each offer is valid for the 30-minute approval window.
-KEPT_UPLOAD_ACTIONS=('voice.over_limit_quoted','voice.check_unavailable')
-
 def reap_abandoned_voice_uploads():
-    """Remove kept uploads nobody sent within the approval window. Only files an over-limit quote or a kept-recording
-    offer recorded are candidates, never one a job references, and never one a newer offer still holds (a retry can
-    renew the offer for the same recording)."""
+    """Remove over-limit uploads nobody approved within the approval window. Only files an over-limit quote recorded are
+    candidates, and never one a job references."""
     cutoff=timezone.now()-timedelta(seconds=ABANDONED_UPLOAD_SECONDS)
     removed=0
-    for event in AuditEvent.objects.filter(action__in=KEPT_UPLOAD_ACTIONS,created_at__lt=cutoff,created_at__gte=cutoff-timedelta(days=7)).order_by('created_at')[:500]:
+    for event in AuditEvent.objects.filter(action='voice.over_limit_quoted',created_at__lt=cutoff,created_at__gte=cutoff-timedelta(days=7)).order_by('created_at')[:500]:
         relative=str((event.details or {}).get('path',''))
         if not UPLOAD_NAME.fullmatch(relative) or Job.objects.filter(input_path=relative).exists(): continue
-        if AuditEvent.objects.filter(action__in=KEPT_UPLOAD_ACTIONS,created_at__gte=cutoff,details__path=relative).exists(): continue
         path=private_path(relative)
         if path.is_file():
             path.unlink(missing_ok=True); removed+=1
-            audit(None,'voice.over_limit_upload_removed' if event.action=='voice.over_limit_quoted' else 'voice.kept_upload_removed',
-                  event.target,department=event.department,path=relative)
+            audit(None,'voice.over_limit_upload_removed',event.target,department=event.department,path=relative)
     return removed+reap_stray_submissions()
 
 

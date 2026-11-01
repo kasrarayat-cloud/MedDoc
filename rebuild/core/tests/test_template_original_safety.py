@@ -6,12 +6,21 @@ stored format, never from the client's file name. Fixtures are built in memory (
 hook forbids tracked PDFs); the payloads are app.alert('synthetic') only.
 
 Round 3 (2026-11-01): a stored PDF export is served after its TEMPLATE ORIGINAL passes that check,
-and the export itself is not scanned (SI-1, SI-2); a refused form buys no coding run either (SI-3);
-and a check that could not run says "try again" and keeps the doctor's recording (SI-4).
+and the export itself is not scanned (SI-1, SI-2); a check that could not run says "try again"
+(SI-4).
+
+Round 4 (2026-11-01): provider usage is gated in the WORKER, immediately before every provider call
+(generation, transcription, the semantic stages and recheck, coding): a refused form, or a check that
+could not run, fails that job unsent through its existing failure handling. Round 3's kept-recording
+retry flow and its enqueue-time guards are removed, so the voice upload and approval flows are as
+they were before P1. The synchronous checks stay where refusing loses nothing: encounter creation,
+the generate request, and both downloads. A check that cannot even START (GR-1) is a check that could
+not run, everywhere.
 """
 from contextlib import contextmanager
 import copy
-from datetime import date, timedelta
+from datetime import date
+import errno
 from io import BytesIO, StringIO
 import hashlib
 import json
@@ -21,9 +30,7 @@ import subprocess
 import tempfile
 from unittest.mock import patch
 
-from django.conf import settings
 from django.contrib.messages import get_messages
-from django.core import signing
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
@@ -33,12 +40,13 @@ from django.utils import timezone
 from docx import Document
 
 from core.billing import welcome_credit
-from core.jobs import enqueue, reap_abandoned_voice_uploads, run_one
-from core.models import (AuditEvent, Department, Encounter, Job, Membership, Organization, Patient, Template,
-                         TemplateVersion, User)
+from core.generation_errors import NoProviderRequest
+from core.jobs import enqueue, run_one
+from core.models import (AuditEvent, Department, Encounter, Job, Membership, Organization, Patient, ProviderReceipt,
+                         Reservation, Template, TemplateVersion, Usage, User)
 from core.security import private_path
 from core.template_source import (CHECK_UNAVAILABLE_CODES, PdfTemplateCheckUnavailable, PdfTemplateRefused,
-                                  assert_pdf_template_usable)
+                                  assert_pdf_template_usable, provider_refusal)
 from documents import DocumentError, pdf_raw
 from documents.test_pdf_active_content import form, p1_trigger, after_eof
 from exercised import requires_input
@@ -47,6 +55,15 @@ from .audio_fixtures import wav_bytes
 from .test_workflow import TEST_SETTINGS
 
 DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+# ⚠️ Stated here, never read from the code under test: a mutation of the code's own constant must not be
+# able to make these comparisons pass (round 3's lesson with CHECK_UNAVAILABLE_CODES).
+REFUSED_JOB = ("The PDF form of this document can no longer be used: it failed the active-content check. "
+               "Upload a clean PDF as a new form.")
+UNCHECKED_JOB = ("The PDF form of this document could not be checked right now. This is a temporary problem on "
+                 "our side, not a verdict about the form.")
+NOT_SENT = " No provider request was made; nothing was charged and the held funds were released."
+CODING_RETAINED = " Contact your administrator to review this retained attempt. No automatic retry will be sent."
 
 
 def docx_bytes():
@@ -202,6 +219,72 @@ class UploadRefusesHiddenContent(TestCase):
         self.assertEqual(Template.objects.get().format, "pdf")
 
 
+def worker_failure(code):
+    """The check of an ORIGINAL failing for a reason that is not about the file (e.g. parser_timeout)."""
+    messages = {"parser_timeout": "Document processing exceeded its time limit.",
+                "parser_failed": "The isolated document processor failed or reached a resource limit.",
+                "sandbox_unavailable": "The secure document sandbox is unavailable.",
+                "source_unavailable": "The original is unavailable.",
+                "source_changed": "The approved document source changed before processing."}
+    return patch("documents.check_original", side_effect=DocumentError(messages[code], code))
+
+
+def check_operation(argv):
+    """True when this subprocess launch is the isolated worker running the CHECK operation."""
+    request = Path(argv[-1]) / "request.json"
+    return request.exists() and json.loads(request.read_text()).get("operation") == "check"
+
+
+@contextmanager
+def check_times_out():
+    """Exactly the audit's SI-4 condition: only the isolated CHECK hits the 20 s wall clock (as on a loaded
+    host); inspect and fill run for real, so the real service turns the timeout into parser_timeout."""
+    import documents.service as service
+    real_run = subprocess.run
+
+    def slow_check(argv, *args, **kwargs):
+        if check_operation(argv):
+            raise subprocess.TimeoutExpired(argv, service.TIMEOUT_SECONDS)
+        return real_run(argv, *args, **kwargs)
+
+    with patch.object(service.subprocess, "run", side_effect=slow_check) as patched:
+        yield patched
+
+
+@contextmanager
+def check_cannot_start(error=None):
+    """Finding GR-1: only the isolated CHECK cannot START its worker, the way the kernel reports it on a loaded
+    host (fork/clone EAGAIN at a pids limit, ENOMEM, EMFILE for its pipes); inspect and fill run for real."""
+    import documents.service as service
+    real_run = subprocess.run
+    error = error if error is not None else BlockingIOError(errno.EAGAIN, "Resource temporarily unavailable")
+
+    def failing(argv, *args, **kwargs):
+        if check_operation(argv):
+            raise error
+        return real_run(argv, *args, **kwargs)
+
+    with patch.object(service.subprocess, "run", side_effect=failing) as patched:
+        yield patched
+
+
+@contextmanager
+def check_workspace_fails(code):
+    """Finding GR-1: the CHECK's temporary workspace cannot be created (ENOSPC, EDQUOT); inspect and fill run
+    for real."""
+    import documents.service as service
+    real_run = service._run
+
+    def run(path, operation, *args, **kwargs):
+        if operation == "check":
+            with patch.object(service.tempfile, "TemporaryDirectory", side_effect=OSError(code, os.strerror(code))):
+                return real_run(path, operation, *args, **kwargs)
+        return real_run(path, operation, *args, **kwargs)
+
+    with patch.object(service, "_run", side_effect=run):
+        yield
+
+
 @override_settings(**TEST_SETTINGS)
 class CheckStoredOriginalsCommand(TestCase):
     def setUp(self):
@@ -251,7 +334,15 @@ class CheckStoredOriginalsCommand(TestCase):
         with self.assertRaises(CommandError):
             call_command("check_pdf_originals", output=str(output), stdout=StringIO())
 
-
+    def test_a_check_that_cannot_start_is_reported_as_such_not_raised(self):
+        # GR-1 at the documents layer: the command calls check_original directly, so only the conversion
+        # there keeps a spawn failure from aborting the whole report.
+        clean = self.stored(form())
+        output = self.root / "report.json"
+        with check_cannot_start():
+            call_command("check_pdf_originals", output=str(output), stdout=StringIO())
+        report = json.loads(output.read_text())
+        self.assertEqual(report["templates"], [{"template_id": str(clean.pk), "code": "sandbox_unavailable"}])
 
 
 class SyntheticPractice:
@@ -307,32 +398,21 @@ class SyntheticPractice:
         encounter.save()
         return encounter
 
+    def new_encounter(self, version, notes="Symptoms: synthetic words typed by the doctor"):
+        return self.client.post("/encounters/new/", {"patient": self.patient.pk, "template_version": version.pk,
+                                                     "notes": notes, "synthetic_only": "on",
+                                                     "service_date": timezone.localdate().isoformat()})
 
-def worker_failure(code):
-    """The check of an ORIGINAL failing for a reason that is not about the file (e.g. parser_timeout)."""
-    messages = {"parser_timeout": "Document processing exceeded its time limit.",
-                "parser_failed": "The isolated document processor failed or reached a resource limit.",
-                "sandbox_unavailable": "The secure document sandbox is unavailable.",
-                "source_unavailable": "The original is unavailable.",
-                "source_changed": "The approved document source changed before processing."}
-    return patch("documents.check_original", side_effect=DocumentError(messages[code], code))
+    def generate_json(self, encounter):
+        return self.client.post("/encounters/%s/generate/" % encounter.pk, HTTP_ACCEPT="application/json")
 
-
-@contextmanager
-def check_times_out():
-    """Exactly the audit's SI-4 condition: only the isolated CHECK hits the 20 s wall clock (as on a loaded
-    host); inspect and fill run for real, so the real service turns the timeout into parser_timeout."""
-    import documents.service as service
-    real_run = subprocess.run
-
-    def slow_check(argv, *args, **kwargs):
-        request = Path(argv[-1]) / "request.json"
-        if request.exists() and json.loads(request.read_text()).get("operation") == "check":
-            raise subprocess.TimeoutExpired(argv, service.TIMEOUT_SECONDS)
-        return real_run(argv, *args, **kwargs)
-
-    with patch.object(service.subprocess, "run", side_effect=slow_check) as patched:
-        yield patched
+    def assert_failed_unsent(self, job, error):
+        """The worker's existing not-processed failure: failed, nothing received, recorded or held."""
+        job.refresh_from_db()
+        self.assertEqual((job.state, job.error), ("failed", error))
+        self.assertFalse(ProviderReceipt.objects.filter(job=job).exists())
+        self.assertFalse(Usage.objects.filter(job=job).exists())
+        self.assertFalse(Reservation.objects.filter(job=job, state="held").exists())
 
 
 @override_settings(**TEST_SETTINGS)
@@ -441,7 +521,8 @@ class ExportDownloadSafety(SyntheticPractice, TestCase):
 class ExportOfTheDoctorsOwnWords(SyntheticPractice, TestCase):
     """SI-2 through the real upload, generation, review, finalize and export views and the real worker:
     pypdf writes answers verbatim into uncompressed appearance streams, and the word "trailer" followed
-    later by "/Launch" in an answer made round 2 refuse a clean form's finalized export."""
+    later by "/Launch" in an answer made round 2 refuse a clean form's finalized export. (Round 4: the
+    generation also passes the worker's form guard, with the real sandboxed check.)"""
 
     username = "export-words"
 
@@ -488,10 +569,11 @@ class ExportOfTheDoctorsOwnWords(SyntheticPractice, TestCase):
 
 @override_settings(**TEST_SETTINGS)
 class RefusedTemplateNotUsable(SyntheticPractice, TestCase):
-    """Findings DL-2 and SI-3. A PDF template whose stored original the download gate refuses is turned
-    away at encounter creation and on EVERY path that can buy a provider call for an encounter —
-    generation and transcription (jobs.enqueue), coding (coding_service.ensure_run, automatic after a
-    save and on request) and the semantic recheck — not only at finalize."""
+    """Findings DL-2 and SI-3, as round 4 places the gates. A PDF template whose stored original the download
+    gate refuses is turned away synchronously where that loses nothing — encounter creation and the generate
+    request — and, for every provider call, by the worker immediately before the call: generation,
+    transcription, coding, the semantic generation stages and the semantic recheck all fail unsent, through
+    their existing failure handling, whenever and however they were queued."""
 
     username = "refused-tmpl"
 
@@ -501,26 +583,52 @@ class RefusedTemplateNotUsable(SyntheticPractice, TestCase):
             assert_pdf_template_usable(refused_template)
         self.assertIn("can no longer be used", "; ".join(caught.exception.messages))
         self.assertEqual(caught.exception.code, "unsafe_upload")
+        self.assertEqual(provider_refusal(refused_template), REFUSED_JOB)
         clean_template, _ = self.stored_template(form(), name="Clean form")
         assert_pdf_template_usable(clean_template)      # no raise
+        self.assertIsNone(provider_refusal(clean_template))
 
     def test_encounter_creation_is_refused_for_a_refused_template(self):
         template, version = self.stored_template(p1_trigger("nosize"))
-        response = self.client.post("/encounters/new/", {"patient": self.patient.pk, "template_version": version.pk,
-                                                         "notes": "Symptoms: synthetic", "synthetic_only": "on",
-                                                         "service_date": timezone.localdate().isoformat()})
+        response = self.new_encounter(version)
         self.assertEqual(response.status_code, 409)
         self.assertContains(response, "can no longer be used", status_code=409)
+        self.assertContains(response, "synthetic words typed by the doctor", status_code=409)
         self.assertFalse(Encounter.objects.filter(template_version=version).exists())
 
-    def test_generation_enqueue_is_refused_before_any_provider_call(self):
+    def test_the_generate_request_is_refused_and_queues_nothing(self):
         template, version = self.stored_template(p1_trigger("widew"))
         # An encounter that already exists (e.g. created before the repair) must still not buy a generation.
         encounter = self.encounter(version)
-        with self.assertRaises(ValidationError) as caught:
-            enqueue(encounter, self.user, kind="generation")
-        self.assertIn("can no longer be used", "; ".join(caught.exception.messages))
+        response = self.generate_json(encounter)
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("can no longer be used", response.json()["message"])
+        page = self.client.post("/encounters/%s/generate/" % encounter.pk)
+        self.assertEqual(page.status_code, 302)
+        self.assertTrue(any("can no longer be used" in str(m) for m in get_messages(page.wsgi_request)))
         self.assertFalse(Job.objects.filter(encounter=encounter).exists())
+
+    def test_a_generation_queued_anyway_fails_in_the_worker_without_a_provider_call(self):
+        # enqueue no longer checks the form (round 4): a job queued by another path, or before the deploy,
+        # reaches the worker, and the worker's guard is what stops it.
+        template, version = self.stored_template(p1_trigger("widew"))
+        encounter = self.encounter(version)
+        job = enqueue(encounter, self.user, kind="generation")
+        self.assertEqual(job.state, "queued")
+        with patch("core.generation.generate") as provider:
+            self.assertTrue(run_one())
+        self.assertEqual(provider.call_count, 0)
+        self.assert_failed_unsent(job, "Not processed: " + REFUSED_JOB + NOT_SENT)
+
+    def test_the_same_generation_on_a_clean_form_reaches_the_provider(self):
+        # The control: the guard passes a clean form and the provider path runs.
+        template, version = self.stored_template(form())
+        encounter = self.encounter(version)
+        job = enqueue(encounter, self.user, kind="generation")
+        with patch("core.generation.generate", side_effect=NoProviderRequest("Synthetic stop after the guard.")) as provider:
+            self.assertTrue(run_one())
+        self.assertEqual(provider.call_count, 1)
+        self.assert_failed_unsent(job, "Not processed: Synthetic stop after the guard." + NOT_SENT)
 
     def coding_setup(self, original):
         """An encounter in review with answers (as a generation before the repair left it), a coding reference
@@ -560,26 +668,24 @@ class RefusedTemplateNotUsable(SyntheticPractice, TestCase):
                                                                              "reviewed_Symptoms": "on"})
         self.assertEqual(saved.status_code, 302)
 
-    def test_saving_answers_queues_no_coding_run_for_a_refused_template(self):
-        # SI-3: on round 2 this save queued a run and the coding worker called the provider once.
+    def test_a_coding_run_on_a_refused_form_fails_in_the_worker_without_a_provider_call(self):
+        # SI-3's case. Round 3 refused at the save (on the request path); round 4 lets the save queue the run
+        # as before P1, and the coding worker's guard stops it: no request, nothing charged, the reason shown.
         from core import coding_service
         from core.models import CodingRun
         encounter, provider = self.coding_setup(p1_trigger("type"))
         self.save_reviewed(encounter)
-        self.assertFalse(CodingRun.objects.filter(encounter=encounter).exists())
-        self.assertFalse(coding_service.run_one())
+        run = CodingRun.objects.get(encounter=encounter)
+        self.assertEqual(run.state, "queued")
+        self.assertTrue(coding_service.run_one())
         self.assertEqual(provider.call_count, 0)
-        failed = AuditEvent.objects.get(action="coding.enqueue_failed", target=str(encounter.pk))
-        self.assertEqual(failed.details, {"error_type": "PdfTemplateRefused"})
-        # The explicit request is refused the same way, with the form's verdict, and creates nothing.
-        from core.coding_engine import CURRENT_IDENTITY_CONTRACT
-        with self.assertRaises(PdfTemplateRefused) as caught:
-            coding_service.ensure_run(encounter, self.user, identity_policy=CURRENT_IDENTITY_CONTRACT)
-        self.assertIn("can no longer be used", caught.exception.messages[0])
-        self.assertFalse(CodingRun.objects.filter(encounter=encounter).exists())
+        run.refresh_from_db()
+        self.assertEqual((run.state, run.error_code, run.error), ("failed", "processing_failed", REFUSED_JOB + CODING_RETAINED))
+        self.assertEqual((run.actual_cost, run.requests), (0, []))
+        self.assertFalse(AuditEvent.objects.filter(action="coding.enqueue_failed").exists())
 
     def test_the_same_save_on_a_clean_form_does_queue_coding(self):
-        # The control that keeps the test above from passing vacuously: this setup does queue a run.
+        # The control that keeps the test above from passing vacuously: this setup does reach the provider.
         from core import coding_service
         from core.models import CodingRun
         encounter, provider = self.coding_setup(form())
@@ -588,16 +694,35 @@ class RefusedTemplateNotUsable(SyntheticPractice, TestCase):
         self.assertTrue(coding_service.run_one())
         self.assertEqual(provider.call_count, 1)
 
-    def test_the_semantic_recheck_enqueue_runs_the_guard_first(self):
+    def test_a_semantic_generation_job_is_stopped_before_anything_on_its_path(self):
+        # Semantic definitions exist for Word forms only, so this cannot happen today; the guard still comes
+        # before anything on the path, and the job fails unsent (no stage was ever created or sent).
+        template, version = self.stored_template(p1_trigger("type"))
+        encounter = self.encounter(version)
+        job = Job.objects.create(encounter=encounter, user=self.user, kind="generation", revision=encounter.revision,
+                                 request_key="synthetic-semantic-guard", config={"semantic_contract": "semantic-facts-v1"})
+        from core import word_contract
+        with patch("core.word_contract.require_generation", wraps=word_contract.require_generation) as definitions:
+            self.assertTrue(run_one())
+        self.assertEqual(definitions.call_count, 0)
+        self.assert_failed_unsent(job, "Not processed: " + REFUSED_JOB)
+        self.assertFalse(job.ai_stage_receipts.exists())
+
+    def test_a_semantic_recheck_job_is_stopped_before_anything_on_its_path(self):
         from core import semantic_revalidation
         template, version = self.stored_template(p1_trigger("type"))
         encounter = self.encounter(version, status="review")
-        token = signing.dumps({"contract": semantic_revalidation.CONTRACT, "binding": {}}, salt=semantic_revalidation.SALT)
-        with self.assertRaises(PdfTemplateRefused) as caught:
-            semantic_revalidation.enqueue(encounter, self.user, token, encounter.revision)
-        # The guard's verdict, not the recheck's own later refusal of this empty binding.
-        self.assertIn("can no longer be used", caught.exception.messages[0])
-        self.assertFalse(Job.objects.filter(encounter=encounter).exists())
+        job = Job.objects.create(encounter=encounter, user=self.user, kind="generation", revision=encounter.revision,
+                                 request_key="synthetic-recheck-guard",
+                                 config={"semantic_revalidation_contract": semantic_revalidation.CONTRACT})
+        with patch("core.semantic_revalidation._bound_proposal") as bound, patch("core.ai_stages.execute_stage") as stage:
+            self.assertTrue(run_one())
+        self.assertEqual((bound.call_count, stage.call_count), (0, 0))
+        job.refresh_from_db()
+        self.assertEqual(job.state, "failed")
+        self.assertTrue(job.error.endswith("NoProviderRequest"), job.error)
+        self.assertEqual(AuditEvent.objects.get(action="semantic.revalidation_failed", target=str(job.pk)).details,
+                         {"error_class": "NoProviderRequest", "provider_calls": 0, "automatic_retries": 0})
 
 
 @override_settings(**TEST_SETTINGS)
@@ -605,7 +730,7 @@ class CheckUnavailableIsNotAVerdict(SyntheticPractice, TestCase):
     """Finding SI-4. A check that could not run (the worker timed out, failed or hit a limit, the
     sandbox would not start, the stored file changed between two reads) refuses just the same — nothing
     is sent — but says "try again", never the permanent "can no longer be used", and never discards the
-    doctor's input."""
+    doctor's input. In the worker it fails the job unsent with its own sentence."""
 
     username = "check-unavailable"
 
@@ -616,28 +741,28 @@ class CheckUnavailableIsNotAVerdict(SyntheticPractice, TestCase):
         self.assertEqual(CHECK_UNAVAILABLE_CODES, frozenset(failures))
         template, _ = self.stored_template(form())
         for code in failures:
-            with self.subTest(code=code), worker_failure(code), self.assertRaises(PdfTemplateCheckUnavailable) as caught:
-                assert_pdf_template_usable(template)
-            self.assertEqual(caught.exception.code, code)
-            self.assertIn("could not check this form right now", caught.exception.messages[0])
-            self.assertIn("try again", caught.exception.messages[0])
-            self.assertNotIn("can no longer be used", caught.exception.messages[0])
+            with self.subTest(code=code):
+                with worker_failure(code), self.assertRaises(PdfTemplateCheckUnavailable) as caught:
+                    assert_pdf_template_usable(template)
+                self.assertEqual(caught.exception.code, code)
+                self.assertIn("could not check this form right now", caught.exception.messages[0])
+                self.assertIn("try again", caught.exception.messages[0])
+                self.assertNotIn("can no longer be used", caught.exception.messages[0])
         verdicts = {"unsafe_upload": "PDF actions, attachments, XFA, and external resources are not accepted.",
                     "unreadable_pdf": "This PDF could not be read completely.", "upload_limit": "Too large.",
                     "invalid_document": "The document is malformed.", "unsupported_format": "Not a PDF."}
         for code, message in verdicts.items():
-            with self.subTest(code=code), patch("documents.check_original", side_effect=DocumentError(message, code)), \
-                    self.assertRaises(PdfTemplateRefused) as caught:
-                assert_pdf_template_usable(template)
-            self.assertEqual(caught.exception.code, code)
-            self.assertTrue(caught.exception.messages[0].startswith("This form can no longer be used: " + message))
+            with self.subTest(code=code):
+                with patch("documents.check_original", side_effect=DocumentError(message, code)), \
+                        self.assertRaises(PdfTemplateRefused) as caught:
+                    assert_pdf_template_usable(template)
+                self.assertEqual(caught.exception.code, code)
+                self.assertTrue(caught.exception.messages[0].startswith("This form can no longer be used: " + message))
 
     def test_encounter_creation_and_generation_say_try_again_and_send_nothing(self):
         template, version = self.stored_template(form())
         with check_times_out():
-            response = self.client.post("/encounters/new/", {"patient": self.patient.pk, "template_version": version.pk,
-                                                             "notes": "Symptoms: synthetic words kept", "synthetic_only": "on",
-                                                             "service_date": timezone.localdate().isoformat()})
+            response = self.new_encounter(version, notes="Symptoms: synthetic words kept")
         self.assertEqual(response.status_code, 409)
         self.assertContains(response, "could not check this form right now", status_code=409)
         self.assertContains(response, "synthetic words kept", status_code=409)       # the doctor's notes are kept
@@ -645,7 +770,7 @@ class CheckUnavailableIsNotAVerdict(SyntheticPractice, TestCase):
         self.assertFalse(Encounter.objects.filter(template_version=version).exists())
         encounter = self.encounter(version)
         with check_times_out():
-            generated = self.client.post("/encounters/%s/generate/" % encounter.pk, HTTP_ACCEPT="application/json")
+            generated = self.generate_json(encounter)
         self.assertEqual(generated.status_code, 503)
         self.assertIn("could not check this form right now", generated.json()["message"])
         self.assertFalse(Job.objects.filter(encounter=encounter).exists())
@@ -660,116 +785,225 @@ class CheckUnavailableIsNotAVerdict(SyntheticPractice, TestCase):
         self.assertEqual(AuditEvent.objects.get(action="template.download_refused", target=str(template.pk)).details,
                          {"code": "parser_timeout"})
 
+    def test_in_the_worker_a_check_that_could_not_run_fails_the_job_unsent(self):
+        template, version = self.stored_template(form())
+        encounter = self.encounter(version)
+        job = enqueue(encounter, self.user, kind="generation")
+        with check_times_out(), patch("core.generation.generate") as provider:
+            self.assertTrue(run_one())
+        self.assertEqual(provider.call_count, 0)
+        self.assert_failed_unsent(job, "Not processed: " + UNCHECKED_JOB + NOT_SENT)
+
+    def test_the_worker_guard_never_raises_into_the_worker(self):
+        # A guard that raised anything but the not-sent failure would leave the job in reconciliation with its
+        # hold kept. Here the stored location itself is invalid (the database forbids changing it afterwards,
+        # so the row is created that way), and the guard cannot even find the file.
+        template = Template.objects.create(department=self.department, name="Synthetic invalid location", format="pdf",
+                                           original_name="synthetic.pdf", original_path="", sha256="a" * 64,
+                                           created_by=self.user)
+        version = TemplateVersion.objects.create(template=template, number=1, created_by=self.user, fields=[
+            {"key": "Symptoms", "label": "Symptoms", "kind": "text", "locator": {"pdf_field": "Symptoms"}}])
+        with self.assertRaises(ValidationError):
+            assert_pdf_template_usable(template)
+        self.assertEqual(provider_refusal(template), UNCHECKED_JOB)
+        job = enqueue(self.encounter(version), self.user, kind="generation")
+        with patch("core.generation.generate") as provider:
+            self.assertTrue(run_one())
+        self.assertEqual(provider.call_count, 0)
+        self.assert_failed_unsent(job, "Not processed: " + UNCHECKED_JOB + NOT_SENT)
+
 
 @override_settings(**TEST_SETTINGS)
-class RecordingKeptWhenTheFormCannotBeChecked(SyntheticPractice, TestCase):
-    """SI-4 on the voice route: on round 2 a check timeout on a clean form deleted the doctor's uploaded
-    recording and called the form unusable. The recording is now kept, nothing is sent, and the doctor
-    sends the same recording again (or discards it) from the page the response shows."""
+class CheckThatCannotStart(SyntheticPractice, TestCase):
+    """Finding GR-1. A failure to START the check — the worker cannot be spawned (EAGAIN, ENOMEM), its pipes
+    cannot be opened (EMFILE), its workspace cannot be created (ENOSPC, EDQUOT) — raised a plain OSError past
+    every gate: 500s, typed notes lost, unaudited refusals. It is a check that could not run, everywhere:
+    "try again", never a 500, never a discarded input, audited where the route audits."""
 
-    username = "recording-kept"
-    VOICE_ENV = {"QUILLMD_DEEPGRAM_RATE_PER_MINUTE": "0.006", "QUILLMD_DEEPGRAM_RATE_PER_SECOND": "",
-                 "QUILLMD_VOICE_MAX_COST": "0.20", "QUILLMD_PROVIDER_DISCOUNT_RATE": "0",
-                 "DEEPGRAM_API_KEY": "synthetic-placeholder-not-a-key"}
+    username = "check-start"
+
+    def test_every_start_failure_is_a_check_that_could_not_run(self):
+        template, _ = self.stored_template(form())
+        starts = {"spawn EAGAIN": check_cannot_start(BlockingIOError(errno.EAGAIN, "Resource temporarily unavailable")),
+                  "spawn ENOMEM": check_cannot_start(OSError(errno.ENOMEM, "Cannot allocate memory")),
+                  "pipes EMFILE": check_cannot_start(OSError(errno.EMFILE, "Too many open files")),
+                  "child setup": check_cannot_start(subprocess.SubprocessError("Exception occurred in preexec_fn.")),
+                  "workspace ENOSPC": check_workspace_fails(errno.ENOSPC),
+                  "workspace EDQUOT": check_workspace_fails(errno.EDQUOT)}
+        for name, failure in starts.items():
+            with self.subTest(name=name):
+                with failure, self.assertRaises(PdfTemplateCheckUnavailable) as caught:
+                    assert_pdf_template_usable(template)
+                self.assertEqual(caught.exception.code, "sandbox_unavailable")
+                self.assertIn("try again", caught.exception.messages[0])
+
+    def test_anything_else_the_check_raises_is_not_a_verdict_either(self):
+        template, _ = self.stored_template(form())
+        with patch("documents.check_original", side_effect=RuntimeError("synthetic unexpected failure")), \
+                self.assertRaises(PdfTemplateCheckUnavailable) as caught:
+            assert_pdf_template_usable(template)
+        self.assertEqual(caught.exception.code, "sandbox_unavailable")
+
+    def test_an_original_that_exists_but_cannot_be_read_is_not_skipped(self):
+        template, _ = self.stored_template(form())
+
+        class Unreadable:
+            def read_bytes(self):
+                raise OSError(errno.EIO, "Input/output error")
+
+        with patch("core.template_source.private_path", return_value=Unreadable()), \
+                self.assertRaises(PdfTemplateCheckUnavailable) as caught:
+            assert_pdf_template_usable(template)
+        self.assertEqual(caught.exception.code, "source_unavailable")
+        missing, _ = self.stored_template(form(), name="Missing original")
+        private_path(missing.original_path).unlink()
+        assert_pdf_template_usable(missing)            # a missing original is still left to the step that reads it
+
+    def test_encounter_creation_keeps_the_typed_notes_and_says_try_again(self):
+        template, version = self.stored_template(form())
+        with check_cannot_start():
+            response = self.new_encounter(version)
+        self.assertEqual(response.status_code, 409)
+        self.assertContains(response, "synthetic words typed by the doctor", status_code=409)
+        self.assertContains(response, "could not check this form right now", status_code=409)
+        self.assertFalse(Encounter.objects.filter(template_version=version).exists())
+
+    def test_the_generate_request_says_try_again(self):
+        template, version = self.stored_template(form())
+        encounter = self.encounter(version)
+        with check_cannot_start():
+            response = self.generate_json(encounter)
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("could not check this form right now", response.json()["message"])
+        self.assertFalse(Job.objects.filter(encounter=encounter).exists())
+
+    def test_both_downloads_say_try_again_and_are_audited(self):
+        data = form()
+        template, version = self.stored_template(data)
+        finalized = self.finalized(version, data)
+        with check_cannot_start():
+            original = self.client.get("/templates/%s/original/" % template.pk)
+            exported = self.client.get("/encounters/%s/export/" % finalized.pk)
+        for response in (original, exported):
+            self.assertEqual(response.status_code, 503)
+            self.assertNotIn(b"%PDF", response.content)
+            self.assertIn(b"try again in a few minutes", response.content)
+        self.assertEqual(AuditEvent.objects.get(action="template.download_refused", target=str(template.pk)).details,
+                         {"code": "sandbox_unavailable"})
+        self.assertEqual(AuditEvent.objects.get(action="encounter.export_refused", target=str(finalized.pk)).details,
+                         {"code": "sandbox_unavailable"})
+
+    def test_in_the_worker_a_check_that_cannot_start_fails_the_job_unsent(self):
+        template, version = self.stored_template(form())
+        job = enqueue(self.encounter(version), self.user, kind="generation")
+        with check_cannot_start(), patch("core.generation.generate") as provider:
+            self.assertTrue(run_one())
+        self.assertEqual(provider.call_count, 0)
+        self.assert_failed_unsent(job, "Not processed: " + UNCHECKED_JOB + NOT_SENT)
+
+
+VOICE_ENV = {"QUILLMD_DEEPGRAM_RATE_PER_MINUTE": "0.006", "QUILLMD_DEEPGRAM_RATE_PER_SECOND": "",
+             "QUILLMD_VOICE_MAX_COST": "0.20", "QUILLMD_PROVIDER_DISCOUNT_RATE": "0",
+             "DEEPGRAM_API_KEY": "synthetic-placeholder-not-a-key"}
+# $60 per minute: a two-second recording is above the $0.30 displayed limit (same device as test_recording_limit).
+EXPENSIVE_VOICE_ENV = dict(VOICE_ENV, QUILLMD_DEEPGRAM_RATE_PER_MINUTE="60")
+
+
+@override_settings(**TEST_SETTINGS)
+class VoiceFlowsAsBeforeP1(SyntheticPractice, TestCase):
+    """Round 4: the voice upload and over-limit approval run no form check, exactly as before P1, so a check
+    that cannot run can no longer cost the doctor the recording they dictated. The worker checks the form
+    immediately before the transcription request; a refused form, or a check that could not run, fails the
+    job unsent and the recording stays that job's input, as for any failed job. Round 3's retry page, its
+    signed offers and the reaper's kept-recording rules are gone."""
+
+    username = "voice-flows"
 
     def recordings(self):
         folder = private_path("audio")
         return sorted(p.name for p in folder.iterdir()) if folder.is_dir() else []
 
-    def dictate(self, encounter, tag):
-        with patch.dict(os.environ, self.VOICE_ENV):
+    def dictate(self, encounter, tag, env=VOICE_ENV):
+        with patch.dict(os.environ, env):
             return self.client.post("/encounters/%s/voice/" % encounter.pk, {
                 "audio": SimpleUploadedFile(tag + ".wav", wav_bytes(seconds=2, tag=tag), content_type="audio/wav"),
                 "consent": "on"})
 
-    def decide(self, encounter, response, decision):
-        with patch.dict(os.environ, self.VOICE_ENV):
-            return self.client.post("/encounters/%s/voice/retry/" % encounter.pk,
-                                    {"retry": response.context["retry"], "decision": decision})
+    def queued(self, response, encounter):
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(any(str(m).startswith("Transcription queued") for m in get_messages(response.wsgi_request)))
+        job = Job.objects.get(encounter=encounter, kind="transcription")
+        self.assertEqual(job.state, "queued")
+        self.assertEqual(self.recordings(), [Path(job.input_path).name])
+        return job
 
-    def kept(self):
+    def process(self, job, provider_side_effect=None):
+        with patch.dict(os.environ, VOICE_ENV), patch("core.jobs.transcribe", side_effect=provider_side_effect) as provider:
+            self.assertTrue(run_one())
+        return provider
+
+    def assert_kept_as_failed_input(self, job, error):
+        self.assert_failed_unsent(job, error)
+        self.assertEqual(self.recordings(), [Path(job.input_path).name])         # the recording is not discarded
+        self.assertEqual(AuditEvent.objects.get(action="job.failed", target=str(job.pk)).details["billing"],
+                         "not_processed")
+
+    def test_no_check_runs_on_upload_and_a_clean_form_reaches_the_provider(self):
+        template, version = self.stored_template(form())
+        encounter = self.encounter(version)
+        from documents import check_original
+        with patch("documents.check_original", wraps=check_original) as checked:
+            job = self.queued(self.dictate(encounter, "clean"), encounter)
+        self.assertEqual(checked.call_count, 0)
+        provider = self.process(job, NoProviderRequest("Synthetic stop after the guard."))
+        self.assertEqual(provider.call_count, 1)
+
+    def test_a_refused_form_fails_the_job_in_the_worker_and_keeps_the_recording(self):
+        template, version = self.stored_template(p1_trigger("type"))
+        encounter = self.encounter(version)
+        job = self.queued(self.dictate(encounter, "refused"), encounter)
+        provider = self.process(job)
+        self.assertEqual(provider.call_count, 0)
+        self.assert_kept_as_failed_input(job, "Not processed: " + REFUSED_JOB + NOT_SENT)
+
+    def test_a_check_that_could_not_run_fails_the_job_and_keeps_the_recording(self):
         template, version = self.stored_template(form())
         encounter = self.encounter(version)
         with check_times_out():
-            response = self.dictate(encounter, "kept")
-        self.assertEqual(response.status_code, 409)               # never 5xx: Django saves no session on one
-        self.assertIn(settings.SESSION_COOKIE_NAME, response.cookies)        # so this page extends the session
-        self.assertContains(response, "could not check this form right now", status_code=409)
-        self.assertNotContains(response, "can no longer be used", status_code=409)
-        self.assertFalse(Job.objects.filter(encounter=encounter).exists())
-        self.assertEqual(len(self.recordings()), 1)                                   # kept, not deleted
-        offered = AuditEvent.objects.get(action="voice.check_unavailable", target=str(encounter.pk))
-        self.assertEqual(offered.details["code"], "parser_timeout")
-        self.assertEqual(Path(offered.details["path"]).name, self.recordings()[0])
-        return encounter, response, offered.details["path"]
+            job = self.queued(self.dictate(encounter, "timeout"), encounter)
+            provider = self.process(job)
+        self.assertEqual(provider.call_count, 0)
+        self.assert_kept_as_failed_input(job, "Not processed: " + UNCHECKED_JOB + NOT_SENT)
 
-    def test_the_kept_recording_is_sent_again_without_recording_it_again(self):
-        encounter, response, kept = self.kept()
-        answer = self.decide(encounter, response, "retry")
-        self.assertEqual(answer.status_code, 302)
-        job = Job.objects.get(encounter=encounter, kind="transcription")
-        self.assertEqual((job.input_path, job.state), (kept, "queued"))
-        self.assertEqual(self.recordings(), [Path(kept).name])
-
-    def test_a_retry_while_the_check_still_fails_keeps_it_and_offers_again(self):
-        encounter, response, kept = self.kept()
-        with check_times_out():
-            again = self.decide(encounter, response, "retry")
-        self.assertEqual(again.status_code, 409)
-        self.assertEqual(self.recordings(), [Path(kept).name])
-        self.assertFalse(Job.objects.filter(encounter=encounter).exists())
-        self.assertEqual(self.decide(encounter, again, "retry").status_code, 302)
-        self.assertEqual(Job.objects.get(encounter=encounter, kind="transcription").input_path, kept)
-
-    def test_discarding_removes_it_and_sends_nothing(self):
-        encounter, response, kept = self.kept()
-        self.decide(encounter, response, "discard")
-        self.assertEqual(self.recordings(), [])
-        self.assertFalse(Job.objects.filter(encounter=encounter).exists())
-
-    def test_a_kept_recording_nobody_sends_is_removed_after_the_window(self):
-        encounter, response, kept = self.kept()
-        self.assertEqual(reap_abandoned_voice_uploads(), 0)                      # still inside the window
-        with patch("core.jobs.timezone.now", return_value=timezone.now() + timedelta(minutes=41)):
-            self.assertEqual(reap_abandoned_voice_uploads(), 1)
-        self.assertEqual(self.recordings(), [])
-        self.assertEqual(AuditEvent.objects.filter(action="voice.kept_upload_removed").count(), 1)
-
-    def test_a_renewed_offer_holds_the_recording_but_not_past_the_first_offers_window(self):
-        encounter, response, kept = self.kept()
-        start = timezone.now()
-
-        def at(minutes):
-            moment = start + timedelta(minutes=minutes)
-            return patch("django.core.signing.time.time", return_value=moment.timestamp()), \
-                patch("django.utils.timezone.now", return_value=moment)
-
-        clock, now = at(25)
-        with clock, now, check_times_out():
-            renewed = self.decide(encounter, response, "retry")                    # the first offer, still valid
-        self.assertEqual(renewed.status_code, 409)
-        self.assertEqual(AuditEvent.objects.filter(action="voice.check_unavailable").count(), 2)
-        with patch("core.jobs.timezone.now", return_value=start + timedelta(minutes=41)):
-            self.assertEqual(reap_abandoned_voice_uploads(), 0)                  # the newer offer still holds it
-        self.assertEqual(self.recordings(), [Path(kept).name])
-        # The renewed page is 10 minutes old, but the first offer ended at 30: nothing is sent. (Only the
-        # signing clock moves here, so the session's own 30-minute expiry plays no part in the outcome.)
-        clock, _ = at(35)
-        with clock:
-            late = self.decide(encounter, renewed, "retry")
-        self.assertEqual(late.status_code, 302)
-        self.assertFalse(Job.objects.filter(encounter=encounter).exists())
-        self.assertTrue(any("no longer kept for sending" in str(m) for m in get_messages(late.wsgi_request)))
-        with patch("core.jobs.timezone.now", return_value=start + timedelta(minutes=25 + 41)):
-            self.assertEqual(reap_abandoned_voice_uploads(), 1)                  # and its own window ends too
-        self.assertEqual(self.recordings(), [])
-
-    def test_a_refused_form_still_removes_the_upload_and_says_so(self):
-        template, version = self.stored_template(p1_trigger("type"))
+    def test_a_check_that_cannot_start_is_no_500_and_no_lost_recording(self):
+        # GR-1 on the voice route: round 3 answered 500 and left the recording on disk with no audit.
+        template, version = self.stored_template(form())
         encounter = self.encounter(version)
-        response = self.dictate(encounter, "refused")
-        self.assertEqual(response.status_code, 302)
-        messages = [str(m) for m in get_messages(response.wsgi_request)]
-        self.assertTrue(any("can no longer be used" in m for m in messages), messages)
-        self.assertEqual(self.recordings(), [])
-        self.assertFalse(AuditEvent.objects.filter(action="voice.check_unavailable").exists())
+        with check_cannot_start():
+            job = self.queued(self.dictate(encounter, "spawn"), encounter)
+            provider = self.process(job)
+        self.assertEqual(provider.call_count, 0)
+        self.assert_kept_as_failed_input(job, "Not processed: " + UNCHECKED_JOB + NOT_SENT)
+
+    def test_an_over_limit_approval_queues_without_a_check_and_the_worker_checks(self):
+        template, version = self.stored_template(form())
+        encounter = self.encounter(version)
+        over = self.dictate(encounter, "over", env=EXPENSIVE_VOICE_ENV)
+        self.assertEqual(over.status_code, 409)
+        with check_times_out(), patch.dict(os.environ, EXPENSIVE_VOICE_ENV):
+            approved = self.client.post("/encounters/%s/voice/approve/" % encounter.pk,
+                                        {"approval": over.context["approval"], "decision": "approve"})
+            self.assertEqual(approved.status_code, 302)
+            job = Job.objects.get(encounter=encounter, kind="transcription")
+            provider = self.process(job)
+        self.assertEqual(provider.call_count, 0)
+        self.assert_kept_as_failed_input(job, "Not processed: " + UNCHECKED_JOB + NOT_SENT)
+
+    def test_the_retry_route_and_its_audit_rows_are_gone(self):
+        template, version = self.stored_template(form())
+        encounter = self.encounter(version)
+        self.assertEqual(self.client.post("/encounters/%s/voice/retry/" % encounter.pk,
+                                          {"retry": "x", "decision": "retry"}).status_code, 404)
+        with check_times_out():
+            self.dictate(encounter, "no-offer")
+        self.assertFalse(AuditEvent.objects.filter(action__startswith="voice.check").exists())

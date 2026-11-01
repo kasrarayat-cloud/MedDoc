@@ -164,8 +164,18 @@ def check_original(path, *, expected_sha256=None):
     check can only get stricter. This runs, in the isolated worker, the same raw scan, pypdf walk,
     single-catalog and annotation rules as inspection, without the field or capacity rules, on
     the bytes whose sha256 is `expected_sha256`. Raises DocumentError when they must not be served.
+
+    ⚠️ FINDING GR-1 (2026-11-01). A check that cannot even START — the worker process cannot be
+    spawned (fork/clone EAGAIN or ENOMEM at a pids or memory limit), its pipes or its temporary
+    workspace cannot be created or written (EMFILE, ENOSPC, EDQUOT) — fails in this parent with an
+    OSError, before any DocumentError exists. That says nothing about the file, so it is raised as
+    the DocumentError `sandbox_unavailable` (a check that could not run), never let through as an
+    exception every caller turned into a 500.
     """
-    return _run(path, "check", expected_sha256=expected_sha256)
+    try:
+        return _run(path, "check", expected_sha256=expected_sha256)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise DocumentError("The isolated document check could not be started.", "sandbox_unavailable") from exc
 
 
 def fill_template(original_path, mapping: list, answers: dict, output_path, *,

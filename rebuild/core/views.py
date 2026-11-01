@@ -3,7 +3,6 @@ import json
 import os
 import re
 import secrets
-import time
 from datetime import datetime,timedelta
 from io import BytesIO
 from decimal import Decimal
@@ -631,6 +630,11 @@ def generate_view(request,pk,recovery=False):
     try:
         if not rate_limit('generate:'+str(request.user.pk),limit=30):raise ValidationError('Generation rate limit reached.')
         if 'revision' in request.POST and request.POST['revision']!=str(e.revision):raise ValidationError('Source notes changed. Reload before generating answers.')
+        # DL-2, kept synchronous in round 4 because refusing here loses nothing (the notes are saved): a refused
+        # PDF form is 409, a check that could not run 503 "try again", and nothing is queued. It runs before
+        # enqueue's encounter lock is taken; the worker checks again immediately before the provider call.
+        from .template_source import assert_pdf_template_usable
+        assert_pdf_template_usable(e.template_version.template)
         quoted=usage_quote(request,e,generation_request=True)
         job=enqueue(e,request.user,config=quoted,expected_revision=e.revision,
                     require_current_generation_quote=bool(request.POST.get('usage_quote')),
@@ -1064,113 +1068,35 @@ def voice(request,pk):
         # approval and the session (30 min). The limit it shows still binds, the signed pricing
         # configuration is unchanged, and length is re-measured at enqueue.
         quoted={**usage_quote(request,e,max_age=VOICE_QUOTE_SECONDS,expired=VOICE_QUOTE_EXPIRED,changed=VOICE_DOCUMENT_CHANGED),'transcript_review_required':True}
-        decision=queue_recording(request,e,relative,quoted,e.revision)
-        if decision is not None:return decision
+        try:
+            job=enqueue(e,request.user,'transcription',relative,config=quoted,expected_revision=e.revision)
+        except RecordingOverLimit as over:
+            # Nothing was sent and the upload is kept: the doctor chooses a shorter segment or a clearly priced higher limit.
+            approval=signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'path':relative,
+                                    'sha256':hashlib.sha256(private_path(relative).read_bytes()).hexdigest(),
+                                    'charge_limit':over.quote['charge_limit'],'config':quoted},salt='voice-limit')
+            # The path lets the worker remove the upload if nobody approves it within the approval window.
+            audit(request.user,'voice.over_limit_quoted',e.pk,department=e.department,seconds=over.quote['seconds'],
+                  charge_limit=over.quote['charge_limit'],standard_limit=over.quote['standard_limit'],path=relative)
+            # Whether the balance covers the limit, never the amount: an organization's paid balance is shown to its owners only.
+            return render(request,'voice_limit.html',{'encounter':e,'message':error_message(over),'quote':over.quote,'approval':approval,
+                'length':seconds_text(over.quote['seconds']),'fits':seconds_text(over.quote['fits_seconds']),
+                'standard_limit':Decimal(over.quote['standard_limit']),
+                'affordable':available_balance(request.user,e.department)>=Decimal(over.quote['charge_limit'])},status=409)
+        if job.input_path!=relative:private_path(relative).unlink(missing_ok=True)
+        if getattr(job,'reused',False):
+            # The identical recording already holds this request key; the redundant upload was just
+            # removed above. Nothing was sent to the provider and nothing was charged again.
+            messages.info(request,'This recording was already transcribed for this document. No new request was made and nothing was charged. Its transcript is below in Document record.')
+        else:
+            from .testing_authority import identity
+            if identity(job.config):
+                messages.success(request,f"Sponsored test transcription queued. Estimated provider cost: ${job.config['testing_quote_usd']}; account charge: $0. Review the transcript before generating answers.")
+            else:
+                messages.success(request,f"Transcription queued with a limit of ${Decimal(job.config.get('charge_limit','0'))}. Review the transcript before generating answers.")
     except ValidationError as exc:
-        # A refusal (a refused form included): nothing was sent, and the upload is removed.
         if relative:private_path(relative).unlink(missing_ok=True)
         messages.error(request,error_message(exc))
-    return redirect('encounter_detail',pk=pk)
-
-def queue_recording(request,e,relative,quoted,revision,first_offered=None):
-    """Queue a stored recording for transcription; on success the outcome is in messages and None is
-    returned. When the doctor has a decision to make, return its page and KEEP the upload: a recording
-    above the displayed limit (approve a higher limit or take a shorter segment), or a form that could
-    not be checked right now (send it again, or discard it). Any other refusal raises ValidationError."""
-    from .template_source import PdfTemplateCheckUnavailable
-    try:
-        job=enqueue(e,request.user,'transcription',relative,config=quoted,expected_revision=revision)
-    except RecordingOverLimit as over:
-        # Nothing was sent and the upload is kept: the doctor chooses a shorter segment or a clearly priced higher limit.
-        approval=signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':revision,'path':relative,
-                                'sha256':hashlib.sha256(private_path(relative).read_bytes()).hexdigest(),
-                                'charge_limit':over.quote['charge_limit'],'config':quoted},salt='voice-limit')
-        # The path lets the worker remove the upload if nobody approves it within the approval window.
-        audit(request.user,'voice.over_limit_quoted',e.pk,department=e.department,seconds=over.quote['seconds'],
-              charge_limit=over.quote['charge_limit'],standard_limit=over.quote['standard_limit'],path=relative)
-        # Whether the balance covers the limit, never the amount: an organization's paid balance is shown to its owners only.
-        return render(request,'voice_limit.html',{'encounter':e,'message':error_message(over),'quote':over.quote,'approval':approval,
-            'length':seconds_text(over.quote['seconds']),'fits':seconds_text(over.quote['fits_seconds']),
-            'standard_limit':Decimal(over.quote['standard_limit']),
-            'affordable':available_balance(request.user,e.department)>=Decimal(over.quote['charge_limit'])},status=409)
-    except PdfTemplateCheckUnavailable as unavailable:
-        return recording_kept(request,e,relative,quoted,revision,unavailable,first_offered)
-    if job.input_path!=relative:private_path(relative).unlink(missing_ok=True)
-    if getattr(job,'reused',False):
-        # The identical recording already holds this request key; the redundant upload was just
-        # removed above. Nothing was sent to the provider and nothing was charged again.
-        messages.info(request,'This recording was already transcribed for this document. No new request was made and nothing was charged. Its transcript is below in Document record.')
-    else:
-        from .testing_authority import identity
-        if identity(job.config):
-            messages.success(request,f"Sponsored test transcription queued. Estimated provider cost: ${job.config['testing_quote_usd']}; account charge: $0. Review the transcript before generating answers.")
-        else:
-            messages.success(request,f"Transcription queued with a limit of ${Decimal(job.config.get('charge_limit','0'))}. Review the transcript before generating answers.")
-    return None
-
-def recording_kept(request,e,relative,quoted,revision,unavailable,first_offered=None):
-    """⚠️ FINDING SI-4. The form could not be checked right now (the worker timed out or failed). That
-    is not a verdict about the form or the recording, and the recording exists nowhere else: the page
-    that dictated it is gone after this request. So the upload is KEPT, nothing is sent, and the doctor
-    can send the same recording again from this page within the approval window. The audited path
-    lets the worker remove it afterwards, exactly like an unapproved over-limit upload.
-    A retry that fails the same way renews the page but not the window: every offer for one recording
-    ends 30 minutes after the FIRST, so its signed quote is never older than an over-limit approval's."""
-    first_offered=first_offered or int(time.time())
-    retry=signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':revision,'path':relative,
-                         'sha256':hashlib.sha256(private_path(relative).read_bytes()).hexdigest(),'config':quoted,
-                         'first_offered':first_offered},salt='voice-retry')
-    audit(request.user,'voice.check_unavailable',e.pk,department=e.department,code=unavailable.code,path=relative)
-    # 409, like the over-limit page, never 5xx: Django saves no session on a 5xx response, so the doctor's
-    # session would not be extended by this page and could end before the offer does.
-    return render(request,'voice_retry.html',{'encounter':e,'message':error_message(unavailable),'retry':retry},status=409)
-
-@require_POST
-def voice_retry(request,pk):
-    """The doctor's decision on a recording kept because its form could not be checked: send it again, or discard it."""
-    e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
-    discard=request.POST.get('decision')=='discard'
-    token=request.POST.get('retry','')
-    try:
-        data=signing.loads(token,salt='voice-retry',max_age=VOICE_QUOTE_SECONDS)
-        if time.time()-data.get('first_offered',0)>VOICE_QUOTE_SECONDS:
-            raise signing.SignatureExpired('The first offer for this recording has ended.')
-    except signing.SignatureExpired:
-        # An expired offer can no longer send anything, but discarding still removes its upload.
-        if not discard:
-            messages.error(request,'This recording is no longer kept for sending. Upload it again; nothing was sent.')
-            return redirect('encounter_detail',pk=pk)
-        data=signing.loads(token,salt='voice-retry')
-    except signing.BadSignature:
-        messages.error(request,'This retry is invalid. Upload the recording again; nothing was sent.')
-        return redirect('encounter_detail',pk=pk)
-    relative=str(data.get('path',''))
-    if (data.get('user')!=str(request.user.pk) or data.get('encounter')!=str(e.pk)
-            or not UPLOAD_NAME.fullmatch(relative)):
-        raise PermissionDenied
-    path=private_path(relative)
-    if discard:
-        # Under the encounter lock enqueue takes: a recording a retry already queued is never removed.
-        with transaction.atomic():
-            Encounter.objects.select_for_update().get(pk=e.pk)
-            if Job.objects.filter(input_path=relative).exists():
-                messages.info(request,'This recording was already queued; its request is listed below.')
-                return redirect('encounter_detail',pk=pk)
-            path.unlink(missing_ok=True)
-        messages.info(request,'The recording was discarded. Nothing was sent.')
-        return redirect('encounter_detail',pk=pk)
-    try:
-        if data.get('revision')!=e.revision:
-            raise ValidationError('The document changed after this recording was uploaded. Upload it again; nothing was sent.')
-        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=data.get('sha256'):
-            raise ValidationError('The kept recording is no longer available. Upload it again; nothing was sent.')
-        decision=queue_recording(request,e,relative,data['config'],data['revision'],data['first_offered'])
-        if decision is not None:return decision
-    except ValidationError as exc:
-        # Kept, not removed: the worker removes it after the window, as for any kept upload.
-        messages.error(request,error_message(exc))
-    except OSError:
-        messages.error(request,'The kept recording is no longer available. Upload it again; nothing was sent.')
     return redirect('encounter_detail',pk=pk)
 
 @require_POST
@@ -1210,12 +1136,7 @@ def voice_approve(request,pk):
             raise ValidationError('The document changed after the quote. Upload the recording again; nothing was sent.')
         if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=data.get('sha256'):
             raise ValidationError('The quoted recording is no longer available. Upload it again; nothing was sent.')
-        from .template_source import PdfTemplateCheckUnavailable
-        try:
-            job=enqueue(e,request.user,'transcription',relative,config=data['config'],approved_limit=data['charge_limit'],expected_revision=data['revision'])
-        except PdfTemplateCheckUnavailable as unavailable:
-            # SI-4: kept, with a page to send it again (it may then ask for this approval once more).
-            return recording_kept(request,e,relative,data['config'],data['revision'],unavailable)
+        job=enqueue(e,request.user,'transcription',relative,config=data['config'],approved_limit=data['charge_limit'],expected_revision=data['revision'])
         if job.input_path!=relative:path.unlink(missing_ok=True)
         audit(request.user,'voice.limit_approved',job.pk,department=e.department,charge_limit=str(data['charge_limit']))
         messages.success(request,f"Transcription queued with your approved limit of ${data['charge_limit']}.")

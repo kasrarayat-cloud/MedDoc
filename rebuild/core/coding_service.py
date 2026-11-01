@@ -212,14 +212,6 @@ def ensure_run(encounter, user, automatic=False, *, identity_policy=None):
             state, error_code = 'failed', 'service_unavailable'
             error = (str(exc.messages[0]) if 'source_interpretation' in inputs else
                      'Coding is not configured for this workspace. Contact your administrator.')
-    if state == 'queued':
-        # ⚠️ FINDING SI-3 (2026-11-01). A queued run IS a provider call (run_one sends it), and saving
-        # the answers of an encounter whose PDF form the download gate refuses queued one automatically
-        # while generation on the same encounter said "Nothing was sent". Every path that can buy a
-        # provider call for an encounter runs the same guard as jobs.enqueue: refused, or "try again"
-        # when the check could not run, and either way nothing is created or sent.
-        from .template_source import assert_pdf_template_usable
-        assert_pdf_template_usable(e.template_version.template)
     run = CodingRun.objects.create(encounter=e, user=user, input_digest=key,
         inputs=inputs, context=context, releases=releases, config=config, state=state,
         error_code=error_code, error=error,
@@ -548,6 +540,14 @@ def run_one():
         run.state = 'running'; run.started_at = timezone.now()
         run.save(update_fields=['state', 'started_at'])
     try:
+        # ⚠️ P1 ROUND 4 (2026-11-01): the PDF form guard, immediately before the provider call. Round 3
+        # checked when a save queued the run (SI-3), on the request path; this covers every run however
+        # and whenever it was queued. A refusal, or a check that could not run, fails the run below with
+        # no request sent and nothing charged (failure_message shows the guard's fixed sentence).
+        from .template_source import provider_refusal
+        refusal = provider_refusal(e.template_version.template)
+        if refusal:
+            raise ValidationError(refusal)
         from .coding_dispatch import generate
         result = generate(run)
         with transaction.atomic():
@@ -602,10 +602,11 @@ def failure_message(exc, uncertain):
         return 'The provider response could not be validated. Contact your administrator. Its evidence and known cost are retained; no retry will be sent.'
     # Only static local validation descriptions are displayed, never an arbitrary
     # transport exception, credential, payload, or traceback.
+    from .template_source import FORM_JOB_PREFIX
     safe_prefixes = ('Coding evidence ', 'Exactly one ICD-10-CM release ',
                      'The bound coding reference ', 'The extracted patient name ',
                      'The coding extractor ', 'The coding resolver ',
-                     'An integral-symptom reference ', 'Coding lookup terms ')
+                     'An integral-symptom reference ', 'Coding lookup terms ', FORM_JOB_PREFIX)
     if isinstance(exc, ValidationError) and len(exc.messages) == 1:
         reason = exc.messages[0]
         if len(reason) <= 240 and reason.startswith(safe_prefixes) and not any(ord(c) < 32 for c in reason):
