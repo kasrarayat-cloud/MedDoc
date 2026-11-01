@@ -34,13 +34,14 @@ primitives, and runs their checks and actions in the engine's own order:
 
 What the installer adds to that shape (the 2026-11-01 refutation, 22 findings, every one repaired with a test):
 
-- **Path guards.** A dot-named path component is admitted only where the base already tracks that path. No
-  manifest path may have an existing prefix in `/opt/meddoc-pro` that is not a real directory (an ignored
-  `rebuild/.env` or `.env` included), and no added path may already exist in any form (a dangling link included):
-  `git merge` silently replaces an ignored file that stands in its way. No merge-time or maintenance hook
-  (`pre-auto-gc` included), no gate instrument (`scripts/check-citation.sh`, `scripts/lib/runs-api.sh`,
-  `scripts/lib/declaration.sh`, `scripts/run-ruled-mutation.sh`, `scripts/lib/run-watched.sh`,
-  `scripts/lib/container-revision.sh`) and no `.gitattributes` in the delta.
+- **Path guards.** A dot-named path component is admitted only where the base already tracks that path, or where
+  it is a new file that the declaration's contract names exactly in `new_dot_paths` (step 3). No manifest path may
+  have an existing prefix in `/opt/meddoc-pro` that is not a real directory (an ignored `rebuild/.env` or `.env`
+  included), and no added path may already exist in any form (a dangling link included): `git merge` silently
+  replaces an ignored file that stands in its way. No merge-time or maintenance hook (`pre-auto-gc` included), no
+  gate instrument (`scripts/check-citation.sh`, `scripts/lib/runs-api.sh`, `scripts/lib/declaration.sh`,
+  `scripts/run-ruled-mutation.sh`, `scripts/lib/run-watched.sh`, `scripts/lib/container-revision.sh`) and no
+  `.gitattributes` in the delta.
 - **Trusted gates.** The citation and the strict declaration gate run from the base's tracked copies in the shared
   tree, each proven byte-equal to its blob at `BASE` and pinned by sha256 in the plan. `origin/main` is read as
   `refs/remotes/origin/main` (nothing may shadow it) and as exactly `refs/heads/main` on the remote.
@@ -145,7 +146,8 @@ Never reuse an attempt directory: a second attempt is `attempt-02` with a new re
 ```
 cd $C
 $PY -I -B $C/rebuild/ops/install_rebuild_release.py --base $BASE --candidate $CODE \
-  --declaration $C/$DECL --backup-report $R/backup-report-01.json --result $R/preflight-01.json
+  --declaration $C/$DECL --backup-report $R/backup-report-01.json --result $R/preflight-01.json \
+  --new-dot-path cpt-studio/.gitignore --new-dot-path cpt-studio/deploy/.dockerignore
 ```
 
 **Expected result: exit 1, and exactly three FAIL rows:** `declaration_provenance`, `strict_declaration_gate` and
@@ -160,8 +162,9 @@ $PY -I -B $C/rebuild/ops/install_rebuild_release.py --base $BASE --candidate $CO
 - the trusted gate scripts: the shared tree's `check-citation.sh`, `lib/runs-api.sh` and `lib/declaration.sh` are
   the base's blobs;
 - no merge-time hooks (`pre-auto-gc` included);
-- the manifest (no untracked dot path, no gate instrument, no `.gitattributes`), every manifest path unobstructed
-  in the shared tree, and the requirements rule;
+- the declared new dot paths (`declared_new_dot_paths`, from `--new-dot-path` at this step) and the manifest (no
+  undeclared untracked dot path, no gate instrument, no `.gitattributes`), every manifest path unobstructed in the
+  shared tree, and the requirements rule;
 - the venv footprint and the requirement pins;
 - the owned units active;
 - the foreign services, the venv-sharing units and their idle window;
@@ -177,9 +180,20 @@ $PY -I -B $C/rebuild/ops/install_rebuild_release.py --base $BASE --candidate $CO
 
 **STOP** if any other check fails.
 
-On 2026-11-01 the planned delta (`67acb2628..`) adds two dot-named files the base does not track,
-`cpt-studio/.gitignore` and `cpt-studio/deploy/.dockerignore`, so `whole_repository_manifest` refuses
-(`untracked_dot_path`) until they leave the release or a ruling admits them.
+**The two new dot files.** The planned delta (`67acb2628..`) adds two dot-named files the base does not track,
+`cpt-studio/.gitignore` and `cpt-studio/deploy/.dockerignore`. They are admitted only as declared new dot paths:
+
+- at this step they come from `--new-dot-path` (exact repository paths, no globs) and go into the contract to
+  embed as `new_dot_paths`; the `whole_repository_manifest` row prints them as `new_dot_paths_admitted`;
+- once the declaration is committed in the candidate (steps 6 and 7) it is the only source:
+  `declared_new_dot_paths` reports `"source": "declaration"`, a different `--new-dot-path` refuses
+  (`new_dot_paths_differ_from_the_declaration`), and the act refuses `--new-dot-path` outright;
+- every other path guard still applies to them: absent from `/opt/meddoc-pro` (lstat), under real directories,
+  with a regular blob mode;
+- a declared path the delta does not add is a stale declaration and refuses (`declared_dot_path_not_in_delta`), as
+  does a path the base already covers (`declared_dot_path_not_new`); a dot-named directory the base does not track
+  and any undeclared dot path refuse (`untracked_dot_path`), and so does a `.git` or `.env*` name even when declared
+  (`declared_dot_path_git_or_env`).
 
 The command prints the contract block to embed. Read it against these expectations, and STOP on any surprise:
 
@@ -187,6 +201,7 @@ The command prints the contract block to embed. Read it against these expectatio
 - `venv` shows 64 distributions and 63 unrecorded bytecode files;
 - `foreign_venv_units` lists exactly the two Corti candidate units;
 - `static` is `[]` (otherwise every name in it is a declared static publication);
+- `new_dot_paths` is exactly `cpt-studio/.gitignore` and `cpt-studio/deploy/.dockerignore`;
 - `runtime_paths` lists P1's files, `rebuild/core/source_assertion_generation.py` (PR #1434),
   `rebuild/requirements.txt` and the new operator modules.
 
@@ -246,6 +261,8 @@ $PY -I -B $X/rebuild/ops/install_rebuild_release.py --base $BASE --candidate $CA
 - `declaration_contract_matches_measurement`: the embedded contract equals today's measurement, the code manifest
   equals the declared one, and the declaration is the only delta from `CODE`;
 - `strict_declaration_gate`: the runner's gate passes, run from the base's pinned copy;
+- `declared_new_dot_paths`: `"source": "declaration"` with exactly the two cpt-studio files, which the manifest
+  admits as `new_dot_paths_admitted` (no `--new-dot-path` is needed from here on);
 - `backup_report`: complete, restore passed, no older than 12 hours, and intact on disk in exactly this sense
   (no key is used): the run directory holds `summary.json`, `manifest.json.fernet`, `database.dump.fernet` and
   `objects/` and nothing else, `objects/` holds exactly `file_count` objects, and every one of those files is
@@ -267,6 +284,7 @@ cd $X && bash $X/scripts/run-ruled-mutation.sh --declaration $X/$DECL -- \
 The installer refuses before anything if:
 
 - it is not under the runner (`RULED_MUTATION_*` must name this declaration);
+- `--new-dot-path` is given (the act admits only the new dot paths the merged declaration names);
 - its current directory is not `$X`;
 - the evidence directory already exists;
 - any preflight row fails;
@@ -374,7 +392,7 @@ exists, a failure after publication is answered by a newly declared corrective a
 |---|---|
 | any time | Another merge to `main` happens after step 3, the shared tree leaves clean `main` at `BASE`, or anyone runs pip or tests on the live venv. |
 | step 2 | Any non-zero exit, an incomplete report, an `INCOMPLETE` marker, a restore that is not complete, a retained drill container, or a run inside a scheduled window. |
-| step 3 | Any FAIL other than the three declaration rows; a requirements mismatch other than filelock, msgpack and pypdf; a static name or a migration; venv-sharing units other than the Corti pair, or not idle; undeclared live-venv processes; locks held; pending provider work; a citation that is not 2 of 2; a contract that surprises the reader. |
+| step 3 | Any FAIL other than the three declaration rows; a requirements mismatch other than filelock, msgpack and pypdf; `new_dot_paths` other than the two cpt-studio files; a static name or a migration; venv-sharing units other than the Corti pair, or not idle; undeclared live-venv processes; locks held; pending provider work; a citation that is not 2 of 2; a contract that surprises the reader. |
 | step 4 | CI is red on the PR or on the merge commit; the merge adds anything but the declaration; `diff CODE CANDIDATE` is not exactly `A $DECL`. |
 | step 6 | Any FAIL, a backup report older than 12 hours, or a contract mismatch (the venv, foreign units, backup or code changed since step 3: redo steps 2-6 as needed). |
 | step 7 | Exit 1 (read `failure.json`; never re-run); exit 2 (judge; units are serving the candidate). |
@@ -384,7 +402,8 @@ exists, a failure after publication is answered by a newly declared corrective a
 
 - No pip; the venv is left exactly as found (D1, D2).
 - No migration; a changed `rebuild/**/migrations/**` path refuses.
-- No new dot-named path the base does not track, nothing written through or over an existing non-directory in the
+- No new dot-named path the base does not track unless the declaration names that exact file (never a dot-named
+  directory, never a `.git` or `.env*` name), nothing written through or over an existing non-directory in the
   shared tree, no hook, no gate instrument and no `.gitattributes` from the delta.
 - No static publication unless the contract names it: flat `rebuild/static/<name>` only, through the engine's own
   static path.

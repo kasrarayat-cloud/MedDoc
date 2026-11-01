@@ -180,10 +180,12 @@ class ManifestTests(GitIsolation):
         rows = {'rebuild/core/a.py': 'runtime', 'rebuild/requirements.txt': 'requirements',
                 'rebuild/static/app.js': 'static', 'cpt-studio/.gitignore': 'passenger', 'docs/x.md': 'passenger'}
         manifest = {'format': op.MANIFEST_FORMAT, 'base': BASE,
-                    'paths': {n: {'status': 'M', 'class': c} for n, c in rows.items()}}
+                    'paths': {n: {'status': 'M', 'class': c} for n, c in rows.items()},
+                    'new_dot_paths': ['cpt-studio/.gitignore']}
         facts = op.manifest_facts(manifest)
         self.assertEqual(facts['runtime_paths'], ['rebuild/core/a.py', 'rebuild/requirements.txt'])
         self.assertEqual(facts['dot_paths'], ['cpt-studio/.gitignore'])
+        self.assertEqual(facts['new_dot_paths'], ['cpt-studio/.gitignore'])
         self.assertEqual(facts['static'], ['app.js'])
         self.assertEqual(facts['paths']['classes'], {'passenger': 2, 'requirements': 1, 'runtime': 1, 'static': 1})
 
@@ -265,6 +267,147 @@ class ManifestPathsOnDiskTests(unittest.TestCase):
                 self.assertEqual(str(caught.exception), label)
 
 
+class DeclaredDotPathTests(GitIsolation):
+    """AS-1 with a declaration: the contract's new_dot_paths admits exactly the new dot-named files it names.
+
+    The planned delta (67acb2628..origin/main) adds cpt-studio/.gitignore and cpt-studio/deploy/.dockerignore, which
+    the base does not track. Every other path guard still applies to a declared path.
+    """
+
+    TRACKED = frozenset({'.github', '.github/workflows', '.github/workflows/test.yml', 'rebuild', 'rebuild/.gitignore',
+                         'rebuild/.env.example'})
+    PLANNED = ['cpt-studio/.gitignore', 'cpt-studio/deploy/.dockerignore']
+    BLOBS = {'a' * 40: b'new', 'b' * 40: b'old'}
+
+    def build(self, rows, declared):
+        """rows: names (added, 100644) or (name, status[, mode]) tuples."""
+        entries = []
+        for row in rows:
+            name, status, mode = (row, 'A', '100644') if isinstance(row, str) else (row + ('100644',))[:3]
+            old = ('100644', 'b' * 40) if status == 'M' else ('000000', '0' * 40)
+            entries.append((status, old[0], mode, old[1], 'a' * 40, name))
+        return op.build_manifest(BASE, entries, self.BLOBS.__getitem__, base_paths=self.TRACKED,
+                                 new_dot_paths=declared)
+
+    def refusal(self, function, *args, **kwargs):
+        with self.assertRaises(op.Refusal) as caught:
+            function(*args, **kwargs)
+        return str(caught.exception)
+
+    def test_as1_declared_new_dot_files_are_admitted_and_bound_by_the_manifest(self):
+        manifest = self.build(self.PLANNED + ['cpt-studio/app.py', '.github/workflows/new.yml',
+                                              ('rebuild/.gitignore', 'M'), ('rebuild/.env.example', 'M')], self.PLANNED)
+        self.assertEqual(manifest['new_dot_paths'], self.PLANNED)
+        facts = op.manifest_facts(manifest)
+        self.assertEqual(facts['new_dot_paths'], self.PLANNED)
+        self.assertEqual(facts['dot_paths'], ['.github/workflows/new.yml', 'cpt-studio/.gitignore',
+                                              'cpt-studio/deploy/.dockerignore', 'rebuild/.env.example',
+                                              'rebuild/.gitignore'])
+        self.assertNotEqual(op.manifest_digest(manifest), op.manifest_digest(dict(manifest, new_dot_paths=[])))
+        self.assertEqual(self.build(['cpt-studio/app.py'], [])['new_dot_paths'], [])
+        # The same on a real repository shaped like the planned delta: the base does not track cpt-studio at all.
+        repo = new_repo(self.root)
+        base = commit(repo, {'rebuild/core/a.py': 'one\n', '.github/workflows/test.yml': 'x: 1\n'})
+        candidate = commit(repo, {'cpt-studio/.gitignore': '*.pyc\n', 'cpt-studio/deploy/.dockerignore': '.venv\n',
+                                  'cpt-studio/app.py': 'app\n', '.github/workflows/cpt-studio.yml': 'y: 1\n'})
+        manifest = op.compute_manifest(repo, base, candidate, frozenset(), self.PLANNED)
+        self.assertEqual(manifest['new_dot_paths'], self.PLANNED)
+        self.assertEqual(manifest['paths']['cpt-studio/.gitignore']['sha256'], op.sha(b'*.pyc\n'))
+        self.assertEqual(self.refusal(op.compute_manifest, repo, base, candidate, frozenset()), 'untracked_dot_path')
+
+    def test_as1_an_undeclared_new_dot_path_still_refuses(self):
+        for declared in ([], ['cpt-studio/.gitignore'], ['cpt-studio/deploy/.gitignore']):
+            with self.subTest(declared=declared):
+                self.assertEqual(self.refusal(self.build, self.PLANNED, declared), 'untracked_dot_path')
+        # A declaration admits a dot-named FILE only. A dot-named directory the base does not track still refuses,
+        # declared or not, so no declared path can write into an existing ignored directory.
+        for declared in (['x/.cache/y.txt'], ['x/.cache', 'x/.cache/y.txt']):
+            with self.subTest(declared=declared):
+                self.assertEqual(self.refusal(self.build, ['x/.cache/y.txt'], declared), 'untracked_dot_path')
+        self.assertEqual(self.refusal(op.tracked_dot_components, 'rebuild/.runtime/x.json', self.TRACKED,
+                                      frozenset({'rebuild/.runtime/x.json', 'rebuild/.runtime'})), 'untracked_dot_path')
+
+    def test_as1_a_declared_dot_path_keeps_every_other_guard(self):
+        manifest = self.build(self.PLANNED, self.PLANNED)
+        clean = self.root / 'shared'
+        (clean / 'cpt-studio/deploy').mkdir(parents=True)
+        self.assertEqual(op.manifest_paths_on_disk(manifest, root=clean),
+                         {'paths': 2, 'added_absent': 2, 'modified_regular': 0})
+
+        def ignored_file_at_the_path(shared):
+            (shared / 'cpt-studio').mkdir()
+            (shared / 'cpt-studio/.gitignore').write_text('a local, ignored copy\n')
+
+        def dangling_link_at_the_path(shared):
+            (shared / 'cpt-studio/deploy').mkdir(parents=True)
+            (shared / 'cpt-studio/deploy/.dockerignore').symlink_to('/nonexistent-target')
+
+        def file_where_a_directory_goes(shared):
+            (shared / 'cpt-studio').write_text('stray\n')
+
+        def linked_directory(shared):
+            (shared / 'elsewhere').mkdir()
+            (shared / 'cpt-studio').mkdir()
+            (shared / 'cpt-studio/deploy').symlink_to(shared / 'elsewhere')
+        cases = ((ignored_file_at_the_path, 'added_path_obstructed'),
+                 (dangling_link_at_the_path, 'added_path_obstructed'),
+                 (file_where_a_directory_goes, 'manifest_path_prefix_not_a_directory'),
+                 (linked_directory, 'manifest_path_prefix_not_a_directory'))
+        for setup, label in cases:
+            with self.subTest(case=setup.__name__), tempfile.TemporaryDirectory() as other:
+                shared = Path(other).resolve()
+                setup(shared)
+                self.assertEqual(self.refusal(op.manifest_paths_on_disk, manifest, root=shared), label)
+        # No symbolic link and no mode but the regular blob modes, declared or not.
+        for mode in ('120000', '160000'):
+            with self.subTest(mode=mode):
+                self.assertEqual(self.refusal(self.build, [('cpt-studio/.gitignore', 'A', mode)],
+                                              ['cpt-studio/.gitignore']), 'regular_blob_modes_only')
+
+    def test_as1_git_and_env_names_refuse_even_when_declared(self):
+        names = ('.env', '.env.local', 'rebuild/.env', 'cpt-studio/.env.production', 'cpt-studio/.ENV',
+                 'cpt-studio/.git', 'cpt-studio/.Git')
+        contract = op.build_contract(
+            base=BASE, code_candidate=CANDIDATE, code_manifest=self.build(self.PLANNED, self.PLANNED),
+            venv_summary={'footprint_sha256': 'f' * 64, 'distributions': 64, 'unrecorded_bytecode': 63}, mismatch={},
+            foreign_units=[], backup={'report_sha256': 'e' * 64, 'run_id': 'r', 'restore_run_id': 's'},
+            operator={name: 'd' * 64 for name in op.OPERATOR_FILES})
+        self.assertEqual(contract['new_dot_paths'], self.PLANNED)
+        for name in names:
+            with self.subTest(name=name):
+                self.assertEqual(self.refusal(self.build, [name], [name]), 'declared_dot_path_git_or_env')
+                self.assertEqual(self.refusal(op.new_dot_path_list, [name]), 'declared_dot_path_git_or_env')
+                # The rule itself refuses them too, whatever set it is handed.
+                self.assertEqual(self.refusal(op.tracked_dot_components, name, self.TRACKED, frozenset({name})),
+                                 'declared_dot_path_git_or_env')
+                declared = dict(contract, dot_paths=sorted(contract['dot_paths'] + [name]),
+                                new_dot_paths=sorted(self.PLANNED + [name]))
+                text = op.CONTRACT_MARKER + '\n```json\n' + json.dumps(declared) + '\n```\n'
+                self.assertEqual(self.refusal(op.contract_from, text), 'declared_dot_path_git_or_env')
+        # A base-tracked .env* template is not a declaration and stays admitted as before.
+        self.assertFalse(op.tracked_dot_components('rebuild/.env.example', self.TRACKED))
+        # Exact paths only: no glob, nothing absolute, a dot-named component, and a sorted list of unique names.
+        shapes = ((['cpt-studio/.*'], 'declared_dot_path_exact'), (['cpt-studio/.git*'], 'declared_dot_path_exact'),
+                  (['cpt-studio/.{a,b}'], 'declared_dot_path_exact'), (['/cpt-studio/.x'], 'declared_dot_path_exact'),
+                  (['cpt-studio/app.py'], 'declared_dot_path_without_dot_component'),
+                  (list(reversed(self.PLANNED)), 'declared_dot_path_list'),
+                  ('cpt-studio/.gitignore', 'declared_dot_path_list'))
+        for value, label in shapes:
+            with self.subTest(value=value):
+                self.assertEqual(self.refusal(op.new_dot_path_list, value), label)
+
+    def test_as1_a_declared_path_the_delta_does_not_add_is_a_stale_declaration(self):
+        self.assertEqual(self.refusal(self.build, self.PLANNED, sorted(self.PLANNED + ['cpt-studio/.npmrc'])),
+                         'declared_dot_path_not_in_delta')
+        # The release dropped both files after the declaration named them.
+        self.assertEqual(self.refusal(self.build, ['cpt-studio/app.py'], self.PLANNED),
+                         'declared_dot_path_not_in_delta')
+        # A path the base already covers needs no declaration; naming it is stale too.
+        for row in (('.github/workflows/new.yml', 'A'), ('rebuild/.gitignore', 'M')):
+            with self.subTest(row=row):
+                self.assertEqual(self.refusal(self.build, [row], [row[0]]), 'declared_dot_path_not_new')
+
+
 class DeclarationTests(GitIsolation):
     """D4: the declaration lives in the candidate and is tracked, unmodified and committed there."""
 
@@ -279,8 +422,8 @@ class DeclarationTests(GitIsolation):
                              'docs/notes.md': 'notes\n'}, 'code')
         return repo, base, code
 
-    def measured(self, repo, base, code):
-        manifest = op.compute_manifest(repo, base, code, frozenset())
+    def measured(self, repo, base, code, new_dot_paths=()):
+        manifest = op.compute_manifest(repo, base, code, frozenset(), new_dot_paths)
         return {'manifest': manifest,
                 'venv': {'footprint_sha256': 'f' * 64, 'distributions': 64, 'unrecorded_bytecode': 63},
                 'requirements_mismatch': {'pypdf': {'required': '6.21.4', 'installed': '6.21.1'}},
@@ -350,6 +493,47 @@ class DeclarationTests(GitIsolation):
         _, checks = self.checks(repo, drifted, base, candidate)
         self.assertIn({'check': 'declaration_contract_matches_measurement', 'passed': False,
                        'reason': 'contract_differs:foreign_venv_units,venv'}, checks.rows)
+
+    def test_as1_once_committed_the_declaration_is_the_only_source_of_new_dot_paths(self):
+        repo, base, _ = self.repository()
+        code = commit(repo, {'cpt-studio/.gitignore': '*.pyc\n', 'cpt-studio/deploy/.dockerignore': '.venv\n'},
+                      'code with two new dot files')
+        planned = ['cpt-studio/.gitignore', 'cpt-studio/deploy/.dockerignore']
+
+        def source(candidate, given):
+            args = SimpleNamespace(base=base, candidate=candidate, declaration=repo / self.RELATIVE,
+                                   new_dot_path=given)
+            with patch.object(op, 'SOURCE', repo):
+                return op.declared_new_dot_paths(args)
+        # The preflight of record: nothing is declared yet, so --new-dot-path supplies the contract to embed.
+        self.assertEqual(source(code, list(reversed(planned))), {'source': 'command_line', 'new_dot_paths': planned})
+        measured = self.measured(repo, base, code, planned)
+        contract = op.build_contract(code_candidate=code, code_manifest=measured['manifest'], base=base,
+                                     venv_summary=measured['venv'], mismatch=measured['requirements_mismatch'],
+                                     foreign_units=measured['foreign_venv_units'], backup=measured['backup'],
+                                     operator=measured['operator'])
+        self.assertEqual(contract['new_dot_paths'], planned)
+        candidate = self.declare(repo, contract)
+        # Merged: the declaration is read from the candidate's blob, and a different --new-dot-path refuses.
+        for given in ([], planned):
+            self.assertEqual(source(candidate, given), {'source': 'declaration', 'new_dot_paths': planned})
+        with self.assertRaises(op.Refusal) as caught:
+            source(candidate, ['cpt-studio/.gitignore'])
+        self.assertEqual(str(caught.exception), 'new_dot_paths_differ_from_the_declaration')
+        measured['manifest'] = op.compute_manifest(repo, base, candidate, frozenset(), planned)
+        result, checks = self.checks(repo, measured, base, candidate)
+        self.assertTrue(checks.passed, checks.rows)
+        self.assertEqual(result['contract']['new_dot_paths'], planned)
+        # A stale declaration names a dot path the release does not add: the manifest built from it refuses.
+        git(repo, 'reset', '-q', '--hard', code)
+        stale = dict(contract, dot_paths=sorted(contract['dot_paths'] + ['cpt-studio/.npmrc']),
+                     new_dot_paths=sorted(planned + ['cpt-studio/.npmrc']))
+        candidate = self.declare(repo, stale)
+        declared = source(candidate, [])
+        self.assertEqual(declared['source'], 'declaration')
+        with self.assertRaises(op.Refusal) as caught:
+            op.compute_manifest(repo, base, candidate, frozenset(), declared['new_dot_paths'])
+        self.assertEqual(str(caught.exception), 'declared_dot_path_not_in_delta')
 
     def test_uncommitted_modified_or_misplaced_declarations_refuse(self):
         repo, base, code = self.repository()
@@ -1418,7 +1602,7 @@ class PreflightFlowTests(unittest.TestCase):
             patcher = patch.object(op, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
-        self.args = SimpleNamespace(base=BASE, candidate=CANDIDATE, manifest_sha256=None,
+        self.args = SimpleNamespace(base=BASE, candidate=CANDIDATE, manifest_sha256=None, new_dot_path=[],
                                     declaration=self.root / 'missing.md', backup_report=self.root / 'backup.json')
 
     def test_before_the_declaration_only_the_declaration_rows_fail_and_nothing_secret_is_reported(self):
@@ -1426,7 +1610,8 @@ class PreflightFlowTests(unittest.TestCase):
         failed = sorted(row['check'] for row in report['checks'] if not row['passed'])
         self.assertEqual(failed, ['declaration_contract', 'declaration_provenance', 'strict_declaration_gate'])
         rows = [row['check'] for row in report['checks']]
-        for name in ('git_environment_clean', 'trusted_gate_scripts', 'manifest_paths_unobstructed'):
+        for name in ('git_environment_clean', 'trusted_gate_scripts', 'declared_new_dot_paths',
+                     'manifest_paths_unobstructed'):
             self.assertIn(name, rows)
         self.assertEqual(context['environment']['original'], self.environment)
         self.assertNotIn(self.environment.decode().strip(), json.dumps(report, default=str))
@@ -1436,6 +1621,34 @@ class PreflightFlowTests(unittest.TestCase):
         self.assertEqual(contract['venv']['footprint_sha256'], self.venv['footprint_sha256'])
         self.assertEqual(report['measured']['database']['tables'], {'core_encounter': 5})
         self.assertIsNone(self.engine.BASE)  # the binding is restored after the preflight
+
+    def test_as1_the_preflight_prints_the_declared_dot_paths_it_admitted(self):
+        planned = ['cpt-studio/.gitignore', 'cpt-studio/deploy/.dockerignore']
+        entries = [('M', '100644', '100644', 'a' * 40, 'b' * 40, 'rebuild/requirements.txt'),
+                   *[('A', '000000', '100644', '0' * 40, 'c' * 40, name) for name in planned]]
+
+        def compute(repo, base, candidate, hooks, new_dot_paths):
+            return op.build_manifest(BASE, entries, lambda blob: blob.encode(), hooks=hooks,
+                                     base_paths=frozenset({'rebuild', 'rebuild/requirements.txt'}),
+                                     new_dot_paths=new_dot_paths)
+        declared = SimpleNamespace(**dict(vars(self.args), new_dot_path=list(reversed(planned))))
+        stale = SimpleNamespace(**dict(vars(self.args), new_dot_path=planned + ['cpt-studio/.npmrc']))
+        with patch.object(op, 'compute_manifest', compute):
+            report, _ = op.preflight(declared)
+            undeclared, _ = op.preflight(self.args)
+            stale_report, _ = op.preflight(stale)
+        rows = {row['check']: row for row in report['checks']}
+        self.assertEqual(rows['declared_new_dot_paths']['detail'], {'source': 'command_line', 'new_dot_paths': planned})
+        self.assertEqual(rows['whole_repository_manifest']['detail']['new_dot_paths_admitted'], planned)
+        self.assertEqual(op.summary(report)['measured']['manifest_facts']['new_dot_paths'], planned)
+        self.assertEqual(op.contract_from(report['contract_block'])['new_dot_paths'], planned)
+        self.assertEqual(sorted(row['check'] for row in report['checks'] if not row['passed']),
+                         ['declaration_contract', 'declaration_provenance', 'strict_declaration_gate'])
+        for value, label in ((undeclared, 'untracked_dot_path'), (stale_report, 'declared_dot_path_not_in_delta')):
+            with self.subTest(label=label):
+                failed = {row['check']: row['reason'] for row in value['checks'] if not row['passed']}
+                self.assertEqual(failed['whole_repository_manifest'], label)
+                self.assertNotIn('contract_block', value)
 
     def test_a_changed_manifest_busy_units_or_a_stray_process_fail_their_rows(self):
         changed = SimpleNamespace(**vars(self.args))
@@ -1478,11 +1691,20 @@ class CommandLineTests(unittest.TestCase):
         execute = self.argv('--execute', '--evidence-directory', str(self.root / 'evidence'),
                             '--manifest-sha256', 'a' * 64)
         self.assertTrue(op.arguments(execute).execute)
+        self.assertEqual(op.arguments(execute).new_dot_path, [])
+        self.assertEqual(op.arguments(self.argv('--new-dot-path', 'cpt-studio/deploy/.dockerignore', '--new-dot-path',
+                                                'cpt-studio/.gitignore')).new_dot_path,
+                         ['cpt-studio/deploy/.dockerignore', 'cpt-studio/.gitignore'])
         bad = [['--base', 'abc'] + self.argv()[2:], self.argv()[:2] + ['--candidate', BASE] + self.argv()[4:],
                self.argv('--execute'), self.argv('--execute', '--manifest-sha256', 'a' * 64),
                self.argv('--evidence-directory', str(self.root / 'e')), self.argv('--manifest-sha256', 'xyz'),
                self.argv()[:5] + ['relative.md'] + self.argv()[6:],
-               self.argv()[:9] + [str(self.root / '../x.json')]]
+               self.argv()[:9] + [str(self.root / '../x.json')],
+               # AS-1: exact new dot paths, never .git or .env*, and never on the act's command line.
+               self.argv('--new-dot-path', '.env.local'), self.argv('--new-dot-path', 'cpt-studio/.git'),
+               self.argv('--new-dot-path', 'cpt-studio/.*'), self.argv('--new-dot-path', 'cpt-studio/app.py'),
+               self.argv('--new-dot-path', '/cpt-studio/.gitignore'),
+               execute + ['--new-dot-path', 'cpt-studio/.gitignore']]
         for argv in bad:
             with self.subTest(argv=argv), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 op.arguments(argv)

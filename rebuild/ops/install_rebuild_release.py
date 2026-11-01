@@ -36,10 +36,11 @@ and bound to the code through its contract; everything else is the engine's. A t
 the two stage sequences, so a drift in either one fails CI.
 
 WHAT THE INSTALLER ADDS TO THE ENGINE'S SHAPE (the 2026-11-01 refutation, 22 findings)
-  * Path guards: a dot-named component only where the base already tracks that path; no path whose existing
-    prefix in the shared tree is not a real directory, no added path that already exists in any form (ignored
-    files such as rebuild/.env included); no merge-time or maintenance hook (pre-auto-gc included); no gate
-    instrument and no .gitattributes in the delta.
+  * Path guards: a dot-named component only where the base already tracks that path, or a new dot-named file that
+    the declaration's contract names exactly (new_dot_paths: never a .git or .env* name, never a path the delta
+    does not add); no path whose existing prefix in the shared tree is not a real directory, no added path that
+    already exists in any form (ignored files such as rebuild/.env included); no merge-time or maintenance hook
+    (pre-auto-gc included); no gate instrument and no .gitattributes in the delta.
   * The citation and the strict declaration gate run from the base's tracked copies in the shared tree, proven
     byte-equal to their blobs at BASE; origin/main is read as refs/remotes/origin/main and refs/heads/main exactly.
   * Git's own state in the shared repository (lock files, an unfinished merge, cherry-pick, revert, rebase or
@@ -131,6 +132,8 @@ SIGNALS = ('SIGTERM', 'SIGINT', 'SIGHUP')
 POSTCONDITIONS = ('configuration_preserved_after_resume', 'foreign_services_preserved_after_resume',
                   'venv_sharing_units_idle_after_resume', 'venv_exact_after_resume')
 REFUSED_PARTS = frozenset({'node_modules', '.venv', 'uploads', 'backups', '.git'})
+#: A declaration names its new dot paths exactly; a pattern character would read as a glob, so it refuses.
+PATTERN_CHARACTERS = frozenset('*?[]{}')
 #: activate_rowan_corti's pinned guard reads every blob through `git cat-file` with a 1 MiB output bound.
 BLOB_LIMIT = 1024 * 1024
 MAX_PATHS = 4000
@@ -311,12 +314,19 @@ def parse_raw_diff(raw):
     return entries
 
 
+def canonical_repository_path(name):
+    """A relative, normalized, printable repository path of at most 400 bytes (manifest rows and declared paths)."""
+    if type(name) is not str or not name.isprintable():
+        return False
+    path = PurePosixPath(name)
+    return (0 < len(name.encode()) <= 400 and name == str(path) and not path.is_absolute()
+            and not set(path.parts) & {'', '.', '..'} and '\\' not in name)
+
+
 def classify(name, status, *, hooks=frozenset()):
     """runtime | requirements | static | support | passenger, or a refusal. Exact membership is checked elsewhere."""
+    require(canonical_repository_path(name), 'canonical_manifest_path')
     path = PurePosixPath(name)
-    require(type(name) is str and 0 < len(name.encode()) <= 400 and name == str(path) and not path.is_absolute()
-            and not set(path.parts) & {'', '.', '..'} and '\\' not in name and name.isprintable(),
-            'canonical_manifest_path')
     require(status in ('A', 'M'), 'add_or_modify_only')
     require(name not in hooks, 'merge_time_git_hook')
     require(name not in GATE_INSTRUMENTS, 'gate_instrument_in_delta')
@@ -337,31 +347,65 @@ def classify(name, status, *, hooks=frozenset()):
     return 'runtime'
 
 
-def tracked_dot_components(name, base_paths):
-    """A dot-named component only where the base already tracks that path (a tree or a blob).
+def refused_dot_name(part):
+    """git's own directory and the live environment files (.env, rebuild/.env): refused even when declared."""
+    lowered = part.lower()
+    return lowered == '.git' or lowered.startswith('.env')
+
+
+def new_dot_path_list(values):
+    """The declaration's new_dot_paths: the exact repository paths of the new dot-named files the act may add.
+
+    A sorted list of unique canonical paths with no pattern character (no globs), each naming a dot-named
+    component, none with a .git or .env* component (those refuse even when declared).
+    """
+    require(type(values) is list and len(values) <= MAX_PATHS and all(type(name) is str for name in values)
+            and values == sorted(set(values)), 'declared_dot_path_list')
+    for name in values:
+        require(canonical_repository_path(name) and not set(name) & PATTERN_CHARACTERS, 'declared_dot_path_exact')
+        parts = PurePosixPath(name).parts
+        require(any(part.startswith('.') for part in parts), 'declared_dot_path_without_dot_component')
+        require(not any(refused_dot_name(part) for part in parts), 'declared_dot_path_git_or_env')
+    return values
+
+
+def tracked_dot_components(name, base_paths, declared=frozenset()):
+    """A dot-named component only where the base already tracks that path (a tree or a blob), or where that
+    component is the file itself and ``declared`` (the contract's new_dot_paths) names this exact path. Returns
+    True when the declaration admitted it.
 
     The live tree's ignored files and directories are dot names (.env, rebuild/.env, .runtime, .venv, .worktrees);
-    a release may not create one, or write into one, that the base does not track.
+    a release may not create one, or write into one, that the base does not track. A declaration admits a new
+    dot-named FILE only: a dot-named directory the base does not track still refuses, so a declared path can never
+    write into an existing ignored directory, and a .git or .env* name refuses even when declared.
     """
     parts = PurePosixPath(name).parts
+    admitted = False
     for index, part in enumerate(parts):
-        if part.startswith('.'):
-            require('/'.join(parts[:index + 1]) in base_paths, 'untracked_dot_path')
+        if part.startswith('.') and '/'.join(parts[:index + 1]) not in base_paths:
+            require(index == len(parts) - 1 and name in declared, 'untracked_dot_path')
+            require(not refused_dot_name(part), 'declared_dot_path_git_or_env')
+            admitted = True
+    return admitted
 
 
-def build_manifest(base, entries, blob, *, hooks=frozenset(), base_paths=frozenset()):
+def build_manifest(base, entries, blob, *, hooks=frozenset(), base_paths=frozenset(), new_dot_paths=()):
     """The whole-repository delta, one row per path; blob(sha1) returns that blob's bytes.
 
     ``base_paths`` is every path the base tree tracks, trees included (`git ls-tree -r -t`); without it every dot
-    path refuses.
+    path refuses. ``new_dot_paths`` is the declaration's list (new_dot_path_list): every name in it must be a path
+    this delta adds that only the declaration admits, or it refuses as a stale declaration. The manifest records
+    the paths it admitted that way, so its digest binds them.
     """
     require(full_sha(base), 'full_base_sha')
     require(0 < len(entries) <= MAX_PATHS, 'finite_non_empty_delta')
-    paths = {}
+    declared = frozenset(new_dot_path_list(list(new_dot_paths)))
+    paths, admitted = {}, set()
     for status, old_mode, new_mode, old_blob, new_blob, name in entries:
         require(name not in paths, 'unique_manifest_path')
         kind = classify(name, status, hooks=hooks)
-        tracked_dot_components(name, base_paths)
+        if tracked_dot_components(name, base_paths, declared):
+            admitted.add(name)
         require(new_mode in ('100644', '100755'), 'regular_blob_modes_only')
         if status == 'M':
             require(old_mode in ('100644', '100755'), 'regular_blob_modes_only')
@@ -376,7 +420,11 @@ def build_manifest(base, entries, blob, *, hooks=frozenset(), base_paths=frozens
             require(len(old) <= BLOB_LIMIT, 'blob_within_guard_bound')
             row.update(base_mode=old_mode, base_blob=old_blob, base_bytes=len(old), base_sha256=sha(old))
         paths[name] = row
-    return {'format': MANIFEST_FORMAT, 'base': base, 'paths': dict(sorted(paths.items()))}
+    for name in sorted(declared):
+        require(name in paths, 'declared_dot_path_not_in_delta')
+        require(name in admitted, 'declared_dot_path_not_new')
+    return {'format': MANIFEST_FORMAT, 'base': base, 'paths': dict(sorted(paths.items())),
+            'new_dot_paths': sorted(admitted)}
 
 
 def manifest_digest(manifest):
@@ -398,6 +446,7 @@ def manifest_facts(manifest):
                       'modified': sum(r['status'] == 'M' for r in rows.values()), 'classes': dict(sorted(classes.items()))},
             'runtime_paths': sorted(n for n, r in rows.items() if r['class'] in ('runtime', 'requirements')),
             'dot_paths': sorted(n for n in rows if any(part.startswith('.') for part in PurePosixPath(n).parts)),
+            'new_dot_paths': list(manifest['new_dot_paths']),
             'static': sorted(PurePosixPath(n).name for n, r in rows.items() if r['class'] == 'static')}
 
 
@@ -428,14 +477,15 @@ def base_tree_paths(repo, base):
     return frozenset(name.decode('utf-8') for name in raw.split(b'\0')[:-1])
 
 
-def compute_manifest(repo, base, candidate, hooks):
+def compute_manifest(repo, base, candidate, hooks, new_dot_paths=()):
     raw = git(repo, 'diff', '--raw', '--no-renames', '-z', '--no-abbrev', base, candidate)
 
     def blob(name):
         size = int(git(repo, 'cat-file', '-s', name).decode().strip())
         require(size <= BLOB_LIMIT, 'blob_within_guard_bound')
         return git(repo, 'cat-file', 'blob', name, limit=BLOB_LIMIT)
-    return build_manifest(base, parse_raw_diff(raw), blob, hooks=hooks, base_paths=base_tree_paths(repo, base))
+    return build_manifest(base, parse_raw_diff(raw), blob, hooks=hooks, base_paths=base_tree_paths(repo, base),
+                          new_dot_paths=new_dot_paths)
 
 
 def manifest_paths_on_disk(manifest, root=None):
@@ -444,7 +494,8 @@ def manifest_paths_on_disk(manifest, root=None):
     Every existing proper prefix must be a real directory: a regular file there (an ignored rebuild/.env), a
     symbolic link or anything else refuses. An added path must not exist in any form, a dangling link included:
     `git merge` silently replaces an IGNORED file that stands in its way. A modified path must be a regular file
-    whose mode is its base mode, so the merge changes no mode the manifest does not declare.
+    whose mode is its base mode, so the merge changes no mode the manifest does not declare. A declared new dot path
+    (the manifest's new_dot_paths) is an added row and gets exactly these guards.
     """
     root = root or ROOT
     added = modified = 0
@@ -512,6 +563,25 @@ def declaration_provenance(path, candidate, *, source=None, runner_commit=None):
         require(runner_commit == commit, 'runner_declaration_commit')
     return {'path': str(path), 'relative': relative, 'sha256': sha(raw), 'bytes': len(raw), 'commit': commit,
             'committed_at': git(source, 'log', '-1', '--format=%cI', commit).decode().strip()}
+
+
+def declared_new_dot_paths(args):
+    """The new dot paths the manifest may admit, which it needs before the declaration rows run.
+
+    Once the declaration is committed in the candidate (its D4 provenance holds), its contract is the only source,
+    read from the candidate's blob: the act admits exactly what the merged declaration names, and --new-dot-path,
+    if given, must name the same paths. Before that (the preflight of record), they come from --new-dot-path and
+    go into the contract to embed. A draft declaration is never read here; its own rows fail.
+    """
+    given = new_dot_path_list(sorted(set(args.new_dot_path)))
+    try:
+        proven = declaration_provenance(args.declaration, args.candidate)
+    except (Refusal, OSError, subprocess.SubprocessError):
+        return {'source': 'command_line', 'new_dot_paths': given}
+    raw = git(SOURCE, 'show', args.candidate + ':' + proven['relative'], limit=MAX_DECLARATION_BYTES)
+    declared = contract_from(raw.decode())['new_dot_paths']
+    require(not given or given == declared, 'new_dot_paths_differ_from_the_declaration')
+    return {'source': 'declaration', 'new_dot_paths': declared}
 
 
 def trusted_gate_scripts(base, root=None):
@@ -582,8 +652,9 @@ def contract_from(text):
 
 
 CONTRACT_KEYS = frozenset({'format', 'base', 'code_candidate', 'code_manifest_sha256', 'paths', 'runtime_paths',
-                           'dot_paths', 'static', 'migrations', 'environment_delta', 'dependency_installs', 'venv',
-                           'requirements_mismatch', 'foreign_venv_units', 'backup', 'operator'})
+                           'dot_paths', 'new_dot_paths', 'static', 'migrations', 'environment_delta',
+                           'dependency_installs', 'venv', 'requirements_mismatch', 'foreign_venv_units', 'backup',
+                           'operator'})
 
 
 def validate_contract(value):
@@ -598,6 +669,8 @@ def validate_contract(value):
     for key in ('runtime_paths', 'dot_paths', 'static', 'foreign_venv_units'):
         require(type(value[key]) is list and all(type(x) is str for x in value[key])
                 and value[key] == sorted(set(value[key])), 'contract_sorted_unique_lists')
+    new_dot_path_list(value['new_dot_paths'])
+    require(set(value['new_dot_paths']) <= set(value['dot_paths']), 'contract_new_dot_paths_are_dot_paths')
     require(all(UNIT_NAME.fullmatch(unit) for unit in value['foreign_venv_units']), 'contract_unit_names')
     require(value['migrations'] == 0 and value['dependency_installs'] == 0
             and value['environment_delta'] == ['QUILLMD_RELEASE_SHA'], 'contract_code_only_literals')
@@ -625,7 +698,8 @@ def build_contract(*, base, code_candidate, code_manifest, venv_summary, mismatc
     return validate_contract({
         'format': CONTRACT_FORMAT, 'base': base, 'code_candidate': code_candidate,
         'code_manifest_sha256': manifest_digest(code_manifest), 'paths': facts['paths'],
-        'runtime_paths': facts['runtime_paths'], 'dot_paths': facts['dot_paths'], 'static': facts['static'],
+        'runtime_paths': facts['runtime_paths'], 'dot_paths': facts['dot_paths'],
+        'new_dot_paths': facts['new_dot_paths'], 'static': facts['static'],
         'migrations': 0, 'environment_delta': ['QUILLMD_RELEASE_SHA'], 'dependency_installs': 0,
         'venv': {'path': str(VENV), 'footprint_sha256': venv_summary['footprint_sha256'],
                  'distributions': venv_summary['distributions'],
@@ -920,11 +994,14 @@ def preflight(args, *, executing=False):
         if venv is not None:
             context['venv'] = venv
             measured['venv'] = footprint.summary(venv)
+        new_dot = checks.run('declared_new_dot_paths', declared_new_dot_paths, args)
         manifest = None
-        if hooks is not None:
+        if hooks is not None and new_dot is not None:
             manifest = checks.keep('whole_repository_manifest', compute_manifest, SOURCE, args.base, args.candidate,
-                                   hooks, describe=lambda value: {'sha256': manifest_digest(value),
-                                                                  **manifest_facts(value)['paths']})
+                                   hooks, new_dot['new_dot_paths'],
+                                   describe=lambda value: {'sha256': manifest_digest(value),
+                                                           **manifest_facts(value)['paths'],
+                                                           'new_dot_paths_admitted': value['new_dot_paths']})
         if manifest is not None:
             measured['manifest_sha256'] = manifest_digest(manifest)
             measured['manifest'] = manifest
@@ -1605,6 +1682,9 @@ def arguments(argv=None):
     parser.add_argument('--execute', action='store_true')
     parser.add_argument('--evidence-directory', type=Path)
     parser.add_argument('--manifest-sha256')
+    parser.add_argument('--new-dot-path', action='append', default=[], metavar='PATH',
+                        help='a new dot-named file the delta adds (exact path, repeatable), for the preflight before '
+                             'the declaration is committed; from then on the declaration is the only source')
     args = parser.parse_args(argv)
     for value in (args.base, args.candidate):
         if not full_sha(value):
@@ -1617,7 +1697,13 @@ def arguments(argv=None):
             parser.error('--' + name.replace('_', '-') + ' must be an absolute, normalized path')
     if args.manifest_sha256 is not None and not digest64(args.manifest_sha256):
         parser.error('--manifest-sha256 must be 64 lowercase hex characters')
+    try:
+        new_dot_path_list(sorted(set(args.new_dot_path)))
+    except Refusal as refusal:
+        parser.error('--new-dot-path: ' + str(refusal))
     if args.execute:
+        if args.new_dot_path:
+            parser.error('--new-dot-path is refused with --execute: the act admits what the merged declaration names')
         if args.evidence_directory is None or args.manifest_sha256 is None:
             parser.error('--execute requires --evidence-directory and --manifest-sha256 (from the preflight)')
         if not args.evidence_directory.is_absolute():
