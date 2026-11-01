@@ -1184,5 +1184,23 @@
    "the facility, credential and procedure-word lists are closed lists; each match only returns a hold to the installed exclusion (a miss keeps the hold)",
    "the no-service path (_held_unless_agreed) still shows its one-cause words only as far as a cue excerpt reaches (160 characters): true, and cut before the heading line"
   ]
+ },
+ "amendment_20261101_cycle2": {
+  "date": "2026-11-01",
+  "cycle": "Wave 1 repair, cycle 2: no PA code changes (studio/validation/engine.py's PA functions are as at fbc59ee53). PA only adds holds - EXCLUDED -> held - so a miss falls back to installed's reading",
+  "written": "by Wave 1 repair cycle 2, group PD+PO+PA, with the two refutation findings below reproduced first on sealed exports of installed 80df1831d168 and fbc59ee53 (the procedures-and-offers lens's inputs, work/cases1.json, cases4.json, cases8.json, byte for byte)",
+  "known_limits": {
+   "PA-REAL-HEADING-READ-PAST": {
+    "finding": "PA holds on a real unread heading only as _pa_real_heading reads one: a bare procedure name ('Endoscopic Ultrasound', 'Endoscopic Ultrasonography', 'Upper Endoscopic Ultrasound', 'EUS With Fine Needle Aspiration', 'Upper EUS'), any line _PA_FACILITY matches ('Endoscopy Suite Findings', 'Findings in the Endoscopy Unit', 'Today in the Endoscopy Suite'), or a heading standing right under a list line with no stop ('Cholecystectomy 2014') is read past as the section's content",
+    "reproduced": "h4-05 without its 'Question to Answer' block and with 'Scope Passage and Views' renamed so, 43259 citing 'A linear echoendoscope was introduced by mouth.' (truth: done): fbc59ee53 excludes 43259 as historical exactly as installed does (b840ae756 held it); with the facility-word headings and the list-line variant the EUS item 'documented as performed, no supported proposal' is also offered for a second review (PO-2 reads the same line as an unread heading). The control 'Scope Passage and Views' stays held",
+    "limit": "the installed false EXCLUSION of today's EUS returns under those headings, with installed's 'documented as historical' reason - no worse than installed: PA adds holds only, and a heading it reads past leaves installed's reading. Where PO-2 offers the item on the same document the output both excludes the code and offers its service for a second review (a PA x PO disagreement); the offer is the member's to ask for and no stage sends anything for it. Not repaired this cycle, by the round's direction: PA only adds holds, so a miss falls back to installed; widening _pa_real_heading would be PA's second and last cycle, with no cycle left to fix what its refutation finds"
+   },
+   "PA-EM-SAME-DAY-COLLATERAL": {
+    "finding": "when PA holds a history-section procedure on a real unread heading in an office note, the engine's same-day rule (_same_day_procedure, state 'uncertain') turns the READY office E/M into a 'possibly same-day procedure' hold: em.same_day_procedure warn and the separate_em question. pa.json declared 'EXCLUDED -> held only' and no E/M movement, so this READY -> held is a declared limit from now on",
+    "reproduced": "the lens's office note (Past Surgical History, then 'Endoscopy Findings' | 'Dilation Details' | 'Esophageal Dilation Summary' above a dilation sentence; 99214 citing 'Medical decision making: moderate.', 43249 citing the dilation): installed and the control without the heading read 43249 excluded and 99214 READY; fbc59ee53 reads 43249 needs_clarification [extent, performed_status] and 99214 needs_clarification [separate_em]",
+    "limit": "a READY office visit beside a PA-held history procedure is held, never excluded or sent: the member answers the separate-E/M question (a hold's cost, no false READY). The cycle-1 repair (amendment_20261101_r2) narrowed what PA counts as a heading - the title-case history entries, provider, page, facility and procedure-name lines of CTS-3 no longer hold - but not this propagation through a real heading"
+   }
+  },
+  "code": "none: PA's functions, tests and mutants are unchanged; this entry records the two limits only"
  }
 }
