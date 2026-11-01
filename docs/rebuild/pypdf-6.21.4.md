@@ -93,7 +93,8 @@ rather than widened. Full account and measurements in
   view. Not widened.
 - **F2 (accepted)** — the byte pass refuses a well-formed string holding a long
   policy name right after a slash (e.g. `(intake, pre/Launch checklist)`). By
-  design; kept, not narrowed.
+  design; kept, not narrowed. *(Round 4, GR-4: the download of an export filled
+  from such a form is refused too.)*
 
 ## P1 round 3 — 2026-11-01: the gates corrected (not yet installed)
 

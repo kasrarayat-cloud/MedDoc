@@ -278,6 +278,10 @@ than narrowed: for medical templates the eight long names are CamelCase PDF word
 and only `Launch` and `JavaScript` are plausible in ordinary text. Measured: the
 three string variants refused on 6.21.1 and 6.21.4; the comma control and an
 escaped tooltip pass.
+*(⚠️ Round 4, GR-4: since SI-1 and SI-2 a stored PDF export is judged by its form's
+original, so the download of an export filled from a form this byte pass refuses is
+refused as well, although the export itself carries no such name. See "Round 4"
+below.)*
 
 **Round-2 proof.** `documents.test_pdf_active_content` adds `ScanCost` (each
 COST-1 shape scanned in a CPU-capped fork; a regression is killed by the cap and
