@@ -15,10 +15,12 @@ run the next. Nothing here was executed by the session that wrote it.
 | image | `cpt-studio:<sha12>`, built from `git archive <revision> cpt-studio/`, label `org.opencontainers.image.revision=<revision>` |
 | database | container `cpt-studio-db` (postgres 17.11, pinned by digest), uid 70, all capabilities dropped, `127.0.0.1:55451`, volume `cpt-studio-pg` |
 | web | container `cpt-studio-web`, gunicorn, read-only root, uid 10150, `127.0.0.1:9150` → 8000 |
-| worker | container `cpt-studio-worker`, read-only root, the only holder of the Corti credentials (live mode only) |
+| worker | container `cpt-studio-worker`, read-only root, stop timeout 360 s, the only holder of the Corti credentials (live mode only) and of each harness participant's (that participant live only) |
 | network | `cpt-studio-net` (bridge). Web and worker reach the database as `cpt-studio-db:5432` |
 | files | volume `cpt-studio-files` at `/var/lib/cpt-studio` (originals, reference copies) |
 | secrets | `/etc/cpt-studio/` root 0700: `app.env`, `db.env` (root 0600), `corti-credentials.env` (10150:10150 0400), `initial-credentials.json` (root 0600) |
+| participant credentials (optional) | `/etc/cpt-studio/openai-credentials.env` (Astra) and `anthropic-credentials.env` (Fable), 10150:10150 0400, each copied from `/etc/cpt-studio-provider-sources/{openai,anthropic}.env` (root 0600 in a root 0700 directory) when the owner placed it; never part of the three-file set above |
+| passages | the CMS passage files the revision commits under `studio/reference/data/`, imported into `PassageSource`/`ReferencePassage` |
 | agent login | `/home/claude/.cpt-studio/agent-credentials.json` (0600, agent account only) |
 | ingress | NEW `/etc/nginx/sites-available/quillmd-cpt` + `sites-enabled` symlink. The `quillmd` vhost is never edited |
 | certificate | separate lineage `cpt.quillmd.com`, webroot `/var/www/certbot`, existing ACME account |
@@ -50,16 +52,17 @@ directory. Exit 0 = done; 1 = refused or failed (the receipt says which and why)
 | # | phase | extra arguments | changes |
 |---|---|---|---|
 | 1 | `preflight` | — | nothing (one ACME probe file written and removed) |
-| 2 | `secrets` | — | creates `/etc/cpt-studio/` and its three files, once |
+| 2 | `secrets` | — | creates `/etc/cpt-studio/` and its three files, once; copies each participant credentials source the owner placed, once |
 | 3 | `image` | — | builds `cpt-studio:<sha12>` |
 | 4 | `db` | — | network, two volumes, database container |
-| 5 | `app` | `--provider-mode live --authorization-ref docs/foundation/rulings/2026-10-23-cpt-studio-gi.md` (or `--provider-mode disabled`) | migrations; web and worker containers |
+| 5 | `app` | `--provider-mode live --authorization-ref docs/foundation/rulings/2026-10-23-cpt-studio-gi.md` (or `--provider-mode disabled`); optional `--astra-mode live`, `--fable-mode live` (each `disabled` when not given; live needs `--authorization-ref`) and `--access-check` | migrations; web and worker containers; with `--access-check`, one real request per live participant |
 | 6 | `reference` | `--pfs-zip <abs> --pfs-retrieved-at <ISO> --mue-zip <abs> --mue-retrieved-at <ISO>` | reference copies in the files volume; two `ReferenceSource` imports |
-| 7 | `provision` | `--owner-username <name>` (optional `--agent-username`, display names, `--reset-passwords`) | GI workspace, owner and agent accounts; credentials files |
-| 8 | `http-vhost` | — | `quillmd-cpt` (HTTP stage) + symlink; nginx reload |
-| 9 | `cert` | — | lineage `cpt.quillmd.com` |
-| 10 | `https-vhost` | — | `quillmd-cpt` replaced by the HTTPS stage; nginx reload |
-| 11 | `verify` | — | nothing |
+| 7 | `passages` | — | each committed `studio/reference/data/` file imported (`PassageSource`, `ReferencePassage`); idempotent |
+| 8 | `provision` | `--owner-username <name>` (optional `--agent-username`, display names, `--reset-passwords`) | GI workspace, owner and agent accounts; credentials files |
+| 9 | `http-vhost` | — | `quillmd-cpt` (HTTP stage) + symlink; nginx reload |
+| 10 | `cert` | — | lineage `cpt.quillmd.com` |
+| 11 | `https-vhost` | — | `quillmd-cpt` replaced by the HTTPS stage; nginx reload |
+| 12 | `verify` | — | nothing |
 
 `rollback-app` removes the web and worker containers; it keeps the database,
 volumes, images and secrets, and needs the database to be running. First, with
@@ -72,7 +75,11 @@ run (queued, running, or cancelled as its encounter's latest stage) whichever
 pair created it, settles the provider runs they left unsettled (as **app**
 below does on a failure), reads again, and only then removes the pair. The next
 worker is the parked pair's when one is left (its kinds read from its image);
-otherwise one that runs extract, analyze, predict and assess only. If the stages
+otherwise one that runs extract, analyze, predict and assess only. Either way
+the harness participants' stages (kinds `astra` and `fable`) are closed: no
+revision before the harness (80df1831d168 and older) has a stage for them, so
+they are closed like a second review's, as failed, with the installer's message
+naming the revision (no web offers a Resume for them). If the stages
 cannot be closed, or the second read names a record (a request in flight when
 the worker stopped is then an unknown outcome), the pair is left stopped, not
 removed: start it, clear the records, rerun.
@@ -91,20 +98,81 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   55451, DNS (A `147.189.172.8` only, no AAAA), the pinned helper and postgres
   images, the Corti credentials source, Let's Encrypt state by path (live
   names, renewal-config hashes, account ids — key material is never opened)
-  and that the ACME webroot is writable. Any problem fails the phase.
+  and that the ACME webroot is writable. It also records whether each harness
+  participant's credentials source is there: one that is absent is not a
+  problem (that participant stays disabled), but a sources directory that is
+  not root 0700, or a source that is not a root 0600 regular file, is.
+  Any problem fails the phase.
 - **secrets** generates the Django key and database password inside the root
   helper; the values never leave it. The Corti file is copied byte-for-byte and
   only its four key NAMES are checked. A partial or altered set is refused, not
-  repaired.
-- **image** builds, then requires the revision label, user 10150, the baked
-  release, English OCR data, a working `pdftoppm`, `manage check`, and that the
-  WSGI application loads as the image's own user on a read-only root (this is
-  what catches unreadable static files, which `manage check` does not).
+  repaired. Then, separately from that set (adding to it would read every
+  existing install as partial), each harness participant's credentials source
+  the owner placed is copied once, unread, byte for byte, through the root
+  helper: `/etc/cpt-studio-provider-sources/openai.env` to
+  `/etc/cpt-studio/openai-credentials.env` (Astra) and `anthropic.env` to
+  `anthropic-credentials.env` (Fable), 10150:10150 0400, then read back. The
+  sources directory is mounted (read-only) only once it is seen to be a root
+  0700 directory, and each source is opened without following a link and must
+  be a root 0600 regular file of at most 32,000 bytes. Only key NAMES are
+  checked: `OPENAI_API_KEY` (and optionally `OPENAI_PROJECT`), or
+  `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_WORKSPACE_ID`), each once and
+  nothing else. Only those expected names are ever reported: a line setting any
+  other key is counted, never echoed, since a key pasted without its name would
+  otherwise be printed as one. Every check runs before anything is written, and
+  any problem writes nothing for either participant. A copy already there must
+  be the 10150:10150 0400 file and equal its source; one whose source was since
+  removed is reported `present` with its source `absent`. A missing source is
+  `not provided`: that participant can only be installed disabled. The receipt
+  names each participant's state, whether its source is there and the expected
+  key names found; no value leaves the helper.
+- **image** first reads the revision's migrations (with `ast`; nothing is
+  imported or run) and refuses, before building anything, any migration after
+  0005 that is not additive for a pair that does not know it. 0005 is the leaf
+  of 057a7d39, the oldest revision a rollback goes back to; `app` migrates while
+  the previous pair still runs, a failed replacement restores that pair on the
+  migrated schema, `rollback-app` hands an older pair the rows, and nothing is
+  reversed. Accepted: a new table; a column that is nullable, has `db_default`,
+  or whose database default the same migration's SQL sets (an older pair's
+  insert names no such column); an index; a constraint on a new table; SQL that
+  only sets column defaults. Anything else (a removed, renamed or altered column
+  or table, a constraint on an existing table, `RunPython`, other SQL, a form the
+  check does not read, a file in the migrations directory that is not a
+  migration) is refused. The receipt records each checked migration and why it
+  passed. 0006 and 0007 pass: 0007 adds `endpoint`, `requested_model`,
+  `returned_model` and `response_id` to `studio_providerrun` and `participants`
+  and `retrieval` to `studio_assessment`, each NOT NULL and each given a
+  database default by the same migration's SQL, and creates `PassageSource` and
+  `ReferencePassage`, tables no older revision reads. So the previous pair keeps
+  inserting valid rows between `migrate` and the swap, and a restored or older
+  pair runs on the migrated schema. The phase then builds, and requires the
+  revision label, user 10150, the baked release, English OCR data, a working
+  `pdftoppm`, `manage check`, and that the WSGI application loads as the
+  image's own user on a read-only root (this is what catches unreadable static
+  files, which `manage check` does not).
 - **db** is idempotent; an existing container must be ours, on the pinned
   image, loopback-only, `unless-stopped`.
 - **app** (live mode) first loads the Corti credentials with the
   application's own loader, in the worker's mount layout, with no network:
   a file the worker could not use stops the phase before anything changes.
+  Each harness participant given `live` (`--astra-mode live`,
+  `--fable-mode live`; both need `--authorization-ref`, as Corti's live mode
+  does) is checked the same way before anything changes: its copy in
+  `/etc/cpt-studio/` must be the 10150:10150 0400 file the secrets phase writes
+  (a missing source leaves none, and the participant can then only be installed
+  disabled), and the application's own loader
+  (`studio.participants.credentials.load_openai_credentials` or
+  `load_anthropic_credentials`) must read it in the worker's mount layout with
+  no network and the participant itself disabled. A refusal's error output is
+  kept in the receipt directory only once a root helper has found no value
+  from that file in it. The new web and worker are both given
+  `CPT_STUDIO_ASTRA_MODE` and `CPT_STUDIO_FABLE_MODE` (`disabled` unless given
+  `live`) and, for a live participant, `CPT_STUDIO_OPENAI_CREDENTIALS_FILE=/run/cpt-studio/openai-credentials.env`
+  or `CPT_STUDIO_ANTHROPIC_CREDENTIALS_FILE=/run/cpt-studio/anthropic-credentials.env`;
+  only the worker mounts the file there, read-only, and only for a live
+  participant (the web builds requests, which needs no credentials, as with
+  Corti). Every one-shot runs with Corti and both participants disabled, but
+  the opt-in access check below.
   It then migrates with a one-shot container and refuses, before replacing
   anything, while the queue holds a stage this revision's worker has no handler
   for (queued, running, or cancelled as its encounter's latest stage, which a
@@ -127,6 +195,24 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   which recomputes them; if they were, only the parked pair is left to remove.
   An installer killed outright writes no receipt: rerun `app` (see **Recovery
   notes**).
+  With `--access-check` (opt-in: it needs a live participant, and never runs
+  without the flag, because it sends a real request), once the new pair runs,
+  its states are recomputed and the parked pair is removed, each live
+  participant in turn is sent ONE request by
+  `manage participant_access_check --participant <astra|fable>`, in a one-shot
+  with the worker's mount and network for that participant: its credentials
+  file read-only at the worker's path, `cpt-studio-net`, that participant live
+  under the same `--authorization-ref`, Corti and the other participant
+  disabled, bounded at 420 s (the participant send deadline is 330 s). What the
+  container wrote is recorded - its JSON receipt in this phase's receipt
+  (`access_checks`), everything in a log - only once a root helper has found no
+  value from that participant's credentials file in it (key names only come
+  back from that helper); otherwise nothing it wrote is kept and the check
+  fails. A check that exits non-zero, does not finish (whether its request
+  reached the vendor is then not known) or writes no JSON receipt fails the
+  phase, which then says the pair stays installed with those participants live:
+  fix the credentials or the vendor account and run `app` again with
+  `--access-check`, or install that participant disabled.
   On any failure before the new pair runs, the recompute does not run: the new
   pair is stopped and, before the parked pair is restored, every stage
   it queued, ran or left resumable since the swap, and every stage of a kind the
@@ -138,8 +224,9 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   stale-stage sweep settles them (the closed encounters' states are refreshed).
   Nothing finished is touched and no row is removed. If the close then names
   an encounter whose state the parked revision would show wrongly whatever it
-  is handed - a bounded second review's response refused whole, or a second
-  review left unread (**second_review_refused**, **second_review_unread**,
+  is handed - a bounded second review's response refused whole, a second
+  review left unread, or a code only a harness participant proposed
+  (**second_review_refused**, **second_review_unread**, **participant**,
   under **Reinstalling an older revision**) - and
   the parked pair is not this revision, nothing is restored over it: the new
   pair is left stopped and the parked pair parked, and the receipt names the
@@ -185,6 +272,19 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   the encounters) before `app`.
 - **reference** requires each zip to match its pinned size and sha256 and
   passes the pinned release, URL and window with the retrieval time you give.
+- **passages** (after `app`) lists every file the revision commits under
+  `cpt-studio/studio/reference/data/` (`git ls-tree` of the revision; the image
+  ships exactly those, built from `git archive` of it) and refuses a link or a
+  submodule there, or an empty directory, before any container runs. It then
+  refuses unless `manage migrate --check` passes with this revision's image (the
+  passage tables are migration 0007's: run `app` first), and imports each file
+  with the application's own importer,
+  `manage import_passages --data /app/studio/reference/data/<file>`, one
+  one-shot per file, in name order. The importer is idempotent, so the phase is
+  too: rerun it freely. The receipt records each file's git blob id, the
+  importer's output and its log; a failed import names its file and the files
+  imported before it (they stay imported). Until it has run, an assessment
+  retrieves no passage.
 - **provision** writes both credentials files only after the accounts exist
   with the generated passwords; an account that already existed (password
   unchanged) aborts and discards them unless `--reset-passwords` was given.
@@ -200,13 +300,18 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   one. Other lineages' renewal configs must be byte-identical afterwards.
 - **verify** compares everything with the preflight receipt and checks the
   deployed containers' hardening and the HTTPS headers, including that a
-  request whose SNI is not `cpt.quillmd.com` is closed (444).
+  request whose SNI is not `cpt.quillmd.com` is closed (444). The containers'
+  check (also run as each starts in `app`) includes their bind mounts: the web
+  holds none, and the worker only the credentials files, read-only, at their
+  worker paths.
 
 ## Reinstalling a new revision
 
 Commit a declaration naming the new revision, then run `preflight`, `image`,
-`app`, `verify`. `secrets`, `db`, `reference` and `provision` are idempotent or
-refuse rather than repeat. If `deploy/nginx/` changed between the revisions,
+`app`, `passages`, `verify`. `secrets`, `db`, `reference`, `passages` and
+`provision` are idempotent or refuse rather than repeat. A harness participant
+credentials source placed since the last `secrets` is copied by running
+`secrets` again (the three-file set reads `present`) before `app`. If `deploy/nginx/` changed between the revisions,
 `verify` reports the vhost as different: republish with `rollback-vhost`,
 `http-vhost`, `cert` (a no-op for a lineage not yet due for renewal; it records
 the receipt `https-vhost` requires) and `https-vhost` under the new declaration.
@@ -223,7 +328,8 @@ reinstall's preflight baseline.
 An older revision's installer does not close a newer revision's stages, and its
 worker and web read the newer revision's records under their own rules. The
 installed revision 057a7d39 acts wrongly on these (`rollback-app` and the
-failure path of `app` read them as it reads the rows):
+failure path of `app` read them as it reads the rows), and every revision
+before the harness, 80df1831d168 included, on the last two:
 
 - **unknown**: a provider outcome still unknown. Its reconcile requests the
   current context under its rules: without a date when that context holds a
@@ -276,11 +382,19 @@ failure path of `app` read them as it reads the rows):
   proposed nothing, so what 057a7d39 says of those rows is true: they are put
   back (below) - unless an earlier one made for the same answer is unread as
   above, which names the encounter.
-- a stage of a kind it has no stage for (the second review), queued, running,
-  or stopped as the latest: its worker ends on it.
+- **participant**: a code only a harness participant (Astra or Fable)
+  proposed, in the current assessment's decision set (selected or excluded).
+  No revision before the harness reads a participant: its page and both
+  reports show the code as the provider's own proposal, naming no other
+  proposer, and its re-assessment reads Corti's answer alone, so the code
+  leaves the decision set without a reviewer's decision. No list state can be
+  put back for it, so it is named, never handed over.
+- a stage of a kind it has no stage for (the second review; the harness
+  participants' `astra` and `fable`, which no revision before the harness
+  runs), queued, running, or stopped as the latest: its worker ends on it.
 
 `rollback-app` closes the last as failed, and refuses, naming the encounters,
-while any of the first six exists. They are cleared on this revision's web:
+while any of the first seven exists. They are cleared on this revision's web:
 reconcile each unknown outcome; Resume the stopped stage, or answer the date
 question (correct or clear the metadata date), after which this revision makes
 the request for the agreed date (re-assessing with, or re-using, a recorded
@@ -291,7 +405,12 @@ for, or this revision stays installed. A code only a second review selected,
 a second review's response refused whole, and a second review left unread are
 cleared likewise by an addendum (the newer revision's assessment reads no second
 review, and none is made for its answer, until one is asked for), or this
-revision stays installed. So,
+revision stays installed. A code only a harness participant proposed is cleared
+by an assessment made with no participant configured, which holds none: install
+this revision again with `--astra-mode disabled --fable-mode disabled`, then
+re-assess each named encounter on its web (a saved change to its context
+re-checks the answer in use; an addendum makes a new request), or this revision
+stays installed. So,
 before reinstalling an older revision over this one:
 
 1. Clear those records on this revision's web.
@@ -313,7 +432,16 @@ member's service date that differs from the document's as the date (its own
 rule, which this revision holds); and where it reads the document's date
 otherwise than this revision does, its next metadata save requests its own
 reading (a first request, sent; one that failed or was not sent before is named
-above). Encounter list states stay as this revision last derived them until an
+above). The harness participants' runs (provider `astra` or `fable`, purpose
+`independent`) are no run of 80df1831d168's own (its run in use is a primary
+run); 057a7d39 takes the newest finished run of any kind as its run in use, so a
+participant run can be it: its metadata save then re-predicts, reusing Corti's
+retained answer to an unchanged request (nothing is sent), and a failed request
+it would send again is **outcome**, named above. An unknown outcome of a
+participant run is **unknown**. The runs' endpoint, models and response id, the
+assessment's participants and retrieval, and the passage tables are columns and
+tables no older revision reads (migration 0007 gives each column a database
+default). Encounter list states stay as this revision last derived them until an
 action on each encounter recomputes them - except a state this revision labels
 from more than the state. An older revision labels a stored state by its name
 alone, and never recomputes one: a response refused whole is `provider_failed`
@@ -371,6 +499,18 @@ recomputes every state.
   interrupted `provision`: delete them (no account uses their passwords unless
   the receipt says the accounts were created) and rerun.
 - Rotating the two passwords: `--phase provision --owner-username … --reset-passwords`.
+- Rotating a harness participant's key: the owner replaces its source; remove
+  `/etc/cpt-studio/openai-credentials.env` (or `anthropic-credentials.env`) by
+  hand (root), run `secrets`, which copies the new source, then `app` with the
+  same modes: the running worker's mount holds the file it was started with.
+  `secrets` refuses a copy that differs from its source rather than replace it.
+- A staged `.openai-credentials.env.new` / `.anthropic-credentials.env.new` in
+  `/etc/cpt-studio/` from an interrupted `secrets`: delete it by hand and rerun;
+  `secrets` refuses while one exists.
+- An `app` whose access check failed left the pair installed and running with
+  those participants live (the receipt says so): rerun `app` with
+  `--access-check` once the credentials or the vendor account are fixed, or
+  with that participant disabled.
 
 ## Local build and tests (no host change)
 
@@ -401,3 +541,16 @@ verified inside the image under that setting.
   containers here, and RLIMIT_NPROC (set by the extraction sandbox from its
   container's own task count) is accounted per host uid. `preflight` and
   `verify` refuse if any task outside CPT Studio runs as 10150.
+- The installer reads a participant's credentials by key NAME only; whether a
+  key works is known only from the opt-in access check (one real, paid request
+  per live participant), or from the first live send. Corti has no access check
+  here.
+- The scan that keeps credential values out of receipts and logs matches each
+  value as written, unquoted and without an inline comment, and does not match
+  values under 8 characters (they would match by chance), nor a value
+  transformed (encoded, or partly printed). It reads only the checked
+  participant's file.
+- The worker's stop timeout (360 s) covers a participant send (deadline 330 s),
+  not every whole stage: a stage still running when the 360 s pass is killed
+  with the worker and settled as any stage cut short (the stale-stage sweep, or
+  an undo's close).
