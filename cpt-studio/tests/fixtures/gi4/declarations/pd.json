@@ -14,7 +14,11 @@
   "context._PD_COPIED",
   "context._PD_CREDENTIAL",
   "context._PD_KIND_FIELD",
+  "context._PD_NAME_BACK",
+  "context._PD_NAME_BEFORE",
+  "context._PD_NAME_SUFFIX",
   "context._PD_NOT_CLOSING",
+  "context._PD_NOT_NAME",
   "context._PD_NOT_OWN",
   "context._PD_OTHER_DATE",
   "context._PD_OWN_VERB",
@@ -86,7 +90,7 @@
   "amended 2026-11-01 (DS-4): several values narrow nothing - the question quotes the lines and never says 'Conflicting dates of service are documented' for them (F1, D1, D2, C4)",
   "amended 2026-11-01 (CTS-5): rule (a)'s note quotes each differing label's whole line ('Day of procedure: 10/19/2026 Date seen: 10/12/2026 (pre-op clinic)'), never the label and its date alone"
  ],
- "guards_and_mutants": "one killing mutant per guard, each detected by tests.test_gi4_pd (SimpleTestCase, no database): the around-procedure title hold; the last-8-lines reach; the not-a-closing-line words; the installed candidates read apart from the wide ones; plus the prototype's guards PD now carries: corroboration of a single value, the own-reading filter, the worded field's occurrence words, the head reach, and rule (a) taking only installed's date. Amended 2026-11-01: see amendment_20261101.mutants (the guards whose anchors the repair replaces are replaced by the new guards' mutants, one killing mutant each)",
+ "guards_and_mutants": "one killing mutant per guard, each detected by tests.test_gi4_pd (SimpleTestCase, no database): the around-procedure title hold; the last-8-lines reach; the not-a-closing-line words; the installed candidates read apart from the wide ones; plus the prototype's guards PD now carries: corroboration of a single value, the own-reading filter, the worded field's occurrence words, the head reach, and rule (a) taking only installed's date. Amended 2026-11-01: see amendment_20261101.mutants (the guards whose anchors the repair replaces are replaced by the new guards' mutants, one killing mutant each) and amendment_20261101.second_entry.mutants",
  "deviations_from_the_prototype": [
   "wide and worded candidates are read beside the installed candidates (_pd_wide_candidates) and appended after the installed post-processing, so _installed_service_date_fact reads exactly the installed candidates",
   "_head_end counts lines with sections.head_lines_end (one pass, no backtracking on a long blank line)",
@@ -136,6 +140,15 @@
    "replay.h4-03": {"fact": ["conflict", null], "note": "Conflicting documented values: 2026-10-06, 2026-10-08.", "accepted": ["2026-10-06", "2026-10-08"], "newly_held": ["doc:2026-10-09", "far", "minus1", "plus1"], "failed_hard": []},
    "h1_hard_failures": "installed 25 -> 0",
    "summary_rule_c": "the labels become that evidence - one value only when a closing-role line states the same day, several values as a conflict of those values; corroboration only from closing-role lines among the last 8 non-empty lines (the summary above is kept as written; this amendment governs)"
+  },
+  "second_entry": {
+   "date": "2026-11-01",
+   "written": "after the first entry's code was written and measured (not committed), and BEFORE this guard's code, by the resumed session of the same repair (cycle 1, still one cycle)",
+   "why": "the first entry reads the author's own sign-off from its POSITION (a closing-role line among the note's last 8 non-empty lines, after the head) and its verb, and rules out a copied block only by NEGATIVE evidence (no copied-text announcement, no addendum line, not under a heading naming another occurrence). A copied outside report pasted at a clinic note's end with no announcement and a neutral heading still narrows to the copied report's day - DS-3's class, which the first entry closes only for the refuter's wordings ('GI Clinic Note / Date performed: 09/03/2026 / ... / Electronically signed by B. Other MD, 09/03/2026' takes only 2026-09-03 and holds the visit's own day). Binding rule (1) asks for the AUTHOR'S OWN signature: the positive evidence of whose signature a line is, is a head field naming the note's performer or author",
+   "added_guard": "(1) amended: a sign-off line (it signs, e-signs, authenticates, finalizes or attests) is the author's own only when it NAMES a performer or author a head field names (_PD_PERFORMER among the first 12 non-empty lines: proceduralist, endoscopist, operator, performing physician/endoscopist/provider, gastroenterologist, colonoscopist, surgeon, attending, physician, provider, seen by, author; the field's name cut at its first comma, semicolon, colon, bracket or cell break): the field's surname stands in the sign-off line as the END of the signer's name (not followed by another capitalised word that is no credential or suffix: 'Synthetic Nurse' is not 'Synthetic'), and where the field gives a first name, the name words right before that surname (at most three, a title such as 'Dr.' skipped) agree with it - equal, or an initial of it ('Ilse Halvorsen-Ode' is not 'Wren Halvorsen-Ode'; 'W. Halvorsen-Ode', 'Wren J. Halvorsen-Ode' and 'Dr. Halvorsen-Ode' are); and the sign-off line is at most 240 characters (a longer line is no sign-off; it also bounds the name reading). Every sign-off verb is read alike, so an attestation and a signature are the same case: h4-06's 'Attested:' by the colonoscopist its head names stays its own sign-off, and a signature by anyone the head does not name - or in a note whose head names nobody - narrows nothing. Hold direction only: the guard can only turn a narrowing into the quote-only fact (installed's answers), never the reverse",
+   "cues_added": ["context._PD_NAME_BACK", "context._PD_NAME_BEFORE", "context._PD_NAME_SUFFIX", "context._PD_NOT_NAME"],
+   "expected": "against the first entry (its uncommitted code, the H2 corpus, measured with a scratch model of this rule): of its 1,075 narrowing texts about 979 still narrow - the 4 regression texts h4-01, h4-02, h4-04 and h4-06 among them, each signed by the performer its head names - and about 96 generated procedure reports whose head names no performer become quote-only (every answer taken, as installed); nothing else moves. Against installed and b840ae756: inside the first entry's declared bounds (NEW-SEND 0 and NEW-TAKE 0 against installed; NEW-HELD lower; TAKEN->HELD 0 against b840ae756; SEND->ASK and requests unchanged). H1 as the first entry declares (h4-01, h4-02, h4-04, h4-06 narrowed exactly as on b840ae756; h4-03 quote-only with its four recorded HARD failures); H4 EQUAL; H3 no MUST or SHOULD regression against installed (date cells only fall back to installed's)",
+   "mutants": "pd-attest-performer is replaced by pd-signoff-names-performer (every sign-off verb needs the head's performer); added pd-performer-whole-name (the surname ends the signer's name), pd-performer-first-name (the first name agrees) and pd-signoff-short-line (a sign-off line is at most 240 characters); the anchors of pd-own-not-cosign, pd-not-closing-words and pd-dictated-only follow the restructured lines. PD census 31 -> 34, total 129 -> 132"
   }
  }
 }
