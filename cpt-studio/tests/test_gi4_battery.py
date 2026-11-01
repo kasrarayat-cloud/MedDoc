@@ -4,7 +4,9 @@ K1-K3, E1-E4 and S1-S3, the h4-05 counterfactual (43259 citing the narrative: EX
 PA), and package PA's PA1-PA3 (the agreement gate reached with a second reader that disagrees, and with one that agrees).
 
 Pinned against installed 80df1831d168, re-pinned by package PA from the sealed export of its code commit c9454ee4a (only
-the h4-05 counterfactual moved, as tests/fixtures/gi4/declarations/pa.json declares; PA1-PA3 added)
+the h4-05 counterfactual moved, as tests/fixtures/gi4/declarations/pa.json declares; PA1-PA3 added), then by the Wave 1
+integration from the sealed export of the integrated tree (PA's h4-05 counterfactual and PV1's telephone-only and
+last-visit E/M times moved, as pa.json and pv1.json declare; no other row moved)
 (tests/fixtures/gi4/pins/battery.json): every code's bucket and status, and every property violation. A package that
 moves a row re-pins it beside its declaration ("battery": [[row, code, from, to]]),
 and a NEW violation (READY where the truth says not done today, an exclusion where it says done) always fails. The truths
@@ -52,9 +54,11 @@ class AssessBatteryTests(SimpleTestCase):
         known = {(n, c) for n, codes in PIN['rows'].items() for c, (_, _, v) in codes.items() if v}
         now = {(n, c) for n, row in self.result.items() for c, p in row['proposals'].items() if p['violations']}
         self.assertEqual(sorted(now - known), [])
-        # installed: two C4 E/M READYs and two S2/S3 exclusions of a done colonoscopy (the h4-05 counterfactual's
-        # exclusion, a fifth on installed, is held since package PA)
-        self.assertEqual(len(known), 4)
+        # installed carried five: the two C4 E/M READYs (telephone-only time 99212, last visit time 99213: held since
+        # package PV1), the h4-05 counterfactual's exclusion (43259: held since package PA), and the two S2/S3
+        # exclusions of a done colonoscopy (45378), which no Wave 1 package moves - the two left, measured on the
+        # integrated tree (S2's routing aggregate is a recorded residual of the round-4 plan)
+        self.assertEqual(len(known), 2)
 
     def test_the_properties(self):
         ready = {'bucket': 'selected', 'status': 'ready', 'modifiers': [], 'checks': []}

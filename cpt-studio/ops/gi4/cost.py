@@ -4,6 +4,12 @@ the stages run them (studio/bounded.py, under the stage deadline and memory allo
 most 2.3 (steps under the noise floor of 0.05 s are not judged), the analyze child at most 30 s, the assess child at
 most 60 s, and neither past ASSESS_MEMORY_BYTES (an overrun is a failure, never a skip).
 
+Both children read every shape on its own date of service, PROBE_DATE (the head's "Date of service: 10/19/2026"), as
+installed read them. Where the context asks that date instead of reading it (round 4 PD: a wide label beside the date
+of service makes the context ask, and only the date of service is accepted), the children get the member's answer the
+context accepts, so they still measure the dated path, never a dateless one; a shape whose context accepts no
+PROBE_DATE at all fails the probe loudly (member_values).
+
   python -m ops.gi4.cost [--tree DIR] [--sizes 25000,50000,100000,200000,400000] [--only NAME ...]
 """
 from __future__ import annotations
@@ -21,6 +27,7 @@ RATIO_LIMIT = 2.3
 NOISE_FLOOR = 0.05
 ANALYZE_LIMIT = 30.0
 ASSESS_LIMIT = 60.0
+PROBE_DATE = '2026-10-19'  # every shape's own date of service (B's head line)
 B = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy Report\nDate of service: 10/19/2026\n'
 # The minimal design's shapes (its cost.py) and the shapes the PS helpers read.
 SHAPES = {
@@ -68,30 +75,44 @@ def _peak(fn, *args):
     return result, resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024
 
 
-def _analyze(m, text):
-    read = m.jobs._analyze_child(text, {}, m.settings.MAX_SERVICE_MENTIONS)
+def member_values(m, document_facts) -> dict:
+    """The member's values both children read for a shape whose document facts are ``document_facts``: none where the
+    document gives PROBE_DATE itself; where the context asks it instead, the member's answer PROBE_DATE, taken only when
+    the context accepts it (jobs._merged_facts, exactly as the stages merge an answer). Anything else raises: the
+    children would read another date, or none, and measure another path than the probe says."""
+    want = dt.date.fromisoformat(PROBE_DATE)
+    for values in ({}, {'service_date': PROBE_DATE}):
+        if m.jobs._service_date_of(m.jobs._merged_facts(document_facts, values)) == want:
+            return values
+    fact = document_facts['service_date']
+    raise ValueError(f'the context neither reads nor accepts {PROBE_DATE} on this shape ({fact.origin}: '
+                     f'{fact.value!r}): the children would not read the date of service the probe codes')
+
+
+def _analyze(m, text, values):
+    read = m.jobs._analyze_child(text, values, m.settings.MAX_SERVICE_MENTIONS)
     return 'mentions over the limit' if isinstance(read, int) else 'read'
 
 
-def _assess(m, text):
-    day = dt.date(2026, 10, 19)
+def _assess(m, text, values):
     quote = 'Date of service: 10/19/2026'
     start = text.find(quote)
     codes = () if start < 0 else (m.ProviderCode(role='selected', system='cpt', code='45378', display='SYNTHETIC',
                                                  evidence=(m.EvidenceSpan(0, start, start + len(quote), quote, True,
                                                                           1),)),)
     normalized = m.NormalizedResponse(provider='corti', adapter_version='corti-coding-v2@cptstudio-1', codes=codes)
-    facts = m.jobs._merged_facts(m.context.extract_context(text), {})
+    facts = m.jobs._merged_facts(m.context.extract_context(text), values)
+    day = m.jobs._service_date_of(facts)  # the date the stages derive from the merged facts: PROBE_DATE (member_values)
     context = m.jobs.context_facts(SimpleNamespace(facts=facts))
     m.jobs._assess_child(text, day, (m.PageSpan(1, 0, len(text)),), context, normalized, m.Lookup([], {}), 'succeeded',
                          'ok', ())
     return 'assessed'
 
 
-def _bounded(m, fn, text, seconds):
+def _bounded(m, fn, text, values, seconds):
     t0 = time.perf_counter()
     try:
-        outcome, peak = m.bounded.run_bounded(_peak, fn, m, text, seconds=seconds,
+        outcome, peak = m.bounded.run_bounded(_peak, fn, m, text, values, seconds=seconds,
                                               memory_bytes=m.settings.ASSESS_MEMORY_BYTES)
     except m.bounded.Overrun as exc:
         return {'seconds': round(time.perf_counter() - t0, 2), 'overrun': exc.reason}
@@ -114,12 +135,13 @@ def probe(m, name, make, sizes) -> list:
         m.sections.around_procedure_title(text) if hasattr(m.sections, 'around_procedure_title') else None
         m.sections.procedure_report_head(text) if hasattr(m.sections, 'procedure_report_head') else None
         t4 = time.perf_counter()
+        values = member_values(m, facts)
         _clear(m)
-        analyze = _bounded(m, _analyze, text, m.settings.JOB_DEADLINE_SECONDS['analyze'])
-        assess = _bounded(m, _assess, text, m.settings.JOB_DEADLINE_SECONDS['assess'])
+        analyze = _bounded(m, _analyze, text, values, m.settings.JOB_DEADLINE_SECONDS['analyze'])
+        assess = _bounded(m, _assess, text, values, m.settings.JOB_DEADLINE_SECONDS['assess'])
         rows.append({'chars': len(text), 'context': round(t1 - t0, 3), 'route': round(t2 - t1, 3),
                      'inventory': round(t3 - t2, 3), 'ps_helpers': round(t4 - t3, 4), 'analyze': analyze,
-                     'assess': assess})
+                     'assess': assess, 'member_answer': values.get('service_date')})
     return rows
 
 
@@ -157,7 +179,9 @@ def main(argv=None):
         rows = probe(m, name, make, sizes)
         results[name] = rows
         problems += judge(name, rows)
-        print(f'{name}:', flush=True)
+        answered = sorted({r['member_answer'] for r in rows if r['member_answer']})
+        print(f'{name}:' + (f' (the context asks the date: the children read the member answer {answered})'
+                            if answered else ''), flush=True)
         for r in rows:
             print(f"  {r['chars'] // 1000:4d}k ctx {r['context']:6.2f}s route {r['route']:6.2f}s inv {r['inventory']:6.2f}s "
                   f"ps {r['ps_helpers']:7.4f}s | analyze child {r['analyze'].get('seconds')}s "
