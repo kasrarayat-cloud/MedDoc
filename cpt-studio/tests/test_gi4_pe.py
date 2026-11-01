@@ -12,7 +12,9 @@ it is read only by detect._landmarks, through detect._pe_reached_before. These t
   be passed" stays "incomplete: stomach", a 30 cm stricture never reads complete, and a denied, hedged, planned,
   conditioned, generalised or falling-short steer, an accessory's, a shallow one, a letter's or another record's
   gives back the installed reading;
-- one killing mutant per guard (PE_MUTANTS, detector this module; every anchor occurs exactly once in this tree).
+- the behaviour every PE mutant must break: this module is the detector of tests/test_gi4_pe_mutants.PE_MUTANTS, and
+  holds no registry test of its own (a mutant removes its own anchor, so a registry check here would kill every
+  mutant whatever the behaviour tests saw).
 Offline: SimpleTestCase, no database, nothing sent.
 """
 import datetime as dt
@@ -22,8 +24,7 @@ from pathlib import Path
 
 from django.test import SimpleTestCase
 
-from ops.gi4 import boot, freeze, regression, replay
-from ops.gi4.mutants import Mutant
+from ops.gi4 import freeze, regression, replay
 from studio import jobs
 from studio.gi import context, cues, detect, sections, services
 
@@ -277,46 +278,3 @@ class GuardTests(SimpleTestCase):
         self.assertFalse(moved('We ', 'steered the balloon into the '))
         self.assertFalse(moved('It was ', 'steered into the '))
         self.assertFalse(moved('', 'Steered into the '))
-
-
-# One killing mutant per guard PE adds, and the release itself (detector: this module). Run from a scratch driver with
-# ops.gi4.mutants.applied on a COPY of a sealed export (sha256 printed after the mutation and after the restore).
-_D = 'studio/gi/detect.py'
-_UNIT = 'unit:tests.test_gi4_pe'
-PE_MUTANTS = (
-    Mutant('pe-vocabulary', "routing's own reach verbs are read (the release)", _D,
-           '    found = cues.REACHED_BEFORE_ROUTING.search(pre)\n', '    found = cues.REACHED_BEFORE.search(pre)\n', _UNIT),
-    Mutant('pe-endpoint', "a routing-only verb reads only the family's endpoint or beyond", _D,
-           "    if depth < _S2_expected_depth(an, table):\n        return False  # short of the family's endpoint",
-           "    if False:\n        return False  # short of the family's endpoint", _UNIT),
-    Mutant('pe-doubt-governs', 'a negation, modal, infinitive, hedge or present tense governing the verb', _D,
-           '    if re.search(r"(?:\\b(?:not|never|cannot|unable[ \\t\\n]+to|',
-           '    if False and re.search(r"(?:\\b(?:not|never|cannot|unable[ \\t\\n]+to|', _UNIT),
-    Mutant('pe-doubt-falling-short', 'a falling-short adverb before the verb', _D,
-           '        return True  # it fell short', '        return False  # it fell short', _UNIT),
-    Mutant('pe-doubt-plan', 'a wish, plan, attempt or condition before the verb', _D,
-           '        return True  # a wish, a plan, an attempt or a condition',
-           '        return False  # a wish, a plan, an attempt or a condition', _UNIT),
-    Mutant('pe-doubt-span', 'a negation, hedge or attempt between the verb and the landmark', _D,
-           '        return True  # denied or doubted between the verb and the landmark',
-           '        return False  # denied or doubted between the verb and the landmark', _UNIT),
-    Mutant('pe-doubt-post', 'another time or a condition after the landmark', _D,
-           "    return re.search(r'\\b(?:later|tomorrow|upcoming|future|",
-           "    return False and re.search(r'\\b(?:later|tomorrow|upcoming|future|", _UNIT),
-    Mutant('pe-endoscope', 'the endoscope moved, never an accessory', _D,
-           '    if not _pe_endoscope_moved(before, span):\n        return False', '    if False:\n        return False', _UNIT),
-    Mutant('pe-around-procedure', 'no routing-only reach in a note written around a procedure', _D,
-           '    if _pe_around_procedure(an):\n        return False', '    if False:\n        return False', _UNIT),
-    Mutant('pe-another-occurrence', "no routing-only reach under a line naming another occurrence's record", _D,
-           '    return not gi_sections.under_another_occurrence(an.text, at - len(pre) + found.start())',
-           '    return True', _UNIT),
-)
-
-
-class MutantRegistryTests(SimpleTestCase):
-    def test_every_anchor_occurs_exactly_once_in_this_tree(self):
-        for m in PE_MUTANTS:
-            text = (boot.HARNESS_TREE / m.path).read_text(encoding='utf-8')
-            self.assertEqual(text.count(m.old), 1, m.name)
-            self.assertNotEqual(m.old, m.new, m.name)
-        self.assertEqual(len({m.name for m in PE_MUTANTS}), len(PE_MUTANTS))
