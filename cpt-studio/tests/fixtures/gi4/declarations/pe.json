@@ -1,0 +1,45 @@
+{
+ "package": "PE",
+ "summary": "GI round 4, package PE: routing extent vocabulary (synthesis E2; plan Wave 1 PE). New cues.REACHED_BEFORE_ROUTING = installed cues.REACHED_BEFORE with 'steered' and 'navigated' added to its reach verbs, read ONLY by detect._landmarks (both of its REACHED_BEFORE reads: the reach and the cell-cut test), through new _pe_ helpers. cues.REACHED_BEFORE itself and every constant context.py or sections.py reads stay byte-identical, so the request side cannot move. A reach read only by a routing-only verb counts only under fail-closed guards (each can only give back installed behaviour): the landmark lies at or beyond the depth the family calls for (cecum for the lower tract; _expected_upper_depth for the upper), no denial governs the verb ('could not be steered', 'was not', 'never', 'unable to', 'failed to', a negation or an attempt word between the verb and the landmark), no falling-short adverb (cues._FALLING_SHORT), and the instrument steered is an endoscope (a scope word before the verb in the clause window or as its object, never an accessory: guidewire, catheter, balloon, dilator, stent, probe, ...).",
+ "base": "06e6d204e (cpt-studio byte-identical to installed 80df1831d168; the branch base 1e0733feb reads identically: PS added uncalled functions only)",
+ "declared_before_code": true,
+ "cues_added": [],
+ "cues_added_note": "cues.REACHED_BEFORE_ROUTING is new but neither context.py nor sections.py references it, so H2(a)'s request-side inventory does not list it; cues.REACHED_BEFORE (read by sections._landmark_reads) is unchanged.",
+ "movements": {},
+ "movements_note": "H2: NO movement of any class (NEW-SEND 0, NEW-TAKE 0, NEW-HELD 0, SEND->ASK 0, LAYOUT/FACT/REQUEST/MENTIONS/STATE-CHANGED 0): detect._landmarks is read by neither context.py nor sections.py, and no mention counter calls it.",
+ "battery": [],
+ "battery_note": "H4: NO movement. Only one permanent row contains a routing-only verb: 'unpassed pylorus (steered)'. Its stomach is reached by the installed form ('introduced ... through the'), its pylorus is reached by neither form (the comma after 'stomach'), and its duodenum is blocked by cues.NOT_REACHED_BEFORE before any reach is read; it stays 43235 selected/ready with its incompleteness signal and extent 'incomplete: stomach'. Every other row has no 'steered'/'navigated' and cannot move.",
+ "must_hold": [
+  "'The pylorus could not be passed' (battery 'unpassed pylorus (steered)'): routing gi.egd stays 'incomplete', extent 'incomplete: stomach'; 43235 selected/ready with its incompleteness signal (no violation, as installed)",
+  "'stricture at 30 cm' and 'stricture, cecum named in plan': never complete (45380 and 45378 stay selected/needs_clarification); a steered variant ('steered through the rectum and could not be advanced past a tight stricture at 30 cm in the sigmoid colon') never reads complete",
+  "denials of the new verbs read as installed: 'could not be steered into the duodenum', 'was not steered into the duodenum', 'couldn't be navigated to the cecum', 'never navigated to the cecum', 'unable to be steered into the duodenal bulb', 'steered toward but not into the duodenum', 'not successfully navigated to the cecum'",
+  "an accessory steered or navigated is no endoscope reach (read as installed): a guidewire navigated through the pylorus into the duodenum, a balloon steered into the duodenal bulb, a catheter navigated to the cecum",
+  "a routing-only verb never reads a landmark short of the family's endpoint (read as installed, so no new 'incomplete: X'): steered into the esophagus, steered into the stomach, navigated into the rectum, navigated to the hepatic flexure",
+  "historical, planned and another procedure's statements keep their installed readings (the per-hit status and _about_another_procedure checks run before any reach)"
+ ],
+ "replay": {
+  "h4-04": {
+   "states": ["none", "walk", "doc:2026-09-28", "far", "minus1", "plus1", "plan"],
+   "routing": "gi.egd extent fact 'incomplete: stomach' -> 'second part of duodenum' (origin document, same evidence: the clause of L15-16) in every state; gi.egd status stays 'uncertain', missing stays []; gi.colonoscopy unchanged (negated)",
+   "inventory": "S1 (gi.egd) extent 'incomplete: stomach' -> 'second part of duodenum' in every state; its status (performed), completion (complete), scope and acts unchanged; S2 unchanged",
+   "proposals": "every bucket, status, non-pass check and fingerprint unchanged in every state: 43251 stays selected/ready (walk; selected/needs_clarification in 'none') with fingerprint 92e16310d388 in the walk state; 45378 stays excluded/excluded. The only check that names the extent, facts.required, stays 'pass' (only its detail text moves to 'extent reached = second part of duodenum'), and the fingerprint hashes check ids and statuses, not details",
+   "unchanged": "date fact and accepted answers, every request sha256, questions, second-review offers, completeness, encounter checks",
+   "expectations": "SOFT routing.fact[gi.egd.extent]: ok false -> true (its detail moves); every other expectation unchanged; failed_hard unchanged",
+   "difference_paths": 16,
+   "difference_paths_note": "H1 --base/--head: 7 x states/<s>/routing/gi.egd/facts[0][1], 7 x states/<s>/inventory[0]/extent, and expectations[<routing.fact[gi.egd.extent]>]/ok and /detail"
+  },
+  "h4-01": "EQUAL", "h4-02": "EQUAL", "h4-03": "EQUAL", "h4-05": "EQUAL", "h4-06": "EQUAL", "h2-08": "EQUAL", "h2-10": "EQUAL"
+ },
+ "fingerprint_43251": "DECLARED UNCHANGED under PE alone (92e16310d388 in the walk state; every state's fingerprint unchanged), against the task text's expectation of a change (the judge's F12 measured 92e16310 -> 2eeb1224 / 9d6bff8e on trees that also carried PR, PI, PD and PV, whose routing.family or other check statuses move). Consequence: the live approval of 43251 carries on fingerprint equality after PE; it is invalidated only when a package that moves a check status installs with it.",
+ "corpus": {
+  "documents_with_a_routing_only_verb": 96,
+  "which": "the seeded h4-04 family's variants whose 'upper' slot keeps the source sentence (S-h4-04-*, upper=0); no generated document carries 'steered' or 'navigated'",
+  "MUST extent.never-false-incomplete[gi.egd]": "75 fixed, 0 regressed (upper_h 'Stomach and Duodenum' 39 + 'Upper Tract' 36: installed 'incomplete: stomach' -> 'second part of duodenum')",
+  "SHOULD extent.read[gi.egd]": "75 fixed, 0 regressed (the same 75 documents)",
+  "readings_without_a_cell_movement": "the 21 variants under 'Upper Endoscopy Findings' (installed: gi.egd performed, extent 'duodenum' from 'the duodenum looked normal') read extent 'second part of duodenum'; both extent cells pass before and after",
+  "every_other_cell": "no movement (status, binding, act, date and E/M cells; gi.colonoscopy extent cells)"
+ },
+ "state": "H5: unchanged (tests/test_gi4_state.py passes as on the base)",
+ "cost": "H7: within the limits; a routing-only reach is evaluated only where cues.REACHED_BEFORE fails and cues.REACHED_BEFORE_ROUTING matches, on the clause window already read (bounded by CLAUSE_REACH), with the family's endpoint memoised per analysis",
+ "pins": "re-pinned in a separate final commit: replay.json (h4-04's 7 states: routing 'extent=second part of duodenum' and the inventory extent); cues.json, freeze.json, battery.json and tables.json unchanged"
+}
