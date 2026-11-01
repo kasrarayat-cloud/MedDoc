@@ -463,7 +463,7 @@ def _routing_agrees(u: reconcile.Unresolved, inventory, routing: Optional[Routin
             return True  # its own clause states it done; only routing's family summary doubts the service
         if strict and status == 'uncertain' and cues[:1] and cues[0].startswith(detect.SILENT):
             return True
-    return _po_not_contradicted(u, routing, text, day, families)
+    return _po_not_contradicted(u, routing, text, day, families, inventory)
 
 
 # GI round 4, package PO (the plan's M1 and PO-2). Routing reads a family that is named only in a title, a grid header
@@ -507,13 +507,15 @@ def _po_cached(fn):
 
 
 def _po_not_contradicted(u: reconcile.Unresolved, routing: RoutingResult, text: str, day: Optional[date],
-                         families: set) -> bool:
+                         families: set, inventory=None) -> bool:
     """Whether routing says nothing against the unresolved item ``u`` the installed rule does not offer: the document is
     today's procedure report by its own head (_po_todays_procedure_report), routing names the item's family on a title
     line of that head where it reads done today or says nothing (A2: a family routing never names has no such
     mention), and either
-    - PO-1: every mention of the family is silent, and no passage of the item (its evidence) is read as not done today
-      or with a worded doubt (_po_says_nothing); or
+    - PO-1: every mention of the family is silent, no passage of the item (its evidence) is read as not done today
+      or with a worded doubt (_po_says_nothing), and - positive evidence beyond that silence (Wave 1 repair cycle 1,
+      refutation F4) - the documented-service reader reads an act of the item's own service as done by an act
+      predicate of its own (_po_done_in_body); or
     - PO-2: no mention of the family contradicts - each is done today, says nothing, is another occasion's by a time
       word of its own clause, or is not done today only by a section that reaches it across an unread heading-like line
       (_po_section_only_across_unread_heading) - a passage of the item on a title line says nothing (A3: the
@@ -535,6 +537,8 @@ def _po_not_contradicted(u: reconcile.Unresolved, routing: RoutingResult, text: 
             return False
         readings.append((ev.start, *detect.status_for_span(text, ev.start, ev.end, day)))
     if all(_po_silent(m.status, m.cues) for m in mentions):  # PO-1
+        if not _po_done_in_body(u, inventory, text):  # P1: silence is no evidence that anything was done today
+            return False
         return all(_po_says_nothing(status, cues) for _, status, cues in readings)
     for m in mentions:  # PO-2: no mention contradicts
         if m.status in checks.POSITIVE or _po_says_nothing(m.status, m.cues):
@@ -549,6 +553,38 @@ def _po_not_contradicted(u: reconcile.Unresolved, routing: RoutingResult, text: 
         return False
     runaway = [_po_section_only_across_unread_heading(text, pos, status, cues) for pos, status, cues in readings]
     return any(runaway) and all(r or _po_says_nothing(status, cues) for r, (_, status, cues) in zip(runaway, readings))
+
+
+# GI round 4, Wave 1 repair cycle 1 (PO-1; refutation F4 of b840ae756): routing's silence about a family and the
+# documented-service reader's title are not evidence that anything was done today. A titled report whose procedure was
+# called off in words A5 does not list ("we did not go ahead", "the scope was not inserted", "nothing further was done
+# today"), or a pre-procedure note titled with the procedure ("Pre-colonoscopy Assessment", "Colonoscopy Admission
+# Checklist"), had been offered. PO-1 now also needs the documented-service reader to read an act of the item's own
+# service as done by an act predicate of its own ("Cold forceps samples were taken", "the polyp was removed with a hot
+# snare") - never an act read only from a title or a procedure line ("Colonoscopy With Cold Snare Polypectomy") - in a
+# passage under no line naming another occurrence's record. Hold-only: it withholds offers and offers nothing new.
+_PO_ACT_PREDICATE = 'performed: an act predicate'  # services: an act predicate of its own, in a current report or not
+
+
+def _po_done_in_body(u: reconcile.Unresolved, inventory, text: str) -> bool:
+    """P1 (PO-1's positive evidence): an act of the item's own service - for an act item, that act - that the
+    documented-service reader reads performed by an act predicate of its own (_PO_ACT_PREDICATE: never only from a
+    title, a procedure line, a box or a field), with a passage in the text under no line naming another occurrence's
+    record (sections.under_another_occurrence: "Outside records"). False without an inventory or the item's service."""
+    service = next((s for s in inventory.services if s.id == u.service), None) if inventory is not None else None
+    if service is None:
+        return False
+    for a in service.acts:
+        if u.act and a.kind != u.act:
+            continue
+        if a.status != 'performed':
+            continue
+        if not any(c.startswith(_PO_ACT_PREDICATE) for c in a.cues):
+            continue
+        if any(0 <= ev.start < ev.end <= len(text) and not gi_sections.under_another_occurrence(text, ev.start)
+               for ev in a.evidence):
+            return True
+    return False
 
 
 def _po_another_occasion(cues: Sequence[str]) -> bool:
@@ -803,6 +839,10 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
             # today, another status, or nothing at all: both readers must agree before a code is excluded, so it is
             # held (7c8 skeptic, sk:9).
             found = None
+        elif found.reason == 'act_missing' and outcome.state == 'not_performed' \
+                and not _time_in_doubt(code, found.service):
+            # Held: GI round 4, Wave 1 repair (PA, CTS-4) - a one-cause disagreement says so, true of the document
+            found = _pa_one_cause_hold(found, outcome, code, text, day, pages)
         elif found.reason == 'service_uncertain' and outcome.state == 'not_performed' \
                 and _own_passage_decides(outcome) and gi_services.doubted_by_routing_alone(found.service) \
                 and not _act_documented(code, found.service, inventory):
@@ -1019,8 +1059,8 @@ def _second_reading(outcome: checks.StatusOutcome, text: str, day: Optional[date
                 if one_cause:
                     # GI round 4 (PA): both readers take the time from one section - the layout - so no agreement
                     # (the words that say so come first: a cue is shown to EXCERPT_CHARS characters)
-                    return (f'reads it the same only by its section: one cause, not two readings; '
-                            f'{_pa_reach(text, decisive.start)} (\u201c{checks.excerpt(clause.text)}\u201d)')
+                    return (f'{_PA_ONE_CAUSE}; {_pa_reach(text, decisive.start)} '
+                            f'(\u201c{checks.excerpt(clause.text)}\u201d)')
             agreed = True
             continue
         return f'reads it as {reading.status}: \u201c{checks.excerpt(clause.text)}\u201d'
@@ -1044,6 +1084,7 @@ def _says_nothing(status: str, cues: Sequence[str]) -> bool:
 # heading-like line the layout does not read, they are no agreement: the code is held, never excluded. A section whose
 # own heading stands above the passage is the document's own statement, and its readings still agree.
 _SECTION_ONLY_SERVICES = ('historical: in a history section', 'planned: in a plan section')
+_PA_ONE_CAUSE = 'reads it the same only by its section: one cause, not two readings'  # _second_reading's words
 
 
 def _pa_own_time(cue: str) -> bool:
@@ -1067,28 +1108,166 @@ def _section_only_routing_reading(reading: checks.Reading, text: str = '') -> bo
     historical: "performed: was introduced") - AND that section reaches the passage only across a heading-like line the
     layout does not read as a heading, or from further below its heading than that is read (sections.
     beyond_heading_reach, fail-closed: a runaway history or plan section; GI round 4, PA). A section whose own heading
-    stands above the passage is the document's own statement: False, and a reading by it still agrees."""
+    stands above the passage is the document's own statement: False, and a reading by it still agrees. Wave 1 repair
+    cycle 1 (refutations F6 and CTS-3): only a REAL unread heading counts (_pa_unread_heading) - never a list entry, a
+    provider, facility or page line, a bare procedure name, the section's first line, or a line that names another
+    occurrence itself."""
     if reading.start is None:  # a reading of the whole family has no passage of its own (and no text: no heading)
         return False
     if not any(cue.startswith(checks.SECTION_CUE_PREFIX) for cue in reading.cues) \
             or any(_pa_own_time(cue) for cue in reading.cues):
         return False
-    return gi_sections.beyond_heading_reach(text, gi_sections.layout(text), reading.start)
+    return bool(_pa_unread_heading(text, reading.start))
+
+
+# GI round 4, Wave 1 repair cycle 1 (PA; refutations F6 and CTS-3 of b840ae756). The one-cause rule had counted every
+# short title-case line between a history or plan heading and the passage as an unread heading: an entry of a surgical
+# history list ("Colonoscopy With Biopsy" / "Upper Endoscopy With Dilation"), a provider's or facility's name ("Alan
+# Synthetic MD", "Synthetic Regional Medical Center"), a page's running number ("Page 2 of 3"), a procedure's name
+# opening a history entry ("Endoscopic Retrograde Cholangiopancreatography"), and a line that itself names an earlier
+# occurrence ("What the Earlier Echoendoscope Showed"). Each turned a correct exclusion into a hold, and a held
+# procedure then held a READY E/M as possibly same-day. Only a REAL unread heading makes the section's reading one
+# cause now: the nearest heading-like line above the passage that stands as a heading - bounded above (a blank line, a
+# sentence's end or a field line), followed by content (a sentence, a field, a bulleted item or a long line), not the
+# section's first line, and no name, page or bare procedure-name line; such lines are read past as the section's own
+# content. When the nearest heading-like line names another occurrence, the document's own words date the passage, and
+# the agreement stands. Every rule here only narrows the hold back to the installed exclusion; past the reach read it
+# still fails closed (_PA_FAR).
+_PA_FAR = '\x00beyond the reach read'  # _pa_unread_heading: the heading lies too far back (fail-closed)
+_PA_PAGE_LINE = re.compile(r'(?:page[ \t]*+\d{1,4}(?:[ \t]*+(?:of|/)[ \t]*+\d{1,4})?+'
+                           r'|\d{1,4}[ \t]*+(?:of|/)[ \t]*+\d{1,4})', re.A | re.I)
+_PA_CREDENTIAL = re.compile(r'(?:,|[ \t])[ \t]*+(?:M\.?D|D\.?O|R\.?N|N\.?P|P\.?A(?:-?C)?|CRNA|Ph\.?D|MBBS|MBChB|FACG'
+                            r'|FACP|FASGE|AGAF|FRCPC?|DNP|APRN|ARNP|FNP(?:-BC)?|CNP|LPN)\.?$', re.A)
+_PA_TITLE_PREFIX = re.compile(r'(?:Dr|Mr|Mrs|Ms|Mx|Prof)\.?[ \t]+[A-Z]', re.A)
+_PA_FACILITY = re.compile(r'\b(?:hospital|medical[ \t]+cent(?:er|re)|health[ \t]+(?:cent(?:er|re)|system|services)'
+                          r'|healthcare|clinic|infirmary|university|institute|surgery[ \t]+cent(?:er|re)'
+                          r'|surgical[ \t]+cent(?:er|re)|endoscopy[ \t]+(?:cent(?:er|re)|unit|suite)|medical[ \t]+group'
+                          r'|associates)\b', re.A | re.I)
+_PA_TRAILING_ASIDE = re.compile(r'(?:[ \t]*+\([^()\n]{0,40}\))+$')
+# The words a bare procedure name carries beside the service's own name ("Colonoscopy With Biopsy", "Upper Endoscopy
+# With Dilation"): connectors, an act or a qualifier. Read only to say a line is an entry of a history, not a heading.
+_PA_PROCEDURE_WORDS = frozenset((
+    'with', 'without', 'and', 'or', 'of', 'the', 'a', 'an', 'plus', 'via', 'under', 'using', 'to', 'into',
+    'biopsy', 'biopsies', 'dilation', 'dilations', 'dilatation', 'polypectomy', 'polypectomies', 'ligation', 'banding',
+    'band', 'bands', 'stent', 'stents', 'stenting', 'placement', 'removal', 'exchange', 'sphincterotomy', 'cannulation',
+    'ablation', 'injection', 'tattoo', 'tattooing', 'aspiration', 'fine', 'needle', 'fna', 'fnb', 'hemostasis', 'clip',
+    'clips', 'clipping', 'snare', 'cold', 'hot', 'forceps', 'balloon', 'upper', 'lower', 'flexible', 'diagnostic',
+    'screening', 'surveillance', 'therapeutic', 'emr', 'mucosal', 'resection', 'endoscopic', 'retrograde'))
+_PA_NEXT_LINES = 3  # lines read down from a heading-like line for the content it heads
+
+
+def _pa_bounded_above(line: str) -> bool:
+    """Whether a heading may stand right under ``line``: a blank line, a sentence's end or a field line - never a list's
+    previous entry or a sentence the heading-like line would continue (GI round 4 Wave 1 repair, PA)."""
+    return not line or line[-1] in '.!?' or gi_sections._TITLE_FIELD.search(line) is not None
+
+
+def _pa_content(line: str) -> bool:
+    """Whether ``line`` is content a heading heads: a sentence, a field, a bulleted or numbered item, or a line longer
+    than a heading - never another short entry of an unbulleted list (GI round 4 Wave 1 repair, PA)."""
+    return len(line) > 60 or line[-1] in '.!?' or gi_sections._TITLE_FIELD.search(line) is not None \
+        or gi_sections._LIST_ITEM.match(line) is not None
+
+
+def _pa_name_line(line: str) -> bool:
+    """A page's running number, a provider's name or a facility's ("Page 2 of 3", "Alan Synthetic MD", "Dr. Alan
+    Synthetic", "Synthetic Regional Medical Center"; an aside in brackets at its end is read past): never a heading
+    (GI round 4 Wave 1 repair, PA)."""
+    bare = _PA_TRAILING_ASIDE.sub('', line).strip()
+    return _PA_PAGE_LINE.fullmatch(bare) is not None or _PA_CREDENTIAL.search(bare) is not None \
+        or _PA_TITLE_PREFIX.match(bare) is not None or _PA_FACILITY.search(bare) is not None
+
+
+def _pa_procedure_name_line(line: str) -> bool:
+    """A bare procedure name ("Endoscopic Retrograde Cholangiopancreatography", "Colonoscopy With Biopsy"): a service
+    the documented-service reader names (services.SERVICES) and nothing else but _PA_PROCEDURE_WORDS - an entry of a
+    history of procedures, never a heading ("Endosonographic Conclusion" says more: a heading) (GI round 4 Wave 1
+    repair, PA)."""
+    rest, named = list(line), False
+    for _, _, pattern in gi_services.SERVICES:
+        for m in pattern.finditer(line):
+            named = True
+            rest[m.start():m.end()] = ' ' * (m.end() - m.start())
+    return named and all(w.lower() in _PA_PROCEDURE_WORDS for w in gi_sections._HEADING_WORD.findall(''.join(rest)))
+
+
+def _pa_real_heading(text: str, start: int, end: int, first: int, line: str) -> bool:
+    """Whether the heading-like ``line`` at [start, end) stands as a REAL heading: not the section's first line under
+    its heading (``first``: an entry or a sub-title of the section's own content), no name, page or bare procedure-name
+    line, bounded above (_pa_bounded_above), and followed by content (_pa_content: the next non-empty line, read at
+    most _PA_NEXT_LINES lines down) (GI round 4 Wave 1 repair, PA)."""
+    if start == first or _pa_name_line(line) or _pa_procedure_name_line(line):
+        return False
+    above = text.rfind('\n', 0, start - 1) + 1
+    if not _pa_bounded_above(text[above:start - 1].strip()):
+        return False
+    nxt, after = end + 1, ''
+    for _ in range(_PA_NEXT_LINES):
+        if nxt >= len(text):
+            break
+        stop = text.find('\n', nxt)
+        stop = len(text) if stop < 0 else stop
+        after = text[nxt:stop].strip()
+        if after:
+            break
+        nxt = stop + 1
+    return not after or _pa_content(after)
+
+
+def _pa_unread_heading(text: str, pos: int) -> str:
+    """The REAL unread heading line through which the section at ``pos`` reaches it: reading up from ``pos`` to the
+    section's heading line, the nearest heading-like line (as sections.beyond_heading_reach reads one: _po_heading_like)
+    that stands as a heading (_pa_real_heading); a list entry, a name or page line, a bare procedure name or the
+    section's first line is read past as the section's own content. '' when none stands there, or when the nearest
+    heading-like line names another occurrence's record (sections.ANOTHER_OCCURRENCE_HEAD: the document's own words date
+    the passage); _PA_FAR, fail-closed, when the heading lies more than HEADING_REACH_LINES lines or HEADING_REACH_CHARS
+    characters back and nothing nearer decides. Bounded: those lines and characters, three lines down per candidate."""
+    section = gi_sections.layout(text).section_at(pos)
+    if section.heading is None:
+        return ''
+    lo = text.find('\n', section.heading.end)  # the heading's own line (its label's answer) is never such a line
+    if lo < 0 or lo >= pos:
+        return ''
+    first = lo + 1  # the section's first non-empty line under its heading
+    while first < pos:
+        nl = text.find('\n', first, pos)
+        if nl < 0 or text[first:nl].strip():
+            break
+        first = nl + 1
+    floor = max(lo, pos - gi_sections.HEADING_REACH_CHARS)
+    end = text.rfind('\n', lo, pos)
+    for _ in range(gi_sections.HEADING_REACH_LINES):
+        if end <= floor:
+            return _PA_FAR if floor > lo else ''
+        nl = text.rfind('\n', floor, end)
+        if nl < 0:
+            return _PA_FAR  # a line begun before the characters read: fail-closed
+        start = nl + 1
+        line = text[start:end].strip()
+        if _po_heading_like(line):
+            if gi_sections.ANOTHER_OCCURRENCE_HEAD.search(line):
+                return ''  # the passage stands under a line that names another occurrence itself (F6)
+            if _pa_real_heading(text, start, end, first, line):
+                return line
+        end = start - 1
+    return _PA_FAR
 
 
 def _pa_reach(text: str, pos: int, what: str = 'it') -> str:
     """How the section at ``pos`` reaches it, said for a reading _section_only_routing_reading finds one-cause: from
-    further below its heading than sections.beyond_heading_reach reads (HEADING_REACH_LINES lines or HEADING_REACH_CHARS
-    characters: fail-closed), or else past a heading-like line the layout does not read. Words only; it decides nothing
-    (GI round 4, PA)."""
+    further below its heading than is read (HEADING_REACH_LINES lines or HEADING_REACH_CHARS characters: fail-closed),
+    or else past the real unread heading line _pa_unread_heading finds, quoted whole. Words only; it decides nothing
+    (GI round 4, PA; the line quoted since Wave 1 repair cycle 1)."""
     section = gi_sections.layout(text).section_at(pos)
     heading = section.heading.text.rstrip(':').strip() if section.heading is not None else ''
     named = f' \u201c{heading}\u201d' if heading else ''
-    lo = text.find('\n', section.heading.end) if section.heading is not None else -1
-    if lo >= 0 and (pos - lo > gi_sections.HEADING_REACH_CHARS
-                    or text.count('\n', lo + 1, pos) >= gi_sections.HEADING_REACH_LINES):
+    line = _pa_unread_heading(text, pos)
+    if line == _PA_FAR:
         return (f'its section{named} reaches {what} from more than {gi_sections.HEADING_REACH_LINES} lines or '
                 f'{gi_sections.HEADING_REACH_CHARS:,} characters below its heading, further than a heading is read')
+    if line:
+        return (f'its section{named} reaches {what} only past the line \u201c{line}\u201d, written as a heading, which '
+                'the layout does not read as one')
     return (f'its section{named} reaches {what} only past a line written as a heading that the layout does not read '
             'as one')
 
@@ -1112,14 +1291,43 @@ def _agreed_not_done(code: str, outcome: checks.StatusOutcome, service, text: st
     decisive = outcome.decisive
     if decisive is None or decisive.origin != 'evidence' or decisive.start is None or decisive.end is None:
         return False
-    profile = reconcile.catalogue.code_profile(code)
-    kinds = set(profile.covers) if profile is not None else set()
     want = _not_done_class(decisive.status)
-    here = [a for a in service.acts if a.kind in kinds and not _says_nothing(a.status, a.cues)
-            and any(decisive.start < ev.end and ev.start < decisive.end for ev in a.evidence)]
+    here = _acts_in_passage(code, decisive, service)
     if here:
         return all(a.status in checks.NEGATIVE and _not_done_class(a.status) == want for a in here)
     return not _second_reading(outcome, text, day, pages)
+
+
+def _acts_in_passage(code: str, decisive: checks.Reading, service) -> list:
+    """The documented acts of a kind ``code`` accounts for that the deciding passage holds, each saying something
+    either way: they decide the act path's agreement before anything else (_agreed_not_done)."""
+    profile = reconcile.catalogue.code_profile(code)
+    kinds = set(profile.covers) if profile is not None else set()
+    return [a for a in service.acts if a.kind in kinds and not _says_nothing(a.status, a.cues)
+            and any(decisive.start < ev.end and ev.start < decisive.end for ev in a.evidence)]
+
+
+def _pa_one_cause_hold(found: reconcile.Match, outcome: checks.StatusOutcome, code: str, text: str,
+                       day: Optional[date], pages=()) -> reconcile.Match:
+    """The act path's hold (GI round 4, Wave 1 repair cycle 1, PA; refutation CTS-4) where the agreement an exclusion
+    needs fails only because both readers read the code's own passage as not today by one section (_second_reading's
+    one-cause words: no act of the code's kind in the passage decided it). The hold then says that, which is true of
+    the document, in place of the inventory's words for a missing act ("... but no endosonographic examination is
+    documented as done in it"), which the documented-service reader's act vocabulary makes false of a passage that
+    states one (h4-05: "Echoendoscopic views were obtained ..."). Any other disagreement keeps its hold and its words;
+    the bucket and the status are the same either way (held, never excluded)."""
+    decisive = outcome.decisive
+    if decisive is None or decisive.origin != 'evidence' or decisive.start is None or decisive.end is None \
+            or _acts_in_passage(code, decisive, found.service):
+        return found
+    why = _second_reading(outcome, text, day, pages)
+    if not why.startswith(_PA_ONE_CAUSE):
+        return found
+    return replace(found, state='uncertain', reason='readings_disagree',
+                   question=f'Confirm whether {code} was performed on the date of service.',
+                   detail=f'The routing-era reading of the passage it cites reads it as {decisive.status} only by its '
+                          f'section: {checks.cite(decisive)}. The documented-service reader {why}. Held for the '
+                          'reviewer, not excluded.')
 
 
 def _not_the_same_not_done(found: reconcile.Match, old: checks.StatusOutcome, code: str, text: str = '') -> str:

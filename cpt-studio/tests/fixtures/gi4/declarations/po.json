@@ -1168,5 +1168,315 @@
    "a note written around a procedure whose title has no around-procedure word (\"Colonoscopy Review\", \"Follow-up Visit\", \"H&P\") is held only by A1 (a sedation-labelled head field) and by the procedure head guard; the PS head guard itself stays as loose as described in 'why' (1) - a finding for package PR, which reads it to release codes (procedure_report_head is PS's, outside PO's ownership)",
    "a planned reading that runs across an unread heading is read with the history words of sections.ANOTHER_OCCURRENCE_HEAD only: no plan word on an unread heading line holds it"
   ]
+ },
+ "amendment_20261101_r2": {
+  "date": "2026-11-01",
+  "cycle": "Wave 1 repair, cycle 1 of at most 2 for this releasing family (the round-4 plan, rules for the round)",
+  "base": "b840ae756 (the integrated Wave 1 head); every movement below is against it unless it says installed",
+  "why": "An independent refutation of b840ae756 (finding F4) found PO-1 offering a second review for services not done today: a titled colonoscopy or EUS whose procedure was called off in words A5 does not list (\"After discussion we did not go ahead\", \"the scope was not inserted\", \"nothing further was done today\", \"At the time-out ... we did not go ahead\"), and pre-procedure notes titled outside sections.AROUND_PROCEDURE_WORDS (\"Pre-colonoscopy Assessment\", \"Colonoscopy Pre-assessment\", \"Colonoscopy Admission Checklist\", \"Colonoscopy Readiness Review\"). In each, the documented-service reader reads the service performed only from its report title and routing says nothing; PO-1 took that silence as no contradiction. Reproduced on a sealed export of b840ae756 before this amendment. The binding rule of this cycle: PO-1 needs positive evidence of today's performance beyond silence, or it is dropped.",
+  "rule_added": {
+   "P1 (PO-1 only)": "an act of the item's own service - for an act item, that act - that the documented-service reader reads performed by an act predicate of its own (a cue opening \"performed: an act predicate\": never an act read only from a title or a procedure line, a box or a field), with a passage in the text under no line naming another occurrence's record (sections.under_another_occurrence). Read by _po_done_in_body, given the inventory _routing_agrees already holds. Hold-only: it withholds offers and offers nothing new. PO-2, A1-A5, the head guard and installed's own rule are unchanged",
+   "closed lists": "none added (A5 and AROUND_PROCEDURE_WORDS are not widened: P1 is structural)"
+  },
+  "expected": {
+   "H1": "EQUAL against b840ae756 in every member state (--fixtures and --inputs): h4-02's two PO-1 items keep their offers in all six states (each has an act read performed by an act predicate: the biopsies, \"biopsied.\"), h4-05's PO-2 offer is untouched",
+   "H2": "NONE by construction (engine.py only)",
+   "H3": "no movement",
+   "H4": "no movement; the offer battery (the 50 H4 rows, own and empty answers) does not move",
+   "H5": "no movement (the PO state tests offer h4-02 and h4-05 as before)",
+   "original guard rows": "unchanged (P-h4-02 and G-evidence keep their offers)",
+   "amendment_20261101 rows": {
+    "A-evtitle colonoscopy report, copied prior EUS block": "gi.colonoscopy True -> False: its only act (\"Cold forceps biopsies were taken ...\") is read historical by the runaway Prior Studies section, so nothing is read done today beyond the title - a done-today item loses its offer (a declared cost); the EUS item stays False",
+    "every other row": "unchanged",
+    "moved": {
+     "A-evtitle colonoscopy report, copied prior EUS block": [
+      [
+       "gi.colonoscopy",
+       "",
+       "no_proposal",
+       true,
+       false
+      ],
+      [
+       "gi.eus",
+       "",
+       "no_proposal",
+       false,
+       false
+      ]
+     ]
+    },
+    "moved_about": "[family, act, reason, b840ae756 offer, cycle-1 offer] per unresolved item (empty answer)"
+   },
+   "offer corpus": "5,768 texts (empty and base answers, both member states): 1 offer True -> False - repo svc-28-flexsig-hemorrhoid-banding-nursing-conflict, none/base, gi.flex_sig band_ligation not_covered (its act is read from the procedure line and \"named without an act predicate\" in the body) - and nothing else: 9,743 of the 14,885 unresolved items are offered on b840ae756, 9,742 on the candidate; no proposal, completeness or item moves",
+   "rows": {
+    "about": "synthetic rows tests/test_gi4_po.py reads (R2_ROWS; text sha256 pinned here before the code), the row's own codes or none; [family, act, reason, installed offer, b840ae756 offer, cycle-1 offer] per unresolved item. F4 rows are the refutation's inputs byte for byte",
+    "rows": {
+     "F4 O1 colonoscopy, we did not go ahead": {
+      "text_sha256": "5f4636fc23bcab4a9457ff1b4576a52a4844f25b4cc87daec5ca9e900755c374",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "F4 O1 colonoscopy, the scope was not inserted": {
+      "text_sha256": "069f0baf6f77346bceab44765916eed924f961d88c3bb3b57d149332e5da947b",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "F4 O1 colonoscopy, nothing further was done today": {
+      "text_sha256": "9672cb678c79aa9161fb3709533ed20f35405b866d20ac88352b8bdac9baa094",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "F4 O2 EUS, at the time-out we did not go ahead": {
+      "text_sha256": "057d5183a0e2918685522bfe87e70b769a92bfbabd58012bbe59ebaaf226ee19",
+      "codes": [],
+      "offers": [
+       [
+        "gi.eus",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "F4 control, A5 reads the examination not started": {
+      "text_sha256": "15f4ded14247a058d5ed06bce383e0d854624daa474e42b1414c593999976e3e",
+      "codes": [],
+      "offers": []
+     },
+     "F4 PRE Pre-colonoscopy Assessment": {
+      "text_sha256": "854d15d273bbf906306a5ad0411fcde2537d89b568f92e509c8984266a2a3976",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "F4 PRE Colonoscopy Pre-assessment": {
+      "text_sha256": "8c3454f065e5c7b639f8836d1c923adb63f049f0a1ee791906960a929f6ca863",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "F4 PRE Colonoscopy Admission Checklist": {
+      "text_sha256": "e7337022a56778f5f4e0e4f902e1bbab42bd95d26c99373e005181ac1bab0242",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "F4 PRE Colonoscopy Readiness Review": {
+      "text_sha256": "8fe098c1a8dd7fb108e6b115f568f8e458ceb3c09d8f5e132be8c5032364f03b",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "P1 an act read only from the title": {
+      "text_sha256": "aed9de8c696295c1b9fc4a1bdc5587de6719b80fbd253a103770a0faa6d50288",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "P1 an act only under an outside-records line": {
+      "text_sha256": "f6ea08ac0af4f55844da42e49dc89ee4e90256f7e84d5aee0da62b6dd0bdfb53",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "P1 an act item whose own act is read only from the title": {
+      "text_sha256": "2f0244a4b3bfbbbfdf6e61104bab3ba81f950f8f341bb7c743acedbaae2aabc5",
+      "codes": [
+       [
+        "45385",
+        "A 4 mm polyp in the sigmoid colon was removed with cold snare."
+       ]
+      ],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "tattoo",
+        "not_covered",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "P1 an act stated in the indication": {
+      "text_sha256": "cd466bbaf213c445b2f5bf2b8deea1c2e4b5796aa749584b0dcfa53af3f19554",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "P1 an act in a history section": {
+      "text_sha256": "d00f23c12db4bcc0031609d38c5691bd20372a326f6a5af193f3dd4002fa7a3b",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "P1 an act dated another day": {
+      "text_sha256": "2948d951576302d4a1f9e5811500fb31a93c7b7cc141718cbdec40009caf8b21",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "P1 control, an act done today": {
+      "text_sha256": "0c40b27c93ec2ee1f93c97df59d6e578864b9959b778529ea88c54067686bf2e",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        true
+       ]
+      ]
+     },
+     "P1 control, biopsies taken in an upper examination": {
+      "text_sha256": "a412f1de1c359352bd149aee81b29fabe61fe8e47b730c9149e56980ec301ac9",
+      "codes": [],
+      "offers": [
+       [
+        "gi.egd",
+        "",
+        "no_proposal",
+        false,
+        true,
+        true
+       ]
+      ]
+     },
+     "P1 control, an act under a runaway indication": {
+      "text_sha256": "c3e4cbf3b5be688b2f7ce34c68b2a0424030cedf198e04a0e38ee731abef5532",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        true
+       ]
+      ]
+     }
+    }
+   },
+   "measured_before_code": "the code applied to a scratch copy of the sealed git-archive export of b840ae756 (engine.py sha256 bb837b00a47ae759 -> 31d6d5697142fa78; no worktree changed), read with the committed harness: H1 replay (--fixtures and --inputs) EQUAL against b840ae756; H4 battery 0 movements; the rows below on installed 80df1831d168, on b840ae756 and on the candidate; the offer corpus observed on b840ae756 and on the candidate"
+  },
+  "mutants": {
+   "po1-positive-evidence": "unit: the F4 rows",
+   "po1-own-act": "unit: P1 an act item whose own act is read only from the title",
+   "po1-act-performed": "unit: a hand-built act whose status is not performed beside an act-predicate cue",
+   "po1-act-predicate": "unit: P1 an act read only from the title",
+   "po1-act-occurrence": "unit: P1 an act only under an outside-records line",
+   "po1-act-in-text": "unit: a hand-built act whose passage lies outside the text",
+   "po1-no-service": "unit: no inventory, or no service of the item"
+  },
+  "known_limits": [
+   "P1 trusts the documented-service reader's act reading: an untimed act statement it reads as today's (an act predicate under a sub-heading it opens inside an indication) counts as positive evidence in a report whose procedure was called off",
+   "a done-today item whose acts are read only historical or planned by a runaway section, or only from a procedure line, a box or a field, loses its PO-1 offer (A-evtitle, svc-28)",
+   "PO-2 is unchanged: it offers on a passage that is not today only by a runaway section across an unread heading, with its own A3/A4 holds; it does not need P1 (h4-05 has no act read performed)"
+  ]
  }
 }

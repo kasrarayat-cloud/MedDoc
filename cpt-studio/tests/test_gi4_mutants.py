@@ -33,15 +33,16 @@ class MutantRegistryTests(SimpleTestCase):
     def test_the_census_every_package_once(self):
         # The merged registry (the Wave 1 integration): every round-4 package's mutants, each exactly once, as the
         # packages counted them (PS and PA here since stage A and PA; PD from its scratch driver; PV1, PE, PI and PO from
-        # their tests/test_gi4_<package>_mutants.py), and stage A's own controls and gates.
+        # their tests/test_gi4_<package>_mutants.py), and stage A's own controls and gates. Wave 1 repair cycle 1
+        # (PA+PO, amendments amendment_20261101_r2) adds PA's 20 and PO's 7 (P1).
         names = [m.name for m in mutants.MUTANTS]
         census = {p: [n for n in names if n.startswith(prefixes)] for p, prefixes in mutants.PACKAGE_PREFIXES.items()}
         self.assertEqual({p: len(v) for p, v in census.items()},
-                         {'PS': 7, 'PA': 13, 'PD': 11, 'PV1': 17, 'PE': 10, 'PI': 19, 'PO': 21})
+                         {'PS': 7, 'PA': 33, 'PD': 11, 'PV1': 17, 'PE': 10, 'PI': 19, 'PO': 28})
         stage_a = [n for n in names if n.startswith(mutants.STAGE_A_PREFIXES)]
         self.assertEqual(len(stage_a), 11)
         self.assertEqual(sorted(sum(census.values(), []) + stage_a), sorted(names))  # every name in one place only
-        self.assertEqual(len(names), 109)
+        self.assertEqual(len(names), 136)
         for package, slice_ in (('PD', mutants.PD_MUTANTS), ('PV1', mutants.PV1_MUTANTS), ('PE', mutants.PE_MUTANTS),
                                 ('PI', mutants.PI_MUTANTS), ('PO', mutants.PO_MUTANTS)):
             self.assertEqual([m.name for m in slice_], census[package], package)

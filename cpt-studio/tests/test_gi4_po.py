@@ -14,6 +14,12 @@ head, A3 (PO-2) a passage of the item on such a title line, A4 (PO-2) no unread 
 anywhere within the reach, A5 no statement that a procedure was called off or not performed which names none - and
 the AMENDED_ROWS that pin each hold (their texts pinned by sha256 there too).
 
+The second dated amendment (amendment_20261101_r2, Wave 1 repair cycle 1, declared before its code; refutation F4 of
+b840ae756) gives PO-1 positive evidence beyond routing's silence (P1, engine._po_done_in_body): the documented-service
+reader reads an act of the item's own service performed by an act predicate of its own, in a passage under no line naming
+another occurrence. Hold-only. Its R2_ROWS pin [installed, b840ae756, cycle 1] offers per item, and it moves one
+amendment row (A-evtitle, copied prior EUS block: its colonoscopy offer True -> False), declared there.
+
 Each tests/test_gi4_po_mutants.py PO_MUTANTS entry removes one guard and is killed by a test HERE (H6, run against
 sealed copies through the harness's mutant machinery). The registry and its anchor check live in that other module on
 purpose: a check that every anchor occurs in this tree fails on every mutated copy, so inside the detector it would
@@ -182,6 +188,10 @@ AMENDED_ROWS = {
              'platelet count.\nUpper Tract Observations\n'), ()),
 }
 AMENDED = DECLARED['amendment_20261101']['guard_rows']['rows']
+# Wave 1 repair cycle 1 (amendment_20261101_r2): the amendment rows P1 moves, [family, act, reason, b840ae756 offer,
+# cycle-1 offer] per item; every other amendment row keeps its amended offer
+R2 = DECLARED['amendment_20261101_r2']
+R2_MOVED = R2['expected']['amendment_20261101 rows']['moved']
 
 
 def offers_of(text, codes=(), user_values=None):
@@ -204,10 +214,17 @@ def declared(offers):
     return [[family, act, reason, po] for family, act, reason, _, po in offers]
 
 
-def amended(offers):
+def amended(offers, name=''):
     """An amendment row's offers as the amended rule makes them: [family, act, reason, installed offer, committed offer
-    (0f2512471), amended offer] -> [family, act, reason, amended offer]."""
-    return [[family, act, reason, po] for family, act, reason, _, _, po in offers]
+    (0f2512471), amended offer] -> [family, act, reason, amended offer]; for a row cycle 1 moves (R2_MOVED), the item's
+    cycle-1 offer, its b840ae756 offer checked to be the amended one."""
+    moved = {(f, a, r): (before, after) for f, a, r, before, after in R2_MOVED.get(name, ())}
+    out = []
+    for family, act, reason, _, _, po in offers:
+        before, after = moved.get((family, act, reason), (po, po))
+        assert before == po, (name, family, act, reason)
+        out.append([family, act, reason, after])
+    return out
 
 
 class RegressionOfferTests(SimpleTestCase):
@@ -323,7 +340,7 @@ class AmendedGuardRowTests(SimpleTestCase):
         row = AMENDED[name]
         self.assertEqual(boot.sha256_text(text), row['text_sha256'], name)
         self.assertEqual([list(c) for c in codes], row['codes'], name)
-        self.assertEqual(offers_of(text, codes), amended(row['offers']), name)
+        self.assertEqual(offers_of(text, codes), amended(row['offers'], name), name)
 
     def test_the_rows_are_the_declared_ones(self):
         self.assertEqual(sorted(AMENDED_ROWS), sorted(AMENDED))
@@ -354,7 +371,7 @@ class AmendedGuardRowTests(SimpleTestCase):
     def test_a_family_the_title_names_but_the_inventory_takes_from_a_copied_block(self):  # kills po2-evidence-on-title
         self.check('A-evtitle colonoscopy report, EUS review named in the title, copied EUS block')
 
-    def test_a_prior_study_copied_under_unread_headings(self):  # held by A2 and A3
+    def test_a_prior_study_copied_under_unread_headings(self):  # held by A2 and A3; the colonoscopy by P1 (cycle 1)
         self.check('A-evtitle colonoscopy report, copied prior EUS block')
 
     def test_an_unread_heading_naming_another_occurrence_far_above(self):  # kills po-runaway-occurrence-between
@@ -588,3 +605,187 @@ class HelperTests(SimpleTestCase):
         self.assertEqual(engine._po_document.cache_info().hits, 1)
         jobs.release_routing_caches()  # ROUTING_CACHE_MODULES names this module: the cache is cleared with the others
         self.assertEqual(engine._po_document.cache_info().currsize, 0)
+
+
+# --- Wave 1 repair cycle 1 (po.json amendment_20261101_r2; refutation F4 of b840ae756) ----------------------------------
+R2_DECLARED = R2['expected']['rows']['rows']
+TITLED = 'Colonoscopy for Iron Deficiency Anemia\nDate of service: 10/20/2026\nEndoscopist: Synthetic MD\n'
+BREAKFAST = 'She reported eating breakfast this morning despite the instructions. '
+PRE_BODY = ('\nAssessment\nNPO since midnight. Split-dose preparation completed; last output clear. Vital signs stable. '
+            'Consent signed after a discussion of bleeding and perforation risks. Escorted to the endoscopy suite at '
+            '08:40.\n')
+
+
+def _pre(title):
+    """F4's pre-procedure note, titled ``title`` (a title sections.AROUND_PROCEDURE_WORDS does not read)."""
+    return (B + title + '\nDate of service: 10/20/2026\nEndoscopist: Synthetic MD\nSedation: propofol planned, by CRNA\n'
+            + PRE_BODY)
+
+
+SEDATED = TITLED + 'Sedation: propofol by CRNA\n\n'
+CALLED_OFF = 'Assessment\nShe had eaten breakfast, so we did not go ahead; she will be rebooked.\n'
+SNARE_TODAY = 'A 4 mm polyp in the sigmoid colon was removed with cold snare.'
+# (text, codes): the amendment's rows, byte for byte as declared (codes: (code, quote); none = an empty provider answer)
+R2_ROWS = {
+    # F4: a procedure called off in words A5 does not list, and pre-procedure notes titled with the procedure
+    'F4 O1 colonoscopy, we did not go ahead': (
+        B + TITLED + 'Sedation: none given\n\nAssessment\n' + BREAKFAST + 'After discussion we did not go ahead, and she '
+        'will be rebooked next week with a two-day preparation.\n', ()),
+    'F4 O1 colonoscopy, the scope was not inserted': (
+        B + TITLED + 'Sedation: none given\n\nAssessment\n' + BREAKFAST + 'Because of this the scope was not inserted, '
+        'and she will be rebooked next week with a two-day preparation.\n', ()),
+    'F4 O1 colonoscopy, nothing further was done today': (
+        B + TITLED + 'Sedation: none given\n\nAssessment\n' + BREAKFAST + 'She was rebooked for next week with a '
+        'two-day preparation; nothing further was done today.\n', ()),
+    'F4 O2 EUS, at the time-out we did not go ahead': (
+        B + 'Endoscopic Ultrasound for Pancreatic Cyst\nDate of service: 10/20/2026\nEndoscopist: Synthetic MD\n'
+        'Sedation: monitored anesthesia care was planned\n\nEvents\nAt the time-out her potassium was 2.6, so we did not '
+        'go ahead; she was admitted for repletion and will be rebooked.\n', ()),
+    'F4 control, A5 reads the examination not started': (
+        B + TITLED + 'Sedation: none given\n\nAssessment\n' + BREAKFAST + 'The examination was not started, and she '
+        'will be rebooked next week with a two-day preparation.\n', ()),
+    'F4 PRE Pre-colonoscopy Assessment': (_pre('Pre-colonoscopy Assessment'), ()),
+    'F4 PRE Colonoscopy Pre-assessment': (_pre('Colonoscopy Pre-assessment'), ()),
+    'F4 PRE Colonoscopy Admission Checklist': (_pre('Colonoscopy Admission Checklist'), ()),
+    'F4 PRE Colonoscopy Readiness Review': (_pre('Colonoscopy Readiness Review'), ()),
+    # P1's guards: an act read only from the title, an act only under an outside-records line, the item's own act
+    'P1 an act read only from the title': (
+        B + 'Colonoscopy With Cold Snare Polypectomy\nDate of service: 10/20/2026\nEndoscopist: Synthetic MD\nSedation: '
+        'propofol by CRNA\n\n' + CALLED_OFF, ()),
+    'P1 an act only under an outside-records line': (
+        B + SEDATED + CALLED_OFF + '\nOutside records\nA 6 mm polyp was removed with cold snare.\n', ()),
+    'P1 an act item whose own act is read only from the title': (
+        B + 'Colonoscopy With Tattoo\nDate of service: 10/20/2026\nEndoscopist: Synthetic MD\nSedation: propofol by '
+        'CRNA\n\nFindings\n' + SNARE_TODAY + '\n', (('45385', SNARE_TODAY),)),
+    'P1 an act stated in the indication': (
+        B + SEDATED + 'Indication\nSurveillance. Polyps were removed with cold snare.\n\n' + CALLED_OFF, ()),
+    'P1 an act in a history section': (
+        B + SEDATED + 'Past Surgical History\nPolyps were removed with cold snare.\n\n' + CALLED_OFF, ()),
+    'P1 an act dated another day': (
+        B + SEDATED + 'Assessment\nA polyp was removed with cold snare on 2024-03-01. She had eaten breakfast, so we did '
+        'not go ahead.\n', ()),
+    # positive controls: an act done today in the report's own body is positive evidence
+    'P1 control, an act done today': (B + SEDATED + 'Findings\n' + SNARE_TODAY + '\n', ()),
+    'P1 control, biopsies taken in an upper examination': (
+        B + 'Gastroscopy for Dyspepsia\nDate of service: 10/20/2026\nOperator: Synthetic MD\nSedation provider: '
+        'Synthetic CRNA\nUpper Tract Observations\nThe gastric mucosa showed patchy erythema. Cold forceps samples were '
+        'taken.\nDiagnoses\n1. Gastritis; biopsied.\n', ()),
+    'P1 control, an act under a runaway indication': (
+        B + SEDATED + 'Indication\nIron deficiency anemia.\n\nLarge Bowel Narrative\nThe colonoscope was inserted. '
+        + SNARE_TODAY + '\n', ()),
+}
+
+
+def cycle_one(offers):
+    """A cycle-1 row's offers as the cycle-1 rule makes them: [family, act, reason, installed offer, b840ae756 offer,
+    cycle-1 offer] -> [family, act, reason, cycle-1 offer]."""
+    return [[family, act, reason, po] for family, act, reason, _, _, po in offers]
+
+
+class CycleOneOfferTests(SimpleTestCase):
+    """PO-1 needs positive evidence of today's performance beyond routing's silence (P1): the refutation's rows lose
+    their offers, each P1 guard's killing row offers nothing, and an act done today in the report's own body still
+    offers (the texts are pinned by the declaration)."""
+
+    def check(self, name):
+        text, codes = R2_ROWS[name]
+        row = R2_DECLARED[name]
+        self.assertEqual(boot.sha256_text(text), row['text_sha256'], name)
+        self.assertEqual([list(c) for c in codes], row['codes'], name)
+        self.assertEqual(offers_of(text, codes), cycle_one(row['offers']), name)
+
+    def test_the_rows_are_the_declared_ones(self):
+        self.assertEqual(sorted(R2_ROWS), sorted(R2_DECLARED))
+        self.assertFalse(set(R2_ROWS) & (set(ROWS) | set(AMENDED_ROWS)))
+
+    def test_f4_a_procedure_called_off_in_words_a5_does_not_list(self):  # kills po1-positive-evidence
+        for name in ('F4 O1 colonoscopy, we did not go ahead', 'F4 O1 colonoscopy, the scope was not inserted',
+                     'F4 O1 colonoscopy, nothing further was done today', 'F4 O2 EUS, at the time-out we did not go ahead',
+                     'F4 control, A5 reads the examination not started'):
+            with self.subTest(name):
+                self.check(name)
+
+    def test_f4_pre_procedure_notes_titled_with_the_procedure(self):  # kills po1-positive-evidence
+        for name in ('F4 PRE Pre-colonoscopy Assessment', 'F4 PRE Colonoscopy Pre-assessment',
+                     'F4 PRE Colonoscopy Admission Checklist', 'F4 PRE Colonoscopy Readiness Review'):
+            with self.subTest(name):
+                self.check(name)
+
+    def test_an_act_read_only_from_the_title(self):  # kills po1-act-predicate
+        self.check('P1 an act read only from the title')
+
+    def test_an_act_only_under_an_outside_records_line(self):  # kills po1-act-occurrence
+        self.check('P1 an act only under an outside-records line')
+
+    def test_an_act_items_own_act(self):  # kills po1-own-act
+        self.check('P1 an act item whose own act is read only from the title')
+
+    def test_an_act_in_an_indication_a_history_or_dated_another_day(self):
+        for name in ('P1 an act stated in the indication', 'P1 an act in a history section', 'P1 an act dated another day'):
+            with self.subTest(name):
+                self.check(name)
+
+    def test_an_act_done_today_still_offers(self):
+        for name in ('P1 control, an act done today', 'P1 control, biopsies taken in an upper examination',
+                     'P1 control, an act under a runaway indication'):
+            with self.subTest(name):
+                self.check(name)
+
+
+class DoneInBodyUnitTests(SimpleTestCase):
+    """P1 (engine._po_done_in_body) on real readings of h4-02, with the item or its acts varied by hand."""
+
+    def setUp(self):
+        self.routing = detect.route(H402, None)
+        self.inventory = gi_services.build(H402, service_date=None, routing=self.routing, context_facts={})
+        unresolved, _, _ = reconcile.reconcile(self.inventory, [])
+        self.u = next(u for u in unresolved if u.family == 'gi.egd' and not u.act)
+        self.service = next(s for s in self.inventory.services if s.id == self.u.service)
+        self.act = next(a for a in self.service.acts if a.status == 'performed'
+                        and any(c.startswith(engine._PO_ACT_PREDICATE) for c in a.cues))
+
+    def tearDown(self):
+        __import__('studio.jobs', fromlist=['x']).release_routing_caches()
+
+    def with_acts(self, *acts):
+        service = dataclasses.replace(self.service, acts=acts)
+        return dataclasses.replace(self.inventory, services=tuple(service if s.id == service.id else s
+                                                                  for s in self.inventory.services))
+
+    def test_an_act_stated_done_in_the_report_is_positive_evidence(self):
+        self.assertTrue(engine._po_done_in_body(self.u, self.inventory, H402))
+        self.assertTrue(engine._po_done_in_body(self.u, self.with_acts(self.act), H402))
+
+    def test_no_inventory_or_no_service_of_the_item_is_none(self):  # kills po1-no-service
+        self.assertFalse(engine._po_done_in_body(self.u, None, H402))
+        self.assertFalse(engine._po_done_in_body(dataclasses.replace(self.u, service='no-such-service'), self.inventory,
+                                                 H402))
+
+    def test_an_act_not_read_performed_is_none(self):  # kills po1-act-performed
+        uncertain = dataclasses.replace(self.act, status='uncertain')
+        self.assertTrue(any(c.startswith(engine._PO_ACT_PREDICATE) for c in uncertain.cues))
+        self.assertFalse(engine._po_done_in_body(self.u, self.with_acts(uncertain), H402))
+
+    def test_an_act_read_without_an_act_predicate_is_none(self):  # kills po1-act-predicate
+        boxed = dataclasses.replace(self.act, cues=(gi_services.OWN_BOX_CHECKED,))
+        self.assertFalse(engine._po_done_in_body(self.u, self.with_acts(boxed), H402))
+
+    def test_an_act_whose_passage_lies_outside_the_text_is_none(self):  # kills po1-act-in-text
+        outside = dataclasses.replace(self.act, evidence=(Span(len(H402) + 5, len(H402) + 9, 'gone'),))
+        self.assertFalse(engine._po_done_in_body(self.u, self.with_acts(outside), H402))
+
+    def test_an_act_under_a_line_naming_another_occurrence_is_none(self):  # kills po1-act-occurrence
+        ev = self.act.evidence[0]
+        line_start = H402.rfind('\n', 0, ev.start) + 1
+        text = H402[:line_start] + 'Outside records\n' + H402[line_start:]  # its own line, right above the act's
+        moved = dataclasses.replace(self.act, evidence=(Span(ev.start + 16, ev.end + 16, ev.text),))
+        self.assertEqual(text[ev.start + 16:ev.end + 16], H402[ev.start:ev.end])
+        self.assertTrue(sections.under_another_occurrence(text, ev.start + 16))
+        self.assertTrue(engine._po_done_in_body(self.u, self.with_acts(self.act), H402))  # the control
+        self.assertFalse(engine._po_done_in_body(self.u, self.with_acts(moved), text))
+
+    def test_an_act_item_reads_only_its_own_act(self):  # kills po1-own-act
+        other = 'tattoo' if self.act.kind != 'tattoo' else 'injection'
+        self.assertTrue(engine._po_done_in_body(dataclasses.replace(self.u, act=self.act.kind), self.with_acts(self.act),
+                                                H402))
+        self.assertFalse(engine._po_done_in_body(dataclasses.replace(self.u, act=other), self.with_acts(self.act), H402))
