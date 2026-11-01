@@ -21,7 +21,7 @@ from typing import Optional
 
 from studio.gi import cues
 from studio.gi.sections import (ADDENDUM_HEADER, DOCUMENT_PART, HEADINGS, Layout, around_procedure_title, head_lines_end,
-                                layout)
+                                layout, procedure_report_head, under_another_occurrence)
 from studio.types import CONTEXT_FACTS, Fact, Span
 
 SETTINGS = ('office', 'hospital_outpatient', 'asc', 'inpatient', 'emergency', 'telehealth')
@@ -392,8 +392,20 @@ class _Candidate:
     # its field). Never the note's own date by itself (``installed`` is False), and read beside the installed candidates,
     # never among them (_pd_wide_candidates): it only asks or narrows (_service_date_fact)
     wide: bool = False
-    # GI round 4 (D1): a closing-role line among the document's last lines states its day (_closing_days)
-    corroborated: bool = False
+    # GI round 4, Wave 1 repair (PD, cycle 1; DS-1 to DS-4): rule (c) may narrow a member's answers to this candidate's
+    # date - the author's own sign-off (naming the performer the head names) states its day, every closing-role day
+    # agrees, the closing region is the note's own, the note is not written around a procedure, its date stands alone
+    # on a clean line, and a procedure's label stands in a procedure's report (_pd_wide_candidates, _pd_signoff_day)
+    narrows: bool = False
+    # The label's whole line (a window around the label when the line is longer than _PD_QUOTE_CHARS): what a note or a
+    # question quotes, never the label and its date alone (CTS-5); ``quote`` is that line as a note quotes it, and
+    # ``line_at`` the line's start (the evidence keeps one span per line: many labels on one long line quote it once)
+    line: Optional[Span] = None
+    quote: str = ''
+    line_at: int = -1
+    # Rule (a) may ask on it: False under a title of a note written around a procedure (sections.around_procedure_title),
+    # where b840ae756 read no wide label at all, so rule (a) still never asks there
+    asks: bool = True
 
     @property
     def spans(self) -> tuple[Span, ...]:
@@ -2017,16 +2029,24 @@ def _pd_wide_candidates(text: str, lay: Layout, rows: '_Rows', worded: list) -> 
     _head_end) and the worded date-of-service fields (``worded``: the date-of-service labels the installed reading
     dropped as prose, outside plan and history sections), each read as an own date ('own') of the note through the
     installed label reading, or dropped as that reading drops a label (another occurrence's, one it cannot place, a
-    birth label joined to it, no calendar date). None at all under a title of a note written AROUND a procedure - a
-    booking, a pre-procedure call, a consent, instructions, a handout, a letter, a records review
-    (sections.around_procedure_title): its "Day of procedure" or "Case date" is the planned procedure's, never the note's
-    own, and the installed fact stands. Each candidate is corroborated when a closing-role line of the note's end states
-    its day (_closing_days, read once, only when a label is read). Bounded: the head, once; each worded label's own
-    line."""
+    birth label joined to it, no calendar date). Each keeps its label's whole line (``line``, ``quote``): a note or a
+    question quotes the line, never the label and its date alone (Wave 1 repair, CTS-5).
+
+    Wave 1 repair (PD, cycle 1; DS-1 to DS-4). Under a title of a note written AROUND a procedure - a booking, a
+    pre-procedure call, a consent, instructions, a handout, a letter, a records review (sections.around_procedure_title)
+    - its "Day of procedure" or "Case date" is the planned procedure's: the labels are read, but never ask (``asks``:
+    rule (a) stays off there, as on b840ae756, which read none). A label narrows a member's answers (rule (c),
+    ``narrows``) only with positive evidence that its date is the note's own: the author's own sign-off - naming the
+    performer or author the head names - states that day and nothing in the note's closing contradicts it
+    (_pd_signoff_day, read once and only when a label is read), its date stands alone in its field, its line is short
+    and states no other date (_pd_clean_line), and a label naming a procedure's occurrence stands in a procedure's own
+    report (_PD_PROCEDURE_LABEL, sections.procedure_report_head). Bounded: the head, once; each label's own line; the
+    closing read once."""
     head_end = _head_end(text, lay)
-    if not worded and WIDE_SERVICE_DATE.search(text, 0, head_end) is None or around_procedure_title(text):
+    if not worded and WIDE_SERVICE_DATE.search(text, 0, head_end) is None:
         return ()
-    out, closing = [], None
+    asks = not around_procedure_title(text)
+    out, signoff, unread, report_head = [], None, True, None
     for m in WIDE_SERVICE_DATE.finditer(text, 0, head_end):
         if lay.section_at(m.start()).kind in NOT_CURRENT_SECTIONS or _joined(text, rows, m.start('label'),
                                                                                m.end('label')) is not None:
@@ -2037,10 +2057,21 @@ def _pd_wide_candidates(text: str, lay: Layout, rows: '_Rows', worded: list) -> 
         kind, start = _labelled_kind(text, m.start('label'), m.end('label'), m.start('date'), m.end(), value)
         if _READING[kind] != 'own':
             continue  # another occurrence's, or one it cannot place: dropped, as the installed reading drops the label
-        closing = _closing_days(text) if closing is None else closing
-        out.append(_Candidate(_span(text, start, m.end()), value.isoformat(), 'label', 'own', 'read',
-                              alone=_alone_in_field(text, m.end(), rows.line(m.start())[1]), installed=False,
-                              wide=True, corroborated=value.isoformat() in closing))
+        if unread:
+            signoff, unread = _pd_signoff_day(text, head_end), False
+        ls, le = rows.line(m.start())
+        alone = _alone_in_field(text, m.end(), le)
+        line, quote = _pd_line(text, ls, le, start, m.end())
+        # the declaration's fifth entry: a label naming a procedure's occurrence dates that procedure, so it narrows only
+        # in the procedure's own report (sections.procedure_report_head, read once and only for such a label)
+        procedural = _PD_PROCEDURE_LABEL.search(m.group('label')) is not None
+        if procedural and report_head is None:
+            report_head = procedure_report_head(text)
+        out.append(_Candidate(_span(text, start, m.end()), value.isoformat(), 'label', 'own', 'read', alone=alone,
+                              installed=False, wide=True, asks=asks, line=line, quote=quote, line_at=ls,
+                              narrows=alone and signoff == value.isoformat()
+                              and _pd_clean_line(text, ls, le, start, m.end())
+                              and (not procedural or report_head)))
     for m in worded:
         field = _worded_field(text, m, rows)
         if field is None:
@@ -2053,9 +2084,14 @@ def _pd_wide_candidates(text: str, lay: Layout, rows: '_Rows', worded: list) -> 
         kind, start = _labelled_kind(text, m.start('label'), m.end('label'), ds, de, value)
         if _READING[kind] != 'own' or _OCCURRENCE_WORDS.search(text, m.end('label'), ds):
             continue
-        closing = _closing_days(text) if closing is None else closing
+        if unread:
+            signoff, unread = _pd_signoff_day(text, head_end), False
+        ls, le = rows.line(m.start())
+        line, quote = _pd_line(text, ls, le, start, de)
+        # its date stands alone in its field by construction (_worded_field)
         out.append(_Candidate(_span(text, start, de), value.isoformat(), 'label', 'own', 'read', alone=False,
-                              installed=False, wide=True, corroborated=value.isoformat() in closing))
+                              installed=False, wide=True, asks=asks, line=line, quote=quote, line_at=ls,
+                              narrows=signoff == value.isoformat() and _pd_clean_line(text, ls, le, start, de)))
     return tuple(out)
 
 
@@ -2068,17 +2104,113 @@ def _head_end(text: str, lay: Layout) -> int:
     return min(head_lines_end(text, TITLE_LINES), first)
 
 
-# GI round 4 (D1; package PD): a line that signs, attests, authenticates or finalizes the note ("Electronically
-# authenticated by ..., 10/26/2026 18:22", "Report finalized by ..., 2026-10-21 16:05", "Attested: ..., Oct 27, 2026").
-# The day it states corroborates a wide or worded own label of the same day; that only lets the label restrict a member's
-# answer (hold-only). Read only among the note's last _PD_CLOSING_LINES non-empty lines, and never on a line about a
-# consent, an order, a request, a booking or schedule, or a call (_PD_NOT_CLOSING): "Consent signed 11/04/2026", "Call
-# placed and signed 11/04/2026" date that act, not the note.
+# GI round 4, Wave 1 repair (PD, cycle 1; the declaration's fifth entry): a wide label naming a procedure's occurrence
+# ("Day of procedure", "Procedure day", "Case date", "Date/Day of case", "Date performed") narrows only in a procedure's
+# own report; a visit or exam label ("Date seen", "Exam date", "Day of visit", "Day of service") as before.
+_PD_PROCEDURE_LABEL = cues.rx(r'\b(?:day[ \t]++of[ \t]++procedure|procedure[ \t]++day|(?:date|day)[ \t]++of[ \t]++case'
+                              r'|case[ \t]++(?:date|day)|date[ \t]++performed)\b')
+# GI round 4, Wave 1 repair (PD, cycle 1; CTS-5): a wide label is quoted with its whole line. A line longer than
+# _PD_QUOTE_CHARS is quoted as a window of _PD_QUOTE_WINDOW characters either side of its label and date, each cut end
+# marked, and its label never narrows (_pd_clean_line).
+_PD_QUOTE_CHARS = 240
+_PD_QUOTE_WINDOW = 100
+# Any other date-shaped text on a label's line (a date this reader reads, one it does not - "10/12/26", "Tuesday,
+# October 20, 2026" - or a month and year): the line then states more than the label's date, and the label narrows nothing.
+_PD_OTHER_DATE = cues.rx(r'(?<![\w/-])(?:' + DATE_SHAPE + r')|' + MONTH_YEAR.pattern)
+
+
+def _pd_line(text: str, ls: int, le: int, start: int, end: int) -> tuple[Span, str]:
+    """(span, quote) of the line [ls, le) holding a wide label [start, end): the line without its outer blanks, or a
+    window around the label when it is longer than _PD_QUOTE_CHARS; the quote is the span's text with its blanks
+    collapsed, in quotation marks, each cut end marked."""
+    a, b = ls, le
+    while a < b and text[a] in ' \t\r':
+        a += 1
+    while b > a and text[b - 1] in ' \t\r':
+        b -= 1
+    head = tail = ''
+    if b - a > _PD_QUOTE_CHARS:
+        wa, wb = max(a, start - _PD_QUOTE_WINDOW), min(b, end + _PD_QUOTE_WINDOW)
+        head, tail = ('…' if wa > a else ''), ('…' if wb < b else '')
+        a, b = wa, wb
+    return Span(a, b, text[a:b]), '“' + head + ' '.join(text[a:b].split()) + tail + '”'
+
+
+def _pd_clean_line(text: str, ls: int, le: int, start: int, end: int) -> bool:
+    """Whether a wide label [start, end) may narrow by its line [ls, le): the line is at most _PD_QUOTE_CHARS characters
+    and states no other date-shaped text and no addendum word, so the whole line is evidence whose only date is the
+    label's (Wave 1 repair, PD cycle 1: fail-closed)."""
+    if le - ls > _PD_QUOTE_CHARS or re.search(r'\baddend', text[ls:le], re.I):
+        return False
+    return _PD_OTHER_DATE.search(text, ls, start) is None and _PD_OTHER_DATE.search(text, end, le) is None
+
+
+# GI round 4 (D1; package PD): a line that signs, attests, authenticates or finalizes the note, or a co-signature, a
+# dictation or a transcription line ("Electronically authenticated by ..., 10/26/2026 18:22", "Report finalized by ...,
+# 2026-10-21 16:05", "Attested: ..., Oct 27, 2026") - a closing-role line. A consent, order, request, booking or
+# schedule, or call line (_PD_NOT_CLOSING: "Consent signed 11/04/2026", "Call placed and signed 11/04/2026") dates that
+# act, never the note's sign-off.
 _CLOSING_ROLE = cues.rx(r'\b(?:electronically[ \t]++|e-)?+(?:(?:co-?|counter)?signed|dictated|transcribed|'
                         r'attest(?:ed|ation)|authenticated|finali[sz]ed)\b')
 _PD_CLOSING_LINES = 8
 _PD_NOT_CLOSING = cues.rx(r'\b(?:consent\w*+|order\w*+|request\w*+|book(?:ed|ings?+)|schedul\w*+|call(?:s|ed|ing)?+'
                           r'|(?:tele)?+phon(?:e|es|ed|ing))\b')
+# Wave 1 repair (PD, cycle 1; DS-1): the AUTHOR'S OWN sign-off is a closing-role line that signs, e-signs, authenticates,
+# finalizes (_PD_OWN_VERB; a dictation word beside such a verb does not disqualify it) or attests (_PD_ATTEST) - never a
+# co-signature or countersignature, nor a transcription line (_PD_NOT_OWN) - and that NAMES the performer or author a
+# head field names (_PD_PERFORMER; the declaration's second entry: the positive evidence of whose signature a line is).
+# Every verb is read alike: h4-06's "Attested:" by the colonoscopist its head names is its own sign-off; an attestation or
+# a signature by anyone else (a supervising physician's, an H&P update's on the procedure day, a copied report's author)
+# narrows nothing, nor does any sign-off in a note whose head names nobody.
+_PD_OWN_VERB = cues.rx(r'(?:(?<![\w-])|(?<=\be-))(?:signed|authenticated|finali[sz]ed)\b')
+_PD_NOT_OWN = cues.rx(r'\b(?:co|counter)[ \t-]*+sign\w*|\bcosign\w*|\bcountersign\w*|\btranscri\w*')
+_PD_ATTEST = cues.rx(r'\battest\w*')
+_PD_PERFORMER = cues.rx(r'^[ \t]*+(?:proceduralist|endoscopist|operator|performing[ \t]++(?:physician|endoscopist|provider)'
+                        r'|gastroenterologist|colonoscopist|surgeon|attending(?:[ \t]++physician)?+|physician|provider'
+                        r'|seen[ \t]++by|author)[ \t]*+:[ \t]*+(?P<name>[^\n]{1,120})', cues.FLAGS | re.M)
+_PD_CREDENTIAL = cues.rx(r'(?:md|do|mbbs|mbchb|rn|np|pa|pa-c|aprn|crna|cnp|dnp|phd|facg|fasge|agaf|facp|frcp|dr|mr|mrs|ms'
+                         r'|prof)\.?')
+# How a sign-off line names a head's performer (_pd_signed_by): the field's surname ends the signer's name - the next word
+# is no capitalised word other than a credential or a suffix (_PD_NAME_SUFFIX) - and where the field gives a first name,
+# the name words right before the surname (read back over at most _PD_NAME_BACK characters with _PD_NAME_BEFORE, a title
+# such as "Dr." skipped, stopped by a lower-case word or a sign-off word, _PD_NOT_NAME) agree with it: equal, or an initial.
+_PD_NAME_SUFFIX = cues.rx(r'(?:jr|sr|ii|iii|iv)\.?')
+_PD_NAME_BEFORE = cues.rx(r"(?P<word>[A-Za-z][A-Za-z'’-]*+)\.?+[ \t]*+\Z")
+_PD_NAME_BACK = 80
+_PD_NOT_NAME = frozenset(('by', 'signed', 'esigned', 'attested', 'authenticated', 'finalized', 'finalised',
+                          'electronically', 'dictated', 'reviewed', 'and', 'report', 'note', 'signature', 'e', 'for',
+                          'on', 'at'))
+# The closing region is the note's own (DS-3): no addendum line after the head (_PD_ADDENDUM: "Addendum", "ADDENDUM
+# (revision 2, ...)", "Late entry", "Amended report"), and no line anywhere announcing copied, pasted, attached,
+# imported, scanned, faxed, forwarded or excerpted text (_PD_COPIED: "Copied report text follows.").
+_PD_ADDENDUM = cues.rx(r'^[ \t#*_>-]*+(?:addend(?:um|a)|late[ \t]++entry|amendment|amended[ \t]++(?:note|report)'
+                       r'|corrected[ \t]++(?:note|report))\b', cues.FLAGS | re.M)
+_PD_COPIED = cues.rx(r'\b(?:copied|pasted|(?:copy|cut)[ \t-]*+(?:and|&)[ \t-]*+paste\w*|attached|attachments?|imported'
+                     r'|scanned|faxed|forwarded|excerpt(?:ed|s)?)\b')
+# A call, a phone contact or a message written anywhere as an event (the declaration's third entry: rule (4) widened to
+# the body, hold only): "Call placed on 10/30/2026.", "Spoke with the patient by phone", "Left a voicemail". A field label
+# ("Phone: 555-0100", "Telephone:") and "Recall" are none.
+_PD_CALL_PHRASE = cues.rx(r'\b(?:called|calling|phoned|messaged|texted|e-?mailed|voice-?mail\w*+'
+                          r'|left[ \t]++(?:a[ \t]++)?+(?:voice[ \t]*+)?+message'
+                          r'|(?:tele)?+phone[ \t]++(?:call|encounter|visit|contact|conversation)s?+'
+                          r'|call[ \t]++(?:placed|made|received|returned|back)'
+                          r'|(?:by|over[ \t]++the|on[ \t]++the|via)[ \t]++(?:tele)?+phone)\b')
+# A note written around a procedure, under the broadened detection (DS-2): a title-like line or a flattened line's cell of
+# at most _PD_TITLE_CHARS characters, or a kind field (_PD_KIND_FIELD: "Note type: Telephone"), among the head's first
+# TITLE_LINES non-empty lines, whose words name such a note. A closed list read only to HOLD: it keeps rule (c) from
+# narrowing, and the installed answers stand.
+_PD_TITLE_CHARS = 160
+_PD_AROUND_WORDS = cues.rx(
+    r'\b(?:book(?:ing|ings|ed)?|schedul\w*|reschedul\w*|pre[ \t-]?(?:procedure|procedural|op|operative|admission|admit'
+    r'|colonoscopy|endoscopy|egd|anesthesia|anaesthesia|sedation|screening|assessment|testing|visit|call)|prep'
+    r'|preparation|telephone|phone|call\w*|messag\w*|appointments?|reminders?|instructions?|consent\w*|education'
+    r'|handouts?|correspondence|letters?|review\w*|outside|nursing|nurse|assessments?|triage|portal|e-?mail|fax\w*'
+    r'|refills?|referral|requests?|orders?|cancel\w*|no[ \t-]?shows?|intake|telehealth|telemedicine|virtual'
+    r'|video[ \t]++visit)\b')
+_PD_KIND_FIELD = cues.rx(r'[ \t]*+(?:(?:note|encounter|visit|document|contact|appointment|communication|service|call'
+                         r'|message)[ \t]*+(?:type|kind|class|category)|type[ \t]++of[ \t]++(?:note|visit|encounter'
+                         r'|contact|service|call|communication|document)|note|encounter|visit|contact)[ \t]*+:[ \t]*+'
+                         r'(?P<value>\S.*)')
 
 
 def _pd_closing_start(text: str) -> int:
@@ -2096,25 +2228,144 @@ def _pd_closing_start(text: str) -> int:
         end = start - 1
 
 
-def _closing_days(text: str) -> frozenset:
-    """The calendar days (ISO) the closing-role lines among the document's last _PD_CLOSING_LINES non-empty lines state,
-    never a date of birth, and nothing a consent, order, request, booking or call line states: one pass, each line read
-    once."""
-    days, line_end = set(), -1
-    for m in _CLOSING_ROLE.finditer(text, _pd_closing_start(text)):
+def _pd_around_procedure(text: str) -> bool:
+    """Wave 1 repair (PD, cycle 1; DS-2): whether the document is a note written around a procedure under the broadened
+    detection - sections.around_procedure_title, or among its first TITLE_LINES non-empty lines a kind field naming
+    such a note ("Note type: Telephone") or a title-like line or flattened line's cell ("TELEPHONE ENCOUNTER   MRN:
+    ...") of at most _PD_TITLE_CHARS characters, with no field value and no closing sentence punctuation, that names one
+    (_PD_AROUND_WORDS). Hold-only: True only keeps rule (c) from narrowing. Bounded: at most TITLE_LINES lines, each read
+    only up to 4 * _PD_TITLE_CHARS characters."""
+    if around_procedure_title(text):
+        return True
+    end, start = head_lines_end(text, TITLE_LINES), 0
+    while start < end:
+        nl = text.find('\n', start, end)
+        line_end = end if nl < 0 else nl
+        if line_end - start <= 4 * _PD_TITLE_CHARS:  # a long line is never read for a title (bounded)
+            for cell in _FIELD_BREAK.split(text[start:line_end]):
+                cell = cell.strip().lstrip('#*_>').rstrip('#*_').strip()
+                if not cell:
+                    continue
+                kind = _PD_KIND_FIELD.match(cell)
+                if kind is not None:
+                    if _PD_AROUND_WORDS.search(kind.group('value')):
+                        return True
+                elif len(cell) <= _PD_TITLE_CHARS and cell[-1] not in '.!?;,' and re.search(r':[ \t]*\S', cell) is None \
+                        and _PD_AROUND_WORDS.search(cell):
+                    return True
+        if nl < 0:
+            break
+        start = nl + 1
+    return False
+
+
+def _pd_performers(text: str) -> tuple[tuple[str, str], ...]:
+    """(first name, surname) of each performer or author the head's fields name (_PD_PERFORMER among its first
+    TITLE_LINES non-empty lines): the field's name up to its first comma, semicolon, colon, bracket or cell break, its
+    words that are no credential; the surname is the last, the first name the first when there are two or more
+    ("Colonoscopist: Evander Quarshie-Moll, MD" -> ("Evander", "Quarshie-Moll"); "Endoscopist: Synthetic MD" -> ("",
+    "Synthetic"))."""
+    names = []
+    for m in _PD_PERFORMER.finditer(text, 0, head_lines_end(text, TITLE_LINES)):
+        words = [w for w in re.findall(r"[A-Za-z][A-Za-z'’-]*", re.split(r'[,;:(\[|\t]| {2,}', m.group('name'),
+                                                                          maxsplit=1)[0])
+                 if not _PD_CREDENTIAL.fullmatch(w)]
+        if words and len(words[-1]) >= 2:
+            names.append((words[0] if len(words) > 1 else '', words[-1]))
+    return tuple(names)
+
+
+def _pd_signed_by(line: str, performers: tuple[tuple[str, str], ...]) -> bool:
+    """Whether a sign-off line (at most _PD_QUOTE_CHARS characters) names one of the head's performers: the surname
+    stands in it as the end of the signer's name (the next word is no capitalised word other than a credential or a
+    suffix: "Synthetic Nurse" is not "Synthetic"), and where the field gives a first name, the name words right before the
+    surname agree with it (_pd_first_name_agrees: "Ilse Halvorsen-Ode" is not "Wren Halvorsen-Ode")."""
+    for first, surname in performers:
+        for m in re.finditer(r"(?<![A-Za-z'’-])" + re.escape(surname) + r"(?![A-Za-z'’-])", line, re.I):
+            after = re.match(r"[ \t]*+([A-Za-z][A-Za-z'’-]*)", line[m.end():])
+            if after is not None and after.group(1)[0].isupper() and not _PD_CREDENTIAL.fullmatch(after.group(1)) \
+                    and not _PD_NAME_SUFFIX.fullmatch(after.group(1)):
+                continue  # the signer's name goes on past this surname: another person's
+            if not first or _pd_first_name_agrees(line[max(0, m.start() - _PD_NAME_BACK):m.start()], first):
+                return True
+    return False
+
+
+def _pd_first_name_agrees(before: str, first: str) -> bool:
+    """Whether the name words right before a surname (``before``: the text before it on its line, at most _PD_NAME_BACK
+    characters) agree with a performer's first name: none at all ("Signed by Halvorsen-Ode", "Dr. Halvorsen-Ode"), or at
+    most three capitalised words, a title such as "Dr." skipped, of which one is that name or an initial of it (or the
+    name an initial: "W. Halvorsen-Ode", "Wren J. Halvorsen-Ode"). A lower-case word or a sign-off word (_PD_NOT_NAME)
+    ends the name."""
+    run = []
+    while len(run) < 3:
+        token = _PD_NAME_BEFORE.search(before)
+        if token is None:
+            break
+        word, before = token.group('word'), before[:token.start()]
+        if not word[0].isupper() or word.lower() in _PD_NOT_NAME:
+            break
+        if not _PD_CREDENTIAL.fullmatch(word):  # a title such as "Dr." before the name is no name word
+            run.append(word)
+    return not run or any(w.lower() == first.lower() or (min(len(w), len(first)) == 1 and w[0].lower() == first[0].lower())
+                          for w in run)
+
+
+def _pd_signoff_day(text: str, head_end: int) -> Optional[str]:
+    """Wave 1 repair (PD, cycle 1; DS-1 to DS-4): the day (ISO) of the author's own sign-off, only when the binding
+    conditions under which rule (c) may narrow hold - else None:
+    (1) an own sign-off among the closing region's lines states a day, and all of them state the same one: a line of at
+        most _PD_QUOTE_CHARS characters that signs, authenticates, finalizes (_PD_OWN_VERB) or attests (_PD_ATTEST) and
+        names a performer or author the head's fields name (_pd_signed_by; the declaration's second entry) - never
+        _PD_NOT_OWN, never a consent, order, request, booking or call line; a line that only attests counts only as the
+        closing region's sole closing-role line (the fourth entry: h4-06's "Attested:"; beside a fellow's signature it
+        is a supervising attestation);
+    (2) every closing-role line after the head states that day or no day (a co-signature, an attestation, a dictation
+        or transcription line of another day contradicts it);
+    (3) the closing region is the note's own: its last _PD_CLOSING_LINES non-empty lines and never the head (a short
+        document whose head is all of it has none); no addendum line after the head; no copied-text announcement
+        anywhere; the sign-off not under a heading-like line naming another occurrence's record
+        (sections.under_another_occurrence);
+    (4) the document is not written around a procedure (_pd_around_procedure), and states no call, phone contact or
+        message as an event anywhere (_PD_CALL_PHRASE).
+    Dates of birth are never read. One pass over the text after the head, each line read once."""
+    if _pd_around_procedure(text) or _PD_COPIED.search(text) or _PD_ADDENDUM.search(text, head_end):
+        return None
+    if _PD_CALL_PHRASE.search(text):
+        return None  # a note about a call or a message, whatever its title
+    region = max(_pd_closing_start(text), head_end)
+    own, days, line_end, performers = set(), set(), -1, None
+    signers, verbs, attests = 0, False, False  # the closing region's closing-role lines; how the own sign-off signs
+    for m in _CLOSING_ROLE.finditer(text, head_end):
         if m.start() < line_end:
             continue  # this line was read already (bounded: each line once)
         start = text.rfind('\n', 0, m.start()) + 1
         line_end = text.find('\n', m.end())
         line_end = len(text) if line_end < 0 else line_end
-        if _PD_NOT_CLOSING.search(text, start, line_end):
-            continue
-        for d in FULL_DATE.finditer(text, start, line_end):
-            if _BIRTH_BEFORE.search(text, max(start, d.start() - _BIRTH_REACH), d.start()) is None:
-                day = date_from_match(d)
-                if day:
-                    days.add(day.isoformat())
-    return frozenset(days)
+        stated = {day.isoformat() for day in (date_from_match(d) for d in FULL_DATE.finditer(text, start, line_end)
+                                              if _BIRTH_BEFORE.search(text, max(start, d.start() - _BIRTH_REACH),
+                                                                      d.start()) is None) if day}
+        days |= stated
+        signers += start >= region  # every closing-role line of the closing region, dated or not
+        if start < region or not stated or line_end - start > _PD_QUOTE_CHARS:
+            continue  # not in the closing region, no day, or a line too long to be a sign-off
+        if _PD_NOT_CLOSING.search(text, start, line_end) or _PD_NOT_OWN.search(text, start, line_end):
+            continue  # a consent, order, request, booking or call line; a co-signature or a transcription line
+        if not (_PD_OWN_VERB.search(text, start, line_end) or _PD_ATTEST.search(text, start, line_end)):
+            continue  # a dictation line alone
+        performers = _pd_performers(text) if performers is None else performers
+        if not _pd_signed_by(text[start:line_end], performers):
+            continue  # signed or attested by anyone the head does not name as the note's performer or author
+        if under_another_occurrence(text, start):
+            return None  # a copied block's signature
+        own |= stated
+        if _PD_OWN_VERB.search(text, start, line_end):
+            verbs = True
+        else:
+            attests = True  # it only attests
+    if attests and not verbs and signers > 1:
+        return None  # an attestation beside another closing line: a supervising attestation, not the author's sign-off
+    return next(iter(own)) if len(own) == 1 and days == own else None
 
 
 # GI round 4 (D2; package PD): the words a worded date-of-service field may carry between its label and its colon
@@ -2689,9 +2940,19 @@ PART_DATE_NOTE = ('A date of service is labelled in a later numbered part of the
                   '(no technique, findings or impression), so it may date another service than the one the note '
                   'documents and is not taken as the date of service by itself.')
 # GI round 4 (D1, D2; package PD): why a wide or worded own label alone is asked, and a member's answer restricted to it
-WIDE_DATE_NOTE = ('A date is labelled with words this service reads as naming the encounter but does not send by '
-                  'itself (such as "Date seen", "Exam date", "Case date", "Date performed" or "Day of procedure"), so '
-                  "it is asked; a member's answer with that date is taken.")
+# Wave 1 repair (PD, cycle 1): said what the narrowing rests on - the note's own sign-off of the same day - instead of
+# "words this service reads as naming the encounter", which the question's "not read as one" contradicted (L5)
+WIDE_DATE_NOTE = ('A date is labelled with words this service does not send as the date of service by itself (such as '
+                  '"Date seen", "Exam date", "Case date", "Date performed" or "Day of procedure"), and the signature '
+                  "closing the note states the same day, so the date is asked; a member's answer is taken only when it "
+                  'is that date.')
+# Wave 1 repair (PD, cycle 1; DS-1 to DS-4): rule (c)'s fact where nothing shows the label's date is the note's own -
+# its lines are quoted, and they limit no answer (_QuotedSpan): every member date is taken, as installed takes it
+WIDE_DATE_QUOTE_NOTE = ('No date of service is read: the document states a date with words this service does not take as '
+                        'the date of service by itself (a label such as "Date seen", "Exam date", "Case date", "Date '
+                        'performed" or "Day of procedure", or a date-of-service label with other words before its '
+                        "date). It may be this encounter's date or another occurrence's (a planned or an earlier one), "
+                        "so it is quoted and limits no answer: a member's date is taken.")
 ORDER_DATE_NOTE = ('A labelled date of service is earlier than a date the document gives for an earlier occurrence (a '
                    'prior, last, recent or index one), so the two cannot both be right and it is not taken as '
                    'the date of service by itself.')
@@ -2703,32 +2964,37 @@ def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
     take a send away or answers away - never add either, and a wide or worded label's date is never sent:
     (a) where the installed reading sends a date and a wide or worded own label states another day, the date is asked,
         and only the date it sends is a member's answer (the narrow release's question: WIDE_DATE_ASK_NOTE, read by
-        charge_date_problem and charge_date_own; every reader still reads that date, charge_question_day);
+        charge_date_problem and charge_date_own; every reader still reads that date, charge_question_day). Never under a
+        title of a note written around a procedure (_Candidate.asks). The note quotes each such label's whole line
+        (Wave 1 repair, CTS-5), once per line;
     (b) where it already asks with evidence, its fact and answers stand;
-    (c) where it asks with no evidence at all (any member date taken), the wide and worded labels are that evidence:
-        several values are a conflict of those values; one value restricts the answer only where a closing-role line
-        states the same day (corroborated) - one no closing line dates, such as a call note's "Day of procedure", may be
-        another occurrence's, so the installed fact stands and the right date is never refused. A wide label alone never
-        makes the fact 'document' (it is never the note's own: installed=False)."""
+    (c) where it asks with no evidence at all (any member date taken): Wave 1 repair (PD, cycle 1; DS-1 to DS-4) - the
+        labels narrow the answer to their date ONLY when every one of them narrows (_Candidate.narrows: the author's own
+        sign-off states that one day, every closing-role day agrees, the closing region is the note's own, the note is
+        not written around a procedure, the date stands alone on a clean line), so there is exactly one value and none
+        is in doubt; the evidence is then each label's whole line (its only date is the label's). Otherwise the labels'
+        lines are only QUOTED (_QuotedSpan, WIDE_DATE_QUOTE_NOTE): they limit no answer, and every member date is taken
+        exactly as installed takes it. A wide label never makes the fact 'document' (installed=False)."""
     plain = tuple(c for c in found if not c.wide)
     fact = _installed_service_date_fact(plain)
     wide = [c for c in found if c.wide and c.form == 'read' and c.reading == 'own']
     if not wide:
         return fact
     if fact.origin == 'document' and fact.value:
-        differing = [c for c in wide if c.value != fact.value]
+        differing = [c for c in wide if c.value != fact.value and c.asks]
         if not differing:
             return fact
         own = next((s for s in fact.evidence if s.text.strip()), None)
         return Fact('service_date', None, 'conflict', fact.evidence, WIDE_DATE_ASK_NOTE.format(
-            wide=', '.join('\u201c' + ' '.join(c.span.text.split()) + '\u201d' for c in differing[:3]),
+            wide=', '.join(list(dict.fromkeys(c.quote for c in differing))[:3]),
             value=fact.value, own='\u201c' + ' '.join(own.text.split()) + '\u201d' if own else 'the document'))
     if fact.evidence:
         return fact
-    full = _installed_service_date_fact(found)
-    if full.origin == 'missing' and not any(c.corroborated for c in wide):
-        return fact
-    return full
+    lines = list({c.line_at: c.line for c in reversed(wide)}.values())  # each line once (its first label's span)
+    if all(c.narrows for c in wide) and len(wide) == sum(1 for c in found if c.wide):
+        return Fact('service_date', None, 'missing', _sorted_spans(lines), WIDE_DATE_NOTE)
+    return Fact('service_date', None, 'missing', _sorted_spans(_QuotedSpan(s.start, s.end, s.text) for s in lines),
+                WIDE_DATE_QUOTE_NOTE)
 
 
 def _installed_service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
@@ -2883,6 +3149,25 @@ class _DoubtSideSpan(Span):
     __hash__ = Span.__hash__
 
 
+class _QuotedSpan(Span):
+    """GI round 4, Wave 1 repair (PD, cycle 1; DS-1 to DS-4): a wide or worded label's line that rule (c) only QUOTES
+    (WIDE_DATE_QUOTE_NOTE) - nothing shows its date is the note's own, so it limits no answer. Where a fact's evidence
+    holds nothing else, merge_user_values takes a member's date whatever it is, exactly as installed takes it with no
+    evidence at all; _date_readings never reads a date from it. Quoted, stored and shown as any span (equal to the plain
+    span it copies, plain JSON through to_jsonable): the question quotes the line instead of saying nothing is
+    documented."""
+
+    def __eq__(self, other):
+        return isinstance(other, Span) and (self.start, self.end, self.text) == (other.start, other.end, other.text)
+
+    __hash__ = Span.__hash__
+
+
+def _limits_answers(fact) -> bool:
+    """Whether a fact's evidence limits a member's answer: some span of it is more than a quoted line (_QuotedSpan)."""
+    return any(not isinstance(ev, _QuotedSpan) for ev in fact.evidence)
+
+
 def _evidence_spans(c: _Candidate, answers: Optional[set] = None) -> tuple[Span, ...]:
     """A candidate's spans as the date's evidence: _ElsewhereSpan for a label or title read as another occurrence's or
     another document's (fr-di:3), or as maybe another occurrence's (df-d:4, 'beside'); _BirthSpan for a labelled date
@@ -2993,8 +3278,8 @@ def _date_readings(spans) -> Optional[set]:
     (_ElsewhereSpan) - its date is not the note's, as the fact's own note says."""
     values = set()
     for span in spans:
-        if isinstance(span, (_ElsewhereSpan, _DoubtSideSpan)):  # fix round 2, F-1: nor beside an own date in doubt
-            continue
+        if isinstance(span, (_ElsewhereSpan, _DoubtSideSpan, _QuotedSpan)):  # fix round 2, F-1: nor beside an own date in
+            continue  # doubt; Wave 1 repair (PD): nor a line rule (c) only quotes
         values |= _span_dates(span)
     return values or None
 
@@ -3053,7 +3338,7 @@ def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> di
                                 USER_CONFLICT_NOTE.format(user=value, document=' or '.join(listed)))
             continue
         if not listed and documented is not None and documented.origin in ('missing', 'conflict') \
-                and documented.evidence:
+                and documented.evidence and _limits_answers(documented):  # Wave 1 repair (PD): a quoted line limits none
             # The document labels this fact but its value cannot be used here (a labelled date that is no calendar
             # date, a place-of-service code this service does not recognise): a member value cannot be checked
             # against it, so both sides are kept (refutation r1: such a member date was used and sent to the provider,

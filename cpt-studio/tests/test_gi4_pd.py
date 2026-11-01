@@ -1,12 +1,20 @@
 """GI round 4, package PD (date step 1): wide own-date labels and D2's worded date-of-service field only ever ASK or
-NARROW, and are never sent (studio/gi/context.py: _service_dates, _pd_wide_candidates, _head_end, _closing_days,
-_worded_field, _service_date_fact over the renamed, unchanged _installed_service_date_fact, _date_fact's notes,
-charge_date_problem). Declared before any code: tests/fixtures/gi4/declarations/pd.json.
+NARROW, and are never sent (studio/gi/context.py: _service_dates, _pd_wide_candidates, _head_end, _pd_signoff_day,
+_pd_around_procedure, _worded_field, _service_date_fact over the renamed, unchanged _installed_service_date_fact,
+_QuotedSpan, merge_user_values, charge_date_problem). Declared before any code: tests/fixtures/gi4/declarations/pd.json,
+and its dated amendment_20261101 before the Wave 1 repair's code.
 
 (a) the installed reading sends X and a wide or worded own label states Y: asked, only X taken, every reader reads X;
-(b) it already asks with evidence: unchanged; (c) it asks with no evidence: the labels become that evidence (one value
-only when a closing-role line among the last 8 non-empty lines states the same day, never a consent, order, request,
-booking or call line); nothing is read under a title of a note written around a procedure.
+    never under a title of a note written around a procedure; the note quotes the label's whole line (CTS-5);
+(b) it already asks with evidence: unchanged;
+(c) it asks with no evidence (Wave 1 repair, cycle 1; DS-1 to DS-4): the labels NARROW the answer to their date only
+    when the author's own sign-off states that one day - a line that signs, authenticates, finalizes or attests and
+    names the performer or author a head field names (the declaration's second entry), never a co-signature or a
+    transcription line - every closing-role day after the head agrees, the closing region is the note's own (never the
+    head of a short document, no addendum, no copied-text announcement, not under another occurrence's heading), the
+    note is not around a procedure under the broadened detection and states no call or message (the third entry),
+    there is one value, and the date stands alone on a clean line. Otherwise the lines are only QUOTED and every member
+    date is taken exactly as installed takes it.
 
 No database (SimpleTestCase): this module is the H6 detector of every PD guard; each guard's killing test says so.
 Every document is synthetic.
@@ -20,10 +28,24 @@ from studio import jobs
 from studio.gi import context
 from studio.gi.sections import layout
 from studio.providers.corti import ADAPTER_VERSION, build_coding_request
+from studio.types import Span, to_jsonable
+from studio.validation import checks
 
 B = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
 DOCS = regression.load_fixtures()
 FAR = '1998-01-01'
+ENDO = 'Wren Halvorsen-Ode, MD (fictional)'
+SIGNED = f'Electronically signed by {ENDO}, 10/21/2026 10:05\n'
+BODY = ''.join(f'Segment {i}: normal mucosa.\n' for i in range(5))
+
+
+def report(title='Colonoscopy Report', label='Date performed: 10/21/2026', head_extra='', body_extra='', closing=SIGNED,
+           tail=''):
+    """A procedure report whose head names its endoscopist and states a wide own-date label: with the defaults its own
+    sign-off states the label's day, so every guard of rule (c) passes and the label narrows."""
+    return (B + title + '\n' + f'Endoscopist: {ENDO}\n' + label + '\n' + head_extra + 'Sedation: propofol by CRNA\n\n'
+            'Findings\nThe colonoscope was advanced to the cecum. No polyps were found.\n' + body_extra
+            + 'Impression\nNormal colonoscopy.\n' + closing + tail)
 
 
 def fact(text):
@@ -49,27 +71,46 @@ def evidence(f):
     return [' '.join(e.text.split()) for e in f.evidence]
 
 
-class RegressionDocumentTests(SimpleTestCase):
-    """The plan's PD table, on the texts the service read (tests/fixtures/gi4/regression/)."""
+def narrows(text, day='2026-10-21', other='2026-10-30'):
+    """Whether the document's wide label narrows the answer to ``day`` (``other`` held, ``day`` taken)."""
+    return taken(text, day) and not taken(text, other)
 
-    EXPECTED = {  # doc: (origin, evidence, accepted, held)
-        'h4-01': ('missing', ['Date seen: 10/26/2026'], ['2026-10-26'],
+
+def quote_only(text):
+    """Whether rule (c) only quotes: origin missing, every evidence span a quoted line, the quote-only note."""
+    f = fact(text)
+    return (f.origin == 'missing' and bool(f.evidence) and all(isinstance(e, context._QuotedSpan) for e in f.evidence)
+            and f.note == context.WIDE_DATE_QUOTE_NOTE)
+
+
+def every_answer_taken(test, text, answers):
+    """As installed with no evidence: nothing is sent before an answer, and every answer is taken and sent."""
+    test.assertEqual(sends(text), 'DATELESS', text)
+    for answer in answers:
+        test.assertTrue(taken(text, answer), (answer, text))
+        test.assertEqual(sends(text, answer), answer, (answer, text))
+
+
+class RegressionDocumentTests(SimpleTestCase):
+    """The plan's PD table, on the texts the service read (tests/fixtures/gi4/regression/), as amended 2026-11-01."""
+
+    EXPECTED = {  # doc: (evidence, accepted, held) - the narrowing kept: each own sign-off states the label's day
+        'h4-01': (['Date seen: 10/26/2026'], ['2026-10-26'],
                   ['2026-10-14', '2026-10-25', '2026-10-27', '2026-11-02', '2026-11-23', '2026-12-14', FAR]),
-        'h4-02': ('missing', ['Case date: 2026-10-21'], ['2026-10-21'], ['2026-10-20', '2026-10-22', '2026-11-18', FAR]),
-        'h4-03': ('conflict', ['Exam date: 10/06/2026', 'Service date logged for this case: 10/08/2026'],
-                  ['2026-10-06', '2026-10-08'], ['2026-10-05', '2026-10-07', '2026-10-09', FAR]),
-        'h4-04': ('missing', ['Date performed: October 19, 2026'], ['2026-10-19'],
+        'h4-02': (['Case date: 2026-10-21'], ['2026-10-21'], ['2026-10-20', '2026-10-22', '2026-11-18', FAR]),
+        'h4-04': (['Date performed: October 19, 2026'], ['2026-10-19'],
                   ['2026-09-28', '2026-10-18', '2026-10-20', '2026-11-16', FAR]),
-        'h4-06': ('missing', ['Day of procedure: Oct 27, 2026'], ['2026-10-27'],
+        'h4-06': (['Day of procedure: Oct 27, 2026'], ['2026-10-27'],  # attested by the colonoscopist its head names
                   ['2025-09-30', '2026-10-26', '2026-10-28', '2026-11-24', FAR]),
     }
 
-    def test_wide_labels_become_the_evidence_and_only_their_dates_are_taken(self):
-        for doc_id, (origin, quoted, accepted, held) in self.EXPECTED.items():
+    def test_the_narrowed_documents_take_only_their_labels_dates(self):
+        for doc_id, (quoted, accepted, held) in self.EXPECTED.items():
             text = DOCS[doc_id]['text']
             f = fact(text)
-            self.assertEqual((f.origin, f.value), (origin, None), doc_id)
+            self.assertEqual((f.origin, f.value, f.note), ('missing', None, context.WIDE_DATE_NOTE), doc_id)
             self.assertEqual(evidence(f), quoted, doc_id)
+            self.assertFalse(any(isinstance(e, context._QuotedSpan) for e in f.evidence), doc_id)
             for answer in accepted:
                 self.assertTrue(taken(text, answer), (doc_id, answer))
                 self.assertEqual(sends(text, answer), answer, (doc_id, answer))
@@ -78,10 +119,15 @@ class RegressionDocumentTests(SimpleTestCase):
                 self.assertEqual(sends(text, answer), 'HELD', (doc_id, answer))
             self.assertEqual(sends(text), 'DATELESS', doc_id)  # nothing is sent before a member's answer
 
-    def test_the_notes(self):
-        for doc_id in ('h4-01', 'h4-02', 'h4-04', 'h4-06'):
-            self.assertEqual(fact(DOCS[doc_id]['text']).note, context.WIDE_DATE_NOTE, doc_id)
-        self.assertEqual(fact(DOCS['h4-03']['text']).note, 'Conflicting documented values: 2026-10-06, 2026-10-08.')
+    def test_h4_03_is_only_quoted_its_two_values_narrow_nothing(self):  # amended 2026-11-01: rules (1) and (5)
+        text = DOCS['h4-03']['text']
+        f = fact(text)
+        self.assertTrue(quote_only(text))
+        self.assertEqual(evidence(f), ['Exam date: 10/06/2026', 'Service date logged for this case: 10/08/2026'])
+        every_answer_taken(self, text, ['2026-10-06', '2026-10-08', '2026-10-09', '2026-10-05', '2026-10-07', FAR])
+        state = checks.service_date_state(context.merge_user_values(context.extract_context(text), {}), None)
+        self.assertEqual(checks._date_problem(state), 'No usable date of service was read: the document states “Exam '
+                                                      'date: 10/06/2026”, which is not read as one')
 
     def test_h4_05_h2_08_and_h2_10_read_as_installed(self):
         f = fact(DOCS['h4-05']['text'])
@@ -125,7 +171,7 @@ class InstalledSendsXTests(SimpleTestCase):
         for answer in ('2026-10-19', FAR, '2026-10-17'):
             self.assertEqual(sends(self.X_Y, answer), 'HELD', answer)
 
-    def test_every_reader_reads_x_while_it_is_asked(self):  # kills pd-rule-a-readers-read-x
+    def test_every_reader_reads_x_while_it_is_asked(self):  # kills pd-rule-a-readers-read-x, pd-rule-a-only-x
         f = fact(self.X_Y)
         self.assertEqual(context.charge_date_own(f), '2026-10-18')
         self.assertEqual(context.charge_question_day(self.X_Y), dt.date(2026, 10, 18))
@@ -134,6 +180,43 @@ class InstalledSendsXTests(SimpleTestCase):
         self.assertEqual(problem, 'The document also states “Date performed: 10/19/2026”, while 2026-10-18 is '
                                   'read from “Date of service: 10/18/2026”')
         self.assertTrue(f.note.startswith(problem))
+
+    def test_the_note_quotes_whole_lines(self):  # CTS-5; kills pd-rule-a-whole-line
+        rows = {  # the refuter's PD-02, PD-03, PD-04, PD-06 and PD-08 head lines: the whole line is quoted, once
+            'Date performed: 10/21/2026 (pathology)': '“Date performed: 10/21/2026 (pathology)”',
+            'Date performed: 10/21/2026 by Mercy GI': '“Date performed: 10/21/2026 by Mercy GI”',
+            'Case date: 10/12/2026 (booked)': '“Case date: 10/12/2026 (booked)”',
+            'Date seen: 10/12/2026 in clinic; procedure today': '“Date seen: 10/12/2026 in clinic; procedure today”',
+            'Day of procedure: 10/19/2026    Date seen: 10/12/2026 (pre-op clinic)':
+                '“Day of procedure: 10/19/2026 Date seen: 10/12/2026 (pre-op clinic)”'}
+        for line, quoted in rows.items():
+            text = (B + 'Colonoscopy Report\nDate of service: 10/19/2026\n' + line + '\nEndoscopist: Synthetic MD\n'
+                    'Sedation: propofol by CRNA\nFindings: The colonoscope was advanced to the cecum. No polyps were '
+                    'found.\nImpression: Normal colonoscopy.\n')
+            f = fact(text)
+            self.assertEqual(f.origin, 'conflict', line)
+            self.assertEqual(context.charge_date_problem(f), f'The document also states {quoted}, while 2026-10-19 is '
+                                                             'read from “Date of service: 10/19/2026”', line)
+            self.assertEqual(context.charge_date_own(f), '2026-10-19', line)  # the note's own date, whatever is quoted
+            self.assertTrue(taken(text, '2026-10-19'), line)
+            self.assertFalse(taken(text, '2026-10-12'), line)
+
+    def test_a_long_line_is_quoted_as_a_window_with_its_cuts_marked(self):
+        line = ('Facility: ' + 'Riverside Endoscopy Suite Two ' * 6 + '   Date seen: 10/12/2026    Room: '
+                + 'Procedure Room Four ' * 6)  # a flattened header row longer than the quote limit
+        text = B + 'Colonoscopy Report\nDate of service: 10/19/2026\n' + line + '\nFindings: normal.\n'
+        problem = context.charge_date_problem(fact(text))
+        quoted = problem[len('The document also states '):problem.index(', while ')]
+        self.assertTrue(quoted.startswith('“…') and quoted.endswith('…”'), quoted)
+        self.assertIn('Date seen: 10/12/2026', quoted)
+        self.assertLessEqual(len(quoted), 2 * context._PD_QUOTE_WINDOW + 30)
+
+    def test_never_under_a_title_of_a_note_written_around_a_procedure(self):  # kills pd-rule-a-asks-around
+        text = (B + 'Pre-procedure telephone call\nDate of service: 10/30/2026\nDay of procedure: 11/04/2026\nPatient '
+                'reached; prep reviewed.\nSigned: Synthetic Nurse, RN (fictional), 10/30/2026\n')
+        f = fact(text)
+        self.assertEqual((f.origin, f.value), ('document', '2026-10-30'))  # as installed: the planned day asks nothing
+        self.assertEqual(sends(text), '2026-10-30')
 
     def test_a_worded_field_asks_the_same_way(self):
         text = (B + 'Variceal Banding Session\nDate of service: 10/06/2026\nProceduralist: Synthetic MD\n\nConclusions\n'
@@ -170,55 +253,236 @@ class InstalledAsksWithEvidenceTests(SimpleTestCase):
             self.assertTrue(context._installed_service_date_fact(plain).evidence, text)
 
 
-class InstalledAsksWithNoEvidenceTests(SimpleTestCase):
-    """Rule (c): the labels become the evidence - one value only with a closing-role line of the same day."""
+class NarrowingTests(SimpleTestCase):
+    """Rule (c) narrows: the author's own sign-off states the label's day and every other guard passes."""
 
-    def test_a_corroborated_value_restricts_the_answer(self):
-        text = B + 'New Patient Evaluation\nDate seen: 10/26/2026\nTotal time: 30 minutes.\nSigned: Synthetic MD, 10/26/2026\n'
-        self.assertEqual(evidence(fact(text)), ['Date seen: 10/26/2026'])
-        self.assertTrue(taken(text, '2026-10-26'))
-        self.assertFalse(taken(text, FAR))
-
-    def test_an_uncorroborated_value_leaves_the_installed_fact(self):  # kills pd-corroboration
-        text = (B + 'Colonoscopy\nDay of procedure: 11/04/2026\nPrep reviewed.\nSigned: Synthetic Nurse, RN (fictional), '
-                '10/30/2026\n')
+    def test_the_label_narrows_to_its_day_with_its_whole_line_as_evidence(self):
+        text = report()
         f = fact(text)
-        self.assertEqual((f.origin, f.evidence, f.note), ('missing', (), context.MISSING_NOTES['service_date']))
-        self.assertTrue(taken(text, '2026-10-30'))  # the note's real day is never refused
-        self.assertTrue(taken(text, '2026-11-04'))
+        self.assertEqual((f.origin, f.value, f.note), ('missing', None, context.WIDE_DATE_NOTE))
+        self.assertEqual([(e.start, e.end, e.text) for e in f.evidence],
+                         [(text.index('Date performed'), text.index('Date performed') + 26, 'Date performed: 10/21/2026')])
+        self.assertTrue(narrows(text))
         self.assertEqual(sends(text), 'DATELESS')
+        self.assertEqual(sends(text, '2026-10-21'), '2026-10-21')
+        self.assertEqual(sends(text, FAR), 'HELD')
 
-    def test_several_values_are_a_conflict_of_those_values(self):
-        text = B + 'Colonoscopy Report\nExam date: 10/06/2026\nCase date: 10/08/2026\nFindings: normal.\n'
-        f = fact(text)
-        self.assertEqual(f.note, 'Conflicting documented values: 2026-10-06, 2026-10-08.')
-        self.assertTrue(taken(text, '2026-10-06') and taken(text, '2026-10-08'))
-        self.assertFalse(taken(text, '2026-10-07'))
+    def test_an_attestation_by_the_performer_the_head_names_is_the_authors_own_sign_off(self):
+        self.assertTrue(narrows(report(closing=f'Attested: {ENDO}, 10/21/2026 10:05\n')))  # h4-06's shape
+        self.assertEqual(context._pd_performers(report()), (('Wren', 'Halvorsen-Ode'),))
 
-    def test_a_worded_field_alone_is_noted_as_a_wide_label_never_as_text_after_its_date(self):
-        text = (B + 'Banding Session\nProceduralist: Synthetic MD\nService date logged for this case: 10/08/2026\n'
-                'Signed electronically: Synthetic MD, 10/08/2026 07:48\n')
-        f = fact(text)
-        self.assertEqual((f.origin, evidence(f)), ('missing', ['Service date logged for this case: 10/08/2026']))
-        self.assertEqual(f.note, context.WIDE_DATE_NOTE)
-        self.assertNotIn(context.FIELD_DATE_NOTE, f.note)
-        self.assertTrue(taken(text, '2026-10-08'))
-        self.assertFalse(taken(text, '2026-10-09'))
+    def test_a_dictation_word_beside_an_own_verb_does_not_disqualify_it(self):
+        self.assertTrue(narrows(report(closing=f'Dictated and electronically signed by {ENDO}, 10/21/2026 10:05\n')))
 
-    def test_a_wide_label_is_never_sent(self):  # kills pd-wide-never-own
-        for text in (B + 'New Patient Evaluation\nDate seen: 10/26/2026\nSigned: Synthetic MD, 10/26/2026\n',
-                     B + 'Colonoscopy Report\nDay of procedure: Oct 27, 2026\nAttested: Synthetic MD, Oct 27, 2026\n',
-                     B + 'Colonoscopy Report\nExam date: 10/06/2026\nService date logged for this case: 10/06/2026\n'
-                         'Signed: Synthetic MD, 10/06/2026\n'):
-            self.assertNotEqual(fact(text).origin, 'document', text)
-            self.assertEqual(sends(text), 'DATELESS', text)
-            self.assertIsNone(context.service_date_of(text), text)  # no reader reads it as the date either
+    def test_a_worded_field_narrows_the_same_way(self):
+        text = report(title='Banding Session', label='Service date logged for this case: 10/21/2026')
+        self.assertEqual(evidence(fact(text)), ['Service date logged for this case: 10/21/2026'])
+        self.assertTrue(narrows(text))
+
+    def test_a_narrowed_wide_label_is_never_sent(self):  # kills pd-wide-never-own
+        for text in (report(), report(title='Banding Session', label='Service date logged for this case: 10/21/2026'),
+                     DOCS['h4-01']['text'], DOCS['h4-06']['text']):
+            self.assertNotEqual(fact(text).origin, 'document', text[:120])
+            self.assertEqual(sends(text), 'DATELESS', text[:120])
+            self.assertIsNone(context.service_date_of(text), text[:120])  # no reader reads it as the date either
 
 
-class AroundProcedureTitleTests(SimpleTestCase):
-    """Hardening: nothing is read under a title of a note written around a procedure; the installed fact stands."""
+class QuoteOnlyTests(SimpleTestCase):
+    """Rule (c) only quotes: the lines are evidence the question quotes, and limit no answer."""
 
-    def test_the_judges_f7_call_and_booking_shapes(self):  # kills pd-around-title
+    UNCORROBORATED = (B + 'Colonoscopy\nDay of procedure: 11/04/2026\nPrep reviewed.\nSigned: Synthetic Nurse, RN '
+                          '(fictional), 10/30/2026\n')
+
+    def test_an_uncorroborated_value_is_quoted_and_every_answer_taken(self):  # kills pd-quoted-limits-nothing
+        text = self.UNCORROBORATED
+        self.assertTrue(quote_only(text))
+        self.assertEqual(evidence(fact(text)), ['Day of procedure: 11/04/2026'])
+        every_answer_taken(self, text, ['2026-10-30', '2026-11-04', FAR])  # the note's real day is never refused
+
+    def test_the_question_quotes_the_line(self):
+        state = checks.service_date_state(context.merge_user_values(context.extract_context(self.UNCORROBORATED), {}),
+                                          None)
+        self.assertEqual(checks._date_problem(state), 'No usable date of service was read: the document states “Day of '
+                                                      'procedure: 11/04/2026”, which is not read as one')
+
+    def test_the_quoted_evidence_is_the_whole_line(self):  # kills pd-quote-only-whole-line
+        text = (B + 'Endoscopy Appointment\nCase date: 11/04/2026        Transcribed by: M. Clerk\nPatient: Alex '
+                'Synthetic\nProcedure: EGD with possible dilation\nArrival 06:30. Driver required.\n')
+        self.assertTrue(quote_only(text))
+        self.assertEqual([e.text for e in fact(text).evidence], ['Case date: 11/04/2026        Transcribed by: M. Clerk'])
+
+    def test_many_labels_on_one_long_line_are_quoted_once(self):
+        text = (B + 'Colonoscopy Report\n' + '    '.join(f'Exam date: 10/{d:02d}/2026' for d in range(1, 21))
+                + '\nFindings: normal.\n')
+        self.assertEqual(sum(1 for c in context._service_dates(text, layout(text)) if c.wide), 20)
+        self.assertTrue(quote_only(text))
+        [span] = fact(text).evidence  # one window of the line, never one per label
+        self.assertLessEqual(len(span.text), 2 * context._PD_QUOTE_WINDOW + 30)
+        every_answer_taken(self, text, ['2026-10-01', '2026-10-30', FAR])
+
+    def test_a_quoted_span_reads_no_date_and_equals_its_plain_span(self):
+        quoted = context._QuotedSpan(3, 31, 'Day of procedure: 11/04/2026')
+        self.assertIsNone(context._date_readings((quoted,)))
+        self.assertEqual(quoted, Span(3, 31, 'Day of procedure: 11/04/2026'))
+        self.assertEqual(hash(quoted), hash(Span(3, 31, 'Day of procedure: 11/04/2026')))
+        stored = to_jsonable(fact(self.UNCORROBORATED))
+        self.assertEqual(stored['evidence'][0]['text'], 'Day of procedure: 11/04/2026')  # plain JSON as stored
+        self.assertFalse(context._limits_answers(context.Fact('service_date', None, 'missing', (quoted,), '')))
+        self.assertTrue(context._limits_answers(context.Fact('service_date', None, 'missing',
+                                                             (quoted, Span(0, 3, 'x')), '')))
+
+
+class AuthorsOwnSignOffTests(SimpleTestCase):
+    """DS-1: only the author's own sign-off of the label's day narrows, and every closing-role day must agree."""
+
+    def test_the_refuters_documents_take_every_answer(self):  # DS-1: E3b, B3, C2 exactly as the refuter wrote them
+        e3b = (B + 'Colonoscopy\nDay of procedure: 11/04/2026\nPrep reviewed.\nSigned: Synthetic Nurse, RN (fictional), '
+               '10/30/2026\nCo-signed: Synthetic MD, 11/04/2026\n')
+        b3 = ('GI Consultation\nPatient: Alex Synthetic\nDay of procedure: 11/04/2026\nChief complaint: rectal bleeding.\n'
+              'HPI: 62-year-old with intermittent hematochezia for two months.\nExam: Abdomen soft, nontender.\nAssessment: '
+              'hematochezia; colonoscopy indicated.\nElectronically signed by A. Doctor MD, 10/28/2026 16:40\nAttested by A. '
+              'Doctor MD, 11/04/2026 07:02\n')
+        c2 = ('GI Clinic Note\nPatient: Alex Synthetic\nChief complaint: reflux.\nAssessment: GERD without esophagitis.\n'
+              'Electronically signed by A. Doctor MD, 10/12/2026 16:20\n\nAddendum\nDate of service for this addendum: '
+              '10/20/2026\nPathology reviewed with the patient.\nElectronically signed by A. Doctor MD, 10/20/2026 09:00\n')
+        for text, answers in ((e3b, ['2026-10-30', '2026-11-04', FAR]), (b3, ['2026-10-28', '2026-11-04', FAR]),
+                              (c2, ['2026-10-12', '2026-10-20', FAR])):
+            self.assertTrue(quote_only(text), text)
+            every_answer_taken(self, text, answers)
+
+    def test_a_co_signature_or_a_transcription_line_is_no_sign_off_of_the_author(self):  # kills pd-own-not-cosign
+        # by the performer the head names too (the second entry's guard alone would refuse anyone else): his
+        # co-signature of someone else's note, or a transcription line, is never the author's own sign-off
+        for closing in (f'Co signed by {ENDO}, 10/21/2026 10:05\n', f'Transcribed and signed by {ENDO}, 10/21/2026 10:05\n',
+                        'Co signed by Ilse Marchetti, MD (fictional), 10/21/2026 10:05\n',
+                        'Countersigned: Ilse Marchetti, MD (fictional), 10/21/2026 10:05\n',
+                        'Transcribed and signed by Synthetic Clerk, 10/21/2026 10:05\n'):
+            text = report(closing=closing)
+            self.assertTrue(quote_only(text), closing)
+            self.assertTrue(taken(text, '2026-10-30'), closing)
+
+    def test_an_attestation_by_anyone_the_head_does_not_name_is_no_sign_off(self):  # kills pd-attest-performer
+        text = report(closing='Attested by Ilse Marchetti, MD (fictional), 10/21/2026 10:05\n')
+        self.assertTrue(quote_only(text))
+        self.assertTrue(taken(text, '2026-10-30'))
+        self.assertTrue(narrows(report(closing=f'Attested: {ENDO}, 10/21/2026 10:05\n')))  # the performer's own
+
+    def test_a_dictation_line_alone_is_no_sign_off(self):  # kills pd-dictated-only
+        text = report(closing=f'Dictated by {ENDO}, 10/21/2026 10:05\n')
+        self.assertTrue(quote_only(text))
+        self.assertTrue(taken(text, '2026-10-30'))
+
+    def test_a_consent_order_request_booking_or_call_line_is_no_sign_off(self):  # kills pd-not-closing-words
+        # each also by the performer the head names, so only the line's own words refuse it
+        for closing in (f'Orders signed by {ENDO}, 10/21/2026 10:05\n',
+                        f'Consent signed by the patient with {ENDO}, 10/21/2026 10:05\n',
+                        f'Booking finalized by {ENDO}, 10/21/2026 10:05\n',
+                        f'Scheduling request signed by {ENDO}, 10/21/2026 10:05\n',
+                        'Consent signed by the patient 10/21/2026\n', 'Orders signed by Synthetic MD 10/21/2026\n',
+                        'Request finalized by Synthetic Clerk 10/21/2026\n', 'Call note signed 10/21/2026\n'):
+            text = report(body_extra=BODY, closing=closing)  # the closing line beyond the head's first lines
+            self.assertTrue(quote_only(text), closing)
+            self.assertTrue(taken(text, '2026-10-30'), closing)
+
+    def test_every_closing_role_day_after_the_head_must_agree(self):  # kills pd-closing-days-agree
+        for extra in ('Co-signed: Ilse Marchetti, MD (fictional), 10/22/2026 08:00\n',
+                      'Dictated: 10/20/2026\n', 'Attested by Ilse Marchetti, MD (fictional), 10/23/2026\n'):
+            text = report(closing=SIGNED + extra)
+            self.assertTrue(quote_only(text), extra)
+            self.assertTrue(taken(text, '2026-10-30'), extra)
+        same_day = report(closing=SIGNED + 'Co-signed: Ilse Marchetti, MD (fictional), 10/21/2026 11:00\n')
+        self.assertTrue(narrows(same_day))  # a co-signature of the same day contradicts nothing
+
+    def test_a_date_of_birth_on_a_closing_line_is_never_its_day(self):
+        text = report(closing=f'Electronically signed by {ENDO} (DOB 01/01/1970), 10/21/2026 10:05\n')
+        self.assertTrue(narrows(text))
+
+
+class SignedByThePerformerTests(SimpleTestCase):
+    """The declaration's second entry: the author's own sign-off NAMES the performer or author a head field names - the
+    positive evidence of whose signature a line is - for every sign-off verb alike."""
+
+    COPIED = ('GI Clinic Note\nSeen by: A. Doctor MD\nPatient: Alex Synthetic\nDate performed: 09/03/2026\nChief '
+              'complaint: follow-up after a colonoscopy elsewhere.\nAssessment: one adenoma removed; surveillance in '
+              'five years.\nSt. Mary Endoscopy\nThe colonoscope was advanced to the cecum. A 10 mm polyp was removed '
+              'with a hot snare.\nElectronically signed by B. Other MD, 09/03/2026 10:15\n')
+
+    def test_a_sign_off_by_anyone_the_head_does_not_name_narrows_nothing(self):  # kills pd-signoff-names-performer
+        nobody = report().replace(f'Endoscopist: {ENDO}\n', '')  # the same report, its head naming no performer
+        for text, answers in ((report(closing='Electronically signed by Ilse Marchetti, MD (fictional), 10/21/2026 '
+                                              '10:05\n'), ['2026-10-21', '2026-10-30', FAR]),
+                              (self.COPIED, ['2026-10-12', '2026-09-03', FAR]),  # a copied report, no announcement
+                              (nobody, ['2026-10-21', '2026-10-30', FAR])):
+            self.assertTrue(quote_only(text), text)
+            every_answer_taken(self, text, answers)
+        self.assertTrue(narrows(report()))
+
+    def test_the_surname_ends_the_signers_name(self):  # kills pd-performer-whole-name
+        head = report().replace(f'Endoscopist: {ENDO}', 'Endoscopist: Synthetic MD')
+        nurse = head.replace(SIGNED, 'Signed: Synthetic Nurse, RN (fictional), 10/21/2026 10:05\n')
+        self.assertTrue(quote_only(nurse))
+        self.assertTrue(taken(nurse, '2026-10-30'))
+        for closing in ('Signed: Synthetic MD, 10/21/2026 10:05\n', 'Signed: Synthetic, MD, 10/21/2026\n',
+                        'Electronically signed by Synthetic Jr., 10/21/2026\n'):
+            self.assertTrue(narrows(head.replace(SIGNED, closing)), closing)
+
+    def test_a_first_name_before_the_surname_agrees(self):  # kills pd-performer-first-name
+        other = report(closing='Electronically signed by Ilse Halvorsen-Ode, MD (fictional), 10/21/2026 10:05\n')
+        self.assertTrue(quote_only(other))
+        self.assertTrue(taken(other, '2026-10-30'))
+        for closing in ('Electronically signed by W. Halvorsen-Ode, MD, 10/21/2026 10:05\n',
+                        'Signed: Dr. Halvorsen-Ode, 10/21/2026\n', 'Signed by Wren J. Halvorsen-Ode, 10/21/2026\n',
+                        'ELECTRONICALLY SIGNED BY WREN HALVORSEN-ODE, MD, 10/21/2026\n',
+                        'Report finalized by Halvorsen-Ode 10/21/2026\n'):
+            self.assertTrue(narrows(report(closing=closing)), closing)
+
+    def test_an_attestation_signs_only_as_the_closings_sole_line(self):  # kills pd-attest-sole-line (the fourth entry)
+        for closing in (f'Electronically signed by Ilse Marchetti, MD (fictional)\nAttested by {ENDO}, 10/21/2026 10:05\n',
+                        f'Dictated by Ilse Marchetti, MD (fictional)\nAttested: {ENDO}, 10/21/2026 10:05\n'):
+            text = report(closing=closing)  # a fellow's undated line, then the head performer's supervising attestation
+            self.assertTrue(quote_only(text), closing)
+            every_answer_taken(self, text, ['2026-10-21', '2026-10-30', FAR])
+        self.assertTrue(narrows(report(closing=f'Attested: {ENDO}, 10/21/2026 10:05\n')))  # h4-06's: its only line
+        self.assertTrue(narrows(report(closing=SIGNED + f'Attested: {ENDO}, 10/21/2026 10:06\n')))  # his own signature
+
+    def test_a_sign_off_line_longer_than_the_quote_limit_is_none(self):  # kills pd-signoff-short-line
+        line = f'Electronically signed by {ENDO}, 10/21/2026 10:05' + '; workstation Endo Suite Four session' * 6
+        self.assertGreater(len(line), context._PD_QUOTE_CHARS)
+        text = report(closing=line + '\n')
+        self.assertTrue(quote_only(text))
+        self.assertTrue(taken(text, '2026-10-30'))
+
+    def test_the_head_fields_names(self):
+        text = (B + 'Colonoscopy Report\nEndoscopist: Dr. Jane Smith    Sedation: propofol\nAttending: Smith, John MD\n'
+                'Provider: Synthetic MD (fictional)\nReferring physician: Dr. Oak\nDate performed: 10/21/2026\n')
+        self.assertEqual(context._pd_performers(text), (('Jane', 'Smith'), ('', 'Smith'), ('', 'Synthetic')))
+        self.assertTrue(context._pd_signed_by('Signed: J. Smith, 10/21/2026', (('Jane', 'Smith'),)))
+        self.assertFalse(context._pd_signed_by('Signed: Raj Smith, 10/21/2026', (('Jane', 'Smith'),)))
+        self.assertFalse(context._pd_signed_by('Signed: Smithson, 10/21/2026', (('', 'Smith'),)))
+        self.assertFalse(context._pd_signed_by('Signed: 10/21/2026', ()))
+
+
+class ProcedureLabelTests(SimpleTestCase):
+    """The declaration's fifth entry: a label naming a procedure's occurrence narrows only in a procedure's own report."""
+
+    CONSULT = ('GI Consultation\nSeen by: A. Doctor MD\n{label}\nChief complaint: rectal bleeding.\nAssessment: '
+               'hematochezia; colonoscopy scheduled.\nElectronically signed by A. Doctor MD, 11/04/2026 07:30\n')
+
+    def test_a_procedure_label_outside_a_procedure_report(self):  # kills pd-procedure-label-head
+        for label in ('Day of procedure: 11/04/2026', 'Case date: 11/04/2026', 'Date performed: 11/04/2026',
+                      'Procedure day: 11/04/2026'):
+            text = self.CONSULT.format(label=label)  # signed late, on the planned procedure's day (R8)
+            self.assertTrue(quote_only(text), label)
+            every_answer_taken(self, text, ['2026-10-28', '2026-11-04', FAR])
+        self.assertTrue(narrows(self.CONSULT.format(label='Date seen: 11/04/2026'), '2026-11-04', '2026-10-28'))
+        for label in ('Day of procedure: 10/21/2026', 'Case date: 10/21/2026', 'Date performed: 10/21/2026'):
+            self.assertTrue(narrows(report(label=label)), label)  # the procedure's own report: its head's fields
+
+
+class AroundProcedureTests(SimpleTestCase):
+    """DS-2: a note written around a procedure, under the broadened detection, narrows nothing; its labels are quoted."""
+
+    def test_the_judges_f7_call_and_booking_shapes(self):
         for text, own_day in (
                 (B + 'Pre-procedure telephone call\nDay of procedure: 11/04/2026\nPatient reached; prep reviewed.\n'
                      'Signed: Synthetic Nurse, RN (fictional), Oct 30, 2026\n', '2026-10-30'),
@@ -227,53 +491,221 @@ class AroundProcedureTitleTests(SimpleTestCase):
                 (B + 'Endoscopy booking\nCase date: 2026-11-04\nColonoscopy booked for the morning list.\n', '2026-10-29'),
                 (B + 'Endoscopy booking\nCase date: 2026-11-04\nColonoscopy booked for the morning list.\nAttested: '
                      'Synthetic Scheduler, 2026-11-04\n', '2026-10-29')):
-            f = fact(text)
-            self.assertEqual((f.origin, f.evidence), ('missing', ()), text)
+            self.assertTrue(quote_only(text), text)
             self.assertEqual(sends(text), 'DATELESS', text)  # the planned day is never sent by the document
             self.assertTrue(taken(text, own_day), text)  # the note's own day is never refused
 
-    def test_every_around_title_holds(self):
-        for title in ('Procedure consent', 'Colonoscopy preparation instructions', 'Patient Education Handout',
-                      'GI Records Review', 'Clinic Correspondence', 'Colonoscopy scheduling'):
-            text = B + title + '\nDay of procedure: 11/04/2026\nSigned: Synthetic MD, 11/04/2026\n'
-            self.assertEqual(fact(text).evidence, (), title)
+    def test_the_refuters_documents_take_every_answer(self):  # DS-2: E1d, E2b, E4, A1-A3, A5-A7, B1, B2, B6, B7
+        signed = 'Electronically signed by J. Nurse RN, 11/02/2026 15:42\nAttested by A. Doctor MD, 11/04/2026 07:05\n'
+        rows = (
+            B + 'Endoscopy appointment\nCase date: 2026-11-04\nColonoscopy booked for the morning list.\nAttested: '
+                'Synthetic MD, 2026-11-04\n',
+            B + 'Nursing note\nNote type: Telephone\nDay of procedure: 11/04/2026\nCall placed on 10/30/2026.\nSigned: '
+                'Synthetic Nurse, RN (fictional), 11/04/2026 07:10\n',
+            B + 'Colonoscopy appointment reminder\nDay of procedure: 11/04/2026\nSigned: Synthetic MD, 11/04/2026\n',
+            'GI Nurse Note\nNote type: Telephone\nPatient: Alex Synthetic    MRN: 00012345\nDay of procedure: 11/04/2026\n'
+            'Procedure: Colonoscopy\nSpoke with patient by phone today. Reviewed split-dose prep, clear liquids the day '
+            'before, nothing by mouth after midnight. Questions answered.\n' + signed,
+            'Endoscopy Appointment\nPatient: Alex Synthetic\nCase date: 11/04/2026\nProcedure: EGD with possible dilation\n'
+            'Arrival 06:30. Driver required. Hold apixaban two days before.\nEntered by front desk 10/20/2026\nAttested by '
+            'A. Doctor MD, 11/04/2026 06:55\n',
+            'Pre-colonoscopy Nursing Assessment\nPatient: Alex Synthetic\nDay of procedure: 11/04/2026\nAllergies '
+            'reviewed. Medication list reconciled. Prep instructions reviewed with the patient in clinic.\nElectronically '
+            'signed by J. Nurse RN, 10/30/2026 11:15\nCo-signed by A. Doctor MD, 11/04/2026 07:00\n',
+            'Riverside Gastroenterology Associates\n100 Main Street\nSpringfield\nPatient: Alex Synthetic\nMRN: 00012345\n'
+            'Provider: A. Doctor MD\nTelephone Encounter\nDay of procedure: 11/04/2026\nCalled patient to review prep. '
+            'Patient verbalized understanding.\n' + signed,
+            'Gastroenterology nursing telephone outreach regarding upcoming colonoscopy preparation and arrival\nPatient: '
+            'Alex Synthetic\nDay of procedure: 11/04/2026\nReviewed prep. Patient verbalized understanding.\n' + signed,
+            'Pre procedure prep review\nPatient: Alex Synthetic\nDay of procedure: 11/04/2026\nReviewed prep. Patient '
+            'verbalized understanding.\n' + signed,
+            'TELEPHONE ENCOUNTER                    MRN: 00012345\nPatient: Alex Synthetic\nDay of procedure: 11/04/2026\n'
+            'Called patient to review prep. Patient verbalized understanding.\n' + signed,
+            'Patient Message\nPatient: Alex Synthetic\nDay of procedure: 11/04/2026\nPatient asked whether to stop iron '
+            'tablets before the colonoscopy. Advised to stop iron five days before.\nElectronically signed by J. Nurse '
+            'RN, 11/01/2026 09:30\nCosigned by A. Doctor MD, 11/04/2026 07:01\n',
+            'Prep Reminder\nPatient: Alex Synthetic\nCase date: 11/04/2026\nReminder sent with split-dose instructions.\n'
+            'Electronically signed by J. Nurse RN, 10/28/2026 12:00\nAttested by A. Doctor MD, 11/04/2026 06:59\n',
+            'Pre-Admission Testing\nPatient: Alex Synthetic\nDay of procedure: 11/04/2026\nLabs drawn. ECG normal sinus '
+            'rhythm.\nElectronically signed by J. Nurse RN, 10/29/2026 14:00\nFinalized by A. Doctor MD, 11/04/2026 '
+            '07:10\n')
+        for text in rows:
+            self.assertTrue(quote_only(text), text)
+            every_answer_taken(self, text, ['2026-10-20', '2026-10-28', '2026-10-30', '2026-11-02', '2026-11-04', FAR])
+
+    def test_a_title_outside_the_closed_title_list(self):  # kills pd-around-broadened
+        for title in ('Endoscopy Appointment', 'Patient Message', 'Prep Reminder', 'Pre-Admission Testing',
+                      'Pre procedure review', 'Pre-colonoscopy Nursing Assessment', 'Outside Colonoscopy Report Review',
+                      'Chart Review', 'GI Triage', 'Portal Message'):
+            text = report(title=title)
+            self.assertTrue(context._pd_around_procedure(text), title)
+            self.assertTrue(quote_only(text), title)
             self.assertTrue(taken(text, '2026-10-30'), title)
+        self.assertFalse(context._pd_around_procedure(report()))
+        self.assertTrue(narrows(report()))
+
+    def test_a_kind_field_names_the_note(self):  # kills pd-around-kind-field
+        for field in ('Note type: Telephone', 'Encounter type: Patient message', 'Visit type: Telehealth',
+                      'Type of visit: phone call', 'Encounter: Telephone'):
+            text = report(title='GI Note', head_extra=field + '\n')
+            self.assertTrue(context._pd_around_procedure(text), field)
+            self.assertTrue(quote_only(text), field)
+        self.assertFalse(context._pd_around_procedure(report(head_extra='Encounter class: hospital outpatient\n')))
+
+    def test_a_flattened_line_cell_is_read_as_a_title(self):  # kills pd-around-cells
+        for line in ('TELEPHONE ENCOUNTER        MRN: 00012345', 'Patient Message\tMRN: 00012345',
+                     'MRN: 00012345 | Prep Reminder'):
+            text = report(title=line)
+            self.assertTrue(context._pd_around_procedure(text), line)
+            self.assertTrue(quote_only(text), line)
+
+    def test_a_title_anywhere_among_the_heads_first_twelve_lines(self):  # kills pd-around-head-lines
+        text = (B + 'Riverside Gastroenterology Associates\n100 Main Street\nSpringfield\nPatient: Alex Synthetic\n'
+                'MRN: 00012345\nTelephone Encounter\n' + f'Endoscopist: {ENDO}\nDate performed: 10/21/2026\n'
+                'Sedation: propofol by CRNA\n\nFindings\nThe colonoscope was advanced to the cecum.\nImpression\n'
+                f'Normal colonoscopy.\n{SIGNED}')
+        self.assertTrue(context._pd_around_procedure(text))
+        self.assertTrue(quote_only(text))
+
+    def test_a_title_over_eighty_characters(self):  # kills pd-around-title-chars
+        title = 'Gastroenterology nursing telephone outreach regarding upcoming colonoscopy preparation and arrival'
+        self.assertGreater(len(title), 80)
+        self.assertTrue(quote_only(report(title=title)))
+
+    def test_a_field_value_or_a_sentence_is_no_title(self):
+        self.assertFalse(context._pd_around_procedure(report(head_extra='Phone: 555-0100\n')))
+        self.assertFalse(context._pd_around_procedure(report(head_extra='Consent was signed and risks were given.\n')))
+        self.assertTrue(narrows(report(head_extra='Phone: 555-0100\n')))
+
+    def test_a_call_or_a_message_written_in_the_body(self):  # kills pd-no-call-phrase (the third entry)
+        f7 = (B + 'Endoscopy Unit Note\nAuthor: Synthetic Nurse, RN (fictional)\nDay of procedure: 11/04/2026\nCall placed '
+              'on 10/30/2026.\nSigned: Synthetic Nurse, RN (fictional), 11/04/2026 07:10\n')  # F7, its kind in the body
+        self.assertTrue(quote_only(f7))
+        every_answer_taken(self, f7, ['2026-10-30', '2026-11-04', FAR])
+        for words in ('Spoke with the patient by phone about the result.', 'Left a voicemail for the patient.',
+                      'The pathology result will be called to the patient.', 'Patient messaged about the prep.',
+                      'Telephone call with the daughter.'):
+            text = report(body_extra=words + '\n')
+            self.assertTrue(quote_only(text), words)
+            self.assertTrue(taken(text, '2026-10-30'), words)
+        for words in ('Recall colonoscopy in three years.', 'Phone: 555-0100', 'Telephone: 555-0101'):
+            self.assertTrue(narrows(report(body_extra=words + '\n')), words)  # no call as an event
 
 
-class ClosingLineTests(SimpleTestCase):
-    """Hardening: corroboration only from closing-role lines among the last 8 non-empty lines, never from a consent,
-    order, request, booking or call line."""
+class ClosingRegionTests(SimpleTestCase):
+    """DS-3: the sign-off is read only in the note's own closing region."""
 
-    def test_a_closing_line_far_above_the_end_corroborates_nothing(self):  # kills pd-closing-last-lines
-        text = (B + 'Colonoscopy\nDay of procedure: 11/04/2026\nSigned: Synthetic MD, 11/04/2026\n'
-                + ''.join(f'Line {i} of the note.\n' for i in range(10)))
-        self.assertEqual(fact(text).evidence, ())
+    def test_the_refuters_documents_take_every_answer(self):  # DS-3: B4, B5, C1, C5
+        rows = (
+            ('Outside Colonoscopy Report Review\nPatient: Alex Synthetic\nDate performed: 09/03/2026\nReviewed in clinic '
+             'with the patient today. Copied report text follows.\nThe colonoscope was advanced to the cecum. A 10 mm '
+             'polyp was removed with a hot snare.\nImpression: one adenoma removed.\nElectronically signed by B. Outside '
+             'MD, 09/03/2026 10:15\n', ['2026-10-12', '2026-09-03', FAR]),
+            ('Chart Review\nPatient: Alex Synthetic\nDate performed: 09/03/2026\nFacility: Mercy GI\nReviewed in clinic '
+             'with the patient today. Copied report text follows.\nThe colonoscope was advanced to the cecum. A 10 mm '
+             'polyp was removed with a hot snare.\nImpression: one adenoma removed.\nElectronically signed by B. Outside '
+             'MD, 09/03/2026 10:15\n', ['2026-10-12', '2026-09-03', FAR]),
+            ('Endoscopy Appointment\nCase date: 11/04/2026        Transcribed by: M. Clerk\nPatient: Alex Synthetic\n'
+             'Procedure: EGD with possible dilation\nArrival 06:30. Driver required.\n', ['2026-10-20', '2026-11-04', FAR]),
+            ('Endoscopy Pre-Assessment\nDay of procedure: 11/04/2026   Signed by: J. Nurse RN\nPatient: Alex Synthetic\n'
+             'Allergies reviewed.\n', ['2026-10-30', '2026-11-04', FAR]))
+        for text, answers in rows:
+            self.assertTrue(quote_only(text), text)
+            every_answer_taken(self, text, answers)
+
+    def test_the_head_of_a_short_document_is_never_its_closing(self):  # kills pd-region-not-head
+        # its head names the signer and its label is a visit's (the fifth entry's rule would refuse a procedure's), so
+        # only the region keeps the label's own line from signing it
+        text = (B + 'Endoscopy Note\nAuthor: J. Nurse RN\nDate seen: 11/04/2026   Signed by: J. Nurse RN\nPatient: '
+                'Alex Synthetic\nAllergies reviewed.\n')
+        self.assertTrue(quote_only(text))
         self.assertTrue(taken(text, '2026-10-30'))
-        near = text + 'Signed: Synthetic MD, 11/04/2026\n'  # the same line among the last eight
-        self.assertEqual(evidence(fact(near)), ['Day of procedure: 11/04/2026'])
-        self.assertFalse(taken(near, '2026-10-30'))
 
-    def test_consent_order_request_booking_and_call_lines_corroborate_nothing(self):  # kills pd-not-closing-words
-        for line in ('Call signed: Synthetic Nurse, RN (fictional), 11/04/2026',
-                     'Consent signed by the patient 11/04/2026', 'Orders signed by Synthetic MD 11/04/2026',
-                     'Request finalized by Synthetic Clerk 11/04/2026', 'Booking attested: Synthetic Clerk, 11/04/2026',
-                     'Phone note signed 11/04/2026', 'Scheduled and signed by the front desk 11/04/2026'):
-            text = B + 'Colonoscopy\nDay of procedure: 11/04/2026\nPrep reviewed.\n' + line + '\n'
-            self.assertEqual(fact(text).evidence, (), line)
+    def test_a_sign_off_above_the_last_eight_lines_is_not_read(self):  # kills pd-closing-last-lines
+        text = report(tail=''.join(f'Plan line {i}: continue the current regimen.\n' for i in range(10)))
+        self.assertTrue(quote_only(text))
+        self.assertTrue(taken(text, '2026-10-30'))
+        self.assertTrue(narrows(report(body_extra=BODY)))  # the same sign-off among the last eight lines
+
+    def test_an_addendum_after_the_head(self):  # kills pd-no-addendum
+        text = report(tail=f'Addendum\nPathology: no dysplasia.\nElectronically signed by {ENDO}, 10/21/2026 15:00\n')
+        self.assertTrue(quote_only(text))
+        self.assertTrue(taken(text, '2026-10-30'))
+
+    def test_a_line_announcing_copied_text(self):  # kills pd-no-copied-text
+        for words in ('Copied report text follows.', 'Outside report pasted below.', 'See attached report.',
+                      'Report imported from the referring practice.'):
+            text = report(body_extra=words + '\n')
+            self.assertTrue(quote_only(text), words)
+            self.assertTrue(taken(text, '2026-10-30'), words)
+
+    def test_a_sign_off_under_a_heading_naming_another_record(self):  # kills pd-signoff-not-under-occurrence
+        text = (report(closing='') + ''.join(f'Line {i} of the plan.\n' for i in range(6)) + 'Outside Report\nThe '
+                'colonoscope was advanced to the cecum.\n' + SIGNED)
+        self.assertTrue(quote_only(text))
+        self.assertTrue(taken(text, '2026-10-30'))
+
+
+class OneValueTests(SimpleTestCase):
+    """DS-4: several values never narrow, and are never worded as documented conflicting dates of service."""
+
+    def test_the_refuters_documents_take_every_answer(self):  # DS-4: F1, D1, D2, C4
+        rows = (
+            ('GI Consultation\nPatient: Alex Synthetic\nDay of procedure: 11/04/2026\nSurveillance colonoscopy\nDate '
+             'performed: 05/02/2019\nChief complaint: due for surveillance; intermittent hematochezia.\nExam: Abdomen '
+             'soft, nontender.\nAssessment: personal history of adenomas; colonoscopy scheduled.\nElectronically signed '
+             'by A. Doctor MD, 10/28/2026 16:40\n', ['2026-10-28', '2026-11-04', '2019-05-02', FAR]),
+            ('Pre-colonoscopy Nursing Assessment\nPatient: Alex Synthetic\nDay of procedure: 11/04/2026\nSurveillance '
+             'colonoscopy\nDate performed: 05/02/2019\nAllergies reviewed. Medication list reconciled.\nElectronically '
+             'signed by J. Nurse RN, 10/30/2026 11:15\n', ['2026-10-30', '2026-11-04', '2019-05-02', FAR]),
+            ('Endoscopy Appointment\nPatient: Alex Synthetic\nCase date: 11/04/2026\nMoved at patient\'s request; new slot '
+             'below.\nDay of procedure: 11/18/2026\nArrival 06:30. Driver required.\nEntered by front desk 10/20/2026\n',
+             ['2026-10-20', '2026-11-04', '2026-11-18', FAR]),
+            ('Pre-colonoscopy Nursing Assessment\nPatient: Alex Synthetic\nExam date: 10/02/2026\nDay of procedure: '
+             '11/04/2026\nAllergies reviewed. Medication list reconciled.\nElectronically signed by J. Nurse RN, '
+             '10/30/2026 11:15\n', ['2026-10-30', '2026-10-02', '2026-11-04', FAR]))
+        for text, answers in rows:
+            self.assertTrue(quote_only(text), text)
+            every_answer_taken(self, text, answers)
+            state = checks.service_date_state(context.merge_user_values(context.extract_context(text), {}), None)
+            self.assertNotIn('Conflicting dates of service', checks._date_problem(state), text)
+
+    def test_one_value_the_sign_off_states_and_another_narrow_nothing(self):  # kills pd-every-candidate-narrows
+        text = report(head_extra='Day of procedure: 11/04/2026\n')
+        self.assertTrue(quote_only(text))
+        self.assertEqual(evidence(fact(text)), ['Date performed: 10/21/2026', 'Day of procedure: 11/04/2026'])
+        every_answer_taken(self, text, ['2026-10-21', '2026-11-04', '2026-10-30'])
+
+    def test_a_wide_label_in_doubt_beside_it_narrows_nothing(self):  # kills pd-no-wide-in-doubt
+        text = report(head_extra='DOB: 01/01/1998\nExam date: 01/01/1998\n')
+        self.assertEqual([c.doubt for c in context._service_dates(text, layout(text)) if c.wide], ['', 'birth'])
+        self.assertTrue(quote_only(text))
+        self.assertTrue(taken(text, '2026-10-30'))
+
+
+class CleanLineTests(SimpleTestCase):
+    """Fail-closed beside the binding rules: the label's date alone in its field, on a short line stating no other date."""
+
+    def test_a_date_with_words_after_it_in_its_field(self):  # kills pd-label-alone
+        text = report(label='Date performed: 10/21/2026 (screening)')
+        self.assertTrue(quote_only(text))
+        self.assertEqual(evidence(fact(text)), ['Date performed: 10/21/2026 (screening)'])
+        self.assertTrue(taken(text, '2026-10-30'))
+
+    def test_another_date_on_the_labels_line(self):  # kills pd-clean-line-dates
+        for line in ('Date performed: 10/21/2026    Accession: 10/22/2026', 'Date performed: 10/21/2026    Printed: '
+                     '10/22/26', 'Date performed: 10/21/2026    Scope serviced 05/2019',
+                     'Date performed: 10/21/2026    Scope model: Olympus 190, May 2019'):
+            text = report(label=line)
+            self.assertTrue(quote_only(text), line)
             self.assertTrue(taken(text, '2026-10-30'), line)
 
-    def test_the_closing_days(self):
-        text = (B + 'Note\nDOB: 01/01/1998\nElectronically authenticated by Synthetic MD, 10/26/2026 18:22\n'
-                'Co-signed: Synthetic Fellow (DOB 01/02/1999), 10/27/2026\n')
-        self.assertEqual(context._closing_days(text), frozenset({'2026-10-26', '2026-10-27'}))
-        self.assertEqual(context._closing_days(B + 'Consent signed 10/26/2026\n'), frozenset())
-
-    def test_the_last_lines_start(self):
-        text = 'a\n\n' + ''.join(f'line {i}\n\n \n' for i in range(9))
-        start = context._pd_closing_start(text)
-        self.assertEqual(text[start:].split('\n')[0], 'line 1')
-        self.assertEqual(context._pd_closing_start('one\ntwo\n'), 0)
-        self.assertEqual(context._pd_closing_start(''), 0)
+    def test_a_line_longer_than_the_quote_limit(self):  # kills pd-clean-line-length
+        text = report(label='Date performed: 10/21/2026    Location: ' + 'Riverside Endoscopy Suite Two ' * 9)
+        self.assertTrue(quote_only(text))
+        self.assertTrue(taken(text, '2026-10-30'))
+        addendum = report(label='Date performed: 10/21/2026    Addendum pending')
+        self.assertTrue(quote_only(addendum))
 
 
 class MustHoldTests(SimpleTestCase):
@@ -323,3 +755,34 @@ class MustHoldTests(SimpleTestCase):
         self.assertEqual(fact(B + 'New Patient Evaluation\nDate seen: 10/26/26\nSigned: X, 10/26/2026\n').evidence, ())
         text = B + 'Office visit\nPlan\nExam date: 11/04/2026\nSigned: Synthetic MD, 11/04/2026\n'
         self.assertEqual(fact(text).evidence, ())
+
+    def test_a_wide_label_is_never_sent(self):
+        for text in (B + 'New Patient Evaluation\nDate seen: 10/26/2026\nSigned: Synthetic MD, 10/26/2026\n',
+                     B + 'Colonoscopy Report\nDay of procedure: Oct 27, 2026\nAttested: Synthetic MD, Oct 27, 2026\n',
+                     B + 'Colonoscopy Report\nExam date: 10/06/2026\nService date logged for this case: 10/06/2026\n'
+                         'Signed: Synthetic MD, 10/06/2026\n', report()):
+            self.assertNotEqual(fact(text).origin, 'document', text)
+            self.assertEqual(sends(text), 'DATELESS', text)
+            self.assertIsNone(context.service_date_of(text), text)
+
+
+class HelperTests(SimpleTestCase):
+    def test_the_last_lines_start(self):
+        text = 'a\n\n' + ''.join(f'line {i}\n\n \n' for i in range(9))
+        start = context._pd_closing_start(text)
+        self.assertEqual(text[start:].split('\n')[0], 'line 1')
+        self.assertEqual(context._pd_closing_start('one\ntwo\n'), 0)
+        self.assertEqual(context._pd_closing_start(''), 0)
+
+    def test_the_sign_off_day(self):
+        text = report()
+        self.assertEqual(context._pd_signoff_day(text, context._head_end(text, layout(text))), '2026-10-21')
+        for other in (report(title='Endoscopy Appointment'), report(body_extra='Copied report text follows.\n'),
+                      report(closing='Co-signed: X Y, MD, 10/21/2026\n')):
+            self.assertIsNone(context._pd_signoff_day(other, context._head_end(other, layout(other))))
+
+    def test_the_line_and_its_quote(self):
+        text = 'x\n  Date seen: 10/26/2026  \ny'
+        start = text.index('Date')
+        span, quote = context._pd_line(text, 2, text.index('\ny'), start, start + 21)
+        self.assertEqual((span.text, quote), ('Date seen: 10/26/2026', '“Date seen: 10/26/2026”'))
