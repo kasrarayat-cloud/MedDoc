@@ -154,6 +154,12 @@ INSTALLED = {
     # --- guard: a note written around a procedure ---
     'a referral letter': (B + 'Referral Letter\nDate of service: 10/19/2026\nColonoscopy Report\nThe colonoscope was '
                               'navigated to the cecum.\n', {COLON: ('performed', None)}),
+    # (Wave 1 repair, amendment_20261101_cycle1_b: the referral letter's head names no family, so the head rule holds it
+    # too; this note's title names the colonoscopy and its 'Findings' passage passes every copy guard, so the
+    # around-procedure guard alone holds it - measured on installed 80df1831d168: performed, no extent)
+    'a telephone note naming the colonoscopy': (B + 'Colonoscopy Telephone Note\nDate of service: 10/19/2026\nFindings\n'
+                                                    'The colonoscope was navigated to the cecum.\n',
+                                                {COLON: ('performed', None)}),
     # --- guard: under a line naming another occurrence's record ---
     'outside records': (B + 'Colonoscopy Report\nDate of service: 10/19/2026\nFindings\nThe colonoscope could not be '
                             'advanced beyond the sigmoid colon because of a stricture.\nOutside Records\nAt Mercy GI the '
@@ -282,3 +288,212 @@ class GuardTests(SimpleTestCase):
         self.assertFalse(moved('We ', 'steered the balloon into the '))
         self.assertFalse(moved('It was ', 'steered into the '))
         self.assertFalse(moved('', 'Steered into the '))
+
+
+# --- GI round 4 Wave 1 repair, cycle 1: the shared copy guards (detect.todays_procedure_report and
+# detect.in_todays_narrative; declared in pe.json and pi.json, amendment_20261101_cycle1). One implementation, read by
+# PE's routing-only reach here and by PI's S1 and E1 (tests/test_gi4_pi.py). Each text below holds by exactly ONE guard,
+# so the guard's mutant (ops/gi4/mutants.py, pe-today-*) is killed by its own behaviour. ---
+FILL = ''.join(f'Line {i} of the outside summary lists medications and allergies in detail.\n' for i in range(8))
+FIELDS = ('Date performed: October 19, 2026\nGastroenterologist: Synthetic Gastroenterologist, MD (fictional)\n'
+          'Sedation and airway: propofol given by a CRNA (fictional)\n')
+STRONG = B + 'Gastroscopy Then Colonoscopy in One Sitting\n' + FIELDS  # a head the layout reads no heading in
+UPPER = 'Stomach and Duodenum\nThe gastroscope was advanced to the second part of the duodenum. The stomach was normal.\n'
+REACH = 'The colonoscope reached the cecum.'
+
+
+def narrative(text, needle=REACH, day=DAY):
+    pos = text.index(needle)
+    return detect.in_todays_narrative(text, pos, day, (pos, text.index('.', pos) + 1))
+
+
+class TodaysProcedureReportTests(SimpleTestCase):
+    """The strong head: an own-date field, a proceduralist field and a sedation field, each a labelled field; one own
+    date; no title naming a later review or another record (refutation F2: 'Attending:', or 'sedation' in an
+    allergy line, had passed sections.procedure_report_head)."""
+
+    def test_the_regression_heads_are_strong(self):
+        for doc_id in ('h4-03', 'h4-04', 'h4-06'):
+            self.assertTrue(detect.todays_procedure_report(regression.load_fixtures()[doc_id]['text']), doc_id)
+        self.assertTrue(detect.todays_procedure_report(STRONG))
+
+    def test_an_own_date_field(self):
+        self.assertFalse(detect.todays_procedure_report(STRONG.replace('Date performed: October 19, 2026\n', '')))
+
+    def test_one_own_date_only(self):
+        self.assertFalse(detect.todays_procedure_report(STRONG + 'Date of service: 10/20/2026\n'))
+
+    def test_a_proceduralist_field_never_an_attending(self):
+        self.assertFalse(detect.todays_procedure_report(STRONG.replace('Gastroenterologist:', 'Attending:')))
+
+    def test_a_sedation_field_never_the_word_in_another_field(self):
+        allergy = STRONG.replace('Sedation and airway: propofol given by a CRNA (fictional)',
+                                 'Allergies: none; no reaction to sedation in the past.')
+        self.assertFalse(detect.todays_procedure_report(allergy))
+
+    def test_a_denied_sedation_is_no_sedation_field(self):
+        self.assertFalse(detect.todays_procedure_report(
+            STRONG.replace('Sedation and airway: propofol given by a CRNA (fictional)', 'Sedation: none')))
+
+    def test_no_title_naming_a_later_review(self):
+        self.assertFalse(detect.todays_procedure_report(
+            STRONG.replace('Gastroscopy Then Colonoscopy in One Sitting', 'Colon Surveillance Pathology Review')))
+
+
+class TodaysNarrativeTests(SimpleTestCase):
+    """The copy guards of today's procedure narrative, each held alone (refutation F1 and F3: an attached outside report,
+    unit statistics under a plan heading)."""
+
+    def test_today_s_narrative_reads(self):
+        self.assertTrue(narrative(STRONG + UPPER + 'Large Bowel\n' + REACH + ' No polyps were seen.\n'))
+        for doc_id, needle in (('h4-04', 'The colonoscope reached the cecum'), ('h4-04', 'steered through'),
+                               ('h4-03', 'The duodenal bulb and descending'), ('h4-06', 'Neoterminal ileum: normal')):
+            text = regression.load_fixtures()[doc_id]['text']
+            pos = text.index(needle)
+            self.assertTrue(detect.in_todays_narrative(text, pos, None, (pos, pos + len(needle))), doc_id)
+
+    def test_an_attachment_heading_opens_a_foreign_block(self):
+        self.assertFalse(narrative(STRONG + UPPER + '\nAttached Report\n' + FILL + 'Large Bowel\n' + REACH + '\n'))
+
+    def test_a_heading_dated_another_day_opens_a_foreign_block(self):
+        self.assertFalse(narrative(STRONG + UPPER + '\nMercy GI, March 2023\n' + FILL + 'Large Bowel\n' + REACH + '\n'))
+
+    def test_a_sign_off_opens_a_foreign_block(self):
+        self.assertFalse(narrative(STRONG + UPPER + 'Signed electronically: Synthetic Gastroenterologist, MD (fictional)\n'
+                                   'Large Bowel\n' + REACH + '\n'))
+
+    def test_a_statement_that_a_copy_follows_opens_a_foreign_block(self):
+        self.assertFalse(narrative(STRONG + UPPER.rstrip('\n') + ' Her earlier report is copied below.\n\nLarge Bowel\n'
+                                   + REACH + '\n'))
+
+    def test_the_governing_heading_names_no_other_occurrence_or_education(self):
+        self.assertFalse(narrative(STRONG + UPPER + 'Index Examination\n' + FILL + REACH + '\n'))
+        self.assertFalse(narrative(STRONG + UPPER + 'What Happens During a Colonoscopy\n' + FILL + REACH + '\n'))
+
+    def test_the_governing_heading_names_no_facility(self):
+        self.assertFalse(narrative(STRONG + UPPER + 'Mercy Endoscopy Center\n' + REACH + '\n'))
+
+    def test_the_governing_heading_is_no_plan_heading(self):
+        self.assertFalse(narrative(STRONG + UPPER + 'Next Steps\nBowel preparation: split dose the evening before.\n'
+                                   + REACH + '\n'))
+
+    def test_beyond_its_heading_s_reach_nothing_is_released(self):
+        lines = ''.join(f'The mucosa of segment {i} was normal.\n' for i in range(210))
+        self.assertFalse(narrative(STRONG + UPPER + 'Large Bowel\n' + lines + REACH + '\n'))
+
+    def test_the_block_carries_no_other_date(self):
+        self.assertFalse(narrative(STRONG + UPPER + 'Large Bowel\n' + REACH + ' A biopsy from the 09/28/2026 study was '
+                                                                              'reviewed.\n'))
+
+    def test_the_block_carries_no_sign_off(self):
+        self.assertFalse(narrative(STRONG + UPPER + 'Large Bowel\n' + REACH + '\nReport signed by the Mercy GI '
+                                                                              'endoscopist.\n'))
+
+    def test_no_unit_statistics(self):
+        text = STRONG + UPPER + 'Large Bowel\nIn our unit the colonoscope reached the cecum in 98 of 100 patients.\n'
+        self.assertFalse(narrative(text, 'In our unit'))
+
+    def test_never_under_another_occurrence(self):
+        self.assertFalse(narrative(STRONG + UPPER + 'Large Bowel\nCopied: the colonoscope reached the cecum.\n',
+                                   'the colonoscope reached'))
+
+    def test_never_beyond_heading_reach(self):
+        self.assertFalse(narrative(STRONG + 'Findings:\nThe stomach was normal.\nScope Passage and Views\n' + REACH + '\n'))
+
+
+class AttachedReportReachTests(SimpleTestCase):
+    """Refutation F3 (b840ae756): a routing-only verb read the cecum reached inside an attached outside colonoscopy
+    report, and 45385 became READY. Routing reads such a reach as installed did again."""
+    E = (B + 'Upper Endoscopy Report\nDate of service: 10/20/2026\nEndoscopist: Synthetic MD\nSedation: propofol by CRNA\n'
+         '\nProcedure\nThe gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies of the '
+         'antrum were taken.\n\n')
+    TAIL = ' A 10 mm sigmoid polyp was removed with a hot snare.\nReport signed by the Mercy GI endoscopist on 03/02/2024.\n'
+
+    def shapes(self):
+        lines = ''.join(f'Line {i} of the attached pages lists medications and allergies in detail.\n' for i in range(8))
+        for verb in ('navigated', 'steered'):
+            yield f'attached, {verb}', self.E + 'Attached Report\n' + lines + 'Procedure: Colonoscopy.\nThe colonoscope was ' \
+                + verb + ' to the cecum.' + self.TAIL
+            yield f'facility heading, {verb}', self.E + 'Mercy Endoscopy Center\nProcedure: Colonoscopy.\nThe colonoscope ' \
+                'was ' + verb + ' to the cecum. A 10 mm sigmoid polyp was removed with a hot snare.\nSigned 03/02/2024.\n'
+
+    def test_routing_reads_no_extent_there(self):
+        for name, text in self.shapes():
+            with self.subTest(name):
+                colon = detect.route(text, dt.date(2026, 10, 20)).finding(COLON)
+                jobs.release_routing_caches()
+                self.assertNotIn('extent', [f.name for f in colon.facts])
+
+    def test_45385_is_never_ready(self):
+        from ops.gi4 import battery
+        for name, text in self.shapes():
+            with self.subTest(name):
+                row = battery.run_row(battery.modules(), name, text, [
+                    ('43239', 'Cold forceps biopsies of the antrum were taken.', 'done'),
+                    ('45385', 'A 10 mm sigmoid polyp was removed with a hot snare.', 'not_done')])
+                p = row['proposals']['45385']
+                self.assertEqual((p['bucket'], p['status']), ('selected', 'needs_clarification'), name)
+                self.assertIn('extent', p['clarifications'], name)
+
+
+class HeadNamesFamilyTests(SimpleTestCase):
+    """amendment_20261101_cycle1_b (pe.json): a routing-only reach counts only for a family the document's head NAMES, by
+    routing's own service mentions in detect.head_procedure_spans (its title lines and its procedure fields, never past
+    the body's first heading). The probes below leaked through cycle 1's copy guards: the pasted colonoscopy block of an
+    EGD report under a heading no closed list names, or under none, made 45385 READY (installed: held on extent)."""
+    NEUTRAL = ''.join(f'Line {i} of the pages lists medications and allergies in detail.\n' for i in range(8))
+    BLOCK = ('Procedure: Colonoscopy.\nThe colonoscope was {verb} to the cecum. A 10 mm sigmoid polyp was removed with a '
+             'hot snare.\n')
+
+    def shapes(self):
+        e = AttachedReportReachTests.E
+        for verb in ('navigated', 'steered'):
+            block = self.BLOCK.format(verb=verb)
+            yield f'neutral heading, {verb}', e + 'Additional Pages\n' + self.NEUTRAL + block
+            yield f'no heading, no filler, {verb}', e + block
+            yield f'generic title, {verb}', e.replace('Upper Endoscopy Report', 'Procedure Note') + 'Additional Pages\n' \
+                + self.NEUTRAL + block
+        # amendment_20261101_cycle1_d: a head that names the colonoscopy only as not done today names nothing
+        block = self.BLOCK.format(verb='navigated')
+        for tag, title, field in (('field planned', 'Procedure Note', 'Procedure: EGD with biopsy; colonoscopy next year\n'),
+                                  ('field deferred', 'Procedure Note', 'Procedure: EGD with biopsy; colonoscopy deferred\n'),
+                                  ('title prior', 'EGD after Prior Colonoscopy', ''),
+                                  ('title not done', 'EGD; Colonoscopy Not Done', '')):
+            head = e.replace('Upper Endoscopy Report', title).replace('Sedation: propofol by CRNA\n',
+                                                                      'Sedation: propofol by CRNA\n' + field)
+            yield f'head {tag}', head + 'Additional Pages\n' + self.NEUTRAL + block
+
+    def test_routing_reads_no_extent_there(self):
+        for name, text in self.shapes():
+            with self.subTest(name):
+                colon = detect.route(text, dt.date(2026, 10, 20)).finding(COLON)
+                jobs.release_routing_caches()
+                self.assertNotIn('extent', [f.name for f in colon.facts], name)
+
+    def test_45385_is_never_ready(self):
+        from ops.gi4 import battery
+        for name, text in self.shapes():
+            with self.subTest(name):
+                row = battery.run_row(battery.modules(), name, text, [
+                    ('43239', 'Cold forceps biopsies of the antrum were taken.', 'done'),
+                    ('45385', 'A 10 mm sigmoid polyp was removed with a hot snare.', 'not_done')])
+                p = row['proposals']['45385']
+                self.assertEqual((p['bucket'], p['status']), ('selected', 'needs_clarification'), name)
+
+    def test_the_head_spans_stop_at_the_body(self):
+        e = AttachedReportReachTests.E + self.BLOCK.format(verb='navigated')
+        spans = [e[s:t] for s, t in detect.head_procedure_spans(e)]
+        self.assertIn('Upper Endoscopy Report', spans)
+        self.assertNotIn('Procedure: Colonoscopy.', spans)  # the 8th non-empty line, but under the body's 'Procedure'
+        field = B + 'Procedure Note\nDate of service: 10/20/2026\nEndoscopist: Synthetic MD\nProcedure: Colonoscopy\n'
+        self.assertIn('Procedure: Colonoscopy', [field[s:t] for s, t in detect.head_procedure_spans(field)])
+
+    def test_the_head_rule_alone_decides_the_no_heading_shape(self):
+        # the same text is read where the head names the colonoscopy, and only there: the head rule alone holds it
+        text = AttachedReportReachTests.E + self.BLOCK.format(verb='navigated')
+        extents = {}
+        for title in ('Upper Endoscopy Report', 'Gastroscopy and Colonoscopy'):
+            colon = detect.route(text.replace('Upper Endoscopy Report', title), dt.date(2026, 10, 20)).finding(COLON)
+            jobs.release_routing_caches()
+            extents[title] = [str(f.value) for f in colon.facts if f.name == 'extent']
+        self.assertEqual(extents, {'Upper Endoscopy Report': [], 'Gastroscopy and Colonoscopy': ['cecum']})

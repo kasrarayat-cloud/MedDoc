@@ -25,7 +25,8 @@ class MutantRegistryTests(SimpleTestCase):
 
     def test_each_is_registered_once_in_the_merged_registry(self):
         names = [m.name for m in mutants.MUTANTS]
-        self.assertEqual(len(PE_MUTANTS), 10)
+        self.assertEqual(len(PE_MUTANTS), 32)  # 10, the Wave 1 repair's 19 (pe.json, amendment_20261101_cycle1), 2
+        # (amendment_20261101_cycle1_b: pe-head-family, pe-head-span-body) and 1 (amendment_20261101_cycle1_d)
         for m in PE_MUTANTS:
             self.assertEqual(names.count(m.name), 1, m.name)
             self.assertIs(mutants.BY_NAME[m.name], m)

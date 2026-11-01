@@ -41,5 +41,79 @@
  },
  "state": "H5: unchanged (tests/test_gi4_state.py passes as on the base)",
  "cost": "H7: within the limits; a routing-only reach is evaluated only where cues.REACHED_BEFORE fails and cues.REACHED_BEFORE_ROUTING matches, on the clause window already read (bounded by CLAUSE_REACH), with the family's endpoint memoised per analysis",
- "pins": "re-pinned in a separate final commit: replay.json (h4-04's 7 states: routing 'extent=second part of duodenum' and the inventory extent); cues.json, freeze.json, battery.json and tables.json unchanged"
+ "pins": "re-pinned in a separate final commit: replay.json (h4-04's 7 states: routing 'extent=second part of duodenum' and the inventory extent); cues.json, freeze.json, battery.json and tables.json unchanged",
+ "amendment_20261101_cycle1": {
+  "provenance": "Written on 2026-11-01 BEFORE any code of the GI round 4 Wave 1 repair, cycle 1 of the two refutation-and-fix cycles a releasing family may take (group PI+PE, branch wip/gi4-r2-pipe-20261101 from the integrated head b840ae756). Every movement below is against b840ae756. Every key above this one is unchanged against b840ae756: each value is identical, and the only byte added before this key is the comma that separates it.",
+  "findings": {
+   "F3-PE-navigated-reach-in-attached-report": "reproduced on a sealed export of b840ae756: PE4-navigated, PE4-steered, PE5-navigated and PE5-steered move routing's gi.colonoscopy extent from none to 'cecum' and 45385 from held [extent] (installed) to selected/ready; PE3-navigated (outside heading 9 lines up, and copy heading) moves the extent to 'cecum' while 45385 stays held by performed_status; the 'advanced' variants are READY on installed too (an installed false READY PE does not own)."
+  },
+  "rules": {
+   "copy_guards": "A reach read only by a routing-only verb ('steered', 'navigated') counts only inside today's procedure narrative, read by the same shared copy guards as package PI's S1 and E1 (detect.in_todays_narrative; see pi.json amendment_20261101_cycle1 'todays_narrative'): no foreign block opened before it (an attachment or copy heading, a heading dated another day, a sign-off line, a statement that a copy follows), a governing heading-like line within 200 lines / 20,000 characters that names no other record or occasion, no education, no facility below the head's fields, no other date and is no history, plan or indication heading, a block with no other date and no sign-off, a sentence with no generalisation, not under another occurrence (sections.under_another_occurrence, read there now instead of in _pe_routing_reach's last line) and not beyond heading reach (sections.beyond_heading_reach). Unlike S1 and E1, PE does not require the strong head: the binding rule for PE asks for routing's copy guards, and PE's release is a routing reach the installed verbs already read the same way."
+  },
+  "movements_vs_b840ae756": {
+   "H1": "EQUAL for every regression document and member state: h4-04's 'steered through the stomach and pylorus into the second part of the duodenum' lies under 'Stomach and Duodenum', its block carries no date, and nothing foreign opens before it, so gi.egd's extent stays 'second part of duodenum' and 43251 stays ready with its b840ae756 fingerprint.",
+   "H2": "No movement of any class; the cue inventory is identical (no constant context.py or sections.py reads is added or changed).",
+   "H3": "No cell moves: the 96 seeded h4-04 variants that carry a routing-only verb keep the source's EGD paragraph under an upper-tract heading with no date, so the 75 fixed MUST extent.never-false-incomplete[gi.egd] cells stay fixed; measured after and recorded.",
+   "H4": "No movement (one permanent row carries a routing-only verb, 'unpassed pylorus (steered)', whose reach PE never read).",
+   "H5": "Unchanged.",
+   "H6": "The shared guard's mutants are PE's (pe-, detector tests.test_gi4_pe); pe-another-occurrence is re-anchored on the shared guard's call in _pe_routing_reach.",
+   "H7": "Linear (the shared guard reads the document once per text and date, then bounded windows per reach).",
+   "lens_cases": "PE4-navigated, PE4-steered, PE5-navigated and PE5-steered read routing's gi.colonoscopy extent as installed (none) and 45385 held [extent] as installed; PE3-navigated reads no extent, as installed."
+  },
+  "known_limits": [
+   "The installed verbs ('advanced', 'passed', 'reached') still read a reach inside an attached report (PE4-advanced, PE5-advanced READY on installed and here): not PE's release, recorded for the round.",
+   "Closed hold lists cannot be complete (see pi.json's amendment_20261101_cycle1 known_limits)."
+  ]
+ },
+ "amendment_20261101_cycle1_b": {
+  "provenance": "Written on 2026-11-01 BEFORE any code of this amendment, still in cycle 1 of the two refutation-and-fix cycles a releasing family may take (group PI+PE, branch wip/gi4-r2-pipe-20261101 from the integrated head b840ae756, on top of the cycle-1 repair 1bd334478 that amendment_20261101_cycle1 declared). Before handing cycle 1 to the next independent refutation, the repair author probed 1bd334478 with variants of the four findings and found the cycle-1 guards closed only the refutation's own shapes; this amendment declares the further holds. Every movement below is against b840ae756 unless it says 1bd334478. Every key above this one is unchanged: each value is identical, and the only byte added before this key is the comma that separates it.",
+  "probes_of_1bd334478": {
+   "F3 class (45385 held [extent] on installed -> selected/ready on 1bd334478 as on b840ae756)": "PE4's EGD report ('Upper Endoscopy Report', strong head) with the colonoscopy block under a heading no closed list names ('Additional Pages', 8 filler lines, 'Procedure: Colonoscopy.', 'The colonoscope was navigated [steered] to the cecum. A 10 mm sigmoid polyp was removed with a hot snare.', no date, no sign-off); the same block straight after the EGD paragraph and a blank line, with no heading and no filler; and a generic 'Procedure Note' title over the same block. With 'advanced' all three are READY on installed too (an installed false READY PE does not own); 'navigated' and 'steered' were held [extent] there."
+  },
+  "rules": {
+   "head_spans": "The head's procedure names (detect.head_procedure_spans, read on the text as written, one implementation read by PI's S1 and PE's routing-only reach): its title lines (detect._gi4_head: the title-shaped lines among its first 6 non-empty lines, before its first field) and its procedure fields ('Procedure:', 'Procedures performed:', 'Operation:', 'Examination:', 'Exam:', 'Study:'; each read at most 400 characters) among its first 12 non-empty lines, but never past the first heading-like line that follows its first field - the body starts there, so a 'Procedure: Colonoscopy.' line under a later heading or inside a pasted block is the body's, never the head's (the cycle-1 _pi_head_excludes read any such field among the first 12 non-empty lines).",
+   "pe_head_names_family": "A reach read only by a routing-only verb ('steered', 'navigated') counts only for a family the document's head NAMES by routing's own service mentions (the Analysis' mentions, cues.SERVICE_PATTERNS, read only): a mention of gi.egd inside head_spans for the upper landmark table, of gi.colonoscopy or gi.flex_sig for the lower. Positive evidence that today's report documents the family whose endpoint the verb reaches; without it the installed reading stands. Added to the cycle-1 copy guards (in_todays_narrative), which stay."
+  },
+  "movements_vs_b840ae756": {
+   "H1": "EQUAL for every regression document and member state: PE reads only h4-04's 'steered ... into the second part of the duodenum' in the regression set, and h4-04's title names the gastroscopy (gi.egd), so 43251 stays ready with its b840ae756 fingerprint.",
+   "H2": "No movement of any class; the cue inventory is identical.",
+   "H3": "The 75 fixed MUST extent.never-false-incomplete[gi.egd] cells are seeded h4-04 variants: those whose head keeps a title naming the gastroscopy stay fixed; any whose head names no upper endoscopy go back to installed's reading. Measured after and recorded; no new MUST failure against installed.",
+   "H4": "No movement.",
+   "H5": "Unchanged.",
+   "H6": "Two pe- mutants (detector tests.test_gi4_pe): pe-head-family (the head check removed) and pe-head-span-body (a procedure field past the body's first heading read as the head's).",
+   "H7": "Linear: the head's spans once per text (cached), the mentions in them by bisect, memoised per analysis.",
+   "probe_cases": "The F3-class probes above read routing's gi.colonoscopy extent as installed and 45385 held [extent] (the 'advanced' variants stay READY, as installed)."
+  },
+  "known_limits": [
+   "A generic-titled report ('Procedure Note') whose only procedure field sits in the body gives PE no evidence: its 'navigated to the cecum' reads as installed (cost, fail-closed).",
+   "Installed's own reach verbs in a pasted report stay an installed false READY, as recorded."
+  ]
+ },
+ "amendment_20261101_cycle1_d": {
+  "provenance": "Written on 2026-11-01 BEFORE the code of this amendment, after amendment_20261101_cycle1_b and _c and their code (6183c1289, c4d867353). Still cycle 1. Every key above this one is unchanged: each value is identical, and the only byte added before this key is the comma that separates it.",
+  "probe": "A probe of c4d867353 (the repair author's own, before the next refutation): PE4's EGD report whose head field reads 'Procedure: EGD with biopsy; colonoscopy next year', over a pasted colonoscopy block under 'Additional Pages' with 'navigated to the cecum': 45385 held [extent] on installed, selected/READY on c4d867353 (as on b840ae756). The head names the colonoscopy, but only as planned. The same with 'colonoscopy deferred', '(colonoscopy cancelled)', a title 'EGD after Prior Colonoscopy' or 'EGD; Colonoscopy Not Done' stayed held there by routing's own readings; with S1 every such variant stayed held.",
+  "rules": {
+   "head_names_today": "The head names a family only by a mention that routing does not read as not done today: a mention of the family in head_procedure_spans whose own routing reading (detect._generic_reading for PE; the routing finding's mention status for PI's S1, read from the routing result the inventory already receives) is planned, historical, cancelled or negated (detect.NOT_TODAY) names nothing. Measured on the inputs before this amendment (read only): every head mention in the regression set reads uncertain or performed (h4-04's 'Gastroscopy' and 'Colonoscopy' uncertain, h4-02's two uncertain, h2-10's 'ERCP' performed, h4-05's uncertain; h4-03 and h4-06 have none), while the probe heads read planned, cancelled, historical or negated."
+  },
+  "movements_vs_b840ae756": {
+   "H1": "EQUAL against b840ae756 (no regression head mention is read as not done today, so no head loses a family).",
+   "H2": "No movement.",
+   "H3": "Movements only back toward installed values; measured after.",
+   "H4": "No movement.",
+   "H5": "Unchanged.",
+   "H6": "pe-head-not-today (detector: the probe above and its title variants read routing's extent as installed, 45385 never READY).",
+   "H7": "Linear: one reading per head mention (memoised per analysis), at most the head's 12 lines."
+  }
+ },
+ "after_measurement_20261101_cycle1": {
+  "provenance": "Written on 2026-11-01 AFTER measurement, as a record: it changes no declaration above it. Code head 8a92da33c (1bd334478 plus amendments _b, _c, _d and the H6 test repairs of c4d867353), each tool on a sealed export, against b840ae756 and installed 80df1831d168. Every key above this one is unchanged: each value is identical, and the only byte added before this key is the comma that separates it.",
+  "H1": "Fixtures and the raw inputs, every member state: EQUAL against b840ae756. Against installed the differences are byte-identical to the integration's b840ae756-against-installed (Wave 1's own movements). HARD met as on b840ae756: h2-08 18/18, h2-10 9/9, h4-01 18/18, h4-02 14/14, h4-03 17/17, h4-04 14/14, h4-05 17/17, h4-06 16/16; walk READY codes 99204 (h4-01), 43244 (h4-03), 43251 (h4-04), 45385 (h4-06), 43274 (h2-10); h4-04's 45378 held. Controls: the head against itself EQUAL; the three planted mutations differ (98, 30 and 46 paths).",
+  "H2": "Against b840ae756, no declaration: no movement of any class over 51,925 texts and 281,868 text x member states (NEW-SEND 0, NEW-TAKE 0, NEW-HELD 0, SEND->ASK 0); layout identical; 191,264 requests unchanged; mention counts unchanged; 302 cue patterns, none changed. Against installed with the Wave 1 union declaration: NEW-SEND 0, NEW-TAKE 0, NEW-HELD 14,872, SEND->ASK 1,386, FACT-CHANGED 5,378, cue patterns +22 (PS and PD) - identical to the integration's measurement of b840ae756. Gate holds both ways.",
+  "H3": "5,664 documents, 0 reader errors. 1bd334478 -> 8a92da33c: no movement (amendments _b, _c and _d move no cell). Against b840ae756: MUST binding.lower-not-on-upper regressed in 21 documents (the generated 'bidirectional' kind, B03462 onward) and nothing else moved; the same 21 regress b840ae756 -> 1bd334478 (measured), so they are cycle 1's: the binding rule's not-beyond-heading-reach guard. Their head's 'Sedation:' field is read by the layout as a section heading, the unread 'Large Bowel' line then stands between that heading and the colonoscope's reach, S1 holds, and the rectal lesion falls back to the upper endoscopy as installed places it. Against installed: binding.lower-not-on-upper fixed 25 (b840ae756: 46), every other cell as on b840ae756, no new MUST failure against installed.",
+  "H4": "Against b840ae756: 0 movements in 50 rows and 60 codes, 0 new violations. Against installed with the union declaration: 3 movements, all declared (the S3h h4-05 counterfactual 43259, 99213, 99212), 0 undeclared, 0 new violations.",
+  "H5": "10 of 10 (tests.test_gi4_state, test_gi4_pd_state, test_gi4_po_state) on the sealed export, 127.0.0.1:55461, suffix w1r2pipe.",
+  "H6": "56 of 56 PE and PI mutants killed on the sealed export of 8a92da33c, each applied and restored with sha256 printed, both detector baselines passing. The first battery on 6183c1289 found 3 survivors whose tests no longer reached their guard alone (pe-around-procedure, pe-today-head-date, pi-carry-region); c4d867353 pinned each alone again, behaviour unchanged.",
+  "lens_and_probes": "The 139 refutation lens cases read on 8a92da33c exactly as on 1bd334478 (every input of F1, F2, F3 and F5 as installed). The repair author's own probes of 1bd334478 (the F1, F3 and F5 classes of amendment _b, the planned-head probe of _d) read as installed, except the recorded known-limit shape: a pasted block of a family the title names as today's.",
+  "cost_on_the_regression_set": "None: every release is kept. h4-03 43244 and h4-06 45385 READY (E1 under their strong heads), h4-04 45378 held [extent, performed_status] (S1, its title naming both procedures), h4-04 43251 READY with its b840ae756 fingerprint."
+ }
 }
