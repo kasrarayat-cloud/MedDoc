@@ -18,10 +18,13 @@ from studio.gi.context import charge_question_day, is_member_conflict
 from studio.gi import sections as gi_sections
 from studio.gi import services as gi_services
 from studio.gi.profiles import DETECTED_FAMILIES, PROFILES, PROFILES_VERSION, ServiceProfile, family_for_code
+from studio.participants import LABELS as PARTICIPANT_LABELS, PARTICIPANTS as PARTICIPANT_ORDER
+from studio.participants import VENDORS as PARTICIPANT_VENDORS
 from studio.reference.store import PFS, applied_sources
-from studio.types import (CONTEXT_FACTS, AssessmentResult, Check, ClarificationSpec, CodeReference, EvidenceSpan, Fact,
-                          FamilyFinding, NormalizedResponse, PageSpan, ProposalAssessment, ProviderCode,
-                          ReferenceLookup, ReferenceSourceInfo, RoutingResult, ServiceMention, sha256_json)
+from studio.types import (CONTEXT_FACTS, PARTICIPANT_STATES, AssessmentResult, Check, ClarificationSpec, CodeReference,
+                          EvidenceSpan, Fact, FamilyFinding, LocatedQuote, NormalizedResponse, PageSpan,
+                          ParticipantInput, ProposalAssessment, ProviderCode, ReferenceLookup, ReferenceSourceInfo,
+                          RoutingResult, ServiceMention, sha256_json)
 from studio.gi.detect import DOUBT_PREFIX, UNESTABLISHED
 from studio.validation import checks, rationale, reconcile
 
@@ -84,6 +87,9 @@ class _Selection:
     family: str
     evaluation: Optional[_Evaluation] = None  # None: excluded for scope or evidence, not reinstatable
     origin: str = 'primary'  # 'second_review': selected by the bounded second review for an unresolved service
+    # 'participant': proposed by an independent participant no decidable proposal carried the code of (HARNESS.md 5);
+    # proposers names them, in stage order: only those that quoted it verbatim (its evidence is their quotes alone).
+    proposers: tuple[str, ...] = ()
 
     @property
     def profile(self) -> ServiceProfile:
@@ -128,7 +134,10 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
            normalized: Optional[NormalizedResponse], reference: ReferenceLookup, service_date: Optional[date],
            provider_status: str, extraction_status: Optional[str] = None,
            extraction_messages: Sequence[str] = (), second: Optional[NormalizedResponse] = None,
-           second_scope: Optional[dict] = None) -> AssessmentResult:
+           second_scope: Optional[dict] = None, participants: Sequence[ParticipantInput] = ()) -> AssessmentResult:
+    """``participants``: one input per CONFIGURED independent participant (HARNESS.md 5). With none (an installation
+    where Astra and Fable are disabled) nothing below reads them and the result is the one this engine made before them
+    (I1). With any, _Harness merges their codes: they never decide a status (I2) and agreement never promotes (I3)."""
     if provider_status not in PROVIDER_STATUSES:
         raise ValueError(f'Unknown provider status {provider_status!r}.')
     if extraction_status is not None and extraction_status not in EXTRACTION_STATUSES:
@@ -136,6 +145,10 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     response = normalized if provider_status == 'succeeded' else None
     if provider_status == 'succeeded' and response is None:
         raise ValueError('A succeeded provider status needs its normalized response.')
+    harness = _Harness(participants, text, pages) if participants else None
+    # Whether any answer is read: the proposal provider's, or an independent participant's reading (I10: the proposal
+    # provider's failure blocks only itself). With no participant it is exactly "the provider answered".
+    answered = response is not None or (harness is not None and harness.answered)
     date_state = checks.service_date_state(context, service_date)
     # GI round 3, the narrow release: the question a closing charge block asks holds the date and what hangs on it, never
     # the reading. Every reader reads the date the installed reading sends, as routing does, so the document reads as
@@ -143,8 +156,9 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     # dated reference applies (the sixth refutation, parity-6-1 and 6-2: read with no date, a 2025 colonoscopy read as done
     # today, and a code went from ready to excluded). So does a member's held answer that keeps the dateless request's
     # answer (the seventh refutation, parity-7-1 and pipe7-2). A held answer with no provider answer is a state the installed
-    # revision reaches, with nothing to misread, and reads as it does (the eighth refutation, delta-1).
-    read_day = date_state.value or (None if response is None and is_member_conflict(date_state.fact)
+    # revision reaches, with nothing to misread, and reads as it does (the eighth refutation, delta-1). An independent
+    # participant's reading is an answer to read as the provider's is (``answered``; the same as before with none).
+    read_day = date_state.value or (None if not answered and is_member_conflict(date_state.fact)
                                     else charge_question_day(text))
     sources = tuple(reference.sources())
     selections: list[_Selection] = []
@@ -159,6 +173,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     problems = gi_services.validate(inventory, text)
     usable = inventory if not problems else None  # an inconsistent reading never decides a status; it is reported
     second_merge: Optional[_SecondMerge] = None
+    participant_alternatives: tuple[ProposalAssessment, ...] = ()
     if response is not None:
         listable = [c for c in response.codes if isinstance(c.code, str) and 0 < len(c.code) <= MAX_LISTED_CODE]
         if len(listable) < len(response.codes):
@@ -171,15 +186,29 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
             selections, second_alternatives, second_merge = _second_review(
                 second, second_scope or {}, selections, text, pages, routing, reference, date_state.value, usable,
                 procedure_day=primary_day)
+        if harness is not None:
+            selections, participant_alternatives = harness.merge(selections, routing, reference, read_day, usable,
+                                                                 dated=date_state.value is not None)
         encounter = _encounter(response.provider, context, routing, sources, date_state, selections)
         procedure_day = encounter.procedure_day
         alternatives = (c for c in listable if c.role != 'selected')
-        proposals = (_keyed(selections, encounter)
+        proposals = (_keyed(selections, encounter, harness)
                      + tuple(_alternative(index, item, text, pages, response.provider)
                              for index, item in enumerate(alternatives))
-                     + tuple(second_alternatives))
+                     + tuple(second_alternatives) + participant_alternatives)
+    elif harness is not None:
+        # No usable answer from the proposal provider: the participants' codes are judged on their own, by the same path
+        # (I10: the provider's failure blocks only itself).
+        selections, participant_alternatives = harness.merge(selections, routing, reference, read_day, usable,
+                                                             dated=date_state.value is not None)
+        encounter = _encounter('', context, routing, sources, date_state, selections)
+        procedure_day = encounter.procedure_day
+        proposals = _keyed(selections, encounter, harness) + participant_alternatives
     else:
         procedure_day = _encounter('', context, routing, sources, date_state, selections).procedure_day
+    if harness is not None:
+        proposals = harness.recorded(proposals)
+        provider = harness.provider_checks(provider, provider_status, response, proposals)
     active = [(s.code, s.family) for s in selections if not s.excluded]
     # The same-day E/M rule decides for the reconciliation too: on a (possible) procedure day - a routed procedure
     # family or another GI service done or possibly done today, or a selected procedural code (_Encounter) - an office
@@ -193,7 +222,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     # documented services performed with no proposal that the reconciliation does not list (refutation 7c8, reports-1):
     # recorded in completeness and named by the services.unresolved check, which never passes beside one (its skeptic)
     not_listed = reconcile.uncounted(usable, unresolved, covered) if usable else []
-    if response is not None:
+    if answered:
         # Read once the reconciliation is known (refutation p2, reports2:0): a performed service routing detected with no
         # selected proposal is named whatever services.unresolved also lists, never covered by "every performed service
         # that routing detected has a selected proposal"; only a family the reconciliation accounts for with another
@@ -207,7 +236,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     encounter_checks = [*provider, checks.extraction_check(extraction_status, extraction_messages),
                         checks.service_date_check(date_state), reconcile.inventory_check(inventory, problems),
                         *coverage]
-    if usable and response is not None:
+    if usable and answered:
         encounter_checks.append(reconcile.unresolved_check(unresolved, usable.problems, not_listed))
     if usable:
         encounter_checks.append(reconcile.conflicts_check(usable))
@@ -215,6 +244,8 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         if attribution:
             encounter_checks.append(attribution)
     encounter_checks.append(checks.unsupported_check(unsupported))
+    if harness is not None:
+        encounter_checks += harness.encounter_checks(usable or inventory)
     clarification = checks.service_date_clarification(date_state)
     clarifications = ((clarification,) if clarification else ()) + tuple(service_questions)
     clarifications += tuple(_member_conflict_questions(context, clarifications, proposals))
@@ -228,6 +259,8 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     if problems:
         complete['state'] = 'incomplete'
         complete['reasons'] = list(complete['reasons']) + ['the documented-service reading was inconsistent']
+    if harness is not None:
+        harness.complete(complete, usable or inventory)
     complete.update({
         'unresolved_items': [_jsonable_unresolved(u, i < SECOND_REVIEW_CHECKED
                                                   and _routing_agrees(u, usable or inventory, routing, text, service_date))
@@ -1984,16 +2017,22 @@ def _global_days(procedures: Sequence[_Selection], pfs_source, sources, day) -> 
     return checks.global_days_note(entries, pfs_source.release, unavailable)
 
 
-def _keyed(selections: Sequence[_Selection], encounter: _Encounter) -> tuple[ProposalAssessment, ...]:
-    """Selected-bucket proposals first, then excluded; keys count within each bucket in provider order."""
+def _keyed(selections: Sequence[_Selection], encounter: _Encounter,
+           harness: Optional['_Harness'] = None) -> tuple[ProposalAssessment, ...]:
+    """Selected-bucket proposals first, then excluded; keys count within each bucket in provider order. ``harness``: the
+    independent participants' merge, whose contradiction checks a decidable proposal carries (HARNESS.md 5); None adds
+    nothing."""
     selected, excluded = [], []
     for selection in selections:
         bucket, prefix = (excluded, 'exc') if selection.excluded else (selected, 'sel')
-        bucket.append(_proposal(selection, f'{prefix}:{len(bucket)}', encounter))
+        extra = harness.disagreements(selection) if harness is not None else ()
+        bucket.append(_proposal(selection, f'{prefix}:{len(bucket)}', encounter, extra))
     return tuple(selected + excluded)
 
 
-def _proposal(s: _Selection, key: str, enc: _Encounter) -> ProposalAssessment:
+def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] = ()) -> ProposalAssessment:
+    """``extra``: checks added after every rule's own (an independent participant's contradiction, which never changes
+    the status); like every check, they are part of the fingerprint."""
     if s.evaluation is None:
         return _excluded_early(s, key, enc.provider)
     finding, outcome, ref = s.evaluation.finding, s.evaluation.outcome, s.evaluation.reference
@@ -2077,6 +2116,7 @@ def _proposal(s: _Selection, key: str, enc: _Encounter) -> ProposalAssessment:
         found.append(checks.reinstatement_check(holds, date_unknown=day is None))
         if any(code == s.code for code, _ in enc.if_reinstated):
             found.append(checks.same_day_em_check(enc.gated_visits))
+    found += extra
     if s.excluded:
         status = 'excluded'
     elif clarifications or day is None:  # an unknown service date holds every proposal on the encounter question
@@ -2091,7 +2131,9 @@ def _proposal(s: _Selection, key: str, enc: _Encounter) -> ProposalAssessment:
         provider_display=s.display, evidence=s.evidence,
         rationale=rationale.selected_rationale(provider=(f'{enc.provider} in a second review limited to the '
                                                          'unresolved documented service'
-                                                         if s.origin == 'second_review' else enc.provider),
+                                                         if s.origin == 'second_review'
+                                                         else _participant_names(s.proposers)
+                                                         if s.origin == 'participant' else enc.provider),
                                                units=s.units, evidence_count=len(s.evidence),
                                                profile=profile, detected=finding is not None, outcome=outcome,
                                                facts=_documented_facts(finding, states, m),
@@ -2298,6 +2340,12 @@ def reviewed_completeness(services: Optional[dict], completeness: Optional[dict]
         inventory, unresolved, asked, 'the provider response was not available' not in reasons,
         unestablished=sum(1 for s in inventory.services if s.status == 'uncertain' and s.id not in set(read)),
         not_listed=not_listed)
+    # An independent participant's performed service the documented-service reading does not read (HARNESS.md 5) is no
+    # reconciliation of codes, so no reinstatement answers it: its reason stays. None recorded, nothing is added.
+    noted = [str(item['reason']) for item in completeness.get('participant_services') or []
+             if isinstance(item, dict) and item.get('reason')]
+    if noted:
+        fresh = {**fresh, **_incomplete(list(fresh['reasons']) + noted)}
     return {**completeness, **fresh,
             'unresolved_items': [_jsonable_unresolved(u, marks.get((u.service, u.act, u.reason), False))
                                  for u in unresolved],
@@ -2466,3 +2514,388 @@ def _summary(proposals: Sequence[ProposalAssessment], provider_status: str, extr
             'needs_clarification': count('status', 'needs_clarification'), 'provider_status': provider_status,
             'extraction_status': extraction_status,
             'service_date': date_state.value.isoformat() if date_state.value else None}
+
+
+# --- the independent participants (HARNESS.md 5) ---------------------------------------------------------------------
+
+PRIMARY = 'corti'  # the proposal provider among the proposers: the API names the three corti, astra and fable
+# The participants' service families (studio.types.PARTICIPANT_FAMILIES) as CPT Studio's own (studio.gi.profiles). A
+# service a participant reads as performed is one the documented-service reading does not read when the inventory reads
+# no performed service of any family it maps to. 'other_gi' maps to every profiled family outside the six the
+# instructions name and to gi.other, which the inventory never reads; 'not_gi' is outside the GI scope this release
+# codes, so it maps to none and never counts.
+PARTICIPANT_FAMILY_MAP = {
+    'office_em': ('gi.office_em',), 'egd': ('gi.egd',), 'colonoscopy': ('gi.colonoscopy',),
+    'flexible_sigmoidoscopy': ('gi.flex_sig',), 'eus': ('gi.eus',), 'ercp': ('gi.ercp',),
+    'other_gi': ('gi.enteroscopy', 'gi.capsule', 'gi.motility', 'gi.reflux', 'gi.anorectal', 'gi.feeding_tube',
+                 OTHER_GI),
+    'not_gi': (),
+}
+PARTICIPANT_SERVICE_LABELS = {'office_em': 'office / outpatient visit', 'egd': 'upper endoscopy',
+                              'colonoscopy': 'colonoscopy', 'flexible_sigmoidoscopy': 'flexible sigmoidoscopy',
+                              'eus': 'endoscopic ultrasound', 'ercp': 'ERCP', 'other_gi': 'other GI service'}
+NOT_PERFORMED_HERE = 'not_performed_at_this_encounter'
+NOT_CODED_WORDS = {NOT_PERFORMED_HERE: 'it reads the service as not performed at this encounter',
+                   'included_in_another_code': 'it reads the service as included in another code',
+                   'insufficient_documentation': 'it reads the documentation as insufficient to code it',
+                   'outside_gi_scope': 'it reads the service as outside the GI scope',
+                   'other': 'for another reason'}
+# Why a participant did not read the document (studio.types.PARTICIPANT_STATES other than 'read').
+PARTICIPANT_STATE_WORDS = {
+    'refused': 'it answered, and its answer was not used',
+    'failed': 'its request failed',
+    'unknown': 'its request was sent and its outcome is unknown; a workspace member must reconcile it',
+    'not_sent': 'its request was not sent',
+    'blocked': 'its request was not sent while another run\'s outcome is unknown',
+    'not_configured': 'it is not configured on this installation',
+    'not_run': 'it has not run for this revision',
+}
+UNLOCATED = ('none of its quotes was found verbatim in the document text, and a quote that is not found is never '
+             'evidence')
+LISTED_IN_SUMMARY = 8  # codes a participant's summary sentence names; the rest are counted
+MODIFIER_SHAPE = re.compile(r'[A-Z0-9]{2}', re.A)  # a modifier as a participant may state one; anything else is counted
+OPEN_QUESTION = 'open question'  # the words review.coding_completeness drops a completeness reason for
+
+
+def participant_codes(participants: Sequence[ParticipantInput]) -> tuple[str, ...]:
+    """The codes an assessment with ``participants`` may look up beside the proposal provider's (the assess stage
+    prefetches the union for the bounded child, which has no database): every listable code a used reading proposes
+    with at least one located quote. A superset of what _Harness.merge reads; never a code it would miss."""
+    return tuple(sorted({item.code for p in participants if p.state == 'read' and p.reading is not None
+                         and not p.reading.refused for item in p.reading.codes
+                         if isinstance(item.code, str) and 0 < len(item.code) <= MAX_LISTED_CODE
+                         and any(q.spans for q in item.evidence)}))
+
+
+def _participant_names(names: Sequence[str]) -> str:
+    """'Astra (independent participant)', 'Astra and Fable (independent participants)'."""
+    return (checks._join([PARTICIPANT_LABELS.get(name, name) for name in names])
+            + (' (independent participant)' if len(names) == 1 else ' (independent participants)'))
+
+
+def _reason_words(reason: str) -> str:
+    """A not-coded entry's enumerated reason in words (a reason outside the enumeration, which the reading's schema
+    refuses, reads as 'another reason': never the participant's own wording)."""
+    return NOT_CODED_WORDS.get(reason, NOT_CODED_WORDS['other'])
+
+
+def _incomplete(reasons: Sequence[str]) -> dict:
+    """Coding completeness as reconcile.completeness words an incomplete one, for ``reasons``."""
+    return {'state': 'incomplete', 'reasons': list(reasons),
+            'statement': 'Coding for this encounter is incomplete: ' + '; '.join(reasons) + '.'}
+
+
+@dataclass(frozen=True)
+class _Said:
+    """One participant's entry about one code, with its quotes' spans as CPT Studio verified them: ``good`` are exact
+    slices of the revision text (each once, with its page), ``bad`` every span that is not (never evidence)."""
+    entry: object  # ParticipantCode or ParticipantNotCoded
+    good: tuple[EvidenceSpan, ...]
+    bad: tuple[EvidenceSpan, ...] = ()
+
+
+class _Harness:
+    """The independent participants' merge (HARNESS.md 5), made once per assessment from the inputs of the configured
+    participants, in stage order. Only what CPT Studio itself verified is used: a quote is evidence only where its span
+    is an exact slice of the revision text, checked here again and never assumed (I7), and nothing a participant wrote
+    in its own words reaches the result - only its codes, its enumerated reasons and the document's own passages.
+
+    - A code a decidable proposal carries (the proposal provider's or the bounded second review's: one a reviewer can
+      decide, as _second_review reads it) stays that proposal, changed only by the record of who proposed it
+      (support['proposed_by'], from 'corti', and support['participants'], each participant's position).
+    - Any other code is read by the proposal provider's own path (_select, then _proposal), once, from the quotes of
+      every participant that quoted it verbatim, as one selection of one unit (I2). In scope with exact evidence it is a
+      proposal of its own (support['origin'] 'participant'); otherwise an alternative saying why ('altp:<n>'). A
+      participant's stated units, modifiers and confidence are recorded in its position and never used.
+    - Agreement never promotes (I3): a second proposer adds its quotes to the code's evidence and its name to the
+      record; with the same quotes it changes nothing else - not the bucket, status, checks, units or fingerprint (only
+      the rationale's first sentence, which names the proposers).
+    - A participant that advises not to code a code because its service was not performed at this encounter, quoting
+      the document, adds a warn to each decidable proposal of that code (participants.disagree); the status stays the
+      readers' own.
+    - A service a participant reads as performed, quoting the document, of a kind of which the documented-service
+      reading reads no performed service, makes coding completeness incomplete (participants.services).
+    - Its questions never become clarifications: participants.summary counts them, as notes."""
+
+    def __init__(self, participants: Sequence[ParticipantInput], text: str, pages):
+        order = {name: index for index, name in enumerate(PARTICIPANT_ORDER)}
+        seen: set[str] = set()
+        for p in participants:
+            if not isinstance(p, ParticipantInput):
+                raise ValueError(f'A participant input must be a ParticipantInput, not {type(p).__name__}.')
+            if p.provider not in order:
+                raise ValueError(f'Unknown participant {p.provider!r}.')
+            if p.provider in seen:
+                raise ValueError(f'Participant {p.provider!r} is given twice.')
+            seen.add(p.provider)
+            if p.state not in PARTICIPANT_STATES:
+                raise ValueError(f'Unknown participant state {p.state!r}.')
+            if (p.state == 'read') != (p.reading is not None):
+                raise ValueError(f'Participant {p.provider!r}: a reading is given exactly when its state is read.')
+            if p.reading is not None and (p.reading.provider != p.provider or p.reading.refused):
+                raise ValueError(f'Participant {p.provider!r}: its reading is another participant\'s or was refused.')
+        self.inputs = tuple(sorted(participants, key=lambda p: order[p.provider]))
+        self.text, self.pages = text, pages
+        self.readings = {p.provider: p.reading for p in self.inputs if p.state == 'read'}
+        self.answered = bool(self.readings)
+        # code -> participant -> its entries, in first appearance (stage order, then each reading's own order)
+        self.codes: dict[str, dict[str, list[_Said]]] = {}
+        self.advised: dict[str, dict[str, list[_Said]]] = {}
+        self.unlisted: dict[str, int] = {}
+        for name, reading in self.readings.items():
+            for item in reading.codes:
+                if not (isinstance(item.code, str) and 0 < len(item.code) <= MAX_LISTED_CODE):
+                    self.unlisted[name] = self.unlisted.get(name, 0) + 1
+                    continue
+                self.codes.setdefault(item.code, {}).setdefault(name, []).append(self._said(item))
+            for item in reading.not_coded:
+                if isinstance(item.code, str) and 0 < len(item.code) <= MAX_LISTED_CODE:
+                    self.advised.setdefault(item.code, {}).setdefault(name, []).append(self._said(item))
+        self._missing: Optional[list[dict]] = None
+
+    def _said(self, entry) -> _Said:
+        good, bad = self._partition(entry.evidence)
+        return _Said(entry, good, bad)
+
+    def _partition(self, quotes: Sequence[LocatedQuote]) -> tuple[tuple[EvidenceSpan, ...], tuple[EvidenceSpan, ...]]:
+        spans = [span for quote in quotes for span in quote.spans]
+        good, _ = checks.exact_evidence(spans, self.text, self.pages)
+        return good, tuple(span for span in spans if checks._evidence_problem(span, self.text))
+
+    # --- one code ---------------------------------------------------------------------------------------------------
+
+    def proposers(self, code: str) -> tuple[str, ...]:
+        """The participants that proposed ``code`` quoting the document verbatim, in stage order."""
+        return tuple(name for name, said in self.codes.get(code, {}).items() if any(s.good for s in said))
+
+    def _good(self, code: str, names: Sequence[str]) -> tuple[EvidenceSpan, ...]:
+        """The exact spans ``names`` quoted for ``code``, each once, in the order of the document: the same quotes give
+        the same evidence whoever gave them and in whatever order (I3)."""
+        found = {}
+        for name in names:
+            for said in self.codes.get(code, {}).get(name, ()):
+                for span in said.good:
+                    found.setdefault((span.start, span.end), span)
+        return tuple(found[key] for key in sorted(found))
+
+    def _evidence(self, code: str, names: Sequence[str]) -> tuple[EvidenceSpan, ...]:
+        """What _select reads for ``code``: the exact spans of its proposers, then every span of theirs that is not
+        exact, which _select drops and its evidence check names."""
+        return self._good(code, names) + tuple(span for name in names for said in self.codes[code][name]
+                                               for span in said.bad)
+
+    def merge(self, selections: list, routing: RoutingResult, reference: ReferenceLookup, day: Optional[date],
+              inventory, *, dated: bool) -> tuple[list, tuple[ProposalAssessment, ...]]:
+        """(``selections`` with the participants' own proposals after them, the participants' alternatives)."""
+        have = {s.code for s in selections if s.evaluation is not None}  # decidable, as _second_review reads it
+        added, listed = [], []
+        for code, by in self.codes.items():
+            if code in have:
+                continue  # recorded on that proposal (recorded): nothing else about it changes
+            proposers = self.proposers(code)
+            _, scope_reason = checks.code_scope(code)
+            if scope_reason:
+                why = scope_reason
+            elif not proposers:
+                why = UNLOCATED
+            else:
+                group = [ProviderCode('selected', 'participant', code, '', self._evidence(code, proposers))]
+                candidate = _select(group, self.text, self.pages, routing, reference, day, inventory, dated=dated)
+                if candidate.evaluation is not None:
+                    added.append(replace(candidate, origin='participant', proposers=proposers))
+                    continue
+                why = candidate.scope_reason or NO_EVIDENCE
+            listed.append(self._alternative(len(listed), code, tuple(by), why))
+        return list(selections) + added, tuple(listed)
+
+    def _alternative(self, index: int, code: str, names: tuple[str, ...], why: str) -> ProposalAssessment:
+        """A participant's code that is not a proposal, saying why: informational, never approvable."""
+        code_kind, scope_reason = checks.code_scope(code)
+        kept = self._good(code, names)
+        family = family_for_code(code)
+        found = (checks.scope_check(code_kind, scope_reason),)
+        profile_version = PROFILES[family].version
+        who, why = _participant_names(names), why.rstrip('.')
+        return ProposalAssessment(
+            key=f'altp:{index}', bucket='alternative', code=code, code_kind=code_kind, family=family,
+            profile_version=profile_version, status='informational',
+            exclusion_reason=f'Proposed by {who}, but not added as a proposal: {why}. Alternatives cannot be approved.',
+            reinstatable=False, provider_display='', evidence=kept,
+            rationale=(f'Proposed by {who}; not added as a proposal: {why}. Informational only.'
+                       + (f' {checks.plural(len(kept), "exact evidence passage")}.' if kept else '')),
+            checks=found, modifier_considerations=(), units=1,
+            fingerprint=_fingerprint(code, family, profile_version, kept, found, {}, 1, 'informational'),
+            support={'origin': 'participant'})
+
+    def disagreements(self, s: _Selection) -> tuple[Check, ...]:
+        """The participants.disagree warn of a decidable proposal: each participant that advises not to code its code
+        because its service was not performed at this encounter, quoting the document."""
+        if s.evaluation is None:
+            return ()
+        items = []
+        for name, said in self.advised.get(s.code, {}).items():
+            quoted = next((x for x in said if x.entry.reason == NOT_PERFORMED_HERE and x.good), None)
+            if quoted is not None:
+                items.append((PARTICIPANT_LABELS[name], quoted.good[0].text))
+        return (checks.participants_disagree_check(s.code, items),) if items else ()
+
+    # --- the record ---------------------------------------------------------------------------------------------------
+
+    def recorded(self, proposals: Sequence[ProposalAssessment]) -> tuple[ProposalAssessment, ...]:
+        """Every proposal with who proposed it (support['proposed_by']) and each participant's position on its code
+        (support['participants']). Outside the fingerprint: who proposed a code never changes its decision."""
+        return tuple(replace(p, support={**(p.support or {}), 'proposed_by': self._proposed_by(p),
+                                         'participants': self.positions(p.code)}) for p in proposals)
+
+    def _proposed_by(self, p: ProposalAssessment) -> list[str]:
+        origin = (p.support or {}).get('origin', 'primary')
+        if p.bucket == 'alternative':
+            # an alternative is proposed by no one; a participant's lists every participant that gave the code
+            return list(self.codes.get(p.code, {})) if origin == 'participant' else []
+        if origin == 'participant':
+            return list(self.proposers(p.code))
+        if p.bucket == 'selected' or p.reinstatable:  # decidable: the participants' proposals were merged into it
+            return [PRIMARY, *self.proposers(p.code)]
+        return [PRIMARY]  # excluded for scope or evidence: a participant's code of its own stands apart from it
+
+    def positions(self, code: str) -> dict:
+        """{participant: {'position', 'detail', 'quote'}} for every configured participant: 'proposed', 'not_proposed',
+        'advised_not_to_code' or 'not_run'. The quote is a passage of the document it quoted, found verbatim."""
+        out = {}
+        for p in self.inputs:
+            label = PARTICIPANT_LABELS[p.provider]
+            if p.provider not in self.readings:
+                out[p.provider] = {'position': 'not_run', 'detail': self._state_sentence(p), 'quote': ''}
+                continue
+            said = self.codes.get(code, {}).get(p.provider, [])
+            advised = self.advised.get(code, {}).get(p.provider, [])
+            if said:
+                good = list({(span.start, span.end): span for x in said for span in x.good}.values())
+                detail = f'{label} proposed {code}' + (f' {len(said)} times' if len(said) > 1 else '')
+                detail += f' ({self._stated([x.entry for x in said])})'
+                detail += (f', quoting the document verbatim in {checks.plural(len(good), "passage")}.' if good
+                           else '; none of its quotes was found verbatim in the document, so it is not counted as a '
+                                'proposer.')
+                if advised:
+                    detail += f' It also lists {code} as not to code: {_reason_words(advised[0].entry.reason)}.'
+                out[p.provider] = {'position': 'proposed', 'detail': detail,
+                                   'quote': checks.excerpt(good[0].text) if good else ''}
+            elif advised:
+                first = next((x for x in advised if x.entry.reason == NOT_PERFORMED_HERE and x.good),
+                             next((x for x in advised if x.good), advised[0]))
+                out[p.provider] = {'position': 'advised_not_to_code',
+                                   'detail': f'{label} advises not to code {code}: '
+                                             f'{_reason_words(first.entry.reason)}.',
+                                   'quote': checks.excerpt(first.good[0].text) if first.good else ''}
+            else:
+                out[p.provider] = {'position': 'not_proposed', 'detail': f'{label} did not propose {code}.',
+                                   'quote': ''}
+        return out
+
+    @staticmethod
+    def _stated(entries) -> str:
+        """What a participant stated with a code: units, modifiers (only those shaped as one) and confidence."""
+        units = ', '.join(str(entry.units) for entry in entries)
+        modifiers = [m for entry in entries for m in entry.modifiers
+                     if isinstance(m, str) and MODIFIER_SHAPE.fullmatch(m)]
+        others = sum(len(entry.modifiers) for entry in entries) - len(modifiers)
+        stated = f'stated units {units}; modifiers {", ".join(dict.fromkeys(modifiers)) or "none"}'
+        if others:
+            stated += f' ({others} other value{"s" if others != 1 else ""} not shown)'
+        return stated + '; confidence ' + ', '.join(dict.fromkeys(str(entry.confidence) for entry in entries))
+
+    def _state_sentence(self, p: ParticipantInput) -> str:
+        reason = checks.excerpt(str(p.reason or '')).rstrip('.')
+        return (f'{PARTICIPANT_LABELS[p.provider]} ({PARTICIPANT_VENDORS[p.provider]}) did not read the document: '
+                f'{PARTICIPANT_STATE_WORDS[p.state]}' + (f' ({reason})' if reason else '') + '.')
+
+    def provider_checks(self, provider: list, provider_status: str, response: Optional[NormalizedResponse],
+                        proposals: Sequence[ProposalAssessment]) -> list:
+        """The proposal provider's checks, with its status reworded where it proposed nothing and a participant's code
+        is a proposal: "so there are no CPT proposals" would be false beside it."""
+        decidable = [p for p in proposals if p.bucket != 'alternative']
+        if any((p.support or {}).get('origin') != 'participant' for p in decidable):
+            return provider
+        names = [PARTICIPANT_LABELS[name] for name in PARTICIPANT_ORDER
+                 if any(name in p.support.get('proposed_by', ()) for p in decidable)]
+        check = checks.provider_status_beside_participants(provider_status, response, names) if names else None
+        return provider if check is None else [check if c.id == 'provider.status' else c for c in provider]
+
+    # --- the encounter ------------------------------------------------------------------------------------------------
+
+    def encounter_checks(self, inventory) -> list[Check]:
+        out = [checks.participants_summary_check([self._summary_sentence(p) for p in self.inputs])]
+        missing = self.missing(inventory)
+        if missing:
+            out.append(checks.participants_services_check([(PARTICIPANT_LABELS[m['participant']], m['label'],
+                                                            m['quote']) for m in missing]))
+        return out
+
+    def _summary_sentence(self, p: ParticipantInput) -> str:
+        reading = self.readings.get(p.provider)
+        if reading is None:
+            return self._state_sentence(p)
+        label = PARTICIPANT_LABELS[p.provider]
+        model = f', {reading.requested_model}' if reading.requested_model else ''
+        parts = [f'{label} ({PARTICIPANT_VENDORS[p.provider]}{model}) read the document.']
+        codes = [code for code, by in self.codes.items() if p.provider in by]
+        if codes:
+            quoted = sum(1 for code in codes if any(x.good for x in self.codes[code][p.provider]))
+            more = len(codes) - LISTED_IN_SUMMARY
+            named = ', '.join(codes[:LISTED_IN_SUMMARY]) + (f' and {more} more' if more > 0 else '')
+            parts.append(f'It proposed {checks.plural(len(codes), "code")} ({named}), {quoted} quoting the document '
+                         'verbatim.')
+        else:
+            parts.append('It proposed no code.')
+        if self.unlisted.get(p.provider):
+            parts.append(checks.unlisted_codes(self.unlisted[p.provider], MAX_LISTED_CODE, 'It'))
+        if reading.unverified_quotes:
+            one = reading.unverified_quotes == 1
+            parts.append(f'{checks.plural(reading.unverified_quotes, "quote")} it gave {"was" if one else "were"} not '
+                         f'found verbatim in the document and {"is" if one else "are"} never evidence.')
+        if reading.questions:
+            notes = 'is a note' if len(reading.questions) == 1 else 'are notes'
+            parts.append(f'{checks.plural(len(reading.questions), "question")} it asked {notes}, never a '
+                         'clarification.')
+        if reading.extraction_issues:
+            parts.append(f'It reported {checks.plural(len(reading.extraction_issues), "extraction issue")}.')
+        return ' '.join(parts)
+
+    def missing(self, inventory) -> list[dict]:
+        """The services a participant reads as performed, quoting the document verbatim, of a kind of which
+        ``inventory`` reads no performed service: one per participant and family, the first quote of its first."""
+        if self._missing is None:
+            done = {s.family for s in inventory.services if s.status in checks.POSITIVE}
+            out, seen = [], set()
+            for name, reading in self.readings.items():
+                for service in reading.services:
+                    families = PARTICIPANT_FAMILY_MAP.get(service.family, ())
+                    if service.status != 'performed' or not families or done.intersection(families) \
+                            or (name, service.family) in seen:
+                        continue
+                    good, _ = self._partition(service.evidence)
+                    if not good:
+                        continue
+                    seen.add((name, service.family))
+                    label = PARTICIPANT_SERVICE_LABELS[service.family]
+                    reason = (f'{PARTICIPANT_LABELS[name]} reads a performed {label} that the documented-service '
+                              'reading does not read as performed')
+                    quoted = f'{reason} ({reconcile.quote(good[0])})'
+                    out.append({'participant': name, 'family': service.family, 'families': list(families),
+                                'label': label, 'quote': good[0].text, 'start': good[0].start, 'end': good[0].end,
+                                'page': good[0].page,
+                                # review.coding_completeness drops every reason that holds "open question" (it
+                                # recounts the open questions): a quote that holds it is kept in the entry and the
+                                # check, never in the reason, so the reason cannot be dropped with the count
+                                'reason': quoted if OPEN_QUESTION not in quoted else f'{reason} (quoted under the '
+                                                                                     'participants\' services)'})
+            self._missing = out
+        return self._missing
+
+    def complete(self, complete: dict, inventory) -> None:
+        """Coding completeness, incomplete beside each service only a participant reads (recorded under
+        'participant_services', which reviewed_completeness keeps)."""
+        missing = self.missing(inventory)
+        if missing:
+            complete.update(_incomplete(list(complete['reasons']) + [m['reason'] for m in missing]))
+            complete['participant_services'] = missing
