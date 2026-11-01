@@ -18,8 +18,16 @@ The key file and the role file are passed to the tool BY PATH ONLY. This module 
 prints them, nor rebuild/.env (the tool opens them itself: backup_restore.py source_options and key_at).
 
 Without --execute it is a read-only preflight that prints the two exact commands. With --execute it writes one
-private report; install_rebuild_release verifies that report (verify_report: complete, restore passed, the backup
-still intact on disk, and fresh) and binds its sha256 into the release declaration.
+private report; install_rebuild_release verifies that report and binds its sha256 into the release declaration.
+
+WHAT verify_report PROVES, AND WHAT IT DOES NOT. Without the key it cannot decrypt anything, so "intact" means,
+exactly: the run directory holds summary.json, manifest.json.fernet, database.dump.fernet and objects/ and nothing
+else; objects/ holds exactly file_count encrypted objects (backup_restore.py writes one per referenced file, named
+by the sha256 of its path); every one of those files is private (owner, 0600, one link), non-empty and has the
+SAME BYTES as when this step measured them right after the restore check decrypted and verified every object and
+the dump (a sha256 over the whole ciphertext inventory, recorded in the report); and the summary and the manifest
+ciphertext hash still match. The plaintext was proven restorable once, by that restore check; it is not
+re-decrypted here.
 """
 import argparse
 import datetime as dt
@@ -41,7 +49,11 @@ TOOL = APP / 'ops/backup_restore.py'
 PYTHON = APP / '.venv/bin/python'
 KEY = APP / '.runtime/backup-secrets/fresh-backup-current-20260917.key'
 ROLES = APP / '.runtime/db-role-secrets/fresh-db-roles.json'
-FORMAT = 'quillmd-rebuild-release-backup-v1'
+FORMAT = 'quillmd-rebuild-release-backup-v2'
+#: What backup_restore.py backup leaves in a complete run directory (backup_restore.py:585-647).
+RUN_ENTRIES = frozenset({'summary.json', 'manifest.json.fernet', 'database.dump.fernet', 'objects'})
+OBJECT_NAME = re.compile(r'[a-f0-9]{64}\.fernet')
+HASH_CHUNK = 1024 * 1024
 #: Identical to scheduled_backup.SUMMARY_KEYS (a test pins the equality): the tool's printed summary.
 SUMMARY_KEYS = frozenset({'complete', 'run_id', 'database', 'table_count', 'row_count', 'file_count', 'file_bytes',
                           'source_commit', 'encrypted', 'manifest_cipher_sha256'})
@@ -116,6 +128,44 @@ def private_bytes(path, limit):
     return raw
 
 
+def private_digest(path):
+    """(size, sha256) of one private ciphertext file, streamed, refusing if it changes while it is read."""
+    path = Path(path)
+    before = path.lstat()
+    require(stat.S_ISREG(before.st_mode) and before.st_uid == os.getuid() and stat.S_IMODE(before.st_mode) == 0o600
+            and before.st_nlink == 1 and before.st_size > 0, 'private_ciphertext_file')
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    digest, size = hashlib.sha256(), 0
+    with os.fdopen(fd, 'rb') as stream:
+        opened = os.fstat(stream.fileno())
+        while True:
+            chunk = stream.read(HASH_CHUNK)
+            if not chunk:
+                break
+            digest.update(chunk)
+            size += len(chunk)
+        after = os.fstat(stream.fileno())
+    identity = lambda info: (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+    require(size == before.st_size and identity(before) == identity(opened) == identity(after), 'stable_ciphertext_file')
+    return size, digest.hexdigest()
+
+
+def ciphertext_inventory(directory, summary):
+    """The complete run directory, measured without the key: its exact population and every ciphertext's sha256."""
+    directory = private_directory(directory)
+    require({entry.name for entry in directory.iterdir()} == RUN_ENTRIES, 'backup_run_directory_population')
+    objects = private_directory(directory / 'objects')
+    names = sorted(entry.name for entry in objects.iterdir())
+    require(len(names) == summary['file_count'] and all(OBJECT_NAME.fullmatch(name) for name in names),
+            'backup_object_population')
+    rows = {}
+    for relative in ('summary.json', 'manifest.json.fernet', 'database.dump.fernet', *('objects/' + n for n in names)):
+        rows[relative] = private_digest(directory / relative)
+    canonical = json.dumps(rows, sort_keys=True, separators=(',', ':')).encode()
+    return {'files': len(rows), 'objects': len(names), 'bytes': sum(size for size, _ in rows.values()),
+            'sha256': sha(canonical)}
+
+
 def new_path(path, label):
     path = Path(path)
     require(path.is_absolute() and str(path) == os.path.normpath(str(path)) and not path.exists()
@@ -182,7 +232,9 @@ def drill_absent(run_id, runner=subprocess.run):
 
 
 def verify_report(path, *, base, now, max_age):
-    """For install_rebuild_release: the report is complete, its backup is intact and restorable, and it is fresh."""
+    """For install_rebuild_release: the report is complete and fresh, its restore check passed, and every file of
+    its backup is still on disk with the bytes measured right after that restore check (see the module docstring
+    for exactly what that does and does not prove)."""
     raw = private_bytes(path, MAX_REPORT_BYTES)
     value = loads(raw)
     require(type(value) is dict and value.get('format') == FORMAT and value.get('complete') is True
@@ -192,12 +244,16 @@ def verify_report(path, *, base, now, max_age):
     summary = validate_summary(value['backup']['summary'], output / 'backup')
     require(summary['source_commit'] == base, 'backup_source_commit_is_base')
     result = validate_restore(value['restore']['result'], summary, output / 'restore')
+    recorded = value['backup'].get('ciphertext')
+    require(type(recorded) is dict and recorded == ciphertext_inventory(summary['backup_directory'], summary),
+            'backup_ciphertext_unchanged_since_restore_check')
     finished = dt.datetime.fromisoformat(value['finished_at'])
     require(finished.tzinfo is not None and dt.timedelta(0) <= now - finished <= max_age, 'fresh_backup_report')
     return {'report_sha256': sha(raw), 'run_id': summary['run_id'], 'restore_run_id': result['run_id'],
             'finished_at': value['finished_at'], 'source_commit': summary['source_commit'],
             'table_count': summary['table_count'], 'row_count': summary['row_count'],
-            'file_count': summary['file_count'], 'file_bytes': summary['file_bytes']}
+            'file_count': summary['file_count'], 'file_bytes': summary['file_bytes'],
+            'ciphertext_files_unchanged': recorded['files']}
 
 
 def run_child(argv, timeout, runner=subprocess.run):
@@ -296,6 +352,10 @@ def execute(args, installer_module, *, runner=subprocess.run):
             require(directory == str(output / 'restore' / ('restore-' + value['run_id'])), 'restore_directory')
             report['stage'] = 'drill_absence'
             report['drill_container_absent'] = drill_absent(value['run_id'], runner)
+            # The bytes the restore check has just decrypted and verified, measured so verify_report can prove later
+            # that every one of them is still on disk unchanged.
+            report['stage'] = 'ciphertext_inventory'
+            report['backup']['ciphertext'] = ciphertext_inventory(summary['backup_directory'], summary)
             report['stage'] = 'complete'
             report['complete'] = True
     except Exception as error:

@@ -42,7 +42,7 @@ class FakeTool:
 
     def summary(self, directory):
         return {'complete': True, 'run_id': RUN, 'database': 'quillmd_fresh', 'table_count': 48,
-                'row_count': 232947, 'file_count': 1291, 'file_bytes': 51234567, 'source_commit': BASE,
+                'row_count': 232947, 'file_count': 3, 'file_bytes': 51234567, 'source_commit': BASE,
                 'encrypted': True, 'manifest_cipher_sha256': backup.sha(b'encrypted manifest')}
 
     def __call__(self, argv, **options):
@@ -56,6 +56,11 @@ class FakeTool:
         if action == 'backup':
             directory = output / RUN
             directory.mkdir(mode=0o700)
+            (directory / 'objects').mkdir(mode=0o700)
+            for index in range(3):     # backup_restore.py: one object per referenced file, named by its path's sha256
+                write_private(directory / 'objects' / (backup.sha(b'file-%d' % index) + '.fernet'),
+                              b'encrypted object %d' % index)
+            write_private(directory / 'database.dump.fernet', b'encrypted database dump')
             write_private(directory / 'manifest.json.fernet', b'encrypted manifest')
             summary = self.summary(directory)
             write_private(directory / 'summary.json', json.dumps(summary, indent=2).encode() + b'\n')
@@ -65,7 +70,7 @@ class FakeTool:
         directory.mkdir(mode=0o700)
         result = {'run_id': RESTORE, 'container': 'quillmd-restore-' + RESTORE, 'complete': True,
                   'started_at_utc': '2026-10-31T20:30:00+00:00', 'provider_actions': 0, 'stage': 'complete',
-                  'table_count': 48, 'row_count': 232947, 'file_count': 1291, 'all_table_hashes_match': True,
+                  'table_count': 48, 'row_count': 232947, 'file_count': 3, 'all_table_hashes_match': True,
                   'all_file_hashes_match': True, 'decrypted_files_written': 0,
                   'restore_database_on_tmpfs_without_swap': True, 'invariants': {'users': 3},
                   'enabled_custom_triggers': 7, 'network': 'none', 'published_ports': 0, 'workers_started': 0,
@@ -169,6 +174,55 @@ class BackupStepTests(unittest.TestCase):
         (self.root / 'report.json').chmod(0o640)
         with self.assertRaises(backup.Refusal):
             verify()
+        (self.root / 'report.json').chmod(0o600)
+        verify()
+
+    def test_intact_means_every_ciphertext_still_on_disk_with_its_measured_bytes(self):
+        """PT-4: the dump and every object are checked, not only the summary and the manifest hash."""
+        self.execute()
+        report = json.loads((self.root / 'report.json').read_text())
+        self.assertEqual(report['backup']['ciphertext']['files'], 6)
+        self.assertEqual(report['backup']['ciphertext']['objects'], 3)
+        finished = dt.datetime.fromisoformat(report['finished_at'])
+        run = self.root / 'attempt-01/backup' / RUN
+        objects = sorted((run / 'objects').iterdir())
+
+        def verdict():
+            try:
+                backup.verify_report(self.root / 'report.json', base=BASE, now=finished,
+                                     max_age=dt.timedelta(hours=12))
+            except backup.Refusal as refusal:
+                return str(refusal)
+            return 'verified'
+        self.assertEqual(verdict(), 'verified')
+        dump = (run / 'database.dump.fernet').read_bytes()
+
+        def damage(action, undo):
+            action()
+            try:
+                return verdict()
+            finally:
+                undo()
+        same_size = bytes([dump[0] ^ 1]) + dump[1:]
+        saved = {path: path.read_bytes() for path in objects}
+        cases = {
+            'dump_deleted': (lambda: (run / 'database.dump.fernet').unlink(),
+                             lambda: write_private(run / 'database.dump.fernet', dump)),
+            'dump_rewritten_same_size': (lambda: (run / 'database.dump.fernet').write_bytes(same_size),
+                                         lambda: (run / 'database.dump.fernet').write_bytes(dump)),
+            'object_deleted': (lambda: objects[0].rename(self.root / 'aside'),
+                               lambda: (self.root / 'aside').rename(objects[0])),
+            'object_truncated': (lambda: objects[1].write_bytes(b''),
+                                 lambda: objects[1].write_bytes(saved[objects[1]])),
+            'foreign_object_added': (lambda: write_private(run / 'objects' / ('f' * 64 + '.fernet'), b'x'),
+                                     lambda: (run / 'objects' / ('f' * 64 + '.fernet')).unlink()),
+            'stray_file_in_run': (lambda: write_private(run / 'notes.txt', b'x'),
+                                  lambda: (run / 'notes.txt').unlink()),
+            'object_mode': (lambda: objects[2].chmod(0o644), lambda: objects[2].chmod(0o600))}
+        for name, (action, undo) in cases.items():
+            with self.subTest(damage=name):
+                self.assertNotEqual(damage(action, undo), 'verified')
+                self.assertEqual(verdict(), 'verified')
 
     def test_failures_leave_an_incomplete_report_and_stop_at_once(self):
         cases = [({'backup'}, False, False, 'backup_command_failed', 1),
