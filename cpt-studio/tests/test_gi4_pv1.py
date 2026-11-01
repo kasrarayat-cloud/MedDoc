@@ -15,6 +15,7 @@ code in tests/fixtures/gi4/declarations/pv1.json). Every case is synthetic.
 Each 'pv1-*' mutant of tests/test_gi4_pv1_mutants.py is killed here (H6): a test below fails when that guard is removed.
 """
 import datetime as dt
+import time
 
 from django.test import SimpleTestCase
 
@@ -330,6 +331,36 @@ class OtherServiceNounTests(SimpleTestCase):
                               {'service_date': '2026-10-05'})
         self.assertEqual(row['proposals']['99215']['bucket'], 'selected')
         self.assertEqual(row['proposals']['99215']['status'], 'needs_clarification')
+
+
+class QuoteBoundTests(SimpleTestCase):
+    """Session 2, H7: the quotes of the label-inside and other-visit holds are cut from a bounded window
+    (detect._PV1_QUOTE_WINDOW), never from the sentence's start or a whole match: one sentence may hold thousands of
+    labels or time statements."""
+
+    def test_the_label_quote_is_cut_from_the_window_before_the_label(self):  # kills pv1-quote-window
+        text = OFFICE + 'Copied words' + ' ' * (detect._PV1_QUOTE_WINDOW + 40) + 'complexity of decision making: high.\n'
+        held = mention(em(text), 'complexity of decision making: high')
+        self.assertEqual(held.cues[0], f"{detect._PV1_LABEL_INSIDE}: 'complexity of decision making: high'")
+        near = OFFICE + 'Copied words complexity of decision making: high.\n'  # the words inside the window are quoted
+        self.assertEqual(mention(em(near), 'complexity of decision making: high').cues[0],
+                         f"{detect._PV1_LABEL_INSIDE}: 'Copied words complexity of decision making: high'")
+
+    def test_the_other_visit_quote_is_cut_from_the_head_of_its_match(self):  # kills pv1-other-visit-window
+        text = OFFICE + 'Total time 40 minutes at' + ' ' * (detect._PV1_QUOTE_WINDOW + 40) + 'last visit.\n'
+        held = mention(em(text), 'Total time 40 minutes')
+        self.assertEqual(held.cues, (detect.EM_ANOTHER_TIME, f"{detect.ANOTHER_TIME_PREFIX}: 'at' may place it on another "
+                                                              'date'))
+
+    def test_one_sentence_of_many_labels_routes_in_linear_time(self):
+        # 3800 labels in one 198,000-character sentence: 6.4 s of CPU on 3a6a5e77d (each quote cut from the sentence's
+        # start), about 2 s with the window (installed reads no label here: 0.9 s). CPU time, so another process's load
+        # does not count.
+        text = OFFICE + 'complexity of decision making: high, at last visit, ' * 3800 + 'end.\n'
+        jobs.release_routing_caches()
+        started = time.process_time()
+        detect.route(text, DAY)
+        self.assertLess(time.process_time() - started, 5.0)
 
 
 class DeclaredOutcomeTests(SimpleTestCase):

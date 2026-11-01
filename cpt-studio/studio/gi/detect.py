@@ -6027,6 +6027,7 @@ EM_NOT_IN_PERSON = 'uncertain: the note may document no in-person visit'
 EM_ANOTHER_TIME = 'uncertain: the E/M statement names another time'
 _PV1_HEAD_LINES = 6  # the head lines read for a title naming a telephone or audio-only encounter (C4)
 _PV1_QUOTE = 80  # the most of the not-in-person words a cue quotes
+_PV1_QUOTE_WINDOW = 4 * _PV1_QUOTE  # the most text a session-2 quote is cut from (a bound per mention: H7)
 # C2's inline label ("Complexity of decision making: moderate."), as cues.MDM_LEVEL's third prefix reads it
 _PV1_DECISION_LABEL = re.compile(r'(?:complexity|level)\s+of\s+decision[- ]making\b', re.A | re.I)
 
@@ -6101,7 +6102,8 @@ def _pv1_held(an: Analysis, m: Mention, reading: Reading) -> Reading:
         # as "Total time:" ends a sentence of its own in the layout)
         s, e = an.lay.sentence_for(m.start, m.start + 1)[0], an.lay.sentence_for(max(m.start, m.end - 1), m.end)[1]
         if label and not _pv1_opens_its_sentence(an.text, m.start, s):
-            said = ' '.join(an.text[s:m.end].split())[-_PV1_QUOTE:]
+            # the quote is cut from a bounded window, never from the sentence's start: one sentence may hold many labels
+            said = ' '.join(an.text[max(s, m.start - _PV1_QUOTE_WINDOW):m.end].split())[-_PV1_QUOTE:]
             return Reading('uncertain', (f"{_PV1_LABEL_INSIDE}: '{said}'",), 'cue', doubt=True)
         held = _another_time(an, m.start, m.end)
         if held:
@@ -6159,7 +6161,8 @@ def _pv1_other_visit(an: Analysis, start: int, end: int, label: bool) -> Optiona
     spans, starts = (every, every_starts) if label else (timed, timed_starts)
     i = bisect.bisect_left(starts, start)
     if i < len(spans) and spans[i][1] <= end:
-        return ' '.join(an.text[spans[i][0]:spans[i][1]].split())[:_PV1_QUOTE]
+        x, y = spans[i]
+        return ' '.join(an.text[x:min(y, x + _PV1_QUOTE_WINDOW)].split())[:_PV1_QUOTE]
     return None
 
 

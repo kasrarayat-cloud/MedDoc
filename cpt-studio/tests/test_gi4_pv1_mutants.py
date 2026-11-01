@@ -69,6 +69,14 @@ MUTANTS = (
     mutants.Mutant('pv1-other-visit', 'C2 and C4-time (session 2): another visit named by a preposition, with or '
                    'without a determiner, holds a time statement or the new label', DETECT,
                    '        other = _pv1_other_visit(an, s, max(e, m.end), label)', '        other = None', UNIT),
+    mutants.Mutant('pv1-quote-window', "H7 (session 2): the label-inside quote is cut from a bounded window, never from "
+                   "the sentence's start", DETECT,
+                   "            said = ' '.join(an.text[max(s, m.start - _PV1_QUOTE_WINDOW):m.end].split())[-_PV1_QUOTE:]",
+                   "            said = ' '.join(an.text[s:m.end].split())[-_PV1_QUOTE:]", UNIT),
+    mutants.Mutant('pv1-other-visit-window', 'H7 (session 2): the other-visit quote is cut from a bounded window of its '
+                   'match', DETECT,
+                   "        return ' '.join(an.text[x:min(y, x + _PV1_QUOTE_WINDOW)].split())[:_PV1_QUOTE]",
+                   "        return ' '.join(an.text[x:y].split())[:_PV1_QUOTE]", UNIT),
 )
 BY_NAME = {m.name: m for m in MUTANTS}
 
