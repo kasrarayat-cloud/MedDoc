@@ -659,9 +659,13 @@ def _problem(fact: Optional[Fact]) -> str:
 
 
 def required_fact_states(profile: ServiceProfile, finding: Optional[FamilyFinding],
-                         context: Mapping[str, Fact]) -> tuple[FactState, ...]:
+                         context: Mapping[str, Fact], service=None) -> tuple[FactState, ...]:
     """Context facts (which carry member-supplied values) come from the context; the rest from routing,
-    where a fact routing itself lists as missing stays missing."""
+    where a fact routing itself lists as missing stays missing. GI round 4 (E1): where routing gives no extent fact and
+    does not read the family as done today (no finding, or only another occasion's, a doubtful or a silent reading),
+    the extent is the documented service's own (``service``: the code's matched service, services._finish) when that
+    reader reads the examination performed and complete by its own endpoint statement, cited as its evidence. Where
+    routing reads the service done today, its extent reading - a withheld one too - decides, as before."""
     states = []
     for name in profile.required_facts:
         if name in CONTEXT_FACTS:
@@ -669,6 +673,12 @@ def required_fact_states(profile: ServiceProfile, finding: Optional[FamilyFindin
             problem = _problem(fact)
         else:
             fact = next((f for f in finding.facts if f.name == name), None) if finding else None
+            if fact is None and name == 'extent' and service is not None and service.extent \
+                    and service.completion == 'complete' and service.completion_evidence \
+                    and (finding is None or finding.status not in POSITIVE):
+                states.append(FactState(name, Fact('extent', service.extent, 'document',
+                                                   tuple(service.completion_evidence)), ''))
+                continue
             listed_missing = finding is not None and name in finding.missing
             problem = _problem(fact) or ('missing' if listed_missing else '')
         states.append(FactState(name, fact, problem))

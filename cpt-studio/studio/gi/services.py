@@ -2815,6 +2815,132 @@ def _endpoint_seen(text: str, family: str, start: int, end: int, service_date, d
     return None
 
 
+# --- GI round 4, package PI: the inventory's own reading of reach, binding and extent -------------------------------
+# Every rule below only reads more of what the document states about a service already documented here, and each
+# holds wherever its guard is not met (fail-closed: the installed reading stands).
+
+# E1: the endpoint landmarks (routing's own labels and depths, cues.UPPER_LANDMARKS / LOWER_LANDMARKS) a completion
+# statement may name for the inventory to read the extent from it - the duodenum (bulb or beyond) for an EGD, the
+# cecum or beyond for a colonoscopy. No other family's extent is read here.
+_ENDPOINT_TABLE = {'gi.egd': tuple((label, depth, p) for label, depth, p in _cues.UPPER_LANDMARKS if depth >= 3),
+                   'gi.colonoscopy': tuple((label, depth, p) for label, depth, p in _cues.LOWER_LANDMARKS
+                                           if depth >= _cues.CECUM_DEPTH)}
+# A statement carrying an extent word is an extent label routing's own label rules read (and may withhold: round 4c-2
+# plan:B, D2); this reader never reads an extent from it.
+EXTENT_WORD = _rx(r'\b(?:extent|depth|furthest|farthest|maximal|reach(?:ed)?\s*:)')
+PARAGRAPH_BREAK = re.compile(r'\n[ \t]*\n')  # A1: a blank line ends what a paragraph carries
+CARRY_REACH = 1500  # A1: characters a paragraph carries its service over (bounded work per act)
+# The instrument as the subject of its own reach ("The colonoscope reached the cecum", "The gastroscope went in"): the
+# active form of the passive reach ACT_VERB reads ("was advanced", "was passed"). Read right after the instrument word.
+_PI_REACH_AFTER = _rx(r'[ \t]+(?:(?:then|easily|successfully|subsequently|readily|smoothly|finally)[ \t]+)?'
+                      r'(?:reached|entered|traversed|went[ \t]+(?:in|into|through|down|past|beyond|to))\b')
+_PI_REACH_CUE = 'performed: the instrument as the subject of its own reach, in a procedure report'
+# W1: an indwelling stent's state ("The existing stent was in position and draining.", "the indwelling stent in good
+# position"): a stent noun led by an indwelling word and followed straight away by its state, with no act between.
+_PI_INDWELLING_BEFORE = _rx(r'\b(?:existing|indwelling|in-dwelling|previously[ \t]+(?:placed|inserted|deployed)'
+                            r'|prior|old|in[ \t-]situ|current)[ \t]+(?:[\w-]+[ \t]+){0,4}$')
+_PI_STATE_AFTER = _rx(r'(?:[ \t]+(?:was|were|is|are|remained|remains|appeared|appears|looked|looks|seen|noted))?'
+                      r'(?:[ \t]+(?:still|well|again|already))?[ \t]+(?:in[ \t]+(?:(?:good|proper|satisfactory|'
+                      r'appropriate|correct|stable|expected|adequate)[ \t]+)?(?:position|place|situ)\b|draining\b'
+                      r'|patent\b|functioning\b)')
+_PI_E1_SPANS = 64  # E1: completion statements read per service (bounded work; fewer can only read less)
+
+
+def _pi_own_report(text: str) -> bool:
+    """Positive evidence that the document is a procedure's own report (GI round 4, PS helpers): its head carries a
+    procedure report's own fields (a sedation or anesthesia line, a field naming who performed it) and its title is no
+    note written around a procedure (a booking, a call, a consent, instructions, a handout, a letter, a records
+    review)."""
+    return _sections.procedure_report_head(text) and not _sections.around_procedure_title(text)
+
+
+def _pi_today_report(text: str, routing) -> bool:
+    """Positive evidence that the document is today's procedure report, which the instrument's reach (S1) and E1 need
+    before they read more than installed does (the round's rule: a releasing rule needs positive evidence that the
+    document is today's report): the document's head carries a procedure report's own fields and no note written around
+    a procedure titles it (_pi_own_report), and routing reads no office visit done today. An office note's or a records
+    review's procedure narrative is a copied report or another occasion's far more often than today's, and an office
+    note's own "Sedation: none" line passes the head test (GI round 4, PI: an outside banding narrative pasted into an
+    office note, its occurrence words more than OCCURRENCE_HEAD_LINES above it, was READY on E1 alone). Hold-only:
+    False keeps the installed reading (the reach silent, the extent a question)."""
+    visit = routing.finding('gi.office_em') if routing is not None and hasattr(routing, 'finding') else None
+    if visit is not None and visit.status in POSITIVE:
+        return False
+    return _pi_own_report(_ORIGINAL.get() or text)
+
+
+def _pi_reaches(text: str, end: int) -> bool:
+    """Whether the instrument word ending at ``end`` is the subject of its own reach (_PI_REACH_AFTER)."""
+    return _PI_REACH_AFTER.match(text, end) is not None
+
+
+def _pi_not_today_place(text: str, pos: int) -> bool:
+    """Whether a statement at ``pos`` lies where it cannot speak for today's examination (E1 hardening): in a history
+    or plan section of the layout of the text this reader reads or of the document as written, or under another
+    occurrence (sections.under_another_occurrence: its own line's lead, or the heading-like line above it)."""
+    original = _ORIGINAL.get() or text
+    for t in {text, original}:
+        if len(t) != len(text):
+            continue
+        if _sections.layout(t).section_at(pos).kind in ('history', 'plan') \
+                or _sections.under_another_occurrence(t, pos):
+            return True
+    return False
+
+
+def _endpoint_named(family: str, spans: Sequence[Span], text: str = '') -> str:
+    """The deepest endpoint landmark (routing's label) the completion statements ``spans`` name, or '' (GI round 4, E1).
+    Never from a statement in a history or plan section or under another occurrence (_pi_not_today_place), never from
+    one carrying an extent word - an extent label ("Extent: Cecum | Scope: Olympus": routing's own label rules decide
+    those, and where routing withholds such a label this reader adds nothing) or "the furthest point" - and never a
+    landmark an earlier-occurrence word leads within the statement ("at the index examination the cecum")."""
+    table = _ENDPOINT_TABLE.get(family, ())
+    best: Optional[tuple[str, int]] = None
+    for span in list(spans)[:_PI_E1_SPANS] if table else ():
+        if EXTENT_WORD.search(span.text) or (text and _pi_not_today_place(text, span.start)):
+            continue
+        for label, depth, pattern in table:
+            if best is not None and depth <= best[1]:
+                continue
+            if any(not _sections.ANOTHER_OCCURRENCE_HEAD.search(span.text, 0, m.start())
+                   for m in pattern.finditer(span.text)):
+                best = (label, depth)
+    return best[0] if best else ''
+
+
+def _pi_carried(carry, part: _Part, pos: int, regions, performed: Sequence[str], text: str,
+                field_row: bool = False) -> str:
+    """The family a paragraph carries to an act or lesion at ``pos`` that its part, its sentence and its site leave to
+    no family (GI round 4, A1), or '': the family the paragraph last named (``carry``: family, part start, end of the
+    sentence that set it), only within the same part and never in a history, plan or indication part, never for a field
+    or check-box row, only where more than one family is documented performed and the carried family is one of them,
+    within CARRY_REACH characters with no blank line between, and only when every region the statement names is one that
+    family reaches (FAMILY_REGIONS: a rectal site never goes to an upper endoscopy)."""
+    if carry is None or field_row:
+        return ''
+    family, part_start, end = carry
+    if part_start != part.start or part.kind in ('history', 'plan', 'indication'):
+        return ''
+    done = [f for f in performed if f != 'gi.office_em']
+    if len(done) < 2 or family not in done:
+        return ''
+    if pos - end > CARRY_REACH or (pos > end and PARAGRAPH_BREAK.search(text, end, pos)):
+        return ''
+    named = set(regions) - {''}
+    if named and not named <= FAMILY_REGIONS.get(family, frozenset()):
+        return ''
+    return family
+
+
+def _pi_indwelling_state(text: str, clause_start: int, ms: int, me: int) -> bool:
+    """Whether the stent noun at [ms, me) names an indwelling stent's state, not an act (GI round 4, W1): an indwelling
+    word leads it within its clause and its state follows straight away ("The existing stent was in position and
+    draining.", "the indwelling stent in good position"). A new stent placed beside it is its own noun and still
+    counts."""
+    return _PI_INDWELLING_BEFORE.search(text, max(clause_start, ms - 120), ms) is not None \
+        and _PI_STATE_AFTER.match(text, me) is not None
+
+
 def _upper_only(text: str, start: int, end: int) -> str:
     """'gi.egd' when a sentence about an unnamed endoscope names only upper GI anatomy, the stomach or duodenum among
     it ("An ultraslim endoscope ... the stomach and duodenum to the second portion were examined")."""
@@ -3449,6 +3575,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             if family not in performed_families and reading.status == 'performed':
                 performed_families.append(family)
         # Instruments name their service ("The colonoscope was advanced to the cecum").
+        own_report: list[bool] = []  # GI round 4 (S1): read once, at the first instrument that needs it
         for ss, se in sentences:
             part = _part_at(plist, starts, ss)
             upper = None  # what the sentence's anatomy makes an unnamed endoscope: read once, at its first one
@@ -3464,6 +3591,20 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 reading = read_clause(text, clause, m.start(), m.end(), service_date=service_date, dates=dates,
                                       part=part, in_today_report=part.kind == 'report' and part.family == family)
                 reading = held_under_denial(text, m.start(), reading, service_date)
+                if reading.status == 'uncertain' and len(reading.cues) == 1 and reading.cues[0] in SILENT_READINGS \
+                        and _pi_reaches(text, m.end()):
+                    # GI round 4 (S1): the instrument is the subject of its own reach ("The colonoscope reached the
+                    # cecum") and nothing in its clause dates, denies, doubts or plans it - read as performed, as the
+                    # passive "was advanced" is, but only with positive evidence that the document is today's procedure
+                    # report (its head, no note written around a procedure, no office visit: _pi_today_report), never
+                    # under another occurrence and never in a clause carrying a date (whose owner this reader did not
+                    # weigh); else it stays silent
+                    cs, ce = _bounded_clause(text, clause, m.start(), m.end())
+                    if not own_report:
+                        own_report.append(_pi_today_report(text, routing))
+                    if own_report[0] and not _dates_in(dates, cs, ce) \
+                            and not _sections.under_another_occurrence(_ORIGINAL.get() or text, m.start()):
+                        reading = Reading('performed', reading.cues + (_PI_REACH_CUE,))
                 bounded_span = _span(text, *_bounded_clause(text, clause, m.start(), m.end()))
                 if reading.status == 'performed' and family in drafts and any(
                         REPLACED_CUE in cue_list for status, cue_list, sp in drafts[family].statuses
@@ -3533,6 +3674,15 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
         # Pass 3: lesions and acts.
         act_count = 0
         last_lesion: dict[str, Lesion] = {}
+        # GI round 4 (A1): with more than one service performed, the only performed family's fallback no longer
+        # decides an act or lesion that names no service, instrument or site its family fits; the service its
+        # paragraph is about does (_pi_carried) - the one family its last naming sentence named, or gave a lesion or
+        # an act by its own part, name or site. A sentence naming two families leaves the paragraph to neither.
+        carry: Optional[tuple[str, int, int]] = None  # (family, part start, end of the sentence that set it)
+        # a paragraph carries a service only where more than one is performed (_pi_carried): elsewhere every sentence
+        # without an act or a lesion is passed over unread, as before (bounded work: no added scan per sentence)
+        carrying = len([f for f in performed_families if f != 'gi.office_em']) > 1
+        indwelling: list[tuple[str, str]] = []  # (family, act id) read as an indwelling stent's state (W1, below)
         # where each lesion was last named as itself, and where each service's text last named a lesion this reader did
         # not record: "the polyp" after an unrecorded polyp may be that one, not the last one recorded (status-1, below)
         last_named: dict[str, int] = {}
@@ -3548,14 +3698,20 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                                 f'first {SENTENCE_READ_CHARS:,} characters.')
             mentions = _acts_in(text, ss, read_end)
             lesion_matches = list(LESION.finditer(text, ss, read_end))
+            if not mentions and not lesion_matches and not carrying:
+                continue  # nothing to read here, and no paragraph's service to follow (as before GI round 4)
+            named_here = sorted({f for f in named_in.get(ss, ()) if f in drafts}
+                                | _instrument_families(text, ss, se, drafts))
+            if carrying and len(named_here) == 1:
+                carry = (named_here[0], part.start, se)  # GI round 4 (A1): every sentence naming one service sets it
+            elif carrying and named_here:
+                carry = None  # two services named: the paragraph carries neither
             if not mentions and not lesion_matches:
                 continue
             cls = clauses_of(ss, read_end)
             anatomy_all = _anatomy_in(text, ss, read_end)
             regions = {region for _, region, _, _ in anatomy_all}
             part_family = part.family if part.family in drafts and part.kind == 'report' else ''
-            named_here = sorted({f for f in named_in.get(ss, ()) if f in drafts}
-                                | _instrument_families(text, ss, se, drafts))
             if not part_family and len(named_here) == 1:
                 part_family = named_here[0]
             if not part_family and len(procedural) == 1 and part.kind not in ('history', 'plan'):
@@ -3577,6 +3733,9 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     continue
                 region_one = next(iter(regions)) if len(regions) == 1 else ''
                 fam = _family_for_act('biopsy', region_one, part_family, present_families, performed_families)
+                if not fam:
+                    # GI round 4 (A1): the service its paragraph is about, where every site the sentence names fits it
+                    fam = _pi_carried(carry, part, ss, regions, performed_families, text)
                 if not fam or fam not in drafts or denies_further:
                     continue
                 d = drafts[fam]
@@ -3641,6 +3800,12 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 anat = [a for a in anatomy_all if clause[0] <= a[2] < clause[1]] or anatomy_all
                 region = anat[0][1] if anat else ''
                 fam = _family_for_act(kind, region, part_family, present_families, performed_families)
+                if not fam:
+                    # GI round 4 (A1): the service its prose paragraph is about (never a field or check-box row)
+                    fam = _pi_carried(carry, part, ss, {a[1] for a in anat}, performed_families, text,
+                                      field_row=_field_or_box_line(text, ms, me))
+                elif fam in drafts:
+                    carry = (fam, part.start, se)  # an act its own part, name or site gives a family sets it
                 if not fam or fam not in drafts:
                     # Neither its part, its sentence nor its site tells which of the documented services the statement
                     # is about. A checklist item's own field or check box that denies it today is then the encounter's
@@ -3740,11 +3905,14 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     unplaced.append((act, _heading_service(part, drafts)))
                     continue
                 d.acts.append(replace(act, id=f'{d.id}-A{len(d.acts) + 1}', service=d.id))
+                if kind == 'stent' and reading.status == 'performed' and _pi_indwelling_state(text, bc[0], ms, me):
+                    indwelling.append((fam, d.acts[-1].id))  # GI round 4 (W1): weighed once every act is read
             if sentence_lesions:
                 lesion = sentence_lesions[-1]
                 for f, d in drafts.items():
                     if d.id == lesion.service:
                         last_lesion[f] = lesion
+                        carry = (f, part.start, se)  # GI round 4 (A1): a lesion recorded sets the paragraph's service
         # The encounter's denials (above): each is set beside every service that documents done an act it denies - the
         # two statements are about the same act, and _conflicts keeps them as a conflict there - and beside no other,
         # so a denial of an act no service documents adds nothing, and no service's own scope grows by it. A part whose
@@ -3763,6 +3931,16 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 if act_count > MAX_ACTS:
                     raise _Capped(f'More than {MAX_ACTS:,} acts are documented; the rest were not inventoried.')
                 d.acts.append(replace(denial, id=f'{d.id}-A{len(d.acts) + 1}', service=d.id))
+        # GI round 4 (W1): an indwelling stent's state ("The existing stent was in position and draining.") is no
+        # performed act. It is dropped only where its service documents another stent performed (a new stent placed
+        # beside it still counts), so dropping it never takes away what a code, a base-included hold or an unresolved
+        # item reads: hold-only. Elsewhere the installed reading stands. Weighed once every act and every denial is
+        # placed, so no act id is assigned after a drop.
+        for fam, act_id in indwelling:
+            d = drafts[fam]
+            phantom = {i for f, i in indwelling if f == fam}
+            if any(a.kind == 'stent' and a.status == 'performed' and a.id not in phantom for a in d.acts):
+                d.acts = [a for a in d.acts if a.id != act_id]
     except _Capped as exc:
         problems.append(str(exc))
     services = [_finish(d, text, routing, context_facts, encounter_intents) for d in drafts.values()]
@@ -4129,6 +4307,19 @@ def _finish(d: _ServiceDraft, text: str, routing, context_facts, encounter_inten
             status = 'uncertain'
 
     extent = reach.value if reach is not None else ''
+    if not extent and status == 'performed' and completion == 'complete' and not d.completion_neg \
+            and has_endpoint(d.family, d.kind) and routing_status not in POSITIVE and _pi_today_report(text, routing):
+        # GI round 4 (E1): routing reads no extent at all (no reach, no stop) and does not read the family as done
+        # today, where this reader reads the examination complete by its own endpoint statement ("Neoterminal ileum:
+        # normal.", "The duodenal bulb and descending duodenum were normal."), in a document that is a procedure's own
+        # report and no visit note (_pi_today_report): the deepest endpoint landmark those statements name is the extent
+        # - never one stated in a history or plan section, under another occurrence or as an extent label
+        # (_endpoint_named), never a guess. Where routing reads the family done today, its extent reading (a withheld one
+        # too) decides, as before.
+        named = _endpoint_named(d.family, completion_spans, text)
+        if named:
+            extent = named
+            cues.append(f'complete: this reader reads the endpoint ({named}) in its own completion statement')
     if finding is not None:
         # A family routing reads takes routing's intent, as it takes routing's extent: read per family, for a service
         # done today, from today's indication and procedure text only - never a question, a hedge, a pending

@@ -1,0 +1,65 @@
+{
+ "package": "PI",
+ "summary": "GI round 4, package PI (the inventory), declared BEFORE any code: three reading changes in studio/gi/services.py, one parameter in validation/checks.required_fact_states and one argument in validation/engine._proposal. (1) The instrument as the subject of its own reach ('The colonoscope reached the cecum') states its service performed in the inventory - only where the document carries a procedure report's own head (sections.procedure_report_head), its head is no note written around a procedure (sections.around_procedure_title), the instrument is not under another occurrence (sections.under_another_occurrence), its clause carries no date and the inventory's reading is otherwise silent. Implemented as a guarded promotion in _build's instrument pass with new _pi_ helpers; the module-wide ACT_VERB is NOT widened, because a regex cannot carry the head guard and the unguarded form (the minimal design's tree_c) reads the copied 'The colonoscope reached the cecum' of a records review as performed (judge rows J1-J3, H3 records documents). (2) Paragraph carry (A1): with more than one family performed, an act or lesion no part, name or site gives a family takes the family its paragraph last named - same part, never a history, plan or indication part, never a field or box row, within CARRY_REACH characters with no blank line between, the carried family itself performed, every region the clause or sentence names one that family reaches, and a sentence naming two families clears the carry. (3) E1: where routing reads no extent and does not read the family as done today, a performed service the inventory reads complete by its own endpoint statement takes the deepest endpoint landmark those statements name (routing's labels; EGD and colonoscopy only), never from a statement in a history or plan section (layout of the text the inventory reads and of the original), under another occurrence, carrying an extent word, or after an extent label; checks.required_fact_states uses that extent only when routing has no extent fact and does not read the family positive; engine._proposal passes the matched service. (4) The hold-only W1 guard: an indwelling stent's state ('The existing stent was in position and draining.') is not a performed act - applied only where the same service documents another stent performed (a new stent placed beside it still counts), so removing the phantom can never release a base-included hold or an unresolved item. NOTE, declared now: this guard does NOT hold h2-10's 43274 - 43274 covers the new stent placed across the stricture, which stays performed; the plan's 'so h2-10's 43274 is held' does not follow from the guard as specified (holding it needs the stent exchange read as its own act, the W1 vocabulary the plan parks for a coder or the owner).",
+ "base": "installed 80df1831d168 (cpt-studio identical to 06e6d204e); stage A's head 1e0733feb adds only the uncalled PS helpers",
+ "cues_added": [],
+ "movements": {},
+ "freeze": "NONE: no constant context.py or sections.py reads changes (cue inventory identical, nothing added), layout identical, NEW-SEND 0, NEW-TAKE 0, NEW-HELD 0, SEND->ASK 0, every request byte-identical, mention counts unchanged (services.mention_count counts SERVICES and ACTS, both untouched)",
+ "battery": [],
+ "battery_note": "No (bucket, status) movement in any of the 47 permanent rows, and no new violation. J4, J7, K2, K3 (and K1) stay held: E1 removes their extent hold, but each stays needs_clarification on performed_status (the routing-era reading of the passage the code cites holds it). J1-J3, J5, S1-S3 are head-less, so the instrument predicate does not apply and they read as installed (S2 and S3 keep their two installed violations: the head guard's cost).",
+ "battery_clarifications": [
+  ["J4 records review, colonoscopy named in plan only", "45385", ["extent", "performed_status"], ["performed_status"]],
+  ["J7 records review, completion rows only", "45385", ["extent", "performed_status"], ["performed_status"]],
+  ["K1 records review, copied banding narrative", "43244", ["extent", "performed_status"], ["performed_status"]],
+  ["K2 office note with copied EGD named", "43244", ["extent", "performed_status"], ["performed_status"]],
+  ["K3 copied colonoscopy, completion statement", "45385", ["extent", "performed_status"], ["performed_status"]],
+  ["bulb hot snare + planned colonoscopy", "43251", ["extent", "performed_status"], ["performed_status"]]
+ ],
+ "replay": {
+  "h4-01": "EQUAL",
+  "h4-02": "EQUAL",
+  "h4-05": "EQUAL",
+  "h2-08": "EQUAL",
+  "h4-03": {
+   "all_states": "inventory S1 gi.egd extent '' -> 'second part of duodenum' (status performed, completion complete, acts unchanged); 43244 fingerprint changes, its facts.required warn goes, its proposal clarification 'extent' goes",
+   "dated_states": ["walk", "doc:2026-10-08", "doc:2026-10-09", "far", "minus1", "plus1"],
+   "dated": "43244 selected/needs_clarification -> selected/ready (routing.family warn and evidence.support warn stay); completeness incomplete -> complete_pending_review; SOFT approvable[43244] and INFO author-code-ready[43244] become ok",
+   "none": "43244 stays selected/needs_clarification (the date is not known); completeness stays incomplete",
+   "counterfactual_note": "far, minus1, plus1 and doc:2026-10-09 are states in which installed takes a member date the document does not give as its own (the D1 hazard package PD closes); READY there is assessed under that wrong date"
+  },
+  "h4-06": {
+   "all_states": "inventory S1 gi.colonoscopy extent '' -> 'terminal ileum' (from 'Neoterminal ileum: normal.', in the layout's 'other' section, not under another occurrence); 45385 fingerprint changes, facts.required warn goes, proposal clarification 'extent' goes",
+   "dated_states": ["walk", "doc:2025-09-30", "far", "minus1", "plus1", "plan"],
+   "dated": "45385 selected/needs_clarification -> selected/ready (its routing.family warn stays); completeness incomplete -> complete_pending_review; SOFT approvable[45385] and INFO author-code-ready[45385] become ok",
+   "none": "45385 stays selected/needs_clarification; completeness stays incomplete",
+   "counterfactual_note": "doc:2025-09-30, far, minus1, plus1, plan take a date installed should not take (D1)"
+  },
+  "h4-04": {
+   "all_states": "inventory S2 gi.colonoscopy negated/unknown -> uncertain/complete (the colonoscope's reach is read as performed, routing's 'She has never had a colonoscopy.' then makes it uncertain); the rectal polyps lesion leaves the EGD (S1-L2) for the colonoscopy (S2-L1); S1 gi.egd otherwise unchanged ('incomplete: stomach', snare performed); 45378 excluded/excluded -> selected/needs_clarification with clarifications [extent, performed_status], fingerprint changes; 43251 unchanged (ready in every dated state, needs_clarification in none, fingerprint unchanged)",
+   "dated_states": ["walk", "doc:2026-09-28", "far", "minus1", "plan", "plus1"],
+   "dated": "completeness complete_pending_review -> incomplete (45378's open questions)",
+   "none": "completeness stays incomplete"
+  },
+  "h2-10": {
+   "all_states": "inventory S1 gi.ercp loses the act 'stent performed' read from 'The existing stent was in position and draining.' (7 acts instead of 8; the new stent placed across the stricture stays performed); every proposal, check status, fingerprint, question, offer and completeness unchanged (43274 stays ready in none and doc:2026-10-23)"
+  },
+  "unchanged_everywhere": "date channel (sends, takes, holds), every request sha256, routing, offers"
+ },
+ "h3": "The only movement: MUST binding.lower-not-on-upper FIXED in 46 documents (6 bidirectional reports with the active colonoscope phrase, a procedure head, rectal polyps left in place and unknown section headings; 40 seeded h4-04 variants keeping the source's colonoscope sentence under an unknown lower heading). No other cell moves; no MUST or SHOULD regression.",
+ "h5": "The state battery passes unchanged (it reads h4-04's 43251, which does not move).",
+ "h6": "One killing mutant per guard added: the instrument predicate's head, title, occurrence and date guards; the carry's part, part-kind, performed-family, region, reach, blank-line, field-row and two-family guards; E1's history/plan-section, occurrence and extent-word guards; W1's another-stent restriction. Each killed by tests/test_gi4_pi.py (unit tests, no database).",
+ "h7": "Linear: per instrument mention a bounded match after the word, and the head and title helpers once per document; per act or lesion a constant-time carry check (the blank-line search is bounded by CARRY_REACH); per service at most 64 completion statements read for E1. Every doubling ratio <= 2.3, analyze child <= 30 s, assess child <= 60 s.",
+ "suite": "Expected to move only what the declaration names: tests pinning the h4-03, h4-04, h4-06 replay (tests/test_gi4_replay.py until the pins are re-written in this package's final commit) and any existing fixture whose only hold was an extent the inventory's own endpoint statement now supplies (each reported, never edited here: the plan gives fixture re-pins to PX).",
+ "after_measurement": {
+  "provenance": "Appended on 2026-11-01 after H1-H6 were measured on 7704793e5 and on 0d8991aa2 (H7 and the suite are reported with the package, not here). This block is NOT part of the declaration made before coding: that declaration is every key above, unchanged and byte-identical to commit 178ca2405. It is kept beside the declaration so the record shows both. A difference named here is a movement the declaration did not name, found by measurement.",
+  "undeclared_movements": [
+   "h4-04 43251: its checks gain pfs.endoscopic_base (info) in the four states with fee rows, and its fingerprint changes: walk 92e16310 -> 9d6bff8e, minus1 f2652179 -> 17b0671f, plan 6be52d7c -> 70e539c4, plus1 d8ea3c06 -> fdf8baaa. Its bucket and status stay selected/ready in every dated state, and it stays held in none. The declaration said 43251's fingerprint was unchanged; that was wrong. The movement follows from the declared one: 45378 is now selected (held), not excluded, so a second endoscopic base code stands beside 43251. The judge's plan predicted this exact fingerprint for this package (F12: 92e16310 -> 9d6bff8e with the routing reach disabled) and asked for it to be declared. The one live decision on h4-04, 43251 approved under 92e16310, is invalidated with a recorded reason at its next assessment.",
+   "h4-04 S2 gi.colonoscopy: its scope moves from [1786, 1942] to [1514, 1942] in every state, because the colonoscope's reach sentence is now its evidence. No second review is offered (offers unchanged). A member-asked second review of a colonoscopy item would send this wider excerpt as a new request."
+  ],
+  "declared_but_measured_otherwise": [
+   "h2-10: the declaration said '7 acts instead of 8'. Measured: 8 merged acts on both trees. Installed merged the phantom stent act (S1-A3, 'The existing stent was in position and draining.') with the impression's 'Biliary stent exchanged: one plastic stent removed and one new plastic stent placed.' That act is gone, and the impression's restatement now stands as its own act S1-A10, stent performed. Act kinds and statuses are unchanged, as are every proposal, check, fingerprint, question, offer and completeness.",
+   "battery_clarifications: on 7704793e5, exactly the six declared rows (J4, J7, K1, K2, K3, bulb hot snare) lost their extent clarification. After 0d8991aa2, E1 needs _pi_today_report: a procedure report head, no around-procedure title and no office visit routing reads as done. All six now keep their extent hold, as installed, and no battery row differs from installed in any field. The fix followed an adversarial probe: on 7704793e5 an outside banding narrative pasted into an office note or a records review was READY on E1 alone. Installed holds those shapes, and so does 0d8991aa2.",
+   "h6: 19 mutants, all killed: the 18 declared plus pi-office-visit for the guard 0d8991aa2 adds."
+  ]
+ }
+}

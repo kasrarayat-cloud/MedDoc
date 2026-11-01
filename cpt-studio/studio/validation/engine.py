@@ -1587,7 +1587,8 @@ def _proposal(s: _Selection, key: str, enc: _Encounter) -> ProposalAssessment:
                                                 proposal_key=key, reason=reason,
                                                 question=f'Is {s.code} reported separately from {", ".join(included)} '
                                                          'for this examination?'))
-    states = checks.required_fact_states(profile, finding, enc.context)
+    # GI round 4 (E1): the matched documented service, whose own endpoint statement may supply the extent routing lacks
+    states = checks.required_fact_states(profile, finding, enc.context, service=m.service if m is not None else None)
     facts_check = checks.required_facts_check(profile, states)
     if facts_check:
         found.append(facts_check)
