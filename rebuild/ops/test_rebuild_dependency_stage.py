@@ -8,6 +8,7 @@ import base64
 from contextlib import redirect_stdout
 import csv
 import hashlib
+import importlib.util
 import io
 import json
 import os
@@ -173,8 +174,11 @@ class StageTests(unittest.TestCase):
             self.addCleanup(patcher.stop)
         self.check_calls = []
 
-        def checks(venv, snapshot, *, phase='after', runner=None, recorder=None):
+        def checks(venv, snapshot, *, phase='after', runner=None, recorder=None, proven=None):
             self.check_calls.append(phase)
+            if phase == 'before':       # the new dependency graph is judged from the proven wheels
+                self.assertEqual(sorted(proven), ['demo'])
+                self.assertEqual(proven['demo']['sha256'], stage.WHEELS['demo']['sha256'])
             return {'stubbed': True}
         patcher = patch.object(stage, 'checks', checks)
         patcher.start()
@@ -491,18 +495,18 @@ class StageTests(unittest.TestCase):
         self.assertEqual(self.check_calls, [])          # refused before the venv's own checks even ran
 
     def test_dep2_r1_the_venv_s_own_checks_run_before_pip_and_refuse_with_nothing_changed(self):
-        """DEP2-R1(B): a requirement already broken among the other distributions makes `pip check` exit 1 BEFORE pip:
-        the venv's own checks now run first, on the old versions, so that refusal comes with nothing moved."""
+        """DEP2-R1(B): what the venv's checks refuse (a broken import, a dependency graph pip check would refuse) is
+        refused BEFORE pip: the checks run first, on the old versions and the new graph, with nothing moved."""
         order = []
 
-        def checks(venv, snapshot, *, phase='after', runner=None, recorder=None):
+        def checks(venv, snapshot, *, phase='after', runner=None, recorder=None, proven=None):
             order.append('checks_' + phase)
             if phase == 'before' and getattr(self, 'broken', False):
-                raise stage.Refusal('pip_check_before_pip')
+                raise stage.Refusal('new_dependency_graph_before_pip')
             return {'stubbed': True}
         with patch.object(stage, 'checks', checks):
             self.broken = True
-            self.refused_before_pip('pip_check_before_pip')
+            self.refused_before_pip('new_dependency_graph_before_pip')
             self.broken = False
             pip = FakePip(self.venv, self.wheel, during=lambda: order.append('pip'))
             self.install(pip)
@@ -636,49 +640,101 @@ class ChecksTests(unittest.TestCase):
                     'cachecontrol_file_cache': str(site / 'cachecontrol/caches/file_cache.py'),
                     'certifi_ca_sha256': 'c' * 64, 'pillow': '13.0.0', 'png_roundtrip': True}
         broken = b'tqdm 4.70.1 requires lens-missing-dependency, which is not installed.\n'
+        proven = {package: {'requires': []} for package in stage.TRANSITIONS}
+        clean_graph = json.dumps({'distributions': stage.DISTRIBUTIONS, 'parsing_problems': False, 'missing': {},
+                                  'conflicting': {}, 'installed': {p: pair[0] for p, pair
+                                                                   in stage.TRANSITIONS.items()}}).encode()
+
+        def dependency_child(argv):
+            return argv[-1] == 'check' or argv[3:5] == ['-c', stage.GRAPH_PROGRAM]
 
         def runner(program, check):
             def run(argv, **options):
-                if argv[-1] == 'check':
+                if dependency_child(argv):
                     return subprocess.CompletedProcess(argv, *check)
                 return subprocess.CompletedProcess(argv, *program)
             return run
         umask = os.umask(0o077)
         try:
-            for phase, index, names, labels in (
+            for phase, index, names, labels, passing in (
                     ('after', 1, ('check_program', 'pip_check'),
-                     ('installed_versions_locations_and_round_trips', 'pip_check')),
-                    ('before', 0, ('check_program_before_pip', 'pip_check_before_pip'),
-                     ('versions_locations_and_round_trips_before_pip', 'pip_check_before_pip'))):
+                     ('installed_versions_locations_and_round_trips', 'pip_check'),
+                     b'No broken requirements found.\n'),
+                    ('before', 0, ('check_program_before_pip', 'new_dependency_graph_before_pip'),
+                     ('versions_locations_and_round_trips_before_pip', 'new_dependency_graph_before_pip'),
+                     clean_graph)):
                 good = (0, json.dumps(report(index)).encode(), b'')
-                with self.subTest(phase=phase, child='pip_check_exit_1'):
+                with self.subTest(phase=phase, child='dependency_check_exit_1'):
                     records = []
                     with self.assertRaises(stage.Refusal) as caught:
                         stage.checks(venv, snapshot, phase=phase, runner=runner(good, (1, broken, b'')),
-                                     recorder=records.append)
+                                     recorder=records.append, proven=proven)
                     self.assertEqual(str(caught.exception), labels[1])
                     self.assertEqual([(r['record'], r['returncode']) for r in records], [(names[0], 0), (names[1], 1)])
                     self.assertIn('lens-missing-dependency', records[1]['stdout'])
-                    self.assertEqual(records[1]['argv'][-1], 'check')
+                    # After pip, `pip check` itself; before pip, the new graph through pip's own check code.
+                    self.assertTrue(records[1]['argv'][-1] == 'check' if phase == 'after'
+                                    else records[1]['argv'][4] == stage.GRAPH_PROGRAM)
                 with self.subTest(phase=phase, child='import_error'):
                     records = []
                     failing = (1, b'', b'ModuleNotFoundError: No module named PIL\n')
                     with self.assertRaises(stage.Refusal) as caught:
                         stage.checks(venv, snapshot, phase=phase, runner=runner(failing, (0, b'', b'')),
-                                     recorder=records.append)
+                                     recorder=records.append, proven=proven)
                     self.assertEqual(str(caught.exception), labels[0])
                     self.assertEqual([(r['record'], r['returncode']) for r in records], [(names[0], 1)])
                     self.assertIn('No module named PIL', records[0]['stderr'])
                 with self.subTest(phase=phase, child='both_pass'):
                     records = []
-                    stage.checks(venv, snapshot, phase=phase,
-                                 runner=runner(good, (0, b'No broken requirements found.\n', b'')),
-                                 recorder=records.append)
+                    stage.checks(venv, snapshot, phase=phase, runner=runner(good, (0, passing, b'')),
+                                 recorder=records.append, proven=proven)
                     self.assertEqual([r['record'] for r in records], list(names))
             # The new versions are not the old ones: an 'after' report fails the 'before' comparison and vice versa.
             with self.assertRaises(stage.Refusal):
-                stage.checks(venv, snapshot, phase='before',
-                             runner=runner((0, json.dumps(report(1)).encode(), b''), (0, b'', b'')))
+                stage.checks(venv, snapshot, phase='before', proven=proven,
+                             runner=runner((0, json.dumps(report(1)).encode(), b''), (0, clean_graph, b'')))
+            # Before pip the wheels are required: the new graph is judged from their metadata.
+            with self.assertRaises(stage.Refusal) as caught:
+                stage.checks(venv, snapshot, phase='before', runner=runner(good, (0, clean_graph, b'')))
+            self.assertEqual(str(caught.exception), 'checks_phase')
+        finally:
+            os.umask(umask)
+
+    def test_r3_dep_1_the_new_graph_report_must_describe_this_venv_and_find_nothing_broken(self):
+        """R3-DEP-1: dependency_graph hands the child the NEW versions and the proven wheels' Requires-Dist, and
+        refuses unless the report names the calibrated population with the OLD versions installed and finds nothing
+        missing, conflicting or unparsable."""
+        venv = Path('/nonexistent/venv')
+        proven = {package: {'requires': ['typing_extensions>=4.0; python_version < "3.11"'] if package == 'pypdf'
+                            else []} for package in stage.TRANSITIONS}
+        clean = {'distributions': stage.DISTRIBUTIONS, 'parsing_problems': False, 'missing': {}, 'conflicting': {},
+                 'installed': {p: pair[0] for p, pair in stage.TRANSITIONS.items()}}
+        seen = []
+
+        def runner(report):
+            def run(argv, **options):
+                seen.append(argv)
+                return subprocess.CompletedProcess(argv, 0, report if isinstance(report, bytes)
+                                                   else json.dumps(report).encode(), b'')
+            return run
+        umask = os.umask(0o077)
+        try:
+            records = []
+            self.assertEqual(stage.dependency_graph(venv, proven, runner=runner(clean), recorder=records.append),
+                             clean)
+            self.assertEqual([r['record'] for r in records], ['new_dependency_graph_before_pip'])
+            self.assertEqual(seen[-1][1:5], ['-I', '-B', '-c', stage.GRAPH_PROGRAM])
+            self.assertEqual(json.loads(seen[-1][5]), {p: {'version': pair[1], 'requires': proven[p]['requires']}
+                                                       for p, pair in stage.TRANSITIONS.items()})
+            for change in ({'conflicting': {'tqdm': ['pypdf<6.21.4 (new graph has 6.21.4)']}},
+                           {'missing': {'pypdf': ['typing-extensions>=4.0']}}, {'parsing_problems': True},
+                           {'installed': dict(clean['installed'], pypdf='6.21.4')},
+                           {'distributions': stage.DISTRIBUTIONS + 1}):
+                with self.subTest(change=change), self.assertRaises(stage.Refusal) as caught:
+                    stage.dependency_graph(venv, proven, runner=runner(dict(clean, **change)))
+                self.assertEqual(str(caught.exception), 'new_dependency_graph_before_pip')
+            with self.assertRaises(stage.Refusal):
+                stage.dependency_graph(venv, proven, runner=runner(b'not json'))
         finally:
             os.umask(umask)
 
@@ -709,6 +765,98 @@ class ChecksTests(unittest.TestCase):
                 stage.checks(venv, after, runner=runner(good, b'pypdf 6.21.4 requires x, which is not installed.\n'))
         finally:
             os.umask(umask)
+
+
+def pip_package():
+    """The test interpreter's own pip package (GRAPH_PROGRAM runs pip's check code inside the venv)."""
+    spec = importlib.util.find_spec('pip')
+    return Path(spec.origin).parent if spec is not None and spec.origin else None
+
+
+def graph_venv(root, distributions):
+    """A venv the real interpreter runs (pyvenv.cfg, bin/python -> the interpreter) holding exactly the given
+    distributions {name: (version, [Requires-Dist, ...])}, with the test interpreter's pip linked in."""
+    venv = root / 'graph-venv'
+    site = venv / SITE
+    site.mkdir(parents=True)
+    (venv / 'bin').mkdir()
+    interpreter = Path(os.path.realpath(sys.executable))
+    (venv / 'bin/python').symlink_to(interpreter)
+    write(venv / 'pyvenv.cfg', ('home = %s\ninclude-system-site-packages = false\n' % interpreter.parent).encode())
+    (site / 'pip').symlink_to(pip_package(), target_is_directory=True)
+    for name, (version, requires) in distributions.items():
+        dist = site / (name + '-' + version + '.dist-info')
+        meta = 'Metadata-Version: 2.1\nName: %s\nVersion: %s\n' % (name, version)
+        write(dist / 'METADATA', (meta + ''.join('Requires-Dist: %s\n' % r for r in requires)).encode())
+        write(dist / 'RECORD', b'')
+    return venv
+
+
+@unittest.skipIf(pip_package() is None, 'pip is not importable by the test interpreter')
+class NewDependencyGraphTests(unittest.TestCase):
+    """R3-DEP-1 with pip's REAL check code (pip._internal.operations.check, what `pip check` runs) over fabricated
+    distributions: the pre-pip `pip check` judged the OLD graph, so a bound only the NEW versions violate passed it
+    and was refused only by the post-pip `pip check`, with all three packages moved (D2: no way back)."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name).resolve()
+        self.addCleanup(self.temporary.cleanup)
+        for name, value in {'TRANSITIONS': {'demo': ('1.0', '1.1')}, 'DISTRIBUTIONS': 2}.items():
+            patcher = patch.object(stage, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        umask = os.umask(0o077)
+        self.addCleanup(os.umask, umask)
+
+    def judge(self, name, distributions, requires=()):
+        venv = graph_venv(self.root / name, distributions)
+        records = []
+        try:
+            report = stage.dependency_graph(venv, {'demo': {'requires': list(requires)}}, recorder=records.append)
+        except stage.Refusal as refusal:
+            return str(refusal), records, venv
+        return report, records, venv
+
+    def old_graph_pip_check(self, venv):
+        """The check the stage ran before pip until round 4: `pip check` on the venv as it is (the OLD graph)."""
+        return subprocess.run([str(venv / 'bin/python'), '-I', '-B', *stage.PIP_CHECK], capture_output=True,
+                              env=stage.child_environment(), cwd=str(venv), timeout=120).returncode
+
+    def test_r3_dep_1_a_bound_only_the_new_version_violates_refuses_before_pip(self):
+        verdict, records, venv = self.judge('upper-bound', {'demo': ('1.0', []), 'other': ('2.0', ['demo<1.1'])})
+        self.assertEqual(verdict, 'new_dependency_graph_before_pip')
+        self.assertEqual(json.loads(records[0]['stdout'])['conflicting'], {'other': ['demo<1.1 (new graph has 1.1)']})
+        self.assertEqual(self.old_graph_pip_check(venv), 0)      # the old check passed this venv: the finding
+
+    def test_r3_dep_1_a_requirement_the_transition_fixes_no_longer_refuses(self):
+        verdict, records, venv = self.judge('fixed', {'demo': ('1.0', []), 'other': ('2.0', ['demo>=1.1'])})
+        self.assertEqual((verdict['conflicting'], verdict['missing'], verdict['installed']), ({}, {}, {'demo': '1.0'}))
+        self.assertEqual(self.old_graph_pip_check(venv), 1)      # the old check refused it although pip fixes it
+
+    def test_r3_dep_1_the_new_wheels_requirements_are_judged_with_pip_s_marker_rules(self):
+        base = {'demo': ('1.0', []), 'other': ('2.0', [])}
+        cases = {'applicable_missing': (['missing-thing>=1; python_version >= "3"'], 'new_dependency_graph_before_pip'),
+                 'applicable_conflict': (['other>=3; python_version >= "3"'], 'new_dependency_graph_before_pip'),
+                 'applicable_satisfied': (['other>=2.0; python_version >= "3"'], None),
+                 'extra_only_or_other_python': (['missing-thing; extra == "full"', 'other>=3; python_version < "3"'],
+                                                None)}
+        for name, (requires, label) in cases.items():
+            with self.subTest(case=name):
+                verdict, records, _ = self.judge(name, base, requires)
+                if label is None:
+                    self.assertEqual((verdict['missing'], verdict['conflicting']), ({}, {}))
+                else:
+                    self.assertEqual(verdict, label)
+                    report = json.loads(records[0]['stdout'])
+                    self.assertTrue(report['missing'] or report['conflicting'])
+
+    def test_r3_dep_1_a_venv_that_is_not_the_calibrated_population_refuses(self):
+        verdict, _, _ = self.judge('not-the-old-version', {'demo': ('0.9', []), 'other': ('2.0', [])})
+        self.assertEqual(verdict, 'new_dependency_graph_before_pip')
+        verdict, _, _ = self.judge('extra-distribution', {'demo': ('1.0', []), 'other': ('2.0', []),
+                                                          'third': ('1.0', [])})
+        self.assertEqual(verdict, 'new_dependency_graph_before_pip')
 
 
 class PublishedTests(unittest.TestCase):

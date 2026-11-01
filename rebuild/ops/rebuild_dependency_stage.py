@@ -31,13 +31,19 @@ sha256 under --require-hashes; the units are proven drained immediately before t
 its outcome through ``recorder`` ('pip_process' and 'outcome' records), with a MEASURED venv state on any failure
 after pip starts, and every refusal is this module's Refusal (a footprint refusal or a timeout included).
 
-EVERY REFUSAL THE VENV CAN ALREADY DECIDE IS ENFORCED BEFORE PIP (the second refutation): the calibrated population
-(64 distributions, pip 24.0, the premise of the uninstall proof and of the generated metadata) from the before-
-snapshot, and the venv's own checks (imports and round trips on the OLD versions, then `pip check`), run in the venv
-before pip. Each check child is recorded under its own name and refused under its own label, before pip and after.
-SIGTERM, SIGINT and SIGHUP are BLOCKED for the whole of install_once: no handler or KeyboardInterrupt can cut it
-short, a signal taken before pip refuses with nothing changed, and one taken after pip started is recorded while the
-stage runs to its end. Every venv child starts with them blocked and is SIGKILLed if the stage process dies.
+BEFORE PIP ALSO (the second and third refutations): the calibrated population (64 distributions, pip 24.0, the
+premise of the uninstall proof and of the generated metadata) from the before-snapshot; the venv's own imports and
+round trips on the OLD versions; and the NEW dependency graph (dependency_graph: pip's own check_package_set over the
+installed distributions with the three targets replaced by the proven wheels' versions and Requires-Dist, markers
+evaluated as pip evaluates them), which is the refusal the post-pip `pip check` makes, decided while nothing has
+moved. A requirement broken only in the OLD graph, which the transition fixes, no longer refuses. What only pip's own
+work can show is still judged AFTER pip, with the packages already moved and no way back (D2): transition() (the
+installed bytes, modes, owners, directories and generated metadata), the imports and round trips of the NEW versions,
+and `pip check` itself. Each check child is recorded under its own name and refused under its own label, before pip
+and after. SIGTERM, SIGINT and SIGHUP are BLOCKED for the whole of install_once: no handler or KeyboardInterrupt can
+cut it short, a signal taken before pip refuses with nothing changed, and one taken after pip started is recorded
+while the stage runs to its end. Every venv child starts with them blocked and is SIGKILLed if the stage process
+dies.
 """
 import argparse
 import base64
@@ -108,6 +114,32 @@ print(json.dumps({'pypdf':pypdf.__version__,'pypdf_file':pypdf.__file__,'pdf_rou
  'msgpack':msgpack.version,'msgpack_extension':_cmsgpack.__file__,'msgpack_c_packer':msgpack.Packer is _cmsgpack.Packer,
  'msgpack_roundtrip':msgpack.unpackb(packed,raw=False)==value,'cachecontrol_file_cache':file_cache.__file__,
  'certifi_ca_sha256':hashlib.sha256(open(certifi.where(),'rb').read()).hexdigest(),'pillow':PIL.__version__,'png_roundtrip':png_ok},sort_keys=True))
+"""
+#: The NEW dependency graph, judged in the venv before pip by the code `pip check` itself runs (pip 24.0,
+#: pip._internal.operations.check): the installed distributions as pip reads them, with each target replaced by its
+#: new version and its wheel's Requires-Dist, filtered as pip's iter_dependencies filters an installed distribution's
+#: (no marker, or a marker true with extra ""). check_package_set then reports what the post-pip `pip check` would:
+#: a requirement of any distribution on a target that the new version does not satisfy, a target requirement nothing
+#: installed satisfies, and every requirement already broken among the others. argv[1] is the targets as JSON.
+GRAPH_PROGRAM = r"""import json,sys
+from pip._vendor.packaging.requirements import Requirement
+from pip._vendor.packaging.utils import canonicalize_name
+from pip._vendor.packaging.version import parse
+from pip._internal.operations.check import PackageDetails,check_package_set,create_package_set_from_installed
+targets=json.loads(sys.argv[1])
+package_set,problems=create_package_set_from_installed()
+installed={}
+for name,row in targets.items():
+    key=canonicalize_name(name)
+    installed[name]=str(package_set[key].version) if key in package_set else None
+    requirements=[Requirement(text) for text in row['requires']]
+    applicable=[r for r in requirements if not r.marker or r.marker.evaluate({'extra':''})]
+    package_set[key]=PackageDetails(parse(row['version']),applicable)
+missing,conflicting=check_package_set(package_set)
+report={'distributions':len(package_set),'installed':installed,'parsing_problems':bool(problems),
+ 'missing':{name:sorted(str(r) for _,r in rows) for name,rows in missing.items()},
+ 'conflicting':{name:sorted('%s (new graph has %s)' % (r,v) for _,v,r in rows) for name,rows in conflicting.items()}}
+print(json.dumps(report,sort_keys=True))
 """
 
 
@@ -514,21 +546,49 @@ def pip_arguments(requirements):
             '-r', str(requirements)]
 
 
-#: The venv's own checks: (record and refusal of the imports child, record and refusal of `pip check`, version index).
+#: The venv's own checks: (record and refusal of the imports child, record and refusal of the dependency check,
+#: version index). Before pip the dependency check is GRAPH_PROGRAM over the NEW graph; after pip it is `pip check`.
 CHECK_PHASES = {'before': ('check_program_before_pip', 'versions_locations_and_round_trips_before_pip',
-                           'pip_check_before_pip', 0),
+                           'new_dependency_graph_before_pip', 0),
                 'after': ('check_program', 'installed_versions_locations_and_round_trips', 'pip_check', 1)}
 
 
-def checks(venv, snapshot, *, phase='after', runner=subprocess.run, recorder=None):
-    """Imports and round trips in the venv itself, then pip's own dependency check.
+def dependency_graph(venv, proven, *, runner=subprocess.run, recorder=None):
+    """GRAPH_PROGRAM in the venv: the dependency graph pip will leave behind, judged before pip runs.
 
-    'before' runs them before pip on the OLD versions, so whatever they would refuse after pip (a broken PIL, a
-    requirement already broken among the other distributions) refuses while nothing has moved; 'after' proves the new
-    versions. Each child is recorded under its own name and refused under its own label: a broken requirement is
-    'pip_check' (or 'pip_check_before_pip'), never the 'venv_child_failed' of a failed pip install.
+    ``proven`` holds the three wheels as wheel() proved them (their Requires-Dist). The report must describe this venv
+    (the calibrated number of distributions, the OLD versions installed) and find nothing missing, nothing
+    conflicting and no metadata pip could not parse; anything else refuses 'new_dependency_graph_before_pip', and the
+    child's record keeps the report. This is the refusal the post-pip `pip check` would make, decided while nothing
+    has moved; a requirement that the transition FIXES (one broken only in the old graph) no longer refuses.
     """
-    require(phase in CHECK_PHASES, 'checks_phase')
+    label = CHECK_PHASES['before'][2]
+    targets = {package: {'version': TRANSITIONS[package][1], 'requires': [str(r) for r in proven[package]['requires']]}
+               for package in sorted(TRANSITIONS)}
+    raw = interpreter(venv, ['-c', GRAPH_PROGRAM, json.dumps(targets, sort_keys=True)], runner=runner,
+                      recorder=recorder, record=label, failure=label)
+    try:
+        value = json.loads(raw)
+    except ValueError:
+        raise Refusal(label) from None
+    require(type(value) is dict and value.get('installed') == {p: pair[0] for p, pair in TRANSITIONS.items()}
+            and value.get('distributions') == DISTRIBUTIONS, label)
+    require(value.get('parsing_problems') is False and value.get('missing') == {} and value.get('conflicting') == {},
+            label)
+    return value
+
+
+def checks(venv, snapshot, *, phase='after', runner=subprocess.run, recorder=None, proven=None):
+    """Imports and round trips in the venv itself, then a dependency check.
+
+    'before' runs them before pip on the OLD versions, so whatever they would refuse after pip (a broken PIL) refuses
+    while nothing has moved, then judges the NEW dependency graph (dependency_graph, with ``proven``, the wheels), so
+    what the post-pip `pip check` would refuse refuses before pip too; 'after' proves the new versions and runs
+    `pip check` itself. Each child is recorded under its own name and refused under its own label: a broken
+    requirement is 'pip_check' (or 'new_dependency_graph_before_pip'), never the 'venv_child_failed' of a failed pip
+    install.
+    """
+    require(phase in CHECK_PHASES and (phase == 'after' or proven is not None), 'checks_phase')
     program_record, program_label, pip_label, index = CHECK_PHASES[phase]
     raw = interpreter(venv, ['-c', CHECK_PROGRAM], runner=runner, recorder=recorder, record=program_record,
                       failure=program_label)
@@ -546,6 +606,9 @@ def checks(venv, snapshot, *, phase='after', runner=subprocess.run, recorder=Non
                 'certifi_ca_sha256': snapshot['files'][SITE + '/certifi/cacert.pem']['sha256'],
                 'pillow': snapshot['census']['distributions']['pillow'], 'png_roundtrip': True}
     require(value == expected, program_label)
+    if phase == 'before':
+        dependency_graph(venv, proven, runner=runner, recorder=recorder)
+        return value
     output = interpreter(venv, PIP_CHECK, runner=runner, recorder=recorder, record=pip_label, failure=pip_label)
     require(output.strip() == b'No broken requirements found.', pip_label)
     return value
@@ -579,8 +642,9 @@ def install_once(venv, wheel_directory, before, *, drained, recorder, live=False
     pip (nothing changed), or failed or refused after pip started, with the venv state MEASURED at that moment.
     ``work`` is a private directory for the pinned wheel copies (a new temporary directory by default).
 
-    Every refusal the venv can decide before pip is enforced before pip: the residue, the old versions, the
-    uninstall proof and the calibrated population from ``before``, then the venv's own checks on the old versions.
+    Before pip: the residue, the old versions, the uninstall proof and the calibrated population from ``before``,
+    the wheels' proofs, then the venv's own checks on the old versions and the new dependency graph (checks, phase
+    'before'). What only pip's work can show (transition(), the new versions' checks, `pip check`) comes after pip.
     SIGTERM, SIGINT and SIGHUP stay blocked for the whole call: one taken before pip refuses ('interrupted_by_<name>',
     nothing changed); one taken after pip started is recorded in the outcome ('signals_received', also in the proof)
     while the stage runs every check to its end, and the caller judges it (calibrate exits 2).
@@ -600,11 +664,12 @@ def install_once(venv, wheel_directory, before, *, drained, recorder, live=False
             require(versions(before) == {p: pair[0] for p, pair in TRANSITIONS.items()}, 'old_versions_installed')
             uninstall = {package: uninstall_proof(before, package) for package in sorted(TRANSITIONS)}
             population = calibrated_population(before)
+            # The wheels are proven before the checks: the new dependency graph is judged from their metadata.
+            proven = wheels(wheel_directory)
             refuse_if_signalled(received, 'checks_before_pip')
-            checks(venv, before, phase='before', runner=runner, recorder=recorder)
+            checks(venv, before, phase='before', runner=runner, recorder=recorder, proven=proven)
             # The snapshot is the venv as found, and the checks above changed nothing in it.
             module.require_exact(before, module.snapshot(venv), 'venv_unchanged_since_its_snapshot')
-            proven = wheels(wheel_directory)
             if work is None:
                 work = tempfile.mkdtemp(prefix='rebuild-deps-')
                 scratch.append(work)
