@@ -1,6 +1,6 @@
 """GI round 4 harness, H4: the assess battery (ops/gi4/battery.py). Synthetic provider answers go through
-jobs._assess_child in-process, offline, for the permanent rows: the minimal design's 28 cases and the judge's J1-J8,
-K1-K3, E1-E4 and S1-S3.
+jobs._assess_child in-process, offline, for the permanent rows: the minimal design's 28 cases, the judge's J1-J8,
+K1-K3, E1-E4 and S1-S3, and the h4-05 counterfactual (43259 citing the narrative: EXCLUDED as installed).
 
 Pinned against installed 80df1831d168 (tests/fixtures/gi4/pins/battery.json): every code's bucket and status, and every
 property violation. A package that moves a row re-pins it beside its declaration ("battery": [[row, code, from, to]]),
@@ -25,12 +25,13 @@ class AssessBatteryTests(SimpleTestCase):
         cls.result = battery.run()
 
     def test_the_permanent_rows(self):
-        self.assertEqual(len(battery.CASES), 46)
+        self.assertEqual(len(battery.CASES), 47)
         names = list(battery.CASES)
         for label in ('J1', 'J2', 'J3', 'J4', 'J5', 'J6', 'J7', 'J8', 'K1', 'K2', 'K3', 'E1', 'E2', 'E3', 'E4', 'S1', 'S2',
                       'S3'):
             self.assertEqual(sum(n.startswith(label + ' ') for n in names), 1, label)
-        self.assertEqual(sum(re.match(r'[JKES][1-8] ', n) is None for n in names), 28)  # the minimal design's
+        self.assertEqual(sum(re.match(r'(?:[JKES][1-8]|S3h) ', n) is None for n in names), 28)  # the minimal design's
+        self.assertEqual(sum(n.startswith('S3h ') for n in names), 1)  # the h4-05 counterfactual
 
     def test_every_code_is_assessed_with_its_truth(self):
         for name, row in self.result.items():
@@ -46,7 +47,8 @@ class AssessBatteryTests(SimpleTestCase):
         known = {(n, c) for n, codes in PIN['rows'].items() for c, (_, _, v) in codes.items() if v}
         now = {(n, c) for n, row in self.result.items() for c, p in row['proposals'].items() if p['violations']}
         self.assertEqual(sorted(now - known), [])
-        self.assertEqual(len(known), 4)  # installed: two C4 E/M READYs, two S2/S3 exclusions of a done colonoscopy
+        # installed: two C4 E/M READYs, two S2/S3 exclusions of a done colonoscopy, the h4-05 counterfactual's exclusion
+        self.assertEqual(len(known), 5)
 
     def test_the_properties(self):
         ready = {'bucket': 'selected', 'status': 'ready', 'modifiers': [], 'checks': []}

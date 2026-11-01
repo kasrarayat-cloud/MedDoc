@@ -3,8 +3,10 @@ evidence), read as the stages read it: the analyze child's facts and routing (jo
 merged (jobs._merged_facts), and the assess child (jobs._assess_child) with an in-memory answer and no reference rows.
 In-process and offline: nothing is sent and no database is read.
 
-Permanent rows: the minimal design's 28 cases (its battery.py, verbatim) and the judge's J1-J8, K1-K3, E1-E4 and S1-S3
-(judge_battery.py, verbatim). Each code carries a PROVISIONAL truth (no qualified GI coder has reviewed it):
+Permanent rows: the minimal design's 28 cases (its battery.py, verbatim), the judge's J1-J8, K1-K3, E1-E4 and S1-S3
+(judge_battery.py, verbatim), and the h4-05 counterfactual (the judge's F1: 43259 citing the narrative is EXCLUDED as
+installed, the agreement gate's excluding side; package PA declares it moving to held). Each code carries a
+PROVISIONAL truth (no qualified GI coder has reviewed it):
   done             performed today: an exclusion is a violation
   done_incomplete  performed today, incompletely: an exclusion is a violation, and READY needs an incompleteness signal
                    (a modifier consideration or a non-pass check)
@@ -28,6 +30,7 @@ from types import SimpleNamespace
 from ops.gi4 import boot
 
 B = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
+H405 = (boot.HARNESS_TREE / 'tests' / 'fixtures' / 'gi4' / 'regression' / 'h4-05.txt').read_text(encoding='utf-8')
 FILL = ''.join(f'Line {i} of the outside summary lists medications and allergies in detail.\n' for i in range(8))
 SNARE = 'A 10 mm polyp was removed with a hot snare.'
 
@@ -273,6 +276,10 @@ CASES = {
                                                     '10 mm polyp was removed with a hot snare.\n\nAssessment\nAdenoma '
                                                     'history.\n', [('45385', 'A 10 mm polyp was removed with a hot snare.',
                                                                     'not_done')]),
+    # --- the h4-05 counterfactual (the judge's F1; the diagnosis's S3): an EUS code citing the narrative under the
+    # runaway "Prior Studies" section, which both readers read as historical from that one section ---
+    'S3h h4-05 counterfactual, EUS code citing the narrative': (H405, [('43259', 'A linear echoendoscope was introduced '
+                                                                                  'by mouth.', 'done')]),
 }
 REVIEW_NOTE = ('Provisional author truths; no qualified GI coder has reviewed them. "X|MAY" marks a truth the second '
                'review disputes: J8 (its identity sentence reads like h4-06\'s own), E3 (the judge: arguable), and the '

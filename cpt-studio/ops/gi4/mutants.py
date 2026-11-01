@@ -89,7 +89,9 @@ MUTANTS = (
            '    if not raw.strip() or len(raw) > 24:\n        return None\n    label = normalize_label(raw)', 'freeze'),
     Mutant('freeze-mention-count', "the analyze stage's mention count", 'studio/gi/detect.py',
            '    return len(_service_mentions(text))\n', '    return len(_service_mentions(text)) // 2\n', 'freeze'),
-    # --- H4's code-level guard ---
+    # --- H4's code-level guard: the agreement an exclusion needs (both directions) ---
+    Mutant('battery-agreement-never', "the second reader's agreement can exclude", 'studio/validation/engine.py',
+           '    return not _second_reading(outcome, text, day, pages)\n', '    return False\n', 'battery'),
     Mutant('battery-exclusion-needs-agreement', 'an exclusion needs the second reader to agree', 'studio/validation/engine.py',
            '    return not _second_reading(outcome, text, day, pages)\n', '    return True\n', 'battery'),
     # --- H5's state guards (the throwaway test database) ---
