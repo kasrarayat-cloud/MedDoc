@@ -1372,3 +1372,106 @@ before the code that depends on it.
     - **The usage limit.** At about 11:20Z the previous account's weekly limit stopped every running agent: P1 round
       4's last gate, both rebuild-compatibility lenses and two of three CPT Studio reader lenses. The owner switched
       accounts at about 16:45Z. Only commits survived; every lost run was re-run or is named above as not re-run.
+
+## Owner directive, 2026-11-01 — the CPT Studio GI coding harness (Corti, Astra, Fable, references, reconciliation)
+
+Received directly from the owner in session 1bf3b49c on 1 November 2026 (about 21:00Z), as pasted instruction text,
+while round 4 was in progress (the rebuild release `c8b54991` installed; CPT Studio still serving `80df1831d168`). It
+followed the owner's question whether Astra and Fable were reviewing the files, to which the session answered that the
+review lenses were engineering subagents on the session's own model, and that Astra and Fable are, in the 2026-10-23
+directive, alternative CPT-proposal engines. Recorded by the receiving session in its first commit, together with the
+acceptance checklist it requires (`CPT-HARNESS-CHECKLIST.md`), before the work that depends on it. Verbatim:
+
+> Implement and install the actual CPT Studio GI coding harness on cpt.quillmd.com: Corti plus independent Astra and Fable document reviews, supported by authoritative reference retrieval and evidence-based reconciliation.
+>
+> This is a product implementation task. Engineering subagents reviewing software do not satisfy the requirement for models reviewing each uploaded clinical document.
+>
+> Keep the existing single GI category and approved website design. Carry the work through implementation, installation and meaningful verification on the actual website.
+>
+> CHECKLIST AND REPORTING CONTRACT
+>
+> Create CPT-HARNESS-CHECKLIST.md in the repository before making changes. Use the checklist below as the acceptance contract.
+>
+> Every item must have:
+> - Status: NOT RUN, IN PROGRESS, PASS, FAIL or BLOCKED.
+> - Implementation revision.
+> - Verification evidence location.
+> - Remaining action, if any.
+>
+> Use [x] only for PASS backed by evidence. Writing code, passing a mocked test or repeating another report does not establish live completion.
+>
+> Complete prerequisite items before advancing to dependent stages. Independent preparation may continue in parallel. Investigate and repair failures; do not remove requirements or weaken checks to tick a box.
+>
+> Update the checklist after every completed stage and provide a concise progress report stating completed items, the current item and the next action. Preserve previous failures and measurements.
+>
+> STAGE 1 — ESTABLISH THE ACTUAL STARTING POINT
+>
+> - [ ] Inspect the current installed revision, active work and existing provider integrations. Coordinate with the current deployment owner and use a fresh worktree; do not edit the shared deployment checkout.
+> - [ ] Produce a clear map of the current document-to-code workflow. Distinguish production clinical reviewers from engineering agents.
+> - [ ] Verify backend access to Corti, Astra and Fable: exact provider, API model/endpoint identifier and a minimal synthetic capability check. Desktop model names are insufficient. Do not silently substitute a different model.
+> - [ ] Identify the authorized CPT/reference sources and retrieval tools actually available, including releases, effective dates and permitted uses. Record unavailable dependencies accurately.
+>
+> An unavailable model or reference source blocks its dependent live stage, not all independent engineering work. Consolidate any unavoidable external dependency into one precise request.
+>
+> STAGE 2 — READ THE DOCUMENT CORRECTLY
+>
+> - [ ] Preserve the original document, its hash and revision. Support the existing Word, native PDF, scanned PDF and pasted-text paths with traceable extraction/OCR.
+> - [ ] Verify relevant PDF upload-security repairs and parser safeguards on the actual applicable paths. Address documented encoding, checkbox and extraction failures; an unreadable symbol must not silently become a negative clinical fact.
+> - [ ] Represent each service separately: date, performed/planned/historical/negated/uncertain status, anatomy, extent, technique, lesion identity, provider role and exact supporting evidence.
+> - [ ] Repair shared interpretation defects without patient-specific exceptions. Do not feed all reviewers the same incorrect interpretation as unquestionable truth. Preserve access to source text and page evidence where supported.
+>
+> STAGE 3 — IMPLEMENT THREE GENUINE PARTICIPANTS
+>
+> - [ ] Corti independently receives the supported source input and returns proposals. Preserve its selected codes, alternatives, evidence, raw response and metering without rewriting its original answer.
+> - [ ] Astra independently examines the source and produces supported service facts, proposed CPT codes, missing-service findings and clarification needs.
+> - [ ] Fable independently examines the source and produces the same structured assessment before seeing Astra’s or Corti’s conclusions.
+> - [ ] Record each participant’s actual model/endpoint, input revision, request identity, output and usage. Three summaries of one provider response do not count as three reviews.
+>
+> Respect each endpoint’s capabilities. Corti need not perform web searches itself; the harness can validate its proposals through a separate retrieval stage.
+>
+> STAGE 4 — RETRIEVE, VALIDATE AND RECONCILE
+>
+> - [ ] Implement actual reference retrieval. Retain source identity, retrieved passages, release/effective dates and tool traces. Model memory or an unsupported assertion that a code was “verified online” does not pass.
+> - [ ] Check proposals against documented services, authorized CPT guidance and applicable payer/bundling/modifier rules. Public web search supplements authoritative sources; it does not replace missing licensed content.
+> - [ ] Reconcile the complete service inventory against all three outputs, including services Corti omitted. Check completeness as well as whether returned codes appear plausible.
+> - [ ] Resolve disagreements through source evidence and applicable rules. Majority agreement is not proof. Preserve unresolved contradictions and ask focused questions only when documentation actually requires them.
+> - [ ] Distinguish a proposed code, a reference-supported code and a reviewer-approved code. No automatic approval merely because models agree.
+>
+> STAGE 5 — VERIFY GENERALIZATION BEFORE DEPLOYMENT
+>
+> - [ ] Reproduce the retained date, status, extent, EUS, EGD/biopsy and ERCP discrepancies. Distinguish application errors, provider omissions and unresolved coding judgments.
+> - [ ] Predeclare a small independently authored unseen synthetic set before execution. Include varied document formats, multiple procedures, conflicting dates, planned/negated services and incomplete procedures. Record expectations and their source independently of system output.
+> - [ ] Run the declared set and report every result: correct findings, missed services, unsupported proposals, unnecessary questions, legitimate abstentions and failures. Do not select only successful documents afterward and present them as full acceptance.
+> - [ ] Verify tenant isolation, duplicate prevention, unknown-outcome recovery, evidence preservation and unchanged historical approvals/exports.
+>
+> Qualified GI-coder adjudication is required for a credible clinical accuracy claim. It is not a prerequisite for implementing and privately testing this harness.
+>
+> STAGE 6 — INSTALL AND VERIFY THE WEBSITE
+>
+> - [ ] Install the verified release on the existing login-protected cpt.quillmd.com website, with rollback evidence and preservation checks. Verify the served revision.
+> - [ ] Show understandable per-document progress: Corti review, Astra review, Fable review, reference validation, clarification needs and final review status. Keep detailed traces in the appropriate administrative view.
+> - [ ] Through an ordinary authorized account, upload fresh synthetic documents and prove that all three production participants and reference retrieval actually execute. Replay alone cannot satisfy this item.
+> - [ ] Complete necessary clarification, review and synthetic decisions; verify persistence after reload and download the actual reviewed reports. Check their codes, evidence and decisions against saved state.
+> - [ ] Label automated synthetic decisions accurately. Using a reviewer account does not turn an agent-executed approval into human clinical review.
+> - [ ] Verify the doctor-facing demonstration on desktop and mobile, including genuine failure and unavailable-provider states.
+>
+> EXECUTION AUTHORITY
+>
+> Use the existing standing synthetic-testing authority and authorized provider accounts. Do not revive superseded campaign funding limits or request repeated approvals for already-authorized tests.
+>
+> Use purposeful bounded batches, finite deadlines, serialized clinical provider calls and one integration/deployment owner. Reconcile unknown outcomes before resubmitting. Preserve costs, raw responses, failures and historical reservations.
+>
+> Do not purchase subscriptions, accept new vendor agreements, process real patients, submit claims or publicly launch the service under this instruction.
+>
+> FINAL DELIVERY
+>
+> Return:
+> 1. The complete checklist with evidence-backed statuses.
+> 2. Installed revision and website link.
+> 3. Demonstration encounter links and actual downloaded reports.
+> 4. Proof of which providers/models ran and which references were retrieved.
+> 5. Measured usage and unresolved issues.
+> 6. Two separate verdicts: functional synthetic-demo readiness and independently established clinical accuracy.
+>
+> Do not declare the full harness complete while required participants or reference validation are missing. Do not stop at a plan, local preview or installation report. Deliver and verify the actual website workflow within the authorized scope.
+
