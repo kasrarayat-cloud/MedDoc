@@ -6141,14 +6141,15 @@ def _procedure_facts(an: Analysis, family: str, attributed, only_family: bool,
     return [f for f in facts if f], bool(incomplete) or short
 
 
-# GI round 4 (C4): the cues of an E/M reading held because the note may document no in-person visit (the words that
-# say so are quoted after it), and of an E/M time or decision-making statement held because a time it names may be
+# GI round 4 (C4): the cues of an E/M reading held because the note may document no in-person visit (the line that
+# says so is quoted after it), and of an E/M time or decision-making statement held because a time it names may be
 # another date's.
 EM_NOT_IN_PERSON = 'uncertain: the note may document no in-person visit'
 EM_ANOTHER_TIME = 'uncertain: the E/M statement names another time'
 _PV1_HEAD_LINES = 6  # the head lines read for a title naming a telephone or audio-only encounter (C4)
-_PV1_QUOTE = 80  # the most of the not-in-person words a cue quotes
-_PV1_QUOTE_WINDOW = 4 * _PV1_QUOTE  # the most text a session-2 quote is cut from (a bound per mention: H7)
+_PV1_QUOTE = 80  # the most of the other-visit words a cue quotes
+_PV1_QUOTE_WINDOW = 4 * _PV1_QUOTE  # the most text a quote is cut from (a bound per mention: H7)
+_PV1_LINE_QUOTE = 100  # repair cycle 1 (CTS-2): the most of its line a C4 cue quotes (the cue then fits an excerpt)
 # C2's inline label ("Complexity of decision making: moderate."), as cues.MDM_LEVEL's third prefix reads it
 _PV1_DECISION_LABEL = re.compile(r'(?:complexity|level)\s+of\s+decision[- ]making\b', re.A | re.I)
 
@@ -6170,72 +6171,359 @@ def _em_base_reading(an: Analysis, m: Mention) -> Reading:
     return _pv1_held(an, m, reading)
 
 
-def _pv1_activities(an: Analysis, m: Mention) -> Optional[int]:
-    """Where the list of what an E/M time statement's minutes covered starts: the end of the word that opens it
-    (cues.EM_TIME_ACTIVITIES: "covering", "including", "spent on"), written right after the minutes; None when there is
-    none, and for every mention that is no time statement (GI round 4, C1: "52 minutes, covering her history, ..., the
-    orders, and documentation" names the visit's work, and "the orders" never re-times it)."""
+def _pv1_activity_word(an: Analysis, m: Mention) -> Optional[re.Match]:
+    """The word that opens the list of what an E/M time statement's minutes covered (cues.EM_TIME_ACTIVITIES:
+    "covering", "including", "spent on"), written right after the minutes; None when there is none, and for every
+    mention that is no time statement."""
     if m.kind != 'em-time':
         return None
-    listed = cues.EM_TIME_ACTIVITIES.match(an.text, m.end)
-    return listed.end() if listed else None
+    return cues.EM_TIME_ACTIVITIES.match(an.text, m.end)
 
 
-# C1: the planned cues an activity list may carry about the visit's own planning work ("the orders", "the referral to",
-# "scheduled", "arranging", "recommendations", "awaiting", "next steps"). Only these are skipped after the activity word
-# (a closed list: a planned cue not named here governs, as installed). A planned time ("in 2 weeks", "next week",
-# "tomorrow", "due in") and every cue of another status (cancelled, historical, incomplete, uncertain) still govern the
-# time statement: they may say the minutes were another day's, or the visit never happened (GI round 4, session 2).
-_PV1_PLAN_WORK_CUES = frozenset({'ordered', 'referred for', 'scheduled', 'booked', 'recommend', 'consider', 'will',
-                                 'plan', 'to be done', 'should undergo', 'upcoming'})
-_PV1_NEXT_STEPS = re.compile(r'next\s+steps?\Z', re.A | re.I)  # the 'next' cue's only plan-work reading
+def _pv1_activities(an: Analysis, m: Mention) -> Optional[int]:
+    """Where C1 may skip plan words: the end of the activity word of time statement ``m`` (GI round 4, C1: "52 minutes,
+    covering her history, ..., the orders, and documentation" names the visit's work, and "the orders" never re-times
+    it). Repair cycle 1 (EMR-3, a releasing rule): only where the note positively documents today's in-person office
+    visit (_pv1_office_visit) and the statement is that visit's own (_pv1_statement_refused); None otherwise, so
+    installed's reading stands."""
+    listed = _pv1_activity_word(an, m)
+    if listed is None:
+        return None
+    if _pv1_office_visit(an) is not None or _pv1_statement_refused(an, m) is not None:
+        return None  # cycle 1: C1 releases only with positive evidence of today's office visit
+    return listed.end()
+
+
+# C1: the planned cues an activity list may carry about the visit's own planning work. Repair cycle 1 (EMR-3): only a
+# NOUN of that work is skipped - "the orders" ('ordered'), "the referral to" ('referred for'), "her recommendations"
+# ('recommend'), "next steps" ('next'); never a word that can name the minutes' occasion ("the scheduled visit", "the
+# upcoming infusion visit", "the time that will be spent at her procedure visit", "arranging", "awaiting"), and never a
+# planned time or a cue of another status, which govern the time statement as installed.
+_PV1_PLAN_WORK = {'ordered': re.compile(r'orders?\Z', re.A | re.I),
+                  'referred for': re.compile(r'referral\s+(?:to|for)\Z', re.A | re.I),
+                  'recommend': re.compile(r'recommendations?\Z', re.A | re.I),
+                  'next': re.compile(r'next\s+steps?\Z', re.A | re.I)}
 
 
 def _pv1_activity_work(cue: Cue) -> bool:
     """Whether clause cue ``cue``, standing at or after the activity word of an E/M time statement, names the visit's
-    own planning work, so _clause_reading_cues skips it (GI round 4, C1): a planned cue named in _PV1_PLAN_WORK_CUES,
-    or the 'next' cue read as "next steps". Never a planned time and never a cue of another status."""
+    own planning work by a noun of it, so _clause_reading_cues skips it (GI round 4, C1; narrowed in repair cycle 1)."""
     if cue.status != 'planned':
         return False
-    return cue.name in _PV1_PLAN_WORK_CUES or (cue.name == 'next' and _PV1_NEXT_STEPS.match(cue.text) is not None)
+    noun = _PV1_PLAN_WORK.get(cue.name)
+    return noun is not None and noun.match(cue.text) is not None
 
 
 def _pv1_held(an: Analysis, m: Mention, reading: Reading) -> Reading:
-    """An E/M mention's ``reading``, held (uncertain, a doubt) when it would read performed and the note may document no
-    in-person visit (_not_in_person: "Total time: 15 minutes." in a telephone-only note read 99212 ready; GI round 4,
-    C4), or, for a time statement, when a time no listed cue reads attaches to it (installed's _another_time, now applied
-    to E/M time: "Total time at her last visit was 40 minutes." read 99213 ready). C2's new decision-making label takes
-    the same time hold, so the level it reads is never another visit's ("Complexity of decision making: high (at her last
-    visit)."). Hold-only: a reading that is not performed is returned as it is, so nothing installed holds, excludes or
-    reads not-performed is changed here.
-
-    Session 2: C2's label reads a level only when it opens its sentence ("Previous note: complexity of decision making:
-    high." is held), and a time statement or a label is also held when its sentence names another visit by a
-    preposition, with or without a determiner (_pv1_other_visit: "Total time at last visit was 40 minutes.")."""
+    """An E/M mention's ``reading``, held (uncertain, a doubt) where it would read performed and:
+    - it is an MDM level read after "shared" (repair cycle 1, EMR-9);
+    - it is a time or decision-making statement that names another visit or another time (_pv1_other_time: installed's
+      _another_time applied to E/M time, the other-visit words; "Total time at her last visit was 40 minutes.");
+    - the note states that today's encounter was no in-person visit (_not_in_person, C4: "Telephone encounter").
+    In that order, so a statement held as another visit's or time's is never counted as today's basis (_em_facts).
+    C2's label reaches this only when its release holds: a refused label is no mention at all (_pv1_read_labels).
+    Hold-only: a reading that is not performed is returned as it is, so nothing installed holds, excludes or reads
+    not-performed is changed here."""
     if reading.status != 'performed':
         return reading
+    if m.kind == 'em-mdm' and _PV1_SHARED_LEAD.search(an.text, max(0, m.start - 16), m.start):
+        return Reading('uncertain', (_PV1_SHARED,), 'cue', doubt=True)
+    if m.kind in ('em-time', 'em-mdm'):
+        other = _pv1_other_time(an, m)
+        if other is not None:
+            return Reading('uncertain', other, 'cue', doubt=True)
     words = _not_in_person(an, m)
     if words is not None:
         return Reading('uncertain', (f"{EM_NOT_IN_PERSON}: '{words}'",), 'cue', doubt=True)
-    if m.kind == 'em-time' or _pv1_decision_label(an, m):
-        label = m.kind != 'em-time'
-        # from the start of the sentence the statement opens in to the end of the one it closes in (a field label such
-        # as "Total time:" ends a sentence of its own in the layout)
-        s, e = an.lay.sentence_for(m.start, m.start + 1)[0], an.lay.sentence_for(max(m.start, m.end - 1), m.end)[1]
-        if label and not _pv1_opens_its_sentence(an.text, m.start, s):
-            # the quote is cut from a bounded window, never from the sentence's start: one sentence may hold many labels
-            said = ' '.join(an.text[max(s, m.start - _PV1_QUOTE_WINDOW):m.end].split())[-_PV1_QUOTE:]
-            return Reading('uncertain', (f"{_PV1_LABEL_INSIDE}: '{said}'",), 'cue', doubt=True)
-        held = _another_time(an, m.start, m.end)
-        if held:
-            return Reading('uncertain', (EM_ANOTHER_TIME, held), 'cue', doubt=True)
-        other = _pv1_other_visit(an, s, max(e, m.end), label)
-        if other is not None:
-            return Reading('uncertain', (EM_ANOTHER_TIME, f"{ANOTHER_TIME_PREFIX}: '{other}' may place it on another "
-                                                          'date'), 'cue', doubt=True)
     return reading
 
 
+# --- repair cycle 1: positive evidence that the note documents today's in-person office visit (C1 and C2) -------------
+# An exam or vital-signs heading ("Physical exam", "Vital Signs and Exam", "Objective"), alone on its line or as a field
+# with its content after the colon ("Exam: abdomen soft").
+_PV1_EXAM_LINE = re.compile(
+    r'^[ \t]*(?:(?:physical|general|focused|abdominal|targeted)[ \t]+)?(?:exam(?:ination)?|PE|vital[ \t]+signs?|vitals|'
+    r'objective)(?:[ \t]*(?:and|&|/|,)[ \t]*(?:(?:physical[ \t]+)?exam(?:ination)?|vital[ \t]+signs?|vitals))?[ \t]*'
+    r'(?::[ \t]*(?P<rest>[^\n]*))?[ \t]*$', re.A | re.I | re.M)
+# ... whose content records an exam: a physical finding, or a vital sign with its value (repair cycle 1, second session:
+# a date such as "10/01" or an imaging size such as "3 cm" is no exam), never "deferred" or "not done" ...
+_PV1_EXAM_CONTENT = re.compile(
+    r'\b(?:BP|blood\s+pressure)\b[^\n\d]{0,12}\d{2,3}[ \t]*/[ \t]*\d{2,3}\b'
+    r'|\b(?:HR|pulse|heart\s+rate|RR|resp(?:iratory)?(?:\s+rate)?|SpO2|O2\s+sat(?:uration)?|sat(?:uration)?|'
+    r'temp(?:erature)?|weight|wt|BMI)\b[^\n\d]{0,12}\d{1,3}'
+    r'|\b\d{2,3}(?:\.\d+)?[ \t]*(?:kg|lbs?|bpm|mmHg)\b|\b\d{2,3}(?:\.\d)?[ \t]*\u00b0'
+    r'|\b(?:abdomen|abdominal\s+exam|belly)\b[^\n.;]{0,40}?\b(?:soft|tender|non-?tender|distended|non-?distended|benign|'
+    r'obese|scaphoid|firm|rigid)\b|\bnon-?tender\b|\bbowel\s+sounds\b'
+    r'|\b(?:lungs?|chest)\b[^\n.;]{0,30}?\bclear\b|\bclear\s+to\s+auscultation\b|\bCTAB?\b'
+    r'|\b(?:heart|cardiac)\b[^\n.;]{0,30}?\b(?:regular|RRR|murmurs?)\b|\bRRR\b|\bmurmurs?\b'
+    r'|\b(?:edema|oedema|jaundiced?|icter(?:ic|us)|anicteric|pallor|asterixis|ascites|guarding|rebound|hepatomegaly|'
+    r'splenomegaly|hepatosplenomegaly|organomegaly|caput\s+medusae|spider\s+angiomas?|palmar\s+erythema)\b'
+    r'|\bno\s+acute\s+distress\b|\bNAD\b|\balert\s+and\s+oriented\b|\bA\s*&\s*Ox?\s*[1-4]?\b|\bwell[- ]appearing\b',
+    re.A | re.I)
+_PV1_NO_EXAM = re.compile(r'[ \t]*(?:deferred|not[ \t]+(?:done|performed|examined|obtained|applicable)|n/?a|none|declined|'
+                          r'omitted|unable|telephone|phone|video)\b', re.A | re.I)
+# ... and a content line saying its values were reported or are another visit's records no exam of today's visit
+_PV1_REPORTED = re.compile(
+    r'\b(?:reported|reports?|self-?reported|patient-?reported|per\s+(?:the\s+)?(?:patient|pt|her|him|family|caregiver)|'
+    r'by\s+(?:the\s+)?(?:patient|pt)|at\s+home|home\s+(?:readings?|monitor\w*|log|values?|measurements?|BP|blood\s+'
+    r'pressure|scale|weights?)|(?:prior|last|previous|earlier)\s+(?:visit|note|exam\w*|encounter))\b', re.A | re.I)
+# Words saying the note may document no in-person visit today, read outside history sections (a plan clause carrying a
+# planned cue speaks of a future contact): a telephone, portal, message or remote contact, an e-consult or a records
+# review, a missed or cancelled visit. Read only to REFUSE a release; a closed list never releases anything.
+_PV1_NOT_A_VISIT = re.compile(
+    r'\b(?:tele)?phon(?:e|ed|es|ing)\b|\btelephonic(?:ally)?\b|\bcall(?:s|ed|ing|back)?\b|\bvoice-?mail\b|\baudio\b'
+    r'|\bvideo\b|\btele-?(?:health|medicine|visit|consult\w*)\b|\bvirtual\b|\bremote(?:ly)?\b|\bportal\b|\bmy-?chart\b'
+    r'|\bmessag(?:e|es|ed|ing)\b|\be-?mail\b|\bin-?basket\b|\be-?consult\w*\b|\binter-?professional\b'
+    r'|\b(?:records?|chart)\s+review\b|\bno[- ]?show\w*\b|\b(?:did\s+not|didn\'t|failed\s+to|unable\s+to)\s+(?:arrive|'
+    r'attend|show|come|keep|make)\b|\bmissed\b|\bcancel\w*\b|\bre-?schedul\w*\b|\bleft\s+without\b|\bLWBS\b'
+    r'|\bnot\s+seen\b|\bnurse[- ](?:visit|only)\b'
+    # repair cycle 1, second session (refusals only): an e-visit, an online visit or consult, an asynchronous contact,
+    # an injection or RN visit
+    r'|\be-?visits?\b|\bonline\s+(?:visits?|consult\w*|encounters?)\b|\basynchronous\b|\binjection\s+(?:visit|only)\b'
+    r'|\bRN\s+(?:visit|only)\b', re.A | re.I)
+# Words of a procedure day (a pre-procedure history and physical, sedation), read everywhere but a plan clause carrying a
+# planned cue: such a note's visit statement is the procedure's own assessment, not an office visit.
+_PV1_PROCEDURE_DAY = re.compile(
+    r'\bH\s*&\s*P\b|\bhistory\s+and\s+physical\b|\bpre-?(?:procedure|procedural|op|operative|sedation|anesthesia|'
+    r'anaesthesia|endoscopy)\b|\bendoscopy\s+(?:unit|suite|center|centre|lab)\b|\bASA\s+(?:class\s+)?(?:I{1,3}V?|IV|[1-5])'
+    r'\b|\bairway\b|\bmallampati\b|\bNPO\b|\bsedation\b|\banaesthesia\b|\banesthesia\b|\bpropofol\b|\bCRNA\b'
+    r'|\bmidazolam\b'
+    # repair cycle 1, second session (refusals only): today's procedure, a procedure today, the day of the procedure
+    r"|\btoday'?s\s+(?:colonoscopy|endoscopy|procedure|EGD|ERCP|EUS|sigmoidoscopy)\b"
+    r'|\b(?:colonoscopy|endoscopy|procedure|EGD|ERCP|EUS|sigmoidoscopy)\s+(?:is\s+|was\s+)?(?:scheduled\s+|planned\s+|'
+    r'booked\s+)?(?:for\s+)?(?:today|this\s+(?:morning|afternoon))\b'
+    r'|\bday\s+of\s+(?:the\s+|her\s+|his\s+|their\s+)?(?:procedure|colonoscopy|endoscopy|EGD|ERCP|EUS)\b', re.A | re.I)
+
+
+def _pv1_office_visit(an: Analysis) -> Optional[str]:
+    """None when the note positively documents today's in-person office visit; else why not, in a few words (repair
+    cycle 1: C1 and C2 release only with this evidence). Read once per document."""
+    key = ('pv1-office-visit',)
+    if key not in an.memo:
+        an.memo[key] = _pv1_office_visit_refusal(an)
+    return an.memo[key]
+
+
+def _pv1_office_visit_refusal(an: Analysis) -> Optional[str]:
+    text = an.text
+    if gi_sections.around_procedure_title(text):
+        return 'a note written around a procedure'
+    words = _pv1_first_signal(an, _PV1_PROCEDURE_DAY, everywhere=True)
+    if words is not None:
+        return f"'{words}'"
+    words = _pv1_first_signal(an, _PV1_NOT_A_VISIT, everywhere=False)
+    if words is not None:
+        return f"'{words}'"
+    setting = ctx.extract_context(text)['setting']
+    if setting.origin != 'document' or setting.value != 'office':
+        return 'no office setting is documented'
+    if not _pv1_exam_with_content(text):
+        return 'no exam or vital signs are recorded'
+    return None
+
+
+def _pv1_first_signal(an: Analysis, pattern: re.Pattern, everywhere: bool) -> Optional[str]:
+    """The first match of ``pattern`` that may speak of today: none in a plan-section clause carrying a planned cue (a
+    future contact or procedure), and - unless ``everywhere`` - none in a history-section clause that does not say
+    today. One pass over the text; each match costs a clause lookup."""
+    text = an.text
+    for x in pattern.finditer(text):
+        kind = an.lay.section_at(x.start()).kind
+        if kind in ELSEWHERE_SECTIONS:
+            cs, ce = an.lay.window(an.lay.clauses_for(x.start(), x.end())[0], x.start(), x.end(), CLAUSE_REACH)
+            if kind == 'plan' and any(c.status == 'planned' for c in an.cues_in(cs, ce)):
+                continue
+            if kind == 'history' and not everywhere and cues.TODAY.search(text, cs, ce) is None:
+                continue
+        return ' '.join(x.group(0).split())
+    return None
+
+
+def _pv1_exam_with_content(text: str) -> bool:
+    """Whether an exam or vital-signs heading (or field) records content: its own value, or the next non-blank line,
+    states a physical finding or a vital sign with its value (_PV1_EXAM_CONTENT), is no 'deferred' or 'not done', and
+    does not say its values were reported or are another visit's (_PV1_REPORTED)."""
+    for x in _PV1_EXAM_LINE.finditer(text):
+        rest = x.group('rest')
+        if rest is None or not rest.strip():
+            start = x.end() + 1
+            while start < len(text):
+                nl = text.find('\n', start)
+                line_end = len(text) if nl < 0 else nl
+                if text[start:line_end].strip():
+                    break
+                start = line_end + 1
+            else:
+                continue
+            rest = text[start:min(line_end, start + 4 * _PV1_LINE_QUOTE)]
+        if not _PV1_NO_EXAM.match(rest) and _PV1_EXAM_CONTENT.search(rest) and not _PV1_REPORTED.search(rest):
+            return True
+    return False
+
+
+# The label's or the statement's own line and the heading-like line that governs it (repair cycle 1, C2 and C1).
+_PV1_OPENING = frozenset(' \t\r-*.)0123456789\u2022')
+_PV1_LINE_REACH = 600  # the most of a statement's line read after it; a longer line is refused
+# Another visit or note named without a preposition ("per prior note", "Total time last visit:"); never a reviewed
+# item of it ("her last visit's results", "the prior visit notes").
+_PV1_UNPREPPED_VISIT = re.compile(
+    r'\b(?:last|previous|prior|earlier|preceding|most\s+recent)\s+(?:office\s+|clinic\s+)?(?:visits?|appointments?|'
+    r'encounters?|consult(?:ation)?s?|notes?)\b(?![\'\u2019]s\b)(?!\s+(?:notes?|results?|records?|findings?|labs?|'
+    r'reports?|summary|summaries)\b)', re.A | re.I)
+_PV1_ADDENDUM = re.compile(r'\b(?:addend(?:um|a)|late\s+entry)\b', re.A | re.I)
+_PV1_BARE_MONTH = re.compile(r'\b(?:january|february|march|april|june|july|august|september|october|november|december)\b'
+                             r'(?![\s.,]*\d)', re.A | re.I)
+_PV1_SHORT_DATE = re.compile(r'\b\d{1,2}/\d{1,2}\b(?!/)', re.A)
+
+
+def _pv1_read_labels(an: Analysis) -> tuple[Mention, ...]:
+    """Routing's E/M mentions less C2's labels whose release is refused (_pv1_label_refused): repair cycle 1 keeps C2
+    only where the note positively documents today's in-person office visit and the label is that visit's own, and
+    otherwise DROPS it - the label is not read at all, so installed's reading of the document stands exactly (installed
+    reads no such label: a held label would add a hold installed never made, and a performed_status question saying no
+    documentation establishes the visit beside a visit read performed). One exception, which releases nothing: where C4
+    holds the whole document (_pv1_not_in_person_words), a label that is the visit's own statement
+    (_pv1_statement_refused) is kept, and C4 holds it with every other E/M reading (_pv1_held) - the note states today's
+    decision-making level and that the encounter may have been no in-person visit, and the hold says so (CTS-2);
+    dropping it would leave a telephone note whose only E/M statement it was with no E/M reading at all, which the
+    documented-service reader then reads as a performed visit from its evaluation wording. Called once per document,
+    before routing reads any mention (detect._analysis)."""
+    if not any(_pv1_decision_label(an, m) for m in an.em):
+        return an.em
+    held = _pv1_not_in_person_words(an)[0] is not None  # read with every label still among the E/M statements
+    return tuple(m for m in an.em if not _pv1_decision_label(an, m) or _pv1_label_refused(an, m) is None
+                 or (held and _pv1_statement_refused(an, m) is None))
+
+
+def _pv1_label_refused(an: Analysis, m: Mention) -> Optional[str]:
+    """Why C2's label ``m`` is not read (repair cycle 1, a releasing rule): the note does not positively document today's
+    in-person office visit (_pv1_office_visit), or the label is not that visit's own (_pv1_statement_refused); None
+    when its level is read. The words are for tests and probes: a refused label is no mention (_pv1_read_labels)."""
+    why = _pv1_office_visit(an)
+    if why is not None:
+        return f'no office visit is documented: {why}'
+    return _pv1_statement_refused(an, m)
+
+
+def _pv1_statement_refused(an: Analysis, m: Mention) -> Optional[str]:
+    """Why statement ``m`` (C2's label, or C1's time statement) is not today's visit's own; None when it is: it opens
+    its own line, its section is no history or indication section, the heading-like line governing it names no other
+    occurrence, nor does any heading-like line further up its section (_pv1_section_heading_above), and the rest of its
+    line names no other visit, time or date (repair cycle 1). Bounded per statement: the look-back runs over its line's
+    opening characters, at most 6 lines or 600 characters for the governing line and the section's reach
+    (sections.HEADING_REACH_LINES, HEADING_REACH_CHARS), the look-ahead over at most _PV1_LINE_REACH characters."""
+    key = ('pv1-refused', m.start, m.end)
+    if key not in an.memo:
+        an.memo[key] = _pv1_statement_refusal(an, m)
+    return an.memo[key]
+
+
+def _pv1_statement_refusal(an: Analysis, m: Mention) -> Optional[str]:
+    text = an.text
+    line_start = _pv1_line_start(text, m.start)
+    if line_start is None:
+        return 'it does not open its line'
+    if an.lay.section_at(m.start).kind in ('history', 'indication'):
+        return 'it stands in a history or indication section'
+    governing = _pv1_governing_line(text, line_start)
+    if governing is not None and _pv1_names_another_occurrence(an, *governing):
+        return f"the line governing it names another occurrence: '{' '.join(text[governing[0]:governing[1]].split())}'"
+    above = _pv1_section_heading_above(an, m.start, line_start)
+    if above is not None:
+        return above
+    nl = text.find('\n', m.end, m.end + _PV1_LINE_REACH + 1)
+    line_end = len(text) if nl < 0 and len(text) - m.end <= _PV1_LINE_REACH else nl
+    if line_end < 0:
+        return 'its line runs on past what is read'
+    words = _pv1_names_another_occurrence(an, m.end, line_end, rest=True)
+    if words:
+        return f"its line names another occurrence: '{words}'"
+    return None
+
+
+def _pv1_section_heading_above(an: Analysis, pos: int, line_start: int) -> Optional[str]:
+    """Why a statement at ``pos`` (its line starting at ``line_start``) may stand under another occurrence's heading
+    within its own section (repair cycle 1, second session: a pasted prior note further down today's assessment, under
+    "Prior office note from September", more than _pv1_governing_line's 6 lines above its label): a heading-like line
+    between the section's start and the statement - the section's own heading included - that names another occurrence
+    (_pv1_names_another_occurrence), or a section start beyond sections.HEADING_REACH_LINES lines or
+    HEADING_REACH_CHARS characters back (fail-closed); None when there is none. Bounded by that reach."""
+    text = an.text
+    lo = an.lay.section_at(pos).start
+    if line_start - lo > gi_sections.HEADING_REACH_CHARS:
+        return "it stands beyond its section's reach"
+    end = line_start - 1
+    for _ in range(gi_sections.HEADING_REACH_LINES):
+        if end < lo:
+            return None
+        start = text.rfind('\n', lo, end) + 1
+        start = max(start, lo)
+        line = text[start:end].strip()
+        if line and len(line) <= 60 and line[-1] not in '.;!?,' and any(c.isalpha() for c in line):
+            words = _pv1_names_another_occurrence(an, start, end)
+            if words:
+                return f"a heading above it names another occurrence: '{' '.join(line.split())}'"
+        end = start - 1
+    return "it stands beyond its section's reach"
+
+
+def _pv1_line_start(text: str, start: int) -> Optional[int]:
+    """The start of the line that ``start`` opens - nothing but white space, a list mark or a list number before it on
+    its line - or None. Reads back only over such characters."""
+    i = start - 1
+    while i >= 0 and text[i] in _PV1_OPENING:
+        i -= 1
+    if i >= 0 and text[i] != '\n':
+        return None
+    return i + 1
+
+
+def _pv1_governing_line(text: str, line_start: int) -> Optional[tuple[int, int]]:
+    """The nearest heading-like line above the line at ``line_start``: a short line (at most 60 characters) with no
+    sentence end (a field label's ':' is allowed), within 6 lines and 600 characters; None when there is none."""
+    lo = max(0, line_start - 600)
+    end = line_start - 1
+    for _ in range(6):
+        if end <= lo:
+            return None
+        start = text.rfind('\n', lo, end) + 1
+        line = text[max(start, lo):end].strip()
+        if line and len(line) <= 60 and line[-1] not in '.;!?,' and any(c.isalpha() for c in line):
+            return max(start, lo), end
+        end = start - 1
+    return None
+
+
+def _pv1_names_another_occurrence(an: Analysis, start: int, end: int, rest: bool = False):
+    """The words in [start, end) naming another occurrence: for a governing line (``rest`` False) a word of
+    sections.ANOTHER_OCCURRENCE_HEAD, an addendum or a bare month; for the rest of a statement's line, another visit
+    with or without a preposition; for both, a time cues.OTHER_TIME reads that may not be the date of service, or a date
+    other than the date of service. None (or '') when there are none."""
+    text = an.text
+    if rest:  # another visit, never one a comparison leads ("high, as at her prior visit")
+        found = next((x for pattern in (_PV1_AT_OTHER_VISIT, _PV1_UNPREPPED_VISIT)
+                      for x in pattern.finditer(text, start, end) if not _pv1_compared(text, x.start())), None)
+    else:
+        found = (gi_sections.ANOTHER_OCCURRENCE_HEAD.search(text, start, end) or _PV1_ADDENDUM.search(text, start, end)
+                 or _PV1_BARE_MONTH.search(text, start, end))
+    if found is not None:
+        return ' '.join(found.group(0).split())[:_PV1_QUOTE]
+    times, starts = _other_times(an)
+    for ts_, te_, name, x in times[bisect.bisect_left(starts, start):]:
+        if ts_ >= end:
+            break
+        if te_ <= end and not _today_compatible(an, name, x) and not _pv1_compared(text, ts_):
+            return ' '.join(x.group(0).split())[:_PV1_QUOTE]  # a comparison is no other time, as in _attached_times
+    for d in an.dates_in(start, end):
+        if an.service_date is None or ctx.compare_to_service(d, an.service_date) != 0:
+            return ' '.join(text[d.start:d.end].split())
+    short = _PV1_SHORT_DATE.search(text, start, end)
+    if short is not None and not an.dates_in(short.start(), short.end()):
+        return short.group(0)
+    return None
+
+
+# --- the other-time holds: another visit's or another time's statement ------------------------------------------------
 # Session 2 (C2, C4-time): another visit named by a preposition, with or without a determiner ("at last visit", "during
 # her previous appointment", "from the prior visit"). Installed's OTHER_TIME 'another encounter' needs the determiner
 # and reads at, during and on; a time statement reads those three only ("notes from the last visit" are the visit's
@@ -6244,32 +6532,122 @@ _PV1_AT_OTHER_VISIT = re.compile(
     r'\b(?P<prep>at|during|on|from)\s+(?:(?:her|his|their|the|a|an)\s+)?(?:(?:last|previous|prior|recent|most\s+recent|'
     r'earlier|preceding)\s+)+(?:office\s+|clinic\s+)?(?:visits?|appointments?|encounters?|consult(?:ation)?s?)\b',
     re.A | re.I)
-# What may stand before C2's label in a sentence the label opens: white space, a list mark or a list number.
-_PV1_OPENING = frozenset(' \t\r\n-*.)0123456789\u2022')
-_PV1_LABEL_INSIDE = ("uncertain: the decision-making label does not open its sentence, so its level may be another "
-                     "note's")
+# Repair cycle 1 (EMR-7): an activity list that states a duration or a time re-times its statement ("including 20
+# minutes at last visit"); one that names only the work done today is read for no other time.
+_PV1_LIST_TIME = re.compile(r'\b(?:\d+|one|two|three|four|five|ten|fifteen|twenty|thirty|forty|sixty)[\s-]*(?:minutes?|'
+                            r'mins?|hours?|hrs?)\b|\btime\b', re.A | re.I)
+_PV1_PAREN = re.compile(r'[ \t]*\((?P<inside>[^()\n]{0,80})\)', re.A)
+# Repair cycle 1, second session (EMR-7): an activity-list item that is today's work ON an earlier event - an activity
+# noun leads it ("review of the notes from her hospitalization in August", "counseling on the results discussed at her
+# last visit") - names no other occasion of the minutes. Items are cut at ',', ';' and parentheses.
+_PV1_ACTIVITY_NOUN = re.compile(
+    r'\b(?:review(?:s|ed|ing)?|discuss(?:ion|ions|ed|ing)?|counsel(?:l)?(?:ing|ed)?|comparison|compar(?:ed|ing)|'
+    r'interpret(?:ation|ed|ing)?|summar(?:y|ies|ized|ised|izing|ising)|reconcil(?:iation|ed|ing)|educat(?:ion|ed|ing))\b',
+    re.A | re.I)
+_PV1_ITEM_BREAK = re.compile(r'[,;()]', re.A)
+_PV1_ITEM_REACH = 200  # the most of a list item read on either side of the words in it; a longer item is read whole
+_PV1_ITEM_MATCHES = 8  # the most other-visit matches looked at past reviewed items per statement (then: held)
+# Repair cycle 1 (EMR-9): "shared decision making" gives no level, in installed's MDM reading too
+_PV1_SHARED_LEAD = re.compile(r'\bshared[\s-]+\Z', re.A | re.I)
+_PV1_SHARED = 'uncertain: shared decision making gives no level of medical decision making'
 
 
-def _pv1_opens_its_sentence(text: str, start: int, sentence_start: int) -> bool:
-    """Whether C2's label at ``start`` opens its sentence (GI round 4, session 2): nothing but white space, a list mark
-    or a list number stands before it in the sentence, and the sentence does not follow a field label's colon on the
-    same line ("Prior visit: Complexity of decision making: high.", which the layout may cut after the colon). Reads
-    back only over such characters and the blanks before the sentence, so each label costs the run of them."""
-    i = start - 1
-    while i >= sentence_start and text[i] in _PV1_OPENING:
-        i -= 1
-    if i >= sentence_start:
-        return False
-    while i >= 0 and text[i] in ' \t':
-        i -= 1
-    return i < 0 or text[i] != ':'
+def _pv1_other_time(an: Analysis, m: Mention) -> Optional[tuple[str, ...]]:
+    """The cues holding time or decision-making statement ``m`` because it names another visit or another time; None.
+
+    - A time statement: installed's _another_time and the other-visit words (at, during, on), over its sentence, except
+      in an activity-list item that is today's work on an earlier event (_pv1_reviewed; repair cycle 1, EMR-7:
+      "including review of the notes from her hospitalization in August"; "including her visit in August" and
+      "including 20 minutes at last visit" are read). Also another visit named without a preposition in its head, in a
+      parenthesis right after the minutes, or in such a list item (repair cycle 1, EMR-9: "Total time last visit: 40
+      minutes.", "45 minutes (today 25, previous visit 20)").
+    - C2's label: _another_time and the other-visit words (also 'from') over its sentence, as session 2 read it.
+    - Installed's MDM reading: the other-visit words (at, during, on) over its clause up to the level (repair cycle 1,
+      EMR-9: "MDM at her last visit: high.")."""
+    text = an.text
+    if m.kind == 'em-mdm' and not _pv1_decision_label(an, m):
+        cs = an.lay.clauses_for(m.start, m.end)[0][0]
+        other = _pv1_other_visit(an, min(cs, m.start), m.end, False)
+        return None if other is None else (EM_ANOTHER_TIME, f"{ANOTHER_TIME_PREFIX}: '{other}' may place it on another "
+                                                            'date')
+    label = m.kind != 'em-time'
+    # from the start of the sentence the statement opens in to the end of the one it closes in (a field label such as
+    # "Total time:" ends a sentence of its own in the layout)
+    s, e = an.lay.sentence_for(m.start, m.start + 1)[0], an.lay.sentence_for(max(m.start, m.end - 1), m.end)[1]
+    listed = _pv1_activity_word(an, m)
+    work = listed.end() if listed is not None else None  # where the list of today's work starts (time statements)
+    held = _pv1_another_time(an, m, work)
+    if held:
+        return (EM_ANOTHER_TIME, held)
+    other = _pv1_other_visit(an, s, max(e, m.end), label, work)
+    if other is None and not label:
+        other = _pv1_unprepped(an, s, m.end, work, max(e, m.end))
+    if other is not None:
+        return (EM_ANOTHER_TIME, f"{ANOTHER_TIME_PREFIX}: '{other}' may place it on another date")
+    return None
 
 
-def _pv1_other_visit(an: Analysis, start: int, end: int, label: bool) -> Optional[str]:
+def _pv1_another_time(an: Analysis, m: Mention, work: Optional[int]) -> Optional[str]:
+    """Installed's _another_time for mention ``m``; with ``work`` (where its activity list starts), never a time in a
+    list item that is today's work on an earlier event (_pv1_reviewed; repair cycle 1, EMR-7)."""
+    if work is None:
+        return _another_time(an, m.start, m.end)
+    key = ('pv1-another-time', m.start, m.end, work)
+    if key not in an.memo:
+        text = an.text
+        an.memo[key] = next((f"{ANOTHER_TIME_PREFIX}: '{x.group(0)}' may place it on another date"
+                             for _, x, _ in _attached_times(an, m.start, m.end)
+                             if x.start() < work or not _pv1_reviewed(text, work, x.start())), None)
+    return an.memo[key]
+
+
+def _pv1_reviewed(text: str, work: int, pos: int) -> bool:
+    """Whether the words at ``pos``, in an E/M time statement's activity list (it starts at ``work``), lie in a list item
+    that is today's work ON them (repair cycle 1, second session, EMR-7): an activity noun (_PV1_ACTIVITY_NOUN) stands
+    in the item before them, and the item states no duration or time (_PV1_LIST_TIME: "review of records for 20 minutes
+    at her last visit" is read). Items are cut at ',', ';' and parentheses; an item running past _PV1_ITEM_REACH
+    characters before the words is read (fail-closed). Bounded per call."""
+    lo = max(work, pos - _PV1_ITEM_REACH)
+    cut = max((b.end() for b in _PV1_ITEM_BREAK.finditer(text, lo, pos)), default=None)
+    if cut is None:
+        if lo > work:
+            return False
+        cut = work
+    nxt = _PV1_ITEM_BREAK.search(text, pos, min(len(text), pos + _PV1_ITEM_REACH))
+    item_end = nxt.start() if nxt is not None else min(len(text), pos + _PV1_ITEM_REACH)
+    return _PV1_ACTIVITY_NOUN.search(text, cut, pos) is not None and _PV1_LIST_TIME.search(text, cut, item_end) is None
+
+
+def _pv1_unprepped(an: Analysis, start: int, minutes_end: int, work: Optional[int], end: int) -> Optional[str]:
+    """Another visit named without a preposition in a time statement's head [start, minutes_end), in a parenthesis right
+    after its minutes, or in its activity list [work, end) outside the items that are today's work on an earlier event
+    (_pv1_reviewed), unless a comparison leads it (repair cycle 1, EMR-9). At most _PV1_ITEM_MATCHES matches are looked
+    at past reviewed items; then the statement is held (fail-closed)."""
+    text = an.text
+    spans = [(start, minutes_end, False)]
+    paren = _PV1_PAREN.match(text, minutes_end)
+    if paren is not None:
+        spans.append((*paren.span('inside'), False))
+    if work is not None and work < end:
+        spans.append((work, end, True))
+    for lo, hi, listed in spans:
+        for count, x in enumerate(_PV1_UNPREPPED_VISIT.finditer(text, lo, hi)):
+            words = ' '.join(x.group(0).split())[:_PV1_QUOTE]
+            if count >= _PV1_ITEM_MATCHES:
+                return words
+            if _pv1_compared(text, x.start()) or (listed and _pv1_reviewed(text, work, x.start())):
+                continue
+            return words
+    return None
+
+
+def _pv1_other_visit(an: Analysis, start: int, end: int, label: bool, work: Optional[int] = None) -> Optional[str]:
     """The words of the first _PV1_AT_OTHER_VISIT match lying wholly in [start, end) - for a time statement (``label``
-    False) never one led by 'from' - or None. A comparison is no other time ("high, as at her prior visit"), as for
-    installed's _another_time (_COMPARE_LEAD within 30 characters before, on the same line). Matched once per document;
-    each call costs one bisection."""
+    False) never one led by 'from', and with ``work`` never one in an activity-list item that is today's work on it
+    (_pv1_reviewed: at most _PV1_ITEM_MATCHES are passed over, then the next one is taken) - or None. A comparison is
+    no other time ("high, as at her prior visit"), as for installed's _another_time (_COMPARE_LEAD within 30 characters
+    before, on the same line). Matched once per document; each call costs a bisection and at most _PV1_ITEM_MATCHES + 1
+    matches."""
     key = ('pv1-other-visit',)
     if key not in an.memo:
         text = an.text
@@ -6281,58 +6659,308 @@ def _pv1_other_visit(an: Analysis, start: int, end: int, label: bool) -> Optiona
     every, every_starts, timed, timed_starts = an.memo[key]
     spans, starts = (every, every_starts) if label else (timed, timed_starts)
     i = bisect.bisect_left(starts, start)
-    if i < len(spans) and spans[i][1] <= end:
-        x, y = spans[i]
+    for count, (x, y) in enumerate(spans[i:i + _PV1_ITEM_MATCHES + 1]):
+        if y > end:
+            break
+        if count < _PV1_ITEM_MATCHES and work is not None and x >= work and _pv1_reviewed(an.text, work, x):
+            continue  # repair cycle 1, second session (EMR-7): today's work on an earlier visit
         return ' '.join(an.text[x:min(y, x + _PV1_QUOTE_WINDOW)].split())[:_PV1_QUOTE]
     return None
 
 
+# A preposition and a determiner that may stand between a comparison and the visit it names ("as at her prior visit":
+# the words "prior visit" are led by "as" through "at her"; repair cycle 1, second session)
+_PV1_VISIT_LEAD = re.compile(r'(?:\b(?:at|during|on|from|in|to|with)\s+)?(?:\b(?:her|his|their|the|a|an)\s+)?\Z',
+                             re.A | re.I)
+
+
 def _pv1_compared(text: str, start: int) -> bool:
     """Whether a comparison leads the words at ``start`` ("as at her prior visit"): _COMPARE_LEAD within the 30
-    characters before them, on their line (a bounded look-back, so each match costs at most 30 characters)."""
+    characters before them, on their line, through at most a preposition and a determiner (_PV1_VISIT_LEAD), so the
+    words of another visit named without its preposition are led as the prepositional match is. A bounded look-back:
+    each match costs at most 30 characters."""
     lo = max(0, start - 30)
     newline = text.rfind('\n', lo, start)
-    return _COMPARE_LEAD.search(text, newline + 1 if newline >= 0 else lo, start) is not None
+    lo = newline + 1 if newline >= 0 else lo
+    lead = _PV1_VISIT_LEAD.search(text, lo, start)
+    return _COMPARE_LEAD.search(text, lo, lead.start() if lead is not None else start) is not None
 
 
 def _pv1_decision_label(an: Analysis, m: Mention) -> bool:
     """Whether MDM mention ``m`` was read from C2's inline label ("Complexity of decision making: moderate."; GI round 4):
-    the only MDM reading _pv1_held gives the time hold, so installed's MDM readings are unchanged."""
+    the label whose release _pv1_label_refused gates."""
     return m.kind == 'em-mdm' and _PV1_DECISION_LABEL.match(an.text, m.start, m.end) is not None
 
 
+# --- C4: a statement that today's encounter was no in-person visit (repair cycle 1: TODAY's encounter type only) ------
+# The kinds of a cues.NOT_IN_PERSON match: an encounter-type field, an attendance predicate, a telephone compound, else
+# a telephone or audio contact ("by telephone", "telephonic", "audio-only").
+_PV1_MODE_FIELD = re.compile(r'(?:visit|encounter|appointment|contact|consult\w*|type|mode|modality|method)\b[^\n:]*?'
+                             r'[ \t]*[:\-][ \t]*(?:tele)?phone\Z', re.A | re.I)
+_PV1_ATTENDANCE = re.compile(r"not\s+seen|no\s+in[- ]person|no[- ]?show|did\s+not|didn't|failed\s+to|missed|cancell?ed|"
+                             r'left\s+without|LWBS', re.A | re.I)
+_PV1_COMPOUND = re.compile(r'(?:tele)?phone\s+(?P<noun>[\w/-]+)', re.A | re.I)
+_PV1_DATA_NOUN = re.compile(r'notes?|numbers?|lists?|logs?|records?|lines?|polic(?:y|ies)', re.A | re.I)
+# Another party to a contact: an interpreter, a historian, a clinician, a pharmacy, a family member, a caregiver
+_PV1_THIRD_PARTY = re.compile(
+    r'\b(?:interpret(?:er|ers|ation)|translat(?:or|ors|ion)|historians?|dr|doctors?|physicians?|surgeons?|clinicians?|'
+    r'providers?|nurses?|nursing|NP|PA|RN|pharmac(?:y|ies|ist|ists)|daughters?|sons?|husbands?|wife|wives|spouses?|'
+    r'partners?|mothers?|fathers?|parents?|caregivers?|guardians?|famil(?:y|ies)|sisters?|brothers?|siblings?|friends?|'
+    r'neighbou?rs?|colleagues?|consultants?|PCP|primary\s+care|referring|insur(?:er|ers|ance)|payers?|specialists?|'
+    r'\w+ologists?|staff|scheduler|front\s+desk)\b', re.A | re.I)
+# The patient named as a party to the contact
+_PV1_PATIENT_PARTY = re.compile(
+    r'\b(?:with|to)\s+(?:the\s+)?(?:patient|pt)\b|\b(?:the\s+)?(?:patient|pt)\s+(?:was|is|were|did|called|phoned|'
+    r'reports?|reported|states?|stated|said|says|contacted|reached|spoke|talked|returned)\b|\b(?:called|phoned|'
+    r'contacted|reached|interviewed|counsel(?:l)?ed|spoke\s+(?:with|to)|talked\s+(?:with|to))\s+(?:the\s+)?(?:patient|pt)'
+    r'\b|\bwe\s+(?:spoke|talked|discussed|reviewed|went\s+over|called)\b', re.A | re.I)
+# A contact's subject: today's visit, encounter or contact, or a verb of seeing or speaking with the patient
+_PV1_TODAY_SUBJECT = re.compile(
+    r'\b(?:visits?|encounters?|appointments?|consult(?:ation)?s?|follow-?ups?|f/u|check-?ins?|sessions?|seen|evaluated|'
+    r'interviewed|assessed|counsel(?:l)?ed|contacted|reached|spoke|talked|conducted|completed|performed|done|held)\b',
+    re.A | re.I)
+# A contact detail, never today's encounter (repair cycle 1, second session: only a field, so "reached her at home by
+# phone" stays a statement of the visit): a field line's label ("<label>: <value>", the label at most 60 characters)
+# naming a contact preference ("Preferred contact: by phone", "Best method of contact: phone") ...
+_PV1_FIELD = re.compile(r'[ \t]*[^:\n]{1,60}?[ \t]*:', re.A)
+_PV1_PREFERENCE_LABEL = re.compile(
+    r'\b(?:prefer\w*|best|alternate|alternative|emergency|backup|primary|secondary|home|cell|work|mobile)\b[^:\n]*'
+    r'\b(?:contact|number|phone|telephone|method|mode|way|line)\b|\bcontact\s+(?:preference|method|mode|info\w*|'
+    r'details?|numbers?)\b', re.A | re.I)
+# ... a label naming a telephone service line, not an encounter ("After-hours phone triage: 555-0103", "Phone contact:
+# 555-0100"; "Telephone encounter: 555-0199 called back" is no contact detail) ...
+_PV1_SERVICE_LINE = re.compile(r'triage|contacts?|lines?|numbers?', re.A | re.I)
+# ... and a clause saying what the patient prefers ("She prefers telephone follow-up"), never today's encounter
+_PV1_PREFERS = re.compile(r'\bprefer(?:s|red)?\b|\bwould\s+(?:like|rather|prefer)\b', re.A | re.I)
+# A no-show named as a policy or a record, never a missed visit ("no-show policy reviewed")
+_PV1_NO_SHOW_ITEM = re.compile(r'[ \t]*(?:polic(?:y|ies)|fees?|rates?|letters?|lists?|history|forms?|warnings?|contracts?|'
+                               r'agreements?)\b', re.A | re.I)
+# Another service a missed visit may be (a missed colonoscopy or CT is no missed office visit)
+_PV1_OTHER_SERVICE = re.compile(
+    r'\b(?:procedures?|tests?|testing|imaging|labs?|laborator(?:y|ies)|blood\s*work|ultrasounds?|sonograms?|CT|MRI|MRCP|'
+    r'x-?rays?|scans?|infusions?|injections?|biops(?:y|ies)|endoscop(?:y|ies)|surgery|surgeries|operations?|'
+    r'results?|reports?|pathology)\b', re.A | re.I)
+# A span of time before today ("not seen in the office for two years")
+_PV1_SPAN = re.compile(r'\b(?:for|in|over|within)\s+(?:the\s+)?(?:past\s+|last\s+)?(?:over\s+|more\s+than\s+|about\s+|'
+                       r'nearly\s+|almost\s+|at\s+least\s+)?(?:\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|'
+                       r'eleven|twelve|several|many|a\s+few|a\s+couple\s+of)\s+(?:days?|weeks?|months?|years?)\b|\bsince\b',
+                       re.A | re.I)
+# The visit stated as in person ("seen in person today", "is seen today", "converted to an in-person visit")
+_PV1_IN_PERSON = re.compile(
+    r"(?<!not )(?<!never )(?<!n't )\b(?:seen|evaluated|examined|interviewed)\s+(?:today\s+)?in[- ]person\b"
+    r'|(?<!no )(?<!not )\bin[- ]person\s+(?:today|visit\s+today|encounter\s+today)\b'
+    r'|\bconverted\s+to\s+(?:an?\s+)?(?:in[- ]person|office|clinic|face[- ]to[- ]face)\b|\bface[- ]to[- ]face\b'
+    r"|(?<!not )(?<!never )(?<!n't )\b(?:is|was)\s+seen\s+(?:in\s+(?:the\s+)?(?:office|clinic)\s+)?today\b",
+    re.A | re.I)
+# A head line that is the word "Telephone" or "Phone" alone (repair cycle 1, EMR-8), and the next non-blank line
+_PV1_BARE_TITLE = re.compile(r'^[ \t]*(?:telephone|phone)[ \t]*$', re.A | re.I | re.M)
+_PV1_NEXT_LINE = re.compile(r'\s*\n[ \t]*([^\n]*)', re.A)
+# A telephone number on the line: a letterhead's or a contact field's, never the encounter's mode
+_PV1_PHONE_NUMBER = re.compile(r'\(?\b\d{3}\)?[ .\-]?\d{3}[ .\-]\d{4}\b|\b\d{3}[.\-]\d{4}\b', re.A)
+
+
+def _pv1_line_quote(text: str, start: int, end: int) -> str:
+    """The line holding [start, end), white space collapsed (repair cycle 1, CTS-2: a cue quotes the line it rests on);
+    a line longer than _PV1_LINE_QUOTE characters, or one running past the _PV1_QUOTE_WINDOW characters read on either
+    side, is cut around the words with an ellipsis. Bounded per call."""
+    lo, hi = max(0, start - _PV1_QUOTE_WINDOW), min(len(text), end + _PV1_QUOTE_WINDOW)
+    nl = text.rfind('\n', lo, start)
+    ls, cut_left = (nl + 1, False) if nl >= 0 else (lo, lo > 0)
+    nr = text.find('\n', end, hi)
+    le, cut_right = (nr, False) if nr >= 0 else (hi, hi < len(text))
+    line = ' '.join(text[ls:le].split())
+    if len(line) <= _PV1_LINE_QUOTE and not cut_left and not cut_right:
+        return line
+    side = (_PV1_LINE_QUOTE - min(end - start, _PV1_QUOTE)) // 2
+    a, b = max(ls, start - side), min(le, end + side)
+    if a > ls:  # cut at a word's edge, never inside a word
+        space = text.find(' ', a, start)
+        a = space + 1 if space >= 0 else a
+    if b < le:
+        space = text.rfind(' ', end, b)
+        b = space if space >= 0 else b
+    return ('\u2026' if a > ls or cut_left else '') + ' '.join(text[a:b].split()) + ('\u2026' if b < le or cut_right
+                                                                                     else '')
+
+
+def _pv1_em_in(an: Analysis, start: int, end: int) -> bool:
+    """Whether an E/M time, decision-making or visit statement overlaps [start, end) (the E/M mentions never overlap one
+    another, so the last one starting before ``end`` decides; one bisection). A field label ("Total time:") ends a
+    sentence of its own in the layout, so a statement may open in the sentence before."""
+    key = ('pv1-em-starts',)
+    if key not in an.memo:
+        an.memo[key] = sorted((m.start, m.end) for m in an.em if m.kind in ('em-time', 'em-mdm', 'em-visit'))
+    spans = an.memo[key]
+    i = bisect.bisect_left(spans, (end, -1))
+    return i > 0 and spans[i - 1][1] > start
+
+
+def _pv1_todays_mode(an: Analysis, start: int, end: int) -> bool:
+    """Whether the cues.NOT_IN_PERSON match [start, end) states TODAY's encounter type (repair cycle 1, CTS-1/EMR-6):
+    an encounter-type field; an attendance predicate; or a telephone or audio contact whose clause names the patient as
+    a party, the visit or the encounter, or whose sentence holds an E/M statement - and never where its line carries a
+    telephone number, its sentence states an in-person visit, or its clause names another party (unless the patient is
+    named as one), another time or, for an attendance, another service, or for a contact a plan; a telephone compound
+    naming a data item ("telephone notes") is no contact. Bounded per match (CLAUSE_REACH)."""
+    text = an.text
+    words = text[start:end]
+    if _PV1_MODE_FIELD.search(words):
+        return True  # "Visit type: Telephone", "Encounter: Telephone"
+    ss, se = an.lay.window(an.lay.sentence_for(start, end), start, end, CLAUSE_REACH)
+    if _pv1_in_person_today(an, ss, se):
+        return False  # "She called by phone yesterday; seen in person today."
+    if _pv1_under_another_occasion(an, start):
+        return False  # "Addendum 10/30/2026\nPathology discussed with the patient by phone."
+    cs, ce = an.lay.window(an.lay.clauses_for(start, end)[0], start, end, CLAUSE_REACH)
+    party = _PV1_PATIENT_PARTY.search(text, cs, ce) is not None
+    if _pv1_contact_detail(text, start, end, party or _PV1_TODAY_SUBJECT.search(text, cs, ce) is not None):
+        return False  # "After-hours phone triage: 555-0103", "Preferred contact: by phone", "Phone triage line 555-0103"
+    if not party and _PV1_THIRD_PARTY.search(text, cs, ce):
+        return False  # "Interpreter: Spanish, via phone.", "by phone with Dr. Lee", "a phone call with her daughter"
+    if _pv1_clause_other_time(an, cs, ce):
+        return False  # "she missed her appointment in August", "not seen in the office for two years"
+    if _PV1_ATTENDANCE.search(words):
+        if _PV1_NO_SHOW_ITEM.match(text, end):
+            return False  # "no-show policy reviewed with the patient"
+        return not (an.services_in(cs, ce) or _PV1_OTHER_SERVICE.search(text, cs, ce))  # "no-showed her colonoscopy"
+    if any(c.status == 'planned' for c in an.cues_in(cs, ce)) or _PV1_PREFERS.search(text, cs, ce):
+        return False  # "scheduled as a telephone visit", "I will call her by phone", "she prefers phone follow-up"
+    compound = _PV1_COMPOUND.match(words)
+    if compound is not None:
+        return _PV1_DATA_NOUN.fullmatch(compound.group('noun')) is None  # "telephone notes" are data
+    return party or _PV1_TODAY_SUBJECT.search(text, cs, ce) is not None or _pv1_em_in(an, ss, se)
+
+
+# Repair cycle 1, second session: an in-person visit told of another time ("last seen in person in August") is no
+# statement of today's visit
+_PV1_LAST_LEAD = re.compile(r'\b(?:last|previously|prior|before|earlier|first|initially|once)\s+(?:been\s+|was\s+|'
+                            r'were\s+)?\Z', re.A | re.I)
+
+
+def _pv1_in_person_today(an: Analysis, start: int, end: int) -> bool:
+    """Whether [start, end) states that today's visit was in person (_PV1_IN_PERSON) - not one told of another time:
+    no 'last', 'previously' or 'prior' right before it ("last seen in person"), and no other time in its clause
+    (_pv1_clause_other_time: "seen in person in August"). Bounded: the matches of a CLAUSE_REACH window."""
+    text = an.text
+    for x in _PV1_IN_PERSON.finditer(text, start, end):
+        if _PV1_LAST_LEAD.search(text, max(start, x.start() - 24), x.start()):
+            continue
+        cs, ce = an.lay.window(an.lay.clauses_for(x.start(), x.end())[0], x.start(), x.end(), CLAUSE_REACH)
+        if not _pv1_clause_other_time(an, cs, ce):
+            return True
+    return False
+
+
+def _pv1_under_another_occasion(an: Analysis, pos: int) -> bool:
+    """Whether the heading-like line governing the line at ``pos`` (_pv1_governing_line) names another occasion (repair
+    cycle 1, second session): an addendum or a late entry, another visit or note ("Prior visit", "Previous note"), or a
+    date the date of service is known to differ from ("Addendum 10/30/2026"). Narrower than sections'
+    ANOTHER_OCCURRENCE_HEAD on purpose: "History of present illness" governs today's statements ("Contacted by
+    telephone today"). Read only to keep a C4 hold off, so an unknown date of service clears nothing."""
+    text = an.text
+    line_start = text.rfind('\n', max(0, pos - _PV1_QUOTE_WINDOW), pos) + 1
+    if line_start == 0 and pos > _PV1_QUOTE_WINDOW:
+        return False  # a line longer than the reach: no governing line is read
+    governing = _pv1_governing_line(text, line_start)
+    if governing is None:
+        return False
+    gs, ge = governing
+    if _PV1_ADDENDUM.search(text, gs, ge) or _PV1_UNPREPPED_VISIT.search(text, gs, ge) \
+            or _PV1_AT_OTHER_VISIT.search(text, gs, ge):
+        return True
+    return an.service_date is not None and any(ctx.compare_to_service(d, an.service_date) != 0
+                                               for d in an.dates_in(gs, ge))
+
+
+def _pv1_contact_detail(text: str, start: int, end: int, about_contact: bool) -> bool:
+    """Whether the cues.NOT_IN_PERSON match [start, end) is a contact detail (repair cycle 1, second session): on a field
+    line, a value under a contact-preference label ("Preferred contact: by phone") or a label naming the telephone with
+    a telephone number for its value ("After-hours phone triage: 555-0103"); on another line, a telephone number with no
+    contact of the patient or the visit in the match's clause (``about_contact`` False: "Phone triage line 555-0103").
+    A number on the line of "Spoke with the patient by phone at 555-0199" clears nothing. Bounded: the match's line,
+    read at most _PV1_QUOTE_WINDOW characters on either side."""
+    lo, hi = max(0, start - _PV1_QUOTE_WINDOW), min(len(text), end + _PV1_QUOTE_WINDOW)
+    nl, nr = text.rfind('\n', lo, start), text.find('\n', end, hi)
+    ls, le = (nl + 1 if nl >= 0 else lo), (nr if nr >= 0 else hi)
+    field = _PV1_FIELD.match(text, ls, le)
+    if field is not None and field.end() <= start:  # the match is in the value
+        return _PV1_PREFERENCE_LABEL.search(text, ls, field.end()) is not None
+    if field is not None and start < field.end():  # the match is in the label: a service line, never an encounter
+        compound = _PV1_COMPOUND.match(text, start, end)
+        if compound is not None and not _PV1_SERVICE_LINE.fullmatch(compound.group('noun')):
+            return False  # "Telephone encounter: 555-0199 called back" names today's encounter
+        return _PV1_PHONE_NUMBER.search(text, field.end(), le) is not None
+    return not about_contact and _PV1_PHONE_NUMBER.search(text, ls, le) is not None
+
+
+def _pv1_clause_other_time(an: Analysis, start: int, end: int) -> bool:
+    """Whether [start, end) names a time other than the date of service: a historical cue, a cues.OTHER_TIME match that
+    may not be the date of service, a date other than it, or a span of time before today (_PV1_SPAN)."""
+    if any(c.status == 'historical' for c in an.cues_in(start, end)) or _PV1_SPAN.search(an.text, start, end):
+        return True
+    times, starts = _other_times(an)
+    for ts_, te_, name, x in times[bisect.bisect_left(starts, start):]:
+        if ts_ >= end:
+            break
+        if te_ <= end and not _today_compatible(an, name, x):
+            return True
+    return any(an.service_date is None or ctx.compare_to_service(d, an.service_date) != 0
+               for d in an.dates_in(start, end))
+
+
 def _pv1_not_in_person_words(an: Analysis) -> tuple[Optional[str], tuple[tuple[int, int], ...], tuple[int, ...]]:
-    """(the words that hold every E/M reading of the document, or None; every cues.NOT_IN_PERSON match as (start, end),
-    in order; their starts), read once per document (GI round 4, C4). The document's words are its first match outside a
-    plan or history section (those speak of other encounters: "Telephone follow-up in two weeks."), else a title line of
-    its head naming a telephone or audio-only encounter (cues.NOT_IN_PERSON_TITLE), whatever section the head is in."""
+    """(the line that holds every E/M reading of the document, or None; every cues.NOT_IN_PERSON match as (start, end),
+    in order; their starts), read once per document (GI round 4, C4). The document's line is that of its first match
+    stating today's encounter type (_pv1_todays_mode) - in a plan section too (repair cycle 1, second session, EMR-8:
+    "Reviewed the biopsy results with the patient by telephone." in an Assessment and plan; a contact with a planned cue,
+    "Telephone follow-up in two weeks.", states no encounter of today), and in a history section only in a clause that
+    says today ("Contacted by telephone today ...") or a sentence holding an E/M statement ("Total time 25 minutes, by
+    telephone.": the visit's own time was by telephone, so the whole document is held and its basis counted, CTS-2);
+    else a title line of its head naming a telephone or audio-only encounter (cues.NOT_IN_PERSON_TITLE), whatever
+    section the head is in, never a field ("After-hours phone triage: 555-0103")."""
     key = ('pv1-not-in-person',)
     if key not in an.memo:
         text = an.text
         spans = tuple((m.start(), m.end()) for m in cues.NOT_IN_PERSON.finditer(text))
-        words = next((text[s:e] for s, e in spans if an.lay.section_at(s).kind not in ELSEWHERE_SECTIONS), None)
+        words = None
+        for s, e in spans:
+            if an.lay.section_at(s).kind == 'history':
+                cs, ce = an.lay.window(an.lay.clauses_for(s, e)[0], s, e, CLAUSE_REACH)
+                if cues.TODAY.search(text, cs, ce) is None and not _pv1_em_in(an, *an.lay.sentence_for(s, e)):
+                    continue
+            if _pv1_todays_mode(an, s, e):
+                words = _pv1_line_quote(text, s, e)
+                break
         if words is None:
-            title = cues.NOT_IN_PERSON_TITLE.search(text, 0, gi_sections.head_lines_end(text, _PV1_HEAD_LINES))
-            words = title.group(0).strip() if title else None
-        if words is not None:
-            words = ' '.join(words.split())[:_PV1_QUOTE]
+            head = gi_sections.head_lines_end(text, _PV1_HEAD_LINES)
+            for title in cues.NOT_IN_PERSON_TITLE.finditer(text, 0, head):
+                line = title.group(0)
+                if ':' not in line and not _PV1_PHONE_NUMBER.search(line):
+                    words = ' '.join(line.split())[:_PV1_LINE_QUOTE]
+                    break
+        if words is None:  # repair cycle 1 (EMR-8): the title "Telephone" alone, never above a number
+            for title in _PV1_BARE_TITLE.finditer(text, 0, head):
+                after = _PV1_NEXT_LINE.match(text, title.end())
+                if after is None or not _PV1_PHONE_NUMBER.search(after.group(0)):
+                    words = title.group(0).strip()
+                    break
         an.memo[key] = (words, spans, tuple(s for s, _ in spans))
     return an.memo[key]
 
 
 def _not_in_person(an: Analysis, m: Mention) -> Optional[str]:
-    """The words saying the encounter of E/M mention ``m`` may be no in-person visit (GI round 4, C4): the document's
-    (_pv1_not_in_person_words), or a cues.NOT_IN_PERSON match in the mention's own sentence, whatever its section ("GERD.
-    Total time 25 minutes, by telephone." in an Assessment and plan paragraph); None when there are none. Read only to
-    hold. Each mention costs one bisection over the document's matches."""
-    words, spans, starts = _pv1_not_in_person_words(an)
-    if words is not None or not spans:
-        return words
-    s, e = an.lay.sentence_for(m.start, m.end)
-    i = bisect.bisect_left(starts, s)
-    if i < len(spans) and spans[i][1] <= e:
-        return ' '.join(an.text[spans[i][0]:spans[i][1]].split())[:_PV1_QUOTE]
-    return None
+    """The line saying the encounter of E/M mention ``m`` may be no in-person visit (GI round 4, C4): the document's
+    (_pv1_not_in_person_words), which holds every E/M reading of the document - the statement's own sentence is one of
+    the places it is read, never a hold of that statement alone (repair cycle 1, second session); None when there is
+    none. Read only to hold."""
+    return _pv1_not_in_person_words(an)[0]
+
+
+def _pv1_held_by_c4(an: Analysis, reading: Reading) -> bool:
+    """Whether ``reading`` is held by C4's hold of the whole document (repair cycle 1, CTS-2): today's own statement, in
+    a note that may document no in-person visit."""
+    return (reading.status == 'uncertain' and bool(reading.cues) and reading.cues[0].startswith(EM_NOT_IN_PERSON + ': ')
+            and _pv1_not_in_person_words(an)[0] is not None)
 
 
 # --- round 4c-2 box2:J: an E/M visit statement governed by an unread mark or an unchecked box ----------------------
@@ -6808,6 +7436,8 @@ def _em_facts(an: Analysis, readings: dict) -> list[Fact]:
     facts = [context_facts[name] for name in ('setting', 'patient_status')
              if context_facts[name].origin in ('document', 'conflict')]
     done = [m for m in an.em if readings[m].status == 'performed']
+    if not done:  # repair cycle 1 (CTS-2): a note C4 holds whole states its basis; the hold says why, not "undocumented"
+        done = [m for m in an.em if _pv1_held_by_c4(an, readings[m])]
     times = [(m.value, _span(text, m.start, m.end)) for m in done if m.kind == 'em-time']
     levels = [(m.value, _span(text, m.start, m.end)) for m in done if m.kind == 'em-mdm']
     mdm = levels + [('mdm', _span(text, m.start, m.end)) for m in done
@@ -7506,6 +8136,7 @@ def _analysis(text: str, service_date: Optional[date] = None) -> tuple[Analysis,
     effective = service_date if service_date is not None else ctx.service_date_of(text)
     an = Analysis(text, lay, _service_mentions(text), _em_mentions(text, lay), _clause_cues(text),
                   ctx.find_dates(text), effective, interventions)
+    an.em = _pv1_read_labels(an)  # GI round 4, repair cycle 1 (C2): a label refused its release is not read at all
     return an, _route(an)
 
 
