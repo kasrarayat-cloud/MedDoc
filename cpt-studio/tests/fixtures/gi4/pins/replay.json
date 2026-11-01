@@ -1841,7 +1841,7 @@
     "doc:2026-10-08": {
      "answer": "2026-10-08",
      "completeness": [
-      "incomplete",
+      "complete_pending_review",
       0
      ],
      "held": false,
@@ -1850,7 +1850,7 @@
        "gi.egd",
        "performed",
        "complete",
-       ""
+       "second part of duodenum"
       ]
      ],
      "offers": [],
@@ -1858,8 +1858,8 @@
       [
        "43244",
        "selected",
-       "needs_clarification",
-       "996fe5cfe0ab"
+       "ready",
+       "9cc969467811"
       ]
      ],
      "questions": [],
@@ -1872,7 +1872,7 @@
     "doc:2026-10-09": {
      "answer": "2026-10-09",
      "completeness": [
-      "incomplete",
+      "complete_pending_review",
       0
      ],
      "held": false,
@@ -1881,7 +1881,7 @@
        "gi.egd",
        "performed",
        "complete",
-       ""
+       "second part of duodenum"
       ]
      ],
      "offers": [],
@@ -1889,8 +1889,8 @@
       [
        "43244",
        "selected",
-       "needs_clarification",
-       "f3f8c4de0c94"
+       "ready",
+       "f863fdf70846"
       ]
      ],
      "questions": [],
@@ -1903,7 +1903,7 @@
     "far": {
      "answer": "1998-01-01",
      "completeness": [
-      "incomplete",
+      "complete_pending_review",
       0
      ],
      "held": false,
@@ -1912,7 +1912,7 @@
        "gi.egd",
        "performed",
        "complete",
-       ""
+       "second part of duodenum"
       ]
      ],
      "offers": [],
@@ -1920,8 +1920,8 @@
       [
        "43244",
        "selected",
-       "needs_clarification",
-       "4ef17d66c399"
+       "ready",
+       "b08868bbef2d"
       ]
      ],
      "questions": [],
@@ -1934,7 +1934,7 @@
     "minus1": {
      "answer": "2026-10-05",
      "completeness": [
-      "incomplete",
+      "complete_pending_review",
       0
      ],
      "held": false,
@@ -1943,7 +1943,7 @@
        "gi.egd",
        "performed",
        "complete",
-       ""
+       "second part of duodenum"
       ]
      ],
      "offers": [],
@@ -1951,8 +1951,8 @@
       [
        "43244",
        "selected",
-       "needs_clarification",
-       "b5f422a046e3"
+       "ready",
+       "e449d7503f52"
       ]
      ],
      "questions": [],
@@ -1974,7 +1974,7 @@
        "gi.egd",
        "performed",
        "complete",
-       ""
+       "second part of duodenum"
       ]
      ],
      "offers": [],
@@ -1983,7 +1983,7 @@
        "43244",
        "selected",
        "needs_clarification",
-       "a3d4305621d9"
+       "c452f0e96b4c"
       ]
      ],
      "questions": [
@@ -2002,7 +2002,7 @@
     "plus1": {
      "answer": "2026-10-07",
      "completeness": [
-      "incomplete",
+      "complete_pending_review",
       0
      ],
      "held": false,
@@ -2011,7 +2011,7 @@
        "gi.egd",
        "performed",
        "complete",
-       ""
+       "second part of duodenum"
       ]
      ],
      "offers": [],
@@ -2019,8 +2019,8 @@
       [
        "43244",
        "selected",
-       "needs_clarification",
-       "56ef1c44682c"
+       "ready",
+       "464b756b960d"
       ]
      ],
      "questions": [],
@@ -2033,7 +2033,7 @@
     "walk": {
      "answer": "2026-10-06",
      "completeness": [
-      "incomplete",
+      "complete_pending_review",
       0
      ],
      "held": false,
@@ -2042,7 +2042,7 @@
        "gi.egd",
        "performed",
        "complete",
-       ""
+       "second part of duodenum"
       ]
      ],
      "offers": [],
@@ -2050,8 +2050,8 @@
       [
        "43244",
        "selected",
-       "needs_clarification",
-       "5002e2b1dbad"
+       "ready",
+       "b84655cd869a"
       ]
      ],
      "questions": [],
@@ -2079,7 +2079,7 @@
     "doc:2026-09-28": {
      "answer": "2026-09-28",
      "completeness": [
-      "complete_pending_review",
+      "incomplete",
       0
      ],
      "held": false,
@@ -2092,8 +2092,8 @@
       ],
       [
        "gi.colonoscopy",
-       "negated",
-       "unknown",
+       "uncertain",
+       "complete",
        ""
       ]
      ],
@@ -2107,9 +2107,9 @@
       ],
       [
        "45378",
-       "excluded",
-       "excluded",
-       "048e65332397"
+       "selected",
+       "needs_clarification",
+       "a1a341ccf1f8"
       ]
      ],
      "questions": [],
@@ -2133,7 +2133,7 @@
     "far": {
      "answer": "1998-01-01",
      "completeness": [
-      "complete_pending_review",
+      "incomplete",
       0
      ],
      "held": false,
@@ -2146,8 +2146,8 @@
       ],
       [
        "gi.colonoscopy",
-       "negated",
-       "unknown",
+       "uncertain",
+       "complete",
        ""
       ]
      ],
@@ -2161,9 +2161,9 @@
       ],
       [
        "45378",
-       "excluded",
-       "excluded",
-       "ee73a67a48fe"
+       "selected",
+       "needs_clarification",
+       "2500acd6ea45"
       ]
      ],
      "questions": [],
@@ -2187,7 +2187,7 @@
     "minus1": {
      "answer": "2026-10-18",
      "completeness": [
-      "complete_pending_review",
+      "incomplete",
       0
      ],
      "held": false,
@@ -2200,8 +2200,8 @@
       ],
       [
        "gi.colonoscopy",
-       "negated",
-       "unknown",
+       "uncertain",
+       "complete",
        ""
       ]
      ],
@@ -2211,13 +2211,13 @@
        "43251",
        "selected",
        "ready",
-       "f2652179dea3"
+       "17b0671f5a2a"
       ],
       [
        "45378",
-       "excluded",
-       "excluded",
-       "9588b9ebe0ea"
+       "selected",
+       "needs_clarification",
+       "0f532e4c111f"
       ]
      ],
      "questions": [],
@@ -2254,8 +2254,8 @@
       ],
       [
        "gi.colonoscopy",
-       "negated",
-       "unknown",
+       "uncertain",
+       "complete",
        ""
       ]
      ],
@@ -2269,9 +2269,9 @@
       ],
       [
        "45378",
-       "excluded",
-       "excluded",
-       "2676b0647460"
+       "selected",
+       "needs_clarification",
+       "eae4d021829d"
       ]
      ],
      "questions": [
@@ -2301,7 +2301,7 @@
     "plan": {
      "answer": "2026-11-16",
      "completeness": [
-      "complete_pending_review",
+      "incomplete",
       0
      ],
      "held": false,
@@ -2314,8 +2314,8 @@
       ],
       [
        "gi.colonoscopy",
-       "negated",
-       "unknown",
+       "uncertain",
+       "complete",
        ""
       ]
      ],
@@ -2325,13 +2325,13 @@
        "43251",
        "selected",
        "ready",
-       "6be52d7c46e9"
+       "70e539c4bb89"
       ],
       [
        "45378",
-       "excluded",
-       "excluded",
-       "25e01f65c3b2"
+       "selected",
+       "needs_clarification",
+       "30fbbdf33fe0"
       ]
      ],
      "questions": [],
@@ -2355,7 +2355,7 @@
     "plus1": {
      "answer": "2026-10-20",
      "completeness": [
-      "complete_pending_review",
+      "incomplete",
       0
      ],
      "held": false,
@@ -2368,8 +2368,8 @@
       ],
       [
        "gi.colonoscopy",
-       "negated",
-       "unknown",
+       "uncertain",
+       "complete",
        ""
       ]
      ],
@@ -2379,13 +2379,13 @@
        "43251",
        "selected",
        "ready",
-       "d8ea3c067b08"
+       "fdf8baaa293a"
       ],
       [
        "45378",
-       "excluded",
-       "excluded",
-       "c4123532dc36"
+       "selected",
+       "needs_clarification",
+       "31d2d3123382"
       ]
      ],
      "questions": [],
@@ -2409,7 +2409,7 @@
     "walk": {
      "answer": "2026-10-19",
      "completeness": [
-      "complete_pending_review",
+      "incomplete",
       0
      ],
      "held": false,
@@ -2422,8 +2422,8 @@
       ],
       [
        "gi.colonoscopy",
-       "negated",
-       "unknown",
+       "uncertain",
+       "complete",
        ""
       ]
      ],
@@ -2433,13 +2433,13 @@
        "43251",
        "selected",
        "ready",
-       "92e16310d388"
+       "9d6bff8eb00f"
       ],
       [
        "45378",
-       "excluded",
-       "excluded",
-       "85b857abc02d"
+       "selected",
+       "needs_clarification",
+       "78ecf6bac0e6"
       ]
      ],
      "questions": [],
@@ -2987,7 +2987,7 @@
     "doc:2025-09-30": {
      "answer": "2025-09-30",
      "completeness": [
-      "incomplete",
+      "complete_pending_review",
       0
      ],
      "held": false,
@@ -2996,7 +2996,7 @@
        "gi.colonoscopy",
        "performed",
        "complete",
-       ""
+       "terminal ileum"
       ]
      ],
      "offers": [],
@@ -3004,8 +3004,8 @@
       [
        "45385",
        "selected",
-       "needs_clarification",
-       "2a320b2a8a05"
+       "ready",
+       "1ef5af010b92"
       ]
      ],
      "questions": [],
@@ -3023,7 +3023,7 @@
     "far": {
      "answer": "1998-01-01",
      "completeness": [
-      "incomplete",
+      "complete_pending_review",
       0
      ],
      "held": false,
@@ -3032,7 +3032,7 @@
        "gi.colonoscopy",
        "performed",
        "complete",
-       ""
+       "terminal ileum"
       ]
      ],
      "offers": [],
@@ -3040,8 +3040,8 @@
       [
        "45385",
        "selected",
-       "needs_clarification",
-       "c14177b977f6"
+       "ready",
+       "00c2d3a5bb35"
       ]
      ],
      "questions": [],
@@ -3059,7 +3059,7 @@
     "minus1": {
      "answer": "2026-10-26",
      "completeness": [
-      "incomplete",
+      "complete_pending_review",
       0
      ],
      "held": false,
@@ -3068,7 +3068,7 @@
        "gi.colonoscopy",
        "performed",
        "complete",
-       ""
+       "terminal ileum"
       ]
      ],
      "offers": [],
@@ -3076,8 +3076,8 @@
       [
        "45385",
        "selected",
-       "needs_clarification",
-       "54fa6a29f5c4"
+       "ready",
+       "0543f532110a"
       ]
      ],
      "questions": [],
@@ -3104,7 +3104,7 @@
        "gi.colonoscopy",
        "performed",
        "complete",
-       ""
+       "terminal ileum"
       ]
      ],
      "offers": [],
@@ -3113,7 +3113,7 @@
        "45385",
        "selected",
        "needs_clarification",
-       "8e19dbe15376"
+       "7219dab415c1"
       ]
      ],
      "questions": [
@@ -3137,7 +3137,7 @@
     "plan": {
      "answer": "2026-11-24",
      "completeness": [
-      "incomplete",
+      "complete_pending_review",
       0
      ],
      "held": false,
@@ -3146,7 +3146,7 @@
        "gi.colonoscopy",
        "performed",
        "complete",
-       ""
+       "terminal ileum"
       ]
      ],
      "offers": [],
@@ -3154,8 +3154,8 @@
       [
        "45385",
        "selected",
-       "needs_clarification",
-       "ec01ed138a16"
+       "ready",
+       "922c3d128b86"
       ]
      ],
      "questions": [],
@@ -3173,7 +3173,7 @@
     "plus1": {
      "answer": "2026-10-28",
      "completeness": [
-      "incomplete",
+      "complete_pending_review",
       0
      ],
      "held": false,
@@ -3182,7 +3182,7 @@
        "gi.colonoscopy",
        "performed",
        "complete",
-       ""
+       "terminal ileum"
       ]
      ],
      "offers": [],
@@ -3190,8 +3190,8 @@
       [
        "45385",
        "selected",
-       "needs_clarification",
-       "b84306802f9b"
+       "ready",
+       "d1eb05f4b2fd"
       ]
      ],
      "questions": [],
@@ -3209,7 +3209,7 @@
     "walk": {
      "answer": "2026-10-27",
      "completeness": [
-      "incomplete",
+      "complete_pending_review",
       0
      ],
      "held": false,
@@ -3218,7 +3218,7 @@
        "gi.colonoscopy",
        "performed",
        "complete",
-       ""
+       "terminal ileum"
       ]
      ],
      "offers": [],
@@ -3226,8 +3226,8 @@
       [
        "45385",
        "selected",
-       "needs_clarification",
-       "a9f964e0ebc2"
+       "ready",
+       "149a4a21b83e"
       ]
      ],
      "questions": [],
@@ -3246,6 +3246,6 @@
   }
  },
  "meta": {
-  "commit": "80df1831d168c4ee83d83c37bac9860690986cf3"
+  "commit": "14a6f5ada02e7a36e1004388de5f2e47967c13f9"
  }
 }
