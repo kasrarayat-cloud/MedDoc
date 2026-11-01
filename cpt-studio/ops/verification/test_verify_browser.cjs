@@ -1603,7 +1603,8 @@ function walkPage(id, states) {
   return page;
 }
 
-async function walkQuestion(states, expectedClarifications = []) {
+// extra: options for the walk (opts) and the manifest's review_notes (notes), for the acceptance reviewer's walk
+async function walkQuestion(states, expectedClarifications = [], extra = {}) {
   const id = '0b9e3f7a-1c2d-4e5f-8a9b-0c1d2e3f4a5b';
   const out = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'cpt-verify-question-'));
   try {
@@ -1614,8 +1615,9 @@ async function walkQuestion(states, expectedClarifications = []) {
     const item = { doc, sourceText: QUESTION_TEXT,
       delivery: { format: 'paste', file: doc.delivery.file, sha256: sha(QUESTION_TEXT), size: Buffer.byteLength(QUESTION_TEXT) } };
     const page = walkPage(id, states.map(state => ({ ...clone(state), id })));
-    const opts = { out, baseUrl: 'https://cpt.example', encounter: id, deadlineSeconds: 60, noAutoApprove: false };
-    const record = await vb.verifyDocument(page, opts, { review_notes: { approve: 'Agent-executed synthetic verification review' } }, item, []);
+    const opts = { out, baseUrl: 'https://cpt.example', encounter: id, deadlineSeconds: 60, noAutoApprove: false, ...extra.opts };
+    const notes = extra.notes || { approve: 'Agent-executed synthetic verification review' };
+    const record = await vb.verifyDocument(page, opts, { review_notes: notes }, item, []);
     return { record, acts: page.acts, posts: page.posts };
   } finally {
     fs.rmSync(out, { recursive: true, force: true });
@@ -1659,4 +1661,623 @@ test('the walk makes no edit when the date question is not open: nothing is post
     assert.equal(failed.filter(id => ['context_edit.question_open', 'context_edit.date_unestablished', 'context_edit.dateless_before'].includes(id)).length, 1, label);
     assert.equal(record.result, 'fail', label);
   }
+});
+
+// --- the ordinary-reviewer acceptance mode (CPT Studio GI interpretation 63) ------------------------------------------
+//
+// --acceptance-reviewer signs the ordinary reviewer account in with --password-file and --username (as
+// ops/verify_login.py takes them), makes approvals only - of the codes review_plan.approve_codes names - and checks after
+// the reload that each is recorded as that human reviewer's with its labelled note kept verbatim. What the app stores for
+// a human approval is read from its own source here, never written out as the walk's expectation.
+
+const ACC_LABEL = 'session-made synthetic acceptance-test approval, not a human review';
+const ACC_NOTE = 'Session-made synthetic acceptance-test approval, not a human review - CPT Studio GI round 4, owner item 5';
+const ACC_NOTES = { approve: ACC_NOTE };
+const AGENT_NOTES = { approve: 'Agent-executed synthetic verification review',
+  reject: 'Agent-executed synthetic verification review - designated rejection',
+  confirm: 'Agent-executed synthetic verification review - confirms an exclusion the author marked as not coded' };
+const REVIEW_PY = fs.readFileSync(path.join(ROOT, 'studio', 'review.py'), 'utf8');
+
+// studio/review.py ACKNOWLEDGEMENTS: the attestation an approval must carry for each actor kind, which the app stores.
+function attestation(kind) {
+  const found = new RegExp(`^ {4}'${kind}': \\(((?:\\s*'[^']*')+)\\),$`, 'm').exec(REVIEW_PY);
+  assert.ok(found, `ACKNOWLEDGEMENTS['${kind}'] not found in studio/review.py`);
+  return [...found[1].matchAll(/'([^']*)'/g)].map(m => m[1]).join('');
+}
+
+// The ordinary reviewer as /api/session serves them (serializers.session_json), and the walk's account taken from it.
+const HUMAN_SESSION = {
+  user: { id: 'u-1', username: 'demo-reviewer', label: 'Demo Reviewer', actor_kind: 'human', initials: 'DR' },
+  workspace: { id: 'w-1', name: 'Gastroenterology', subtitle: 'Synthetic demonstration workspace',
+    category: { slug: 'gastroenterology', name: 'Gastroenterology', profiles_version: 'gi@1' } },
+  role: 'reviewer', can_review: true, acknowledgement: attestation('human'), counts: { documents: 0, queue: 0 },
+  synthetic_only: true, provider_mode: 'replay', release: 'x' };
+const ACCOUNT = vb.reviewerAccount(HUMAN_SESSION);
+const AGENT_ACCOUNT = { username: 'review-agent', label: AGENT, actor_kind: 'agent', acknowledgement: attestation('agent') };
+const DECIDED_STATES = { approve: 'approved', reject: 'rejected', confirm: 'exclusion_confirmed' };
+
+// ``id`` decided as studio/review.py record_decision records it and serializers._decision_json serves it, by ``account``.
+function decidedBy(enc, id, action, note, account = ACCOUNT) {
+  const p = enc.assessment.proposals.find(item => item.id === id);
+  p.decision = { id: `d-${id}`, proposal_id: id, code: p.code, action, note, reviewer: account.label, reviewer_kind: account.actor_kind,
+    created_at: '2026-11-01T21:00:00Z', decided_at: '2026-11-01T21:00:00Z', carried_at: null,
+    acknowledgement: action === 'approve' ? account.acknowledgement : '', carried_from: null, invalidated: null, revision_number: 1 };
+  p.decision_state = DECIDED_STATES[action];
+  p.allowed_actions = ['revoke'];
+  enc.decisions.history.push(clone(p.decision));
+  return enc;
+}
+
+function privateDir() {
+  return fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'cpt-verify-acceptance-'));
+}
+
+function writeFile(dir, name, content, mode = 0o600) {
+  const file = path.join(dir, name);
+  fs.rmSync(file, { force: true });  // a file left read-only (0400) by the last write is replaced, not rewritten
+  fs.writeFileSync(file, content);
+  fs.chmodSync(file, mode);
+  return file;
+}
+
+const SIGN_IN = ['--base-url', 'https://x', '--docs', 'd', '--manifest', 'm', '--out', 'o'];
+
+test('a human approval as the app records it: the account\'s actor kind, its label, the human attestation the session serves', () => {
+  const app = require(APP);
+  const human = attestation('human');
+  assert.equal(human, app.ACKNOWLEDGEMENTS.human, 'studio/review.py and app.js hold different human attestations');
+  assert.notEqual(human, attestation('agent'));
+  assert.ok(REVIEW_PY.includes('        if action == APPROVE and acknowledgement != ACKNOWLEDGEMENTS.get(user.actor_kind):\n'),
+    'an approval no longer has to carry the attestation of its own actor kind');
+  assert.ok(REVIEW_PY.includes('            note=note, reviewer=user, reviewer_kind=user.actor_kind, acknowledgement=acknowledgement,\n'),
+    'a decision no longer records the account and its actor kind');
+  assert.ok(REVIEW_PY.includes("        note, acknowledgement = (note or '').strip(), (acknowledgement or '').strip()\n"));
+  const serializers = fs.readFileSync(path.join(ROOT, 'studio', 'serializers.py'), 'utf8');
+  assert.ok(serializers.includes("        'action': decision.action, 'note': decision.note, 'reviewer': decision.reviewer.label(),\n"
+    + "        'reviewer_kind': decision.reviewer_kind,"), 'the served decision changed');
+  assert.ok(serializers.includes("        'acknowledgement': review.ACKNOWLEDGEMENTS.get(user.actor_kind, ''),\n"), 'the session\'s attestation changed');
+  assert.ok(serializers.includes("    return {'id': str(user.pk), 'username': user.get_username(), 'label': user.label(),\n"));
+  // a human's label is their own name: the reviewer a decision names is the session's label
+  const models = fs.readFileSync(path.join(ROOT, 'studio', 'models.py'), 'utf8');
+  assert.ok(models.includes("        name = self.display_name or self.get_username()\n        if self.actor_kind == self.AGENT:\n"
+    + "            return f'{name} (automated agent)'\n        return name\n"), 'User.label changed');
+  assert.deepEqual(ACCOUNT, { username: 'demo-reviewer', label: 'Demo Reviewer', actor_kind: 'human', acknowledgement: human });
+});
+
+test('parseArgs: --password-file with --username signs in instead of --credentials, never both (as verify_login.py)', () => {
+  const pw = vb.parseArgs([...SIGN_IN, '--password-file', 'reviewer.password', '--username', 'demo-reviewer']);
+  assert.deepEqual([pw.passwordFile, pw.username, pw.credentials, pw.acceptanceReviewer, pw.noAutoApprove],
+    ['reviewer.password', 'demo-reviewer', undefined, false, false]);
+  assert.equal(vb.parseArgs([...SIGN_IN, '--password-file=p', '--username=u']).passwordFile, 'p');
+  assert.throws(() => vb.parseArgs([...SIGN_IN, '--credentials', 'c.json', '--password-file', 'p', '--username', 'u']), /mutually exclusive/);
+  assert.throws(() => vb.parseArgs([...SIGN_IN, '--password-file', 'p']), /--password-file needs --username/);
+  assert.throws(() => vb.parseArgs([...SIGN_IN, '--password-file', 'p', '--username', '  ']), /--password-file needs --username/);
+  assert.throws(() => vb.parseArgs([...SIGN_IN, '--password-file', 'p', '--username', '']), /--username needs a value/);
+  assert.throws(() => vb.parseArgs([...SIGN_IN, '--password-file', '', '--username', 'u']), /--password-file needs a value/);
+  assert.throws(() => vb.parseArgs([...SIGN_IN, '--credentials', 'c.json', '--username', 'u']), /--username goes with --password-file/);
+  assert.throws(() => vb.parseArgs(SIGN_IN), /missing --credentials \(or --password-file with --username\)/);
+  assert.throws(() => vb.parseArgs([...SIGN_IN, '--username', 'u']), /missing --credentials/);
+  // a credentials file, as before: no account is named and nothing else changes
+  const agent = vb.parseArgs([...SIGN_IN, '--credentials', 'agent.json']);
+  assert.deepEqual([agent.credentials, agent.passwordFile, agent.username, agent.acceptanceReviewer, agent.noAutoApprove],
+    ['agent.json', undefined, undefined, false, false]);
+});
+
+test('parseArgs: --acceptance-reviewer is a flag that implies --no-auto-approve and signs in only with a password file', () => {
+  const acc = vb.parseArgs([...SIGN_IN, '--password-file', 'p', '--username', 'demo-reviewer', '--acceptance-reviewer']);
+  assert.deepEqual([acc.acceptanceReviewer, acc.noAutoApprove], [true, true]);
+  assert.throws(() => vb.parseArgs([...SIGN_IN, '--credentials', 'c.json', '--acceptance-reviewer']),
+    /--acceptance-reviewer signs the reviewer in with --password-file and --username/);
+  assert.throws(() => vb.parseArgs([...SIGN_IN, '--password-file', 'p', '--username', 'u', '--acceptance-reviewer=yes']), /takes no value/);
+  assert.throws(() => vb.parseArgs([...SIGN_IN, '--acceptance-reviewer']), /missing --credentials/);
+});
+
+test('loadPasswordFile: a private file holding only the password; one trailing line break is not part of it', () => {
+  const dir = privateDir();
+  try {
+    const read = (content, mode) => vb.loadPasswordFile(writeFile(dir, 'pw', content, mode), 'demo-reviewer');
+    assert.deepEqual(read('correct horse ✓ battery\n'), { username: 'demo-reviewer', password: 'correct horse ✓ battery', source: 'password_file', mode: 0o600 });
+    assert.equal(read('s3cret\r\n').password, 's3cret');
+    assert.equal(read('s3cret').password, 's3cret');
+    assert.equal(read('  s3cret \t\n').password, '  s3cret \t', 'only the line break goes; spaces are the password\'s');
+    assert.equal(read('\ufeffs3cret\n').password, '\ufeffs3cret', 'a byte-order mark is read as text, as Python reads UTF-8');
+    assert.equal(read('s3cret\n', 0o400).mode, 0o400);
+    assert.equal(read('s3cret\n', 0o700).mode, 0o700);
+    // only ONE trailing line break is not part of it, and the file holds one line
+    for (const content of ['s3cret\n\n', 's3cret\r\n\r\n', 'line one\nline two\n', 's3c\rret', 's3cret\r', '\n', '\r\n', '']) {
+      assert.throws(() => read(content), /must hold one non-empty line/, JSON.stringify(content));
+    }
+    assert.throws(() => read(Buffer.from([0x73, 0xff, 0x0a])), /is not UTF-8 text/);
+    assert.throws(() => read('x'.repeat(64 * 1024 + 1)), /is over 65536 bytes/);
+    assert.equal(read('x'.repeat(64 * 1024)).password.length, 64 * 1024);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('loadPasswordFile refuses a file a group or other user may read or write, a directory and a missing file, quoting nothing', () => {
+  const dir = privateDir();
+  const secret = 'Unquotable-p4ss';
+  try {
+    for (const mode of [0o640, 0o604, 0o620, 0o602, 0o610, 0o601, 0o660, 0o644, 0o666]) {
+      const file = writeFile(dir, `pw-${mode.toString(8)}`, `${secret}\n`, mode);
+      assert.throws(() => vb.loadPasswordFile(file, 'u'), error => error instanceof vb.UsageError
+        && error.message.includes(`has mode 0${mode.toString(8)}: a group or other user may read or write it`)
+        && !error.message.includes(secret), mode.toString(8));
+    }
+    assert.throws(() => vb.loadPasswordFile(dir, 'u'), /is not a regular file/);
+    assert.throws(() => vb.loadPasswordFile(path.join(dir, 'absent'), 'u'), /cannot open the password file .*absent: ENOENT/);
+    for (const content of [`${secret}\n\n`, Buffer.concat([Buffer.from(secret), Buffer.from([0xff])])]) {
+      const file = writeFile(dir, 'bad', content);
+      assert.throws(() => vb.loadPasswordFile(file, 'u'), error => error instanceof vb.UsageError && !error.message.includes(secret));
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the evidence records a password-file sign-in by its account and mode only; a credentials file\'s record is as before', () => {
+  assert.deepEqual(vb.credentialsRecord({ username: 'demo-reviewer', password: 'p4ss', source: 'password_file', mode: 0o600 }),
+    { username: 'demo-reviewer', source: 'password_file', file_mode: '0600' });
+  assert.deepEqual(vb.credentialsRecord({ username: 'agent', password: 'p4ss', groupOrOtherReadable: true }),
+    { username: 'agent', file_group_or_other_readable: true });
+});
+
+test('a DEBUG that would turn on a Playwright log carrying the password is recognised, however it is spelled', () => {
+  for (const value of ['pw:api', 'pw:channel', 'pw:protocol', 'pw:server:channel', 'pw:*', '*', 'pw:p*', 'pw*', 'p*', '*:channel',
+    'pw:channel*', 'express:*,pw:protocol', 'express:* pw:protocol', '*,-pw:api', '-pw:api,*', 'pw:ap.', 'pw:(api', 'pw:[']) {
+    assert.equal(vb.debugMayLog(value), true, value);
+  }
+  for (const value of [undefined, '', 'pw:browser', 'pw:install,pw:download', 'express:*', '-pw:*', 'pw:browser*', 'pw:error']) {
+    assert.equal(vb.debugMayLog(value), false, String(value));
+  }
+});
+
+// main() with process.env.DEBUG set and stderr captured; every invocation here ends in a usage error before Playwright.
+async function runMain(args, debug) {
+  const saved = { write: process.stderr.write, debug: process.env.DEBUG };
+  let err = '';
+  process.stderr.write = chunk => { err += chunk; return true; };
+  if (debug === undefined) delete process.env.DEBUG;
+  else process.env.DEBUG = debug;
+  try {
+    return { code: await vb.main(args), err };
+  } finally {
+    process.stderr.write = saved.write;
+    if (saved.debug === undefined) delete process.env.DEBUG;
+    else process.env.DEBUG = saved.debug;
+  }
+}
+
+test('main refuses a password-file run under such a DEBUG before reading anything; a credentials run is refused as before', async () => {
+  const dir = privateDir();
+  try {
+    const missing = [ '--base-url', 'https://x', '--docs', path.join(dir, 'docs'), '--manifest', path.join(dir, 'no-manifest.json'),
+      '--out', path.join(dir, 'out')];
+    const pwArgs = [...missing, '--password-file', path.join(dir, 'no-password-file'), '--username', 'demo-reviewer'];
+    const refused = await runMain(pwArgs, 'pw:protocol');
+    assert.equal(refused.code, 2);
+    assert.match(refused.err, /^verify_browser: refusing to run with DEBUG=pw:protocol: a Playwright call, channel or protocol log would carry the password\n/);
+    assert.match((await runMain([...pwArgs, '--acceptance-reviewer'], 'pw:channel')).err, /refusing to run with DEBUG=pw:channel/);
+    // the DEBUG=pw:api refusal stays, for every run
+    for (const args of [pwArgs, [...missing, '--credentials', path.join(dir, 'agent.json')]]) {
+      assert.match((await runMain(args, 'pw:api')).err, /^verify_browser: refusing to run with DEBUG=pw:api: Playwright would log the password\n/);
+    }
+    // a credentials run under pw:protocol is not refused for it (unchanged): it stops on the missing manifest instead
+    const agent = await runMain([...missing, '--credentials', path.join(dir, 'agent.json')], 'pw:protocol');
+    assert.equal(agent.code, 2);
+    assert.match(agent.err, /^verify_browser: cannot read manifest /);
+    // without DEBUG the password-file run reads its inputs first: the manifest, then the password file
+    assert.match((await runMain(pwArgs, undefined)).err, /^verify_browser: cannot read manifest /);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the evidence of a password-file run is scrubbed of the password in every form, and not written where a form survives', () => {
+  const password = 'p&ss "w<o>rd" ✓ / 100%';
+  const forms = vb.secretForms(password);
+  for (const form of [password, encodeURIComponent(password), 'p%26ss+%22w%3Co%3Erd%22+%E2%9C%93+%2F+100%25',
+    'p&amp;ss &quot;w&lt;o&gt;rd&quot; ✓ / 100%', JSON.stringify(password).slice(1, -1)]) {
+    assert.ok(forms.includes(form), form);
+  }
+  assert.deepEqual(vb.scrubSecret({ [password]: [`sign-in failed: ${password}`, 3, null], nested: { text: encodeURIComponent(password) } }, forms),
+    { '[password withheld]': ['sign-in failed: [password withheld]', 3, null], nested: { text: '[password withheld]' } });
+  const dir = privateDir();
+  try {
+    const evidence = { schema: 'cpt-studio-browser-evidence@1', run_id: 'verify-1', base_url: 'https://x',
+      run_error: `sign-in failed: the page said ${password}`, documents: [{ console_errors: [{ text: JSON.stringify({ password }) }] }] };
+    const file = path.join(dir, 'evidence.json');
+    vb.writeEvidence(file, evidence, forms);
+    const text = fs.readFileSync(file, 'utf8');
+    assert.equal(forms.some(form => text.includes(form)), false, text);
+    assert.equal(JSON.parse(text).run_error, 'sign-in failed: the page said [password withheld]');
+    // a password the scrub cannot see through (it spans the JSON's own syntax): nothing that holds it is written
+    const spanning = 'l": "h';
+    vb.writeEvidence(file, evidence, vb.secretForms(spanning));
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')),
+      { schema: evidence.schema, run_id: 'verify-1', run_error: 'the evidence would have held the password; it was not written' });
+    // without a password file the evidence is written as before
+    vb.writeEvidence(file, evidence);
+    assert.equal(fs.readFileSync(file, 'utf8'), `${JSON.stringify(evidence, null, 2)}\n`);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('sessionProblems --acceptance-reviewer: the named human account in an active reviewer membership; never an agent', () => {
+  const acc = { acceptanceReviewer: true, username: 'demo-reviewer' };
+  assert.deepEqual(vb.sessionProblems(HUMAN_SESSION, acc), []);
+  const agentSession = { ...HUMAN_SESSION, user: { ...HUMAN_SESSION.user, actor_kind: 'agent' } };
+  assert.deepEqual(vb.sessionProblems(agentSession, acc),
+    ['the account\'s actor kind is "agent": the acceptance test is made through the ordinary (human) reviewer account']);
+  assert.match(vb.sessionProblems(HUMAN_SESSION, { ...acc, username: 'other-reviewer' })[0], /not the named account "other-reviewer"'s/);
+  assert.match(vb.sessionProblems(HUMAN_SESSION, { acceptanceReviewer: true })[0], /no account was named/);
+  assert.match(vb.sessionProblems({ ...HUMAN_SESSION, role: 'owner' }, acc)[0], /role in this workspace is "owner"/);
+  assert.equal(vb.sessionProblems({ ...HUMAN_SESSION, role: 'viewer', can_review: false }, acc).length, 2);
+  assert.deepEqual(vb.sessionProblems({ ...HUMAN_SESSION, can_review: false }, acc), ['the account cannot review in this workspace']);
+  assert.equal(vb.sessionProblems({ ...HUMAN_SESSION, synthetic_only: false }, acc).length, 1);
+  assert.match(vb.sessionProblems({ ...HUMAN_SESSION, provider_mode: 'live' }, acc)[0], /--allow-live-provider/);
+  // agent mode, as today: the human account is refused, the agent account passes
+  assert.deepEqual(vb.sessionProblems(HUMAN_SESSION, {}), ['the account is a human account; decisions must be recorded as agent review']);
+  assert.deepEqual(vb.sessionProblems(agentSession, {}), []);
+  // an agent signed in with a password file: the session must be the account it names
+  assert.deepEqual(vb.sessionProblems(agentSession, { username: 'demo-reviewer' }), []);
+  assert.equal(vb.sessionProblems(agentSession, { username: 'someone-else' }).length, 1);
+});
+
+test('planDecisions --acceptance-reviewer: approvals only, of the ready selected codes review_plan.approve_codes names', () => {
+  const plan = { reject: { family: 'gi.colonoscopy', prefer_codes: ['45380'] }, approve_codes: ['45331'], second_review: { ask: true, approve_codes: ['45380'] } };
+  const acc = vb.planDecisions(encounter(), plan, ACC_NOTES, { acceptanceReviewer: true });
+  assert.deepEqual(acc.decisions.map(d => [d.code, d.action, d.designated, d.note]), [['45331', 'approve', false, ACC_NOTE]]);
+  assert.deepEqual([acc.designated_missing, acc.not_in_approve_codes, acc.plan_conflicts], [false, ['45380'], []]);
+  // the same plan, walked as the agent, also rejects the designated code
+  assert.deepEqual(vb.planDecisions(encounter(), plan, AGENT_NOTES).decisions.map(d => [d.code, d.action]), [['45331', 'approve'], ['45380', 'reject']]);
+  // nothing named, nothing approved (the option is implied)
+  const none = vb.planDecisions(encounter(), { reject: null }, ACC_NOTES, { acceptanceReviewer: true });
+  assert.deepEqual([none.decisions, none.not_in_approve_codes], [[], ['45331', '45380']]);
+  // never a code of a must_not_code family: a named one is a plan conflict, left undecided
+  const conflict = vb.planDecisions(encounter(), { approve_codes: ['45331', '45380'] }, ACC_NOTES, { acceptanceReviewer: true, mustNotCode: MUST_NOT });
+  assert.deepEqual([conflict.decisions.map(d => d.code), conflict.plan_conflicts], [['45331'], ['45380 (gi.colonoscopy)']]);
+  // never a code a second review added, whatever second_review.approve_codes or approve_codes names
+  const second = encounter();
+  second.assessment.proposals[1].support = { origin: 'second_review', service: 'S1' };
+  const held = vb.planDecisions(second, { approve_codes: ['45331', '45380'], second_review: { approve_codes: ['45380'] } }, ACC_NOTES, { acceptanceReviewer: true });
+  assert.deepEqual([held.decisions.map(d => d.code), held.second_review_held], [['45331'], ['45380']]);
+  assert.deepEqual(held.approve_codes_unmatched, ['45380 (second review: the acceptance reviewer decides no code a second review added)']);
+  // only ready, selected, undecided codes the screen offers to approve
+  const offered = encounter();
+  offered.assessment.proposals[0].status = 'needs_clarification';
+  decidedBy(offered, 'p-colo', 'approve', ACC_NOTE);
+  const unmatched = vb.planDecisions(offered, { approve_codes: ['45331', '45380', '45330', '45378'] }, ACC_NOTES, { acceptanceReviewer: true });
+  assert.deepEqual(unmatched.decisions, []);
+  assert.deepEqual(unmatched.approve_codes_unmatched, ['45331 (needs_clarification)', '45380 (approved)', '45330 (alternative)', '45378 (excluded)']);
+});
+
+test('planProblems --acceptance-reviewer: review_notes.approve must carry the acceptance-test label, checked before any upload', () => {
+  const doc = { id: 'acc-1', upload: { service_date: null }, review_plan: { reject: { family: 'gi.egd' }, approve_codes: ['43239'] } };
+  const acc = { acceptanceReviewer: true };
+  assert.deepEqual(vb.planProblems(doc, ACC_NOTES, acc), []);
+  assert.deepEqual(vb.planProblems(doc, { approve: ACC_LABEL.toUpperCase() }, acc), [], 'the label is matched as agent mode matches its own, in any case');
+  const wanted = `review_notes approve must say "${ACC_LABEL}" (acc-1 would write it on every approval)`;
+  for (const notes of [AGENT_NOTES, {}, { approve: ['x'] }, { approve: 'Synthetic acceptance-test approval' },
+    { approve: 'session-made synthetic acceptance-test approval' }, { approve: 'session-made synthetic acceptance-test approval; not a human review' }]) {
+    assert.deepEqual(vb.planProblems(doc, notes, acc), [wanted], JSON.stringify(notes));
+  }
+  // no rejection, confirmation or second-review note is written, so none is needed or checked
+  assert.deepEqual(vb.planProblems({ ...doc, review_plan: { ...doc.review_plan, second_review: { ask: true } } },
+    { ...ACC_NOTES, reject: 'x', confirm: 'y', second_review_approve: 'z' }, acc), []);
+  // the plan's own checks still apply
+  assert.equal(vb.planProblems({ ...doc, review_plan: { approve_codes: '43239' } }, ACC_NOTES, acc).length, 1);
+  // and agent mode refuses the acceptance note, which does not say agent-executed synthetic
+  assert.match(vb.planProblems(doc, ACC_NOTES)[0], /must say "agent-executed synthetic"/);
+});
+
+test('the reload check: each approval is the human reviewer\'s with its note kept verbatim; the acknowledgement and card are recorded', () => {
+  const made = [{ proposal_id: 'p-flex', code: '45331', family: 'gi.flex_sig', action: 'approve', note: ACC_NOTE, http_status: 201, decision_id: 'd-p-flex' }];
+  const enc = decidedBy(encounter(), 'p-flex', 'approve', ACC_NOTE);
+  const cards = [{ id: 'card-p-flex', badge: 'Approved', insight: `Approved by Demo Reviewer ... Note: ${ACC_NOTE}`, unlocated: 0 }];
+  const good = vb.checkAcceptanceDecisions(made, enc, MUST_NOT, ACCOUNT, cards);
+  assert.deepEqual(good.checks.map(r => `${r.id}:${r.status}`), ['decisions.labelled:pass', 'decisions.never_approved_must_not_code:pass']);
+  assert.deepEqual(good.labels, [{ code: '45331', action: 'approve', decision_id: 'd-p-flex', recorded: true, approval: true, human: true,
+    reviewer: 'Demo Reviewer', reviewer_is_account: true, note_kept: true, note_labelled: true, acknowledgement: attestation('human'),
+    acknowledgement_is_session_attestation: true, card_badge: 'Approved', card_insight: cards[0].insight }]);
+  const judge = (shape, decisions = made, account = ACCOUNT) => failures(vb.checkAcceptanceDecisions(decisions, shape, MUST_NOT, account, cards).checks);
+  const changed = change => { const shape = clone(enc); change(shape.decisions.history[0]); return shape; };
+  // recorded as an agent's, as another reviewer's, with another note, or not at all
+  assert.deepEqual(judge(changed(h => { h.reviewer_kind = 'agent'; })), ['decisions.labelled']);
+  assert.deepEqual(judge(changed(h => { h.reviewer = 'Another Reviewer'; })), ['decisions.labelled']);
+  assert.deepEqual(judge(enc, made, { ...ACCOUNT, label: null }), ['decisions.labelled']);
+  assert.deepEqual(judge(changed(h => { h.note = ACC_NOTE.trim().replace(' - ', ' — '); })), ['decisions.labelled']);
+  assert.deepEqual(judge(changed(h => { h.id = 'd-other'; })), ['decisions.labelled']);
+  assert.match(vb.checkAcceptanceDecisions(made, changed(h => { h.reviewer_kind = 'agent'; }), MUST_NOT, ACCOUNT, cards).checks[0].reason,
+    /45331 approve \(human\)/);
+  // a note without the label, kept verbatim, is still not an acceptance-test approval's
+  const plain = decidedBy(encounter(), 'p-flex', 'approve', 'approved');
+  assert.deepEqual(judge(plain, [{ ...made[0], note: 'approved' }]), ['decisions.labelled']);
+  // any decision but an approval fails; an approval of a must_not_code family fails
+  const rejected = decidedBy(encounter(), 'p-flex', 'reject', ACC_NOTE);
+  assert.deepEqual(judge(rejected, [{ ...made[0], action: 'reject' }]), ['decisions.labelled']);
+  const colo = decidedBy(encounter(), 'p-colo', 'approve', ACC_NOTE);
+  assert.deepEqual(judge(colo, [{ ...made[0], proposal_id: 'p-colo', code: '45380', family: 'gi.colonoscopy', decision_id: 'd-p-colo' }]),
+    ['decisions.never_approved_must_not_code']);
+  // what the app stored is recorded, not judged: another acknowledgement is kept as it is
+  const other = changed(h => { h.acknowledgement = 'something else'; });
+  const recorded = vb.checkAcceptanceDecisions(made, other, MUST_NOT, ACCOUNT, []);
+  assert.deepEqual(failures(recorded.checks), []);
+  assert.deepEqual([recorded.labels[0].acknowledgement, recorded.labels[0].acknowledgement_is_session_attestation, recorded.labels[0].card_badge],
+    ['something else', false, null]);
+  assert.deepEqual(vb.checkAcceptanceDecisions([], encounter(), MUST_NOT, ACCOUNT).checks.map(r => r.status), ['pass', 'pass']);
+});
+
+test('checkPersistence and checkDecisionDom hold a human approval to the acceptance mode, and an agent\'s to agent mode', () => {
+  const before = encounter();
+  const after = decidedBy(encounter(), 'p-flex', 'approve', ACC_NOTE);
+  const made = [{ proposal_id: 'p-flex', code: '45331', action: 'approve', note: ACC_NOTE, http_status: 201 }];
+  assert.deepEqual(failures(vb.checkPersistence(made, before, after, after, 'human')), []);
+  assert.deepEqual(failures(vb.checkPersistence(made, before, after, after)), ['persist.decision.45331']);
+  const agentAfter = decidedBy(encounter(), 'p-flex', 'approve', ACC_NOTE, AGENT_ACCOUNT);
+  assert.deepEqual(failures(vb.checkPersistence(made, before, agentAfter, agentAfter, 'human')), ['persist.decision.45331']);
+  const card = { id: 'card-p-flex', badge: 'Approved', insight: `Approved by Demo Reviewer 1 Nov 2026 · revision 1 · Note: ${ACC_NOTE}` };
+  const dom = (cards, decisions = made, shape = after) => vb.checkDecisionDom(decisions, shape, cards, [], { acceptance: true });
+  assert.deepEqual(dom([card]).map(r => `${r.id}:${r.status}`), ['dom.decision.45331:pass']);
+  assert.deepEqual(failures(dom([{ ...card, badge: 'Approved · agent' }])), ['dom.decision.45331']);
+  assert.deepEqual(failures(dom([{ ...card, badge: 'Ready for review' }])), ['dom.decision.45331']);
+  assert.deepEqual(failures(dom([{ ...card, insight: 'Approved by someone' }])), ['dom.decision.45331']);
+  assert.deepEqual(failures(dom([])), ['dom.decision.45331']);
+  assert.match(dom([], [{ ...made[0], action: 'reject' }])[0].reason, /the acceptance reviewer makes approvals only/);
+  // agent mode is unchanged: the same human card fails it (no agent label)
+  assert.deepEqual(failures(vb.checkDecisionDom(made, after, [card], [])), ['dom.decision.45331']);
+});
+
+test('the acceptance checks agree with the markup the live app.js renders for a human approval, and record it verbatim', { skip: !fs.existsSync(APP) && 'studio/static/studio/app.js is not present' }, () => {
+  const app = require(APP);
+  const enc = decidedBy(encounter(), 'p-flex', 'approve', ACC_NOTE);
+  const { cards } = parseReview(app.reviewView(enc, app.documentLayout(enc), 'codes', false));
+  const card = cards.find(c => c.id === 'card-p-flex');
+  assert.ok(card, 'no code card for the approved code');
+  const made = [{ proposal_id: 'p-flex', code: '45331', family: 'gi.flex_sig', action: 'approve', note: ACC_NOTE, http_status: 201, decision_id: 'd-p-flex' }];
+  assert.deepEqual(failures(vb.checkDecisionDom(made, enc, cards, [], { acceptance: true })), []);
+  const result = vb.checkAcceptanceDecisions(made, enc, MUST_NOT, ACCOUNT, cards);
+  assert.deepEqual(failures(result.checks), []);
+  assert.deepEqual([result.labels[0].card_badge, result.labels[0].card_insight], [card.badge, card.insight]);
+  // what the app shows for it: approved, not as an agent's, by the reviewer, with the labelled note
+  assert.equal(card.badge, 'Approved');
+  assert.ok(card.insight.startsWith('Approved by Demo Reviewer'), card.insight);
+  assert.ok(card.insight.includes(`Note: ${ACC_NOTE}`) && !/agent/i.test(card.insight), card.insight);
+  // and agent mode fails the same card
+  assert.deepEqual(failures(vb.checkDecisionDom(made, enc, cards, [])), ['dom.decision.45331']);
+});
+
+// A scripted review page for verifyDocument's decisions (an attached, pasted encounter). GET /api/encounters/<id> serves
+// the encounter as decided so far; the page is the live app.js's reviewView of it, read through readDom's own selectors
+// (parseHtml, wrap); a decision is made only as the screen makes one - its button, the review dialog, the acknowledgement
+// box for an approval, the note, Save - and recorded as studio/review.py records it for ``account`` (app.js submitReview
+// posts the trimmed note and, for an approval, the session's attestation). Every act is recorded; anything else the
+// walk asks of the page ends it with an error.
+function reviewPage(id, start, account) {
+  const app = require(APP);
+  const acts = [];
+  const posts = [];
+  let current = clone(start);
+  let url = 'about:blank';
+  let dialog = null;
+  let pending = null;
+  const dom = () => {
+    const root = parseHtml(app.reviewView(current, app.documentLayout(current), 'codes', false));
+    root.attrs = {};
+    return wrap(root);
+  };
+  const locator = selector => {
+    const self = {
+      first: () => self,
+      count: async () => {
+        if (selector === '#exportDialog[open]') return 1;  // read as open: the walk only asks it what it offers
+        if (selector.startsWith('#exportOptions ')) return 0;  // nothing is ready to export (readiness says none)
+        if (selector.startsWith('button[data-decision=')) return dom().querySelectorAll(selector).length;
+        throw new Error(`unexpected count of ${selector}`);
+      },
+      click: async () => {
+        const match = /^button\[data-decision="(\w+)"\]\[data-proposal="([^"]+)"\]$/.exec(selector);
+        if (!match || !dom().querySelectorAll(selector).length) throw new Error(`unexpected click on ${selector}`);
+        dialog = { action: match[1], proposal: match[2], acknowledged: false, note: '' };
+        acts.push(`open the ${match[1]} dialog for ${match[2]}`);
+      },
+      waitFor: async ({ state } = {}) => {
+        if (selector !== '#reviewDialog') throw new Error(`unexpected wait for ${selector}`);
+        if ((state === 'visible') !== Boolean(dialog)) throw new Error(`the review dialog is not ${state}`);
+      },
+    };
+    return self;
+  };
+  return {
+    acts, posts, current: () => current,
+    goto: async next => { url = next; },
+    url: () => url,
+    waitForURL: async predicate => { if (!predicate(new URL(url))) throw new Error(`not at ${url}`); },
+    request: { get: async address => {
+      const where = new URL(address).pathname;
+      if (where === `/api/encounters/${id}`) return { ok: () => true, status: () => 200, json: async () => clone(current) };
+      if (where === `/api/encounters/${id}/original`) return { ok: () => false, status: () => 404, body: async () => Buffer.alloc(0) };
+      throw new Error(`unexpected GET ${where}`);
+    } },
+    waitForFunction: async () => true,
+    $$eval: async (selector, fn) => fn(dom().querySelectorAll(selector)),
+    locator,
+    check: async selector => {
+      if (selector !== '#reviewAcknowledgement' || !dialog) throw new Error(`unexpected check of ${selector}`);
+      dialog.acknowledged = true;
+    },
+    fill: async (selector, value) => {
+      if (selector !== '#reviewNote' || !dialog) throw new Error(`unexpected fill of ${selector}`);
+      dialog.note = value;
+    },
+    waitForResponse: () => {
+      let resolve;
+      const promise = new Promise(done => { resolve = done; });
+      pending = { promise, resolve };
+      return promise;
+    },
+    click: async selector => {
+      if (selector !== '#saveReview' || !dialog) throw new Error(`unexpected click on ${selector}`);
+      if (dialog.action === 'approve' && !dialog.acknowledged) throw new Error('the screen refuses an approval without its acknowledgement');
+      const body = { proposal_id: dialog.proposal, action: dialog.action, note: dialog.note.trim(),
+        acknowledgement: dialog.action === 'approve' ? account.acknowledgement : '' };
+      posts.push(body);
+      decidedBy(current, body.proposal_id, body.action, body.note, account);
+      const decision = current.assessment.proposals.find(p => p.id === body.proposal_id).decision;
+      acts.push(`${body.action} ${decision.code}`);
+      dialog = null;
+      pending.resolve({ status: () => 201, json: async () => clone(decision) });
+    },
+    reload: async () => { acts.push('reload'); },
+    keyboard: { press: async () => {} },
+    setViewportSize: async () => {},
+    waitForTimeout: async () => {},
+    screenshot: async () => {},
+  };
+}
+
+// gi-08 pasted, its two codes ready, an exclusion of a must_not_code family to confirm and a second review on offer: an
+// agent walk would approve, reject, confirm and ask; the acceptance walk only approves.
+function acceptanceEncounter() {
+  const enc = withExcluded(pastedEncounter(), 'p-plan', '43260', 'gi.ercp');
+  enc.second_review = { available: true, can_request: true, items: ['Service S1'], reason: '' };
+  enc.readiness = { draft: false, reviewed: false, blockers: ['Every selected code needs a decision.'] };
+  return enc;
+}
+
+async function walkDecisions({ opts = {}, notes, account, reviewPlan }) {
+  const id = '6c1f0e9a-2b3d-4c5e-8f9a-0b1c2d3e4f5a';
+  const out = privateDir();
+  try {
+    const doc = { id: 'acceptance-walk', title: 'acceptance walk', source: 'documents/gi-08-flexible-sigmoidoscopy-biopsy.txt',
+      delivery: { format: 'paste', file: 'gi-08.paste.txt' }, upload: { service_date: null }, expected_extraction: {},
+      expected_context: {}, expected_routing: {}, expected_clarifications: [], incomplete_services: [],
+      must_not_code: [{ family: 'gi.ercp', reason: 'documented as planned, not performed' }], review_plan: reviewPlan };
+    const item = { doc, sourceText: TEXT, delivery: { format: 'paste', file: doc.delivery.file, sha256: sha(TEXT), size: Buffer.byteLength(TEXT) } };
+    const page = reviewPage(id, { ...acceptanceEncounter(), id }, account);
+    const record = await vb.verifyDocument(page, { out, baseUrl: 'https://cpt.example', encounter: id, deadlineSeconds: 60,
+      noAutoApprove: false, ...opts }, { review_notes: notes }, item, []);
+    return { record, acts: page.acts, posts: page.posts, final: page.current() };
+  } finally {
+    fs.rmSync(out, { recursive: true, force: true });
+  }
+}
+
+const ACCEPTANCE_PLAN = { reject: { family: 'gi.colonoscopy', prefer_codes: ['45380'] }, approve_codes: ['45331'],
+  second_review: { ask: true, approve_codes: ['45380'] } };
+
+test('the acceptance walk approves only the named code, through the screen, as the human reviewer, and records what it did not do', { skip: !fs.existsSync(APP) && 'studio/static/studio/app.js is not present' }, async () => {
+  const { record, acts, posts, final } = await walkDecisions({ opts: { acceptanceReviewer: true, noAutoApprove: true, account: ACCOUNT },
+    notes: { ...ACC_NOTES, reject: AGENT_NOTES.reject }, account: ACCOUNT, reviewPlan: ACCEPTANCE_PLAN });
+  assert.equal(record.error, null);
+  assert.deepEqual(acts, ['open the approve dialog for p-flex', 'approve 45331', 'reload']);
+  assert.deepEqual(posts, [{ proposal_id: 'p-flex', action: 'approve', note: ACC_NOTE, acknowledgement: attestation('human') }]);
+  assert.deepEqual(record.decisions.map(d => [d.code, d.action, d.http_status, d.reviewer_kind, d.note]), [['45331', 'approve', 201, 'human', ACC_NOTE]]);
+  assert.deepEqual(final.assessment.proposals.map(p => `${p.code}:${p.decision_state}`),
+    ['45331:approved', '45380:undecided', '45330:undecided', '45378:undecided', '43260:undecided']);
+  const card = record.decision_labels[0].card_insight;
+  assert.deepEqual({ ...record.decision_labels[0], card_insight: undefined }, { code: '45331', action: 'approve', decision_id: 'd-p-flex',
+    recorded: true, approval: true, human: true, reviewer: 'Demo Reviewer', reviewer_is_account: true, note_kept: true, note_labelled: true,
+    acknowledgement: attestation('human'), acknowledgement_is_session_attestation: true, card_badge: 'Approved', card_insight: undefined });
+  assert.ok(card.startsWith('Approved by Demo Reviewer') && card.includes(`Note: ${ACC_NOTE}`), card);
+  const by = Object.fromEntries(record.assertions.map(a => [a.id, a]));
+  for (const id of ['second_review.asked', 'decisions.rejection', 'decisions.confirmations']) assert.equal(by[id]?.status, 'skipped', id);
+  assert.match(by['decisions.confirmations'].reason, /left undecided: 43260$/);
+  assert.match(by['decisions.not_in_approve_codes'].reason, /--acceptance-reviewer\): 45380$/);
+  for (const id of ['persist.decision.45331', 'dom.decision.45331', 'decisions.labelled', 'decisions.never_approved_must_not_code',
+    'readiness.reviewed_blocked']) assert.equal(by[id]?.status, 'pass', id);
+  assert.equal(record.designated_rejection, null);
+  assert.equal(record.second_review, undefined);
+  assert.deepEqual(record.assertions.filter(a => a.status === 'fail').map(a => a.id), []);
+  assert.equal(record.result, 'pass');
+});
+
+test('the agent walk on the same page and plan still approves, rejects the designated code and confirms the exclusion', { skip: !fs.existsSync(APP) && 'studio/static/studio/app.js is not present' }, async () => {
+  const { second_review: _asked, ...plan } = ACCEPTANCE_PLAN;  // the scripted page does not answer a second review
+  const { record, acts, posts } = await walkDecisions({ notes: AGENT_NOTES, account: AGENT_ACCOUNT, reviewPlan: plan });
+  assert.equal(record.error, null);
+  assert.deepEqual(acts, ['open the approve dialog for p-flex', 'approve 45331', 'open the reject dialog for p-colo', 'reject 45380',
+    'open the confirm dialog for p-plan', 'confirm 43260', 'reload']);
+  assert.deepEqual(posts.map(p => [p.action, p.acknowledgement]), [['approve', attestation('agent')], ['reject', ''], ['confirm', '']]);
+  assert.equal(record.designated_rejection, '45380');
+  assert.deepEqual(record.decision_labels.map(l => [l.code, l.agent, l.note_kept, l.note_labelled, l.acknowledgement_labelled]),
+    [['45331', true, true, true, true], ['45380', true, true, true, null], ['43260', true, true, true, null]]);
+  assert.deepEqual(record.assertions.filter(a => a.status === 'fail').map(a => a.id), []);
+  assert.equal(record.result, 'pass');
+  // the same agent walk with the acceptance reviewer's note is refused before anything is uploaded
+  assert.match(vb.planProblems({ id: 'acceptance-walk', review_plan: plan }, ACC_NOTES)[0], /must say "agent-executed synthetic"/);
+});
+
+test('the acceptance walk answers the clarification the document needs once, records it as a clarification answer, and saves nothing else', async () => {
+  const before = questionEncounter();
+  const after = answeredEncounter(before);
+  const { record, acts, posts } = await walkQuestion([before, after], [{ fact: 'service_date', scope_in: ['encounter'] }],
+    { opts: { acceptanceReviewer: true, noAutoApprove: true, account: ACCOUNT }, notes: ACC_NOTES });
+  assert.equal(record.error, null);
+  assert.deepEqual(acts, ['open the context form', 'fill the service date with "2026-10-08"', 'the form posted', 'reload', 'reload']);
+  assert.deepEqual(posts, [ANSWER_EDIT.posted]);
+  assert.deepEqual([record.context_edit.clarification_answer, record.context_edit.coding_decision, record.context_edit.http_status,
+    record.context_edit.request_date, record.context_edit.identical.via], [true, false, 201, ANSWER, null]);
+  assert.match(record.context_edit.identical.skipped, /answers the clarification once/);
+  const hard = record.assertions.filter(a => a.id.startsWith('context_edit.') && (a.severity === 'hard' || a.status === 'skipped'));
+  assert.deepEqual(hard.map(a => `${a.id}:${a.status}`), QUESTION_HARD.map(id => `${id}:${id === 'context_edit.identical_save' ? 'skipped' : 'pass'}`));
+  assert.deepEqual(record.decisions, []);
+  assert.deepEqual(record.assertions.filter(a => a.status === 'fail').map(a => a.id), []);
+  assert.equal(record.result, 'pass');
+  // the agent walk of the same question still makes the same save again and judges it (unchanged)
+  const agent = await walkQuestion([before, after, clone(after)], [{ fact: 'service_date', scope_in: ['encounter'] }]);
+  assert.equal(agent.record.context_edit.clarification_answer, undefined);
+  assert.equal(agent.record.context_edit.identical.via, 'api');
+});
+
+// The planner makes approvals only under --acceptance-reviewer (its tests above), so no fixture reaches the walk's own
+// approvals-only refusal; it is held in place by position, as the attach refusal is (ops-2): before any decision is made.
+test('verifyDocument refuses anything but an approval under --acceptance-reviewer before it decides anything', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'verify_browser.cjs'), 'utf8');
+  const body = source.slice(source.indexOf('async function verifyDocument('));
+  // each line must be there (indexOf answers -1 for a missing one, which would read as "before")
+  const at = text => {
+    const index = body.indexOf(text);
+    assert.ok(index > 0, `not in verifyDocument: ${text}`);
+    return index;
+  };
+  const refusal = at('if (other.length) throw new Error(`refusing to decide: the acceptance reviewer makes approvals only');
+  assert.ok(at('const deciding = [...plan.decisions, ...confirmations];') < refusal);
+  assert.ok(at("const other = deciding.filter(d => d.action !== 'approve');") < refusal);
+  assert.ok(refusal < at('await decide('), 'a decision is made before the approvals-only refusal');
+  assert.ok(at('for (const decision of deciding) record.decisions.push(await decide(page, id, decision));') > refusal);
+});
+
+test('planProblems --acceptance-reviewer: an approval note the screen or the server would change is refused before any upload', () => {
+  const doc = { id: 'acc-1', upload: { service_date: null }, review_plan: { approve_codes: ['43239'] } };
+  const problemsFor = note => vb.planProblems(doc, { approve: note }, { acceptanceReviewer: true });
+  const ch = String.fromCharCode;
+  assert.deepEqual(problemsFor(`${ACC_NOTE}\nA second line, kept as written.`), []);
+  assert.deepEqual(problemsFor(`${ACC_NOTE} ${'x'.repeat(vb.REVIEW_NOTE_MAX - ACC_NOTE.length - 1)}`), [], 'exactly the field\'s length');
+  assert.deepEqual(problemsFor(`${ACC_NOTE} ${String.fromCodePoint(0x1f600)} kept`), [], 'an astral character is not a lone surrogate');
+  for (const [note, reason] of [
+    [` ${ACC_NOTE}`, /begins or ends with whitespace/],
+    [`${ACC_NOTE}\n`, /begins or ends with whitespace/],
+    [`${ACC_NOTE}${ch(0xfeff)}`, /begins or ends with whitespace/],  // the page's trim takes it; Python's strip would not
+    [`${ACC_NOTE}${ch(0x1c)}`, /begins or ends with whitespace/],  // Python's strip takes it; the page's trim would not
+    [`${ch(0x85)}${ACC_NOTE}`, /begins or ends with whitespace/],
+    [`${ACC_NOTE} ${'x'.repeat(vb.REVIEW_NOTE_MAX - ACC_NOTE.length)}`, /longer than the 600 characters the note field takes/],
+    [`${ACC_NOTE}\r\nA second line.`, /carriage return/],
+    [`${ACC_NOTE} ${ch(0)} x`, /NUL or a lone surrogate/],
+    [`${ACC_NOTE} ${ch(0xd800)} x`, /NUL or a lone surrogate/],
+  ]) {
+    const problems = problemsFor(note);
+    assert.equal(problems.length, 1, JSON.stringify(note.slice(-16)));
+    assert.match(problems[0], /^review_notes approve could not be kept verbatim through the review screen: /);
+    assert.match(problems[0], reason, JSON.stringify(note.slice(-16)));
+  }
+  // the note field's length is the template's
+  const page = fs.readFileSync(path.join(ROOT, 'studio', 'templates', 'studio', 'index.html'), 'utf8');
+  const field = /<textarea id="reviewNote"[^>]*\smaxlength="(\d+)"/.exec(page);
+  assert.ok(field, 'the review note field has no maxlength');
+  assert.equal(Number(field[1]), vb.REVIEW_NOTE_MAX);
+  // agent mode does not check it (unchanged)
+  assert.deepEqual(vb.planProblems(doc, { approve: ` ${AGENT_NOTES.approve}` }), []);
 });
