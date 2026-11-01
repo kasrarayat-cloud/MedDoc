@@ -38,6 +38,9 @@ OPENAI_VALUE = 'sk-synthetic-openai-0123456789abcdefghijklmnopqrstuv'
 ANTHROPIC_VALUE = 'sk-ant-synthetic-0123456789abcdefghijklmnopqrstuv'
 OPENAI_FILE = f'# synthetic\nOPENAI_API_KEY={OPENAI_VALUE}\nOPENAI_PROJECT=proj_synthetic0123\n'.encode()
 ANTHROPIC_FILE = f'export ANTHROPIC_API_KEY="{ANTHROPIC_VALUE}"  # synthetic\n'.encode()
+CORTI_VALUE = 'synthetic-corti-client-secret-0123456789'
+CORTI_FILE = (f'CORTI_CLIENT_ID=synthetic-client\nCORTI_CLIENT_SECRET={CORTI_VALUE}\nCORTI_ENVIRONMENT=eu\n'
+              'CORTI_TENANT_NAME=synthetic-tenant\n').encode()
 
 
 def flags(argv, flag):
@@ -79,6 +82,9 @@ class ParticipantArgumentTests(unittest.TestCase):
                           '--authorization-ref', RULING, '--access-check')
         self.assertEqual((args.astra_mode, args.fable_mode, args.access_check), ('live', 'live', True))
         self.assertEqual(self.parse('--phase', 'passages').phase, 'passages')
+        # Corti is a participant the access check reaches when the provider is live (checklist 1.3)
+        self.assertTrue(self.parse('--phase', 'app', '--provider-mode', 'live', '--authorization-ref', RULING,
+                                   '--access-check').access_check)
 
     def test_refusals(self):
         # live needs the recorded authority, as Corti's live mode does
@@ -90,8 +96,7 @@ class ParticipantArgumentTests(unittest.TestCase):
         self.refused('--phase', 'app', '--provider-mode', 'disabled', '--astra-mode', 'replay')
         # the access check sends a real request, so it needs a live participant to send it
         self.assertIn('--access-check checks each live participant',
-                      self.refused('--phase', 'app', '--provider-mode', 'live', '--authorization-ref', RULING,
-                                   '--access-check'))
+                      self.refused('--phase', 'app', '--provider-mode', 'disabled', '--access-check'))
         self.assertIn('only applies to',
                       self.refused('--phase', 'app', '--provider-mode', 'disabled', '--astra-mode', 'disabled',
                                    '--authorization-ref', RULING))
@@ -503,6 +508,7 @@ class AppWorld:
         self.scan_dir.mkdir(exist_ok=True)
         (self.scan_dir / 'astra').write_bytes(OPENAI_FILE)
         (self.scan_dir / 'fable').write_bytes(ANTHROPIC_FILE)
+        (self.scan_dir / 'corti').write_bytes(CORTI_FILE)
         self.stat = {ASTRA['target']: INSTALLED, FABLE['target']: INSTALLED, install.CORTI_TARGET: INSTALLED}
 
     def respond(self, command, kwargs):
@@ -666,6 +672,44 @@ class AppPhaseParticipantTests(TemporaryDirectoryTest):
                          [[f'type=bind,src={ASTRA["target"]},dst=/scan/astra,readonly'],
                           [f'type=bind,src={FABLE["target"]},dst=/scan/fable,readonly']])
         self.assertIn('access checked: astra, fable', details['summary'])
+
+    def test_a_live_corti_is_access_checked_first_with_its_own_mount_and_nothing_else(self):
+        details = self.app(app_args(self.tmp, provider='live', access=True))
+        checks = [event for event in self.world.timeline
+                  if event[0] == 'oneshot' and event[1] == ('manage', 'participant_access_check')]
+        self.assertEqual([event[2][-1] for event in checks], ['corti', 'astra', 'fable'])
+        corti = checks[0][3]
+        self.assertTrue(corti['credentials'])
+        self.assertNotIn('participant_files', corti)
+        self.assertEqual((corti['network'], corti['timeout']), (install.NETWORK, install.ACCESS_CHECK_SECONDS))
+        env = flags(corti['environment'], '-e')
+        for expected in ('CPT_STUDIO_PROVIDER_MODE=live', 'CPT_STUDIO_ASTRA_MODE=disabled',
+                         'CPT_STUDIO_FABLE_MODE=disabled', f'CPT_STUDIO_AUTHORIZATION_REF={RULING}',
+                         f'CPT_STUDIO_CORTI_CREDENTIALS_FILE={install.CREDENTIALS_IN_CONTAINER}'):
+            self.assertIn(expected, env)
+        self.assertFalse([item for item in env if 'OPENAI' in item or 'ANTHROPIC' in item])
+        # Astra's and Fable's checks run with Corti disabled and no Corti file
+        for event in checks[1:]:
+            self.assertNotIn('credentials', event[3])
+            self.assertIn('CPT_STUDIO_PROVIDER_MODE=disabled', flags(event[3]['environment'], '-e'))
+        scans = [event[1] for event in self.world.timeline if event[0] == 'helper']
+        self.assertEqual(scans[0], [f'type=bind,src={install.CORTI_TARGET},dst=/scan/corti,readonly'])
+        self.assertEqual(sorted(details['access_checks']), ['astra', 'corti', 'fable'])
+        self.assertIn('access checked: corti, astra, fable', details['summary'])
+
+    def test_a_corti_check_whose_output_carries_its_secret_is_not_recorded(self):
+        self.world.answers[('access', 'corti')] = SimpleNamespace(
+            returncode=0, stdout=json.dumps({'ok': True, 'error': f'401 for {CORTI_VALUE}'}).encode(), stderr=b'')
+        with self.assertRaises(install.InstallError) as caught:
+            self.app(app_args(self.tmp, provider='live', access=True))
+        check = caught.exception.details['access_checks']['corti']
+        self.assertEqual((check['ok'], check['recorded']), (False, False))
+        self.assertNotIn(CORTI_VALUE, str(caught.exception) + json.dumps(caught.exception.details))
+        # the two-letter environment ('eu', in every Corti endpoint) is below the scan's length and never matches
+        self.world.answers[('access', 'corti')] = SimpleNamespace(
+            returncode=0, stdout=b'{"endpoint": "https://api.eu.corti.app/v2/tools/coding/"}', stderr=b'')
+        details = self.app(app_args(self.tmp, provider='live', access=True))
+        self.assertTrue(details['access_checks']['corti']['ok'])
 
     def test_a_failed_access_check_fails_the_phase_and_says_the_pair_is_installed(self):
         self.world.answers[('access', 'fable')] = SimpleNamespace(

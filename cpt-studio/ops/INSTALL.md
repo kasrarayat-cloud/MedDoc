@@ -198,21 +198,25 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   With `--access-check` (opt-in: it needs a live participant, and never runs
   without the flag, because it sends a real request), once the new pair runs,
   its states are recomputed and the parked pair is removed, each live
-  participant in turn is sent ONE request by
-  `manage participant_access_check --participant <astra|fable>`, in a one-shot
-  with the worker's mount and network for that participant: its credentials
-  file read-only at the worker's path, `cpt-studio-net`, that participant live
-  under the same `--authorization-ref`, Corti and the other participant
-  disabled, bounded at 420 s (the participant send deadline is 330 s). What the
-  container wrote is recorded - its JSON receipt in this phase's receipt
-  (`access_checks`), everything in a log - only once a root helper has found no
-  value from that participant's credentials file in it (key names only come
-  back from that helper); otherwise nothing it wrote is kept and the check
-  fails. A check that exits non-zero, does not finish (whether its request
-  reached the vendor is then not known) or writes no JSON receipt fails the
-  phase, which then says the pair stays installed with those participants live:
-  fix the credentials or the vendor account and run `app` again with
-  `--access-check`, or install that participant disabled.
+  participant in turn - Corti first when `--provider-mode live`, then Astra and
+  Fable - is sent ONE request by
+  `manage participant_access_check --participant <corti|astra|fable>`, in a
+  one-shot with the worker's mount and network for that participant: its
+  credentials file read-only at the worker's path, `cpt-studio-net`, that
+  participant live under the same `--authorization-ref`, every other one
+  disabled, bounded at 420 s (the participant send deadline is 330 s). The
+  command takes the installation-wide provider lock and sends nothing while
+  another request holds it, which fails the check: let the queue drain (or Stop
+  the encounters) before `app --access-check`. It writes nothing to the
+  database. What the container wrote is recorded - its JSON receipt in this
+  phase's receipt (`access_checks`), everything in a log - only once a root
+  helper has found no value from that participant's credentials file in it
+  (key names only come back from that helper); otherwise nothing it wrote is
+  kept and the check fails. A check that exits non-zero, does not finish
+  (whether its request reached the vendor is then not known) or writes no JSON
+  receipt fails the phase, which then says the pair stays installed with those
+  participants live: fix the credentials or the vendor account and run `app`
+  again with `--access-check`, or install that participant disabled.
   On any failure before the new pair runs, the recompute does not run: the new
   pair is stopped and, before the parked pair is restored, every stage
   it queued, ran or left resumable since the swap, and every stage of a kind the
@@ -283,8 +287,10 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   one-shot per file, in name order. The importer is idempotent, so the phase is
   too: rerun it freely. The receipt records each file's git blob id, the
   importer's output and its log; a failed import names its file and the files
-  imported before it (they stay imported). Until it has run, an assessment
-  retrieves no passage.
+  imported before it (they stay imported). Until it has run there is no
+  passage to retrieve, and an assessment the new pair makes meanwhile is
+  recorded without one: to have none, run it right after `app`, or let the
+  queue drain first.
 - **provision** writes both credentials files only after the accounts exist
   with the generated passwords; an account that already existed (password
   unchanged) aborts and discards them unless `--reset-passwords` was given.
@@ -543,8 +549,9 @@ verified inside the image under that setting.
   `verify` refuse if any task outside CPT Studio runs as 10150.
 - The installer reads a participant's credentials by key NAME only; whether a
   key works is known only from the opt-in access check (one real, paid request
-  per live participant), or from the first live send. Corti has no access check
-  here.
+  per live participant, Corti included), or from the first live send. A check
+  that fails leaves the pair installed: retrying it means running `app` again,
+  which parks and replaces the pair.
 - The scan that keeps credential values out of receipts and logs matches each
   value as written, unquoted and without an inline comment, and does not match
   values under 8 characters (they would match by chance), nor a value

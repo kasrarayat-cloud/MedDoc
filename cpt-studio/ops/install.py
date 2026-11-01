@@ -373,8 +373,9 @@ def argument_problem(args) -> str:
                 return f'--{name}-mode live needs --authorization-ref (a ruling file tracked at the revision).'
         if args.authorization_ref and args.provider_mode == 'disabled' and not participants:
             return '--authorization-ref only applies to --provider-mode live, --astra-mode live or --fable-mode live.'
-        if args.access_check and not participants:
-            return '--access-check checks each live participant: give --astra-mode live or --fable-mode live.'
+        if args.access_check and args.provider_mode != 'live' and not participants:
+            return ('--access-check checks each live participant: give --provider-mode live, --astra-mode live or '
+                    '--fable-mode live.')
         reference = args.authorization_ref
         if reference and (not AUTH_REF_RE.fullmatch(reference) or '..' in reference.split('/') or len(reference) > 200):
             return '--authorization-ref must be a relative repository path.'
@@ -1081,15 +1082,20 @@ def participant_secrets() -> dict:
     return run_helper(H_PARTICIPANT_SECRETS, params, mounts=mounts, sensitive=True)['participants']
 
 
+def credentials_target(name) -> str:
+    """The installed credentials file of 'corti' or of a harness participant."""
+    return CORTI_TARGET if name == 'corti' else PARTICIPANTS[name]['target']
+
+
 def credential_free(outputs, participants) -> bool:
-    """Whether no value from the credentials files of ``participants`` occurs in ``outputs`` (bytes), read inside a root
-    helper that answers with key names only (H_CREDENTIAL_SCAN). Output from a container that held such a file is
-    recorded only when this says so; when it cannot be told, it is not (HARNESS.md I9)."""
+    """Whether no value from the credentials files of ``participants`` ('corti' included) occurs in ``outputs`` (bytes),
+    read inside a root helper that answers with key names only (H_CREDENTIAL_SCAN). Output from a container that held
+    such a file is recorded only when this says so; when it cannot be told, it is not (HARNESS.md I9)."""
     names = sorted(set(participants))
     if not names:
         return True
     blob = base64.b64encode(b'\n\0\n'.join(outputs)).decode()
-    mounts = [f'type=bind,src={PARTICIPANTS[name]["target"]},dst=/scan/{name},readonly' for name in names]
+    mounts = [f'type=bind,src={credentials_target(name)},dst=/scan/{name},readonly' for name in names]
     try:
         found = run_helper(H_CREDENTIAL_SCAN, {'blob': blob, 'files': names, 'limit': PARTICIPANT_FILE_LIMIT,
                                                'min_length': 8}, mounts=mounts, sensitive=True)['found']
@@ -2672,17 +2678,21 @@ def access_receipt(stdout: bytes):
 
 
 def participant_access_check(ctx, image_id, env_bytes, name, authorization_ref) -> dict:
-    """``manage participant_access_check --participant <name>`` sends ONE real request to the participant's vendor, so
-    it runs only with --access-check, once the new pair runs. A one-shot with the worker's mount and network for that
-    participant: its credentials file read-only at the worker's path and cpt-studio-net, the participant live under the
-    authorization the worker has, Corti and the other participant disabled. What the container wrote is recorded (its
-    JSON receipt here, everything in a log) only once a root helper found no credential value in it (credential_free).
-    {ok, exit, recorded, receipt, log, problem}."""
-    environment = runtime_env('disabled', authorization_ref, participants={name: 'live'})
+    """``manage participant_access_check --participant <name>`` sends ONE real request to the participant's vendor
+    ('corti', 'astra' or 'fable'), so it runs only with --access-check, once the new pair runs. A one-shot with the
+    worker's mount and network for that participant: its credentials file read-only at the worker's path and
+    cpt-studio-net, that participant live under the authorization the worker has, every other one disabled. What the
+    container wrote is recorded (its JSON receipt here, everything in a log) only once a root helper found no
+    credential value in it (credential_free). {ok, exit, recorded, receipt, log, problem}."""
+    if name == 'corti':
+        environment = runtime_env('live', authorization_ref, credentials=True)
+        files = {'credentials': True}
+    else:
+        environment = runtime_env('disabled', authorization_ref, participants={name: 'live'})
+        files = {'participant_files': (name,)}
     try:
         result = oneshot(image_id, ['manage', 'participant_access_check', '--participant', name], env_bytes,
-                         network=NETWORK, participant_files=(name,), environment=environment,
-                         timeout=ACCESS_CHECK_SECONDS)
+                         network=NETWORK, environment=environment, timeout=ACCESS_CHECK_SECONDS, **files)
     except InstallError as error:  # it did not finish: whether its request reached the vendor is not known
         return {'ok': False, 'recorded': False, 'problem': f'{error} Whether its request reached the vendor is not '
                                                            'known; nothing it wrote was recorded.'}
@@ -2794,12 +2804,13 @@ def phase_app(ctx) -> dict:
     except BaseException as error:  # noqa: BLE001 — the pair is installed: the receipt says what is left to do
         raise InstallError(after_swap_failure(image_id, mode, states, error, parked, modes),
                            details={**services, 'states_recomputed': states}) from error
-    # Opt-in, last: each live participant is sent one real request (participant_access_check), never without the flag.
-    checks = None
+    # Opt-in, last: each live participant - Corti too, when the provider is live (checklist 1.3: all three) - is sent
+    # one real request (participant_access_check), never without the flag.
+    checks, checked = None, (['corti'] if mode == 'live' else []) + live
     if access:
         checks = {}
         try:
-            for name in live:
+            for name in checked:
                 checks[name] = participant_access_check(ctx, image_id, env, name, reference)
         except BaseException as error:  # noqa: BLE001 — the pair is installed: the receipt says what is left to do
             raise InstallError(access_check_failure(image_id, mode, modes, states, checks, error),
@@ -2812,7 +2823,7 @@ def phase_app(ctx) -> dict:
             'states_recomputed': states, 'access_checks': checks if access else 'not run (no --access-check)',
             **services,
             'summary': f'web and worker running {image_id[:19]} ({pair_modes(mode, modes)})'
-                       + (f'; access checked: {", ".join(live)}' if access else '')}
+                       + (f'; access checked: {", ".join(checked)}' if access else '')}
 
 
 def reference_command(kind, path, retrieved_at) -> list:
