@@ -15,6 +15,7 @@ Standard library only. Phase-by-phase effects: ops/INSTALL.md.
 from __future__ import annotations
 
 import argparse
+import ast
 import base64
 import datetime as dt
 import fcntl
@@ -53,7 +54,10 @@ DB_VOLUME = 'cpt-studio-pg'
 FILES_VOLUME = 'cpt-studio-files'
 DB_CONTAINER = 'cpt-studio-db'
 SERVICES = {'web': 'cpt-studio-web', 'worker': 'cpt-studio-worker'}
-STOP_SECONDS = {'web': 30, 'worker': 150}  # a worker may be inside a 120 s provider read
+# A stopped worker finishes the stage it is in (run_worker), which may be inside a harness participant's send: that ends
+# by settings.PARTICIPANT_SEND_DEADLINE_SECONDS (330 s; Corti's by 150 s) and must be recorded before Docker kills the
+# worker, or a request that reached the vendor is left 'sending' (HARNESS.md 8).
+STOP_SECONDS = {'web': 30, 'worker': 360}
 DB_NAME = DB_USER = 'cptstudio'
 APP_UID = 10150  # must equal the Dockerfile's USER; unique on this host (10001 is a co-tenant's)
 POSTGRES_UID = 70
@@ -77,6 +81,31 @@ DB_ENV_KEYS = ('POSTGRES_PASSWORD',)
 CORTI_SOURCE = '/etc/quillmd-corti-test/credentials.env'
 CORTI_TARGET = f'{ETC_DIR}/corti-credentials.env'
 CORTI_KEYS = ('CORTI_CLIENT_ID', 'CORTI_CLIENT_SECRET', 'CORTI_ENVIRONMENT', 'CORTI_TENANT_NAME')
+# The harness participants' credentials (HARNESS.md 8), optional and kept apart from the all-or-nothing set above:
+# adding them to it would read every existing install as partial. Each is copied unread from the source the owner
+# places (root 0600 in a root 0700 directory) when it exists, checked by key NAME only, and mounted read-only into the
+# worker alone, for a live participant only; the web is given the path and no file, as for Corti. A missing source
+# leaves that participant disabled. Models and endpoints are the adapters' constants, never the installer's.
+PROVIDER_SOURCES = '/etc/cpt-studio-provider-sources'
+PARTICIPANTS = {
+    'astra': {'source': f'{PROVIDER_SOURCES}/openai.env', 'target': f'{ETC_DIR}/openai-credentials.env',
+              'mounted': '/run/cpt-studio/openai-credentials.env', 'file_env': 'CPT_STUDIO_OPENAI_CREDENTIALS_FILE',
+              'mode_env': 'CPT_STUDIO_ASTRA_MODE', 'loader': 'load_openai_credentials',
+              'setting': 'OPENAI_CREDENTIALS_FILE', 'required': ('OPENAI_API_KEY',), 'optional': ('OPENAI_PROJECT',)},
+    'fable': {'source': f'{PROVIDER_SOURCES}/anthropic.env', 'target': f'{ETC_DIR}/anthropic-credentials.env',
+              'mounted': '/run/cpt-studio/anthropic-credentials.env',
+              'file_env': 'CPT_STUDIO_ANTHROPIC_CREDENTIALS_FILE', 'mode_env': 'CPT_STUDIO_FABLE_MODE',
+              'loader': 'load_anthropic_credentials', 'setting': 'ANTHROPIC_CREDENTIALS_FILE',
+              'required': ('ANTHROPIC_API_KEY',), 'optional': ('ANTHROPIC_WORKSPACE_ID',)},
+}
+PARTICIPANT_FILE_LIMIT = 32_000  # the size the application's loaders accept (HARNESS.md 8)
+# The access check sends one request: its deadline is the participant send deadline (330 s), plus the container's start.
+ACCESS_CHECK_SECONDS = 420
+ACCESS_CHECK_OUTPUT_LIMIT = 64 * 1024
+# The CMS passage files the revision commits (HARNESS.md 5), in the repository and as the image ships them (/app is the
+# image's copy of cpt-studio/, built from git archive of the revision).
+PASSAGE_DATA = f'{APP}/studio/reference/data'
+PASSAGE_DATA_IN_IMAGE = '/app/studio/reference/data'
 INITIAL_CREDENTIALS = 'initial-credentials.json'
 AGENT_CREDENTIALS = Path('/home/claude/.cpt-studio/agent-credentials.json')
 
@@ -279,6 +308,7 @@ PHASE_ARGUMENTS = {
     'pfs_zip': {'reference'}, 'mue_zip': {'reference'},
     'pfs_retrieved_at': {'reference'}, 'mue_retrieved_at': {'reference'},
     'provider_mode': {'app'}, 'authorization_ref': {'app'},
+    'astra_mode': {'app'}, 'fable_mode': {'app'}, 'access_check': {'app'},
     'owner_username': {'provision'}, 'owner_display_name': {'provision'}, 'agent_username': {'provision'},
     'agent_display_name': {'provision'}, 'workspace_name': {'provision'}, 'reset_passwords': {'provision'},
 }
@@ -295,6 +325,10 @@ def parse_args(argv=None):
     parser.add_argument('--mue-retrieved-at', help='when the operator downloaded the MUE zip, ISO-8601 with offset')
     parser.add_argument('--provider-mode', choices=('disabled', 'live'))
     parser.add_argument('--authorization-ref')
+    parser.add_argument('--astra-mode', choices=('disabled', 'live'), help='Astra (OpenAI); disabled when not given')
+    parser.add_argument('--fable-mode', choices=('disabled', 'live'), help='Fable (Anthropic); disabled when not given')
+    parser.add_argument('--access-check', action='store_true', default=None,
+                        help='after the app phase, send each live participant one real access-check request')
     parser.add_argument('--owner-username')
     parser.add_argument('--owner-display-name')
     parser.add_argument('--agent-username')
@@ -305,6 +339,8 @@ def parse_args(argv=None):
     problem = argument_problem(args)
     if problem:
         parser.error(problem)
+    args.astra_mode = args.astra_mode or 'disabled'
+    args.fable_mode = args.fable_mode or 'disabled'
     args.agent_username = args.agent_username or 'review-agent'
     args.agent_display_name = args.agent_display_name or 'CPT Studio review agent'
     args.owner_display_name = args.owner_display_name or ''
@@ -330,8 +366,16 @@ def argument_problem(args) -> str:
             return '--phase app needs an explicit --provider-mode (disabled or live).'
         if args.provider_mode == 'live' and not args.authorization_ref:
             return '--provider-mode live needs --authorization-ref (a ruling file tracked at the revision).'
-        if args.provider_mode == 'disabled' and args.authorization_ref:
-            return '--authorization-ref only applies to --provider-mode live.'
+        # A live participant sends under the same recorded authority as Corti (HARNESS.md 8; jobs._live_gate).
+        participants = [name for name in PARTICIPANTS if getattr(args, f'{name}_mode') == 'live']
+        for name in participants:
+            if not args.authorization_ref:
+                return f'--{name}-mode live needs --authorization-ref (a ruling file tracked at the revision).'
+        if args.authorization_ref and args.provider_mode == 'disabled' and not participants:
+            return '--authorization-ref only applies to --provider-mode live, --astra-mode live or --fable-mode live.'
+        if args.access_check and args.provider_mode != 'live' and not participants:
+            return ('--access-check checks each live participant: give --provider-mode live, --astra-mode live or '
+                    '--fable-mode live.')
         reference = args.authorization_ref
         if reference and (not AUTH_REF_RE.fullmatch(reference) or '..' in reference.split('/') or len(reference) > 200):
             return '--authorization-ref must be a relative repository path.'
@@ -655,6 +699,164 @@ else:
 print(json.dumps(R, sort_keys=True))
 '''
 
+# The harness participants' credentials (HARNESS.md 8), beside the set above and never part of it. Every check runs
+# before anything is written, and a refusal writes nothing for either participant. A source is read through a
+# descriptor that followed no link, and must be a root-owned 0600 regular file in the root-owned 0700 sources directory.
+# Only key NAMES are read, and only the expected names are ever reported: a line setting any other key is counted, never
+# echoed (a key pasted without its name would otherwise be printed as one). A copy is written once, byte for byte,
+# 10150:10150 0400, and read back; a copy already there must equal its source (to rotate: remove the copy by hand, run
+# the secrets phase, then the app phase, whose new worker mounts the new file). Values never leave the helper.
+H_PARTICIPANT_SECRETS = '''
+T, S = '/target', '/sources'
+EXPECTED = {'regular': True, 'uid': P['uid'], 'gid': P['uid'], 'mode': '0o400'}
+
+def names(raw):
+    out = []
+    for line in raw.decode('utf-8', 'replace').splitlines():
+        s = line.strip()
+        if not s or s.startswith('#'):
+            continue
+        if s.startswith('export '):
+            s = s[7:].lstrip()
+        name, sep, _ = s.partition('=')
+        out.append(name.strip() if sep else '')
+    return out
+
+def opened(path):
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return None, {'exists': False}
+    except OSError:  # a link (O_NOFOLLOW), a socket: not a regular file
+        return None, {'exists': True, 'regular': False}
+    try:
+        i = os.fstat(fd)
+        facts = {'exists': True, 'regular': stat.S_ISREG(i.st_mode), 'uid': i.st_uid, 'gid': i.st_gid,
+                 'mode': oct(stat.S_IMODE(i.st_mode))}
+        if not facts['regular']:
+            return None, facts
+        data = b''
+        while len(data) <= P['limit']:
+            chunk = os.read(fd, P['limit'] + 1 - len(data))
+            if not chunk:
+                break
+            data += chunk
+        return data, facts
+    finally:
+        os.close(fd)
+
+def key_problems(label, raw, required, optional):
+    found, known = names(raw), required + optional
+    problems = []
+    others = sum(1 for name in found if name not in known)
+    if others:
+        problems.append(label + ' has ' + str(others) + ' line(s) setting no key of ' + ', '.join(known))
+    problems += [label + ' sets ' + name + ' more than once' for name in known if found.count(name) > 1]
+    missing = [name for name in required if name not in found]
+    if missing:
+        problems.append(label + ' lacks key name(s): ' + ', '.join(missing))
+    return problems, [name for name in known if name in found]
+
+def stage(name, data):
+    tmp = os.path.join(T, '.' + name + '.new')
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    try:
+        os.fchown(fd, P['uid'], P['uid'])
+        os.fchmod(fd, 0o400)
+        view = memoryview(data)
+        while view:
+            view = view[os.write(fd, view):]
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    os.link(tmp, os.path.join(T, name))
+    os.unlink(tmp)
+
+problems, copies, report = [], [], {}
+if P['sources_mounted']:
+    d = os.lstat(S)
+    if not (stat.S_ISDIR(d.st_mode) and d.st_uid == 0 and d.st_gid == 0 and stat.S_IMODE(d.st_mode) == 0o700):
+        problems.append(P['sources'] + ' is not a root-owned 0700 directory')
+for p in P['participants']:
+    if P['sources_mounted']:
+        source, found = opened(os.path.join(S, p['source']))
+    else:
+        source, found = None, {'exists': False}
+    copy, held = opened(os.path.join(T, p['target']))
+    entry = {'source': 'present' if found['exists'] else 'absent', 'key_names': []}
+    if os.path.lexists(os.path.join(T, '.' + p['target'] + '.new')):
+        problems.append('a staged copy of ' + p['target_path'] + ' from an interrupted run exists; resolve it by hand')
+    if found['exists']:
+        if not found.get('regular') or (found['uid'], found['gid'], found['mode']) != (0, 0, '0o600'):
+            problems.append(p['source_path'] + ' is not a root-owned 0600 regular file')
+        elif len(source) > P['limit']:
+            problems.append(p['source_path'] + ' is larger than ' + str(P['limit']) + ' bytes')
+        else:
+            wrong, entry['key_names'] = key_problems(p['source_path'], source, p['required'], p['optional'])
+            problems += wrong
+    if held['exists']:
+        entry['state'] = 'present'
+        if {key: held.get(key) for key in EXPECTED} != EXPECTED:
+            problems.append(p['target_path'] + ' is not the ' + str(P['uid']) + ':' + str(P['uid'])
+                            + ' 0400 regular file this phase writes')
+        elif len(copy) > P['limit']:
+            problems.append(p['target_path'] + ' is larger than ' + str(P['limit']) + ' bytes')
+        elif found['exists'] and copy != source:
+            problems.append(p['target_path'] + ' differs from its source; to rotate, remove it by hand, then run '
+                            'the secrets phase and the app phase')
+        else:
+            wrong, entry['key_names'] = key_problems(p['target_path'], copy, p['required'], p['optional'])
+            problems += wrong
+    elif found['exists']:
+        entry['state'] = 'to copy'
+        copies.append((p['name'], p['target'], source))
+    else:
+        entry['state'] = 'not provided'
+    report[p['name']] = entry
+if not problems:
+    for name, target, data in copies:
+        stage(target, data)
+    if copies:
+        d = os.open(T, os.O_RDONLY | os.O_DIRECTORY)
+        os.fsync(d)
+        os.close(d)
+    for name, target, data in copies:
+        written, facts = opened(os.path.join(T, target))
+        report[name]['state'] = 'created'
+        if written != data or {key: facts.get(key) for key in EXPECTED} != EXPECTED:
+            problems.append(target + ' was written but does not read back as its source with its owner and mode')
+else:
+    for entry in report.values():
+        if entry['state'] == 'to copy':
+            entry['state'] = 'not written'
+R = {'participants': report}
+if problems:
+    R['error'] = '; '.join(problems)
+print(json.dumps(R, sort_keys=True))
+'''
+
+# Whether output from a container that held participants' credentials files (P['files'], mounted at /scan/<name>)
+# carries a value from them: read here, answered with key names only (HARNESS.md I9). A value is matched as written,
+# without an inline comment and unquoted; one under P['min_length'] characters is not matched (it would by chance).
+H_CREDENTIAL_SCAN = '''
+blob = base64.b64decode(P['blob'])
+found = []
+for name in P['files']:
+    for line in read('/scan/' + name, P['limit'] + 1).decode('utf-8', 'replace').splitlines():
+        s = line.strip()
+        if not s or s.startswith('#'):
+            continue
+        if s.startswith('export '):
+            s = s[7:].lstrip()
+        key, sep, value = s.partition('=')
+        value = value.strip()
+        forms = {value, value.split(' #')[0].strip(), value.split('\\t#')[0].strip()}
+        forms |= {form[1:-1] for form in list(forms) if len(form) >= 2 and form[0] == form[-1] and form[0] in '\\'"'}
+        if sep and any(len(form) >= P['min_length'] and form.encode() in blob for form in forms):
+            found.append(key.strip())
+print(json.dumps({'found': sorted(set(found))}))
+'''
+
 H_READ_FILE = '''
 data = read('/in/file', P['limit'] + 1)
 print(json.dumps({'error': 'file too large'} if len(data) > P['limit'] else {'b64': base64.b64encode(data).decode()}))
@@ -857,6 +1059,49 @@ def validate_env_text(text, keys):
         seen.append(name)
     if sorted(seen) != sorted(keys):
         raise InstallError('A protected environment file lacks: ' + ', '.join(k for k in keys if k not in seen) + '.')
+
+
+def participant_secrets() -> dict:
+    """The harness participants' credentials (H_PARTICIPANT_SECRETS): each source the owner placed is copied once into
+    /etc/cpt-studio (10150:10150 0400), checked by key name only; a missing source leaves its participant 'not
+    provided'. The sources directory is mounted only once it is seen to be a root-owned 0700 directory (and the helper
+    looks again); anything else refuses with nothing written. {participant: {state, source, key_names}}."""
+    folder = helper_stat([PROVIDER_SOURCES])[PROVIDER_SOURCES]
+    mounted = bool(folder.get('exists'))
+    if mounted and folder != {'exists': True, 'kind': 'dir', 'uid': 0, 'gid': 0, 'mode': '0o700'}:
+        raise InstallError(f'{PROVIDER_SOURCES} is not a root-owned 0700 directory; no participant credentials file '
+                           'was copied.', details={'sources': folder})
+    mounts = [f'type=bind,src={ETC_DIR},dst=/target']
+    if mounted:
+        mounts.append(f'type=bind,src={PROVIDER_SOURCES},dst=/sources,readonly')
+    params = {'uid': APP_UID, 'limit': PARTICIPANT_FILE_LIMIT, 'sources_mounted': mounted, 'sources': PROVIDER_SOURCES,
+              'participants': [{'name': name, 'source': PurePosixPath(spec['source']).name,
+                                'source_path': spec['source'], 'target': PurePosixPath(spec['target']).name,
+                                'target_path': spec['target'], 'required': list(spec['required']),
+                                'optional': list(spec['optional'])} for name, spec in PARTICIPANTS.items()]}
+    return run_helper(H_PARTICIPANT_SECRETS, params, mounts=mounts, sensitive=True)['participants']
+
+
+def credentials_target(name) -> str:
+    """The installed credentials file of 'corti' or of a harness participant."""
+    return CORTI_TARGET if name == 'corti' else PARTICIPANTS[name]['target']
+
+
+def credential_free(outputs, participants) -> bool:
+    """Whether no value from the credentials files of ``participants`` ('corti' included) occurs in ``outputs`` (bytes),
+    read inside a root helper that answers with key names only (H_CREDENTIAL_SCAN). Output from a container that held
+    such a file is recorded only when this says so; when it cannot be told, it is not (HARNESS.md I9)."""
+    names = sorted(set(participants))
+    if not names:
+        return True
+    blob = base64.b64encode(b'\n\0\n'.join(outputs)).decode()
+    mounts = [f'type=bind,src={credentials_target(name)},dst=/scan/{name},readonly' for name in names]
+    try:
+        found = run_helper(H_CREDENTIAL_SCAN, {'blob': blob, 'files': names, 'limit': PARTICIPANT_FILE_LIMIT,
+                                               'min_length': 8}, mounts=mounts, sensitive=True)['found']
+    except (InstallError, KeyError):
+        return False
+    return found == []
 
 
 # --- nginx -------------------------------------------------------------------------
@@ -1299,35 +1544,60 @@ def hardening(memory, pids, tmp_size, user=f'{APP_UID}:{APP_UID}'):
             '--pids-limit', str(pids), '--ulimit', 'core=0']
 
 
-def runtime_env(provider_mode, authorization_ref, *, credentials=False):
+def participant_modes(args) -> dict:
+    """{participant: mode} from --astra-mode and --fable-mode; a participant not given (or an args object that names
+    neither) is disabled."""
+    return {name: getattr(args, f'{name}_mode', None) or 'disabled' for name in PARTICIPANTS}
+
+
+def participant_mount(name) -> str:
+    """A participant's credentials file, read-only at the worker's path (HARNESS.md 8)."""
+    spec = PARTICIPANTS[name]
+    return f'type=bind,src={spec["target"]},dst={spec["mounted"]},readonly'
+
+
+def runtime_env(provider_mode, authorization_ref, *, credentials=False, participants=None, files=()):
+    """-e flags. Each harness participant is named with its mode - ``participants`` maps them; one not given is
+    disabled, as in every one-shot - and a live one (or one in ``files``) with its credentials path."""
     values = {'CPT_STUDIO_DB_HOST': DB_CONTAINER, 'CPT_STUDIO_DB_PORT': '5432', 'CPT_STUDIO_DB_NAME': DB_NAME,
               'CPT_STUDIO_DB_USER': DB_USER, 'CPT_STUDIO_HTTPS': '1', 'CPT_STUDIO_TRUST_PROXY': '1',
               'CPT_STUDIO_PROVIDER_MODE': provider_mode, 'CPT_STUDIO_AUTHORIZATION_REF': authorization_ref}
     if credentials:
         values['CPT_STUDIO_CORTI_CREDENTIALS_FILE'] = CREDENTIALS_IN_CONTAINER
+    for name, spec in PARTICIPANTS.items():
+        mode = (participants or {}).get(name) or 'disabled'
+        values[spec['mode_env']] = mode
+        if mode == 'live' or name in files:
+            values[spec['file_env']] = spec['mounted']
     flags = []
     for name, value in values.items():
         flags += ['-e', f'{name}={value}']
     return flags
 
 
-def service_args(role, image_id, revision, provider_mode, authorization_ref):
-    """docker run arguments for a long-running role; secrets arrive on stdin as an env-file."""
+def service_args(role, image_id, revision, provider_mode, authorization_ref, participants=None):
+    """docker run arguments for a long-running role; secrets arrive on stdin as an env-file. ``participants`` maps each
+    harness participant to its mode (disabled when not given)."""
     live = provider_mode == 'live'
+    modes = {name: (participants or {}).get(name) or 'disabled' for name in PARTICIPANTS}
     common = ['--name', SERVICES[role], '--pull=never', '--restart', 'unless-stopped', '--network', NETWORK,
               '--label', f'{LABEL}=1', '--label', f'{ROLE_LABEL}={role}', '--label', f'{REVISION_LABEL}={revision}',
               '--log-opt', 'max-size=10m', '--log-opt', 'max-file=5', '--stop-timeout', str(STOP_SECONDS[role]),
               '--mount', f'type=volume,src={FILES_VOLUME},dst={STATE_DIR}', '--env-file', '/dev/stdin']
+    environment = runtime_env(provider_mode, authorization_ref, credentials=live, participants=modes)
     if role == 'web':
         # The path, never the file. A context change in the web builds the request it would send to tell a
         # re-check from a re-send (jobs._run_answers); building a request opens nothing, and only the worker
         # sends. Without the path, live mode had no provider in the web, so every setting or billing save
         # re-predicted and the worker re-sent a failed or not-sent request (pre-install review, 2026-10-26).
-        return [*common, *hardening('768m', 128, '256m'), '-p', f'127.0.0.1:{WEB_PORT}:8000',
-                *runtime_env(provider_mode, authorization_ref, credentials=live), image_id, 'web']
+        # A live harness participant alike: its adapter builds requests without credentials (HARNESS.md 8).
+        return [*common, *hardening('768m', 128, '256m'), '-p', f'127.0.0.1:{WEB_PORT}:8000', *environment,
+                image_id, 'web']
     extra = ['--mount', f'type=bind,src={CORTI_TARGET},dst={CREDENTIALS_IN_CONTAINER},readonly'] if live else []
-    return [*common, *hardening('1536m', 256, '1g'), '--no-healthcheck', *extra,
-            *runtime_env(provider_mode, authorization_ref, credentials=live), image_id, 'worker']
+    for name, mode in modes.items():
+        if mode == 'live':
+            extra += ['--mount', participant_mount(name)]
+    return [*common, *hardening('1536m', 256, '1g'), '--no-healthcheck', *extra, *environment, image_id, 'worker']
 
 
 def db_args() -> list:
@@ -1342,15 +1612,19 @@ def db_args() -> list:
 
 
 def oneshot(image_id, command, env_bytes, *, mounts=(), user=f'{APP_UID}:{APP_UID}', timeout=600,
-            network=None, credentials=False):
-    """A --rm container of the app image with provider calls disabled; returns the completed process."""
+            network=None, credentials=False, participant_files=(), environment=None):
+    """A --rm container of the app image with provider calls disabled - Corti's and every participant's - unless
+    ``environment`` gives its -e flags; returns the completed process. ``credentials`` and ``participant_files``
+    (participant names) mount those credentials files read-only at the worker's paths."""
     name = f'cpt-studio-oneshot-{secrets.token_hex(8)}'
     if credentials:
         mounts = [*mounts, f'type=bind,src={CORTI_TARGET},dst={CREDENTIALS_IN_CONTAINER},readonly']
+    mounts = [*mounts, *(participant_mount(participant) for participant in participant_files)]
+    if environment is None:
+        environment = runtime_env('disabled', '', credentials=credentials, files=participant_files)
     argv = [DOCKER, 'run', '--rm', '--name', name, '--pull=never', '--network', network or NETWORK,
             '--no-healthcheck', '--log-driver=none', '--label', f'{LABEL}=1', '--label', f'{ROLE_LABEL}=oneshot',
-            *hardening('768m', 128, '256m', user=user), '--env-file', '/dev/stdin',
-            *runtime_env('disabled', '', credentials=credentials),
+            *hardening('768m', 128, '256m', user=user), '--env-file', '/dev/stdin', *environment,
             *[part for mount in mounts for part in ('--mount', mount)], image_id, *command]
     try:
         return run(argv, input=env_bytes, timeout=timeout, check=False)
@@ -1364,6 +1638,14 @@ CREDENTIALS_CHECK = ('from django.conf import settings\n'
                      'from studio.providers.credentials import load_corti_credentials\n'
                      'load_corti_credentials(settings.CORTI_CREDENTIALS_FILE)\n'
                      "print('corti-credentials-parse-ok')\n")
+# A live participant's credentials file, read by the application's own loader as CREDENTIALS_CHECK reads Corti's: in the
+# worker's mount layout (the path from its setting), offline, the participant itself disabled - format and permissions.
+PARTICIPANT_CREDENTIALS_CHECKS = {
+    name: ('from django.conf import settings\n'
+           f'from studio.participants.credentials import {spec["loader"]}\n'
+           f'{spec["loader"]}(settings.{spec["setting"]})\n'
+           f"print('{name}-credentials-parse-ok')\n")
+    for name, spec in PARTICIPANTS.items()}
 
 # Run by `manage shell -c` in an image of the app (APP_SCRIPT_PRELUDE gives it P, the parameters, and ANSWER); each
 # prints one ANSWER line. UNRUNNABLE_STAGES uses only what every revision's models have (057a7d39's included): it is
@@ -1411,6 +1693,13 @@ COMMON_STAGE_KINDS = ('analyze', 'assess', 'extract', 'predict')
 #              proposed', its blocker 'No CPT code was proposed', its page 'No CPT codes were proposed for this
 #              document.' (SHOWN_HAZARDS; refutation P2RA, ROLLBACK lens 0; must-fix class 3). One that failed or was
 #              not sent proposed nothing, so that statement is true of its rows: it is put back like any other state.
+#   participant - the current assessment's decision set (selected or excluded) holds a code only a harness participant
+#              proposed (HARNESS.md 5: support origin 'participant'). No revision before the harness (80df1831d168 and
+#              older) reads a participant: its page and both reports show the code as the provider's own proposal,
+#              naming no other proposer (I4), and its re-assessment reads Corti's answer alone, so the code leaves the
+#              decision set without a reviewer's decision - the 'second_review' case again. No state can be put back for
+#              it (SHOWN_HAZARDS). Its stages (kinds astra and fable) are closed like a second review's: no such
+#              revision's worker has a stage for them (CLOSE_STAGES).
 UNDO_HAZARDS = '''
 def undo_hazards():
     import datetime
@@ -1468,6 +1757,12 @@ def undo_hazards():
                 assessment_id=encounter.current_assessment_id, support__origin='second_review',
                 bucket__in=(models.Proposal.SELECTED, models.Proposal.EXCLUDED)).exists():
             found.setdefault(str(encounter.pk), set()).add('second_review')
+        # a code only a harness participant proposed, in that decision set: no older revision reads a participant, so
+        # it shows the code as the provider's and its re-assessment drops it without a reviewer's decision
+        if encounter.current_assessment_id is not None and models.Proposal.objects.filter(
+                assessment_id=encounter.current_assessment_id, support__origin='participant',
+                bucket__in=(models.Proposal.SELECTED, models.Proposal.EXCLUDED)).exists():
+            found.setdefault(str(encounter.pk), set()).add('participant')
         # the assessment its page shows (the current one, whatever its revision) read a second review refused whole
         # beside a succeeded primary answer with nothing to decide - where 057a7d39 says that no code was proposed
         assessment = encounter.current_assessment if encounter.current_assessment_id is not None else None
@@ -1717,6 +2012,16 @@ def service_problems(container, role, image_id) -> list:
     expected = {'8000/tcp': [{'HostIp': '127.0.0.1', 'HostPort': str(WEB_PORT)}]} if role == 'web' else {}
     if bindings != expected:
         problems.append('unexpected published ports')
+    # Only the worker holds a credentials file, read-only (HARNESS.md 8): Corti's and a live participant's.
+    binds = [(mount.get('Source'), mount.get('Destination'), mount.get('RW'))
+             for mount in container.get('Mounts') or [] if mount.get('Type') == 'bind']
+    allowed = {(CORTI_TARGET, CREDENTIALS_IN_CONTAINER)} | {(spec['target'], spec['mounted'])
+                                                          for spec in PARTICIPANTS.values()}
+    if role == 'web' and binds:
+        problems.append('the web holds a bind-mounted file (only the worker holds credentials)')
+    if role == 'worker' and any((source, destination) not in allowed or writable is not False
+                                for source, destination, writable in binds):
+        problems.append('a bind mount other than a read-only credentials file')
     return problems
 
 
@@ -1837,7 +2142,8 @@ def hazard_summary(hazards) -> str:
 # not what its worker does. No stored state can be put back for them - it says the same thing whatever state it is
 # handed - and a worker left stopped does not keep its web from saying it. Refutation P2RA, ROLLBACK lens 0: a second
 # review the shown assessment did not read is one too (it says that no code was proposed of a response nobody read).
-SHOWN_HAZARDS = ('second_review_refused', 'second_review_unread')
+# The harness: a code only a participant proposed is one too (the older web shows it as the provider's proposal).
+SHOWN_HAZARDS = ('second_review_refused', 'second_review_unread', 'participant')
 
 
 def hazards_by_kind(hazards):
@@ -1890,8 +2196,9 @@ def put_back_states(closed, older_image, image_id, env_bytes) -> dict:
                       what='Putting back the list states the installed revision 057a7d39 derives')
 
 
-def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref) -> dict:
-    """Park the old pair, start the new pair; on any failure stop what was started, close every stage it left open
+def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants=None) -> dict:
+    """Park the old pair, start the new pair (``participants``: each harness participant's mode, disabled when not
+    given); on any failure stop what was started, close every stage it left open
     and every open stage of a kind the old worker does not run (close_undone_stages), put back the list states the old
     revision labels otherwise (put_back_states, with the old pair's own image), and only then restore exactly the old
     pair - its worker left stopped while the close names records it would act on wrongly. A pair whose stages cannot be
@@ -1907,7 +2214,8 @@ def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref)
         swapped_at = dt.datetime.now(dt.timezone.utc)  # every stage created from here on is the new pair's
         for role in ('web', 'worker'):
             launched.append(role)
-            docker('run', '-d', *service_args(role, image_id, ctx.revision, provider_mode, authorization_ref),
+            docker('run', '-d', *service_args(role, image_id, ctx.revision, provider_mode, authorization_ref,
+                                              participants),
                    input=env_bytes, quiet=True)
             started[role] = wait_service(role, ctx.revision, image_id)
     except BaseException as failure:
@@ -1942,7 +2250,8 @@ def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref)
                 raise InstallError(
                     f'{failure}; {named} hold states the previous revision would show wrongly whatever it is handed '
                     '(a bounded second review whose response was refused whole, or whose outcome is unknown or not '
-                    'read yet: it reads neither and would say that no code was proposed), so the new pair was left '
+                    'read yet: it reads neither and would say that no code was proposed; a code only a harness '
+                    'participant proposed: it would show it as the provider\'s), so the new pair was left '
                     'stopped and the previous pair parked '
                     '(*-previous). To keep this revision, remove the parked pair by hand and run --phase app again '
                     'once its failure is fixed; to go back, start this pair again, clear them on its web '
@@ -1994,6 +2303,21 @@ def retire_parked(parked):
 
 # --- phases ------------------------------------------------------------------------
 
+def participant_source_problems(paths) -> list:
+    """The participants' sources are optional - a missing one leaves its participant disabled - but one that is there
+    must be root-only, in a root-only directory, or the secrets phase refuses it (HARNESS.md 8). ``paths``:
+    helper_stat's answer for PROVIDER_SOURCES and each source."""
+    problems = []
+    folder = paths[PROVIDER_SOURCES]
+    if folder.get('exists') and folder != {'exists': True, 'kind': 'dir', 'uid': 0, 'gid': 0, 'mode': '0o700'}:
+        problems.append(f'{PROVIDER_SOURCES} is not a root-owned 0700 directory')
+    for spec in PARTICIPANTS.values():
+        found = paths[spec['source']]
+        if found.get('exists') and found != {'exists': True, 'kind': 'file', 'uid': 0, 'gid': 0, 'mode': '0o600'}:
+            problems.append(f'{spec["source"]} is not a root-owned 0600 regular file')
+    return problems
+
+
 def phase_preflight(ctx) -> dict:
     problems, details = [], {'docker_server': docker_positive_control()}
     files = nginx_file_state()
@@ -2035,9 +2359,14 @@ def phase_preflight(ctx) -> dict:
     details['images'] = {ref: bool(inspect('image', ref)) for ref in (HELPER_IMAGE, POSTGRES_IMAGE)}
     if not all(details['images'].values()):
         problems.append('a pinned image (helper or postgres) is not present locally')
-    details['paths'] = helper_stat([CORTI_SOURCE, ETC_DIR, *LE_DIRS, ACME_CHALLENGE_DIR])
+    participant_paths = [path for spec in PARTICIPANTS.values() for path in (spec['source'], spec['target'])]
+    details['paths'] = helper_stat([CORTI_SOURCE, ETC_DIR, *LE_DIRS, ACME_CHALLENGE_DIR, PROVIDER_SOURCES,
+                                    *participant_paths])
     if not details['paths'][CORTI_SOURCE].get('exists'):
         problems.append(f'{CORTI_SOURCE} is missing')
+    problems += participant_source_problems(details['paths'])
+    details['participant_sources'] = {name: 'present' if details['paths'][spec['source']].get('exists') else 'absent'
+                                      for name, spec in PARTICIPANTS.items()}
     details['letsencrypt'] = le_state()
     if not all(details['letsencrypt']['dirs'].values()):
         problems.append('a Let\'s Encrypt or webroot directory is missing')
@@ -2072,7 +2401,144 @@ def phase_secrets(ctx) -> dict:
                         mounts=[f'type=bind,src={ETC_DIR},dst=/target',
                                 f'type=bind,src={CORTI_SOURCE},dst=/source/credentials.env,readonly'],
                         sensitive=True)
-    return {'etc_dir': etc['etc_dir'], **result, 'summary': f'secrets {result["state"]}; values never left the helper'}
+    # The harness participants' credentials, after the set above and never part of it (HARNESS.md 8).
+    participants = participant_secrets()
+    states = ', '.join(f'{name} {entry["state"]}' for name, entry in participants.items())
+    return {'etc_dir': etc['etc_dir'], **result, 'participant_credentials': participants,
+            'summary': f'secrets {result["state"]}; participant credentials: {states}; values never left the helper'}
+
+
+# --- migrations ----------------------------------------------------------------------
+# The app phase migrates while the previous pair still runs (it replaces the pair afterwards), a failed replacement
+# restores that pair on the migrated schema, rollback-app hands an older pair the rows, and no migration is ever
+# reversed. So every migration after the oldest revision a rollback goes back to must leave that revision's code
+# working: additive, with a database default for every NOT NULL column it adds (an older pair's insert names none).
+# 0005 is the leaf of 057a7d39, that oldest revision (UNDO_HAZARDS); 0006 is in every revision installed since 2b82889f.
+ROLLING_BASELINE = 5
+MIGRATION_FILE_RE = re.compile(r'(\d{4})_\w+\.py')
+SET_DEFAULT_RE = re.compile(r'\s*ALTER\s+TABLE\s+"?(\w+)"?\s+ALTER\s+COLUMN\s+"?(\w+)"?\s+SET\s+DEFAULT\s+\S.*',
+                            re.IGNORECASE | re.DOTALL)
+_UNREAD = object()
+
+
+def _literal(node):
+    try:
+        return ast.literal_eval(node) if node is not None else None
+    except (ValueError, TypeError, SyntaxError, MemoryError, RecursionError):
+        return _UNREAD
+
+
+def _call(node):
+    """(callee's last name, {keyword: node}) of a call such as migrations.AddField(...); (None, {}) for anything else.
+    A positional argument is not read, so the operation is named but its keywords are left unread (None)."""
+    if not isinstance(node, ast.Call):
+        return None, {}
+    func = node.func
+    name = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else None
+    if node.args or any(keyword.arg is None for keyword in node.keywords):
+        return name, None
+    return name, {keyword.arg: keyword.value for keyword in node.keywords}
+
+
+def _statements(value):
+    """RunSQL's forward SQL as a list of strings, or None when it is anything else (SQL with parameters included)."""
+    sql = _literal(value)
+    if isinstance(sql, str):
+        return [sql]
+    if isinstance(sql, (list, tuple)) and all(isinstance(item, str) for item in sql):
+        return list(sql)
+    return None
+
+
+def migration_verdict(source: str) -> dict:
+    """{'safe', 'why'} of one migration file, read with ast (nothing imported or run). Safe operations: CreateModel (a
+    table no older revision reads); AddField to a table this migration creates, or nullable, or with db_default, or
+    whose column this migration's SQL gives a default; AddIndex; AddConstraint on a table this migration creates; and
+    RunSQL that only sets column defaults. Anything else - a removed, renamed or altered column or table, a constraint
+    on an existing table, RunPython, other SQL, a form this reader does not read - is not."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return {'safe': False, 'why': ['the file does not parse']}
+    operations = None
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and node.name == 'Migration':
+            for item in node.body:
+                if (isinstance(item, ast.Assign) and len(item.targets) == 1 and isinstance(item.targets[0], ast.Name)
+                        and item.targets[0].id == 'operations' and isinstance(item.value, (ast.List, ast.Tuple))):
+                    operations = [_call(element) for element in item.value.elts]
+    if operations is None:
+        return {'safe': False, 'why': ['no operations list was read']}
+    created, defaults = set(), set()
+    for kind, keywords in operations:
+        if kind == 'CreateModel' and keywords is not None and isinstance(_literal(keywords.get('name')), str):
+            created.add(_literal(keywords['name']).lower())
+        if kind == 'RunSQL' and keywords is not None:
+            for statement in _statements(keywords.get('sql')) or ():
+                match = SET_DEFAULT_RE.fullmatch(statement)
+                if match:
+                    defaults.add((match.group(1).lower(), match.group(2).lower()))
+    why, unsafe = [], []
+    for kind, keywords in operations:
+        if keywords is None:
+            unsafe.append(f'{kind or "an operation"} whose arguments are not keywords this check reads')
+        elif kind == 'CreateModel':
+            why.append(f'{_literal(keywords.get("name"))}: a new table no older revision reads')
+        elif kind == 'AddField':
+            model, name = _literal(keywords.get('model_name')), _literal(keywords.get('name'))
+            field_kind, field = _call(keywords.get('field'))
+            if not (isinstance(model, str) and isinstance(name, str)) or field_kind is None or field is None:
+                unsafe.append('AddField whose model, name or field this check cannot read')
+                continue
+            label, column = f'{model}.{name}', name
+            if 'db_column' in field:
+                column = _literal(field['db_column'])
+            elif field_kind in ('ForeignKey', 'OneToOneField'):
+                column = f'{name}_id'
+            if model.lower() in created:
+                why.append(f'{label}: a column of a table this migration creates')
+            elif field_kind == 'ManyToManyField':
+                unsafe.append(f'{label}: a many-to-many field, which this check does not read')
+            elif _literal(field.get('null')) is True:
+                why.append(f'{label}: nullable')
+            elif 'db_default' in field:
+                why.append(f'{label}: NOT NULL with a database default (db_default)')
+            elif isinstance(column, str) and (f'studio_{model.lower()}', column.lower()) in defaults:
+                why.append(f'{label}: NOT NULL, given a database default by this migration\'s SQL')
+            else:
+                unsafe.append(f'{label}: NOT NULL with no database default, so an older pair\'s insert is refused')
+        elif kind == 'AddIndex':
+            why.append(f'{_literal(keywords.get("model_name"))}: an index (writes are not refused)')
+        elif kind == 'AddConstraint':
+            model = _literal(keywords.get('model_name'))
+            if isinstance(model, str) and model.lower() in created:
+                why.append(f'{model}: a constraint on a table this migration creates')
+            else:
+                unsafe.append(f'{model}: a constraint on an existing table, which can refuse an older pair\'s rows')
+        elif kind == 'RunSQL':
+            statements = _statements(keywords.get('sql'))
+            if statements and all(SET_DEFAULT_RE.fullmatch(statement) for statement in statements):
+                why.append(f'SQL that only sets column defaults ({len(statements)} statement(s))')
+            else:
+                unsafe.append('SQL other than ALTER TABLE ... ALTER COLUMN ... SET DEFAULT')
+        else:
+            unsafe.append(f'{kind or "an operation"}: not an additive operation this check reads')
+    return {'safe': not unsafe, 'why': unsafe or why}
+
+
+def migration_safety(directory: Path) -> dict:
+    """{migration name: migration_verdict} for every migration in ``directory`` after ROLLING_BASELINE; a file there
+    that is not a migration (or __init__.py) is refused, never skipped."""
+    verdicts = {}
+    for path in sorted(directory.iterdir()):
+        if path.name == '__init__.py' or path.name == '__pycache__':
+            continue
+        match = MIGRATION_FILE_RE.fullmatch(path.name)
+        if not match or not path.is_file() or path.is_symlink():
+            verdicts[path.name] = {'safe': False, 'why': ['not a migration file this check reads']}
+        elif int(match.group(1)) > ROLLING_BASELINE:
+            verdicts[path.stem] = migration_verdict(path.read_text(encoding='utf-8'))
+    return verdicts
 
 
 def extract_archive(data: bytes, destination: Path):
@@ -2098,6 +2564,15 @@ def phase_image(ctx) -> dict:
     try:
         extract_archive(archive, build_root)
         context = build_root / APP
+        # Refused before anything is built: the app phase would apply it while the previous pair runs, and a rollback
+        # would leave an older pair on it (ROLLING_BASELINE).
+        migrations = migration_safety(context / 'studio' / 'migrations')
+        unsafe = {name: verdict['why'] for name, verdict in migrations.items() if not verdict['safe']}
+        if unsafe:
+            raise InstallError(f'{len(unsafe)} migration(s) after {ROLLING_BASELINE:04d} are not additive for a pair '
+                               'that does not know them, so nothing was built: ' + '; '.join(
+                                   f'{name}: {", ".join(reasons)}' for name, reasons in sorted(unsafe.items())) + '.',
+                               details={'migrations': migrations})
         shutil.copyfile(context / 'deploy' / '.dockerignore', context / '.dockerignore')
         base = re.search(r'^FROM (\S+)', (context / 'deploy' / 'Dockerfile').read_text(), re.M).group(1)
         build = docker('build', '--file', str(context / 'deploy' / 'Dockerfile'), '--build-arg',
@@ -2133,6 +2608,7 @@ def phase_image(ctx) -> dict:
             'source_archive_sha256': sha256(archive), 'build_log': build_log, 'tesseract': tesseract,
             'tesseract_languages': [item for item in languages if item in ('eng', 'osd')],
             'pdftoppm': (pdftoppm.stdout + pdftoppm.stderr).decode().splitlines()[0],
+            'migrations': {'baseline': f'{ROLLING_BASELINE:04d}', 'after_baseline': migrations},
             'summary': f'built {tag} = {image["Id"][:19]}'}
 
 
@@ -2167,11 +2643,17 @@ def phase_db(ctx) -> dict:
     return details
 
 
-def after_swap_failure(image_id, mode, states, error, parked) -> str:
+def pair_modes(mode, participants=None) -> str:
+    """'provider live, astra disabled, fable live': how the pair was started."""
+    return ', '.join([f'provider {mode}'] + [f'{name} {(participants or {}).get(name) or "disabled"}'
+                                             for name in PARTICIPANTS])
+
+
+def after_swap_failure(image_id, mode, states, error, parked, participants=None) -> str:
     """The receipt of an app phase stopped once its new pair runs (refutation p2, install2:2): whether the stored list
     states were recomputed (``states``, RECOMPUTE_STATES' answer, or None), what stopped it, and what is left to do."""
     cause = str(error) or type(error).__name__
-    running = f'web and worker running {image_id[:19]} (provider {mode}), but '
+    running = f'web and worker running {image_id[:19]} ({pair_modes(mode, participants)}), but '
     back = 'or, to go back, run --phase rollback-app, then rename the parked pair back.'
     if states is None:
         if any((parked or {}).values()):
@@ -2182,17 +2664,96 @@ def after_swap_failure(image_id, mode, states, error, parked) -> str:
             f'previous pair (*-previous) could not be removed ({cause}): remove what is left of it by hand; ' + back)
 
 
+def access_receipt(stdout: bytes):
+    """The access check's JSON receipt - its whole stdout, else its last non-empty line - as a JSON object, or None."""
+    text = stdout.decode('utf-8', 'replace').strip()
+    for candidate in (text, text.splitlines()[-1] if text else ''):
+        try:
+            value = json.loads(candidate)
+        except ValueError:
+            continue
+        if isinstance(value, dict):
+            return value
+    return None
+
+
+def participant_access_check(ctx, image_id, env_bytes, name, authorization_ref) -> dict:
+    """``manage participant_access_check --participant <name>`` sends ONE real request to the participant's vendor
+    ('corti', 'astra' or 'fable'), so it runs only with --access-check, once the new pair runs. A one-shot with the
+    worker's mount and network for that participant: its credentials file read-only at the worker's path and
+    cpt-studio-net, that participant live under the authorization the worker has, every other one disabled. What the
+    container wrote is recorded (its JSON receipt here, everything in a log) only once a root helper found no
+    credential value in it (credential_free). {ok, exit, recorded, receipt, log, problem}."""
+    if name == 'corti':
+        environment = runtime_env('live', authorization_ref, credentials=True)
+        files = {'credentials': True}
+    else:
+        environment = runtime_env('disabled', authorization_ref, participants={name: 'live'})
+        files = {'participant_files': (name,)}
+    try:
+        result = oneshot(image_id, ['manage', 'participant_access_check', '--participant', name], env_bytes,
+                         network=NETWORK, environment=environment, timeout=ACCESS_CHECK_SECONDS, **files)
+    except InstallError as error:  # it did not finish: whether its request reached the vendor is not known
+        return {'ok': False, 'recorded': False, 'problem': f'{error} Whether its request reached the vendor is not '
+                                                           'known; nothing it wrote was recorded.'}
+    stdout, stderr = result.stdout, result.stderr[-8192:]
+    entry = {'ok': False, 'exit': result.returncode, 'recorded': False}
+    if len(stdout) > ACCESS_CHECK_OUTPUT_LIMIT:
+        return {**entry, 'problem': f'it wrote more than {ACCESS_CHECK_OUTPUT_LIMIT} bytes; nothing it wrote was '
+                                    'recorded.'}
+    if not credential_free([stdout, stderr], [name]):
+        return {**entry, 'problem': 'what it wrote carries a value from its credentials file, or that could not be '
+                                    'told; nothing it wrote was recorded.'}
+    receipt = access_receipt(stdout)
+    entry.update(recorded=True, receipt=receipt, log=ctx.log(f'access-check-{name}', stdout + stderr))
+    if result.returncode:
+        entry['problem'] = f'it exited {result.returncode}.'
+    elif receipt is None:
+        entry['problem'] = 'its output was not one JSON receipt.'
+    else:
+        entry['ok'] = True
+    return entry
+
+
+def access_check_failure(image_id, mode, participants, states, checks, error=None) -> str:
+    """The receipt of an app phase whose pair is installed and whose access check did not pass, or stopped."""
+    done = f'web and worker running {image_id[:19]} ({pair_modes(mode, participants)}), the stored list states ' \
+           f'recomputed ({len((states or {}).get("changed") or {})} changed) and the previous pair removed, but '
+    if error is not None:
+        cause = str(error) or type(error).__name__
+        return (done + f'the access check stopped ({cause}) after {", ".join(checks) or "none"}: the pair stays '
+                'installed; run --phase app again with --access-check to check again.')
+    failed = {name: check.get('problem', '') for name, check in checks.items() if not check.get('ok')}
+    return (done + 'the access check did not pass for ' + '; '.join(f'{name} ({problem})'
+                                                                  for name, problem in failed.items())
+            + ' The pair stays installed with those participants live: fix the credentials or the vendor account and '
+              'run --phase app again with --access-check, or install with that participant disabled.')
+
+
 def phase_app(ctx) -> dict:
     mode, reference = ctx.args.provider_mode, ctx.args.authorization_ref or ''
+    modes = participant_modes(ctx.args)
+    live = [name for name in PARTICIPANTS if modes[name] == 'live']
+    access = bool(getattr(ctx.args, 'access_check', None))
     if reference and run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{ctx.revision}:{reference}'],
                          check=False).returncode:
         raise InstallError('--authorization-ref is not a file tracked at the revision.')
     image_id = installed_image(ctx)
     require_db()
+    # Every credentials file a live provider or participant needs, before anything changes: a missing participant
+    # source leaves no file, and that participant is installed disabled or not at all (HARNESS.md 8).
+    wanted = ([CORTI_TARGET] if mode == 'live' else []) + [PARTICIPANTS[name]['target'] for name in live]
+    found = helper_stat(wanted) if wanted else {}
     if mode == 'live':
-        target = helper_stat([CORTI_TARGET])[CORTI_TARGET]
+        target = found[CORTI_TARGET]
         if target != {'exists': True, 'kind': 'file', 'uid': APP_UID, 'gid': APP_UID, 'mode': '0o400'}:
             raise InstallError(f'{CORTI_TARGET} is not the {APP_UID}:{APP_UID} 0400 file the secrets phase writes.')
+    for name in live:
+        spec = PARTICIPANTS[name]
+        if found[spec['target']] != {'exists': True, 'kind': 'file', 'uid': APP_UID, 'gid': APP_UID, 'mode': '0o400'}:
+            raise InstallError(f'--{name}-mode live: {spec["target"]} is not the {APP_UID}:{APP_UID} 0400 file the '
+                               f'secrets phase copies from {spec["source"]}; nothing was changed. Place the source and '
+                               f'run --phase secrets, or install with --{name}-mode disabled.')
     env = read_protected_env(APP_ENV, APP_ENV_KEYS)
     if mode == 'live':
         # The application's own loader, in the worker's mount layout, with no network: format only.
@@ -2201,6 +2762,16 @@ def phase_app(ctx) -> dict:
         if parsed.returncode or b'corti-credentials-parse-ok' not in parsed.stdout:
             raise InstallError('The application cannot load the Corti credentials file as mounted for the worker '
                                '(format and permissions only; nothing was sent).', output=parsed.stderr[-2048:])
+    for name in live:
+        # Likewise each live participant's (studio.participants.credentials). Its error is kept only once a root helper
+        # found no value from the file in it.
+        parsed = oneshot(image_id, ['manage', 'shell', '-c', PARTICIPANT_CREDENTIALS_CHECKS[name]], env,
+                         network='none', participant_files=(name,), timeout=120)
+        if parsed.returncode or f'{name}-credentials-parse-ok'.encode() not in parsed.stdout:
+            output = parsed.stderr[-2048:]
+            raise InstallError(f'The application cannot load {PARTICIPANTS[name]["target"]} as mounted for the worker '
+                               f'(--{name}-mode live; format and permissions only; nothing was sent or changed).',
+                               output=output if credential_free([output], [name]) else b'')
     migrate = oneshot(image_id, ['migrate'], env)
     migrate_log = ctx.log('migrate', migrate.stdout + migrate.stderr)
     if migrate.returncode:
@@ -2215,7 +2786,7 @@ def phase_app(ctx) -> dict:
                            f'({", ".join(unrunnable["kinds"])}) are queued, running or resumable; nothing was '
                            'replaced. Close them with the newer revision\'s --phase rollback-app first.',
                            details=unrunnable)
-    services = replace_services(ctx, image_id, env, mode, reference)
+    services = replace_services(ctx, image_id, env, mode, reference, modes)
     # Refutation p1, migrate-2: the stored list states are recomputed with this revision's derivation (RECOMPUTE_STATES)
     # - once this pair has replaced the old one, never before, so a failure path restores the old pair over the states
     # it derived. Nothing is refused for it (round-7c8 skeptic, sk:2: refusing while an outcome was unknown also refused
@@ -2231,11 +2802,28 @@ def phase_app(ctx) -> dict:
         states = app_script(image_id, env, RECOMPUTE_STATES, {}, what='Recomputing the stored list states')
         retire_parked(parked)
     except BaseException as error:  # noqa: BLE001 — the pair is installed: the receipt says what is left to do
-        raise InstallError(after_swap_failure(image_id, mode, states, error, parked),
+        raise InstallError(after_swap_failure(image_id, mode, states, error, parked, modes),
                            details={**services, 'states_recomputed': states}) from error
-    return {'image_id': image_id, 'provider_mode': mode, 'authorization_ref': reference, 'migrate_log': migrate_log,
-            'unrunnable_stages': unrunnable, 'states_recomputed': states, **services,
-            'summary': f'web and worker running {image_id[:19]} (provider {mode})'}
+    # Opt-in, last: each live participant - Corti too, when the provider is live (checklist 1.3: all three) - is sent
+    # one real request (participant_access_check), never without the flag.
+    checks, checked = None, (['corti'] if mode == 'live' else []) + live
+    if access:
+        checks = {}
+        try:
+            for name in checked:
+                checks[name] = participant_access_check(ctx, image_id, env, name, reference)
+        except BaseException as error:  # noqa: BLE001 — the pair is installed: the receipt says what is left to do
+            raise InstallError(access_check_failure(image_id, mode, modes, states, checks, error),
+                               details={**services, 'states_recomputed': states, 'access_checks': checks}) from error
+        if not all(check['ok'] for check in checks.values()):
+            raise InstallError(access_check_failure(image_id, mode, modes, states, checks),
+                               details={**services, 'states_recomputed': states, 'access_checks': checks})
+    return {'image_id': image_id, 'provider_mode': mode, 'authorization_ref': reference, 'participants': modes,
+            'participant_credentials_loaded': live, 'migrate_log': migrate_log, 'unrunnable_stages': unrunnable,
+            'states_recomputed': states, 'access_checks': checks if access else 'not run (no --access-check)',
+            **services,
+            'summary': f'web and worker running {image_id[:19]} ({pair_modes(mode, modes)})'
+                       + (f'; access checked: {", ".join(checked)}' if access else '')}
 
 
 def reference_command(kind, path, retrieved_at) -> list:
@@ -2268,6 +2856,51 @@ def phase_reference(ctx) -> dict:
         results[kind] = {**pinned, 'retrieved_at': retrieved_at, 'volume_path': in_volume, 'copied': copy['copied'],
                          'log': log}
     return {'sources': results, 'summary': 'imported ' + ', '.join(results)}
+
+
+def passage_files(revision) -> dict:
+    """{path under studio/reference/data/: git blob id} of every file the revision commits there - what its image ships,
+    built from git archive of the revision. A link or a submodule there is refused, never skipped."""
+    listing = run(['git', '-C', str(ROOT), 'ls-tree', '-r', '-z', '--full-tree', revision, '--', f'{PASSAGE_DATA}/'],
+                  timeout=60).stdout.decode('utf-8')
+    files = {}
+    for entry in filter(None, listing.split('\0')):
+        meta, _, path = entry.partition('\t')
+        mode, kind, blob = meta.split()
+        relative = PurePosixPath(path).relative_to(PASSAGE_DATA).as_posix()
+        if kind != 'blob' or mode not in ('100644', '100755'):
+            raise InstallError(f'{path} is not a regular file at the revision; refusing to import passages.')
+        files[relative] = blob
+    return dict(sorted(files.items()))
+
+
+def phase_passages(ctx) -> dict:
+    """After migrate (the app phase): each CMS passage file the revision commits under studio/reference/data/ - shipped
+    in its image - imported by the application's own importer, one file per one-shot (HARNESS.md 5). The importer is
+    idempotent, so this phase is too: a file already loaded changes nothing, and its output says so."""
+    image_id = installed_image(ctx)
+    require_db()
+    files = passage_files(ctx.revision)
+    if not files:
+        raise InstallError(f'The revision commits no file under {PASSAGE_DATA}/; there is nothing to import.')
+    env = read_protected_env(APP_ENV, APP_ENV_KEYS)
+    # The passage tables are this revision's (migration 0007): every migration it has must be applied first.
+    pending = oneshot(image_id, ['manage', 'migrate', '--check'], env, timeout=120)
+    if pending.returncode:
+        raise InstallError(f'This revision\'s migrations are not all applied (manage migrate --check exited '
+                           f'{pending.returncode}): run --phase app first. Nothing was imported.')
+    results = {}
+    for number, (relative, blob) in enumerate(files.items(), start=1):
+        command = ['manage', 'import_passages', '--data', f'{PASSAGE_DATA_IN_IMAGE}/{relative}']
+        imported = oneshot(image_id, command, env)
+        log = ctx.log(f'passages-{number:02d}', imported.stdout + imported.stderr)
+        if imported.returncode:
+            raise InstallError(f'import_passages {relative} failed (exit {imported.returncode}); see {log}. Files '
+                               'imported before it stay imported (a rerun leaves them as they are).',
+                               details={'imported': results, 'failed': relative})
+        results[relative] = {'git_blob': blob, 'log': log,
+                             'output': imported.stdout.decode('utf-8', 'replace').strip()[-4000:]}
+    return {'files': results, 'summary': f'passages imported from {len(results)} file(s); the importer is idempotent'}
 
 
 def credentials_document(ctx, accounts) -> dict:
@@ -2610,8 +3243,9 @@ def phase_verify(ctx) -> dict:
 
 def phase_rollback_app(ctx) -> dict:
     """Refuse, before stopping anything, while their revision recorded what an older revision would act on, or show,
-    wrongly (undo_hazards: a second review's response refused whole, or one the shown assessment did not read, is shown
-    wrongly whatever state it is handed, so it is refused, never put back); otherwise stop the web and worker, close
+    wrongly (undo_hazards: a second review's response refused whole, or one the shown assessment did not read, or a code
+    only a harness participant proposed, is shown wrongly whatever state it is handed, so it is refused, never put
+    back); otherwise stop the web and worker, close
     every stage their revision left open since they were created and every open stage of a kind the next worker does
     not run (close_undone_stages, with their own image), read again, put back the list states the next pair labels
     otherwise (put_back_states), then remove them -
@@ -2763,7 +3397,7 @@ def phase_rollback_vhost(ctx) -> dict:
 
 PHASES = {
     'preflight': phase_preflight, 'secrets': phase_secrets, 'image': phase_image, 'db': phase_db,
-    'app': phase_app, 'reference': phase_reference, 'provision': phase_provision,
+    'app': phase_app, 'reference': phase_reference, 'passages': phase_passages, 'provision': phase_provision,
     'http-vhost': phase_http_vhost, 'cert': phase_cert, 'https-vhost': phase_https_vhost,
     'verify': phase_verify, 'rollback-app': phase_rollback_app, 'rollback-vhost': phase_rollback_vhost,
 }

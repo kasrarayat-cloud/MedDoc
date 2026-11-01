@@ -102,6 +102,9 @@ class FakeOwnership:
     def stat(self, path):
         return self._owned(path, os.stat(path))
 
+    def fstat(self, fd):
+        return self._owned(self.fds[fd], os.fstat(fd)) if fd in self.fds else os.fstat(fd)
+
 
 def run_body(body, params, paths, fake_os=None):
     """Execute a helper body with container paths mapped onto temp paths; return its JSON."""
@@ -607,7 +610,8 @@ class DockerArgumentTests(unittest.TestCase):
         self.assertIn(f'type=bind,src={install.CORTI_TARGET},dst={install.CREDENTIALS_IN_CONTAINER},readonly', mounts)
         self.assertIn(f'CPT_STUDIO_CORTI_CREDENTIALS_FILE={install.CREDENTIALS_IN_CONTAINER}', self.flags(live, '-e'))
         self.assertIn('--no-healthcheck', live)
-        self.assertEqual(self.flags(live, '--stop-timeout'), ['150'])
+        # above the participants' 330 s send deadline (test_install_harness pins it against settings.py)
+        self.assertEqual(self.flags(live, '--stop-timeout'), ['360'])
         self.assertEqual(self.flags(live, '-p'), [])
         disabled = install.service_args('worker', self.IMAGE, REVISION, 'disabled', '')
         self.assertNotIn('corti', ' '.join(disabled).lower())
