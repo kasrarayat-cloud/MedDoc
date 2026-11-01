@@ -48,6 +48,11 @@ so that no one tokenizer disagreement can hide a key:
    a string, /XFA also by an array).
 
 Every bound is explicit (MAX_* below) and refuses as unreadable; nothing is truncated quietly.
+⚠️ EVERY PASS IS LINEAR IN THE FILE AND EVERY STEP IS CHARGED to one work budget that grows with
+the file: a pass that re-reads bytes is either memoized so that it does not, or charged for every
+byte it re-reads (2026-11-01: a 10 KB file of predictor parameters, one long number token, one
+line of comments and names each ran a 10 MiB-capable scan past the worker's 12 s while charged a
+few units; test_pdf_active_content.ScanCost replays them).
 Only the standard library is used, imported when the worker imports engine.py, BEFORE Landlock:
 nothing in the application tree is readable after isolation.
 """
@@ -78,14 +83,21 @@ LONG_NAMES = (b"JavaScript", b"OpenAction", b"EmbeddedFiles", b"EmbeddedFile", b
               b"RichMediaContent", b"SubmitForm", b"ImportData")
 
 MAX_DECODED = 64 * 1024 * 1024        # decoded object-stream and xref-stream bytes, all together
-#: ONE budget for everything the scan does in Python, so that no mix of shapes can add up: a
-#: token or a skipped run is one unit; an escaped name, a closed dictionary and a stream cost
-#: more; 3 bytes through a byte-by-byte decoder (LZW, RunLength, ASCII85, a predictor row other
-#: than Up), one Up row, 64 decoded bytes and 3 slashes for the pattern pass are one unit each.
-#: The weights are measured (docs/rebuild/security-readiness.md): one unit is 0.6-1.8 us, so
-#: the whole scan stays under ~2 s of CPU on any 10 MiB file. Over the ordinary corpus of 133
-#: files (2026-10-31) the most any file used was 3,519 units.
+#: ONE budget for everything the scan does, so that no mix of shapes can add up. A unit is about a
+#: microsecond of CPU: a token or a skipped run is one unit; an escaped name, a closed dictionary
+#: and a stream cost more; 3 bytes through a byte-by-byte decoder (LZW, RunLength, ASCII85, a
+#: predictor row other than Up), one Up row, 64 bytes into or out of a decoder, 3 slashes for the
+#: pattern pass, and SCAN_BYTES bytes crossed by any search that is not one of the scan's fixed
+#: whole-buffer passes are one unit each. The weights are measured
+#: (docs/rebuild/security-readiness.md).
+#: ⚠️ THE BUDGET GROWS WITH THE FILE: MAX_WORK units for any file plus one per BYTES_PER_WORK
+#: bytes, so that it bounds what a file costs for its size, not how large an ordinary file may
+#: be. A fixed 1,000,000 refused a 5.9 MiB graph of 97,000 small objects (2026-11-01); a 10 MiB
+#: file now has 3,621,440 units, about 3.5 s of CPU on that host, against the worker's 12 s.
 MAX_WORK = 1_000_000
+BYTES_PER_WORK = 4
+SCAN_BYTES = 256
+MAX_GAP_MEMO = 1 << 17                # line ends whose following gap is remembered, per buffer
 MAX_HIDDEN_ANCHORS = 20_000           # "obj"/"trailer" keywords outside the sequential view's syntax
 MAX_ANCHOR_BYTES = 32 * 1024 * 1024   # bytes re-read by one-object parses at those anchors
 MAX_OBJECT_STREAMS = 2_000            # object-stream decodings
@@ -115,11 +127,11 @@ _TOKEN = re.compile(
     rb"|(" + _REG + rb"+)"                # 7 number or keyword
     rb")")
 _STRING_SPECIAL = re.compile(rb"[()\\]")
-# ⚠️ GAPS BETWEEN TOKENS ARE CROSSED IN PYTHON (_gap_end), ONE CHARGED STEP PER COMMENT. A
-# regex look-ahead across whitespace and comments is free to the budget, and from an anchor at
-# the end of a comment line it crosses every following comment line: 900,000 such lines took
-# more than 30 s. Only plain whitespace runs, which cannot hold an anchor, are left to C.
+# ⚠️ GAPS BETWEEN TOKENS ARE CROSSED BY _gap_end, MEMOIZED AND CHARGED. A regex look-ahead across
+# whitespace and comments is free to the budget, and from an anchor at the end of a comment line
+# it crosses every following comment line: 900,000 such lines took more than 30 s.
 _SPACE = re.compile(rb"[\x00\t\n\x0c\r ]*")
+_INLINE_SPACE = re.compile(rb"[\x00\t\x0c ]*")         # whitespace that does not end a line
 _SPACES_ONLY = re.compile(rb" *")
 _UINT = re.compile(rb"\d{1,10}")
 _HEADER_BEFORE = re.compile(rb"(\d{1,10})[\x00\t\n\x0c\r ]+(\d{1,5})[\x00\t\n\x0c\r ]*\Z")
@@ -128,8 +140,8 @@ _HEADER_BEFORE = re.compile(rb"(\d{1,10})[\x00\t\n\x0c\r ]+(\d{1,5})[\x00\t\n\x0
 _OBJ_ANCHOR = re.compile(rb"obj(?!" + _REG + rb")")
 _TRAILER_ANCHOR = re.compile(rb"trailer(?!" + _REG + rb")")
 _ENDOBJ = re.compile(rb"endobj")
-#: Where any reader may start a stream: the end of a dictionary, then the keyword "stream".
-_STREAM_START = re.compile(rb">>" + _GAPS + rb"(stream)(?!" + _REG + rb")")
+#: A whole run of whitespace and comments (_unread_streams crosses each run once).
+_GAP_RUN = re.compile(_GAPS)
 _INT = re.compile(_GAPS + rb"(\d{1,10})(?!" + _REG + rb")")
 # Runs that carry nothing for the policy are skipped with one character-class search each
 # (5 ns/byte; a possessive group costs 28): the contents of an array whose items are not needed
@@ -141,8 +153,11 @@ _INT_STOP = re.compile(rb"[^0-9\x00\t\n\x0c\r ]")
 _XREF_STOP = re.compile(rb"[^0-9fn\x00\t\n\x0c\r ]")
 _EOL = re.compile(rb"[\r\n]")
 _DIGITS = re.compile(rb"\d{1,18}")
+# ⚠️ A NUMBER IS MATCHED POSSESSIVELY. "\d+\.?\d*" backtracks over every split of a digit run
+# before failing at a non-digit: one 64,000-digit token followed by "x" took 30 s for one unit.
 #: A whole token that is a number. "333\xe7389" is not: pdf.js reads 333 and then junk.
-_NUMBER = re.compile(rb"[+-]?(?:\d+\.?\d*|\.\d+)\Z")
+_NUMBER_BODY = rb"[+-]?(?:\d++(?:\.\d*+)?|\.\d++)"
+_NUMBER = re.compile(_NUMBER_BODY + rb"\Z")
 _HEX_JUNK = re.compile(rb"[^0-9A-Fa-f\x00\t\n\x0c\r ]")
 _HEADER = re.compile(rb"[\x00\t\n\x0c\r ]+(\d{1,10})[\x00\t\n\x0c\r ]+(obj)(?!" + _REG + rb")")
 
@@ -183,8 +198,9 @@ _BACKUP_LONG = re.compile(_names(LONG_NAMES))
 #: Every name the policy can refuse, as a key or as the value of /Type, /Subtype or /S.
 _POLICY_NAMES = re.compile(_names(FORBIDDEN_KEYS | ACTIVE_ANNOTATIONS | ACTION_TYPES | {b"Encrypt"}))
 #: A token inside an array that no reader takes as a value: not a number, R, true, false or null.
-_ARRAY_JUNK = re.compile(rb"(?<![^\x00\t\n\x0c\r ()<>\[\]{}%])(?!(?:[+-]?(?:\d+\.?\d*|\.\d+)|R|true|false|null)(?!"
-                         + _REG + rb"))" + _REG + rb"+")
+#: (The number is possessive here too: the same 32,000-digit run took 16 s.)
+_ARRAY_JUNK = re.compile(rb"(?<![^\x00\t\n\x0c\r ()<>\[\]{}%])(?!(?:" + _NUMBER_BODY + rb"|R|true|false|null)(?!"
+                         + _REG + rb"))" + _REG + rb"++")
 #: An "R" token, and the "N G " that must stand right before it. ⚠️ AN R THAT ENDS NO "N G R" IS
 #: JUNK, NOT NOTHING: PDFium ends an array at a keyword it cannot read and reads the rest into
 #: the enclosing dictionary, and lenient pypdf does the same after its error (found by fuzzing:
@@ -288,10 +304,16 @@ class _Stream:
         self.obj, self.depth, self.decoded = obj, depth, None
 
 
+def budget(size):
+    """The work units a file of `size` bytes may use (MAX_WORK's comment says why it grows)."""
+    return MAX_WORK + size // BYTES_PER_WORK
+
+
 class _Scanner:
     def __init__(self, data):
         self.data = data
-        self.work = MAX_WORK
+        self.budget = budget(len(data))
+        self.work = self.budget
         self.decoded = 0
         self.slow = 0
         self.anchor_bytes = 0
@@ -305,6 +327,14 @@ class _Scanner:
         self.hidden_ranges = []     # spans of objects found at hidden anchors inside stream data
         self.stream_starts = set()  # "stream" keywords in the file read as a stream's start
         self.stats = {"hidden_anchors": 0, "object_streams": 0}
+        # What _gap_end remembers about the buffer it last crossed gaps in (see there).
+        self._gap_buf = None
+        self._gap_limit = -1
+        self._gap_from = {}         # a position asked about -> where the gap from it ends
+        self._gap_memo = {}         # a line end -> where the gap from it ends
+        self._gap_lines = []        # (from, line end): the last few comment lines searched
+        self._shaped = {}           # (gap end, name class) -> _key_shaped's answer
+        self._refs = {}             # gap end -> _ref_after's answer from there
 
     # ---------------------------------------------------------------- policy
     def _close_dict(self, frame):
@@ -358,12 +388,16 @@ class _Scanner:
             raise _Limit("too many object definitions")
         key = obj[0] << 16 | (obj[1] & 0xFFFF)
         known = self.definitions.get(key)
+        # ⚠️ THE SAME SUMMARY IS RECOGNISED BY IDENTITY FIRST. An object stream's index can name one
+        # already-read value thousands of times, and comparing it structurally with each other
+        # definition first took 7 s for 2 units an entry. A summary that is new was parsed, and
+        # charged, token by token; comparing it with at most MAX_VARIANTS others costs no more.
         if known is None:
             self.definitions[key] = summary
-        elif known is _AMBIGUOUS:
+        elif known is _AMBIGUOUS or known is summary:
             return
         elif isinstance(known, list):
-            if summary not in known:            # at most MAX_VARIANTS comparisons
+            if not any(item is summary for item in known) and summary not in known:
                 if len(known) >= MAX_VARIANTS:
                     self.definitions[key] = _AMBIGUOUS
                 else:
@@ -831,41 +865,116 @@ class _Scanner:
         return False
 
     def _gap_end(self, buf, pos, end):
-        """Past whitespace and comments, as a lexer skips them; every comment is a charged step."""
+        """Past whitespace and comments, as a lexer skips them.
+
+        ⚠️ LINEAR HOWEVER OFTEN IT IS ASKED. It is asked after every short policy name in the raw
+        bytes, after integers and after dictionaries, from anchors that may sit anywhere, and a gap
+        can run over many lines: 40,000 names on ONE comment line took 19 s when each crossed the
+        rest of the line, and 10,000 anchors on one line in stream data took 64 s. So the end of a
+        comment line, once found, answers for every position on that line; where the gap goes from
+        a line end on is remembered, so each line end is crossed from once per buffer; and every
+        comment and every SCAN_BYTES bytes crossed are charged, memo or not. (`end` is always the
+        buffer's length: every walk reads to the end of its buffer.)
+        """
+        if buf is not self._gap_buf or end != self._gap_limit:
+            self._gap_buf, self._gap_limit = buf, end
+            self._gap_memo, self._gap_from, self._gap_lines, self._shaped, self._refs = {}, {}, [], {}, {}
+        self._charge(1)
+        found = self._gap_from.get(pos)
+        if found is None:
+            found = self._gap_cross(buf, pos, end)
+            if len(self._gap_from) < MAX_GAP_MEMO:
+                self._gap_from[pos] = found
+        return found
+
+    def _gap_cross(self, buf, pos, end):
+        stop = _INLINE_SPACE.match(buf, pos, end).end()
+        self._charge((stop - pos) // SCAN_BYTES)
+        if stop >= end:
+            return end
+        c = buf[stop]
+        if c == 0x25:                                   # a comment runs to the end of its line
+            key = self._line_end(buf, stop, end, True)
+        elif c == 0x0A or c == 0x0D:
+            key = stop
+        else:
+            return stop
+        if key >= end:
+            return end
+        memo = self._gap_memo
+        found = memo.get(key)
+        if found is not None:
+            return found
+        path, at = [key], key
+        room = max(0, MAX_GAP_MEMO - len(memo))
         while True:
-            pos = _SPACE.match(buf, pos, end).end()
-            if pos >= end or buf[pos] != 0x25:
-                return pos
-            self._charge(1)
-            eol = _EOL.search(buf, pos, end)
-            if eol is None:
-                return end
-            pos = eol.start()
+            at_next = _SPACE.match(buf, at, end).end()
+            self._charge(1 + (at_next - at) // SCAN_BYTES)
+            if at_next >= end or buf[at_next] != 0x25:
+                found = at_next
+                break
+            at = self._line_end(buf, at_next, end, False)
+            if at >= end:
+                found = end
+                break
+            known = memo.get(at)
+            if known is not None:
+                found = known
+                break
+            if len(path) < room:
+                path.append(at)
+        for key in path[:room]:
+            memo[key] = found
+        return found
+
+    def _line_end(self, buf, at, end, remember):
+        """The first CR or LF at or after `at` (or `end`), charged by the bytes searched. The last few
+        comment lines searched from a gap's start are remembered: every position on them shares it."""
+        lines = self._gap_lines
+        for start, line_end in lines:
+            if start <= at <= line_end:
+                return line_end
+        eol = _EOL.search(buf, at, end)
+        line_end = eol.start() if eol is not None else end
+        self._charge(1 + (line_end - at) // SCAN_BYTES)
+        if remember:
+            lines[:] = [(at, line_end)] + [line for line in lines if line[1] != line_end][:3]
+        return line_end
 
     def _ref_after(self, buf, pos, end):
         """(generation, end) when "G R" follows an integer that ended at `pos`, as pdf.js reads it."""
         at = self._gap_end(buf, pos, end)
         if at == pos:
             return None
+        if at in self._refs:                # where the gap ends decides the rest
+            return self._refs[at]
+        result = None
         generation = _UINT.match(buf, at, end)
-        if generation is None:
-            return None
-        after = self._gap_end(buf, generation.end(), end)
-        if buf.startswith(b"R", after) and (after + 1 == end or buf[after + 1] in _DELIMITING):
-            return int(generation.group()), after + 1
-        return None
+        if generation is not None:
+            after = self._gap_end(buf, generation.end(), end)
+            if buf.startswith(b"R", after) and (after + 1 == end or buf[after + 1] in _DELIMITING):
+                result = int(generation.group()), after + 1
+        if len(self._refs) < MAX_GAP_MEMO:
+            self._refs[at] = result
+        return result
 
     def _key_shaped(self, buf, pos, name):
         """Is what follows a name a dictionary, a reference or (for /JS) a string, /XFA an array?"""
         end = len(buf)
         at = self._gap_end(buf, pos, end)
-        if buf.startswith(b"<<", at) or (name == b"JS" and buf[at:at + 1] in (b"(", b"<")) \
-                or (name == b"XFA" and buf[at:at + 1] == b"["):
-            return True
-        number = _UINT.match(buf, at, end)
-        if number is None or (number.end() < end and buf[number.end()] not in _DELIMITING):
-            return False
-        return self._ref_after(buf, number.end(), end) is not None
+        key = (at, name if name in (b"JS", b"XFA") else b"")
+        known = self._shaped.get(key)
+        if known is not None:
+            return known
+        shaped = buf.startswith(b"<<", at) or (name == b"JS" and buf[at:at + 1] in (b"(", b"<")) \
+            or (name == b"XFA" and buf[at:at + 1] == b"[")
+        if not shaped:
+            number = _UINT.match(buf, at, end)
+            shaped = (number is not None and (number.end() == end or buf[number.end()] in _DELIMITING)
+                      and self._ref_after(buf, number.end(), end) is not None)
+        if len(self._shaped) < MAX_GAP_MEMO:
+            self._shaped[key] = shaped
+        return shaped
 
     def _skip_array(self, buf, pos, end):
         """To the next delimiter that can matter inside an array: comments are crossed, not stopped at."""
@@ -909,6 +1018,8 @@ class _Scanner:
         end = len(data)
         starts = [r[0] for r in self.regions]
         endobjs = None
+        # Every "obj" and "trailer" is a step below, canonical or not ("endobj" included).
+        self._charge((data.count(b"obj") + data.count(b"trailer")) // 4)
         for pattern, canonical in ((_OBJ_ANCHOR, self.canonical_obj), (_TRAILER_ANCHOR, self.canonical_trailer)):
             for m in pattern.finditer(data):
                 at = m.start()
@@ -1002,7 +1113,7 @@ class _Scanner:
                      (first(b"F", b"Filter"), first(b"DP", b"DecodeParms"))):
             if pair not in pairs:
                 pairs.append(pair)
-        out = []
+        out, seen = [], set()
         for chain, parm_value in pairs:
             filters = self._resolve(chain)
             parms = self._resolve(parm_value)
@@ -1011,8 +1122,11 @@ class _Scanner:
             for each in filters:
                 names = self._name_list(each)
                 for parm in parms:
+                    # Up to 3 pairings x 8 definitions x 8 x 64 filters: charged per filter, every round.
+                    self._charge(1 + len(names))
                     variant = tuple(zip(names, self._parm_list(parm, len(names))))
-                    if variant not in out:
+                    if variant not in seen:
+                        seen.add(variant)
                         out.append(variant)
         return out
 
@@ -1122,6 +1236,7 @@ class _Scanner:
         containers = self._containers()
         for _round in range(MAX_STREAM_NESTING + 8):
             progress = pending = False
+            self._charge(1 + len(self.streams) // 8)      # every round looks at every stream
             for stream in list(self.streams):
                 if not self._is_object_stream(stream, containers):
                     continue
@@ -1165,6 +1280,9 @@ class _Scanner:
         if n is None or first is None or not 0 <= first <= len(content):
             return
         pos = 0
+        # ⚠️ ONE READING PER OFFSET, AND THE BYTES CROSSED TO REACH IT ARE COUNTED. 500 entries
+        # naming one offset behind 8 MiB of spaces re-crossed them 500 times (12 s, 2 units each).
+        read = {}
         for _index in range(min(n, len(content))):
             self._charge(2)
             number = _INT.match(content, pos, first)
@@ -1173,16 +1291,20 @@ class _Scanner:
                 break
             pos = offset.end()
             at = first + int(offset.group(1))
-            token = _TOKEN.match(content, at) if at < len(content) else None
-            if token is not None and token.start(token.lastindex) in values:
-                # Already read as syntax by the walk above: the same tokens from the same place.
-                self._define((int(number.group(1)), 0), values[token.start(token.lastindex)])
-            elif at < len(content):
-                summary, stop = self._walk(content, at, len(content), "one", depth)
+            if at >= len(content):
+                continue
+            if at not in read:
+                token = _TOKEN.match(content, at)
+                if token is not None and token.start(token.lastindex) in values:
+                    # Already read as syntax by the walk above: the same tokens from the same place.
+                    summary, stop = values[token.start(token.lastindex)], token.end()
+                else:
+                    summary, stop = self._walk(content, at, len(content), "one", depth)
                 self.anchor_bytes += max(0, stop - at)
                 if self.anchor_bytes > MAX_ANCHOR_BYTES:
                     raise _Limit("hidden-object budget")
-                self._define((int(number.group(1)), 0), summary)
+                read[at] = summary
+            self._define((int(number.group(1)), 0), read[at])
 
     # ---------------------------------------------------------------- decoding
     def _spend(self, size):
@@ -1202,6 +1324,10 @@ class _Scanner:
 
     def _decode(self, data, variant):
         for name, parms in variant:
+            # ⚠️ EVERY FILTER IS CHARGED FOR ITS INPUT, not only for what it outputs: zlib takes
+            # 11 ns a byte through empty fixed-Huffman blocks that output nothing, and streams
+            # found at hidden anchors can share one such run of data.
+            self._charge(1 + len(data) // 64)
             parms = dict(parms or ())
             if name in (b"FlateDecode", b"Fl"):
                 data = self._predict(self._inflate(data), parms)
@@ -1340,9 +1466,12 @@ class _Scanner:
         # byte plus the one above it, modulo 256. Adding only the low seven bits of every byte
         # cannot carry into the next byte; the top bits are XORed in after. The other row types
         # run byte by byte in Python and are charged per byte.
-        low = int.from_bytes(b"\x7f" * width, "big")
-        high = int.from_bytes(b"\x80" * width, "big")
-        prior = bytearray(width)
+        # ⚠️ NOTHING IS SIZED BY THE DECLARED ROW WIDTH, ONLY BY THE DATA: /Columns 1048576 with 32
+        # colours of 16 bits declares 64 MiB rows, and allocating three of them for one byte of
+        # data, for one unit, let 30 such streams in a 10 KB file run past 12 s. The row above the
+        # first is zeros (no row); a short row can only be the last one; the masks are built for
+        # the first full Up row, whose bytes were already charged when they were decoded.
+        low = high = prior = None
         at = 0
         while at < len(data):
             self._charge(1)                         # every row, whatever its type
@@ -1351,32 +1480,37 @@ class _Scanner:
             at += width + 1
             size = len(row)
             if kind == 2 and size == width:
-                a = int.from_bytes(row, "big")
-                b = int.from_bytes(prior, "big")
-                row = bytearray((((a & low) + (b & low)) ^ ((a ^ b) & high)).to_bytes(width, "big"))
+                if prior is not None:               # Up on the first row adds zeros
+                    if low is None:
+                        low = int.from_bytes(b"\x7f" * width, "big")
+                        high = int.from_bytes(b"\x80" * width, "big")
+                    a = int.from_bytes(row, "big")
+                    b = int.from_bytes(prior, "big")
+                    row = bytearray((((a & low) + (b & low)) ^ ((a ^ b) & high)).to_bytes(width, "big"))
             elif kind != 0:
                 self._spend_slow(size)
+                above = prior if prior is not None else bytes(size)
                 if kind == 1:
                     for i in range(step, size):
                         row[i] = (row[i] + row[i - step]) & 255
                 elif kind == 2:
                     for i in range(size):
-                        row[i] = (row[i] + prior[i]) & 255
+                        row[i] = (row[i] + above[i]) & 255
                 elif kind == 3:
                     for i in range(size):
-                        row[i] = (row[i] + (((row[i - step] if i >= step else 0) + prior[i]) >> 1)) & 255
+                        row[i] = (row[i] + (((row[i - step] if i >= step else 0) + above[i]) >> 1)) & 255
                 elif kind == 4:
                     for i in range(size):
                         left = row[i - step] if i >= step else 0
-                        up = prior[i]
-                        corner = prior[i - step] if i >= step else 0
+                        up = above[i]
+                        corner = above[i - step] if i >= step else 0
                         guess = left + up - corner
                         pa, pb, pc = abs(guess - left), abs(guess - up), abs(guess - corner)
                         row[i] = (row[i] + (left if pa <= pb and pa <= pc else up if pb <= pc else corner)) & 255
                 else:
                     raise _unreadable("invalid PNG predictor row")
             out += row
-            prior = row if size == width else row + bytearray(width - size)
+            prior = row
         return bytes(out)
 
     # ---------------------------------------------------------------- entry
@@ -1385,11 +1519,32 @@ class _Scanner:
         token where a key belongs that is not a name, a "[", "<<" or "(" included, and PDFium then
         reads a string's contents as entries; this scan opens the container. Fuzzing found "[" put
         before /Length, and "29 0[ R", hide an object stream's start inside an array that never
-        closed here: its data was never decoded, and pdf.js read a link with a URI action from it."""
-        for m in _STREAM_START.finditer(self.data):
+        closed here: its data was never decoded, and pdf.js read a link with a URI action from it.
+
+        Every ">>" is followed past whitespace and comments to see whether "stream" comes next.
+        ⚠️ IN ONE PASS: a regex search from each ">>" crosses the whole run of comments after it,
+        and a stream of 24,000 lines of "%>>" took more than 30 s for 477 units. So each run is
+        crossed once. A later ">>" inside that run is inside one of its comments: from there the gap
+        either stops on that comment's line, or reaches the line's end and then goes on exactly as
+        the run did, so it ends where the run ends."""
+        data = self.data
+        size = len(data)
+        starts = self.stream_starts
+        run_end = -1
+        at = data.find(b">>")
+        while at >= 0:
             self._charge(1)
-            if m.start(1) not in self.stream_starts:
+            after = at + 2
+            if after < run_end:
+                stop = _INLINE_SPACE.match(data, after).end()
+                gap_end = run_end if stop >= size or data[stop] in b"\r\n%" else stop
+            else:
+                gap_end = run_end = _GAP_RUN.match(data, after).end()
+                self._charge((gap_end - after) // SCAN_BYTES)
+            if (gap_end not in starts and data.startswith(b"stream", gap_end)
+                    and (gap_end + 6 == size or data[gap_end + 6] in _DELIMITING)):
                 raise _unreadable("a stream whose dictionary could not be read")
+            at = data.find(b">>", at + 1)
 
     def run(self):
         data = self.data
@@ -1414,6 +1569,7 @@ def scan(data, stats=None):
         raise _Limit("memory") from exc
     finally:
         if stats is not None:
-            stats.update(scanner.stats, work=MAX_WORK - scanner.work, decoded=scanner.decoded,
+            stats.update(scanner.stats, work=scanner.budget - scanner.work, budget=scanner.budget,
+                         decoded=scanner.decoded,
                          slow=scanner.slow, anchor_bytes=scanner.anchor_bytes, streams=len(scanner.streams),
                          regions=len(scanner.regions))

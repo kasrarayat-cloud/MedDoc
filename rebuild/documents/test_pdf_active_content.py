@@ -802,10 +802,26 @@ class ScannerDetails(unittest.TestCase):
     def test_bounds_refuse_as_unreadable(self):
         self.assertEqual(self.kind(b"%PDF-1.7\n" + b"[" * (pdf_raw.MAX_DEPTH + 1)), "unreadable")
         self.assertEqual(self.kind(b"%PDF-1.7\n" + b"%1 0 obj\n" * (pdf_raw.MAX_HIDDEN_ANCHORS + 1)), "unreadable")
-        with mock.patch.object(pdf_raw, "MAX_WORK", 50):
+        # The budget grows with the file (budget()), so a tiny MAX_WORK needs the growth switched off.
+        with mock.patch.object(pdf_raw, "MAX_WORK", 50), mock.patch.object(pdf_raw, "BYTES_PER_WORK", 1 << 40):
             self.assertEqual(self.kind(form()), "unreadable")
         with mock.patch.object(pdf_raw, "MAX_DECODED", 100):
             self.assertEqual(self.kind(minimal([(3, objstm([(5, b"[" + b"0 " * 200 + b"]")]))])), "unreadable")
+
+    def test_the_budget_grows_with_the_file_so_an_ordinary_large_graph_passes(self):
+        # COST-2: a fixed 1,000,000-unit budget refused a benign large structured file before the
+        # policy ran. The budget is MAX_WORK + size/BYTES_PER_WORK, so a 10 MiB file has room while a
+        # crafted one is still bounded. A 6 MiB graph of 90,000 small dicts spends MORE than the old
+        # fixed budget and now passes, because the budget grew with the file.
+        graph = b"%PDF-1.7\n" + b"".join(b"%d 0 obj\n<< /K %d /P (%s) >>\nendobj\n" % (i, i, b"x" * 32)
+                                          for i in range(1, 90_000))
+        graph += b"trailer\n<< /Root 1 0 R >>\n%%EOF\n"
+        self.assertGreater(len(graph), 6 << 20)
+        stats = {}
+        pdf_raw.scan(graph, stats)                       # no refusal
+        self.assertGreater(stats["work"], pdf_raw.MAX_WORK)      # would have exhausted the old fixed budget
+        self.assertLess(stats["work"], stats["budget"])
+        self.assertGreater(stats["budget"], 2 * pdf_raw.MAX_WORK)
 
     @staticmethod
     def reason(data):
@@ -816,9 +832,26 @@ class ScannerDetails(unittest.TestCase):
         return None
 
     def test_work_that_used_to_escape_the_budget_is_charged(self):
-        # Each of these ran for 15 s to over 30 s before its loop or look-ahead was charged.
-        lines = b"%PDF-1.7\n" + b"%1 0 obj 5\n" * 5000          # each anchor's look-ahead crossed every later line
-        self.assertEqual(self.reason(lines), "work limit")
+        # These shapes ran 15 s to over 30 s for a handful of charged units, because a regex
+        # look-ahead or a decoder loop crossed bytes nobody counted (findings COST-1). Each is now
+        # LINEAR and charged: it either finishes small and fast, or is refused by the budget it now
+        # spends. test_cost_shapes_finish_far_inside_the_worker measures the wall cost; here the
+        # concern is that the work is counted.
+        # 5,000 "obj" anchors on their own comment lines: the per-anchor gap look-ahead used to
+        # cross every later line (quadratic, ~15 s). Memoized, it is linear and cheap now, and the
+        # units scale with the count rather than its square.
+        small = {}
+        pdf_raw.scan(b"%PDF-1.7\n" + b"%1 0 obj 5\n" * 5000, small)
+        large = {}
+        pdf_raw.scan(b"%PDF-1.7\n" + b"%1 0 obj 5\n" * 10000, large)
+        self.assertLess(large["work"], 3 * small["work"])            # linear, not quadratic
+        self.assertLess(small["work"], pdf_raw.MAX_WORK)
+        # One comment line of 400,000 "/A" used to cross the rest of the line per name (~19 s); the
+        # line end is found once now, so it passes quickly with work proportional to the line, not
+        # its square. (A genuinely oversized charged loop still hits the budget: the two below.)
+        wide = {}
+        pdf_raw.scan(b"%PDF-1.7\n1 0 obj\n<< >>\n%" + b"/A%" * 400_000 + b"\nendobj\n%%EOF\n", wide)
+        self.assertLess(wide["work"], wide["budget"])
         defined = b"".join(b"9 0 obj /F%d endobj\n" % i for i in range(pdf_raw.MAX_VARIANTS + 1))
         stream = b"<< /Type /ObjStm /N 1 /First 4 /Filter 9 0 R /Length 5 >>\nstream\n0 0 1\nendstream"
         self.assertEqual(self.reason(minimal([(3, stream)]) + defined), "a stream parameter is defined in too many ways")
@@ -839,6 +872,71 @@ class ScannerDetails(unittest.TestCase):
         stats = {}
         pdf_raw.scan(form(), stats)
         self.assertLess(stats["work"], pdf_raw.MAX_WORK // 100)
+
+
+def _cost_shapes():
+    """The COST-1 lens shapes (refute-p1/robustness-cost), each at a size that ran 12-30 s on the
+    code before the fix. Harmless: no shape names an action or a script. Built raw; the scan needs
+    no valid xref. Each is paired with the verdict the policy gives it."""
+    n = b"1" * 64_000
+    yield "num_token", minimal([(1, b"<< /Note " + n + b"x >>")]), None
+    yield "num_token_after_eof", minimal([(1, b"<< >>")]) + n + b"x\n", None
+    yield "array_junk", minimal([(1, b"<< /Length 0 /BBox [ " + b"1" * 32_000 + b"x ] >>\nstream\n\nendstream")]), "unreadable"
+    yield "stream_start", minimal([(1, b"<< /Length %d >>\nstream\n" % (4 * 24_000) + b"%>>\n" * 24_000 + b"endstream")]), None
+    yield "gap_comment", minimal([(1, b"<< >>")]) + b"%" + b"/A%" * 40_000 + b"\n", None
+    yield "gap_anchors", minimal([(1, b"<< /Length %d >>\nstream\n" % (38 * 10_000)
+                                  + (b"0obj 5 %" + b"x" * 30) * 10_000 + b"\nendstream")]), None
+    objstm = (b"<< /Type /ObjStm /N 500 /First 2000 /Length %d /Filter /FlateDecode >>\nstream\n"
+              % len(zlib.compress(b"1 0 " * 500 + b" " * (2 << 20) + b"<<>>"))
+              + zlib.compress(b"1 0 " * 500 + b" " * (2 << 20) + b"<<>>") + b"\nendstream")
+    yield "objstm_index", minimal([(1, objstm)]), None
+    wide = (b"<< /Type /ObjStm /N 0 /First 0 /Length %d /Filter /FlateDecode /DecodeParms << /Predictor 12 "
+            b"/Columns 1048576 /Colors 32 /BitsPerComponent 16 >> >>\nstream\n" % len(zlib.compress(b"\x00"))
+            + zlib.compress(b"\x00") + b"\nendstream")
+    yield "predict_wide", minimal([(2 + i, wide) for i in range(30)]), None
+
+
+class ScanCost(unittest.TestCase):
+    """Finding COST-1: shapes that escaped the work budget. Each is scanned in a child capped at
+    CAP seconds of CPU (below the worker's 12 s): a regression that makes one super-linear again is
+    killed by the cap and fails here, rather than hanging. On the fixed scanner each is well under."""
+
+    CAP = 10
+
+    def _scan_capped(self, data):
+        import os
+        import resource
+        r, w = os.pipe()
+        pid = os.fork()
+        if pid == 0:
+            os.close(r)
+            try:
+                resource.setrlimit(resource.RLIMIT_CPU, (self.CAP, self.CAP))
+                import time
+                t = time.process_time()
+                try:
+                    pdf_raw.scan(data)
+                    verdict = "pass"
+                except pdf_raw.Refusal as exc:
+                    verdict = exc.kind
+                os.write(w, ("%s\t%.3f" % (verdict, time.process_time() - t)).encode())
+            finally:
+                os._exit(0)
+        os.close(w)
+        _, status, usage = os.wait4(pid, 0)
+        msg = os.read(r, 4096).decode()
+        os.close(r)
+        killed = os.WIFSIGNALED(status)
+        verdict = None if not msg else (None if msg.split("\t")[0] == "pass" else msg.split("\t")[0])
+        return killed, verdict, usage.ru_utime + usage.ru_stime
+
+    def test_cost_shapes_finish_far_inside_the_worker(self):
+        for name, data, expect in _cost_shapes():
+            with self.subTest(name=name):
+                killed, verdict, cpu = self._scan_capped(data)
+                self.assertFalse(killed, "%s was SIGKILLed at the %d s CPU cap (%.2f s)" % (name, self.CAP, cpu))
+                self.assertLess(cpu, self.CAP - 2, "%s used %.2f s of CPU" % (name, cpu))
+                self.assertEqual(verdict, expect, "%s verdict %r (CPU %.2f s)" % (name, verdict, cpu))
 
 
 if __name__ == "__main__":
