@@ -76,8 +76,12 @@ ACTIVE_ANNOTATIONS = frozenset((b"FileAttachment", b"RichMedia", b"Movie", b"Sou
 #: /S values that make a dictionary an action. Added with the raw scan so that an action is
 #: refused even where the key that reaches it (/A, /AA, /OpenAction, /Next) cannot be read.
 #: Measured over the ordinary corpus: no verdict change on 6.21.1, 6.21.2 or 6.21.4.
+#: ⚠️ /Rendition, /Movie and /Sound added 2026-11-01 (COV-RENDITION): an unreferenced
+#: << /S /Rendition >> was accepted while MuPDF reports it as an action (its own forbidden /S set
+#: names /Rendition). No trigger reached it, so nothing could run it; it is refused anyway because
+#: this module refuses an action dictionary wherever it is. The ordinary corpus is unchanged.
 ACTION_TYPES = frozenset((b"JavaScript", b"Launch", b"SubmitForm", b"ImportData", b"RichMediaExecute",
-                          b"GoToR", b"GoToE", b"URI"))
+                          b"GoToR", b"GoToE", b"URI", b"Rendition", b"Movie", b"Sound"))
 #: Searched for in any position outside ordinary stream data, strings and comments included.
 LONG_NAMES = (b"JavaScript", b"OpenAction", b"EmbeddedFiles", b"EmbeddedFile", b"Launch",
               b"RichMediaContent", b"SubmitForm", b"ImportData")
@@ -1526,24 +1530,40 @@ class _Scanner:
         and a stream of 24,000 lines of "%>>" took more than 30 s for 477 units. So each run is
         crossed once. A later ">>" inside that run is inside one of its comments: from there the gap
         either stops on that comment's line, or reaches the line's end and then goes on exactly as
-        the run did, so it ends where the run ends."""
+        the run did, so it ends where the run ends.
+
+        ⚠️ AND A RUN THAT ENDS AT A STREAM THIS SCAN READ IS NOT SEARCHED AGAIN (DELTA-1,
+        2026-11-01). The ">>" inside its comments are comment text, so every lexer skips them on its
+        way to that stream. The first one-pass version tested each of them too, and refused as
+        unreadable "<< ... >>\\n% >> stream\\nstream" — a commented ">> stream" just before a stream it
+        had read — which the earlier non-overlapping regex search accepted, because a match never
+        restarts inside an earlier match. That search's rule is kept exactly: a ">>" inside a run
+        that ends at a stream it read is skipped; inside any other run it is still tested, so a
+        commented ">> stream" with no read stream after the run is refused as before."""
         data = self.data
         size = len(data)
         starts = self.stream_starts
         run_end = -1
+        read_until = -1     # the end of the last run that ended at a stream this scan read
         at = data.find(b">>")
         while at >= 0:
             self._charge(1)
+            if at < read_until:
+                at = data.find(b">>", at + 1)
+                continue
             after = at + 2
-            if after < run_end:
+            inside = after < run_end
+            if inside:
                 stop = _INLINE_SPACE.match(data, after).end()
                 gap_end = run_end if stop >= size or data[stop] in b"\r\n%" else stop
             else:
                 gap_end = run_end = _GAP_RUN.match(data, after).end()
                 self._charge((gap_end - after) // SCAN_BYTES)
-            if (gap_end not in starts and data.startswith(b"stream", gap_end)
-                    and (gap_end + 6 == size or data[gap_end + 6] in _DELIMITING)):
-                raise _unreadable("a stream whose dictionary could not be read")
+            if data.startswith(b"stream", gap_end) and (gap_end + 6 == size or data[gap_end + 6] in _DELIMITING):
+                if gap_end not in starts:
+                    raise _unreadable("a stream whose dictionary could not be read")
+                if not inside:
+                    read_until = gap_end
             at = data.find(b">>", at + 1)
 
     def run(self):

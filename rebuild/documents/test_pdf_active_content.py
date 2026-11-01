@@ -588,6 +588,29 @@ class RealWorker(Workspace):
             check_original(path)
         self.assertEqual(caught.exception.code, "unreadable_pdf")
 
+    def test_an_unreferenced_rendition_action_in_a_form_is_refused(self):
+        # COV-RENDITION, as the audit built it: the supported form plus an object listed in the xref
+        # that nothing points at. Accepted (and served) before; MuPDF reports the action.
+        base = Base()
+        for kind in (b"/Rendition", b"/Movie", b"/Sound"):
+            with self.subTest(kind=kind):
+                path = self.write(table_revision(base.data, [(base.size, b"<< /S " + kind + b" >>")], base.root,
+                                                 base.startxref, base.size + 1))
+                for operation in (inspect_template, check_original):
+                    with self.assertRaises(DocumentError) as caught:
+                        operation(path)
+                    self.assertEqual(caught.exception.code, "unsafe_upload", operation.__name__)
+
+    def test_a_commented_stream_keyword_before_a_stream_keeps_the_form_supported(self):
+        # DELTA-1 through the real worker: a revision whose stream has "% >> stream" on the line before
+        # its own keyword. Round 2 refused it as unreadable_pdf at inspection and download.
+        base = Base()
+        data = table_revision(base.data, [(base.size, b"<< /Length 9 >>\n% >> stream\nstream\nsynthetic\nendstream")],
+                              base.root, base.startxref, base.size + 1)
+        path = self.write(data)
+        self.assertEqual([field["key"] for field in inspect_template(path)["fields"]], ["Symptoms"])
+        self.assertTrue(check_original(path)["checked"])
+
 
 # ---------------------------------------------------------------------------- scanner details
 def minimal(objects, trailer=b"<< /Root 1 0 R >>"):
@@ -749,6 +772,44 @@ class ScannerDetails(unittest.TestCase):
         for kind in (b"/URI", b"/Launch", b"/GoToR", b"/GoToE", b"/SubmitForm", b"/RichMediaExecute"):
             with self.subTest(kind=kind):
                 self.assertEqual(self.kind(minimal([(1, b"<< /S " + kind + b" /F (synthetic) >>")])), "active")
+
+    def test_rendition_movie_and_sound_actions_are_refused_wherever_they_are(self):
+        # COV-RENDITION (2026-11-01): an unreferenced << /S /Rendition >> was accepted while MuPDF
+        # reports it as an action (its forbidden /S set names /Rendition). Nothing reached it, so
+        # nothing could run it; an action dictionary is refused wherever it is all the same.
+        for kind in (b"/Rendition", b"/Movie", b"/Sound"):
+            with self.subTest(kind=kind):
+                self.assertEqual(self.kind(minimal([(1, b"<< /Type /Catalog >>"), (13, b"<< /S " + kind + b" >>")])),
+                                 "active")
+        # A navigation action and the other inert /S values no reader reports stay accepted.
+        for kind in (b"/GoTo /D [3 0 R /Fit]", b"/SetOCGState /State [/ON]", b"/Trans", b"/Transparency"):
+            with self.subTest(kind=kind):
+                self.assertIsNone(self.kind(minimal([(1, b"<< /Type /Catalog >>"), (13, b"<< /S " + kind + b" >>")])))
+
+    def test_a_commented_stream_keyword_before_a_stream_the_scan_read_is_comment_text(self):
+        # DELTA-1 (2026-11-01): round 2's one-pass search tested the ">>" inside a comment between a
+        # dictionary and its own "stream" keyword, and refused "% >> stream" there as a stream it had
+        # not read. Every lexer skips that comment; round 1's search accepted these exactly.
+        for gap in (b"\n% >> stream\n", b"%>>stream\n\n", b" % >> stream\n", b"\n%\n% >>  stream x\n\n"):
+            with self.subTest(gap=gap):
+                data = minimal([(1, b"<< /Type /Catalog >>"),
+                                (3, b"<< /Length 9 >>" + gap + b"stream\nsynthetic\nendstream")])
+                self.assertIsNone(self.kind(data))
+        # The audit's own input (a fuzzed object stream, 169 bytes): round 1 accepted it, round 2 did not.
+        self.assertIsNone(self.kind(b"%PDF-1.7\n3 0 obj\n<< /Type /Obj\x87tm /N 2 /First 9 /Length 38 >>\n% >> "
+                                    b"stream\nstream\n5 0 6 21\n<< /Type /Catalog >>\n[1 2 3]\n\nendstream\nendobj\n"
+                                    b"trailer\n<< /Root 1 0 R >>\n%%EOF\n"))
+        # The comment does not stop the stream being read: an object stream behind it is decoded.
+        link = b"<< /Type /Annot /Subtype /Link /A << /S /URI /URI (synthetic) >> >>"
+        entries, encoded = object_stream([(5, link)], "flate")
+        self.assertEqual(self.kind(minimal([(3, b"<< /Type /ObjStm " + entries + b" /Length %d >>\n%% >> stream\n"
+                                                 b"stream\n" % len(encoded) + encoded + b"\nendstream")])), "active")
+        # Not reopened: a commented ">> stream" after a dictionary that starts NO stream the scan read
+        # is still refused, exactly as both earlier rounds refused it.
+        self.assertEqual(self.kind(minimal([(1, b"<< /Type /Catalog >>"), (3, b"<< /K 1 >>\n% >> stream\nx")])),
+                         "unreadable")
+        self.assertEqual(self.kind(minimal([(3, b"[ << /Length 9 >>\n% >> stream\nstream\nsynthetic\nendstream")])),
+                         "unreadable")
 
     def test_every_definition_of_a_duplicated_key_is_judged(self):
         # pypdf refuses duplicate keys; pdf.js keeps the LAST definition, so judging only the
