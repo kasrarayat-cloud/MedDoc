@@ -58,8 +58,12 @@ class Command(BaseCommand):
         try:
             path = private_path(template.original_path)
             payload = path.read_bytes()
-        except (OSError, ValidationError):
+        except (FileNotFoundError, NotADirectoryError, ValidationError):
             return "source_unavailable"
+        except OSError:
+            # GR1-EXPORT-OPEN: an original that exists but cannot be read now (EMFILE, ENOMEM, EACCES, EIO)
+            # is a check that could not run, not a missing file.
+            return "sandbox_unavailable"
         if hashlib.sha256(payload).hexdigest() != template.sha256:
             return "integrity_failed"
         try:
