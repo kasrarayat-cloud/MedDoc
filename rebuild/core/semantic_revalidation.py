@@ -398,6 +398,10 @@ def enqueue(encounter,user,display_token,expected_revision):
     except signing.BadSignature:_fail('The recovery quote expired or changed. Reload before requesting the one check.')
     e=Encounter.objects.select_for_update().get(pk=encounter.pk)
     membership(user,e.department,roles=['owner','clinician'])
+    # SI-3: every path that can buy a provider call runs the PDF form guard (a no-op for Word forms,
+    # the only ones semantic definitions exist for today).
+    from .template_source import assert_pdf_template_usable
+    assert_pdf_template_usable(e.template_version.template)
     contract=shown.get('contract',CONTRACT)
     if contract not in CONTRACTS:_fail('Unknown retained revalidation contract.')
     binding=shown.get('binding',{})

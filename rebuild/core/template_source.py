@@ -24,18 +24,60 @@ def approval_binding(preparation):
         binding[signing_key] = signing_context
     return digest(binding)
 
+#: ⚠️ FINDING SI-4 (2026-11-01). Codes of the original check that say the CHECK could not run — the
+#: worker timed out, died or hit a resource limit, the sandbox could not start, or the stored file
+#: changed or vanished between two reads — and nothing about the form. Every other code is a verdict
+#: about the file (unsafe_upload, unreadable_pdf, invalid_document, upload_limit, unsupported_format).
+#: Treating a worker failure as a verdict told a doctor to replace a clean form and, on the voice
+#: route, deleted the recording they had just dictated.
+CHECK_UNAVAILABLE_CODES = frozenset(('parser_timeout', 'parser_failed', 'sandbox_unavailable',
+                                     'source_unavailable', 'source_changed'))
+CHECK_UNAVAILABLE_MESSAGE = ('QuillMD could not check this form right now. Nothing was sent for processing and '
+                             'nothing was charged. This is a temporary problem on our side, not a verdict about '
+                             'your form: try again in a few minutes.')
+
+
+class PdfTemplateRefused(ValidationError):
+    """The stored PDF original is refused by the active-content check: a verdict about the file.
+    `code` is the check's code (unsafe_upload, unreadable_pdf, ...)."""
+
+
+class PdfTemplateCheckUnavailable(ValidationError):
+    """The check could not run (`code` says why). Never a verdict about the form: the caller keeps the
+    doctor's work, offers to try again, and sends nothing."""
+
+
+def check_pdf_original(template):
+    """Run the download gate's isolated-worker check on `template`'s stored PDF original. Returns
+    normally when the original may be used and served; raises PdfTemplateRefused (a verdict about the
+    file) or PdfTemplateCheckUnavailable (the check could not run). A DocumentError is never let
+    through, so no caller can mistake a worker failure for a verdict again."""
+    from documents import check_original, DocumentError
+    try:
+        check_original(private_path(template.original_path), expected_sha256=template.sha256)
+    except DocumentError as exc:
+        if exc.code in CHECK_UNAVAILABLE_CODES:
+            raise PdfTemplateCheckUnavailable(CHECK_UNAVAILABLE_MESSAGE, code=exc.code) from None
+        raise PdfTemplateRefused(str(exc), code=exc.code) from None
+
+
 def assert_pdf_template_usable(template):
     """⚠️ FINDING DL-2. A PDF template accepted before the raw scan existed is still stored, and its
     original is read only at finalize. So a form the download gate now refuses stayed selectable: a
     doctor could create an encounter on it and spend a paid generation, learning only at finalize
     that it can never produce a document. This runs the same isolated-worker active-content check as
-    the download, on the stored original, at the two earliest points (encounter creation and every
-    provider enqueue), so a refused form is turned away before any provider usage. DOCX originals are
-    validated by source_for_version; this is PDF only. A missing or changed original is left to the
-    step that reads it, so this never blocks work for an unrelated storage fault."""
+    the download, on the stored original, at encounter creation and on EVERY path that can buy a
+    provider call for an encounter (generation and transcription in jobs.enqueue, coding in
+    coding_service.ensure_run, the semantic recheck), so a refused form is turned away before any
+    provider usage. DOCX originals are validated by source_for_version; this is PDF only. A missing
+    or changed original is left to the step that reads it, so this never blocks work for an
+    unrelated storage fault.
+
+    ⚠️ SI-4: a refusal raises PdfTemplateRefused ("can no longer be used"); a check that could not
+    run raises PdfTemplateCheckUnavailable ("try again"), and callers must never discard the
+    doctor's input for that one. Both are ValidationErrors, so every existing caller sends nothing."""
     if (template.format or '').lower() != 'pdf':
         return
-    from documents import check_original, DocumentError
     path = private_path(template.original_path)
     try:
         data = path.read_bytes()
@@ -44,10 +86,11 @@ def assert_pdf_template_usable(template):
     if hashlib.sha256(data).hexdigest() != template.sha256:
         return
     try:
-        check_original(path, expected_sha256=template.sha256)
-    except DocumentError as exc:
-        raise ValidationError('This form can no longer be used: ' + str(exc) + ' Upload a clean PDF as a new '
-                              'form. Nothing was sent for processing and nothing was charged.')
+        check_pdf_original(template)
+    except PdfTemplateRefused as exc:
+        raise PdfTemplateRefused('This form can no longer be used: ' + exc.messages[0] + ' Upload a clean PDF as '
+                                 'a new form. Nothing was sent for processing and nothing was charged.',
+                                 code=exc.code) from None
 
 
 def source_for_version(version):

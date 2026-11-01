@@ -212,6 +212,14 @@ def ensure_run(encounter, user, automatic=False, *, identity_policy=None):
             state, error_code = 'failed', 'service_unavailable'
             error = (str(exc.messages[0]) if 'source_interpretation' in inputs else
                      'Coding is not configured for this workspace. Contact your administrator.')
+    if state == 'queued':
+        # ⚠️ FINDING SI-3 (2026-11-01). A queued run IS a provider call (run_one sends it), and saving
+        # the answers of an encounter whose PDF form the download gate refuses queued one automatically
+        # while generation on the same encounter said "Nothing was sent". Every path that can buy a
+        # provider call for an encounter runs the same guard as jobs.enqueue: refused, or "try again"
+        # when the check could not run, and either way nothing is created or sent.
+        from .template_source import assert_pdf_template_usable
+        assert_pdf_template_usable(e.template_version.template)
     run = CodingRun.objects.create(encounter=e, user=user, input_digest=key,
         inputs=inputs, context=context, releases=releases, config=config, state=state,
         error_code=error_code, error=error,

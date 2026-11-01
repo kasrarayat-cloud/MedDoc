@@ -3,6 +3,7 @@ import json
 import os
 import re
 import secrets
+import time
 from datetime import datetime,timedelta
 from io import BytesIO
 from decimal import Decimal
@@ -370,14 +371,17 @@ def template_original(request,pk):
     payload=path.read_bytes()
     if hashlib.sha256(payload).hexdigest()!=t.sha256:raise ValidationError('Original integrity check failed.')
     kind=t.format.lower()
-    if kind not in ORIGINAL_TYPES:return refuse_original(request,t,'unsupported_format','This original has an unsupported format.')
+    if kind not in ORIGINAL_TYPES:return refuse_original(request,t,'unsupported_format','This original cannot be downloaded: This original has an unsupported format.')
     if kind=='pdf':
         # ⚠️ FINDING P1: a PDF accepted before the raw scan existed can carry a script the upload
         # check never saw, and these are its exact bytes. Every PDF original is therefore checked
         # again, in the isolated worker, before it is served; a refusal serves nothing at all.
-        from documents import check_original,DocumentError
-        try:check_original(path,expected_sha256=t.sha256)
-        except DocumentError as exc:return refuse_original(request,t,exc.code,str(exc))
+        # ⚠️ SI-4: a check that could not run (timeout, worker failure) is not a verdict; it is
+        # refused just the same, as 503 "try again", and audited with its code.
+        from .template_source import check_pdf_original,PdfTemplateRefused,PdfTemplateCheckUnavailable
+        try:check_pdf_original(t)
+        except PdfTemplateRefused as exc:return refuse_original(request,t,exc.code,'This original cannot be downloaded: '+exc.messages[0])
+        except PdfTemplateCheckUnavailable as exc:return refuse_original(request,t,exc.code,ORIGINAL_CHECK_UNAVAILABLE,status=503)
     audit(request.user,'template.download',t.pk,department=t.department)
     name=t.original_name or 'original'
     if not name.lower().endswith('.'+kind):name+='.'+kind
@@ -386,10 +390,13 @@ def template_original(request,pk):
     response['X-Content-Type-Options']='nosniff'
     return response
 
-def refuse_original(request,t,code,reason):
+ORIGINAL_CHECK_UNAVAILABLE=('This original cannot be downloaded right now: QuillMD could not check it. This is a temporary '
+                            'problem on our side, not a verdict about the form: try again in a few minutes.')
+
+def refuse_original(request,t,code,text,status=409):
     """Nothing of the file is sent; the refusal and its code are recorded."""
     audit(request.user,'template.download_refused',t.pk,department=t.department,code=code)
-    return HttpResponse('This original cannot be downloaded: '+reason,status=409,content_type='text/plain; charset=utf-8')
+    return HttpResponse(text,status=status,content_type='text/plain; charset=utf-8')
 
 @require_http_methods(['GET','POST'])
 def encounter_new(request):
@@ -413,13 +420,15 @@ def encounter_new(request):
                 form.add_error('template_version',CURRENT_MAPPING_ERROR)
                 return render(request,'encounter_form.html',{'form':form,'has_patients':form.fields['patient'].queryset.exists()},status=409)
             from .semantic_preparation import validated_semantic_definitions
-            from .template_source import assert_pdf_template_usable
+            from .template_source import assert_pdf_template_usable,PdfTemplateCheckUnavailable
             try:
                 validated_semantic_definitions(current)
                 assert_pdf_template_usable(current.template)      # DL-2: a refused PDF original never starts an encounter
             except ValidationError as exc:
+                # SI-4: a check that could not run is "try again" (503); the form keeps everything entered.
                 form.add_error('template_version', error_message(exc))
-                return render(request,'encounter_form.html',{'form':form,'has_patients':form.fields['patient'].queryset.exists()},status=409)
+                return render(request,'encounter_form.html',{'form':form,'has_patients':form.fields['patient'].queryset.exists()},
+                              status=503 if isinstance(exc,PdfTemplateCheckUnavailable) else 409)
             e=Encounter(department=data['patient'].department,patient=data['patient'],template_version=data['template_version'],created_by=request.user,notes=data['notes'],service_date=data['service_date']);e.full_clean(exclude=['notes','answers','finalized_at','finalized_by','export_path','export_sha256']);e.save()
             audit(request.user,'encounter.create',e.pk,department=e.department)
         return redirect('encounter_detail',pk=e.pk)
@@ -651,7 +660,9 @@ def generate_view(request,pk,recovery=False):
             response=JsonResponse(result);response['Cache-Control']='no-store';return response
     except ValidationError as exc:
         if wants_json:
-            response=JsonResponse({'error':error_message(exc),'message':error_message(exc)},status=409)
+            from .template_source import PdfTemplateCheckUnavailable
+            response=JsonResponse({'error':error_message(exc),'message':error_message(exc)},
+                                  status=503 if isinstance(exc,PdfTemplateCheckUnavailable) else 409)
             response['Cache-Control']='no-store';return response
         messages.error(request,error_message(exc))
     return redirect('encounter_detail',pk=pk)
@@ -992,15 +1003,34 @@ def export(request,pk):
     kind=e.template_version.template.format.lower()
     if kind=='pdf':
         # ⚠️ FINDING DL-1: a stored PDF export was served after a sha256 check only. New exports are
-        # built from originals the gate now re-checks, but an export FINALIZED BEFORE this repair can
+        # built from originals the gate now re-checks, but an export FINALIZED BEFORE that repair can
         # still carry active content pypdf's root recovery copied out of such an original into a form
-        # every viewer reads. So every stored PDF export is run through the same isolated-worker
-        # active-content check as an original before it is served; a refusal serves nothing.
-        from documents import check_original,DocumentError
-        try:check_original(path,expected_sha256=e.export_sha256)
-        except DocumentError as exc:
+        # every viewer reads. So the export's TEMPLATE ORIGINAL is checked, exactly as its own
+        # download is, before a stored PDF export is served; a refused original serves nothing.
+        # ⚠️ SI-1 / SI-2 (2026-11-01): the EXPORT itself is not scanned. The raw scan is a
+        # hostile-input check of ≤10 MiB uploads, while an export holds the doctor's own words (the
+        # word "trailer" and a later "/Launch" in an answer refused a clean form's export) and may be
+        # up to 30 MiB (a 10.5 MiB export of a clean form was refused for its size). Both refusals
+        # came after finalize, when nothing could change the document any more. The original is
+        # the only input an export took that the doctor did not write, and it is ≤10 MiB.
+        # A PDF template has no prepared source (preparation is Word-only and read_original reads
+        # ZIPs), so the original is the exact file every PDF export was filled from.
+        from .template_source import check_pdf_original,PdfTemplateRefused,PdfTemplateCheckUnavailable
+        try:check_pdf_original(e.template_version.template)
+        except PdfTemplateRefused as exc:
             audit(request.user,'encounter.export_refused',e.pk,department=e.department,code=exc.code)
-            return HttpResponse('This document cannot be downloaded: '+str(exc),status=409,content_type='text/plain; charset=utf-8')
+            return HttpResponse('This document cannot be downloaded: the PDF form it was filled from is no longer accepted. '
+                                +exc.messages[0],status=409,content_type='text/plain; charset=utf-8')
+        except PdfTemplateCheckUnavailable as exc:
+            audit(request.user,'encounter.export_refused',e.pk,department=e.department,code=exc.code)
+            if exc.code in ('source_unavailable','source_changed'):
+                # The stored original is missing or no longer the uploaded file: nothing can vouch for this export.
+                return HttpResponse('This document cannot be downloaded: the PDF form it was filled from is missing or '
+                                    'changed, so it cannot be checked. Contact your administrator.',
+                                    status=409,content_type='text/plain; charset=utf-8')
+            return HttpResponse('This document cannot be downloaded right now: QuillMD could not check the PDF form it '
+                                'was filled from. This is a temporary problem on our side, not a verdict about your '
+                                'document: try again in a few minutes.',status=503,content_type='text/plain; charset=utf-8')
     audit(request.user,'encounter.export',e.pk,department=e.department)
     # The hashed bytes are the bytes served: the file is not opened a second time.
     response=FileResponse(BytesIO(payload),as_attachment=True,filename=f'quillmd-{str(e.pk)[:8]}.{kind}')
@@ -1035,35 +1065,111 @@ def voice(request,pk):
         # approval and the session (30 min). The limit it shows still binds, the signed pricing
         # configuration is unchanged, and length is re-measured at enqueue.
         quoted={**usage_quote(request,e,max_age=VOICE_QUOTE_SECONDS,expired=VOICE_QUOTE_EXPIRED,changed=VOICE_DOCUMENT_CHANGED),'transcript_review_required':True}
-        try:
-            job=enqueue(e,request.user,'transcription',relative,config=quoted,expected_revision=e.revision)
-        except RecordingOverLimit as over:
-            # Nothing was sent and the upload is kept: the doctor chooses a shorter segment or a clearly priced higher limit.
-            approval=signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'path':relative,
-                                    'sha256':hashlib.sha256(private_path(relative).read_bytes()).hexdigest(),
-                                    'charge_limit':over.quote['charge_limit'],'config':quoted},salt='voice-limit')
-            # The path lets the worker remove the upload if nobody approves it within the approval window.
-            audit(request.user,'voice.over_limit_quoted',e.pk,department=e.department,seconds=over.quote['seconds'],
-                  charge_limit=over.quote['charge_limit'],standard_limit=over.quote['standard_limit'],path=relative)
-            # Whether the balance covers the limit, never the amount: an organization's paid balance is shown to its owners only.
-            return render(request,'voice_limit.html',{'encounter':e,'message':error_message(over),'quote':over.quote,'approval':approval,
-                'length':seconds_text(over.quote['seconds']),'fits':seconds_text(over.quote['fits_seconds']),
-                'standard_limit':Decimal(over.quote['standard_limit']),
-                'affordable':available_balance(request.user,e.department)>=Decimal(over.quote['charge_limit'])},status=409)
-        if job.input_path!=relative:private_path(relative).unlink(missing_ok=True)
-        if getattr(job,'reused',False):
-            # The identical recording already holds this request key; the redundant upload was just
-            # removed above. Nothing was sent to the provider and nothing was charged again.
-            messages.info(request,'This recording was already transcribed for this document. No new request was made and nothing was charged. Its transcript is below in Document record.')
-        else:
-            from .testing_authority import identity
-            if identity(job.config):
-                messages.success(request,f"Sponsored test transcription queued. Estimated provider cost: ${job.config['testing_quote_usd']}; account charge: $0. Review the transcript before generating answers.")
-            else:
-                messages.success(request,f"Transcription queued with a limit of ${Decimal(job.config.get('charge_limit','0'))}. Review the transcript before generating answers.")
+        decision=queue_recording(request,e,relative,quoted,e.revision)
+        if decision is not None:return decision
     except ValidationError as exc:
+        # A refusal (a refused form included): nothing was sent, and the upload is removed.
         if relative:private_path(relative).unlink(missing_ok=True)
         messages.error(request,error_message(exc))
+    return redirect('encounter_detail',pk=pk)
+
+def queue_recording(request,e,relative,quoted,revision,first_offered=None):
+    """Queue a stored recording for transcription; on success the outcome is in messages and None is
+    returned. When the doctor has a decision to make, return its page and KEEP the upload: a recording
+    above the displayed limit (approve a higher limit or take a shorter segment), or a form that could
+    not be checked right now (send it again, or discard it). Any other refusal raises ValidationError."""
+    from .template_source import PdfTemplateCheckUnavailable
+    try:
+        job=enqueue(e,request.user,'transcription',relative,config=quoted,expected_revision=revision)
+    except RecordingOverLimit as over:
+        # Nothing was sent and the upload is kept: the doctor chooses a shorter segment or a clearly priced higher limit.
+        approval=signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':revision,'path':relative,
+                                'sha256':hashlib.sha256(private_path(relative).read_bytes()).hexdigest(),
+                                'charge_limit':over.quote['charge_limit'],'config':quoted},salt='voice-limit')
+        # The path lets the worker remove the upload if nobody approves it within the approval window.
+        audit(request.user,'voice.over_limit_quoted',e.pk,department=e.department,seconds=over.quote['seconds'],
+              charge_limit=over.quote['charge_limit'],standard_limit=over.quote['standard_limit'],path=relative)
+        # Whether the balance covers the limit, never the amount: an organization's paid balance is shown to its owners only.
+        return render(request,'voice_limit.html',{'encounter':e,'message':error_message(over),'quote':over.quote,'approval':approval,
+            'length':seconds_text(over.quote['seconds']),'fits':seconds_text(over.quote['fits_seconds']),
+            'standard_limit':Decimal(over.quote['standard_limit']),
+            'affordable':available_balance(request.user,e.department)>=Decimal(over.quote['charge_limit'])},status=409)
+    except PdfTemplateCheckUnavailable as unavailable:
+        return recording_kept(request,e,relative,quoted,revision,unavailable,first_offered)
+    if job.input_path!=relative:private_path(relative).unlink(missing_ok=True)
+    if getattr(job,'reused',False):
+        # The identical recording already holds this request key; the redundant upload was just
+        # removed above. Nothing was sent to the provider and nothing was charged again.
+        messages.info(request,'This recording was already transcribed for this document. No new request was made and nothing was charged. Its transcript is below in Document record.')
+    else:
+        from .testing_authority import identity
+        if identity(job.config):
+            messages.success(request,f"Sponsored test transcription queued. Estimated provider cost: ${job.config['testing_quote_usd']}; account charge: $0. Review the transcript before generating answers.")
+        else:
+            messages.success(request,f"Transcription queued with a limit of ${Decimal(job.config.get('charge_limit','0'))}. Review the transcript before generating answers.")
+    return None
+
+def recording_kept(request,e,relative,quoted,revision,unavailable,first_offered=None):
+    """⚠️ FINDING SI-4. The form could not be checked right now (the worker timed out or failed). That
+    is not a verdict about the form or the recording, and the recording exists nowhere else: the page
+    that dictated it is gone after this request. So the upload is KEPT, nothing is sent, and the doctor
+    can send the same recording again from this page within the approval window. The audited path
+    lets the worker remove it afterwards, exactly like an unapproved over-limit upload.
+    A retry that fails the same way renews the page but not the window: every offer for one recording
+    ends 30 minutes after the FIRST, so its signed quote is never older than an over-limit approval's."""
+    first_offered=first_offered or int(time.time())
+    retry=signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':revision,'path':relative,
+                         'sha256':hashlib.sha256(private_path(relative).read_bytes()).hexdigest(),'config':quoted,
+                         'first_offered':first_offered},salt='voice-retry')
+    audit(request.user,'voice.check_unavailable',e.pk,department=e.department,code=unavailable.code,path=relative)
+    return render(request,'voice_retry.html',{'encounter':e,'message':error_message(unavailable),'retry':retry},status=503)
+
+@require_POST
+def voice_retry(request,pk):
+    """The doctor's decision on a recording kept because its form could not be checked: send it again, or discard it."""
+    e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
+    discard=request.POST.get('decision')=='discard'
+    token=request.POST.get('retry','')
+    try:
+        data=signing.loads(token,salt='voice-retry',max_age=VOICE_QUOTE_SECONDS)
+        if time.time()-data.get('first_offered',0)>VOICE_QUOTE_SECONDS:
+            raise signing.SignatureExpired('The first offer for this recording has ended.')
+    except signing.SignatureExpired:
+        # An expired offer can no longer send anything, but discarding still removes its upload.
+        if not discard:
+            messages.error(request,'This recording is no longer kept for sending. Upload it again; nothing was sent.')
+            return redirect('encounter_detail',pk=pk)
+        data=signing.loads(token,salt='voice-retry')
+    except signing.BadSignature:
+        messages.error(request,'This retry is invalid. Upload the recording again; nothing was sent.')
+        return redirect('encounter_detail',pk=pk)
+    relative=str(data.get('path',''))
+    if (data.get('user')!=str(request.user.pk) or data.get('encounter')!=str(e.pk)
+            or not UPLOAD_NAME.fullmatch(relative)):
+        raise PermissionDenied
+    path=private_path(relative)
+    if discard:
+        # Under the encounter lock enqueue takes: a recording a retry already queued is never removed.
+        with transaction.atomic():
+            Encounter.objects.select_for_update().get(pk=e.pk)
+            if Job.objects.filter(input_path=relative).exists():
+                messages.info(request,'This recording was already queued; its request is listed below.')
+                return redirect('encounter_detail',pk=pk)
+            path.unlink(missing_ok=True)
+        messages.info(request,'The recording was discarded. Nothing was sent.')
+        return redirect('encounter_detail',pk=pk)
+    try:
+        if data.get('revision')!=e.revision:
+            raise ValidationError('The document changed after this recording was uploaded. Upload it again; nothing was sent.')
+        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=data.get('sha256'):
+            raise ValidationError('The kept recording is no longer available. Upload it again; nothing was sent.')
+        decision=queue_recording(request,e,relative,data['config'],data['revision'],data['first_offered'])
+        if decision is not None:return decision
+    except ValidationError as exc:
+        # Kept, not removed: the worker removes it after the window, as for any kept upload.
+        messages.error(request,error_message(exc))
+    except OSError:
+        messages.error(request,'The kept recording is no longer available. Upload it again; nothing was sent.')
     return redirect('encounter_detail',pk=pk)
 
 @require_POST
@@ -1103,7 +1209,12 @@ def voice_approve(request,pk):
             raise ValidationError('The document changed after the quote. Upload the recording again; nothing was sent.')
         if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=data.get('sha256'):
             raise ValidationError('The quoted recording is no longer available. Upload it again; nothing was sent.')
-        job=enqueue(e,request.user,'transcription',relative,config=data['config'],approved_limit=data['charge_limit'],expected_revision=data['revision'])
+        from .template_source import PdfTemplateCheckUnavailable
+        try:
+            job=enqueue(e,request.user,'transcription',relative,config=data['config'],approved_limit=data['charge_limit'],expected_revision=data['revision'])
+        except PdfTemplateCheckUnavailable as unavailable:
+            # SI-4: kept, with a page to send it again (it may then ask for this approval once more).
+            return recording_kept(request,e,relative,data['config'],data['revision'],unavailable)
         if job.input_path!=relative:path.unlink(missing_ok=True)
         audit(request.user,'voice.limit_approved',job.pk,department=e.department,charge_limit=str(data['charge_limit']))
         messages.success(request,f"Transcription queued with your approved limit of ${data['charge_limit']}.")

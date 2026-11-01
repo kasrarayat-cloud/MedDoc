@@ -869,18 +869,25 @@ def cancel(job,user):
     audit(user,'job.cancelled',job.pk,department=job.encounter.department,kind=job.kind)
     return job
 
+#: Audit actions that record an upload kept for the doctor's decision: an over-limit quote, or a form that could not be
+#: checked right now (SI-4, core.views.recording_kept). Each offer is valid for the 30-minute approval window.
+KEPT_UPLOAD_ACTIONS=('voice.over_limit_quoted','voice.check_unavailable')
+
 def reap_abandoned_voice_uploads():
-    """Remove over-limit uploads nobody approved within the approval window. Only files an over-limit quote recorded are
-    candidates, and never one a job references."""
+    """Remove kept uploads nobody sent within the approval window. Only files an over-limit quote or a kept-recording
+    offer recorded are candidates, never one a job references, and never one a newer offer still holds (a retry can
+    renew the offer for the same recording)."""
     cutoff=timezone.now()-timedelta(seconds=ABANDONED_UPLOAD_SECONDS)
     removed=0
-    for event in AuditEvent.objects.filter(action='voice.over_limit_quoted',created_at__lt=cutoff,created_at__gte=cutoff-timedelta(days=7)).order_by('created_at')[:500]:
+    for event in AuditEvent.objects.filter(action__in=KEPT_UPLOAD_ACTIONS,created_at__lt=cutoff,created_at__gte=cutoff-timedelta(days=7)).order_by('created_at')[:500]:
         relative=str((event.details or {}).get('path',''))
         if not UPLOAD_NAME.fullmatch(relative) or Job.objects.filter(input_path=relative).exists(): continue
+        if AuditEvent.objects.filter(action__in=KEPT_UPLOAD_ACTIONS,created_at__gte=cutoff,details__path=relative).exists(): continue
         path=private_path(relative)
         if path.is_file():
             path.unlink(missing_ok=True); removed+=1
-            audit(None,'voice.over_limit_upload_removed',event.target,department=event.department,path=relative)
+            audit(None,'voice.over_limit_upload_removed' if event.action=='voice.over_limit_quoted' else 'voice.kept_upload_removed',
+                  event.target,department=event.department,path=relative)
     return removed+reap_stray_submissions()
 
 
