@@ -306,8 +306,11 @@ _B2_COORDINATED_CUE = 'uncertain: the procedure is named together with a visit'
 # other services, not the visit. Never silent and never an exclusion: the E/M is held, and a reviewer decides.
 _VAL_OTHER_SERVICE_CUE = 'uncertain: its negative reading is about another service it names, not about this visit'
 # Words that name a service other than the visit, beside routing's own procedure form (_PROCEDURE_WORD) and its named
-# services: used only to hold an E/M's negative reading, never to release or exclude anything.
-_VAL_SERVICE_NOUNS = re.compile(r'\b(?:procedures?|tests?|testing|imaging|laborator(?:y|ies)|labs?)\b', re.A | re.I)
+# services: used only to hold an E/M's negative reading, never to release or exclude anything. GI round 4 (V3): an
+# imaging study or a laboratory panel by name ("Surveillance ultrasound in six months.").
+_VAL_SERVICE_NOUNS = re.compile(r'\b(?:procedures?|tests?|testing|imaging|laborator(?:y|ies)|labs?|ultrasounds?|sonograms?|'
+                                r'sonography|elastography|CT|MRI|MRCP|x-?rays?|scans?|blood\s+work|bloodwork|panels?)\b',
+                                re.A | re.I)
 
 
 def _VAL_names_other_service(text: str, start: int, end: int, service_date: Optional[date] = None) -> bool:

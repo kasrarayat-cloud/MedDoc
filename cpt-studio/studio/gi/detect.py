@@ -1853,9 +1853,15 @@ def _told_at_another_time(an: Analysis, start: int, end: int) -> bool:
 
 
 def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int,
-                         em: bool = False) -> list[tuple[str, str, bool, bool]]:
+                         em: bool = False, activities: Optional[int] = None) -> list[tuple[str, str, bool, bool]]:
     """(status, label, about_past, doubt) for every cue that governs the target in one clause. ``em``: the target is
-    an E/M documentation mention (see _owned_time_cue)."""
+    an E/M documentation mention (see _owned_time_cue). ``activities``: where the list of what an E/M time statement's
+    minutes covered starts (_pv1_activities; GI round 4, C1): a planned cue at or after it that names the visit's own
+    planning work (_pv1_activity_work: "the orders", "the referral to", "next steps") does not govern the target, since
+    it is the visit's work, not the time's occasion. Every other cue there still does, as installed: a planned time
+    ("in 2 weeks"), a cancellation ("as the visit was cancelled"), a history ("two days ago"), a doubt. So does a date:
+    it may be another visit's ("including the visit on 10/20/2026"), and nothing tells it from the date of a thing
+    reviewed. None (every other caller): as installed."""
     text = an.text
     cs, ce = an.lay.window(clause, ts, te, CLAUSE_REACH)
     spans, index, members = _groups(an, cs, ce, ts, te)
@@ -1868,6 +1874,8 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
     names = {(m.start, m.end) for m in an.services_in(cs, ce)} | {(iv.start, iv.end) for iv in an.interventions_in(cs, ce)}
     named = [m for m in members if m in names] or [(max(ts, cs), min(max(te, ts + 1), ce))]
     for cue in clause_cues:
+        if activities is not None and cue.start >= activities and _pv1_activity_work(cue):
+            continue  # GI round 4 (C1): a plan word of the work an E/M time covered ("the orders"), not its occasion
         status, doubt = cue.status, False
         if cue.name == 'aborted':
             status, doubt = _abort_status(an, cue)
@@ -1905,7 +1913,7 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
             label = (f'uncertain: {cue.text}, with no statement whether the procedure had started' if doubt
                      else f'{status}: {cue.text}')
             found.append((status, label, False, doubt))
-    for d in an.dates_in(cs, ce):
+    for d in an.dates_in(cs, ce):  # GI round 4 (C1): a date in an activity list still governs (see the docstring)
         if not _attached(spans, index, d.start, d.end, DATE_REACH):
             continue
         label = text[d.start:d.end]
@@ -2104,7 +2112,8 @@ _P2_HEDGED_STATEMENT = ('uncertain: a procedure is stated by its act or its find
                         'outranks the performance statement')
 
 
-def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Optional[Reading]:
+def _cue_reading(an: Analysis, start: int, end: int, em: bool = False,
+                 activities: Optional[int] = None) -> Optional[Reading]:
     """The reading of [start, end) from the cues of its clauses. An explicit performance cue is history in
     a history section (uncertain if its clause says today), uncertain in a plan section (carrying PLAN_TODAY when a
     clause says today, so the E/M beside it is held; round 3b's release of such a clause as performed was withdrawn
@@ -2112,10 +2121,10 @@ def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Option
     unless its clause says today: an indication tells why
     today's service is done, or its prior work-up ("An EGD was performed in August"), so a past-tense
     performance there is held, never performed. ``em``: an E/M documentation mention, which the indication rule
-    does not concern."""
+    does not concern. ``activities``: as for _clause_reading_cues (GI round 4, C1; None: as installed)."""
     found = []
     for clause in an.lay.clauses_for(start, end):
-        found.extend(_clause_reading_cues(an, clause, start, end, em))
+        found.extend(_clause_reading_cues(an, clause, start, end, em, activities))
     if not found:
         return None
     status = next(s for s in STATUS_PRECEDENCE if any(f[0] == s for f in found))
@@ -6011,8 +6020,20 @@ def _procedure_facts(an: Analysis, family: str, attributed, only_family: bool,
     return [f for f in facts if f], bool(incomplete) or short
 
 
+# GI round 4 (C4): the cues of an E/M reading held because the note may document no in-person visit (the words that
+# say so are quoted after it), and of an E/M time or decision-making statement held because a time it names may be
+# another date's.
+EM_NOT_IN_PERSON = 'uncertain: the note may document no in-person visit'
+EM_ANOTHER_TIME = 'uncertain: the E/M statement names another time'
+_PV1_HEAD_LINES = 6  # the head lines read for a title naming a telephone or audio-only encounter (C4)
+_PV1_QUOTE = 80  # the most of the not-in-person words a cue quotes
+_PV1_QUOTE_WINDOW = 4 * _PV1_QUOTE  # the most text a session-2 quote is cut from (a bound per mention: H7)
+# C2's inline label ("Complexity of decision making: moderate."), as cues.MDM_LEVEL's third prefix reads it
+_PV1_DECISION_LABEL = re.compile(r'(?:complexity|level)\s+of\s+decision[- ]making\b', re.A | re.I)
+
+
 def _em_base_reading(an: Analysis, m: Mention) -> Reading:
-    cue = _cue_reading(an, m.start, m.end, em=True)
+    cue = _cue_reading(an, m.start, m.end, em=True, activities=_pv1_activities(an, m))
     if cue and cue.status != 'performed':
         return cue
     if m.kind == 'em-visit' and cue is None and an.lay.section_at(m.start).kind in ('plan', 'history'):
@@ -6025,7 +6046,172 @@ def _em_base_reading(an: Analysis, m: Mention) -> Reading:
         held = _B2_visit_box(an, m.start, m.end)  # round 4c-2 box2:J
         if held is not None:
             return held
+    return _pv1_held(an, m, reading)
+
+
+def _pv1_activities(an: Analysis, m: Mention) -> Optional[int]:
+    """Where the list of what an E/M time statement's minutes covered starts: the end of the word that opens it
+    (cues.EM_TIME_ACTIVITIES: "covering", "including", "spent on"), written right after the minutes; None when there is
+    none, and for every mention that is no time statement (GI round 4, C1: "52 minutes, covering her history, ..., the
+    orders, and documentation" names the visit's work, and "the orders" never re-times it)."""
+    if m.kind != 'em-time':
+        return None
+    listed = cues.EM_TIME_ACTIVITIES.match(an.text, m.end)
+    return listed.end() if listed else None
+
+
+# C1: the planned cues an activity list may carry about the visit's own planning work ("the orders", "the referral to",
+# "scheduled", "arranging", "recommendations", "awaiting", "next steps"). Only these are skipped after the activity word
+# (a closed list: a planned cue not named here governs, as installed). A planned time ("in 2 weeks", "next week",
+# "tomorrow", "due in") and every cue of another status (cancelled, historical, incomplete, uncertain) still govern the
+# time statement: they may say the minutes were another day's, or the visit never happened (GI round 4, session 2).
+_PV1_PLAN_WORK_CUES = frozenset({'ordered', 'referred for', 'scheduled', 'booked', 'recommend', 'consider', 'will',
+                                 'plan', 'to be done', 'should undergo', 'upcoming'})
+_PV1_NEXT_STEPS = re.compile(r'next\s+steps?\Z', re.A | re.I)  # the 'next' cue's only plan-work reading
+
+
+def _pv1_activity_work(cue: Cue) -> bool:
+    """Whether clause cue ``cue``, standing at or after the activity word of an E/M time statement, names the visit's
+    own planning work, so _clause_reading_cues skips it (GI round 4, C1): a planned cue named in _PV1_PLAN_WORK_CUES,
+    or the 'next' cue read as "next steps". Never a planned time and never a cue of another status."""
+    if cue.status != 'planned':
+        return False
+    return cue.name in _PV1_PLAN_WORK_CUES or (cue.name == 'next' and _PV1_NEXT_STEPS.match(cue.text) is not None)
+
+
+def _pv1_held(an: Analysis, m: Mention, reading: Reading) -> Reading:
+    """An E/M mention's ``reading``, held (uncertain, a doubt) when it would read performed and the note may document no
+    in-person visit (_not_in_person: "Total time: 15 minutes." in a telephone-only note read 99212 ready; GI round 4,
+    C4), or, for a time statement, when a time no listed cue reads attaches to it (installed's _another_time, now applied
+    to E/M time: "Total time at her last visit was 40 minutes." read 99213 ready). C2's new decision-making label takes
+    the same time hold, so the level it reads is never another visit's ("Complexity of decision making: high (at her last
+    visit)."). Hold-only: a reading that is not performed is returned as it is, so nothing installed holds, excludes or
+    reads not-performed is changed here.
+
+    Session 2: C2's label reads a level only when it opens its sentence ("Previous note: complexity of decision making:
+    high." is held), and a time statement or a label is also held when its sentence names another visit by a
+    preposition, with or without a determiner (_pv1_other_visit: "Total time at last visit was 40 minutes.")."""
+    if reading.status != 'performed':
+        return reading
+    words = _not_in_person(an, m)
+    if words is not None:
+        return Reading('uncertain', (f"{EM_NOT_IN_PERSON}: '{words}'",), 'cue', doubt=True)
+    if m.kind == 'em-time' or _pv1_decision_label(an, m):
+        label = m.kind != 'em-time'
+        # from the start of the sentence the statement opens in to the end of the one it closes in (a field label such
+        # as "Total time:" ends a sentence of its own in the layout)
+        s, e = an.lay.sentence_for(m.start, m.start + 1)[0], an.lay.sentence_for(max(m.start, m.end - 1), m.end)[1]
+        if label and not _pv1_opens_its_sentence(an.text, m.start, s):
+            # the quote is cut from a bounded window, never from the sentence's start: one sentence may hold many labels
+            said = ' '.join(an.text[max(s, m.start - _PV1_QUOTE_WINDOW):m.end].split())[-_PV1_QUOTE:]
+            return Reading('uncertain', (f"{_PV1_LABEL_INSIDE}: '{said}'",), 'cue', doubt=True)
+        held = _another_time(an, m.start, m.end)
+        if held:
+            return Reading('uncertain', (EM_ANOTHER_TIME, held), 'cue', doubt=True)
+        other = _pv1_other_visit(an, s, max(e, m.end), label)
+        if other is not None:
+            return Reading('uncertain', (EM_ANOTHER_TIME, f"{ANOTHER_TIME_PREFIX}: '{other}' may place it on another "
+                                                          'date'), 'cue', doubt=True)
     return reading
+
+
+# Session 2 (C2, C4-time): another visit named by a preposition, with or without a determiner ("at last visit", "during
+# her previous appointment", "from the prior visit"). Installed's OTHER_TIME 'another encounter' needs the determiner
+# and reads at, during and on; a time statement reads those three only ("notes from the last visit" are the visit's
+# work), C2's label reads 'from' too. Read only to hold.
+_PV1_AT_OTHER_VISIT = re.compile(
+    r'\b(?P<prep>at|during|on|from)\s+(?:(?:her|his|their|the|a|an)\s+)?(?:(?:last|previous|prior|recent|most\s+recent|'
+    r'earlier|preceding)\s+)+(?:office\s+|clinic\s+)?(?:visits?|appointments?|encounters?|consult(?:ation)?s?)\b',
+    re.A | re.I)
+# What may stand before C2's label in a sentence the label opens: white space, a list mark or a list number.
+_PV1_OPENING = frozenset(' \t\r\n-*.)0123456789\u2022')
+_PV1_LABEL_INSIDE = ("uncertain: the decision-making label does not open its sentence, so its level may be another "
+                     "note's")
+
+
+def _pv1_opens_its_sentence(text: str, start: int, sentence_start: int) -> bool:
+    """Whether C2's label at ``start`` opens its sentence (GI round 4, session 2): nothing but white space, a list mark
+    or a list number stands before it in the sentence, and the sentence does not follow a field label's colon on the
+    same line ("Prior visit: Complexity of decision making: high.", which the layout may cut after the colon). Reads
+    back only over such characters and the blanks before the sentence, so each label costs the run of them."""
+    i = start - 1
+    while i >= sentence_start and text[i] in _PV1_OPENING:
+        i -= 1
+    if i >= sentence_start:
+        return False
+    while i >= 0 and text[i] in ' \t':
+        i -= 1
+    return i < 0 or text[i] != ':'
+
+
+def _pv1_other_visit(an: Analysis, start: int, end: int, label: bool) -> Optional[str]:
+    """The words of the first _PV1_AT_OTHER_VISIT match lying wholly in [start, end) - for a time statement (``label``
+    False) never one led by 'from' - or None. A comparison is no other time ("high, as at her prior visit"), as for
+    installed's _another_time (_COMPARE_LEAD within 30 characters before, on the same line). Matched once per document;
+    each call costs one bisection."""
+    key = ('pv1-other-visit',)
+    if key not in an.memo:
+        text = an.text
+        found = [(x.start(), x.end(), x.group('prep').lower() != 'from') for x in _PV1_AT_OTHER_VISIT.finditer(text)
+                 if not _pv1_compared(text, x.start())]
+        every = tuple((s, e) for s, e, _ in found)
+        timed = tuple((s, e) for s, e, kept in found if kept)
+        an.memo[key] = (every, tuple(s for s, _ in every), timed, tuple(s for s, _ in timed))
+    every, every_starts, timed, timed_starts = an.memo[key]
+    spans, starts = (every, every_starts) if label else (timed, timed_starts)
+    i = bisect.bisect_left(starts, start)
+    if i < len(spans) and spans[i][1] <= end:
+        x, y = spans[i]
+        return ' '.join(an.text[x:min(y, x + _PV1_QUOTE_WINDOW)].split())[:_PV1_QUOTE]
+    return None
+
+
+def _pv1_compared(text: str, start: int) -> bool:
+    """Whether a comparison leads the words at ``start`` ("as at her prior visit"): _COMPARE_LEAD within the 30
+    characters before them, on their line (a bounded look-back, so each match costs at most 30 characters)."""
+    lo = max(0, start - 30)
+    newline = text.rfind('\n', lo, start)
+    return _COMPARE_LEAD.search(text, newline + 1 if newline >= 0 else lo, start) is not None
+
+
+def _pv1_decision_label(an: Analysis, m: Mention) -> bool:
+    """Whether MDM mention ``m`` was read from C2's inline label ("Complexity of decision making: moderate."; GI round 4):
+    the only MDM reading _pv1_held gives the time hold, so installed's MDM readings are unchanged."""
+    return m.kind == 'em-mdm' and _PV1_DECISION_LABEL.match(an.text, m.start, m.end) is not None
+
+
+def _pv1_not_in_person_words(an: Analysis) -> tuple[Optional[str], tuple[tuple[int, int], ...], tuple[int, ...]]:
+    """(the words that hold every E/M reading of the document, or None; every cues.NOT_IN_PERSON match as (start, end),
+    in order; their starts), read once per document (GI round 4, C4). The document's words are its first match outside a
+    plan or history section (those speak of other encounters: "Telephone follow-up in two weeks."), else a title line of
+    its head naming a telephone or audio-only encounter (cues.NOT_IN_PERSON_TITLE), whatever section the head is in."""
+    key = ('pv1-not-in-person',)
+    if key not in an.memo:
+        text = an.text
+        spans = tuple((m.start(), m.end()) for m in cues.NOT_IN_PERSON.finditer(text))
+        words = next((text[s:e] for s, e in spans if an.lay.section_at(s).kind not in ELSEWHERE_SECTIONS), None)
+        if words is None:
+            title = cues.NOT_IN_PERSON_TITLE.search(text, 0, gi_sections.head_lines_end(text, _PV1_HEAD_LINES))
+            words = title.group(0).strip() if title else None
+        if words is not None:
+            words = ' '.join(words.split())[:_PV1_QUOTE]
+        an.memo[key] = (words, spans, tuple(s for s, _ in spans))
+    return an.memo[key]
+
+
+def _not_in_person(an: Analysis, m: Mention) -> Optional[str]:
+    """The words saying the encounter of E/M mention ``m`` may be no in-person visit (GI round 4, C4): the document's
+    (_pv1_not_in_person_words), or a cues.NOT_IN_PERSON match in the mention's own sentence, whatever its section ("GERD.
+    Total time 25 minutes, by telephone." in an Assessment and plan paragraph); None when there are none. Read only to
+    hold. Each mention costs one bisection over the document's matches."""
+    words, spans, starts = _pv1_not_in_person_words(an)
+    if words is not None or not spans:
+        return words
+    s, e = an.lay.sentence_for(m.start, m.end)
+    i = bisect.bisect_left(starts, s)
+    if i < len(spans) and spans[i][1] <= e:
+        return ' '.join(an.text[spans[i][0]:spans[i][1]].split())[:_PV1_QUOTE]
+    return None
 
 
 # --- round 4c-2 box2:J: an E/M visit statement governed by an unread mark or an unchecked box ----------------------
