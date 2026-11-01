@@ -16,6 +16,11 @@ and its dated amendment_20261101 before the Wave 1 repair's code.
     there is one value, and the date stands alone on a clean line. Otherwise the lines are only QUOTED and every member
     date is taken exactly as installed takes it.
 
+The integration of Wave 1 repair cycle 1 (pd.json amendment_20261101_integration, declared before its code): a
+procedure report's own head (detect.todays_procedure_report) whose own-date field gives exactly one date holds a
+member's answer of any other day (StrongHeadHoldTests). The rule (c) cases below are read on report(), whose head is
+no such head (its sedation field is denied), so they read rule (c) alone, as they were written to.
+
 No database (SimpleTestCase): this module is the H6 detector of every PD guard; each guard's killing test says so.
 Every document is synthetic.
 """
@@ -42,8 +47,9 @@ BODY = ''.join(f'Segment {i}: normal mucosa.\n' for i in range(5))
 def report(title='Colonoscopy Report', label='Date performed: 10/21/2026', head_extra='', body_extra='', closing=SIGNED,
            tail=''):
     """A procedure report whose head names its endoscopist and states a wide own-date label: with the defaults its own
-    sign-off states the label's day, so every guard of rule (c) passes and the label narrows."""
-    return (B + title + '\n' + f'Endoscopist: {ENDO}\n' + label + '\n' + head_extra + 'Sedation: propofol by CRNA\n\n'
+    sign-off states the label's day, so every guard of rule (c) passes and the label narrows. Its sedation field is
+    denied, so its head is no strong head and the integration's hold never reads it (StrongHeadHoldTests)."""
+    return (B + title + '\n' + f'Endoscopist: {ENDO}\n' + label + '\n' + head_extra + 'Sedation: none\n\n'
             'Findings\nThe colonoscope was advanced to the cecum. No polyps were found.\n' + body_extra
             + 'Impression\nNormal colonoscopy.\n' + closing + tail)
 
@@ -119,12 +125,19 @@ class RegressionDocumentTests(SimpleTestCase):
                 self.assertEqual(sends(text, answer), 'HELD', (doc_id, answer))
             self.assertEqual(sends(text), 'DATELESS', doc_id)  # nothing is sent before a member's answer
 
-    def test_h4_03_is_only_quoted_its_two_values_narrow_nothing(self):  # amended 2026-11-01: rules (1) and (5)
+    def test_h4_03_quotes_its_two_values_and_takes_only_its_heads_date(self):  # amended twice on 2026-11-01
+        # rules (1) and (5): its two values narrow nothing, so rule (c) only quotes them; the integration's STRONG-HEAD
+        # HOLD (amendment_20261101_integration): its head is a procedure report's own, 'Exam date: 10/06/2026' its
+        # one date, so a member's answer of any other day is held (StrongHeadHoldTests)
         text = DOCS['h4-03']['text']
         f = fact(text)
-        self.assertTrue(quote_only(text))
+        self.assertEqual((f.origin, f.value), ('missing', None))
+        self.assertTrue(all(isinstance(e, context._QuotedSpan) for e in f.evidence))
         self.assertEqual(evidence(f), ['Exam date: 10/06/2026', 'Service date logged for this case: 10/08/2026'])
-        every_answer_taken(self, text, ['2026-10-06', '2026-10-08', '2026-10-09', '2026-10-05', '2026-10-07', FAR])
+        self.assertEqual(sends(text), 'DATELESS')
+        self.assertTrue(taken(text, '2026-10-06'))
+        for answer in ('2026-10-08', '2026-10-09', '2026-10-05', '2026-10-07', FAR):
+            self.assertFalse(taken(text, answer), answer)
         state = checks.service_date_state(context.merge_user_values(context.extract_context(text), {}), None)
         self.assertEqual(checks._date_problem(state), 'No usable date of service was read: the document states “Exam '
                                                       'date: 10/06/2026”, which is not read as one')
@@ -233,10 +246,15 @@ class InstalledSendsXTests(SimpleTestCase):
         self.assertEqual((f.origin, f.value), ('document', '2026-10-19'))
         self.assertEqual(sends(text), '2026-10-19')
 
-    def test_the_relabelled_ledger_keeps_installeds_date(self):  # the judge's F7: the 53(b)/54 precedent
+    def test_the_relabelled_ledger_keeps_installeds_date_as_every_readers_date(self):  # the judge's F7 (53(b)/54)
+        # amended 2026-11-01 by the integration's STRONG-HEAD HOLD (amendment_20261101_integration): rule (a) still
+        # asks and keeps installed's 2026-10-08 as every reader's date, but the head's own date is 2026-10-06, so a
+        # member's 2026-10-08 is held too and no answer is taken (TAKEN -> HELD; an addendum settles it)
         text = DOCS['h4-03']['text'].replace('Service date logged for this case:', 'Service date:')
         self.assertEqual(sends(text), 'DATELESS')
-        self.assertTrue(taken(text, '2026-10-08'))
+        self.assertEqual(context.charge_date_own(fact(text)), '2026-10-08')
+        self.assertEqual(context.service_date_of(text), dt.date(2026, 10, 8))
+        self.assertFalse(taken(text, '2026-10-08'))
         self.assertFalse(taken(text, '2026-10-06'))
 
 
@@ -764,6 +782,181 @@ class MustHoldTests(SimpleTestCase):
             self.assertNotEqual(fact(text).origin, 'document', text)
             self.assertEqual(sends(text), 'DATELESS', text)
             self.assertIsNone(context.service_date_of(text), text)
+
+
+class StrongHeadHoldTests(SimpleTestCase):
+    """The integration's STRONG-HEAD HOLD (pd.json amendment_20261101_integration, Wave 1 repair cycle 1): a procedure
+    report's own head (detect.todays_procedure_report, imported) whose own-date field gives exactly one date holds a
+    member's answer of any other day - never narrowed, taken or sent; only an answer the reader would take moves (TAKEN ->
+    HELD); the 'none' state is unchanged. Not in a note written around a procedure (rule (c)'s broadened detection, a call
+    or a message stated). The documents here are written for these tests (h4-03 apart) and are synthetic."""
+
+    EGD = (B + 'Esophagogastroduodenoscopy Report\nDate performed: 09/14/2026\nEndoscopist: Lorcan Abernethy-Vale, MD '
+               '(fictional)\nModerate sedation: midazolam 2 mg and fentanyl 50 mcg, nurse-administered\nIndication: '
+               'solid-food dysphagia for four months.\n\nFindings\nThe endoscope was passed through the upper esophageal '
+               'sphincter and advanced to the second part of the duodenum. A Schatzki ring at 38 cm was dilated with a '
+               '54 French bougie.\nImpression\nSchatzki ring, dilated. Otherwise a normal examination.\nPlan\nBiopsy '
+               'results by 09/21/2026; repeat dilation if the dysphagia returns.\n')
+    CONSULT = (B + 'Gastroenterology Consultation\nSeen by: Odile Fairweather-Ng, MD (fictional)\nDay of procedure: '
+                   '11/04/2026\nReason for consultation: iron deficiency anemia.\nAssessment and plan: bidirectional '
+                   'endoscopy is planned for 11/04/2026 with monitored anesthesia care.\nElectronically signed by Odile '
+                   'Fairweather-Ng, MD (fictional), 10/30/2026 16:40\n')
+    BOOKING = (B + 'Endoscopy Appointment\nDay of procedure: 11/04/2026\nEndoscopist: Lorcan Abernethy-Vale, MD '
+                   '(fictional)\nSedation: monitored anesthesia care\nArrival 06:30; clear liquids until 04:30; a driver '
+                   'is required.\nSigned: Synthetic Scheduler (fictional), 10/30/2026\n')
+    CALL = (B + 'Endoscopy Unit Note\nDay of procedure: 11/04/2026\nProceduralist: Lorcan Abernethy-Vale, MD '
+                '(fictional)\nSedation: monitored anesthesia care\nCall placed on 10/30/2026 to go over the bowel '
+                'preparation; the patient confirmed the arrival time.\nSigned: Synthetic Nurse, RN (fictional), '
+                '10/30/2026\n')
+
+    def held_note(self, text, answer):
+        merged = context.merge_user_values(context.extract_context(text), {'service_date': answer})['service_date']
+        self.assertTrue(context.is_member_conflict(merged), (answer, text[:80]))
+        return merged.note
+
+    def test_h4_03_holds_every_answer_but_its_heads_own_date(self):  # kills pd-head-hold
+        text = DOCS['h4-03']['text']
+        for answer in ('2026-10-08', '2026-10-09', '2026-10-05', '2026-10-07', FAR):
+            self.assertEqual(sends(text, answer), 'HELD', answer)
+        self.assertEqual(sends(text, '2026-10-06'), '2026-10-06')  # the walk's answer: the stored dated request
+        self.assertEqual(sends(text), 'DATELESS')
+        held = context.merge_user_values(context.extract_context(text), {'service_date': '2026-10-08'})
+        self.assertEqual(checks._date_problem(checks.service_date_state(held, None)),
+                         'The date of service is in conflict. Encounter metadata entered by a workspace member gives '
+                         "2026-10-08; this procedure report's own head gives its date of service as 2026-10-06 (“Exam "
+                         'date: 10/06/2026”), and the document also states “Service date logged for this case: '
+                         '10/08/2026”. Both are kept and neither is used: correct the metadata, clear it, or add an '
+                         'addendum to the document')
+
+    def test_a_strong_head_holds_an_entered_date_of_another_day(self):  # kills pd-head-hold
+        text = self.EGD
+        f = fact(text)
+        self.assertEqual((f.origin, f.value, evidence(f)), ('missing', None, ['Date performed: 09/14/2026']))
+        self.assertTrue(all(isinstance(e, context._QuotedSpan) for e in f.evidence))  # rule (c) still only quotes
+        self.assertEqual(f.note, context.HEAD_DATE_NOTE.format(day='2026-09-14', head='“Date performed: 09/14/2026”',
+                                                               also=''))
+        self.assertEqual(sends(text), 'DATELESS')  # the 'none' state is unchanged: nothing is sent before an answer
+        self.assertEqual(sends(text, '2026-09-14'), '2026-09-14')
+        for answer in ('2026-09-21', '2026-09-15', '2026-09-13', FAR):
+            self.assertEqual(sends(text, answer), 'HELD', answer)
+        self.assertEqual(self.held_note(text, '2026-09-21'), context.HEAD_HOLD_NOTE.format(
+            user='2026-09-21', day='2026-09-14', head='“Date performed: 09/14/2026”', also=''))
+
+    def test_a_weak_head_holds_nothing_new(self):  # kills pd-head-strong
+        text = self.EGD.replace('Endoscopist:', 'Attending:')  # an attending is no proceduralist field
+        self.assertNotIsInstance(fact(text), context._HeadHeldFact)
+        self.assertTrue(quote_only(text))
+        every_answer_taken(self, text, ['2026-09-14', '2026-09-21', '2026-09-15', FAR])
+        no_sedation = self.EGD.replace('Moderate sedation: midazolam 2 mg and fentanyl 50 mcg, nurse-administered',
+                                       'Sedation: none')
+        self.assertTrue(quote_only(no_sedation))
+        every_answer_taken(self, no_sedation, ['2026-09-21', FAR])
+
+    def test_a_head_with_no_single_date_holds_nothing_new(self):  # kills pd-head-one-date
+        two_fields = self.EGD.replace('Date performed: 09/14/2026\n', 'Date performed: 09/14/2026\nExam date: '
+                                                                      '09/15/2026\n')
+        self.assertNotIsInstance(fact(two_fields), context._HeadHeldFact)
+        every_answer_taken(self, two_fields, ['2026-09-14', '2026-09-15', '2026-09-21', FAR])
+        two_dates = self.EGD.replace('Date performed: 09/14/2026', 'Date performed: 09/14/2026 (rescheduled from '
+                                                                   '09/07/2026)')
+        self.assertNotIsInstance(fact(two_dates), context._HeadHeldFact)
+        every_answer_taken(self, two_dates, ['2026-09-07', '2026-09-14', '2026-09-21', FAR])
+
+    def test_a_consult_with_a_planned_procedure_date_holds_nothing(self):
+        text = self.CONSULT  # no proceduralist or sedation field: no procedure report's own head
+        self.assertNotIsInstance(fact(text), context._HeadHeldFact)
+        self.assertTrue(quote_only(text))
+        every_answer_taken(self, text, ['2026-10-30', '2026-11-04', FAR])  # the consultation's own day stays an answer
+
+    def test_a_note_written_around_a_procedure_holds_nothing(self):  # kills pd-head-around
+        text = self.BOOKING  # a strong head, under a booking's title
+        self.assertNotIsInstance(fact(text), context._HeadHeldFact)
+        every_answer_taken(self, text, ['2026-10-30', '2026-11-04', FAR])
+
+    def test_a_call_written_in_the_body_holds_nothing(self):  # kills pd-head-call
+        text = self.CALL  # a strong head under a neutral title; the call is stated in the body
+        self.assertNotIsInstance(fact(text), context._HeadHeldFact)
+        every_answer_taken(self, text, ['2026-10-30', '2026-11-04', FAR])
+
+    def test_a_documented_conflict_takes_only_the_heads_date(self):
+        text = (DOCS['h4-03']['text'].replace('Exam date: 10/06/2026', 'Date of service: 10/06/2026')
+                .replace('Service date logged for this case:', 'Service date:'))
+        f = fact(text)
+        self.assertEqual((f.origin, f.note), ('conflict', 'Conflicting documented values: 2026-10-06, 2026-10-08.'))
+        self.assertEqual(context.documented_values(f), ('2026-10-06', '2026-10-08'))  # its note is read: as made
+        self.assertEqual(sends(text), 'DATELESS')
+        self.assertEqual(sends(text, '2026-10-06'), '2026-10-06')
+        self.assertEqual(sends(text, '2026-10-08'), 'HELD')
+
+    def test_the_note_says_which_answers_are_held(self):  # kills pd-head-note
+        f = fact(DOCS['h4-03']['text'])
+        self.assertEqual(f.note, context.HEAD_DATE_NOTE.format(
+            day='2026-10-06', head='“Exam date: 10/06/2026”',
+            also=', and the document also states “Service date logged for this case: 10/08/2026”'))
+        self.assertNotIn("a member's date is taken", f.note)
+
+    def test_rule_a_keeps_its_question_and_says_its_date_is_held_too(self):  # kills pd-head-charge-note
+        text = DOCS['h4-03']['text'].replace('Service date logged for this case:', 'Service date:')
+        f = fact(text)
+        self.assertTrue(f.note.endswith("so the date is asked; a member's answer is taken only when it is 2026-10-08. "
+                                        "This procedure report's own head gives its date of service as 2026-10-06, so "
+                                        'an answer of 2026-10-08 is held too.'))
+        self.assertEqual(context.charge_date_problem(f), 'The document also states “Exam date: 10/06/2026”, while '
+                                                         '2026-10-08 is read from “Service date: 10/08/2026”')
+
+    def test_only_an_answer_the_reader_takes_is_held(self):
+        # an answer held before keeps its own note (h4-04's narrowing holds every other day already)
+        note = self.held_note(DOCS['h4-04']['text'], '2026-10-20')
+        self.assertTrue(note.startswith(context.USER_CONFLICT_NOTE.split('{', 1)[0]))
+        self.assertNotIn("procedure report's own head", note)
+        self.assertIsInstance(fact(DOCS['h4-04']['text']), context._HeadHeldFact)
+        # the hold never takes: the head's own day, held before, stays held
+        listed = context.Fact('service_date', None, 'conflict', (), context.DOCUMENT_CONFLICT_NOTE + '2026-10-01, '
+                                                                    '2026-10-02.')
+        marked = context._head_held(listed, listed.note, '2026-10-06', '“Exam date: 10/06/2026”', '')
+        def merged(answer):
+            return context.merge_user_values({'service_date': marked}, {'service_date': answer})['service_date']
+
+        self.assertEqual((merged('2026-10-06').origin, merged('2026-10-06').note),  # held before: held as before
+                         ('conflict', context.USER_CONFLICT_NOTE.format(user='2026-10-06',
+                                                                       document='2026-10-01 or 2026-10-02')))
+        self.assertEqual((merged('2026-10-01').origin, merged('2026-10-01').note),  # taken before: held by the head
+                         ('conflict', context.HEAD_HOLD_NOTE.format(user='2026-10-01', day='2026-10-06',
+                                                                   head='“Exam date: 10/06/2026”', also='')))
+        self.assertEqual(context.merge_user_values({'service_date': marked}, {})['service_date'], listed)
+
+    def test_the_marked_fact_is_stored_compared_and_carried_as_its_plain_fact(self):
+        import pickle
+        f = fact(DOCS['h4-03']['text'])
+        plain = context.Fact(f.name, f.value, f.origin, f.evidence, f.note)
+        self.assertIsInstance(f, context._HeadHeldFact)
+        self.assertEqual(f, plain)
+        self.assertEqual(plain, f)
+        self.assertEqual(hash(f), hash(plain))
+        self.assertEqual(to_jsonable(f), to_jsonable(plain))
+        carried = pickle.loads(pickle.dumps(f))  # the analyze child hands its facts to the worker by pickle
+        self.assertEqual((carried.head_day, carried.head_quotes), (f.head_day, f.head_quotes))
+        self.assertEqual(context.merge_user_values({'service_date': carried}, {'service_date': FAR})['service_date'].note,
+                         self.held_note(DOCS['h4-03']['text'], FAR))
+
+    def test_takes_another_day_reads_as_merge_user_values_takes(self):
+        texts = [doc['text'] for doc in DOCS.values()] + [self.EGD, self.CONSULT, self.BOOKING, self.CALL, report(),
+                                                         DOCS['h4-03']['text'].replace('Service date logged for this case:',
+                                                                                       'Service date:')]
+        for text in texts:
+            f = fact(text)
+            plain = context.Fact(f.name, f.value, f.origin, f.evidence, f.note)
+            dates = regression.documented_dates(text)
+            day = getattr(f, 'head_day', None) or (dates[0] if dates else '2026-10-01')
+            near = dt.date.fromisoformat(day)
+            answers = set(dates) | {FAR, (near - dt.timedelta(days=1)).isoformat(),
+                                    (near + dt.timedelta(days=1)).isoformat()}
+            others = {a for a in answers - {day} if context.merge_user_values(
+                {'service_date': plain}, {'service_date': a})['service_date'].origin == 'user'}
+            if others:
+                self.assertTrue(context._takes_another_day(plain, day), (text[:80], others))
+            if not context._takes_another_day(plain, day):
+                self.assertEqual(others, set(), text[:80])
 
 
 class HelperTests(SimpleTestCase):

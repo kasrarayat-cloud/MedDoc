@@ -350,6 +350,32 @@ PD_MUTANTS = (
     Mutant('pd-wide-never-own', "a narrowed wide label is never the note's own date (never sent)", _PD_CONTEXT,
            "        return Fact('service_date', None, 'missing', _sorted_spans(lines), WIDE_DATE_NOTE)\n",
            "        return Fact('service_date', wide[0].value, 'document', _sorted_spans(lines), WIDE_DATE_NOTE)\n", _PD_UNIT),
+    # --- the integration of Wave 1 repair cycle 1: the STRONG-HEAD HOLD (pd.json amendment_20261101_integration), one
+    # killing mutant per guard of the hold: the hold itself, the strong head (never PS's weak one), the one-date field,
+    # no note around a procedure (rule (c)'s broadened detection, a call or a message stated), and its notes ---
+    Mutant('pd-head-hold', "a member's answer of another day than a procedure report's own head gives is held", _PD_CONTEXT,
+           "    if isinstance(documented, _HeadHeldFact) and answer is not None and answer.origin == 'user' \\\n",
+           "    if False and isinstance(documented, _HeadHeldFact) and answer is not None and answer.origin == 'user' \\\n",
+           _PD_UNIT),
+    Mutant('pd-head-strong', "only the strong head holds (detect.todays_procedure_report, never PS's procedure_report_head)",
+           _PD_CONTEXT, '    if not detect.todays_procedure_report(text):\n        return None\n    if _pd_around_procedure(text):\n',
+           '    if not (procedure_report_head(text) and detect._gi4_head(text).own_dates):\n        return None\n'
+           '    if _pd_around_procedure(text):\n', _PD_UNIT),
+    Mutant('pd-head-one-date', "the head's own-date field gives exactly one date", _PD_CONTEXT,
+           '            if _PD_OTHER_DATE.search(text, m.end(), brk.start() if brk else line_end) is not None:\n',
+           '            if False:\n', _PD_UNIT),
+    Mutant('pd-head-around', 'no hold in a note written around a procedure (the broadened detection)', _PD_CONTEXT,
+           '    if _pd_around_procedure(text):\n        return None  # a booking, a call, a consent',
+           '    if False:\n        return None  # a booking, a call, a consent', _PD_UNIT),
+    Mutant('pd-head-call', 'no hold where the document states a call, a phone contact or a message', _PD_CONTEXT,
+           '    if _PD_CALL_PHRASE.search(text) is not None:\n        return None  # a call or a message written as an event',
+           '    if False:\n        return None  # a call or a message written as an event', _PD_UNIT),
+    Mutant('pd-head-note', "the hold's fact says which answers are held (never 'a member's date is taken')", _PD_CONTEXT,
+           '            note = HEAD_DATE_NOTE.format(day=day, head=quote, also=also)\n',
+           '            pass  # mutant: the note as made\n', _PD_UNIT),
+    Mutant('pd-head-charge-note', "rule (a)'s question says the date it keeps is held too", _PD_CONTEXT,
+           '            note = fact.note + _HEAD_CHARGE_NOTE.format(day=day, own=own)\n',
+           '            note = fact.note\n', _PD_UNIT),
 )
 # --- package PV1: E/M reading fixes and the C4 holds (detectors tests.test_gi4_pv1 and, for repair cycle 1's guards,
 # tests.test_gi4_pv1_cycle1; moved here from tests/test_gi4_pv1_mutants.py, which now checks this slice). Repair cycle 1
