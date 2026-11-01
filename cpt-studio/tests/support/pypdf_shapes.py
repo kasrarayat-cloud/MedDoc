@@ -1156,10 +1156,13 @@ def answer_rows() -> bytes:
 
 def negation(kind: str) -> bytes:
     """DROP-NEG-1: 'Biopsy was ' and 'taken.' in Helvetica round 'not ' in a font whose text cannot be read: 'euc' (the
-    /EUC-H font), 'missing' (a name the resources do not hold), 'odd' (an Identity-H font, the word an odd byte count)."""
-    shown = {'euc': '/F2 11 Tf (not ) Tj', 'missing': '/F9 11 Tf (not ) Tj', 'odd': '/F2 11 Tf <006E006F007420> Tj'}
+    /EUC-H font), 'missing' (a name the resources do not hold), 'odd' (an Identity-H font, the word an odd byte count),
+    'glyphs' (an Identity-H font with no ToUnicode: the word as the glyph indices a TrueType subset gives it)."""
+    shown = {'euc': '/F2 11 Tf (not ) Tj', 'missing': '/F9 11 Tf (not ) Tj', 'odd': '/F2 11 Tf <006E006F007420> Tj',
+             'glyphs': '/F2 11 Tf <0051005200570003> Tj'}
     content = lines(NOTE) + f'\nBT /F1 11 Tf 72 600 Td (Biopsy was ) Tj {shown[kind]} /F1 11 Tf (taken.) Tj ET'
-    return with_font(content, identity_font() if kind == 'odd' else euc_font())
+    font = {'odd': identity_font, 'glyphs': lambda: composite(descendant=8, descriptor=9)}.get(kind, euc_font)()
+    return with_font(content, font)
 
 
 def box_glyph_rows(*, one_object: bool = False) -> bytes:
@@ -1195,11 +1198,11 @@ def nul_value(kind: str) -> bytes:
     return page_pdf(lines(NOTE), extra=objects, annots='/Annots [26 0 R]', catalog='/AcroForm << /Fields [26 0 R] >>')
 
 
-def one_byte_cmap_page(text: str, *, cid_offset: int = 0, missing: str = '') -> bytes:
+def one_byte_cmap_page(text: str, *, cid_offset: int = 0, missing: str = '', glyphs: dict | None = None) -> bytes:
     """CAP-R2-1: ``text`` in a Type0 font whose /Encoding is an embedded CMap of one-byte codes (Ghostscript's
     OneByteIdentityH: codespace <00> <FF>, the codes CIDs ``cid_offset`` above them), with /W by CID (a space 250,
-    anything else 500, the digits 600) and a one-byte ToUnicode giving each byte of the text its character, but those
-    of ``missing``; the note before it in Helvetica."""
+    anything else 500, the digits 600) and a one-byte ToUnicode giving each byte of the text its character (or the
+    one ``glyphs`` gives it: {byte: character}), but those of ``missing``; the note before it in Helvetica."""
     encoded = text.encode('latin-1')
     cmap = stream('/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo << /Registry (Adobe) '
                   '/Ordering (Identity) /Supplement 0 >> def\n/CMapName /OneByteIdentityH def\n/CMapType 1 def\n'
@@ -1211,8 +1214,8 @@ def one_byte_cmap_page(text: str, *, cid_offset: int = 0, missing: str = '') -> 
                       for code in sorted(set(encoded)))
     font = composite('ABCDEF+DejaVuSans', encoding='12 0 R', descendant=8, descriptor=9, widths=f'/W [{widths}]',
                      to_unicode_ref='/ToUnicode 7 0 R')
-    font[7] = to_unicode(pairs=[(code, chr(code)) for code in sorted(set(encoded)) if chr(code) not in missing],
-                         code_bytes=1)
+    font[7] = to_unicode(pairs=[(code, (glyphs or {}).get(code, chr(code))) for code in sorted(set(encoded))
+                                if chr(code) not in missing], code_bytes=1)
     font[12] = cmap
     return with_font(lines(NOTE) + f'\nBT /F2 11 Tf 72 600 Td <{encoded.hex().upper()}> Tj ET', font)
 

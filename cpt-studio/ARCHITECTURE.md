@@ -160,7 +160,9 @@ read or reported, and content it would not show is excluded with a message.
   its table but the UCS-2 and UTF-16 ones, which it reads as UTF-16BE as they
   encode; an embedded CMap stream, unless its codes are all two bytes, read
   through an Identity copy, or all one byte, read one byte a code, and the font
-  has a ToUnicode; a dictionary), and text in a font pypdf cannot build,
+  has a ToUnicode; a dictionary), text in a glyph-index font (Identity, no
+  ToUnicode, no CIDToGIDMap stream: pypdf reads its glyph indices as
+  UTF-16BE), and text in a font pypdf cannot build,
   cannot parse or the resources do not name (it would draw it in a stand-in
   font that reads every byte as U+FFFD): the walk reads the operator that
   shows it itself (`_TextPlacement.transcribed`): each code pypdf can read as
@@ -172,10 +174,14 @@ read or reported, and content it would not show is excluded with a message.
   place and the words on either side never close up. It is written as
   U+FFFD (outside pypdf's right-to-left ranges, so it never reverses the
   punctuation after it), or, alone in a typed box or alone at the start of a
-  checklist row, as the unread mark `[?]` (held); counted and named: 'N
-  characters in a font or encoding this server cannot read as the PDF encodes
-  it; they are shown as � in place of the text, or as the unread mark [?] in a
-  box' (partial). That holds in a page's layer and in an appearance's text; an
+  checklist row, as the unread mark `[?]` (held); counted and named: 'text in
+  a font or encoding this server cannot read as the PDF encodes it; N
+  characters stand in its place as �, or as the unread mark [?] in a box'
+  (partial; N counts what stands in the text's place, as many characters as
+  pypdf would have written there, never the glyphs the page draws). A space
+  in what the walk reads itself is neutral to pypdf, as the space it stands
+  for is, so a right-to-left line keeps its word order. That holds in a page's
+  layer and in an appearance's text; an
   appearance only compared with a stored value is named unreadable. U+FFFD
   written so is not readable text: a page of nothing else has no usable text
   layer, and goes to OCR or is named, as any. `pdffonts.decodes`,
@@ -331,8 +337,9 @@ Every printed box is then placed where it is drawn (`_I2_Places`) and widgets
   with /Encoding /Differences names resolved through the ZapfDingbats and
   Symbol glyph names (and uniXXXX); a composite one character by character,
   its Latin echo of a symbol code read as that code. A composite font that
-  writes glyph indices (Identity, no ToUnicode, no CIDToGIDMap stream) is
-  dropped, and a malformed ToUnicode entry never fails the document.
+  writes glyph indices (Identity, no ToUnicode, no CIDToGIDMap stream) draws
+  text that cannot be read: U+FFFD in its place, named, never dropped (above),
+  and a malformed ToUnicode entry never fails the document.
   Private-use and control characters are dropped and counted per page; the
   status stays ok, and dropped characters are not readable text.
 - PDF forms and annotations: filled form values (text, choice, checked / not

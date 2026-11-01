@@ -360,20 +360,25 @@ class PdfSymbolFontTests(unittest.TestCase):
         self.assertEqual((result.status, result.messages), ('ok', (undecodable_note(1),)))
         self.assertTrue(result.text.endswith('☐ Biopsy\n☒ Cold snare\n Tattoo'), result.text)
 
-    def test_glyph_index_font_without_tounicode_is_not_text(self):
+    def test_glyph_index_font_without_tounicode_is_text_that_cannot_be_read(self):
+        """Glyph indices name no character, so the text they draw cannot be read: never shown as the characters
+        pypdf would make of them, and (since the pypdf 6.21.4 reader's round 3: unread text is never dropped) never
+        dropped either, which closed a sentence up round a word in such a font. Each glyph is U+FFFD in its place,
+        named, and not readable text: a page of nothing else has no usable text layer."""
+        from studio.ingest.pdf import unreadable_note
         font, extra = composite_font()
         data = font_pdf(font, [(620, GLYPH_CODES, '')], extra=extra, note=[])
         alone = pdf_extract(data, ocr=None)
         self.assertEqual((alone.status, alone.text), ('failed', ''))
         self.assertEqual(alone.messages, ('Page 1 has no usable text layer and OCR is not available on this server.',
-                                          undecodable_note(len(GLYPH_WORDS)), NO_TEXT))
+                                          NO_TEXT))
         with FakeOcr() as fake:
             read = pdf_extract(data, ocr=fake.tools)
         self.assertEqual((read.status, read.method, read.ocr_pages), ('ok', 'pdf-ocr', (1,)))
         beside_text = pdf_extract(font_pdf(font, [(620, GLYPH_CODES, '')], extra=extra), ocr=None)
         self.assertEqual((beside_text.status, beside_text.messages),
-                         ('ok', (undecodable_note(len(GLYPH_WORDS)),)))
-        self.assertTrue(beside_text.text.endswith('Interventions:\n'), beside_text.text)
+                         ('partial', (unreadable_note([1], len(GLYPH_WORDS)),)))
+        self.assertTrue(beside_text.text.endswith('Interventions:\n' + '\ufffd' * len(GLYPH_WORDS)), beside_text.text)
 
     def test_composite_fonts_that_name_characters_are_read(self):
         mapped, extra = composite_font(to_unicode_ref='/ToUnicode 7 0 R')

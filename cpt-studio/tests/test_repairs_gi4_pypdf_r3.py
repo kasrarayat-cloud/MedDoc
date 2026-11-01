@@ -21,14 +21,14 @@ import unicodedata
 import unittest
 from unittest import mock
 
-from pypdf import PdfReader
+from pypdf import PdfReader, _text_extraction
 from pypdf._utils import is_char_neutral, is_char_rtl
 from pypdf.generic import DecodedStreamObject
 
 from studio.ingest import Limits, extract_document
 from studio.ingest import pdfannots, pdffonts
-from studio.ingest.pdf import (BOX_GAP_MAX, BOX_SLACK, _I3_Bands, _I3_lone_marks, _I3_unclaimed, _Layer, _placed_boxes,
-                               extract_pdf, unreadable_note)
+from studio.ingest.pdf import (BOX_GAP_MAX, BOX_SLACK, _decoded, _I3_Bands, _I3_lone_marks, _I3_unclaimed, _Layer,
+                               _placed_boxes, extract_pdf, unreadable_note)
 from studio.ingest.pdfannots import Button, PageAnnotations
 from studio.ingest.pdfcontent import OptionalContent, analyse_page, readings_for
 from studio.ingest.pdffonts import SPACE, UNREAD, Transcript, read_codes
@@ -89,12 +89,30 @@ class MarkTests(unittest.TestCase):
         # pypdf 6.21.4 reverses the neutral characters after a right-to-left one (_text_extraction.get_display_str):
         # U+FDD7, round 2's mark, is in its U+FB1D-U+FDFF right-to-left range
         self.assertTrue(is_char_rtl('﷗'))
-        for char in (UNREAD, SPACE, FFFD, '[', ']'):
+        specials = _text_extraction.CUSTOM_RTL_SPECIAL_CHARS  # what pypdf reads as neutral besides its own ranges
+        for char in (UNREAD, FFFD, '[', ']'):
             with self.subTest(hex(ord(char))):
                 self.assertFalse(is_char_rtl(char))
-                self.assertFalse(is_char_neutral(char))  # left to right: it ends any right-to-left run before it
+                # left to right, as the installed reader's U+FFFD and mojibake were: it ends any right-to-left run
+                # before it, so the punctuation after it is never reversed
+                self.assertFalse(is_char_neutral(char, specials))
+        # SPACE, a space in an operator the reader reads itself, is neutral, as the space it stands for is
+        self.assertFalse(is_char_rtl(SPACE))
+        self.assertTrue(is_char_neutral(SPACE, specials))
         self.assertFalse(is_char_rtl('?'))
         self.assertEqual(unicodedata.bidirectional(FFFD), 'ON')  # what the result holds: a neutral, never R or AL
+
+    def test_the_notice_counts_what_stands_in_the_texts_place(self):
+        """The notice counts the characters written in the text's place (as many as pypdf would have written there),
+        never the text: two bytes of a CMap pypdf does not implement are one character to it."""
+        self.assertEqual(unreadable_note([1], 15),
+                         'Page 1 has text in a font or encoding this server cannot read as the PDF encodes it; 15 '
+                         'characters stand in its place as \ufffd, or as the unread mark [?] in a box, so check the '
+                         'original.')
+        self.assertEqual(unreadable_note([1, 2], 1),
+                         'Pages 1-2 have text in a font or encoding this server cannot read as the PDF encodes it; 1 '
+                         'character stands in its place as \ufffd, or as the unread mark [?] in a box, so check the '
+                         'original.')
 
     def test_the_internal_marks_never_reach_a_result(self):
         for data in (shapes.label_rows(), shapes.negation('euc'), shapes.box_glyph_rows(), shapes.answer_rows()):
@@ -135,6 +153,19 @@ class RightToLeftTests(unittest.TestCase):
                                  ['negated'] * 3)
                 self.assertEqual(reading(result.text, 'Hypertension'), 'historical')
 
+    def test_right_to_left_words_in_an_operator_read_here_keep_their_order(self):
+        """Hebrew words in a font whose embedded one-byte CMap's ToUnicode does not give one code: the reader reads
+        the operator itself, its spaces SPACE, and the words come out in the order pypdf writes them when it reads
+        the whole operator (the installed reader: 'ז והד גבא' and its guess 'h' after them). SPACE read left to
+        right ended each word's run, so the words came out in the wrong order ('גבא והד ז')."""
+        hebrew = {ord(latin): chr(0x05D0 + index) for index, latin in enumerate('abcdefgh')}
+        whole = extract(shapes.one_byte_cmap_page('abc def gh', glyphs=hebrew))
+        self.assertEqual((whole.status, whole.messages), ('ok', ()))
+        self.assertTrue(whole.text.endswith('\nחז והד גבא'), whole.text)  # as pypdf reads it, right to left
+        cut = extract(shapes.one_byte_cmap_page('abc def gh', glyphs=hebrew, missing='h'))
+        self.assertEqual((cut.status, cut.messages), ('partial', (unreadable_note([1], 1),)))
+        self.assertTrue(cut.text.endswith('\nז והד גבא' + FFFD), cut.text)
+
     def test_answers_in_parentheses(self):
         result = extract(shapes.answer_rows())
         self.assertIn('H. pylori\n���\n(-)\nStool occult blood\n����\n(+)', result.text)
@@ -151,15 +182,37 @@ class RightToLeftTests(unittest.TestCase):
 class NeverDroppedTests(unittest.TestCase):
     """DROP-NEG-1: round 2 dropped an operator it could not read, so 'Biopsy was ' + 'not ' (unread) + 'taken.' read
     'Biopsy was taken.': performed. Each character pypdf would have written for 'not ' is U+FFFD in its place: the
-    sentence never closes up, and routing holds the biopsy (the installed reader's U+FFFD and mojibake held it too)."""
+    sentence never closes up, and routing holds the biopsy (the installed reader's U+FFFD and mojibake held it too).
+    The same for a word in a glyph-index font (no ToUnicode), which the installed reader and round 2 dropped as glyphs
+    that name no character: 'Biopsy was taken.', performed, at status ok."""
 
     def test_a_negation_that_cannot_be_read_keeps_its_place(self):
-        for kind, count in (('euc', 2), ('missing', 4), ('odd', 4)):
+        for kind, count in (('euc', 2), ('missing', 4), ('odd', 4), ('glyphs', 4)):
             with self.subTest(kind):
                 result = extract(shapes.negation(kind))
                 self.assertEqual((result.status, result.messages), ('partial', (unreadable_note([1], count),)))
                 self.assertTrue(result.text.endswith('\nBiopsy was ' + FFFD * count + 'taken.'), result.text)
                 self.assertEqual(reading(result.text, 'Biopsy'), 'uncertain')
+
+    def test_glyph_index_text_in_an_appearance_is_never_read_as_letters(self):
+        """A stamp whose appearance draws glyph indices (no ToUnicode): the installed reader and round 2 read
+        pypdf's UTF-16BE reading of them, 'QRW', letters the stamp does not show, at status ok. Each is U+FFFD in
+        its place, named."""
+        result = extract(shapes.annotated('BT /F9 10 Tf 2 4 Td <005100520057> Tj ET',
+                                          font=shapes.composite(descendant=23, descriptor=24)))
+        self.assertEqual((result.status, result.messages), ('partial', (unreadable_note([1], 3), ANNOTATION)))
+        self.assertTrue(result.text.endswith('[PDF annotation text on page 1]\n' + FFFD * 3), result.text)
+
+    def test_a_glyph_index_piece_is_kept_in_place(self):
+        """The layer reader's guard: text pypdf wrote in a glyph-index font (the page walk transcribes it, so none
+        reaches the layer reader so far) is unread text in its place, counted, never glyphs dropped."""
+        reader = PdfReader(io.BytesIO(shapes.negation('glyphs')))
+        font = reader.pages[0]['/Resources']['/Font']['/F2'].get_object()
+        drawn = ((), None, False, True)
+        layer = _decoded([('Biopsy was ', (72.0, 600.0, True), None, None, drawn),
+                          ('QRW\x03', (130.0, 600.0, True), font, None, drawn),
+                          ('taken.', (150.0, 600.0, True), None, None, drawn)])
+        self.assertEqual((layer.text, layer.unread, layer.undecodable), ('Biopsy was ' + UNREAD * 4 + 'taken.', 4, 0))
 
     def test_an_adjustment_pypdf_reads_as_a_space_stays_one(self):
         """A TJ adjustment of half a space or more between strings that cannot be read is a space, as pypdf writes

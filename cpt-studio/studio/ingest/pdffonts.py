@@ -14,8 +14,11 @@
   (``composite_glyph``).
 - **Glyph-index fonts**: a composite font with an Identity CMap, no
   ToUnicode and no CIDToGIDMap stream is written in glyph indices, which name
-  no character; pypdf would show them as arbitrary characters. Its text is
-  counted and dropped.
+  no character; pypdf would show them as arbitrary characters (it reads them
+  as UTF-16BE). Its glyphs draw text this server cannot read, so it is text
+  pypdf cannot read as the PDF encodes it (below): kept in its place, never
+  dropped (dropping it closed 'Biopsy was ' + 'not ' + 'taken.' up into
+  'Biopsy was taken.').
 - NUL, private-use and control characters from any font name no character
   either; ``undecodable`` says which characters the caller counts and drops.
 - **Glyph names pypdf reads by its own rule** (``mapped_font``). pypdf 6.21.4
@@ -69,6 +72,7 @@ import bisect
 import math
 import re
 
+from pypdf import _text_extraction
 from pypdf._cmap import _predefined_cmap
 from pypdf._codecs import adobe_glyphs, charset_encoding
 from pypdf.generic import (ArrayObject, DecodedStreamObject, DictionaryObject, FloatObject, NameObject,
@@ -559,8 +563,9 @@ def decode_plan(font, built: Font | None = None, cache: dict | None = None) -> b
     """How the strings a font shows are judged (``decodes``), worked out once per font: True when pypdf reads every
     string as the font encodes it, False when it reads none so, the codec under which a string must decode, or the
     one-byte codes pypdf reads as the font encodes them. A simple font maps each byte through a code table, unless its
-    /Encoding names a CMap. A glyph-index font's codes are dropped by the page reader, so whatever pypdf makes of them
-    is not read. A composite font whose /Encoding is an embedded CMap of one-byte codes, with a ToUnicode, is read one
+    /Encoding names a CMap. A glyph-index font gives no code a character (pypdf reads its glyph indices as UTF-16BE,
+    which is not what they encode), so it reads none (False): its text is kept in place as text that cannot be read,
+    never dropped. A composite font whose /Encoding is an embedded CMap of one-byte codes, with a ToUnicode, is read one
     byte a code, each by its ToUnicode: the codes it gives (a code it does not give pypdf reads as a StandardEncoding
     guess). Any other composite font needs a CMap pypdf implements under which the whole string decodes: pypdf 6.21.2
     refused a string that does not (or wrote lone surrogates), and 6.21.4 writes U+FFFD and mojibake. ``built``: pypdf's
@@ -570,7 +575,7 @@ def decode_plan(font, built: Font | None = None, cache: dict | None = None) -> b
         return not (isinstance(encoding, str) and encoding not in charset_encoding
                     and (encoding in _predefined_cmap or '-UCS2-' in encoding))
     if kind(font) == 'glyph-index':
-        return True
+        return False
     to_unicode = resolved(font.get('/ToUnicode'))
     if isinstance(encoding, StreamObject) and isinstance(to_unicode, StreamObject):
         layout = _cached(cache, ('layout', id(encoding)), (encoding,), lambda: _cmap_layout(encoding))
@@ -1025,6 +1030,12 @@ UNREAD = '\U0010fffe'
 # reader writes it as a space): a code standing for ' ' itself would be the font's space character to pypdf, which
 # measures it by the font's space width, not by its own (zero) width.
 SPACE = '\U0010ffff'
+# pypdf writes SPACE as it writes the space it stands for: a neutral character, in the order of the run it is in
+# (one of the special characters of _text_extraction.set_custom_rtl, read wherever pypdf extracts text, here or in an
+# appearance). Read left to right, it would end each right-to-left run at a space, and the words of a right-to-left
+# line it is read in would come out in the wrong order. No real text holds it, so no other reading changes.
+if SPACE not in _text_extraction.CUSTOM_RTL_SPECIAL_CHARS:
+    _text_extraction.set_custom_rtl(None, None, _text_extraction.CUSTOM_RTL_SPECIAL_CHARS + SPACE)
 UNREAD_FONT = '/CptStudioUnreadText'  # the resource name the page reader gives its Transcript font
 _WIDTH_CODE, _WIDTH_BITS = 0x0100, 20  # Transcript code 0x0100 + k: 2 ** k glyph-space units wide, no character
 _FIRST_TEXT_CODE = 0x0200  # Transcript codes from here up stand for the text the reader gives them

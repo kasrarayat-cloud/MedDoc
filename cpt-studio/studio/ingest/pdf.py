@@ -7,14 +7,14 @@ What a page shows is read, or the result says what was not read:
   hidden by default, and text drawn wholly outside the visible page area,
   removed (each named in the messages). Symbol fonts are read
   as the characters their glyphs show, check boxes as ☐ / ☒; glyphs that
-  name no character (unmapped symbol glyphs, private-use or control codes,
-  glyph-index fonts without a ToUnicode map) are counted and dropped, never
-  shown as the letters that encode them (studio.ingest.pdffonts). Text pypdf
-  cannot read as the PDF encodes it is never dropped: each character of it is
-  U+FFFD in its place (the unread mark '[?]' alone in a box, or alone at the
-  start of a checklist row), counted and named. A page whose readable
-  text has fewer than ``min_text_chars_per_page`` non-whitespace characters
-  has no usable text layer: it is OCRed when OCR is available; otherwise — or
+  name no character (unmapped symbol glyphs, private-use or control codes)
+  are counted and dropped, never shown as the letters that encode them
+  (studio.ingest.pdffonts). Text pypdf cannot read as the PDF encodes it (a
+  glyph-index font without a ToUnicode map among it) is never dropped: each
+  character of it is U+FFFD in its place (the unread mark '[?]' alone in a
+  box, or alone at the start of a checklist row), counted and named. A page
+  whose readable text has fewer than ``min_text_chars_per_page`` non-whitespace
+  characters has no usable text layer: it is OCRed when OCR is available; otherwise — or
   when OCR fails or time runs out — it is named and the result is 'partial'
   (other pages have text) or 'failed' (none does).
 - **Scans with a short text layer.** A page mostly covered by images (by area,
@@ -1491,11 +1491,9 @@ def _decoded(pieces, readings=None) -> _Layer:
         lead = False  # whitespace opens the piece (drawn, or pypdf's own between pieces)
         last = len(text) - 1
         for index, char in enumerate(text):
-            if char == UNREAD:
-                mapped = char
+            mapped = char if char == UNREAD else ' ' if char == SPACE else decode(char, index == last)
+            if mapped == UNREAD:
                 unread += 1
-            else:
-                mapped = ' ' if char == SPACE else decode(char, index == last)
             if mapped is None and char == ' ':
                 continue  # a space may be pypdf's own, between pieces of text: padding
             opens = False  # whether this item opens a box
@@ -1559,8 +1557,10 @@ def _decoded(pieces, readings=None) -> _Layer:
 def _decoder(font, readings=None):
     """(char, last in its piece) -> the character it stands for, or None for a glyph that names none."""
     style = (readings.kind(font) if readings is not None else kind(font)) if font is not None else 'text'
-    if style == 'glyph-index':  # nothing it writes is a character; pypdf's own line break ends a piece
-        return lambda char, last: '\n' if char == '\n' and last else None
+    if style == 'glyph-index':  # nothing it writes is a character: each glyph is text that cannot be read, in its
+        # place (the page walk transcribes such text, pdffonts.decode_plan, so this is a guard); pypdf's own line
+        # break ends a piece, and a space may be pypdf's own
+        return lambda char, last: '\n' if char == '\n' and last else None if char == ' ' else UNREAD
     if style == 'symbol-composite':
         trusted, table = composite_map(font), symbol_glyphs(font) or {}
         return lambda char, last: composite_glyph(char, trusted, table)
@@ -1607,16 +1607,18 @@ def _render_problem(page, dpi: int) -> str:
 # --- messages -----------------------------------------------------------------------
 
 SCANNED = 'mostly covered by an image and {has} only a short text layer'
-UNREADABLE_TEXT = ('{pages} {has} {count} in a font or encoding this server cannot read as the PDF encodes it; '
-                   '{they} shown as \ufffd in place of the text, or as the unread mark [?] in a box, so check the '
-                   'original.')
+UNREADABLE_TEXT = ('{pages} {has} text in a font or encoding this server cannot read as the PDF encodes it; {count} '
+                   '{stand} in its place as \ufffd, or as the unread mark [?] in a box, so check the original.')
 
 
 def unreadable_note(pages, total: int) -> str:
-    """The notice for ``total`` characters on ``pages`` that could not be read as the PDF encodes them."""
+    """The notice for text on ``pages`` that could not be read as the PDF encodes it, ``total`` characters standing in
+    its place (U+FFFD, or the '?' of an unread mark). That is as many as pypdf would have written there, not a count of
+    the glyphs the page draws (to pypdf, two bytes of a CMap it does not implement are one character), so the notice
+    counts what stands in the text's place, never the text."""
     return UNREADABLE_TEXT.format(pages=page_phrase(pages), has=agree(pages, 'has', 'have'),
                                   count=f'{total:,} character{"" if total == 1 else "s"}',
-                                  they='it is' if total == 1 else 'they are')
+                                  stand='stands' if total == 1 else 'stand')
 
 
 def _messages(read, texts, no_layer, scanned, unavailable, ocr: _Ocr, limits) -> tuple[list[str], bool]:
