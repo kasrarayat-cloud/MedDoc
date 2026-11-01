@@ -61,6 +61,40 @@ discard. What this guarantees, what it does not, and the measurements are in
 [security readiness](security-readiness.md). The text below is the finding as it
 was reported, kept as the record.
 
+## P1 round 2 — 2026-11-01: cost repair and the download-path gates (not yet installed)
+
+An independent refutation of the round-1 code found two cost defects and two
+missing gates, all now repaired, and two ordinary-file edges that are accepted
+rather than widened. Full account and measurements in
+[security readiness](security-readiness.md) (section "Round 2"). In brief:
+
+- **COST-1** — crafted 10 KB–384 KB files drove the raw scan past the worker's
+  12 s CPU while the work budget charged them a unit or two (a backtracking
+  number regex, a per-name gap look-ahead, a per-`>>` comment scan, full-row
+  predictor allocation sized by `/Columns`, per-offset object-stream re-parsing).
+  Every pass is now linear and charged by the bytes it crosses; the lens's inputs
+  and ~10 MiB copies all finish well inside 12 s, refused or not, never killed.
+- **COST-2** — the fixed 1,000,000-unit budget refused a benign 5.9 MiB object
+  graph before the policy ran. The budget now grows with the file
+  (`MAX_WORK + size/4`), so ordinary files up to the 10 MiB upload limit pass and
+  crafted ones stay bounded.
+- **DL-1** — a stored PDF *export* was served after a `sha256` check only; it is
+  now run through the same active-content check as an original before serving.
+  The live rebuild has **no PDF templates today**, so no PDF export exists to
+  refuse; this closes any export written before the P1 repair.
+- **DL-2** — a PDF template whose original the gate now refuses is turned away at
+  encounter creation and at every provider enqueue, not only at finalize.
+- **F1 (accepted)** — a form saved once by pypdf's incremental writer and then by
+  pdf.js (Firefox's viewer) is refused `unreadable_pdf`, because pypdf's own
+  reader drops a revision over an xref-stream number collision; the real set is
+  wider than "pypdf's own writer with two or three increments". The mirror order
+  (pdf.js then pypdf) is read by strict pypdf with a misnumbered object yet
+  accepted — safe, because the raw scan judges every object regardless of pypdf's
+  view. Not widened.
+- **F2 (accepted)** — the byte pass refuses a well-formed string holding a long
+  policy name right after a slash (e.g. `(intake, pre/Launch checklist)`). By
+  design; kept, not narrowed.
+
 ## P1 as reported: the upload check can be passed today, on either version
 
 F1 is not a new hole. pypdf 6.21.2 recovers from an unreadable cross-reference

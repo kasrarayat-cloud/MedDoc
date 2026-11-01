@@ -131,6 +131,12 @@ verdict and download-check result is the same as on `095387ecd`):
   run); 24 repeats of the four slowest inputs took 1.49 to 2.38 s. The raw scan
   alone peaks at about 1.6 s in-process on a quieter host; the ordinary corpus
   uses at most 3,519 of its 1,000,000 work units.
+  *(⚠️ Corrected 2026-11-01: this bound was refuted. An independent cost
+  refutation of the code at this point drove the raw scan past the 12 s worker
+  CPU with ~10 KB–384 KB files — the work budget did not bound several C-level
+  regex and allocation paths — and the fixed 1,000,000-unit budget refused a
+  benign 5.9 MiB object graph. Both are repaired below as COST-1 and COST-2; the
+  numbers in this paragraph describe the code before that repair.)*
 - **Fuzzing.** A mutated corpus file that the raw scan passes goes to two
   oracles: lenient pypdf (6.21.1 and 6.21.4), which reads the most, and pdf.js
   4.10.38, a real viewer's parser; either finding a forbidden key, an action, an
@@ -149,6 +155,125 @@ verdict and download-check result is the same as on `095387ecd`):
 - **Tests:** `documents.test_pdf_active_content` (on CI's explicit list) and
   `core.tests.test_template_original_safety` build every fixture in memory; both
   pass on 6.21.1, 6.21.2 and 6.21.4.
+
+## Round 2 — 2026-11-01: cost repair (COST-1, COST-2), the download-path gates (DL-1, DL-2), two accepted limits (F1, F2)
+
+An independent refutation of the round-1 code found four things. Two were cost
+(denial-of-service and false-rejection; the scan already failed closed, so no
+active content was ever let through), and two were missing gates on stored
+artifacts. Two more were ordinary-file verdict edges that are **accepted, not
+widened** (F1, F2). All are measured through the real sandboxed worker on pypdf
+6.21.1, 6.21.2 and 6.21.4.
+
+**COST-1 (repaired).** Several paths in `pdf_raw.py` were super-linear while the
+work budget charged them one or two units, so crafted files of 10 KB–384 KB —
+all accepted by the base in ~0.3 s — drove the scan past the worker's 12 s CPU
+and were SIGKILLed to `parser_failed`. Each is now linear and charged by the
+bytes it crosses: the number-token regex is possessive (`_NUMBER_BODY`); gap
+crossing (`_gap_end`) memoizes the end of a comment line so it is found once, not
+once per name; `_unread_streams` crosses the comment run after each `>>` once;
+`_predict` sizes its rows and masks by the data, never by a declared `/Columns`
+(so a 64 MiB row width for one byte of data costs nothing); `_scan_content`
+parses each object-stream offset once; `_define` recognises an already-read
+summary by identity; and `_object_streams`, `_anchors`, `_variants` and
+`_decode` charge every pass by the work it does. Measured on the lens's inputs
+and doubled copies up to ~10 MiB, through the real worker (6.21.4), all well
+inside 12 s and never killed:
+
+| input (≈size) | before (round-1) | after |
+|---|---|---|
+| `num_token` 64 KB … 9 MiB | 12 s → killed | supported, 0.00–0.43 s CPU |
+| `array_junk` 32 KB … 9 MiB | 12 s → killed | `unreadable_pdf` (malformed stream), ≤0.5 s |
+| `stream_start` 100 KB … 9.5 MiB | 12 s → killed | supported, 0.02–2.54 s |
+| `predict_objstm` 10 KB … 0.4 MiB | 12 s → killed | supported, ≤0.45 s |
+| `gap_comment` 124 KB … 8.6 MiB | 12 s → killed | pass ≤0.2 s; the 8.6 MiB (3 M names) refused `unreadable_pdf` at 5.3 s |
+| `gap_anchors` 384 KB … 9 MiB | 12 s → killed | pass ≤0.15 s; the 9 MiB (250 k anchors) refused `unreadable_pdf` at 0.5 s |
+| `objstm_index` 12 KB … 65 KB | 12 s → killed | pass ≤0.13 s; the 60 MiB-of-spaces variant refused at 1.2 s |
+
+The work budget now **grows with the file** — `budget() = MAX_WORK (1,000,000) +
+size/4` — so a 10 MiB file has ~3.6 M units (about 3.5 s of CPU on this host) and
+a crafted file is still bounded and refused, never killed. Over the 133-file
+ordinary corpus the most any file now uses is **3,649** units, and every one of
+the 133 keeps the exact verdict it had before this repair (raw scan and worker).
+
+**COST-2 (repaired).** The old fixed 1,000,000-unit budget refused a benign
+large structured file before the policy ran: a 5.9 MiB graph of ~97,000 small
+objects was `unreadable_pdf` (work ≈ 1,002,822). With the growing budget it now
+passes the raw scan (work ≈ 1,148,000 of a ~2.5 M budget) and reaches the real
+policy — the pypdf walk refuses it `upload_limit` for object-graph size, exactly
+as the base does. A plain 9.3 MiB text PDF passes the raw scan at 0.86 s (work
+607,362) and is refused only for its 9,000-page count, as before. So ordinary
+large files up to the 10 MiB upload limit are no longer refused by the budget;
+measured on text PDFs and object graphs from several producers.
+
+**DL-1 (repaired, defence in depth).** A stored PDF **export** was served after a
+`sha256` check only (`core/views.py` `export`). New exports are built from
+originals the gate re-checks, but an export finalized **before** the P1 repair
+could carry a script pypdf's root recovery copied out of an unsafe original into
+a page-level form every viewer reads. The `export` view now runs the same
+isolated-worker active-content check on the stored export bytes before serving a
+PDF export; a refusal sends no byte, answers 409 with the reason, and audits
+`encounter.export_refused` with the code. DOCX exports are not re-checked (same
+as DOCX originals). **The live rebuild has no PDF templates today**, so no PDF
+export exists to refuse; this closes the path for any PDF export written before
+the repair. The only route that serves a stored PDF export is `export`; the
+coding and coding-draft exports are DOCX-only and build a new document.
+
+**DL-2 (repaired).** A PDF template whose stored original the gate now refuses
+was still selectable: a doctor could create an encounter on it and spend a paid
+generation, learning only at finalize that it can never produce a document.
+`core.template_source.assert_pdf_template_usable` runs the same check on the
+stored original at the two earliest points — encounter creation
+(`encounter_new`) and every provider enqueue (`jobs.enqueue`, the one choke point
+for generation and transcription) — and refuses with a clear message before any
+provider usage. DOCX originals are validated by `source_for_version` as before;
+a missing or changed original is left to the step that reads it.
+
+**F1 (accepted limit, not widened).** The second layer refuses any file whose
+read makes strict pypdf drop or replace structure. This is **wider than round 1
+documented**: the affected set is not only "pypdf's own incremental writer with
+two or three increments" — it includes a form saved once by pypdf's incremental
+writer and **then by pdf.js** (the engine behind Firefox's built-in viewer).
+pypdf's incremental writer numbers its xref stream `len(_objects)+1` and omits it
+from its own `/Index`; pdf.js then reuses that number, so strict pypdf raises
+`Overwriting cache for 0 <n>` on the older stream, logs `Previous trailer cannot
+be read`, and drops a revision. The raw scan finds no active content, pdf.js and
+MuPDF read the file without repair, and an export pypdf would build matches a
+correct re-save — so the refusal prevents nothing, but the file is refused as
+`unreadable_pdf` at inspect, fill and download on all three pypdf versions.
+⚠️ **The MIRROR order is accepted:** the same two writers in the other order
+(pdf.js then pypdf) gives the reused number to a new appearance stream, and strict
+pypdf silently returns its own xref stream as the widget's `/AP /N` and accepts,
+fills and serves the file. That is safe **because the raw scan judges every
+definition of every object regardless of what pypdf resolves** — the
+active-content guarantee does not depend on pypdf's view. The rule follows
+pdf.js's allocation order, not whether pypdf's view is wrong; it is kept, because
+accepting the first order would mean exporting from pypdf's stale view. Only
+pdf.js 4.10.38 in node was exercised, not Firefox itself.
+
+**F2 (accepted limit, not widened).** The byte-pattern pass refuses a long
+forbidden name anywhere outside ordinary stream data, strings and comments
+included. So a well-formed literal string that contains a long policy name right
+after a slash — e.g. `/Keywords (intake, pre/Launch checklist)`, a `/Subject`
+URL containing `/JavaScript`, or a field `/V (Enable JS via /JavaScript)` — is
+refused `unsafe_upload`, although no reader takes a name from a well-formed
+string. The same words pass when the producer escapes the next byte (ReportLab
+writes `\)` after a name, and a backslash is a regular byte, so the match is
+decided by an escape, not by meaning). This is by design — a reader that runs a
+dictionary past its end can take such bytes for entries — and it is kept rather
+than narrowed: for medical templates the eight long names are CamelCase PDF words
+and only `Launch` and `JavaScript` are plausible in ordinary text. Measured: the
+three string variants refused on 6.21.1 and 6.21.4; the comma control and an
+escaped tooltip pass.
+
+**Round-2 proof.** `documents.test_pdf_active_content` adds `ScanCost` (each
+COST-1 shape scanned in a CPU-capped fork; a regression is killed by the cap and
+fails) and budget-growth and linearity assertions; `core.tests.
+test_template_original_safety` adds the DL-1 export gate and the DL-2
+encounter/enqueue gates. One killing mutation per new cost guard was verified on
+a throwaway copy (reverting each guard makes its shape blow the cap or regress to
+a refusal, and the copy restores to a pristine sha). A short pdf.js-oracle fuzz
+campaign on the final `pdf_raw.py` found no miss. All on 6.21.1, 6.21.2, 6.21.4.
 
 # Current internal operations supplement — September20–21,2026
 
