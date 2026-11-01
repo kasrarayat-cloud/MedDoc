@@ -189,3 +189,15 @@ requested in chat.
   - The six harness@1 builders keep running; their work is the base that harness@2 builds on.
 - **Correction to the entry above (appended, not rewritten):** it is stamped 22:35Z, but it was written at about 22:24Z. The clock read 22:25:46Z after that commit. The stamp was estimated rather than read; later entries use the clock.
 - **2026-11-01T22:43Z Licensing review prepared for the owner:** `docs/cpt-harness/licensing-requirements-20261101.md`. It is a read-only review of Corti, OpenAI, Anthropic, AMA and CMS sources, with three key quotes spot-checked against the saved copies. It finds that no document grants CPT Studio any CPT right, code numbers included. It adds D5 (Corti's benchmarking clause). D3 and D4 stay open; nothing was accepted or downloaded.
+- **2026-11-01T23:08Z Integration checkpoint (offline only):**
+  - **Round 4 merged and pushed.** The integrated round-4 branch, `443e67032` (pushed), is merged into the harness.
+    Its measured results: HARD 119/123; walk READY {43251, 43274}; H2 gate held; H3 no MUST regression; H6 195/195;
+    Django 4,082 OK.
+  - **Four builder packages merged:** adapters, passages, engine and installer.
+  - **The reading-schema mismatch is fixed** (49 failures and 2 errors before, from my own contract change of the
+    reading schema): merged-package suites 271 OK, ops 264 OK.
+  - **I1 proven against the integrated round-4 baseline (`80f2f2dc8`)**, with Astra and Fable disabled:
+    - engine parity: 11 cases byte-identical, in both call forms;
+    - H1 replay base to head EQUAL (fixtures and retained inputs; controls behave: self EQUAL, three planted DIFFER);
+    - H4 battery: 0 movements.
+  - **Pending:** the website and pipeline packages are still being built. Nothing is verified live.
