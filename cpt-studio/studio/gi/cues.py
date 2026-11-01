@@ -750,7 +750,9 @@ EM_TIME_ACTIVITIES = rx(r'[ \t]*,?[ \t]*(?:covering|including|included|spent\s+(
 # E/M reading (detect._not_in_person). Video, telehealth and virtual visits are not among them: installed reads those as
 # visits (EM_VISIT), and holding them is a policy this round does not make.
 NOT_IN_PERSON = rx(r'\bnot\s+seen\s+in\s+(?:the\s+)?(?:office|clinic|person)\b|\bno\s+in[- ]person\b'
-                   r'|\b(?:by|via|over\s+the|on\s+the)\s+(?:tele)?phone\b'
+                   # repair cycle 1 (EMR-8): "on phone", "over phone" and a parenthesised "(telephone)" too
+                   r'|\b(?:by|via|over(?:\s+the)?|on(?:\s+the)?)\s+(?:tele)?phone\b|\((?:by\s+|via\s+)?(?:tele)?phone\)'
+                   r'|,[ \t]*(?:tele)?phone(?=[ \t]*(?:[.;]|$))'  # "Total time: 12 minutes, telephone."
                    r'|\b(?:tele)?phone\s+(?:calls?|encounters?|visits?|consultations?|consults?|follow-?ups?|f/u\b|'
                    r'check-?ins?|contacts?|conversations?|interviews?|appointments?|notes?|discussions?|messages?|'
                    r'triage)\b'
@@ -762,7 +764,18 @@ NOT_IN_PERSON = rx(r'\bnot\s+seen\s+in\s+(?:the\s+)?(?:office|clinic|person)\b|\
                    r'consult(?:ation)?)\s+(?:type|mode|modality|method)|(?:type|mode|modality|method)\s+of\s+(?:visit|'
                    r'encounter|appointment|contact|consult(?:ation)?))[ \t]*[:\-][ \t]*(?:tele)?phone\b'
                    r"|\bmissed\s+(?:her|his|their|the|this|today'?s)\s+(?:scheduled\s+)?(?:appointment|visit)\b"
-                   r'|\bleft\s+without\s+being\s+seen\b|\bLWBS\b')
+                   r'|\bleft\s+without\s+being\s+seen\b|\bLWBS\b'
+                   # repair cycle 1 (EMR-8): the field "Encounter: Telephone"; a patient who did not show or come in, who
+                   # did not keep or who cancelled the appointment - the patient as subject, at the clause's end or
+                   # before "for the visit" ("The CT did not show a mass." is no missed visit)
+                   r'|^[ \t]*(?:encounter|visit|appointment)[ \t]*:[ \t]*(?:tele)?phone\b'
+                   r"|\b(?:patient|pt|she|he|they)\s+(?:did\s+not|didn't|failed\s+to)\s+(?:show|come\s+in)(?:\s+(?:up|"
+                   r"today))?(?=[ \t]*(?:[.;,!]|$|for\s+(?:the|her|his|their|this|today'?s)\s+(?:scheduled\s+)?"
+                   r'(?:visit|appointment)))'
+                   r"|\b(?:did\s+not|didn't|failed\s+to)\s+keep\s+(?:her|his|their|the|this|today'?s)\s+(?:scheduled\s+)?"
+                   r'appointment\b'
+                   r"|\b(?:patient|pt|she|he|they)\s+cancell?ed\s+(?:her|his|their|the|this|today'?s)\s+(?:scheduled\s+)?"
+                   r'(?:appointment|visit)\b', FLAGS | re.M)
 # ... and a title line of the note's head naming a telephone or audio-only encounter ("Telephone encounter", "Phone
 # visit"), read whatever section the head falls in (a note may open on a heading such as "Follow-up").
 NOT_IN_PERSON_TITLE = rx(r'^[ \t]*+(?:[\w-]++[ \t]++){0,3}?(?:telephone|phone|audio[- ]only)[ \t]++(?:encounter|call|'

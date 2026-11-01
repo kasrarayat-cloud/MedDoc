@@ -9,7 +9,7 @@ from django.test import SimpleTestCase
 
 from ops.gi4 import boot, mutants
 
-UNIT = 'unit:tests.test_gi4_pv1'
+UNITS = ('unit:tests.test_gi4_pv1', 'unit:tests.test_gi4_pv1_cycle1')  # Wave 1's guards; repair cycle 1's
 MUTANTS = mutants.PV1_MUTANTS
 BY_NAME = {m.name: m for m in MUTANTS}
 
@@ -25,11 +25,11 @@ class PV1MutantRegistryTests(SimpleTestCase):
     def test_names_detectors_and_guards(self):
         names = [m.name for m in MUTANTS]
         self.assertEqual(len(set(names)), len(names))
-        self.assertEqual(len(names), 17)
+        self.assertEqual(len(names), 54)  # Wave 1's 17, less the 2 repair cycle 1 removed, plus its 39
         self.assertTrue(all(n.startswith('pv1-') for n in names))  # never a stage A name
         registered = [m.name for m in mutants.MUTANTS]
         for m in MUTANTS:
             self.assertEqual(registered.count(m.name), 1, m.name)  # once in the merged registry
             self.assertIs(mutants.BY_NAME[m.name], m)
-            self.assertEqual(m.detector, UNIT, m.name)
+            self.assertIn(m.detector, UNITS, m.name)
             self.assertTrue(m.guard, m.name)
