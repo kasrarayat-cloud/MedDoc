@@ -1,0 +1,602 @@
+{
+ "id": "c0000000-0000-4000-8000-00000000000a",
+ "title": "Upper endoscopy with a participant failure",
+ "state": "provider_unknown",
+ "state_label": "Provider outcome unknown",
+ "service_date": "2026-10-29",
+ "families": [
+  "Upper GI endoscopy (EGD, esophagoscopy, POEM)"
+ ],
+ "source_kind": "paste",
+ "open_clarifications": 0,
+ "created_at": "2026-10-30T09:10:00Z",
+ "created_by": "Synthetic Reviewer",
+ "permissions": {
+  "can_review": true,
+  "is_owner": false
+ },
+ "revision": {
+  "id": "f0000000-0000-4000-8000-0000000000a1",
+  "number": 1,
+  "kind": "paste",
+  "revisions_total": 1,
+  "created_at": "2026-10-30T09:10:00Z",
+  "source_file": null,
+  "addendum_text": "",
+  "addendum_offset": null,
+  "extraction": {
+   "status": "ok",
+   "method": "paste",
+   "messages": [],
+   "ocr_pages": [],
+   "page_count": 1,
+   "engine": {}
+  },
+  "text": "SYNTHETIC TEST DOCUMENT — NOT A REAL PATIENT\nHarbor Gastroenterology (fictional) · Ambulatory surgery center\nUpper endoscopy report\n\nPatient: Test Patient Foxtrot (synthetic)\nDate of service: 2026-10-29\nIndication: Epigastric pain.\n\nProcedure: Esophagogastroduodenoscopy. The endoscope was advanced to the second portion of the duodenum.\nCold forceps biopsies of the gastric antrum were taken.\n\nImpression: Mild antral gastritis; biopsies taken.",
+  "text_sha256": "0ca452d789b82d61b521e3216786d482c4e634db801a2e4f0ac93aca54917e6b",
+  "pages": [
+   {
+    "page": 1,
+    "start": 0,
+    "end": 445
+   }
+  ]
+ },
+ "context": {
+  "facts": {
+   "service_date": {
+    "value": "2026-10-29",
+    "origin": "document",
+    "evidence": [
+     {
+      "start": 175,
+      "end": 202,
+      "text": "Date of service: 2026-10-29",
+      "exact": true
+     }
+    ],
+    "note": ""
+   },
+   "setting": {
+    "value": "asc",
+    "origin": "document",
+    "evidence": [
+     {
+      "start": 83,
+      "end": 108,
+      "text": "Ambulatory surgery center",
+      "exact": true
+     }
+    ],
+    "note": ""
+   },
+   "billing_context": {
+    "value": "not_documented",
+    "origin": "missing",
+    "evidence": [],
+    "note": ""
+   },
+   "patient_status": {
+    "value": null,
+    "origin": "missing",
+    "evidence": [],
+    "note": ""
+   }
+  },
+  "user_values": {}
+ },
+ "routing": {
+  "version": "gi-routing@1",
+  "document_kind": "procedure_report",
+  "families": [
+   {
+    "family": "gi.egd",
+    "label": "Upper GI endoscopy (EGD, esophagoscopy, POEM)",
+    "supported": true,
+    "status": "performed",
+    "mentions": [],
+    "facts": [],
+    "missing": []
+   }
+  ]
+ },
+ "pipeline": {
+  "can_resume": false,
+  "stopped_by_member": false,
+  "busy": false,
+  "can_stop": false,
+  "stages": [
+   {
+    "kind": "extract",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-30T09:02:00Z"
+   },
+   {
+    "kind": "analyze",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-30T09:02:00Z"
+   },
+   {
+    "kind": "predict",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-30T09:02:00Z"
+   },
+   {
+    "kind": "astra",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-30T09:02:00Z"
+   },
+   {
+    "kind": "fable",
+    "state": "unknown",
+    "error": "Read timed out after the request was sent.",
+    "finished_at": "2026-10-30T09:16:01Z"
+   },
+   {
+    "kind": "assess",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-30T09:02:00Z"
+   }
+  ]
+ },
+ "provider_runs": [
+  {
+   "id": "e0000000-0000-4000-8000-000000000111",
+   "provider": "corti",
+   "mode": "live",
+   "state": "succeeded",
+   "http_status": 200,
+   "latency_ms": 4410.0,
+   "usage": {
+    "creditsConsumed": 0.0174
+   },
+   "usage_basis": "provider_reported_credits_not_usd",
+   "request_sha256": "4df7992455d3ce7a1fd0f3051f494b9b5442924ab3f081fb5011d537e4911eac",
+   "response_sha256": "0165dcc3ba41d058900879d6c1d2cc1b04b8454d758ba63b0a6b2c5f41966aaf",
+   "reused_from": null,
+   "error": "",
+   "reconciled": false,
+   "created_at": "2026-10-30T09:10:20Z",
+   "purpose": "primary",
+   "scope_items": []
+  },
+  {
+   "id": "e0000000-0000-4000-8000-000000000112",
+   "provider": "astra",
+   "mode": "live",
+   "state": "succeeded",
+   "http_status": 200,
+   "latency_ms": 118204.0,
+   "usage": {
+    "input_tokens": 3876,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 16000,
+    "output_tokens_details": {
+     "reasoning_tokens": 15112
+    },
+    "total_tokens": 19876
+   },
+   "usage_basis": "vendor_reported_tokens",
+   "request_sha256": "86873702d882d3613da6d4120eb70e0dc0242b33691547c084ec62ea00b83711",
+   "response_sha256": "93df2512ad43cb0f3c56b2930b136f07053df48a316d6496df01045ce86a146c",
+   "reused_from": null,
+   "error": "",
+   "reconciled": false,
+   "created_at": "2026-10-30T09:10:28Z",
+   "purpose": "independent",
+   "scope_items": []
+  },
+  {
+   "id": "e0000000-0000-4000-8000-000000000113",
+   "provider": "fable",
+   "mode": "live",
+   "state": "unknown",
+   "http_status": null,
+   "latency_ms": null,
+   "usage": {},
+   "usage_basis": "",
+   "request_sha256": "b49a007e76b5a79750d7187c3f6ce1015b5cc87bca781dcd03104a61c95ce88a",
+   "response_sha256": "",
+   "reused_from": null,
+   "error": "Read timed out after the request was sent.",
+   "reconciled": false,
+   "created_at": "2026-10-30T09:12:31Z",
+   "purpose": "independent",
+   "scope_items": []
+  }
+ ],
+ "state_run": null,
+ "second_review": {
+  "available": false,
+  "reason": "",
+  "items": [],
+  "can_request": true,
+  "run": null
+ },
+ "assessment": {
+  "id": "90000000-0000-4000-8000-00000000000a",
+  "profiles_version": "gi-profiles@1",
+  "engine_version": "gi-validation@1",
+  "created_at": "2026-10-30T09:16:30Z",
+  "proposals": [
+   {
+    "id": "d0000000-0000-4000-8000-000000000a01",
+    "key": "sel:0",
+    "bucket": "selected",
+    "code": "43239",
+    "code_kind": "cpt1",
+    "family": "gi.egd",
+    "family_label": "Upper GI endoscopy (EGD, esophagoscopy, POEM)",
+    "eyebrow": "UPPER GI ENDOSCOPY",
+    "supported": true,
+    "profile_version": "gi.egd@1",
+    "status": "ready",
+    "status_label": "Ready for review",
+    "exclusion_reason": "",
+    "reinstatable": false,
+    "descriptor": {
+     "status": "withheld",
+     "label": "Description withheld — no licensed CPT descriptor is connected."
+    },
+    "evidence": [
+     {
+      "start": 338,
+      "end": 393,
+      "text": "Cold forceps biopsies of the gastric antrum were taken.",
+      "exact": true,
+      "page": 1
+     }
+    ],
+    "rationale": "Upper endoscopy with cold forceps biopsies of the gastric antrum is documented as performed on the service date.",
+    "units": 1,
+    "checks": [
+     {
+      "id": "evidence.exact",
+      "label": "Exact source evidence",
+      "status": "pass",
+      "detail": "Every linked passage matches the revision text exactly.",
+      "source": "cpt-studio:evidence@1"
+     },
+     {
+      "id": "service.status",
+      "label": "Service performed on this encounter",
+      "status": "pass",
+      "detail": "The documented service is described as performed.",
+      "source": "cpt-studio:status@1"
+     },
+     {
+      "id": "cpt.membership",
+      "label": "CPT code-set membership for the service date",
+      "status": "not_verified",
+      "detail": "No licensed CPT edition is connected, so code-set membership is not verified.",
+      "source": ""
+     },
+     {
+      "id": "cpt.descriptor",
+      "label": "CPT descriptor",
+      "status": "info",
+      "detail": "Withheld: no licensed CPT descriptor is connected.",
+      "source": ""
+     },
+     {
+      "id": "pfs.presence",
+      "label": "Present in the CMS fee schedule file",
+      "status": "pass",
+      "detail": "43239 is present in the installed fee schedule file for the service date (fixture).",
+      "source": "cms-pfs-rvu26d RVU26D"
+     },
+     {
+      "id": "mue.units",
+      "label": "Units within the practitioner MUE",
+      "status": "pass",
+      "detail": "1 unit is within the practitioner MUE (fixture).",
+      "source": "cms-mue-practitioner-2026q4 2026-Q4"
+     },
+     {
+      "id": "ncci.ptp",
+      "label": "NCCI procedure-to-procedure edits",
+      "status": "not_verified",
+      "detail": "NCCI PTP tables are not connected, so code-pair edits are not verified.",
+      "source": ""
+     }
+    ],
+    "modifier_considerations": [],
+    "support": {},
+    "clarification_ids": [],
+    "decision": null,
+    "decision_state": "undecided",
+    "reinstated_by": null,
+    "allowed_actions": [
+     "approve",
+     "reject"
+    ],
+    "approve_withheld_by": null,
+    "proposed_by": [
+     "corti"
+    ],
+    "participant_positions": {
+     "astra": {
+      "position": "not_run",
+      "detail": "Answered; the reading was not used: the response was cut off at the output limit.",
+      "quote": ""
+     },
+     "fable": {
+      "position": "not_run",
+      "detail": "Outcome unknown — reconcile before sending again.",
+      "quote": ""
+     }
+    },
+    "reference_check": {
+     "state": "passed",
+     "detail": "Present in the fee schedule for the service date; 1 unit is within the MUE."
+    },
+    "retrieval": [
+     {
+      "kind": "fact",
+      "source_key": "cms-pfs-rvu26d",
+      "release": "RVU26D",
+      "label": "PFS status",
+      "value": "A",
+      "page": "",
+      "section": "",
+      "text": ""
+     },
+     {
+      "kind": "fact",
+      "source_key": "cms-pfs-rvu26d",
+      "release": "RVU26D",
+      "label": "Global days",
+      "value": "000",
+      "page": "",
+      "section": "",
+      "text": ""
+     },
+     {
+      "kind": "fact",
+      "source_key": "cms-pfs-rvu26d",
+      "release": "RVU26D",
+      "label": "Multiple procedure indicator",
+      "value": "3",
+      "page": "",
+      "section": "",
+      "text": ""
+     },
+     {
+      "kind": "fact",
+      "source_key": "cms-pfs-rvu26d",
+      "release": "RVU26D",
+      "label": "Endoscopic base",
+      "value": "43235",
+      "page": "",
+      "section": "",
+      "text": ""
+     },
+     {
+      "kind": "fact",
+      "source_key": "cms-mue-practitioner-2026q4",
+      "release": "2026-Q4",
+      "label": "Practitioner MUE",
+      "value": "1 (MAI 2)",
+      "page": "",
+      "section": "",
+      "text": ""
+     },
+     {
+      "kind": "passage",
+      "source_key": "cms-ncci-policy-manual-2026-ch6",
+      "release": "Revision 1/1/2026",
+      "label": "Endoscopic services, rule 3",
+      "value": "",
+      "page": "VI-14",
+      "section": "Chapter VI, section C: Endoscopic Services",
+      "text": "SYNTHETIC FIXTURE TEXT, not CMS text: stands in for the NCCI Policy Manual rule that a surgical endoscopy includes the diagnostic endoscopy of the same anatomy."
+     }
+    ]
+   }
+  ],
+  "encounter_checks": [
+   {
+    "id": "extraction.status",
+    "label": "Text extraction",
+    "status": "pass",
+    "detail": "The document text was extracted completely.",
+    "source": "cpt-studio:extraction@1"
+   },
+   {
+    "id": "provider.status",
+    "label": "Proposal provider",
+    "status": "pass",
+    "detail": "corti (corti-coding@2) returned 1 selected CPT-labelled code.",
+    "source": "cpt-studio:provider@1"
+   }
+  ],
+  "unsupported": [],
+  "reference_sources": [
+   {
+    "key": "cms-pfs-rvu26d",
+    "title": "CMS Physician Fee Schedule relative value file (fixture)",
+    "release": "RVU26D",
+    "effective_start": "2026-10-01",
+    "effective_end": "2026-12-31",
+    "applies": true,
+    "license_note": "Public CMS file; code-keyed indicators only, descriptors dropped at import.",
+    "scope_note": "Medicare payment indicators only; not a CPT code-set reference."
+   },
+   {
+    "key": "cms-mue-practitioner-2026q4",
+    "title": "CMS practitioner MUE table (fixture)",
+    "release": "2026-Q4",
+    "effective_start": "2026-10-01",
+    "effective_end": "2026-12-31",
+    "applies": true,
+    "license_note": "Public CMS file; values keyed by code number.",
+    "scope_note": "Medically unlikely edits for practitioner services only."
+   }
+  ],
+  "summary": {
+   "selected": 1,
+   "alternatives": 0,
+   "excluded": 0,
+   "provider_status": "succeeded"
+  },
+  "services": {
+   "services": [
+    {
+     "id": "S1",
+     "family": "gi.egd",
+     "kind": "egd",
+     "status": "performed",
+     "acts": []
+    }
+   ]
+  },
+  "completeness": {
+   "covered": {
+    "S1": [
+     "43239"
+    ]
+   }
+  },
+  "second_run": null
+ },
+ "clarifications": [],
+ "decisions": {
+  "history": []
+ },
+ "readiness": {
+  "draft": true,
+  "reviewed": false,
+  "blockers": [
+   "An unknown provider outcome must be reconciled",
+   "43239 has no decision"
+  ]
+ },
+ "coding": {
+  "state": "pending_review",
+  "statement": "The documented upper endoscopy has a proposal; a reviewer decides it."
+ },
+ "reports": [],
+ "activity": [
+  {
+   "event": "encounter.created",
+   "summary": "Document added",
+   "actor": "Synthetic Reviewer",
+   "actor_kind": "human",
+   "created_at": "2026-10-30T09:10:00Z",
+   "data": {}
+  }
+ ],
+ "harness": {
+  "participants": [
+   {
+    "name": "corti",
+    "label": "Corti",
+    "vendor": "Corti",
+    "model": "",
+    "state": "done",
+    "detail": "Answered; its proposals were read.",
+    "run_id": "e0000000-0000-4000-8000-000000000111",
+    "reused": false,
+    "codes": [
+     "43239"
+    ],
+    "unverified_quotes": 0,
+    "usage": {
+     "creditsConsumed": 0.0174
+    },
+    "usage_basis": "provider_reported_credits_not_usd",
+    "estimated_cost_usd": null,
+    "returned_model": ""
+   },
+   {
+    "name": "astra",
+    "label": "Astra",
+    "vendor": "OpenAI",
+    "model": "gpt-6-astra",
+    "state": "refused",
+    "detail": "Answered; the reading was not used: the response was cut off at the output limit.",
+    "run_id": "e0000000-0000-4000-8000-000000000112",
+    "reused": false,
+    "codes": [],
+    "unverified_quotes": 0,
+    "usage": {
+     "input_tokens": 3876,
+     "input_tokens_details": {
+      "cached_tokens": 0
+     },
+     "output_tokens": 16000,
+     "output_tokens_details": {
+      "reasoning_tokens": 15112
+     },
+     "total_tokens": 19876
+    },
+    "usage_basis": "vendor_reported_tokens",
+    "estimated_cost_usd": "0.8388",
+    "returned_model": "gpt-6-astra"
+   },
+   {
+    "name": "fable",
+    "label": "Fable",
+    "vendor": "Anthropic",
+    "model": "claude-fable-5-1",
+    "state": "unknown",
+    "detail": "Sent; no response was recorded, so nothing from it was read.",
+    "run_id": "e0000000-0000-4000-8000-000000000113",
+    "reused": false,
+    "codes": [],
+    "unverified_quotes": 0,
+    "usage": {},
+    "usage_basis": "",
+    "estimated_cost_usd": null,
+    "returned_model": ""
+   }
+  ],
+  "reference_validation": {
+   "state": "done",
+   "codes_checked": 1,
+   "passages": 1,
+   "sources": [
+    {
+     "key": "cms-pfs-rvu26d",
+     "title": "CMS Physician Fee Schedule relative value file (fixture)",
+     "release": "RVU26D",
+     "effective_start": "2026-10-01",
+     "effective_end": "2026-12-31"
+    },
+    {
+     "key": "cms-mue-practitioner-2026q4",
+     "title": "CMS practitioner MUE table (fixture)",
+     "release": "2026-Q4",
+     "effective_start": "2026-10-01",
+     "effective_end": "2026-12-31"
+    },
+    {
+     "key": "cms-ncci-policy-manual-2026-ch6",
+     "title": "CMS NCCI Policy Manual 2026, Chapter VI (fixture)",
+     "release": "Revision 1/1/2026",
+     "effective_start": "2026-01-01",
+     "effective_end": "2026-12-31"
+    }
+   ],
+   "not_connected": [
+    "NCCI procedure-to-procedure edits (AMA licence agreement not accepted)",
+    "AMA CPT descriptors and guidelines (no licence)",
+    "Payer policies"
+   ]
+  },
+  "clarification": {
+   "open": 0
+  },
+  "final": {
+   "state": "provider_unknown",
+   "label": "Provider outcome unknown"
+  }
+ }
+}
