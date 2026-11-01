@@ -1048,3 +1048,212 @@ Remaining after round 2, each read as said:
 | pypdf's own built-in-encoding override and double lookup in a font the reader does not copy (no 'u' name, a program pypdf reads) | as both versions read it | unchanged by 6.21.4, and no corpus file needed it |
 | `.notdef` named in a text font's /Differences | `□` (pypdf's glyph list), read as an unchecked box | unchanged by 6.21.4 |
 | a glyph whose ToUnicode gives U+FDD7, the noncharacter the reader writes for text it cannot read | dropped, as text that names no character, but not counted where the page has no unread text | a noncharacter names no character; only its count is lost, on a crafted font |
+
+### Round 3: the refutation of round 2, and its repair (2026-11-01; interpretation 66)
+
+A three-lens delta refutation of round 2's reader (`63f82ea4`: wrong text and boxes, capability on ordinary files,
+cost and limits) filed 11 findings, one blocking; the lenses' notes add two more shapes (a field value ending in NUL
+named as a glyph, and the cost of transcribing a page of unread operators). Each was reproduced here through the real
+extraction child, the installed reader (`origin/main` 06e6d204e, pypdf 6.21.2) beside round 2's (pypdf 6.21.4), on the
+lenses' own inputs, with OCR unavailable and with stand-in OCR tools: all reproduce as reported. They are repaired
+under one rule that ends the churn of rounds 1 and 2: **text that cannot be read is never deleted.** Checking the
+repair against that rule found three more readings it did not yet reach (GI-1, RTL-2, N-1 below), each confirmed the
+same way and repaired. Each repaired reading is pinned by `tests/test_repairs_gi4_pypdf_r3.py` (documents built in
+`tests/support/pypdf_shapes.py`; every cost bound by a doubling test), and routing's reading
+(`studio.gi.detect.status_for_span`) of every finding's text was checked. The engine label stays `cpt-studio-ingest@4`:
+no reader of this branch was ever installed.
+
+| id | finding | installed (6.21.2) | round 2 (6.21.4) | this reader (6.21.4) | by the source |
+|---|---|---|---|---|---|
+| RTL-1 (blocking) | round 2 wrote unreadable text as U+FDD7, which pypdf reads right to left: the neutral characters after it, up to the next left-to-right letter, came out reversed (ReportLab intake checklists, labels in CIDFont HeiseiMin-W3 /EUC-H, typed boxes in Helvetica) | the labels as mojibake; every box exact: Diabetes, Smoker, Asthma negated | ' ) (Diabetes' (no box): affirmed (historical); ')-(' and ')+('; '(?)Hypertension' | '����\n( ) Diabetes': negated, as typed; '(-)', '(+)' exact; '(?) Hypertension' (held, its space kept) | **confirmed, repaired**: the reader's mark for unread text is a noncharacter pypdf reads left to right, written as U+FFFD (outside pypdf's right-to-left ranges too); neither ever reverses what follows |
+| DROP-NEG-1 | an unreadable operator dropped with no mark, so 'Biopsy was ' + 'not ' (in the /EUC-H font, in a font the resources do not hold, or an odd-length Identity-H string) + 'taken.' closed up | 'Biopsy was 湯琠taken.', 'Biopsy was ����taken.' (uncertain), and failed (the odd string) | 'Biopsy was taken.': performed | 'Biopsy was ��taken.', 'Biopsy was ����taken.', 'Biopsy was ����taken.': uncertain, named with the count | **confirmed, repaired**: text that cannot be read keeps its place, a U+FFFD for each character pypdf would have written there |
+| DROP-BOX-1 | a box glyph drawn in a font pypdf cannot read (ReportLab: '□'/'■' in the /EUC-H font, labels in Helvetica), dropped: every item bare | 'ꊢ\nDiabetes' ...: every item affirmed (historical), the glyph unnamed | 'Diabetes' ...: affirmed, the page named | '[?] Diabetes', '[?] Hypertension', ...: held (uncertain), named | **confirmed (installed equally wrong), repaired**: a lone glyph that cannot be read at the start of a checklist row is the unread mark, on its item's line (rows laid across the page and Yes/No answers too: pypdf ends a line after each string ReportLab draws) |
+| NUL-VALUE-1 | a /Tx value or FreeText /Contents of only a NUL counted as text, so the appearance was never read; a NUL ending a value counted as a glyph (the capability lens's note) | 'Indication: Screening colonoscopy'; 'Reviewer note: polyp removed'; the terminated value read, no notice | 'Indication: ' (empty) and a false 'differs from its stored value'; the note lost; a '1 character that does not map' notice | as installed, each: the appearance read, no false notice | **confirmed, repaired**: a stored value or /Contents names no character when, squeezed, it holds none; a NUL that ends it is a terminator |
+| CAP-R2-1 | an embedded one-byte CMap (Ghostscript's OneByteIdentityH) refused: every operator in its font dropped | exact, ok (pypdf reads one byte a code by the ToUnicode) | failed (the whole note), or the box row and the Plan line dropped | exact, ok | **confirmed, repaired**: read one byte a code by its ToUnicode (a code it does not give is unread), its widths by code |
+| CAP-R2-2 | a code Python's gbk or cp950 lacks (GBK-EUC-H A8BF, ETen-B5-H C8A1) lost the whole native line | the line, the code as '��' (named as invalid) | the line dropped, named | GBK: '结肠镜检查 正常 ǹ 5 mm', exact (MuPDF and pdf.js read 'ǹ'), ok; ETen: '結腸鏡檢查 正常 � 5 mm', the one code named | **confirmed, repaired**: the CMap's own wider reading (GB 18030 for GBK's gaps) or the code named alone; a string cut inside a code is not read code by code (that would be mojibake) |
+| R2-COST-A | a lazy back-referencing pattern over an embedded CMap: each unclosed section scanned to the end of up to 1 MiB | ok, 1.1 s | failed at the 240 s deadline | partial, 0.6 s: the malformed CMap's string unread (two U+FFFD), named | **confirmed, repaired**: one pass, keyword by keyword |
+| R2-COST-D | every widget compared with every unread operator's box | ok, 16.0 s, 346 MiB | failed at 240 s | partial, 22.9 s, 392 MiB: 100,000 unread characters named | **confirmed, repaired**: one bisection a widget |
+| R2-MEM-B | a marked ToUnicode copied per font dictionary, kept for the document | ok, 77.2 s, 190 MiB | failed: out of memory (1,519 MiB) at 44.7 s | ok, 86.5 s, 222 MiB, same text | **confirmed, repaired**: one marked copy a ToUnicode |
+| R2-COST-E | each widget squeezed the field's 350,000-character value in a Python loop | partial, 69.7 s (4,001 notices: one a widget) | failed at 240 s | partial, 2.6 s, same text, one notice for the field | **confirmed, repaired**: the value read and squeezed once a field (regular expressions), the shared appearance read once, the field named once |
+| R2-COST-G | the embedded CMap read again for each of 900 font dictionaries sharing it | ok, 0.9 s | ok, 193.9 s | ok, 1.3 s, same text | **confirmed, repaired**: one read of the CMap and one width match a descendant, kept with the objects |
+| (cost lens note) | each transcribed operator a few operations, each its own objects: 350,000 unread operators in 37 KB | ok, 24.9 s, 619 MiB | partial, 14.3 s, 304 MiB at 100,000 (the lens) | partial, 69.0 s, 782 MiB, the same characters (each unread one U+FFFD); 52.1 s against 24.1 s at a load of 7 | **confirmed, reduced**: operators that draw the same text as wide share their operations (1,066 MiB before); what remains is a known limit (below) |
+| GI-1 | text in a glyph-index font (Identity-H, no ToUnicode, no CIDToGIDMap stream) dropped as glyphs that name no character: 'Biopsy was ' + 'not ' + 'taken.'; and a stamp whose appearance draws glyph indices | 'Biopsy was taken.': performed, at ok; the stamp 'QRW' (pypdf's UTF-16BE reading of its glyph indices), at ok | the same | 'Biopsy was ����taken.': uncertain; the stamp '���'; each named, partial | **confirmed (in both), repaired**: pypdf reads glyph indices as UTF-16BE, which is not what they encode, so such text is text pypdf cannot read as the PDF encodes it: kept in place |
+| RTL-2 | the reader's own space (SPACE) in an operator it reads itself was read left to right by pypdf, so a right-to-left line's words came out in the wrong order (Hebrew in a one-byte embedded CMap whose ToUnicode lacks one code) | 'ז והד גבאh' (its StandardEncoding guess 'h' for the code) | the line dropped, named (round 2 refused the CMap: CAP-R2-1) | 'ז והד גבא�', the words as pypdf orders them | **confirmed, repaired**: SPACE is a neutral character to pypdf (`_text_extraction.set_custom_rtl`), as the space it stands for is |
+| N-1 | the notice counted 'characters in a font ... this server cannot read' where it counts what stands in their place: 15 for a 30-character line under a CMap pypdf does not implement | (mojibake, unnamed) | (dropped, named without a count) | 'text in a font or encoding this server cannot read as the PDF encodes it; 15 characters stand in its place as �, or as the unread mark [?] in a box' | **repaired**: the count is of what stands in the text's place, never of the page's glyphs |
+
+What the reader does now, where it differs from round 2's rules above (which this replaces where they disagree):
+
+- **Text that cannot be read keeps its place.** The page walk reads a text-showing operator itself where pypdf cannot
+  read all of it as the PDF encodes it (`pdfcontent._TextPlacement.transcribed`): each code pypdf can read, as pypdf
+  reads it; in place of each character it cannot read the reader's unread character, as many as pypdf would have
+  written there where the string's codes cannot be told apart. What it read is drawn, for extraction, in a per-walk
+  `pdffonts.Transcript` font (Identity-H, zero-wide codes for the text, power-of-two-wide codes that stand for
+  nothing), as wide as pypdf measures the operator, so pypdf spaces the text around it as before and the words either
+  side never close up. The unread character is the noncharacter U+10FFFE, which pypdf reads left to right (outside
+  both its right-to-left and its neutral ranges, as the installed reader's U+FFFD and mojibake were: it ends any
+  right-to-left run, so it never reverses what follows); a space the walk reads is U+10FFFF, which pypdf reads as
+  neutral (one of its custom special characters), as the space it stands for. The page reader writes the unread
+  character as U+FFFD, or as the '?' of the unread mark where it stands alone in a typed box, and names it: "Page N has
+  text in a font or encoding this server cannot read as the PDF encodes it; K characters stand in its place as �, or
+  as the unread mark [?] in a box, so check the original." (partial; K counts what stands in the text's place). That
+  notice is separate from the invalid-text notice, and a failed result carries neither. U+FFFD written so is not
+  readable text: a page of nothing else has no usable text layer and goes to OCR or is named. The same holds in an
+  appearance's text, which is read with its U+FFFD (round 2 left such an annotation wholly unread); an appearance only
+  compared with a stored value or /Contents is named unreadable, as before.
+- **Which text that is**: a string a composite font's CMap cannot decode, a CMap pypdf does not implement, an embedded
+  CMap the reader cannot read (with a ToUnicode, one of one-byte or of two-byte codes is read), a font pypdf cannot
+  build or the resources do not hold, and (new) a glyph-index font, whose glyph indices pypdf reads as UTF-16BE.
+  Glyphs a font itself gives no character (a private-use, control or empty ToUnicode entry, an unmapped symbol glyph)
+  are counted and dropped, as installed (below).
+- **A lone glyph that cannot be read at the start of a checklist row** (the first thing on its line, one glyph, then
+  padding and its row's text; or alone on its line with the next line starting just right of it on its baseline, as
+  pypdf writes ReportLab's separately drawn strings) is the unread mark '[?]' on its item's line: held.
+- **Codes.** A string in a codec font whose only failing codes are whole two-byte codes the codec lacks is read code by
+  code: a gap is read by the CMap's own wider reading (GB 18030 for the GBK CMaps, whose two-byte area is GBK's and
+  more) or named alone (ETen-B5's extensions, which no codec here reads as the CMap does). A string cut inside a code,
+  holding a byte no code starts with, or an odd-length UTF-16BE string (one-byte text in a two-byte font) is not read
+  code by code: reading its pairs would be mojibake. An embedded CMap is read in one pass; one of one-byte codes with a
+  ToUnicode is read one byte a code by that ToUnicode (a code it does not give is unread), with its widths by code.
+- **Stored values.** A value or /Contents that names no character once squeezed (nothing, or only a NUL) shows
+  nothing: the appearance is read; a NUL that ends a value is a C string's terminator, not a glyph.
+- **Cost.** What font dictionaries share is worked out once per shared object (`FontReadings.cache`): an embedded
+  CMap's reading, a descendant's widths matched to it, whether a copy builds, a marked ToUnicode; a widget asks the
+  unread operators' bands by bisection; a field's value is read and squeezed once a field, an appearance read once a
+  page, and a field that shows other text than its value is named once, however many widgets show it; operators the
+  walk transcribes that draw the same text as wide share their operations.
+
+Ordinary files, re-measured (interpretation 66), on this reader's committed tree (`af51392c1`): the 935 files of round 2's
+comparison read through the real child by the installed reader on 6.21.2 and this reader on 6.21.4, with OCR
+unavailable and with stand-in OCR tools: 834 read identically; 101 differ, each judged:
+
+| files | installed (6.21.2) | this reader | by the source |
+|---|---|---|---|
+| 42 ReportLab CIDFont files under a CMap pypdf does not implement (as round 2) | the three Helvetica lines, and the CID line as CJK mojibake (15 characters for its 30 bytes), at ok | the three Helvetica lines; 15 U+FFFD in the CID line's place, named (partial) | the installed reading is wrong (mojibake returned as text); the page draws 'ASCII line in CID font: polyp.', which pdf.js reads with its own CMap files and neither reader reads (the CMap is not implemented here): held, never deleted |
+| 49 files whose font lacks a glyph the text asked for (round 2's 48, and its MuPDF Loma file, whose count rises by one) | the same text, the .notdef glyphs dropped unnamed (the Loma file: one counted) | the same text, and 'N characters that do not map to text' | as round 2: the notice is right |
+| 6 pypdf fills flattened over pdfkit's DejaVu form (one-byte text in a two-byte font) | partial: the body and the block; 'Page 1 is damaged', the flattened line missing | partial: the body and the block; 7, 3 or 14 U+FFFD in the flattened line's place, named | pdf.js reads that line as mojibake ('勩獵淩₱‵₰䌀'): the page draws no legible text there, so what stands in its place is held; the field's value is read in the block |
+| 2 fpdf2 CID-keyed CFF files using more than 255 glyphs (as round 2) | ok, mojibake from code 0x100 on | ok, every character exact | the installed reading is wrong |
+| 2 MuPDF conversions in a Unifont glyph-index font (Identity-H, no ToUnicode): GI-1 | ok: the three lines in that font dropped (122 glyphs, 'characters that do not map to text'), three empty lines left | partial: 122 U+FFFD in those lines' place, named | the page draws three legible lines (symbols, Greek and Cyrillic, 'Plain line: polyp removed with cold snare.') that no ToUnicode maps, which pdf.js reads as letters shifted by one: held in place, never deleted |
+
+Against round 2's reader the 935 differ in 50 files: the 42 CID files and the 6 fills, whose dropped text now stands
+in place as U+FFFD, and the two Unifont files. Round 2's 34 finding inputs read as above (text, status and routing
+identical to the round's first commit, the notice's words aside); round 1's 90 finding inputs differ from round 2's
+reading in 18, each a dropped operator now U+FFFD in its place (the 6 fills, 5 ReportLab CID files, two flattened
+fields in a form with resources but no font, a footer in a font the resources do not hold, one in a font pypdf cannot
+build (a /Widths name) and its two-page variant, an odd-length Identity-H footer, and text shown after a Q left no font
+in effect); the 25 rendered check-box documents read exactly as the installed reader reads them.
+
+Time over the 935 files, with OCR unavailable: this reader 763 s (the longest file 4.3 s), the installed reader 862 s
+in its pass two hours earlier. The two passes ran under different load (the host's load average was 15 to 25 on 14
+cores during this reader's pass), so only the peak memory compares: the child's peak resident memory was at most
+139.1 MiB against 138.8 MiB.
+
+Cost and limits, each read through the real child one file at a time, the installed reader and this reader
+(`af51392c1`) in two processes side by side (the host's load average was 15 to 27 on 14 cores throughout, from other
+work, so a time compares within its row only; round 2's own times, from the cost lens, are in the findings table):
+
+| shape | installed (6.21.2) | this reader (6.21.4) |
+|---|---|---|
+| R2-COST-A: an embedded CMap of 64 KiB of unclosed sections (no code space) | ok, 1.7 s, 50 MiB | partial, 0.6 s, 50 MiB, text differs |
+| R2-COST-A: the same, 128 KiB | ok, 0.8 s, 50 MiB | partial, 0.7 s, 50 MiB, text differs |
+| R2-COST-A: the same, 256 KiB | ok, 1.3 s, 50 MiB | partial, 0.7 s, 50 MiB, text differs |
+| R2-COST-A: the same, 512 KiB | ok, 1.0 s, 50 MiB | partial, 0.9 s, 50 MiB, text differs |
+| R2-COST-A: the same, 1 MiB | ok, 1.1 s, 51 MiB | partial, 0.6 s, 51 MiB, text differs |
+| R2-COST-A control: one valid embedded CMap | ok, 0.9 s, 50 MiB | ok, 1.1 s, 57 MiB, same text |
+| R2-MEM-B: 4 font dictionaries sharing a 1 MiB ToUnicode with an empty destination | ok, 0.6 s, 54 MiB | ok, 0.8 s, 54 MiB, same text |
+| R2-MEM-B: 24 sharing a 32 MiB one | ok, 50.1 s, 190 MiB | ok, 45.8 s, 222 MiB, same text |
+| R2-MEM-B: 48 sharing a 32 MiB one | ok, 77.2 s, 190 MiB | ok, 86.5 s, 222 MiB, same text |
+| R2-COST-D: 1 widget, 100,000 unread operators (/EUC-H) | ok, 7.6 s, 209 MiB | partial, 16.7 s, 256 MiB, text differs |
+| R2-COST-D: 30,000 widgets, 1 unread operator | ok, 9.6 s, 191 MiB | partial, 9.5 s, 191 MiB, text differs |
+| R2-COST-D: 1,000 widgets, 10,000 unread operators | ok, 1.4 s, 67 MiB | partial, 2.3 s, 70 MiB, text differs |
+| R2-COST-D: the same, one-byte strings in an Identity-H font | failed, 1.3 s, 60 MiB | partial, 1.7 s, 70 MiB, text differs |
+| R2-COST-D control: the same, readable two-byte strings | ok, 1.1 s, 67 MiB | ok, 1.7 s, 66 MiB, same text |
+| R2-COST-D control: the same, in Helvetica | ok, 1.5 s, 70 MiB | ok, 1.7 s, 70 MiB, same text |
+| R2-COST-D: 3,000 widgets, 20,000 unread operators | ok, 2.6 s, 91 MiB | partial, 4.1 s, 98 MiB, text differs |
+| R2-COST-D: 30,000 widgets, 100,000 unread operators | ok, 16.0 s, 346 MiB | partial, 22.9 s, 392 MiB, text differs |
+| R2-COST-D control: the same, in Helvetica | ok, 17.5 s, 379 MiB | ok, 16.8 s, 380 MiB, same text |
+| R2-COST-E: 200 widgets of a field whose value is 350,000 characters | partial, 4.3 s, 53 MiB | partial, 1.0 s, 53 MiB, same text |
+| R2-COST-E: 1,000 such widgets | partial, 21.8 s, 53 MiB | partial, 1.7 s, 53 MiB, same text |
+| R2-COST-E: 4,000 such widgets | partial, 69.7 s, 64 MiB | partial, 2.6 s, 63 MiB, same text |
+| R2-COST-E control: 200 widgets, a short value | partial, 0.8 s, 50 MiB | partial, 1.2 s, 50 MiB, same text |
+| R2-COST-E control: 4,000 widgets, a short value | partial, 5.2 s, 62 MiB | partial, 2.0 s, 60 MiB, same text |
+| transcription (cost lens note): 350,000 unread operators, 37 KB | ok, 24.9 s, 619 MiB | partial, 69.0 s, 782 MiB, text differs |
+| transcription: 700,000 unread operators, 67 KB (the same generator) | failed, 90.6 s, 1194 MiB | failed, 211.9 s, 1469 MiB, same text |
+| R2-COST-G: 100 font dictionaries sharing one embedded two-byte CMap | ok, 0.5 s, 50 MiB | ok, 0.9 s, 57 MiB, same text |
+| R2-COST-G: 900 sharing it | ok, 0.9 s, 68 MiB | ok, 1.3 s, 69 MiB, same text |
+| round 1 COST-2: 10 Type 1 fonts sharing a 4 MiB program, 1 page | ok, 1.5 s, 115 MiB | ok, 2.7 s, 115 MiB, same text |
+| round 1 COST-2: 64 such fonts, 1 page | ok, 1.5 s, 115 MiB | ok, 2.7 s, 116 MiB, same text |
+| round 1 COST-2: 64 such fonts, 10 pages | ok, 5.2 s, 115 MiB | ok, 5.8 s, 116 MiB, same text |
+| round 1 COST-1: a 1,000,000-character /BaseFont, 200 strings | ok, 1.4 s, 70 MiB | ok, 2.1 s, 70 MiB, same text |
+| round 1 COST-1: the same, 3,000 strings | ok, 2.0 s, 70 MiB | ok, 1.4 s, 70 MiB, same text |
+| round 1 COST-1: a 4,000-byte /BaseFont name, 2,000 strings | ok, 0.6 s, 50 MiB | ok, 1.1 s, 50 MiB, same text |
+| round 1 COST-1: the same name, 50 TJ of 10,000 glyph-index strings | ok, 37.0 s, 221 MiB | failed, 10.2 s, 258 MiB, text differs |
+| round 1 COST-1 control: a short name, 45 TJ of 10,000 glyph-index strings | ok, 30.5 s, 203 MiB | failed, 9.5 s, 238 MiB, text differs |
+| round 1 COST-2: one such font in 60 appearances | ok, 2.2 s, 115 MiB | ok, 3.5 s, 115 MiB, same text |
+| round 1 COST-2: one such font in 600 appearances | ok, 6.8 s, 116 MiB | ok, 6.5 s, 115 MiB, same text |
+| round 1 d1: a 99,998-entry /Differences font in 60 appearances | partial, 2.3 s, 59 MiB | partial, 3.5 s, 59 MiB, same text |
+| round 1 LIMIT-1: an appearance font past the array limit | partial, 1.0 s, 59 MiB | partial, 1.5 s, 59 MiB, same text |
+| round 1 LIMIT-1 control: 99,999 elements | partial, 1.1 s, 59 MiB | partial, 1.5 s, 59 MiB, same text |
+| round 1 LIMIT-1: the same, on page 40 of 40 | partial, 1.3 s, 59 MiB | partial, 1.7 s, 59 MiB, same text |
+| round 1 LIMIT-1: /DescendantFonts past the limit, used by the page | failed, 1.2 s, 58 MiB | partial, 1.5 s, 58 MiB, text differs |
+| round 1 LIMIT-1: a font past the limit only listed in the resources | failed, 1.1 s, 58 MiB | ok, 1.4 s, 59 MiB, text differs |
+| round 1 MEM-1: 10,000,000 private-use glyphs (900 s deadline) | ok, 111.1 s, 152 MiB | ok, 118.0 s, 132 MiB, same text |
+| round 1 MEM-1: 74,000,000 private-use glyphs (900 s deadline) | ok, 220.5 s, 645 MiB | ok, 218.4 s, 645 MiB, same text |
+
+Each repaired bound is also pinned in process by a doubling test in `tests/test_repairs_gi4_pypdf_r3.py` (`CostTests`:
+twice the input costs at most about twice as much, both timed in turn): an embedded CMap of unclosed sections, one
+CMap shared by many font dictionaries, one marked ToUnicode shared by many, widgets beside unread operators, a long
+value shown by many widgets, lone marks beside many readings, and transcription itself (3,000 and 6,000 unread
+operators hold three transcription operations between them).
+
+Round 1's COST-1 glyph-index shapes (50 TJ of 10,000 glyph-index strings beside one readable line, and its control
+with a short /BaseFont: 500,000 and 450,000 glyphs on one page) change reading: their glyph-index text is U+FFFD in
+its place (GI-1), so the page's text (500,056 and 450,056 characters) is over the 400,000-character limit and the
+result fails, where the installed reader and round 2 returned the readable line at ok and named the glyphs as not
+mapping. Round 1's finding there, the time (240 s), stays repaired (10.2 s and 9.5 s). It is the one change of reading
+on a round-1 or round-2 finding input, and it is the rule's: the installed reader returned one line of what the page
+draws, at ok. It is a capability the owner may weigh against the rule; reverting GI-1 is `decode_plan` returning True
+for a glyph-index font and `pdf._decoder` returning None for its glyphs.
+
+The gates, run as `scripts/ci/verify-cpt-studio.sh` runs them (without `pip_audit`, which queries a network
+service), on the disposable test database on 127.0.0.1:55461 only, on the committed tree `af51392c1` under pypdf
+6.21.4: the system and migration checks pass; the Django suite ran 3,669 tests, 3 skipped, and one failed:
+`test_repairs_r4_validation`'s bound on routing's assessment time (10.5 s against its 10 s bound, 'about 3.5 s now'),
+under the host's load (13 to 27 on 14 cores; routing is not touched by this branch). Run alone it passes, as does
+`test_repairs_r4c_validation`'s, which failed the same way in this round's first gate run. The script stops at the
+first failing gate, so the ops (211 tests), verification (37) and browser-verifier (61 passing, none failing, the
+named test among them) suites were run after it, on `d26383d4d`, and pass. `d26383d4d` adds three test cases and no
+code: the round's module and `test_repairs_ingest_r2` (105 tests) pass on it.
+
+Tests of earlier rounds that changed with the rule, each judged by what the page shows: round 1's and round 2's tests
+that pinned dropped text now pin it in its place as U+FFFD; `test_repairs_r4d_ingest2`'s column in a font the
+resources do not hold reads U+FFFD again, with '[?] MAC', as it read until ingest@3; and `test_repairs_ingest_r2`'s
+glyph-index font, which it pinned dropped at ok ('nothing undecodable passes silently'), is U+FFFD in its place,
+named and partial (a page of nothing else still has no usable text layer and goes to OCR).
+
+Each of the 33 mutations, each reverting one repair of this round on a copy of the committed tree (applied and checked
+present in the copy; the worktree's files hashed before and after: untouched), was killed. Thirty were killed by the
+round's tests on `af51392c1`; three survived them (a value of only a NUL is already empty once its terminator is
+stripped, so the tests of NUL-VALUE-1 could not tell 'names no character' from 'not empty', for a /Tx value or for a
+FreeText's /Contents; the one-byte CMap's widths by code were pinned on the copy, not on what pypdf reads), so
+`d26383d4d` adds a pin for each (a value of only U+0001; a /Contents of only U+0001 giving way to its rich text; a line
+whose codes are CIDs three above them, with 'mm' 1 pt past its end), and each of the three is killed by it.
+
+Remaining after round 3, each read as said:
+
+| input | output | why |
+|---|---|---|
+| a glyph the font itself gives no character: a private-use, control or empty ToUnicode entry, an unmapped symbol glyph, a .notdef | counted and dropped, 'N characters that do not map to text', at ok, as the installed reader reads it | the font says the glyph is no character (icons, dingbats, .notdef boxes); only a glyph-index font, which says nothing, is text that cannot be read. A word a text font maps only to private-use or control codes would close up as DROP-NEG-1 did (no corpus file does: the 49 such files are .notdef glyphs) |
+| routing's reading of U+FFFD standing for a word | held where the finding texts put it ('Biopsy was ����taken.', '[?] Diabetes', '( ) Smoker' after a label of U+FFFD); not in every arrangement: 'Biopsy: ��' and '���� biopsy was taken.' read performed | routing has no rule for U+FFFD; the installed reader's mojibake ('Biopsy: 湯') reads the same. The page is partial and named ('check the original') wherever U+FFFD stands for text |
+| a page of transcribed operators (350,000 unread 'AB' strings in 37 KB: the cost lens's shape) | 350,000 operators: partial, 69.0 s, 782 MiB (installed ok, 24.9 s, 619 MiB, side by side; 52.1 s against 24.1 s at a load of 7); 700,000: both fail, the installed reader on the 400,000-character limit (90.6 s, 1,194 MiB), this one on memory (211.9 s, 1,469 MiB) | each transcribed operator is three operations for pypdf (the transcript's Tf, its Tj, the stream's Tf restored), where the installed reader's was one: two to three times the time, a quarter more memory. Each unread operator writes at least one character, so the 400,000-character limit on what is returned stops both readers before this one's memory limit: no page the installed reader returns is refused here for memory |
+| more than 400,000 characters of glyph-index text with readable text (round 1's COST-1 glyph-index shapes) | failed: the text, with a U+FFFD for each glyph-index glyph, is over the 400,000-character limit (the installed reader: ok, the readable line alone, the glyphs named as not mapping) | the rule's reading (GI-1); a capability for the owner to weigh (see the cost section) |
+| text shown after a Q that restored a graphics state with no font (a font set inside q/Q: round 1's `font-set-inside-q`) | U+FFFD in place, named (round 2 dropped it) | no font is in effect, so the PDF encodes nothing the reader can read; the installed reader returned pypdf's reading in its default (WinAnsi) font, and pdf.js draws none of it |
+| a lone glyph that cannot be read after its label (the box ends the row: 'Diabetes' then '□' on its own line) | U+FFFD in place, the item not held | only a lone glyph at the start of its row, or on its own line just left of the next, is taken for a box; routing reads a readable box on the line after its item the same way ('Diabetes\n☐': historical) |
+| text no code of which can be read | as many U+FFFD as pypdf would have written (two bytes a character for a CMap pypdf does not implement: ReportLab's 30-byte ASCII line under /EUC-H is 15), named with that count | the codes of such a CMap cannot be told apart here; the count follows pypdf's reading, as the installed reader's mojibake did, and the notice says it counts what stands in the text's place |
+| a string whose codes cannot be told apart (cut inside a code, a byte no code starts with, odd-length UTF-16BE) | U+FFFD for each character pypdf would have written, its readable codes too | reading its pairs would be mojibake |
+| ETen-B5's extension codes (C6A1-C8FE) | U+FFFD, named; the rest of the line read | no codec here reads them as the CMap does (big5hkscs reads part of that range otherwise) |
+| a code a one-byte embedded CMap's ToUnicode does not give | U+FFFD, named | pypdf reads it as a StandardEncoding guess (the installed reader: right only where the font's codes happen to be ASCII) |
+| a malformed embedded CMap (no code space, sections never closed) with a ToUnicode | its text unread (U+FFFD), named | pypdf reads such a font one byte a code, right only by accident below 0x100 (the installed reader read 'A' for <0041>) |
+| a ToUnicode that gives U+10FFFE or U+10FFFF (the reader's own marks) | read as unread text, and as a space | noncharacters no producer writes for a glyph; on a crafted font only |
+| a TJ adjustment before the first string of a transcribed operator | no space for it | pypdf adds one only after text it holds, which the reader cannot see from the operator |
+| right-to-left text pypdf reads, with unread text inside a line of it | the unread character ends pypdf's right-to-left run, so the halves keep their drawing order (as the installed reader's U+FFFD and mojibake did) | it is read left to right, which is what keeps it from reversing what follows; a space the reader reads itself is neutral, so a right-to-left line it reads keeps its word order |
+| more than 63,000 distinct characters read by one walk | the rest as U+FFFD, counted | the transcript's two-byte codes run out; no real page holds that many distinct characters |
