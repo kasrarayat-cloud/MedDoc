@@ -84,6 +84,11 @@
    "appended_after": "the declaration commit 4375ee500, before any of its code was written; everything above is kept as written",
    "C4-time": "WIDENED BEFORE CODING: the time statement's whole sentence is read (its activity list included), as installed's _another_time reads the statement's clause, but only for the prepositions installed's OTHER_TIME 'another encounter' uses (at, during, on), now with or without a determiner: 'Total time: 40 minutes, including 20 minutes at last visit.' is held too, and 'including review of notes from the last visit' still is not (no 'from' for a time statement). The noun is a visit, appointment, encounter or consult(ation).",
    "C2": "As declared in the correction before this one, with the prepositions at, during, on and from, over the label's whole sentence ('Complexity of decision making: high (from the prior visit).' is held)."
+  },
+  {
+   "date": "2026-11-01",
+   "appended_after": "the pins commit b9759d19c, declared before the code it describes; everything above is kept as written",
+   "cost": "FIX, found by H7 on 3a6a5e77d: the quote of C2's label-inside hold was cut from its sentence's start, so one sentence holding many labels cost the sentence's length per label. Routing 'one sentence of labels and visits' took 0.30, 0.76, 2.15 and 7.17 s CPU at 25k, 50k, 100k and 200k characters (doubling ratios 2.53, 2.83, 3.34); installed takes 0.11, 0.23, 0.42 and 0.89 s. The quote is now cut from at most the 320 characters before the label, and the other-visit quote from at most the first 320 characters of its match. Expected: no reading, hold, status, fact, code or request moves; a quote's text can differ only where more than 240 characters of white space or text stand before the label in its sentence (it then quotes the label's last 80 characters of context, as before, from the bounded window). A routing CPU test pins the bound."
   }
  ]
 }
