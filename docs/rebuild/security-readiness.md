@@ -559,6 +559,20 @@ recording-limit, audio, coding and semantic recheck modules) pass on pypdf 6.21.
 6.21.2 and 6.21.4. `pdf_raw.py` and `engine.py` did not change in this round, so the
 corpus, fixture and coverage measurements of rounds 1–3 stand and were not re-run.
 
+The full gate (`scripts/ci/verify-fresh.sh python`, pypdf 6.21.1, in a private clone)
+then failed four tests outside those modules, each through a fake or an injection that
+now meets the worker guard first: two `test_clinical_validation_diagnostics` tests and
+one `test_semantic_generation` test hand `run_semantic_job` a fake form with no format,
+or a fake version with no form, which a real one always has (they are now Word forms,
+as every form with semantic definitions is); and `test_refutation`'s receipt test made a
+full disk by failing every `Path.open`, so the guard could not read the stored original
+and stopped the job before the provider call the test measures. A full disk fails
+writes, not reads, so that injection now fails writes only; the test also asserts that
+the provider was called and that no result file was written, and a mutation that drops
+the receipt still fails it. No assertion was removed. When no file can be opened at
+all, the guard cannot tell a missing original from an unreadable one and fails the job
+as could-not-run, the safe direction.
+
 **Not covered, and recorded (round 4).** A missing or changed original is passed by
 the worker guard and left to finalize. The export's "missing or changed … contact
 your administrator" answer (409) also covers an original that exists but cannot be
