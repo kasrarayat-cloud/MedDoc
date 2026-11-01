@@ -739,10 +739,12 @@ EM_TIME_LINE = rx(r'^[ \t]*(?:total\s+)?time(?:\s+spent)?[ \t]*[:\-][ \t]*(?P<mi
 # Times that belong to a procedure, never to an E/M visit.
 NOT_EM_TIME = rx(r'\b(?:withdrawal|sedation|procedure\s+time|procedural|intra-?service|fluoroscop\w*|insertion|'
                  r'cecal|anesthesia|recovery|monitoring)\b')
-# GI round 4 (C1): the word that opens the list of what an E/M time statement's minutes covered, written right after the
-# minutes ("52 minutes, covering her history, ..., the orders, and documentation"; matched at the statement's end). A
-# plan word after it names the visit's own work, never the time's occasion: "the orders" does not re-time the statement.
-# A planned time, a cancellation, a history, a doubt and a date after it still do (detect._pv1_activity_work).
+# GI round 4: the word that opens the list of what an E/M time statement's minutes covered, written right after the
+# minutes ("52 minutes, covering her history, ..., the orders, and documentation"; matched at the statement's end). Read
+# only by C4-time's EMR-7 reading (detect._pv1_activity_word, _pv1_reviewed): a list item that is today's work on an
+# earlier event names no other occasion of the minutes. Wave 1 repair cycle 2 DROPPED C1 (pv1.json
+# amendment_20261101_cycle2), so no cue after this word is skipped any more: "the orders" re-times the statement, as
+# installed.
 EM_TIME_ACTIVITIES = rx(r'[ \t]*,?[ \t]*(?:covering|including|included|spent\s+(?:on|in)|devoted\s+to|comprising|'
                         r'consisting\s+of|which\s+(?:covered|included))\b')
 # GI round 4 (C4): words saying the encounter was no in-person visit - the patient not seen in person, no in-person
@@ -782,13 +784,7 @@ NOT_IN_PERSON_TITLE = rx(r'^[ \t]*+(?:[\w-]++[ \t]++){0,3}?(?:telephone|phone|au
                          r'visit|consultation|follow-?up|f/u|note|triage)\b[^\n]{0,40}$', FLAGS | re.M)
 _LEVEL = r'straightforward|low|moderate|high'
 _LEVEL_END = r'(?=[ \t]*(?:[- ]complexity\b|level\b|[:,.;(]|\n|$))'
-MDM_LEVEL = rx(r'(?:\b(?:medical\s+decision[- ]making|MDM)\b[^.;\n]{0,60}?'
-               # GI round 4 (C2): the heading vocabulary's "decision making" as an inline label of its complexity or
-               # level, its level right after the label's ':' or '-' ("Complexity of decision making: moderate."); it
-               # shares the 'level' group, so every reader of this pattern reads it unchanged. Never "shared decision
-               # making" (no such label), and "... of medical decision making" is read by the first branch, as installed
-               r'|\b(?:complexity|level)\s+of\s+decision[- ]making[ \t]*[:\-][ \t]*)'
-               r'\b(?P<level>' + _LEVEL + r')' + _LEVEL_END
+MDM_LEVEL = rx(r'\b(?:medical\s+decision[- ]making|MDM)\b[^.;\n]{0,60}?\b(?P<level>' + _LEVEL + r')' + _LEVEL_END
                + r'|\b(?P<level2>' + _LEVEL + r')(?:[- ]complexity)?\s+(?:level\s+(?:of\s+)?)?'
                r'(?:medical\s+decision[- ]making|MDM)\b')
 # Applied with .match(text, pos) right after an MDM heading, so no '^' anchor.

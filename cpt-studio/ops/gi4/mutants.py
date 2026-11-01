@@ -380,22 +380,20 @@ PD_MUTANTS = (
 # --- package PV1: E/M reading fixes and the C4 holds (detectors tests.test_gi4_pv1 and, for repair cycle 1's guards,
 # tests.test_gi4_pv1_cycle1; moved here from tests/test_gi4_pv1_mutants.py, which now checks this slice). Repair cycle 1
 # (2026-11-01) re-anchored the guards whose code it rewrote, removed pv1-c2-opens-sentence and pv1-quote-window (their
-# guards are gone: a refused label is no mention, so it is never quoted) and added one mutant per guard it adds ---
+# guards are gone: a refused label is no mention, so it is never quoted) and added one mutant per guard it adds. Repair
+# cycle 2 (pv1.json amendment_20261101_cycle2) DROPPED C1 and C2: their 23 mutants (C1's, C2's and the visit evidence's)
+# are retired with their code, pv1-other-visit and pv1-emr9-mdm-other-visit are re-anchored (their call lost C2's
+# argument; same mutation), and pv1-line-quote-sentence guards the PV1C2-08 text fix (54 - 23 + 1 = 32) ---
 _PV1_DETECT, _PV1_CUES, _PV1_CHECKS = 'studio/gi/detect.py', 'studio/gi/cues.py', 'studio/validation/checks.py'
 _PV1_UNIT = 'unit:tests.test_gi4_pv1'
 _PV1_CYCLE1 = 'unit:tests.test_gi4_pv1_cycle1'
+_PV1_CYCLE2 = 'unit:tests.test_gi4_pv1_cycle2'
 _PV1_HOLD = "        return Reading('uncertain', (f\"{EM_NOT_IN_PERSON}: '{words}'\",), 'cue', doubt=True)"
-_PV1_TIME_ONLY = "    if m.kind != 'em-time':\n        return None\n    return cues.EM_TIME_ACTIVITIES"
-_PV1_DATES = '    for d in an.dates_in(cs, ce):  # GI round 4 (C1): a date in an activity list still governs (see the docstring)\n'
-_PV1_SKIP = '        if activities is not None and cue.start >= activities and _pv1_activity_work(cue):'
-_PV1_PLAN_NOUN = '    return noun is not None and noun.match(cue.text) is not None'
 _PV1_OTHER_STATEMENTS = "    if m.kind in ('em-time', 'em-mdm'):\n        other = _pv1_other_time(an, m)"
 _PV1_CONTACT_PLAN = "    if any(c.status == 'planned' for c in an.cues_in(cs, ce)) or _PV1_PREFERS.search(text, cs, ce):"
 _PV1_REVIEWED = ('    return _PV1_ACTIVITY_NOUN.search(text, cut, pos) is not None and _PV1_LIST_TIME.search(text, cut, item_end) '
                  'is None')
 _PV1_SCAN = "        for s, e in spans:\n            if an.lay.section_at(s).kind == 'history':"
-_PV1_EXAM_TEST = ('        if not _PV1_NO_EXAM.match(rest) and _PV1_EXAM_CONTENT.search(rest) and not '
-                  '_PV1_REPORTED.search(rest):')
 _PV1_ITEM_BOUND = ('    for count, (x, y) in enumerate(spans[i:i + _PV1_ITEM_MATCHES + 1]):\n        if y > end:\n            break\n'
                    '        if count < _PV1_ITEM_MATCHES and work is not None')
 # C4's session-2 synonyms in cues.NOT_IN_PERSON, from their comment to their last alternative (exact source text)
@@ -444,70 +442,18 @@ PV1_MUTANTS = (
     _pv1('pv1-another-time', "C4-time: installed's _another_time holds a performed E/M time statement",
          '    held = _pv1_another_time(an, m, work)', '    held = None', _PV1_UNIT),
     _pv1('pv1-c2-another-time', 'C4-time and EMR-9: a decision-making statement takes the other-time holds (installed\'s '
-         'MDM reading and a read label)', _PV1_OTHER_STATEMENTS,
+         'MDM reading; C2\'s label was dropped in repair cycle 2)', _PV1_OTHER_STATEMENTS,
          _PV1_OTHER_STATEMENTS.replace("m.kind in ('em-time', 'em-mdm')", "m.kind == 'em-time'")),
-    _pv1('pv1-c1-after-only', 'C1: a cue before the activity word still re-times the time statement', _PV1_SKIP,
-         '        if activities is not None and _pv1_activity_work(cue):', _PV1_UNIT),
-    _pv1('pv1-c1-plan-work', 'C1: after the activity word only a planned cue is skipped (a cancellation or a history '
-         'still re-times the statement)', _PV1_SKIP, '        if activities is not None and cue.start >= activities:',
-         _PV1_UNIT),
-    _pv1('pv1-c1-planned-time', 'C1: a planned time after the activity word still re-times the statement (only a noun of '
-         "the visit's planning work is skipped)", _PV1_PLAN_NOUN, '    return True', _PV1_UNIT),
-    _pv1('pv1-c1-dates-count', 'C1: a date in an activity list still re-times the time statement', _PV1_DATES,
-         _PV1_DATES + '        if activities is not None and d.start >= activities:\n            continue\n', _PV1_UNIT),
-    _pv1('pv1-c1-time-only', "C1: only a time statement has an activity list (a visit statement's cues count)",
-         _PV1_TIME_ONLY, _PV1_TIME_ONLY.replace("if m.kind != 'em-time':", "if m.kind not in ('em-time', 'em-visit'):"),
-         _PV1_UNIT),
-    _pv1('pv1-c2-shared', '"shared decision making" never gives an MDM level (a label and its separator)',
-         r"               r'|\b(?:complexity|level)\s+of\s+decision[- ]making[ \t]*[:\-][ \t]*)'",
-         r"               r'|\b(?:\w+\s+)?(?:of\s+)?decision[- ]making\b[^.;\n]{0,60}?)'", _PV1_UNIT, _PV1_CUES),
     _pv1('pv1-v3-ultrasound', "V3: an ultrasound named in an E/M code's negative passage holds the E/M",
          'labs?|ultrasounds?|sonograms?|', 'labs?|sonograms?|', _PV1_UNIT, _PV1_CHECKS),
     _pv1('pv1-c4-synonyms', 'C4 (session 2): "the patient was not seen", a visit-type field naming the telephone, '
          '"missed her appointment" and "left without being seen" hold every E/M reading', _PV1_SYNONYMS, '', _PV1_UNIT,
          _PV1_CUES),
     _pv1('pv1-other-visit', 'C4-time: another visit named by a preposition, with or without a determiner, holds a time '
-         'statement', '    other = _pv1_other_visit(an, s, max(e, m.end), label, work)', '    other = None', _PV1_UNIT),
+         'statement', '    other = _pv1_other_visit(an, s, max(e, m.end), work)', '    other = None', _PV1_UNIT),
     _pv1('pv1-other-visit-window', 'H7 (session 2): the other-visit quote is cut from a bounded window of its match',
          "        return ' '.join(an.text[x:min(y, x + _PV1_QUOTE_WINDOW)].split())[:_PV1_QUOTE]",
          "        return ' '.join(an.text[x:y].split())[:_PV1_QUOTE]", _PV1_UNIT),
-    # --- repair cycle 1: C2, kept only with positive evidence of today's office visit, otherwise not read ---
-    _pv1('pv1-c2-drop', 'C2: a label refused its release is no mention at all (installed\'s reading)',
-         '    an.em = _pv1_read_labels(an)', '    an.em = an.em'),
-    _pv1('pv1-c2-office-visit', "C2: the label is read only where the note documents today's in-person office visit",
-         '    why = _pv1_office_visit(an)', '    why = None'),
-    _pv1('pv1-c2-kept-c4', 'C2: where C4 holds the document, the visit\'s own label is kept and held with the rest',
-         '                 or (held and _pv1_statement_refused(an, m) is None))', '                 or False)'),
-    _pv1('pv1-c2-kept-own', 'C2: under C4 only the visit\'s own label is kept (another note\'s is not read)',
-         '                 or (held and _pv1_statement_refused(an, m) is None))', '                 or held)'),
-    _pv1('pv1-c2-opens-line', 'C2 and C1: the statement must open its own line',
-         '    line_start = _pv1_line_start(text, m.start)', "    line_start = text.rfind('\\n', 0, m.start) + 1"),
-    _pv1('pv1-c2-history-section', 'C2 and C1: a statement in a history or indication section is not the visit\'s own',
-         "    if an.lay.section_at(m.start).kind in ('history', 'indication'):", '    if False:'),
-    _pv1('pv1-c2-governing', 'C2 and C1: the heading-like line governing the statement names no other occurrence',
-         '    if governing is not None and _pv1_names_another_occurrence(an, *governing):', '    if False:'),
-    _pv1('pv1-c2-section-heading', 'C2 and C1: no heading-like line further up the statement\'s section names another '
-         'occurrence (a pasted prior note)', '    above = _pv1_section_heading_above(an, m.start, line_start)',
-         '    above = None'),
-    _pv1('pv1-c2-line-rest', "C2 and C1: the rest of the statement's line names no other visit, time or date",
-         '    words = _pv1_names_another_occurrence(an, m.end, line_end, rest=True)', '    words = None'),
-    _pv1('pv1-visit-exam', 'visit evidence: an exam or vital signs with content', '    if not _pv1_exam_with_content(text):',
-         '    if False:'),
-    _pv1('pv1-visit-setting', "visit evidence: the document's own office setting",
-         "    if setting.origin != 'document' or setting.value != 'office':", '    if False:'),
-    _pv1('pv1-visit-not-a-visit', 'visit evidence: no telephone, portal, message, e-consult, no-show or cancelled word',
-         '    words = _pv1_first_signal(an, _PV1_NOT_A_VISIT, everywhere=False)', '    words = None'),
-    _pv1('pv1-visit-procedure-day', 'visit evidence: no procedure-day word (H&P, ASA, airway, today\'s colonoscopy)',
-         '    words = _pv1_first_signal(an, _PV1_PROCEDURE_DAY, everywhere=True)', '    words = None'),
-    _pv1('pv1-visit-around-title', 'visit evidence: no title of a note written around a procedure',
-         '    if gi_sections.around_procedure_title(text):', '    if False:'),
-    _pv1('pv1-visit-reported', 'visit evidence: reported values or another visit\'s exam are no exam', _PV1_EXAM_TEST,
-         '        if not _PV1_NO_EXAM.match(rest) and _PV1_EXAM_CONTENT.search(rest):'),
-    _pv1('pv1-c1-office-visit', "C1: the plan-work skip applies only with the visit's evidence and its own statement",
-         '    if _pv1_office_visit(an) is not None or _pv1_statement_refused(an, m) is not None:', '    if False:'),
-    _pv1('pv1-c1-nouns', "C1: only a noun of the visit's planning work is skipped ('scheduled' is not)",
-         "_PV1_PLAN_WORK = {'ordered': re.compile(r'orders?\\Z', re.A | re.I),",
-         "_PV1_PLAN_WORK = {'scheduled': re.compile(r'.*'), 'ordered': re.compile(r'orders?\\Z', re.A | re.I),"),
     # --- repair cycle 1: C4 holds only on a statement of today's encounter type ---
     _pv1('pv1-c4-today-mode', "C4: only a statement of today's encounter type holds the document",
          '            if _pv1_todays_mode(an, s, e):', '            if True:'),
@@ -541,6 +487,9 @@ PV1_MUTANTS = (
          '        done = [m for m in an.em if _pv1_held_by_c4(an, readings[m])]', '        done = []'),
     _pv1('pv1-line-quote', 'CTS-2: the C4 cue quotes at most _PV1_LINE_QUOTE characters of its line',
          '    if len(line) <= _PV1_LINE_QUOTE and not cut_left and not cut_right:', '    if True:'),
+    _pv1('pv1-line-quote-sentence', 'PV1C2-08 (repair cycle 2, text only): a long line\'s C4 quote is the sentence holding '
+         'its words when that sentence fits, so it keeps its subject', '    if len(sentence) <= _PV1_LINE_QUOTE:',
+         '    if False:', _PV1_CYCLE2),
     # --- repair cycle 1: C4-time (EMR-7) and the EMR-9 holds ---
     _pv1('pv1-c4time-reviewed', "EMR-7: an activity-list item that is today's work on an earlier event names no other "
          'occasion', _PV1_REVIEWED, '    return False'),
@@ -551,7 +500,7 @@ PV1_MUTANTS = (
     _pv1('pv1-emr9-paren', 'EMR-9: a parenthesis right after the minutes is read for another visit',
          "        spans.append((*paren.span('inside'), False))", '        pass'),
     _pv1('pv1-emr9-mdm-other-visit', "EMR-9: installed's MDM reading takes the prepositional other-visit hold",
-         '        other = _pv1_other_visit(an, min(cs, m.start), m.end, False)', '        other = None'),
+         '        other = _pv1_other_visit(an, min(cs, m.start), m.end)', '        other = None'),
     _pv1('pv1-emr9-shared', "EMR-9: an MDM level read after 'shared' is held",
          "    if m.kind == 'em-mdm' and _PV1_SHARED_LEAD.search(an.text, max(0, m.start - 16), m.start):", '    if False:'),
     _pv1('pv1-cost-item-bound', 'H7: at most _PV1_ITEM_MATCHES reviewed prepositional matches are passed over, then held',

@@ -38,7 +38,9 @@ class MutantRegistryTests(SimpleTestCase):
         names = [m.name for m in mutants.MUTANTS]
         census = {p: [n for n in names if n.startswith(prefixes)] for p, prefixes in mutants.PACKAGE_PREFIXES.items()}
         self.assertEqual({p: len(v) for p, v in census.items()},
-                         {'PS': 7, 'PA': 33, 'PD': 44, 'PV1': 54, 'PE': 32, 'PI': 24, 'PO': 28})  # Wave 1 repair cycle 1 (PA, PO, PV1, PE, PI, PD)
+                         {'PS': 7, 'PA': 33, 'PD': 44, 'PV1': 32, 'PE': 32, 'PI': 24, 'PO': 28})  # Wave 1 repair cycle 1 (PA, PO, PV1, PE, PI, PD)
+        # Wave 1 repair cycle 2: PV1 54 -> 32 (pv1.json amendment_20261101_cycle2: C1 and C2 dropped, their 23 mutants
+        # retired with their code; pv1-line-quote-sentence added for the PV1C2-08 text fix)
         # and its integration: PD +7, one killing mutant per guard of the STRONG-HEAD HOLD (pd.json
         # amendment_20261101_integration: pd-head-hold, -strong, -one-date, -around, -call, -note, -charge-note)
         # PE +19, PI +4: the Wave 1 repair, cycle 1 (pe.json and pi.json, amendment_20261101_cycle1); then PE +2 and PI -1
@@ -52,13 +54,13 @@ class MutantRegistryTests(SimpleTestCase):
         # (pd-closing-last-lines, pd-not-closing-words, pd-wide-never-own), two retired with the code they guarded
         # (pd-around-title, pd-corroboration), and 28 new: one killing mutant per new guard (pd.json
         # amendment_20261101 and its second to fifth entries)
-        self.assertEqual(len(names), 233)
+        self.assertEqual(len(names), 211)  # 233 before Wave 1 repair cycle 2's PV1 drop (-22)
         for package, slice_ in (('PD', mutants.PD_MUTANTS), ('PV1', mutants.PV1_MUTANTS), ('PE', mutants.PE_MUTANTS),
                                 ('PI', mutants.PI_MUTANTS), ('PO', mutants.PO_MUTANTS)):
             self.assertEqual([m.name for m in slice_], census[package], package)
             detectors = {f'unit:tests.test_gi4_{package.lower()}'}
-            if package == 'PV1':  # repair cycle 1's guards are killed by its own test module
-                detectors.add('unit:tests.test_gi4_pv1_cycle1')
+            if package == 'PV1':  # repair cycles 1's and 2's guards are killed by their own test modules
+                detectors |= {'unit:tests.test_gi4_pv1_cycle1', 'unit:tests.test_gi4_pv1_cycle2'}
             self.assertEqual({m.detector for m in slice_}, detectors, package)
 
 
