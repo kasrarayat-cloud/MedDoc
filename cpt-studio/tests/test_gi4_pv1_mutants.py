@@ -63,6 +63,12 @@ MUTANTS = (
     mutants.Mutant('pv1-c4-synonyms', 'C4 (session 2): "the patient was not seen", a visit-type field naming the '
                    'telephone, "missed her appointment" and "left without being seen" hold every E/M reading', CUES,
                    _SYNONYMS, _NO_SHOW + ')', UNIT),
+    mutants.Mutant('pv1-c2-opens-sentence', "C2 (session 2): the new label reads a level only when it opens its "
+                   'sentence', DETECT, '        if label and not _pv1_opens_its_sentence(an.text, m.start, s):',
+                   '        if False:', UNIT),
+    mutants.Mutant('pv1-other-visit', 'C2 and C4-time (session 2): another visit named by a preposition, with or '
+                   'without a determiner, holds a time statement or the new label', DETECT,
+                   '        other = _pv1_other_visit(an, s, max(e, m.end), label)', '        other = None', UNIT),
 )
 BY_NAME = {m.name: m for m in MUTANTS}
 

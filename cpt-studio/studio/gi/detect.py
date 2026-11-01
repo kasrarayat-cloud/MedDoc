@@ -6085,17 +6085,90 @@ def _pv1_held(an: Analysis, m: Mention, reading: Reading) -> Reading:
     to E/M time: "Total time at her last visit was 40 minutes." read 99213 ready). C2's new decision-making label takes
     the same time hold, so the level it reads is never another visit's ("Complexity of decision making: high (at her last
     visit)."). Hold-only: a reading that is not performed is returned as it is, so nothing installed holds, excludes or
-    reads not-performed is changed here."""
+    reads not-performed is changed here.
+
+    Session 2: C2's label reads a level only when it opens its sentence ("Previous note: complexity of decision making:
+    high." is held), and a time statement or a label is also held when its sentence names another visit by a
+    preposition, with or without a determiner (_pv1_other_visit: "Total time at last visit was 40 minutes.")."""
     if reading.status != 'performed':
         return reading
     words = _not_in_person(an, m)
     if words is not None:
         return Reading('uncertain', (f"{EM_NOT_IN_PERSON}: '{words}'",), 'cue', doubt=True)
     if m.kind == 'em-time' or _pv1_decision_label(an, m):
+        label = m.kind != 'em-time'
+        # from the start of the sentence the statement opens in to the end of the one it closes in (a field label such
+        # as "Total time:" ends a sentence of its own in the layout)
+        s, e = an.lay.sentence_for(m.start, m.start + 1)[0], an.lay.sentence_for(max(m.start, m.end - 1), m.end)[1]
+        if label and not _pv1_opens_its_sentence(an.text, m.start, s):
+            said = ' '.join(an.text[s:m.end].split())[-_PV1_QUOTE:]
+            return Reading('uncertain', (f"{_PV1_LABEL_INSIDE}: '{said}'",), 'cue', doubt=True)
         held = _another_time(an, m.start, m.end)
         if held:
             return Reading('uncertain', (EM_ANOTHER_TIME, held), 'cue', doubt=True)
+        other = _pv1_other_visit(an, s, max(e, m.end), label)
+        if other is not None:
+            return Reading('uncertain', (EM_ANOTHER_TIME, f"{ANOTHER_TIME_PREFIX}: '{other}' may place it on another "
+                                                          'date'), 'cue', doubt=True)
     return reading
+
+
+# Session 2 (C2, C4-time): another visit named by a preposition, with or without a determiner ("at last visit", "during
+# her previous appointment", "from the prior visit"). Installed's OTHER_TIME 'another encounter' needs the determiner
+# and reads at, during and on; a time statement reads those three only ("notes from the last visit" are the visit's
+# work), C2's label reads 'from' too. Read only to hold.
+_PV1_AT_OTHER_VISIT = re.compile(
+    r'\b(?P<prep>at|during|on|from)\s+(?:(?:her|his|their|the|a|an)\s+)?(?:(?:last|previous|prior|recent|most\s+recent|'
+    r'earlier|preceding)\s+)+(?:office\s+|clinic\s+)?(?:visits?|appointments?|encounters?|consult(?:ation)?s?)\b',
+    re.A | re.I)
+# What may stand before C2's label in a sentence the label opens: white space, a list mark or a list number.
+_PV1_OPENING = frozenset(' \t\r\n-*.)0123456789\u2022')
+_PV1_LABEL_INSIDE = ("uncertain: the decision-making label does not open its sentence, so its level may be another "
+                     "note's")
+
+
+def _pv1_opens_its_sentence(text: str, start: int, sentence_start: int) -> bool:
+    """Whether C2's label at ``start`` opens its sentence (GI round 4, session 2): nothing but white space, a list mark
+    or a list number stands before it in the sentence, and the sentence does not follow a field label's colon on the
+    same line ("Prior visit: Complexity of decision making: high.", which the layout may cut after the colon). Reads
+    back only over such characters and the blanks before the sentence, so each label costs the run of them."""
+    i = start - 1
+    while i >= sentence_start and text[i] in _PV1_OPENING:
+        i -= 1
+    if i >= sentence_start:
+        return False
+    while i >= 0 and text[i] in ' \t':
+        i -= 1
+    return i < 0 or text[i] != ':'
+
+
+def _pv1_other_visit(an: Analysis, start: int, end: int, label: bool) -> Optional[str]:
+    """The words of the first _PV1_AT_OTHER_VISIT match lying wholly in [start, end) - for a time statement (``label``
+    False) never one led by 'from' - or None. A comparison is no other time ("high, as at her prior visit"), as for
+    installed's _another_time (_COMPARE_LEAD within 30 characters before, on the same line). Matched once per document;
+    each call costs one bisection."""
+    key = ('pv1-other-visit',)
+    if key not in an.memo:
+        text = an.text
+        found = [(x.start(), x.end(), x.group('prep').lower() != 'from') for x in _PV1_AT_OTHER_VISIT.finditer(text)
+                 if not _pv1_compared(text, x.start())]
+        every = tuple((s, e) for s, e, _ in found)
+        timed = tuple((s, e) for s, e, kept in found if kept)
+        an.memo[key] = (every, tuple(s for s, _ in every), timed, tuple(s for s, _ in timed))
+    every, every_starts, timed, timed_starts = an.memo[key]
+    spans, starts = (every, every_starts) if label else (timed, timed_starts)
+    i = bisect.bisect_left(starts, start)
+    if i < len(spans) and spans[i][1] <= end:
+        return ' '.join(an.text[spans[i][0]:spans[i][1]].split())[:_PV1_QUOTE]
+    return None
+
+
+def _pv1_compared(text: str, start: int) -> bool:
+    """Whether a comparison leads the words at ``start`` ("as at her prior visit"): _COMPARE_LEAD within the 30
+    characters before them, on their line (a bounded look-back, so each match costs at most 30 characters)."""
+    lo = max(0, start - 30)
+    newline = text.rfind('\n', lo, start)
+    return _COMPARE_LEAD.search(text, newline + 1 if newline >= 0 else lo, start) is not None
 
 
 def _pv1_decision_label(an: Analysis, m: Mention) -> bool:

@@ -156,6 +156,30 @@ class DecisionMakingLabelTests(SimpleTestCase):
         self.assertEqual(self.levels('MDM: high. Moderate complexity MDM.'),
                          [('MDM: high', 'high'), ('Moderate complexity MDM', 'moderate')])
 
+    def test_a_label_inside_another_sentence_gives_no_level(self):  # kills pv1-c2-opens-sentence
+        # session 2: each read 99215 READY through the new label, where installed reads no level at all
+        for line in ('Previous note: complexity of decision making: high.',
+                     'At last visit, complexity of decision making: high.'):
+            self.assertNotIn('mdm_level', facts(em(OFFICE + line + '\n')), line)
+        held = mention(em(OFFICE + 'Previous note: complexity of decision making: high.\n'),
+                       'complexity of decision making: high')
+        self.assertEqual(held.status, 'uncertain')
+        self.assertEqual(held.cues[0], f"{detect._PV1_LABEL_INSIDE}: 'Previous note: complexity of decision making: high'")
+
+    def test_a_label_that_opens_its_sentence_is_read(self):
+        for line, level in (('- Complexity of decision making: low.', 'low'),
+                            ('Seen today. Complexity of decision making: low.', 'low'),
+                            ('2. Level of decision making: moderate.', 'moderate')):
+            self.assertEqual(facts(em(OFFICE + line + '\n')).get('mdm_level'), level, line)
+
+    def test_a_label_naming_another_visit_without_a_determiner_is_held(self):  # kills pv1-other-visit
+        for line in ('Complexity of decision making: high (at last visit).',
+                     'Complexity of decision making: high, from the prior visit.'):
+            finding = em(OFFICE + line + '\n')
+            self.assertNotIn('mdm_level', facts(finding), line)
+            held = mention(finding, 'Complexity of decision making: high')
+            self.assertEqual((held.status, held.cues[0]), ('uncertain', detect.EM_ANOTHER_TIME), line)
+
     def test_a_level_stated_for_another_visit_is_held(self):  # kills pv1-c2-another-time
         text = OFFICE + 'Complexity of decision making: high (at her last visit).\n'
         finding = em(text)
@@ -261,6 +285,21 @@ class NotInPersonTests(SimpleTestCase):
         held = mention(finding, 'Total time at her last visit was 40 minutes')
         self.assertEqual((held.status, held.cues[0]), ('uncertain', detect.EM_ANOTHER_TIME))
         self.assertTrue(held.cues[1].startswith(detect.ANOTHER_TIME_PREFIX), held.cues)
+
+    def test_a_time_at_another_visit_without_a_determiner_is_held(self):  # kills pv1-other-visit
+        # session 2: READY on installed, whose OTHER_TIME needs "her" or "the" before "last visit"
+        for line in ('Total time at last visit was 40 minutes.', 'At last visit, total time was 40 minutes.',
+                     'Total time: 40 minutes, including 20 minutes at last visit.',
+                     'Total time during previous appointment: 40 minutes.'):
+            finding = em(OFFICE + line + '\n')
+            self.assertNotIn('time_minutes', facts(finding), line)
+        held = mention(em(OFFICE + 'Total time at last visit was 40 minutes.\n'), 'Total time at last visit was 40 minutes')
+        self.assertEqual(held.cues, (detect.EM_ANOTHER_TIME,
+                                     f"{detect.ANOTHER_TIME_PREFIX}: 'at last visit' may place it on another date"))
+
+    def test_notes_from_the_last_visit_are_the_visits_work(self):
+        line = 'Total time: 40 minutes, including review of notes from the last visit.'
+        self.assertEqual(facts(em(OFFICE + line + '\n')).get('time_minutes'), '40')
 
     def test_a_time_on_the_date_of_the_encounter_is_not_held(self):
         text = OFFICE + 'Total time spent on the date of the encounter: 44 minutes.\n'
