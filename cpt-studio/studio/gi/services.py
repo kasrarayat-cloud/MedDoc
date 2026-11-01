@@ -3663,6 +3663,9 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
         # paragraph is about does (_pi_carried) - the one family its last naming sentence named, or gave a lesion or
         # an act by its own part, name or site. A sentence naming two families leaves the paragraph to neither.
         carry: Optional[tuple[str, int, int]] = None  # (family, part start, end of the sentence that set it)
+        # a paragraph carries a service only where more than one is performed (_pi_carried): elsewhere every sentence
+        # without an act or a lesion is passed over unread, as before (bounded work: no added scan per sentence)
+        carrying = len([f for f in performed_families if f != 'gi.office_em']) > 1
         indwelling: list[tuple[str, str]] = []  # (family, act id) read as an indwelling stent's state (W1, below)
         # where each lesion was last named as itself, and where each service's text last named a lesion this reader did
         # not record: "the polyp" after an unrecorded polyp may be that one, not the last one recorded (status-1, below)
@@ -3679,11 +3682,13 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                                 f'first {SENTENCE_READ_CHARS:,} characters.')
             mentions = _acts_in(text, ss, read_end)
             lesion_matches = list(LESION.finditer(text, ss, read_end))
+            if not mentions and not lesion_matches and not carrying:
+                continue  # nothing to read here, and no paragraph's service to follow (as before GI round 4)
             named_here = sorted({f for f in named_in.get(ss, ()) if f in drafts}
                                 | _instrument_families(text, ss, se, drafts))
-            if len(named_here) == 1:
+            if carrying and len(named_here) == 1:
                 carry = (named_here[0], part.start, se)  # GI round 4 (A1): every sentence naming one service sets it
-            elif named_here:
+            elif carrying and named_here:
                 carry = None  # two services named: the paragraph carries neither
             if not mentions and not lesion_matches:
                 continue

@@ -43,7 +43,7 @@ PI_MUTANTS = (
      '                                      field_row=_field_or_box_line(text, ms, me))',
      '                                      field_row=False)', _T),
     ('pi-carry-two-named', 'a sentence naming two families clears the carry', 'studio/gi/services.py',
-     '            elif named_here:\n                carry = None',
+     '            elif carrying and named_here:\n                carry = None',
      '            elif False:\n                carry = None', _T),
     ('pi-e1-section', 'E1: never from a history or plan section of the layout', 'studio/gi/services.py',
      "        if _sections.layout(t).section_at(pos).kind in ('history', 'plan') \\\n"
