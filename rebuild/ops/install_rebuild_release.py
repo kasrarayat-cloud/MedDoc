@@ -43,17 +43,21 @@ WHAT THE INSTALLER ADDS TO THE ENGINE'S SHAPE (the 2026-11-01 refutations: 22 fi
     (pre-auto-gc included); no gate instrument and no .gitattributes in the delta.
   * The citation and the strict declaration gate run from the base's tracked copies in the shared tree, proven
     byte-equal to their blobs at BASE; origin/main is read as refs/remotes/origin/main and refs/heads/main exactly.
-  * Git's own state (lock files, an unfinished merge, cherry-pick, revert, rebase or bisect, assume-unchanged or
-    skip-worktree entries, replace refs) refuses, in the shared tree and in the candidate worktree, in the
-    preflight and again after the stop. A rebase is unfinished only while rebase-merge/ or rebase-apply/ exists: a
-    lone REBASE_HEAD, a finished rebase's leftover, is recorded and never refused or removed. No git process reads
-    a replace object. Nothing is imported from the candidate worktree before it is proven, nothing untracked may
-    sit in rebuild/ops, and no bytecode is read from the source tree.
+  * Git's own state refuses, in the shared tree and in the candidate worktree, in the preflight and again after the
+    stop: a lock that changes `git merge --ff-only` in that worktree (its index.lock, HEAD.lock or ORIG_HEAD.lock, or
+    the lock of the branch it has checked out), an unfinished merge, cherry-pick, revert, rebase or bisect there,
+    assume-unchanged or skip-worktree entries, and replace refs. The locks that other worktrees' ordinary git writes
+    take in the shared common directory (config.lock, packed-refs.lock, other refs' locks) change neither and are
+    recorded (observed_locks), never refused. A rebase is unfinished only while rebase-merge/ or rebase-apply/
+    exists: a lone REBASE_HEAD, a finished rebase's leftover, is recorded and never refused or removed. No git
+    process reads a replace object. Nothing is imported from the candidate worktree before it is proven, nothing
+    untracked may sit in rebuild/ops, and no bytecode is read from the source tree.
   * Configuration, clinical files, the venv, foreign services, git's state, rebuild/.env and the static tree are
     compared again AFTER the stop and BEFORE publication. Publication begins only when git has moved HEAD or the
     working tree: a refusal before that, a merge git refused included, restores the original release once every
     child of the act is reaped and the original is MEASURED intact (the engine's verify_original_before_resume and
-    the same shared-tree measurement as before the merge, git's own state included).
+    the same shared-tree measurement as before the merge, git's own state included; while only a held lock that
+    changes the merge fails it, it is measured again each second for about 30 s before the units are left drained).
   * The failure path is exception-proof. Every unit gets its drain or restore attempt whatever happens to an
     evidence write or to releasing the locks; a restore counts only when every unit is active and health reports
     BASE. The act's git processes run with hooks, automatic maintenance and replace objects off.
@@ -62,14 +66,32 @@ WHAT THE INSTALLER ADDS TO THE ENGINE'S SHAPE (the 2026-11-01 refutations: 22 fi
     cannot be written. --result must be a new file in a private directory before anything runs.
 
 SIGNALS ARE BLOCKED, NEVER HANDLED (the second refutation: an asynchronous handler kept racing what it protected)
-  SIGTERM, SIGINT and SIGHUP are blocked with pthread_sigmask from the act's first statement until the process
-  exits. No handler runs: this module installs none, managed_helper.run_helper's per-call SIGTERM handler cannot
-  fire, KeyboardInterrupt cannot be raised. So no signal interrupts a stage, a helper call, a subprocess start or
-  the failure path. checkpoint() takes pending signals (sigtimedwait, zero timeout) between stages and records each
-  with its sender: before publication one takes the automatic recovery path; from publication on it is recorded,
-  the act runs to completion, and the exit is 2 for judgement. Children inherit the blocked mask, so a git or pip
-  child stops only on SIGKILL, and SIGKILL is the only thing that can still cut the act: the runner's ceiling must
-  exceed the act's worst duration (docs/runbooks/rebuild-release-install-20261031.md, step 7).
+  Every catchable signal whose default action ends the process (SIGNALS, and every real-time signal) is blocked with
+  pthread_sigmask from the act's first statement until the process exits; SIGPIPE stays ignored, as the interpreter
+  set it. No handler runs: this module installs none, managed_helper.run_helper's per-call SIGTERM handler cannot
+  fire, KeyboardInterrupt cannot be raised. A signal sent to the act's OWN PROCESS therefore interrupts no stage,
+  helper call, subprocess start or failure path: checkpoint() takes it (sigtimedwait, zero timeout) between stages,
+  and once more immediately before the merge, and records it with its sender. Before the merge one takes the
+  automatic recovery path; from the merge on it is recorded, the act runs to completion, and the exit is 2.
+
+WHAT BLOCKING DOES NOT COVER (the round-3 refutation; docs/runbooks/rebuild-release-install-20261031.md, step 7)
+  * Under the mandated runner the act's parent is `timeout -k 15`, the leader of the act's process group. A SIGTERM,
+    SIGINT, SIGHUP or SIGQUIT that reaches timeout (a signal to it, a signal to the group, `pkill -f` on the
+    installer's path, which timeout's argv also carries) is forwarded to the whole group; its ceiling, which a
+    SIGALRM sent to timeout also fires, sends the group SIGTERM. Either is followed 15 s later by SIGKILL, which cuts
+    the act wherever it is, a restore or the resume included, with no outcome file; the runner then exits 137. Any
+    other terminating signal that reaches timeout ends timeout itself (the runner exits 128 + its number, as it does
+    when timeout is SIGKILLed) while the act runs on, unwatched.
+  * A child keeps the blocked mask only until it changes it. git keeps all of it and stops only on SIGKILL. The
+    docker helper client is a Go binary: its runtime unblocks the signals it handles (a Go stand-in under this mask:
+    SIGHUP, SIGINT, SIGQUIT, SIGTERM, SIGABRT, SIGPROF, SIGSTKFLT, the fault signals and SIGRTMIN, on every thread),
+    so a group signal reaches it and can abort the unit action in flight (before the resume that refuses into the
+    failure path; once the resume started it drains the new release).
+  * Ctrl-C or a hangup in the operator's terminal reaches only the runner: timeout moved the act out of the terminal's
+    foreground process group, so the act runs on detached and records nothing.
+  So nobody may signal the act, by any route. It runs non-interactively, with a ceiling far above its worst duration
+  and no other operator process running. If it must be stopped (SIGKILL), the only recovery is a separately declared
+  reverse act.
 """
 import argparse
 from contextlib import ExitStack, contextmanager
@@ -144,10 +166,22 @@ GATE_INSTRUMENTS = ('scripts/check-citation.sh', 'scripts/lib/runs-api.sh', 'scr
                     'scripts/run-ruled-mutation.sh', 'scripts/lib/run-watched.sh',
                     'scripts/lib/container-revision.sh')
 TRUSTED_GATE_SCRIPTS = ('scripts/check-citation.sh', 'scripts/lib/runs-api.sh', 'scripts/lib/declaration.sh')
-#: Git's own lock files and unfinished operations in the shared repository (`rev-parse --git-path` names). A rebase
-#: is unfinished only while rebase-merge/ or rebase-apply/ exists, which is how git itself decides
-#: (wt_status_check_rebase).
-GIT_LOCKS = ('index.lock', 'HEAD.lock', 'ORIG_HEAD.lock', 'config.lock', 'packed-refs.lock', 'shallow.lock')
+#: Git's lock files that change `git merge --ff-only` in the worktree that holds them, refused (git 2.43, measured on
+#: scratch repositories 2026-11-01): with index.lock or ORIG_HEAD.lock held the merge refuses before it changes
+#: anything; with HEAD.lock, or the lock of the branch the worktree has checked out (refs/heads/main.lock in the
+#: shared tree, which git_state adds), it moves the index and the working tree and then refuses the ref. These three
+#: are per worktree (`rev-parse --git-path` resolves them in that worktree's own git directory), so no other
+#: worktree's git ever creates them.
+WORKTREE_LOCKS = ('index.lock', 'HEAD.lock', 'ORIG_HEAD.lock')
+#: Locks in the repository's COMMON directory, which every linked worktree shares: an ordinary git write in any
+#: worktree holds one for a moment (strace, 2026-11-01: a commit on another branch takes refs/heads/<branch>.lock, a
+#: fetch refs/remotes/origin/<branch>.lock, `branch -D` config.lock and packed-refs.lock). With each of them held the
+#: same merge fast-forwards exactly as without (measured, loose and packed refs alike). They, and every other *.lock
+#: under refs/ but the checked-out branch's, are recorded under ``observed_locks`` and never refused.
+COMMON_LOCKS = ('config.lock', 'packed-refs.lock', 'shallow.lock')
+OBSERVED_LOCKS_LIMIT = 50
+#: Unfinished operations in the worktree (per worktree, like its HEAD). A rebase is unfinished only while
+#: rebase-merge/ or rebase-apply/ exists, which is how git itself decides (wt_status_check_rebase).
 GIT_OPERATIONS = ('MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'rebase-merge', 'rebase-apply', 'sequencer',
                   'BISECT_LOG', 'BISECT_START')
 #: Left behind by a FINISHED operation: `rebase --continue`, `--skip` and `--quit` all leave REBASE_HEAD (git 2.43),
@@ -156,12 +190,27 @@ GIT_OPERATIONS = ('MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'rebase-merge
 GIT_LEFTOVERS = ('REBASE_HEAD',)
 #: A bare interpreter name: Python then finds itself, and its venv, through the process's own PATH.
 INTERPRETER_NAME = re.compile(r'python[0-9.]*')
-#: Blocked for the whole act (block_signals) and taken only at checkpoints; no handler of any module ever runs.
-SIGNALS = ('SIGTERM', 'SIGINT', 'SIGHUP')
-SIGNAL_NUMBERS = tuple(getattr(signal, name) for name in SIGNALS)
+#: Every catchable signal whose default action ends the process (signal(7): Term or Core), blocked for the whole act
+#: (block_signals) and taken only at checkpoints; no handler of any module ever runs. SIGNAL_NUMBERS adds every
+#: real-time signal (SIGRTMIN..SIGRTMAX, default action Term). SIGKILL cannot be blocked. SIGPIPE is the one left
+#: out on purpose: the interpreter ignores it from startup (block_signals verifies that), so it can never end the act,
+#: while a blocked SIGPIPE would be inherited by every child and turn a closed pipe into a write error inside git or
+#: a script. The rest end nothing: SIGCHLD, SIGURG and SIGWINCH are ignored by default, SIGTSTP, SIGTTIN, SIGTTOU and
+#: SIGSTOP stop the process (SIGCONT resumes it).
+SIGNALS = ('SIGHUP', 'SIGINT', 'SIGQUIT', 'SIGILL', 'SIGTRAP', 'SIGABRT', 'SIGBUS', 'SIGFPE', 'SIGUSR1', 'SIGSEGV',
+           'SIGUSR2', 'SIGALRM', 'SIGTERM', 'SIGSTKFLT', 'SIGXCPU', 'SIGXFSZ', 'SIGVTALRM', 'SIGPROF', 'SIGIO',
+           'SIGPWR', 'SIGSYS')
+SIGNAL_NUMBERS = (tuple(getattr(signal, name) for name in SIGNALS)
+                  + tuple(range(signal.SIGRTMIN, signal.SIGRTMAX + 1)))
 #: How long the failure path waits for a child of the act (a merge an exception left behind) to exit before it
 #: measures anything; a child still running after that counts as a publication that may still move HEAD.
 REAP_SECONDS = 120
+#: While only a held lock that changes the merge (WORKTREE_LOCKS or the branch's lock) fails the restore's
+#: measurement, it is taken again every RESTORE_LOCK_POLL_SECONDS for about RESTORE_LOCK_WAIT_SECONDS before the
+#: units are left drained: a `git status` in the shared tree holds index.lock for a moment.
+RESTORE_LOCK_WAIT_SECONDS = 30
+RESTORE_LOCK_POLL_SECONDS = 1.0
+LOCK_LABELS = frozenset({'git_lock_file_present', 'git_ref_lock_present'})
 #: Bytecode is never read from the source tree: a __pycache__ file planted with a pinned source's mtime and size
 #: would otherwise run instead of the bytes that were hashed (-B only stops writing it). See ops_module.
 BYTECODE_PREFIX = os.devnull
@@ -1011,7 +1060,7 @@ def reason(error):
     """A fixed label for this module's and the engine's refusals; the class name for anything else."""
     label = str(error)
     if (type(error).__name__ in ('Refusal', 'HelperFailure', 'Interrupted')
-            and re.fullmatch(r'[A-Za-z0-9_.:,/ -]{1,400}', label)):
+            and re.fullmatch(r'[A-Za-z0-9_.:,/ +-]{1,400}', label)):
         return label
     name = type(error).__name__
     return name if re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,79}', name) else 'Exception'
@@ -1205,14 +1254,25 @@ def import_package_tracked(source=None):
     return {'untracked': 0, 'bytecode_caches_ignored': len(names)}
 
 
+def lock_refusal(label, names):
+    """A refusal for a held git lock; ``locks`` names what was seen (the restore records it per measurement)."""
+    refusal = Refusal(label)
+    refusal.locks = list(names)
+    return refusal
+
+
 def git_state(repo=None):
     """Git's own state in a repository (the shared tree, or the candidate worktree), read-only: what would make
-    `merge --ff-only` refuse or half-apply, or make git read other objects than the ones a sha names.
+    `merge --ff-only` refuse or half-apply in THIS worktree, or make git read other objects than the ones a sha names.
 
-    Lock files (index, HEAD, ORIG_HEAD, config, packed-refs, shallow, and any under refs/), an unfinished merge,
-    cherry-pick, revert, rebase (rebase-merge/ or rebase-apply/, as git decides) or bisect, index entries hidden
-    from `git status` by assume-unchanged or skip-worktree, and any replace ref all refuse. A leftover of a finished
-    operation (a lone REBASE_HEAD) is reported under ``observed``; it is never refused and never removed.
+    Refused: this worktree's index.lock, HEAD.lock or ORIG_HEAD.lock (WORKTREE_LOCKS) or the lock of the branch it has
+    checked out (refs/heads/main.lock in the shared tree), the only locks that change the merge; an unfinished merge,
+    cherry-pick, revert, rebase (rebase-merge/ or rebase-apply/, as git decides) or bisect in this worktree; index
+    entries hidden from `git status` by assume-unchanged or skip-worktree; any replace ref. Recorded and never
+    refused or removed: a leftover of a finished operation (a lone REBASE_HEAD, under ``observed``), and the locks that
+    other worktrees' ordinary git writes take in the shared common directory (COMMON_LOCKS and every other ref's lock,
+    under ``observed_locks``, at most OBSERVED_LOCKS_LIMIT names): none of them changes this worktree's checkout or
+    the merge.
     """
     repo = repo or ROOT
 
@@ -1228,17 +1288,30 @@ def git_state(repo=None):
         except OSError:
             raise Refusal('git_state_unassessable') from None
         return True
-    require(not any(present(git_path(name)) for name in GIT_LOCKS), 'git_lock_file_present')
-    refs = git_path('refs')
-    require(not any(True for _ in refs.rglob('*.lock')) if refs.is_dir() else True, 'git_ref_lock_present')
+    head = run(['git', '--no-optional-locks', '--no-replace-objects', '-C', str(repo), 'symbolic-ref', '-q', 'HEAD'],
+               check=False)
+    branch = head.stdout.decode(errors='replace').strip() if head.returncode == 0 else None
+    require(branch is None or (re.fullmatch(r'refs/heads/[^\s\\]+', branch) is not None and '..' not in branch),
+            'git_head_reference')
+    held = [name for name in WORKTREE_LOCKS if present(git_path(name))]
+    if held:
+        raise lock_refusal('git_lock_file_present', held)
+    branch_lock = git_path(branch + '.lock') if branch else None
+    if branch_lock is not None and present(branch_lock):
+        raise lock_refusal('git_ref_lock_present', [branch + '.lock'])
     require(not any(present(git_path(name)) for name in GIT_OPERATIONS), 'unfinished_git_operation')
     observed = [name for name in GIT_LEFTOVERS if present(git_path(name))]
+    observed_locks = [name for name in COMMON_LOCKS if present(git_path(name))]
+    refs = git_path('refs')
+    if refs.is_dir():
+        observed_locks += sorted('refs/' + path.relative_to(refs).as_posix() for path in refs.rglob('*.lock'))
     require(not git(repo, 'for-each-ref', '--format=%(refname)', 'refs/replace/').strip(), 'git_replace_refs_present')
     entries = git(repo, 'ls-files', '-v', '-z').split(b'\0')
     hidden = [entry for entry in entries if entry and (entry[:1].islower() or entry[:1] == b'S')]
     require(not hidden, 'assume_unchanged_or_skip_worktree_entries')
     return {'lock_files': 0, 'unfinished_operations': 0, 'hidden_index_entries': 0, 'replace_refs': 0,
-            'index_entries': sum(1 for entry in entries if entry), 'observed': observed}
+            'index_entries': sum(1 for entry in entries if entry), 'observed': observed,
+            'observed_locks': observed_locks[:OBSERVED_LOCKS_LIMIT], 'observed_lock_count': len(observed_locks)}
 
 
 def shared_tree_at_base(base, root=None):
@@ -1365,36 +1438,55 @@ SIGNAL_LEDGER = None
 
 
 def block_signals():
-    """Block SIGTERM, SIGINT and SIGHUP in this process and return the signal ledger (idempotent while blocked).
+    """Block every signal that could end this process (SIGNAL_NUMBERS) and return the signal ledger (idempotent
+    while blocked).
 
     No asynchronous handler runs while they are blocked: not one of this module's, not the SIGTERM handler that
-    managed_helper.run_helper installs for each helper call, not Python's KeyboardInterrupt. A signal stays pending
-    until a checkpoint takes it (take_pending), so it can interrupt no stage, helper call, subprocess start or
-    failure path. Children inherit the blocked mask: a git or pip child that keeps it stops only on SIGKILL.
-    A signal sent to the process goes to any thread that does not block it, so there must be no other thread.
+    managed_helper.run_helper installs for each helper call, not Python's KeyboardInterrupt. A signal sent to THIS
+    process stays pending until a checkpoint takes it (take_pending), so it interrupts no stage, helper call,
+    subprocess start or failure path. SIGPIPE is not blocked: the interpreter's own SIG_IGN, verified here, keeps it
+    from acting. A signal sent to the process goes to any thread that does not block it, so there must be no other
+    thread. What still ends or cuts the act: SIGKILL (from anyone, including the runner's `timeout`, which sends it 15 s
+    after its ceiling, or after any SIGTERM, SIGINT, SIGHUP, SIGQUIT or SIGALRM it receives), and a fault the kernel
+    delivers whatever the mask. A child inherits the mask only until it changes it: a C child such as git keeps it and
+    stops only on SIGKILL, but a Go child (the docker helper client) unblocks the signals its runtime handles, so a
+    signal sent to the act's whole process group can still abort a helper call in flight (docs/runbooks/
+    rebuild-release-install-20261031.md, step 7, has the whole picture).
     """
     global SIGNAL_LEDGER
     if SIGNAL_LEDGER is not None:
         return SIGNAL_LEDGER
     require(threading.current_thread() is threading.main_thread() and threading.active_count() == 1,
             'signals_blocked_in_the_only_thread')
+    require(signal.getsignal(signal.SIGPIPE) == signal.SIG_IGN, 'sigpipe_ignored_by_the_interpreter')
     previous = signal.pthread_sigmask(signal.SIG_BLOCK, SIGNAL_NUMBERS)
     SIGNAL_LEDGER = {'received': [], 'previous_mask': previous}
     return SIGNAL_LEDGER
 
 
+def signal_label(number):
+    """SIGTERM, SIGUSR1 ..., and SIGRTMIN+n for a real-time signal the Signals enum does not name."""
+    try:
+        return signal.Signals(number).name
+    except ValueError:
+        if signal.SIGRTMIN <= number <= signal.SIGRTMAX:
+            return 'SIGRTMIN+%d' % (number - signal.SIGRTMIN)
+        return 'SIG%d' % number
+
+
 def take_pending(ledger, stage):
     """Take every pending routed signal without running any handler (sigtimedwait, zero timeout) and record each
-    with the stage and its sender. Returns the names taken now. Standard signals do not queue: two SIGTERMs that
-    arrive between two checkpoints are one pending signal and one record."""
+    with the stage, its number, its sender and how it was sent (si_code: 0 for kill(2), 128 from the kernel). Returns
+    the names taken now. Standard signals do not queue: two SIGTERMs that arrive between two checkpoints are one
+    pending signal and one record; real-time signals queue, one record each."""
     taken = []
     while True:
         info = signal.sigtimedwait(SIGNAL_NUMBERS, 0)
         if info is None:
             return taken
-        name = signal.Signals(info.si_signo).name
-        ledger['received'].append({'signal': name, 'stage': stage, 'sender_pid': info.si_pid,
-                                   'sender_uid': info.si_uid})
+        name = signal_label(info.si_signo)
+        ledger['received'].append({'signal': name, 'number': info.si_signo, 'stage': stage,
+                                   'sender_pid': info.si_pid, 'sender_uid': info.si_uid, 'code': info.si_code})
         taken.append(name)
 
 
@@ -1477,13 +1569,22 @@ def reap_children(before, *, seconds=REAP_SECONDS, clock=time.monotonic, sleep=t
 
 
 @contextmanager
-def merge_observed(prior, flags):
+def merge_observed(prior, flags, before_merge=None):
     """``flags['merge_invoked']`` becomes True only when publish_source calls `git merge` (activate_rowan_corti.git),
-    never for one of its refusals before that call. The engine's function is bound back afterwards."""
+    never for one of its refusals before that call. The engine's function is bound back afterwards.
+
+    ``before_merge`` runs immediately before that call, after publish_source's own preamble (the HEAD and status
+    re-check, the post-merge hook check and every modified base file's proof): it is the act's last checkpoint that
+    can still recover (a signal taken there raises Interrupted, and git has moved nothing). Only after it returns do
+    ``publication_started`` and ``merge_invoked`` become True.
+    """
     original = prior.git
 
     def observed(*arguments, **options):
         if arguments[:1] == ('merge',):
+            if before_merge is not None:
+                before_merge()
+            flags['publication_started'] = True
             flags['merge_invoked'] = True
         return original(*arguments, **options)
     prior.git = observed
@@ -1578,14 +1679,51 @@ def restore_original(engine, host, plan):
             'original_release_serving': serving, 'errors': errors}
 
 
+def measure_original(engine, original, guard, prepared, measure, *, seconds=None, clock=time.monotonic,
+                     sleep=time.sleep):
+    """The restore's measurement: engine.verify_original_before_resume, then ``measure`` (the shared tree as measured
+    before the merge, git's own state included). Never raises.
+
+    When the only thing that fails it is a held lock that changes the merge (LOCK_LABELS: another process holds the
+    shared tree's index.lock, HEAD.lock, ORIG_HEAD.lock or refs/heads/main.lock, as a `git status` there does for a
+    moment), the whole measurement is taken again every RESTORE_LOCK_POLL_SECONDS until it passes or about ``seconds``
+    (RESTORE_LOCK_WAIT_SECONDS) have passed; any other refusal ends it at once. Returns (intact, error, measurements):
+    every measurement records when it ended (seconds after the first began), its verdict, and the locks it saw (the
+    held lock that failed it, or the observed_locks of a passing one).
+    """
+    seconds = RESTORE_LOCK_WAIT_SECONDS if seconds is None else seconds
+    began = clock()
+    measurements = []
+    while True:
+        try:
+            engine.verify_original_before_resume(original, guard, prepared)
+            state = measure()
+        except BaseException as check:
+            elapsed = clock() - began
+            label = reason(check)
+            measurements.append({'seconds': round(elapsed, 3), 'passed': False, 'label': label,
+                                 'locks': [str(name) for name in getattr(check, 'locks', None) or []]})
+            if label in LOCK_LABELS and elapsed < seconds:
+                sleep(RESTORE_LOCK_POLL_SECONDS)
+                continue
+            return False, check, measurements
+        detail = state.get('git_state') if type(state) is dict else None
+        seen = detail.get('observed_locks') if type(detail) is dict else None
+        measurements.append({'seconds': round(clock() - began, 3), 'passed': True, 'observed_locks': list(seen or [])})
+        return True, None, measurements
+
+
 def failure_path(error, *, engine, host, out, plan, stage, flags, original, guard, prepared, signals, measure,
                  children):
     """The act failed before the installation was complete and healthy. Returns the Refusal to raise.
 
-    Exception-proof and uninterruptible (the routed signals are blocked; any that arrive are recorded): whatever
-    happens to an evidence write, every unit gets its drain or restore attempt, and what happened is recorded in
-    failure.json, in an outcome file, on stderr, and in the Refusal's ``outcome`` (which main() writes to --result,
-    in another directory).
+    Exception-proof, and no signal sent to the act's own process interrupts it (they are blocked; any that arrive are
+    recorded). It is not proof against SIGKILL, which ends it wherever it is (the runner's `timeout` sends one 15 s
+    after it forwards a signal it received), nor against a signal sent to the act's whole process group while a unit
+    action is in flight: the docker helper client unblocks it and that start or stop can fail (recorded as a start
+    error; the restore is then not verified). Whatever happens to an evidence write, every unit gets its drain or
+    restore attempt, and what happened is recorded in failure.json, in an outcome file, on stderr, and in the
+    Refusal's ``outcome`` (which main() writes to --result, in another directory).
 
       resume started               -> drain every owned unit (the engine's stop_failed_resume)
       stopped, nothing published   -> restore the original release, verified first and measured after
@@ -1595,10 +1733,12 @@ def failure_path(error, *, engine, host, out, plan, stage, flags, original, guar
     child the act started is reaped first (reap_children), so no merge can still move HEAD behind the measurement;
     one still running counts as publication. Then the engine's verify_original_before_resume (HEAD at BASE, the tree
     clean, every base file proven, every new path absent) and ``measure`` (the shared tree as measured before the
-    merge: clean main at BASE, git's own state, every manifest path unobstructed) must both pass. A refusal inside
-    publish_source before the merge passes them. A lock or an unfinished operation that git left behind, or that
-    another process holds, does not: the original is then not intact and nothing is started. A failure after
-    publish_source returned is always publication.
+    merge: clean main at BASE, git's own state, every manifest path unobstructed) must both pass (measure_original).
+    A refusal inside publish_source before the merge passes them. A lock that changes the merge, held by another
+    process, is waited for (about RESTORE_LOCK_WAIT_SECONDS, measuring again each second); one that is still there,
+    or that git left behind, or an unfinished operation, fails them: the original is then not intact and nothing is
+    started. The locks other worktrees' git writes take in the common directory never fail them (git_state). A
+    failure after publish_source returned is always publication.
     """
     take_pending(signals, 'failure_path')
     recovery, verification = 'none', None
@@ -1607,14 +1747,15 @@ def failure_path(error, *, engine, host, out, plan, stage, flags, original, guar
     if flags['resume_started']:
         recovery = 'drain'
     elif measuring:
-        try:
-            require(not reaped['running'], 'act_child_process_still_running')
-            engine.verify_original_before_resume(original, guard, prepared)
-            measure()
-            verification, recovery = {'original_intact': True}, 'restore'
-        except BaseException as check:
+        if reaped['running']:
+            intact, check, measurements = False, Refusal('act_child_process_still_running'), []
+        else:
+            intact, check, measurements = measure_original(engine, original, guard, prepared, measure)
+        if intact:
+            verification, recovery = {'original_intact': True, 'measurements': measurements}, 'restore'
+        else:
             # Only a merge that was invoked can have begun publication; otherwise the original is simply not proven.
-            verification = dict(diagnostics(engine, check), original_intact=False)
+            verification = dict(diagnostics(engine, check), original_intact=False, measurements=measurements)
             recovery = 'none' if flags['merge_invoked'] else 'refused'
     publication_attempted = flags['publication_completed'] or (flags['merge_invoked'] and recovery != 'restore')
     failure = dict(format=FORMAT, complete=False, stage=stage, **diagnostics(engine, error),
@@ -1664,9 +1805,12 @@ def act(engine, plan, context, *, footprint, idle=foreign_idle, snapshot_venv=No
     healthy, after failure_path has drained or restored. ``source_state()`` re-measures the shared tree after the
     stop (publication_preconditions over prior.ROOT by default), and again in the failure path before a restore.
 
-    SIGTERM, SIGINT and SIGHUP are blocked from the first statement (block_signals). checkpoint() takes them between
-    stages: before publication a signal raises Interrupted into the failure path, which drains or restores; from
-    publication on it is recorded only, the act runs to completion and returns not passed (main exits 2).
+    Every signal that could end the process is blocked from the first statement (block_signals). checkpoint() takes
+    them between stages, and once more immediately before publish_source runs `git merge`: before that a signal raises
+    Interrupted into the failure path, which drains or restores; from the merge on it is recorded only, the act runs
+    to completion and returns not passed (main exits 2). That holds for a signal sent to this process. A signal sent
+    to its process group also reaches the docker helper client of a unit action in flight, which can then fail, and
+    under the runner it makes `timeout` SIGKILL the act 15 s later (block_signals).
     """
     prior = engine.prior
     legacy = prior.legacy
@@ -1781,11 +1925,13 @@ def act(engine, plan, context, *, footprint, idle=foreign_idle, snapshot_venv=No
                 stage = 'static_after_stop'; checkpoint(stage)
                 require(primitives.static_inventory(prior.APP / 'staticfiles') == static_before,
                         'static_preserved_before_publication')
-                # The last checkpoint that can still recover: from here on a signal is recorded, never acted on.
-                stage = 'source_publication'; note(stage); checkpoint(stage); flags['publication_started'] = True
-                with merge_observed(prior, flags):
+                # The last checkpoints that can still recover: this one, and one in merge_observed immediately before
+                # publish_source runs `git merge` (after its preamble). From the merge on a signal is recorded, never
+                # acted on.
+                stage = 'source_publication'; note(stage); checkpoint(stage)
+                with merge_observed(prior, flags, before_merge=lambda: checkpoint('source_publication_merge')):
                     prior.publish_source(plan, guard, prepared)
-                flags['publication_completed'] = True
+                flags['publication_started'] = flags['publication_completed'] = True
                 stage = 'static_publication'; checkpoint(stage)
                 if plan['static']:
                     static_after = primitives.install_static(prior.APP / 'staticfiles', static_stage, static_before,
@@ -2022,8 +2168,14 @@ def main(argv=None):
     plan = build_plan(args, context)
     engine = context['engine']
     os.chdir(ROOT)
-    # From here until the process exits SIGTERM, SIGINT and SIGHUP stay blocked: only SIGKILL can still cut the act
-    # (the runner's ceiling SIGTERMs, then SIGKILLs 15 s later), and every other signal is recorded, never delivered.
+    # From here until the process exits every signal that could end it stays blocked (SIGNALS, every real-time signal;
+    # SIGPIPE stays ignored): one sent to this process is recorded at a checkpoint, never delivered. That does not make
+    # the act safe to signal. Under the runner the act's parent is `timeout`, the leader of its process group: its
+    # ceiling, or a SIGTERM, SIGINT, SIGHUP, SIGQUIT or SIGALRM that reaches it (a signal to it, or one to the group),
+    # sends the whole group a signal and SIGKILL 15 s later, which cuts the act wherever it is; any other terminating
+    # signal that reaches timeout ends timeout, and the act runs on unwatched. A group signal also reaches the docker
+    # helper client (a Go binary that unblocks it) and can abort a unit action. Nobody may signal the act (the
+    # runbook, step 7).
     signals = block_signals()
     with bound(engine, args.base, plan['static']):
         try:

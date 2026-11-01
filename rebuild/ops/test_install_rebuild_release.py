@@ -33,7 +33,17 @@ from ops import venv_footprint as footprint
 BASE = '1' * 40
 CANDIDATE = '2' * 40
 #: Literal, never op.SIGNALS: a test that iterates the module's own list passes vacuously when the list is emptied.
-ROUTED_SIGNALS = ('SIGTERM', 'SIGINT', 'SIGHUP')
+#: Every catchable signal whose default action ends a process (signal(7)): Term, then Core.
+TERM_SIGNALS = ('SIGHUP', 'SIGINT', 'SIGUSR1', 'SIGUSR2', 'SIGALRM', 'SIGTERM', 'SIGSTKFLT', 'SIGVTALRM', 'SIGPROF',
+                'SIGIO', 'SIGPWR')
+CORE_SIGNALS = ('SIGQUIT', 'SIGILL', 'SIGTRAP', 'SIGABRT', 'SIGBUS', 'SIGFPE', 'SIGSEGV', 'SIGXCPU', 'SIGXFSZ',
+                'SIGSYS')
+#: Never blocked: SIGKILL and SIGSTOP cannot be, the stop and ignore-by-default signals end nothing, and SIGPIPE is
+#: left to the interpreter's SIG_IGN.
+NOT_BLOCKED = ('SIGKILL', 'SIGSTOP', 'SIGTSTP', 'SIGTTIN', 'SIGTTOU', 'SIGCONT', 'SIGCHLD', 'SIGURG', 'SIGWINCH',
+               'SIGPIPE')
+#: Sent to the test process itself (blocked, so never acted on): the ones whose default action dumps no core.
+ROUTED_SIGNALS = TERM_SIGNALS
 GIT_ENV = {'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_AUTHOR_NAME': 'test',
            'GIT_AUTHOR_EMAIL': 'test@example.invalid', 'GIT_COMMITTER_NAME': 'test',
            'GIT_COMMITTER_EMAIL': 'test@example.invalid'}
@@ -667,8 +677,10 @@ class SharedRepositoryTests(GitIsolation):
 
         def skip_worktree(repo):
             git(repo, 'update-index', '--skip-worktree', 'rebuild/core/b.py')
+        # The locks that change `git merge --ff-only` in the shared tree (SIG3-4: the common directory's others are
+        # recorded, never refused; test_sig3_4_... below).
         cases = {name: (lambda repo, name=name: (repo / '.git' / name).write_bytes(b''), 'git_lock_file_present')
-                 for name in ('index.lock', 'HEAD.lock', 'ORIG_HEAD.lock', 'packed-refs.lock', 'config.lock')}
+                 for name in ('index.lock', 'HEAD.lock', 'ORIG_HEAD.lock')}
         cases.update({
             'refs/heads/main.lock': (lambda repo: (repo / '.git/refs/heads/main.lock').write_bytes(b''),
                                      'git_ref_lock_present'),
@@ -691,6 +703,110 @@ class SharedRepositoryTests(GitIsolation):
                 with self.assertRaises(op.Refusal) as caught:
                     op.shared_tree_at_base(base, root=repo)
                 self.assertEqual(str(caught.exception), label)
+                if name.endswith('.lock'):
+                    self.assertEqual(caught.exception.locks, [name])    # the restore records what it saw
+
+    def test_sig3_4_locks_other_worktrees_take_in_the_common_directory_are_recorded_never_refused(self):
+        """SIG3-4: git_state refused packed-refs.lock, config.lock and any *.lock under refs/, which in the shared tree
+        are the COMMON directory every linked worktree writes: a peer session's commit, fetch or branch retirement
+        stranded production drained after any pre-publication refusal. Real git processes in a linked worktree now
+        hold each of those locks, and the shared tree measures clean main at BASE with the lock recorded; the merge the
+        act runs fast-forwards exactly as without it. The locks that DO change the merge still refuse: index.lock and
+        ORIG_HEAD.lock make it refuse before any change, HEAD.lock and refs/heads/main.lock let it move the index and
+        the tree and then refuse the ref. A detached linked worktree (the candidate's shape) refuses its own
+        index.lock and records refs/heads/main.lock."""
+        umask = os.umask(0o022)         # the act's merge runs under umask 022; the manifest measures base modes
+        self.addCleanup(os.umask, umask)
+        origin = self.root / 'origin.git'
+        git(self.root, 'init', '-q', '--bare', '-b', 'main', str(origin))
+        main, base = self.shared()
+        git(main, 'remote', 'add', 'origin', str(origin))
+        git(main, 'push', '-q', 'origin', 'main')
+        git(main, 'fetch', '-q', 'origin')
+        git(main, 'branch', 'retired', base)
+        git(main, 'pack-refs', '--all')                  # an old branch, packed, as retire-branch.sh would delete it
+        git(main, 'checkout', '-q', '-b', 'release')
+        candidate = commit(main, {'rebuild/core/a.py': 'released\n'}, 'candidate')
+        git(main, 'checkout', '-q', 'main')
+        linked = self.root / 'session-b'
+        git(main, 'worktree', 'add', '-q', '-b', 'session-b', str(linked), base)
+        manifest = {'format': op.MANIFEST_FORMAT, 'base': base, 'new_dot_paths': [],
+                    'paths': {'rebuild/core/a.py': {'status': 'M', 'base_mode': '100644'}}}
+
+        @contextmanager
+        def peer(lines):
+            """A peer session's git write in the linked worktree, holding its prepared ref transaction's locks."""
+            holder = subprocess.Popen(['git', '-C', str(linked), 'update-ref', '--stdin'], stdin=subprocess.PIPE,
+                                      stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env={**os.environ, **GIT_ENV})
+            try:
+                holder.stdin.write(('start\n' + lines + 'prepare\n').encode())
+                holder.stdin.flush()
+                self.assertEqual([holder.stdout.readline(), holder.stdout.readline()],
+                                 [b'start: ok\n', b'prepare: ok\n'])
+                yield
+            finally:
+                holder.stdin.write(b'abort\n')
+                holder.stdin.close()
+                holder.wait(timeout=30)
+                holder.stdout.close()
+
+        @contextmanager
+        def present(name):
+            path = main / '.git' / name
+            path.write_bytes(b'')
+            try:
+                yield
+            finally:
+                path.unlink()
+        remote = git(main, 'rev-parse', 'refs/remotes/origin/main')
+        holds = {'commit_on_another_branch': (lambda: peer('update refs/heads/session-b %s %s\n' % (base, base)),
+                                              ['refs/heads/session-b.lock']),
+                 'fetch': (lambda: peer('update refs/remotes/origin/main %s %s\n' % (candidate, remote)),
+                           ['refs/remotes/origin/main.lock']),
+                 'branch_retirement': (lambda: peer('delete refs/heads/retired %s\n' % base),
+                                       ['packed-refs.lock', 'refs/heads/retired.lock']),
+                 'config_write': (lambda: present('config.lock'), ['config.lock']),
+                 'shallow_fetch': (lambda: present('shallow.lock'), ['shallow.lock'])}
+        for name, (hold, seen) in holds.items():
+            with self.subTest(peer=name), hold():
+                detail = op.publication_preconditions(main, base, manifest)
+                self.assertEqual((detail['head'], detail['git_state']['observed_locks'],
+                                  detail['git_state']['observed_lock_count']), (base, seen, len(seen)))
+                with op.act_git_environment():
+                    merged = subprocess.run(['git', '-C', str(main), 'merge', '--ff-only', candidate],
+                                            capture_output=True, env={**os.environ, **GIT_ENV})
+                self.assertEqual((merged.returncode, git(main, 'rev-parse', 'HEAD')), (0, candidate))
+                git(main, 'reset', '-q', '--hard', base)
+        self.assertEqual(op.git_state(main)['observed_locks'], [])
+        # The locks that change the merge: refused, and measured to change it.
+        for name, label, moves_the_tree in (('index.lock', 'git_lock_file_present', False),
+                                            ('ORIG_HEAD.lock', 'git_lock_file_present', False),
+                                            ('HEAD.lock', 'git_lock_file_present', True),
+                                            ('refs/heads/main.lock', 'git_ref_lock_present', True)):
+            with self.subTest(refused=name), present(name):
+                with self.assertRaises(op.Refusal) as caught:
+                    op.publication_preconditions(main, base, manifest)
+                self.assertEqual((str(caught.exception), caught.exception.locks), (label, [name]))
+                with op.act_git_environment():
+                    merged = subprocess.run(['git', '-C', str(main), 'merge', '--ff-only', candidate],
+                                            capture_output=True, env={**os.environ, **GIT_ENV})
+                self.assertNotEqual(merged.returncode, 0)
+                self.assertEqual(git(main, 'rev-parse', 'HEAD'), base)
+                self.assertEqual((main / 'rebuild/core/a.py').read_text() == 'released\n', moves_the_tree)
+            git(main, 'reset', '-q', '--hard', base)
+        # A detached linked worktree: its own index.lock refuses, the shared branch's lock is only recorded.
+        detached = self.root / 'candidate'
+        git(main, 'worktree', 'add', '-q', '--detach', str(detached), candidate)
+        own = Path(git(detached, 'rev-parse', '--absolute-git-dir')) / 'index.lock'
+        own.write_bytes(b'')
+        with self.assertRaises(op.Refusal) as caught:
+            op.git_state(detached)
+        self.assertEqual((str(caught.exception), caught.exception.locks), ('git_lock_file_present', ['index.lock']))
+        own.unlink()
+        with present('refs/heads/main.lock'):
+            self.assertEqual(op.git_state(detached)['observed_locks'], ['refs/heads/main.lock'])
+            with self.assertRaises(op.Refusal):
+                op.shared_tree_at_base(base, root=main)
 
     def test_gp1_a_finished_rebase_s_rebase_head_is_observed_never_refused(self):
         """GP-1 (blocking): `rebase --continue` (and --skip, --quit) leaves .git/REBASE_HEAD behind; the live shared
@@ -1167,9 +1283,9 @@ class ReportingTests(unittest.TestCase):
                 op.write_result(root / 'open/result.json', {})
 
     def test_signals_are_blocked_never_handled_and_children_inherit_the_mask(self):
-        """The binding design: SIGTERM, SIGINT and SIGHUP are blocked, no handler runs, a checkpoint takes them with
-        their sender, and a child (git, pip) starts with them blocked, so only SIGKILL stops it."""
-        self.assertEqual(set(op.SIGNALS), set(ROUTED_SIGNALS))
+        """The binding design: the signals are blocked, no handler runs, a checkpoint takes them with their sender, and
+        a C child (git) starts with them blocked and keeps them, so only SIGKILL stops it."""
+        self.assertEqual(set(op.SIGNALS), set(TERM_SIGNALS + CORE_SIGNALS))
         handlers = {name: signal.getsignal(getattr(signal, name)) for name in ROUTED_SIGNALS}
         mask = signal.pthread_sigmask(signal.SIG_BLOCK, [])
         with redirect_stderr(io.StringIO()) as stderr:
@@ -1241,6 +1357,56 @@ class ReportingTests(unittest.TestCase):
             self.assertEqual(caught.exception.reason, 'interrupted')
             self.assertEqual(signal.getsignal(signal.SIGTERM), before)
         self.assertEqual(signal.sigpending(), set())
+
+    def test_sig3_5_every_signal_that_could_end_the_act_is_blocked_survived_and_recorded(self):
+        """SIG3-5: only SIGTERM, SIGINT and SIGHUP were blocked, so a SIGUSR1 (or SIGQUIT, SIGALRM, ...) to the act
+        ended it 0.02 s later mid-stage, with no failure path and no record. A process that has called
+        block_signals() now survives every catchable signal whose default action ends a process, Term and Core alike,
+        and every real-time one, and its checkpoint records each with its number and sender (real-time signals queue:
+        one record each). SIGPIPE is ignored, never blocked, so children keep their pipe semantics: it is neither fatal
+        nor recorded."""
+        valid = set(signal.valid_signals())
+        realtime = set(range(signal.SIGRTMIN, signal.SIGRTMAX + 1))
+        ending = {getattr(signal, name) for name in TERM_SIGNALS + CORE_SIGNALS}
+        self.assertEqual(ending | {getattr(signal, name) for name in NOT_BLOCKED} | realtime, valid)
+        self.assertEqual(set(op.SIGNAL_NUMBERS), ending | realtime)
+        code = ('import json, sys; sys.path.insert(0, sys.argv[1]); from ops import install_rebuild_release as op;'
+                ' ledger = op.block_signals(); print("ready", flush=True); sys.stdin.readline();'
+                ' op.take_pending(ledger, "checkpoint"); print(json.dumps(ledger["received"]), flush=True)')
+        child = subprocess.Popen([sys.executable, '-I', '-B', '-c', code, str(Path(op.__file__).parents[1])],
+                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        try:
+            self.assertEqual(child.stdout.readline(), b'ready\n')
+            status = (Path('/proc') / str(child.pid) / 'status').read_text()
+            masks = {line.split(':')[0]: int(line.split()[1], 16) for line in status.splitlines()
+                     if line.startswith(('SigBlk:', 'SigIgn:'))}
+            blocked = {number for number in valid if masks['SigBlk'] >> (number - 1) & 1}
+            self.assertEqual(blocked, ending | realtime)
+            self.assertTrue(masks['SigIgn'] >> (signal.SIGPIPE - 1) & 1)
+            sent = ([getattr(signal, name) for name in TERM_SIGNALS]          # no core first, so a gap ends cleanly
+                    + [signal.SIGRTMIN, signal.SIGRTMIN + 5, signal.SIGRTMIN + 5, signal.SIGRTMAX]
+                    + [getattr(signal, name) for name in CORE_SIGNALS] + [signal.SIGPIPE])
+            for number in sent:
+                os.kill(child.pid, number)
+            time.sleep(0.3)
+            self.assertIsNone(child.poll())                 # survived every one of them
+            child.stdin.write(b'\n')
+            child.stdin.flush()
+            records = json.loads(child.stdout.readline())
+            self.assertEqual(child.wait(timeout=30), 0)
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.wait()
+            child.stdin.close()
+            child.stdout.close()
+        self.assertEqual(sorted(row['signal'] for row in records),
+                         sorted(list(TERM_SIGNALS) + list(CORE_SIGNALS)
+                                + ['SIGRTMIN', 'SIGRTMIN+5', 'SIGRTMIN+5', 'SIGRTMAX']))
+        self.assertEqual(sorted(row['number'] for row in records), sorted(sent[:-1]))
+        self.assertEqual({(row['stage'], row['sender_pid'], row['sender_uid'], row['code']) for row in records},
+                         {('checkpoint', os.getpid(), os.getuid(), 0)})
+        self.assertEqual(op.reason(op.Interrupted('SIGRTMIN+5')), 'interrupted_by_SIGRTMIN+5')
 
 
 class EngineBindingTests(unittest.TestCase):
@@ -1659,7 +1825,11 @@ class ActTests(unittest.TestCase):
         self.assertTrue(caught.exception.outcome['original_release_serving'])
         failure = self.assert_restored(stage='source_publication')
         self.assertTrue(failure['merge_invoked'])
-        self.assertEqual(failure['original_verification'], {'original_intact': True})
+        verification = failure['original_verification']
+        self.assertEqual((sorted(verification), verification['original_intact']), (['measurements', 'original_intact'],
+                                                                                   True))
+        self.assertEqual([{key: row[key] for key in ('passed', 'observed_locks')}
+                          for row in verification['measurements']], [{'passed': True, 'observed_locks': []}])
 
     def test_as2_a_merge_that_moved_the_tree_is_publication_and_leaves_the_units_drained(self):
         """HEAD.lock: git updated the index and the working tree, then refused the ref: publication began."""
@@ -2077,8 +2247,9 @@ class ActTests(unittest.TestCase):
     def test_rp6_the_restore_measures_git_s_own_state_and_never_restarts_over_a_lock(self):
         """RP-6: verify_original_before_resume measures HEAD, the tracked tree, .env, the base files and the new
         paths, but not git's own state: a merge killed mid-way can leave index.lock with HEAD at BASE and the tree
-        clean. The restore's measurement now also runs the shared-tree measurement taken before the merge (git's own
-        state included): a lock there means the original is not proven intact, so nothing is started."""
+        clean. The restore's measurement also runs the shared-tree measurement taken before the merge (git's own
+        state included): a lock that changes the merge and is still there when the wait (SIG3-4) ends means the
+        original is not proven intact, so nothing is started."""
         cases = {'after_a_merge_attempt': ('publish', 'none', None),
                  'before_publication': ('venv', 'refused', 'original-recovery-refused.json')}
         for name, (where, recovery, outcome_file) in cases.items():
@@ -2094,21 +2265,150 @@ class ActTests(unittest.TestCase):
 
                 def source_state(real=real, calls=calls, where=where):
                     calls['n'] += 1
-                    if calls['n'] == (2 if where == 'publish' else 1):     # the restore's measurement
-                        raise op.Refusal('git_lock_file_present')
+                    if calls['n'] >= (2 if where == 'publish' else 1):     # every restore measurement: never clears
+                        raise op.lock_refusal('git_lock_file_present', ['index.lock'])
                     return real()
                 world.source_state = source_state
-                with self.assertRaises(op.Refusal):
+                with patch.object(op, 'RESTORE_LOCK_WAIT_SECONDS', 0.3), \
+                        patch.object(op, 'RESTORE_LOCK_POLL_SECONDS', 0.02), self.assertRaises(op.Refusal):
                     self.act(world, engine)
                 failure = self.evidence('failure.json', world)
-                self.assertEqual((failure['recovery'], failure['original_verification']['original_intact'],
-                                  failure['original_verification']['label']),
+                verification = failure['original_verification']
+                self.assertEqual((failure['recovery'], verification['original_intact'], verification['label']),
                                  (recovery, False, 'git_lock_file_present'))
+                measurements = verification['measurements']
+                self.assertGreater(len(measurements), 2)                    # measured again while it waited ...
+                self.assertGreaterEqual(measurements[-1]['seconds'], 0.3)   # ... for the whole bound
+                self.assertEqual({(row['passed'], row['label'], tuple(row['locks'])) for row in measurements},
+                                 {(False, 'git_lock_file_present', ('index.lock',))})
                 self.assertIn(('verified_original',), world.calls)     # the engine's verify passed; git's state did not
                 self.assertEqual([call[0] for call in self.services(world)], ['stop', 'stop', 'stop'])
                 self.assertFalse(self.exists('original-release-resumed.json', world))
                 if outcome_file:
                     self.assertEqual(self.evidence(outcome_file, world)['label'], 'git_lock_file_present')
+
+    def test_sig3_4_a_lock_that_clears_during_the_wait_restores_and_every_measurement_is_recorded(self):
+        """SIG3-4: a lock that changes the merge, held by another process for a moment when the restore measures (a
+        `git status` in the shared tree holds index.lock), left the units drained. The restore now measures again
+        each RESTORE_LOCK_POLL_SECONDS while only such a lock fails it, and restores once it clears; failure.json
+        records every measurement. Any other refusal ends the measurement at once."""
+        world = self.fresh('clears')
+        world.venvs = [world.venv, world.changed_venv]       # a refusal after the stop, before publication
+        calls = {'n': 0}
+        real = world.source_state
+
+        def source_state():
+            calls['n'] += 1
+            if calls['n'] <= 2:
+                raise op.lock_refusal('git_ref_lock_present', ['refs/heads/main.lock'])
+            return dict(real(), git_state={'observed_locks': ['refs/heads/session-b.lock']})
+        world.source_state = source_state
+        with patch.object(op, 'RESTORE_LOCK_POLL_SECONDS', 0.02), self.assertRaises(op.Refusal) as caught:
+            self.act(world)
+        failure = self.assert_restored(world, stage='venv_after_stop')
+        self.assertTrue(caught.exception.outcome['original_release_serving'])
+        measurements = failure['original_verification']['measurements']
+        self.assertEqual([(row['passed'], row.get('label'), row.get('locks'), row.get('observed_locks'))
+                          for row in measurements],
+                         [(False, 'git_ref_lock_present', ['refs/heads/main.lock'], None)] * 2
+                         + [(True, None, None, ['refs/heads/session-b.lock'])])
+        self.assertEqual(world.calls.count(('verified_original',)), 3)     # the whole measurement, every time
+        # Not a lock: one measurement, no wait, nothing started.
+        world = self.fresh('not-a-lock')
+        world.venvs = [world.venv, world.changed_venv]
+        world.faults['source_state'] = op.Refusal('unfinished_git_operation')
+        with patch.object(op, 'RESTORE_LOCK_POLL_SECONDS', 5), self.assertRaises(op.Refusal) as caught:
+            self.act(world)
+        self.assertEqual(str(caught.exception), 'original_recovery_refused_inspect_retained_evidence')
+        measurements = self.evidence('failure.json', world)['original_verification']['measurements']
+        self.assertEqual([(row['passed'], row['label']) for row in measurements], [(False, 'unfinished_git_operation')])
+        self.assertEqual([call[0] for call in self.services(world)], ['stop', 'stop', 'stop'])
+
+    def test_sig3_4_a_peer_worktree_s_git_write_during_the_act_never_strands_the_units(self):
+        """SIG3-4, the round-3 lens's own scenario: a peer session's commit in a linked worktree holds its ref lock in
+        the shared common directory (a real `git update-ref --stdin` with a prepared transaction, started before the
+        act as a peer's process is). It is there after the stop and when publish_source refuses before the merge: the
+        act passes git_state_after_stop, the restore measures the shared tree intact with the lock recorded, and all
+        three units are started again (it was 'refused' with every unit left drained)."""
+        umask = os.umask(0o022)
+        self.addCleanup(os.umask, umask)
+        with patch.dict(os.environ, GIT_ENV):
+            main = new_repo(self.root, 'shared')
+            base = commit(main, {'rebuild/app.py': 'x = 1\n'}, 'base')
+            linked = self.root / 'session-b'
+            git(main, 'worktree', 'add', '-q', '-b', 'session-b', str(linked))
+            manifest = {'format': op.MANIFEST_FORMAT, 'base': base, 'new_dot_paths': [],
+                        'paths': {'rebuild/new_module.py': {'status': 'A'},
+                                  'rebuild/app.py': {'status': 'M', 'base_mode': '100644'}}}
+            holder = subprocess.Popen(['git', '-C', str(linked), 'update-ref', '--stdin'], stdin=subprocess.PIPE,
+                                      stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env={**os.environ, **GIT_ENV})
+            try:
+                holder.stdin.write(('start\nupdate refs/heads/session-b %s %s\nprepare\n' % (base, base)).encode())
+                holder.stdin.flush()
+                self.assertEqual([holder.stdout.readline(), holder.stdout.readline()],
+                                 [b'start: ok\n', b'prepare: ok\n'])
+                self.assertTrue((main / '.git/refs/heads/session-b.lock').exists())
+                world = self.world
+                world.faults['publish_preamble'] = engine_module.Refusal('source_prepublication_identity')
+                os.chdir(world.root)
+                self.stderr = io.StringIO()
+                with redirect_stderr(self.stderr), self.assertRaises(op.Refusal) as caught:
+                    op.act(world.engine(), world.plan(), world.context(), footprint=footprint,
+                           idle=lambda units: world.idles.pop(0), snapshot_venv=lambda path: world.venvs.pop(0),
+                           source_state=lambda: op.publication_preconditions(main, base, manifest))
+            finally:
+                holder.stdin.write(b'abort\n')
+                holder.stdin.close()
+                holder.wait(timeout=30)
+                holder.stdout.close()
+        failure = self.assert_restored(world, stage='source_publication')
+        self.assertTrue(caught.exception.outcome['original_release_serving'])
+        self.assertEqual((failure['label'], failure['merge_invoked']), ('source_prepublication_identity', False))
+        self.assertEqual([(row['passed'], row['observed_locks'])
+                          for row in failure['original_verification']['measurements']],
+                         [(True, ['refs/heads/session-b.lock'])])
+
+    def test_sig3_6_a_signal_in_publish_source_s_preamble_restores_and_never_merges(self):
+        """SIG3-6: publication_started was set before publish_source, whose preamble (the HEAD and status re-check, the
+        hook check and every base file's proof) had no checkpoint, so a signal there was only recorded and the act
+        merged and installed, where a refusal at the same point restores. The last recoverable checkpoint now runs
+        immediately before `git merge`: a signal in the preamble takes the automatic restore, nothing is merged. A
+        signal that arrives once the merge is running is recorded and the act completes (exit 2)."""
+        world = self.fresh('preamble-signal')
+        engine = world.engine()
+
+        def publish(plan, guard, prepared):
+            world.calls.append(('publish',))
+            os.kill(os.getpid(), signal.SIGTERM)                 # publish_source's preamble: git has moved nothing
+            wait_for_signal()
+            world.prior.git('merge', '--ff-only', plan['candidate'], publication=True)
+        engine.prior.publish_source = publish
+        with self.assertRaises(op.Refusal) as caught:
+            self.act(world, engine)
+        failure = self.assert_restored(world, stage='source_publication')
+        self.assertEqual((failure['label'], failure['merge_invoked'], failure['publication_attempted']),
+                         ('interrupted_by_SIGTERM', False, False))
+        self.assertEqual([(row['signal'], row['stage']) for row in failure['signal_records']],
+                         [('SIGTERM', 'source_publication_merge')])
+        self.assertNotIn(('git', 'merge', '--ff-only', CANDIDATE), world.calls)
+        self.assertTrue(caught.exception.outcome['original_release_serving'])
+        # From the merge on: recorded, never acted on.
+        world = self.fresh('merge-signal')
+        real_git = world.git
+
+        def merging(*arguments, **options):
+            if arguments[:1] == ('merge',):
+                os.kill(os.getpid(), signal.SIGTERM)
+                wait_for_signal()
+            return real_git(*arguments, **options)
+        world.git = merging
+        result, passed = self.act(world)
+        self.assertFalse(passed)
+        self.assertEqual((result['installed_revision'], result['interrupted']), (CANDIDATE, 'SIGTERM'))
+        self.assertEqual([(row['signal'], row['stage']) for row in result['signal_records']],
+                         [('SIGTERM', 'static_publication')])
+        self.assertIn(('git', 'merge', '--ff-only', CANDIDATE), world.calls)
+        self.assertFalse(self.exists('failure.json', world))
 
     def test_rp7_merge_invoked_only_when_git_merge_was_called(self):
         """RP-7: publish_source's own refusals before `git merge` (source_prepublication_identity, no_post_merge_hook)
