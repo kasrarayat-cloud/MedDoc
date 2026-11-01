@@ -143,6 +143,14 @@
     "H4": "no bucket or status movement; violations 2; 'telephone-only time' 99212 needs_clarification[performed_status]",
     "lens rows": "every READY-state difference from installed is a hold where the truth is not done or unsupported (EMR-8, EMR-9 and the battery's two rows) or a release where the truth is done (the h4-01 shape, an office note with its exam and the label); no row whose truth is done loses installed's READY"
    }
+  },
+  {
+   "date": "2026-11-01",
+   "appended_after": "the third correction (commit 2a425d48b), before the code it describes is committed; both items were found by the cycle's own probing of the third correction's code and only refuse a release or keep a hold; everything above is kept as written",
+   "C2 and C1, governing today's visit": "TIGHTENED (a refusal only): a label or a time statement is also refused where a heading-like line further up its own section - the section's heading included, at most sections.HEADING_REACH_LINES lines or HEADING_REACH_CHARS characters back, beyond which it is refused (fail-closed) - names another occurrence (_pv1_names_another_occurrence). Found by probe: a prior note pasted below today's assessment under 'Prior office note from September', its label 'Complexity of decision making: high.' eight lines below that heading, was read beside today's label (the six-line governing line did not reach it); alone it would have given 99215 READY from another note's level. h4-01 is unaffected (each of its lines is a section of its own in the layout, so nothing above its statements is read but the six-line governing line, 'Documentation of Time and Complexity'); a refused label is dropped as the second correction says.",
+   "C4 contact detail": "NARROWED (keeps a hold, as b840ae756 did): a telephone word in a field's LABEL is a contact detail only when the label names a telephone service line (a triage line, a contact, a line or a number: 'After-hours phone triage: 555-0103'), never an encounter ('Telephone encounter: 555-0199 called back about her results.' is held). No movement against b840ae756, which held every phone phrase.",
+   "mutants": "one more, pv1-c2-section-heading (54 in PV1's slice; the censuses say so)",
+   "expected": "unchanged from the third correction: H1 equal, H2 zero, H3 only the declared addendum_time regressions, H4 no bucket or status movement, lens rows as declared"
   }
  ]
 }
