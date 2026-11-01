@@ -289,10 +289,20 @@ class EMR4Tests(CycleCase):
         self.assertEqual(an.lay.section_at(text.index('Complexity')).kind, 'history')
         self.assert_label_not_read(text, 'Complexity of decision making: high')
 
-    def test_a_governing_line_naming_another_occasion_refuses_it(self):  # kills pv1-c2-governing
+    def test_a_governing_line_naming_another_occasion_refuses_it(self):
         for heading in ('Addendum 10/30/2026', 'Visit 09/14/2026', 'Prior visit'):
             text = office(tail=f'{heading}\nComplexity of decision making: high.\n')
             self.assert_label_not_read(text, 'Complexity of decision making: high')
+
+    def test_a_governing_line_above_its_own_section_refuses_it(self):  # kills pv1-c2-governing
+        # where each line is a section of its own (h4-01's layout), only the six-line governing line reads the heading
+        # above the statements: h4-01 with "Prior visit 09/14/2026" over them reads as installed (neither C1 nor C2)
+        from ops.gi4 import regression
+        text = regression.load_fixtures()['h4-01']['text'].replace('Documentation of Time and Complexity',
+                                                                     'Prior visit 09/14/2026')
+        got = facts(em(text))
+        self.assertNotIn('mdm_level', got)  # C2: the label is not read
+        self.assertNotIn('time_minutes', got)  # C1: 'the orders' re-times the statement, as installed
 
     def test_a_heading_of_another_occurrence_further_up_its_section_refuses_it(self):  # kills pv1-c2-section-heading
         # a prior note pasted below today's assessment, its heading more than six lines above its label
