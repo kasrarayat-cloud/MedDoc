@@ -81,7 +81,7 @@ Item 1.3 per participant (documented / implemented / verified live):
 
 | | Item | Status | Revision | Evidence | Remaining action |
 |---|---|---|---|---|---|
-| [ ] | 5.1 The retained date, status, extent, EUS, EGD/biopsy and ERCP discrepancies reproduced and classified | IN PROGRESS | — | round-4 Corti traces (session record) | consolidate into the harness evidence |
+| [ ] | 5.1 The retained date, status, extent, EUS, EGD/biopsy and ERCP discrepancies reproduced and classified | IN PROGRESS (documented: reproduced and classified before the harness) | `80df1831d168`, round-4 cycle 2 | `docs/cpt-harness/stage5-retained-discrepancies.md` (7 rows: 4 application, 3 provider, each with its harness@2 path) | measure each row again on the harness release, offline then live |
 | [ ] | 5.2 A small independently authored unseen synthetic set predeclared before execution, with expectations sourced independently | IN PROGRESS | — | sealed set u4-01 to u4-10 (manifest sha256 `c5e59d548b4087a0…`) | check its coverage against this item; declare its use |
 | [ ] | 5.3 The declared set run and every result reported | NOT RUN | — | — | — |
 | [ ] | 5.4 Tenant isolation, duplicate prevention, unknown-outcome recovery, evidence preservation, unchanged historical approvals and exports | NOT RUN | — | — | — |
@@ -186,3 +186,4 @@ requested in chat.
   - Stage 6 completion means the installed site with the harness enabled and genuine responses. Three separate final
     verdicts.
   - The six harness@1 builders keep running; their work is the base that harness@2 builds on.
+- **Correction to the entry above (appended, not rewritten):** it is stamped 22:35Z, but it was written at about 22:24Z. The clock read 22:25:46Z after that commit. The stamp was estimated rather than read; later entries use the clock.
