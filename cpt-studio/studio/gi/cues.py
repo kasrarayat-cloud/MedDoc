@@ -739,9 +739,34 @@ EM_TIME_LINE = rx(r'^[ \t]*(?:total\s+)?time(?:\s+spent)?[ \t]*[:\-][ \t]*(?P<mi
 # Times that belong to a procedure, never to an E/M visit.
 NOT_EM_TIME = rx(r'\b(?:withdrawal|sedation|procedure\s+time|procedural|intra-?service|fluoroscop\w*|insertion|'
                  r'cecal|anesthesia|recovery|monitoring)\b')
+# GI round 4 (C1): the word that opens the list of what an E/M time statement's minutes covered, written right after the
+# minutes ("52 minutes, covering her history, ..., the orders, and documentation"; matched at the statement's end). What
+# follows it is the visit's own work, never the time's occasion: detect._em_base_reading reads only the cues before it.
+EM_TIME_ACTIVITIES = rx(r'[ \t]*,?[ \t]*(?:covering|including|included|spent\s+(?:on|in)|devoted\s+to|comprising|'
+                        r'consisting\s+of|which\s+(?:covered|included))\b')
+# GI round 4 (C4): words saying the encounter was no in-person visit - the patient not seen in person, no in-person
+# contact, a telephone or phone contact, an audio-only one, a no-show, a patient who did not arrive. Read only to HOLD an
+# E/M reading (detect._not_in_person). Video, telehealth and virtual visits are not among them: installed reads those as
+# visits (EM_VISIT), and holding them is a policy this round does not make.
+NOT_IN_PERSON = rx(r'\bnot\s+seen\s+in\s+(?:the\s+)?(?:office|clinic|person)\b|\bno\s+in[- ]person\b'
+                   r'|\b(?:by|via|over\s+the|on\s+the)\s+(?:tele)?phone\b'
+                   r'|\b(?:tele)?phone\s+(?:calls?|encounters?|visits?|consultations?|consults?|follow-?ups?|contacts?|'
+                   r'conversations?|interviews?|appointments?|notes?|discussions?|messages?|triage)\b'
+                   r'|\btelephonic(?:ally)?\b|\baudio[- ]only\b'
+                   r"|\bno[- ]?shows?\b|\b(?:did\s+not|didn't|failed\s+to)\s+(?:arrive|attend|show\s+up)\b")
+# ... and a title line of the note's head naming a telephone or audio-only encounter ("Telephone encounter", "Phone
+# visit"), read whatever section the head falls in (a note may open on a heading such as "Follow-up").
+NOT_IN_PERSON_TITLE = rx(r'^[ \t]*+(?:[\w-]++[ \t]++){0,3}?(?:telephone|phone|audio[- ]only)[ \t]++(?:encounter|call|'
+                         r'visit|consultation|follow-?up|note|triage)\b[^\n]{0,40}$', FLAGS | re.M)
 _LEVEL = r'straightforward|low|moderate|high'
 _LEVEL_END = r'(?=[ \t]*(?:[- ]complexity\b|level\b|[:,.;(]|\n|$))'
-MDM_LEVEL = rx(r'\b(?:medical\s+decision[- ]making|MDM)\b[^.;\n]{0,60}?\b(?P<level>' + _LEVEL + r')' + _LEVEL_END
+MDM_LEVEL = rx(r'(?:\b(?:medical\s+decision[- ]making|MDM)\b[^.;\n]{0,60}?'
+               # GI round 4 (C2): the heading vocabulary's "decision making" as an inline label of its complexity or
+               # level, its level right after the label's ':' or '-' ("Complexity of decision making: moderate."); it
+               # shares the 'level' group, so every reader of this pattern reads it unchanged. Never "shared decision
+               # making" (no such label), and "... of medical decision making" is read by the first branch, as installed
+               r'|\b(?:complexity|level)\s+of\s+decision[- ]making[ \t]*[:\-][ \t]*)'
+               r'\b(?P<level>' + _LEVEL + r')' + _LEVEL_END
                + r'|\b(?P<level2>' + _LEVEL + r')(?:[- ]complexity)?\s+(?:level\s+(?:of\s+)?)?'
                r'(?:medical\s+decision[- ]making|MDM)\b')
 # Applied with .match(text, pos) right after an MDM heading, so no '^' anchor.
