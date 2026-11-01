@@ -109,13 +109,40 @@ each reproduced first and now repaired. Full account in
   *(This replaces the DL-1 line above, which describes the round-2 code.)*
 - **SI-3** — saving answers queued a coding run (a provider call) on a refused
   form; coding and the semantic recheck now run the same guard as generation.
+  *(Superseded 2026-11-01, round 4: the guard runs in the workers now, below.)*
 - **SI-4** — a worker failure of the check (timeout, crash, sandbox) was reported
   as "this form can no longer be used" and deleted an uploaded recording. It is now
   "try again", nothing is sent, and the recording is kept for a retry.
+  *(Superseded in part 2026-11-01, round 4: the retry flow was removed and the
+  voice upload no longer runs the check, below.)*
 - **DELTA-1** — a commented `>> stream` just before a stream the scan had read was
   refused as unreadable by round 2's one-pass rewrite; round 1's rule is restored.
 - **COV-RENDITION** — `/Rendition`, `/Movie` and `/Sound` are refused as action
   types wherever they are (an unreferenced one was accepted; not exploitable).
+
+## P1 round 4 — 2026-11-01: provider usage gated in the worker (not yet installed)
+
+A final review of round 3 found one major and three minor defects; the major one
+(GR-1) was reproduced first. Full account in [security readiness](security-readiness.md)
+(section "Round 4"). In brief:
+
+- **The form guard moved to the workers.** Immediately before every provider call
+  for an encounter (generation, transcription, the semantic stages and recheck,
+  coding) the worker checks the PDF form's original; a refused form, or a check
+  that could not run, fails that job with no provider call, through the job's
+  existing failure. The enqueue-time guards are gone, and so is round 3's
+  kept-recording retry flow: the voice upload and over-limit approval run no form
+  check, exactly as before P1, so a dictated recording can no longer be lost to
+  the check. Encounter creation, the generate request and both downloads keep
+  their synchronous checks.
+- **GR-1** — a check that could not even start (the worker cannot be spawned, its
+  pipes or workspace cannot be created) raised an `OSError` past every gate: 500s,
+  typed notes lost, unaudited refusals. It is now "the check could not run",
+  everywhere.
+- **GR-2, GR-3** — the retry window and the reaper's starvation came with the
+  retry flow, and went with it.
+- **GR-4 (recorded)** — an export whose form is refused only by F2's byte-pattern
+  false positive is refused too.
 
 ## P1 as reported: the upload check can be passed today, on either version
 

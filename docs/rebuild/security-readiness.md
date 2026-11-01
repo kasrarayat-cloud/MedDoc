@@ -238,6 +238,9 @@ the answers queued a coding run with no check (SI-3), now gated together with th
 semantic recheck; and a worker failure of the check was reported as this permanent
 refusal and deleted an uploaded recording (SI-4), now "try again" with the recording
 kept. See "Round 3" below.)*
+*(⚠️ Superseded again 2026-11-01, round 4: `jobs.enqueue` no longer runs the guard.
+The generate request does, and the worker runs it immediately before every provider
+call; see "Round 4" below.)*
 
 **F1 (accepted limit, not widened).** The second layer refuses any file whose
 read makes strict pypdf drop or replace structure. This is **wider than round 1
@@ -324,6 +327,10 @@ semantic recheck's enqueue (Word-only today, so a no-op). Every path that can bu
 provider call for an encounter now goes through the guard. Not covered, and
 recorded: a job or coding run queued **before** the deploy still runs (the workers
 do not re-check), which only matters in the deploy window.
+*(⚠️ Superseded 2026-11-01, round 4: `ensure_run` and the recheck's enqueue no
+longer run the guard. The coding worker and the recheck's worker path run it
+immediately before the provider call, which also covers a run queued before the
+deploy. See "Round 4" below.)*
 
 **SI-4 (repaired).** Every `DocumentError` of the check became the permanent "This
 form can no longer be used … Upload a clean PDF as a new form", worker failures
@@ -347,6 +354,12 @@ over-limit approval's; the worker removes a kept recording nobody sends after th
 window, exactly like an unapproved over-limit upload, and never while a newer offer
 still holds it. A refused form still removes the upload and says "can no longer be
 used".
+*(⚠️ Superseded in part 2026-11-01, round 4: the kept-recording retry flow —
+`voice_retry`, its page, the signed offers, the reaper's kept-recording rules — is
+removed, and so is the refused form's removal of the upload. The voice upload and
+the over-limit approval run no form check, as before P1; the worker fails the job
+unsent instead and the recording stays that job's input. The verdict / "try again"
+split and its answers on the other routes stand. See "Round 4" below.)*
 
 **DELTA-1 (repaired).** Round 2's one-pass `_unread_streams` also tested each `>>`
 inside the comments of a run that ends at a stream the scan had read, and refused
@@ -407,6 +420,151 @@ route already audits (downloads, the kept recording, the automatic coding enqueu
 refused exactly when its original is, so that count bounds the exports affected.
 A 503 download refusal does not extend the session (Django saves no session on a
 5xx); the pages a doctor acts from answer 409 for that reason.
+*(⚠️ Round 4: the first sentence no longer holds — the workers check the form before
+every provider call — and the kept recording and `coding.enqueue_failed` audit rows
+for a refused form are gone with the paths that wrote them.)*
+
+## Round 4 — 2026-11-01: provider usage gated in the worker, the retry flow removed, a check that cannot start (GR-1), the F2 export case recorded (GR-4)
+
+A final review of round 3 — one lens on the new gates and the retry flow, one on the
+raw scan, which found nothing — reported one major finding (GR-1) and three minor
+ones (GR-2, GR-3, GR-4). GR-1 was reproduced first, on `8ab57b30c`, through the
+lens's own probe. This round also carries the integrator's binding simplification,
+which removes the surface three of the four findings were in.
+
+**The simplification: the form guard moved to the workers, and the retry flow is
+gone.** Round 3 checked a PDF form at enqueue. A check that could not run there met
+the recording the doctor had just dictated, so round 3 kept it and offered it again:
+a `voice_retry` route and page, signed retry offers, `recording_kept`, and reaper
+rules for kept recordings — new surface for a case the live rebuild cannot reach
+(it has no PDF templates), and where GR-1's voice arm, GR-2 and GR-3 were found. All
+of it is removed: `voice`, `voice_approve`, the reaper and `urls.py` are
+byte-identical to the base again, so the voice upload and the over-limit approval
+run no form check, as before P1, and a dictated recording can no longer be lost to
+the check. Instead `core.template_source.provider_refusal` runs in the worker,
+immediately before every provider call for an encounter:
+
+| provider path | where the guard runs | refused, or the check could not run |
+|---|---|---|
+| generation, transcription | `core.jobs.run_one`, the first statement of the provider path: before testing admission, the provider slot, a recording's payload preparation and the call | fails as not processed (`NoProviderRequest`): "Not processed: ‹sentence› No provider request was made; nothing was charged and the held funds were released." The hold is released in the same transaction; a recording stays the job's input |
+| semantic generation stages | `core.jobs.run_semantic_job`, first statement, before definitions are read or a stage exists | fails unsent: "Not processed: ‹sentence›" |
+| semantic recheck | `core.semantic_revalidation.run`, first statement, before the proposal is bound | fails with the recheck's own fixed error, hold released, `semantic.revalidation_failed` audited with `NoProviderRequest` |
+| coding | `core.coding_service.run_one`, first statement after the claim | the run fails (`processing_failed`, cost 0, no request) and shows "‹sentence› Contact your administrator to review this retained attempt. No automatic retry will be sent." |
+| template and definition preparation | none added: Word-only by construction | creation requires a `.docx` and makes a `docx` template, and the inventory refuses anything that is not a ZIP (`read_original`) before the first role call; definition preparation's `_validate_source` refuses a non-Word source inside its worker before the first stage |
+
+The two sentences are fixed, because a job's error is shown to the doctor and kept in
+billing evidence: refused — "The PDF form of this document can no longer be used: it
+failed the active-content check. Upload a clean PDF as a new form."; could not run —
+"The PDF form of this document could not be checked right now. This is a temporary
+problem on our side, not a verdict about the form." The guard never raises into the
+worker: anything else that goes wrong in it is the second sentence, so a guard
+failure can never leave a job in reconciliation with its hold kept. It is the first
+step of each provider path, not the line just above the request: nothing on the path
+before the request is a provider call, and a guard placed lower would let a refused
+job remux and record a transcription payload ("written before the request") and hold
+a provider slot, for a request that is never made. A missing or
+changed original is still left to the step that reads it (finalize), as round 2
+decided. Because the guard runs when the job runs, a job queued before the deploy, or
+by any other path, is covered.
+
+**The synchronous checks that stay, where refusing loses nothing:** encounter creation
+(409; the form is shown again with the typed notes; "can no longer be used" for a
+refused form, "try again" when the check could not run), the generate request (JSON
+409 refused, 503 try again; the HTML form redirects with the same message; moved from
+`jobs.enqueue` to `generate_view`, so it runs before `enqueue` takes the encounter
+lock), and both downloads (the original, and the export, which re-checks its template
+original as round 3 does; 409 or 503, audited).
+
+**Enqueue-time guards removed, none kept:** `jobs.enqueue` (round 2's DL-2 guard; its
+transcription arm is what put the recording at risk, and generation's check is now the
+generate request's), `coding_service.ensure_run` (round 3's SI-3 guard; a check
+subprocess on the answer-save path, repeating the worker's), and
+`semantic_revalidation.enqueue` (SI-3; it could never refuse, because semantic
+definitions exist for Word forms only, and the worker covers the call). Each would
+cost a synchronous check the worker repeats, and on the voice paths the recording, so
+none qualified to stay.
+
+**What the doctor sees instead, recorded as the trade.** A recording on a refused form
+is now queued, and its job fails as soon as the worker reaches it, with the recording
+kept as that job's input (round 3 removed it at upload, saying "can no longer be
+used"). A coding run stopped because the check could not run is retained as failed
+under its input digest, like any not-sent coding run, so the same answers are not
+re-sent by a repeated save (changed answers queue a new run). A generation stopped
+that way needs the notes saved again before another request, the existing rule for
+an ended attempt. None of this reaches the live rebuild until it has a PDF template.
+
+**GR-1 (major, repaired): a check that cannot start.** `check_original` turned only a
+worker timeout or a non-zero exit into a `DocumentError`. A check that could not START
+— fork/clone `EAGAIN` or `ENOMEM` at a pids or memory limit, `EMFILE` for its pipes,
+`ENOSPC` or `EDQUOT` for its workspace — raised a plain `OSError`, and every gate let
+it through. Reproduced on `8ab57b30c` with the lens's injection (only the check's
+`subprocess.run` raising `BlockingIOError(EAGAIN)`; inspect and fill real): voice
+upload 500, the WAV left on disk with no audit row and no job, untouched by the reaper
+at +41 min, +1 day and +8 days; encounter creation 500 with the typed notes lost;
+generate (JSON) 500; both downloads 500 with no refusal audited; the retry and
+approval pages said the recording was gone while it was on disk. Now `check_original`
+reports an `OSError` or `SubprocessError` from starting the check as
+`sandbox_unavailable`; `check_pdf_original` treats anything else that escapes the
+check as a check that could not run; and `assert_pdf_template_usable` treats an
+original that exists but cannot be read as could-not-run instead of skipping the
+check. The same probe on round 4: voice 302 with the job queued and the recording its
+input, then the worker fails that job unsent with the "could not be checked" sentence
+(provider never called, hold released); encounter creation 409 with the notes kept;
+generate 503; both downloads 503, audited `sandbox_unavailable`; the over-limit
+approval queues the recording and the worker fails it the same way; the retry route
+is gone (404).
+
+**GR-2 and GR-3 (minor): gone with the retry flow.** GR-2: alternating the retry and
+approval pages kept one signed quote sendable far past 30 minutes. GR-3: one
+recording's repeated retries filled the reaper's window of the 500 oldest events. No
+retry offer exists now, and an upload produces at most one over-limit quote; the
+500-event, seven-day window itself predates P1 and is unchanged from the base.
+
+**GR-4 (recorded, consistent with F2).** An export whose template original is refused
+only by F2's byte-pattern false positive — e.g. `/Keywords (intake, pre/Launch
+checklist)` — is refused as well (409, `encounter.export_refused`, "the PDF form it
+was filled from is no longer accepted"), every time, although pypdf's fill drops the
+Info dictionary, so the export carries no `/Launch`; round 2 served it, and so did the
+base. This is F2's accepted false positive reaching the export gate: since SI-1 and
+SI-2 the gate judges the form, never the export bytes, so it inherits F2 as it
+stands, and F2 stays kept, not narrowed. Only PDF exports finalized from such a form
+before the repair are affected, and the live rebuild has none. A doctor can upload a
+fixed form for new documents, but a finalized document tied to the old form cannot be
+downloaded through the app: an accepted-capability loss (class b) for the owner to
+accept if it ever touches a real document.
+
+**Round-4 proof.** `core.tests.test_template_original_safety` has 48 tests (round 3
+had 35): the worker guard on every provider path — generation, transcription through
+the real voice view, the semantic stages, the recheck, coding — each with a control in
+which a clean form reaches the provider; the voice upload and over-limit approval as
+before P1 (no check on upload; a refused form, a check timeout and a start failure each
+fail the job unsent and keep the recording; the retry route is gone); and GR-1 through
+encounter creation, the generate request, both downloads, the worker and
+`check_pdf_originals`, for every start failure (spawn `EAGAIN` and `ENOMEM`, pipes
+`EMFILE`, a child-setup error, workspace `ENOSPC` and `EDQUOT`). The expected sentences
+are written in the tests, never read from the code. Run against `8ab57b30c`, 21 of the
+48 fail; the other 27 are the 23 unchanged round 1–3 tests, the two controls, and
+encounter creation and the generate request, whose refusals are kept. One killing
+mutation per new or moved guard — 10, each applied and restored to a pristine sha on a
+throwaway clone of the final code, all killed: each of the four worker guards removed,
+the generate request's check removed, GR-1's documents-layer conversion removed, its
+catch-all removed, the unreadable-original skip restored, the worker guard narrowed so
+that it can raise into the worker, and coding's form sentence replaced by the generic
+one. The documents list (211 tests) and the P1 core modules (284 tests, with the
+recording-limit, audio, coding and semantic recheck modules) pass on pypdf 6.21.1,
+6.21.2 and 6.21.4. `pdf_raw.py` and `engine.py` did not change in this round, so the
+corpus, fixture and coverage measurements of rounds 1–3 stand and were not re-run.
+
+**Not covered, and recorded (round 4).** A missing or changed original is passed by
+the worker guard and left to finalize. The export's "missing or changed … contact
+your administrator" answer (409) also covers an original that exists but cannot be
+opened inside the check (that open error is reported as `source_unavailable`); a
+check that cannot start is 503 "try again". In the worker a refusal is audited by the
+job's own failure row (`job.failed`, `semantic.revalidation_failed`; a coding run
+keeps its error), not with the check's code. A job queued on a refused form holds its
+funds until the worker reaches it, then releases them. Both downloads still read the
+stored file itself before the check, as the base does; a failure of that read is not
+the check, and it behaves as it does on the base.
 
 # Current internal operations supplement — September20–21,2026
 
