@@ -144,5 +144,21 @@
   "known_limits": [
    "A short line that is written as a heading but is no heading (a capitalised fragment of at most 60 characters, with no stop) between a lesion and an unsited act lapses the lesion carry as a blank line does."
   ]
+ },
+ "amendment_20261101_cycle1_d": {
+  "provenance": "Written on 2026-11-01 BEFORE the code of this amendment, after amendment_20261101_cycle1_b and _c and their code (6183c1289, c4d867353). Still cycle 1. Every key above this one is unchanged: each value is identical, and the only byte added before this key is the comma that separates it.",
+  "probe": "A probe of c4d867353 (the repair author's own, before the next refutation): PE4's EGD report whose head field reads 'Procedure: EGD with biopsy; colonoscopy next year', over a pasted colonoscopy block under 'Additional Pages' with 'navigated to the cecum': 45385 held [extent] on installed, selected/READY on c4d867353 (as on b840ae756). The head names the colonoscopy, but only as planned. The same with 'colonoscopy deferred', '(colonoscopy cancelled)', a title 'EGD after Prior Colonoscopy' or 'EGD; Colonoscopy Not Done' stayed held there by routing's own readings; with S1 every such variant stayed held.",
+  "rules": {
+   "head_names_today": "The head names a family only by a mention that routing does not read as not done today: a mention of the family in head_procedure_spans whose own routing reading (detect._generic_reading for PE; the routing finding's mention status for PI's S1, read from the routing result the inventory already receives) is planned, historical, cancelled or negated (detect.NOT_TODAY) names nothing. Measured on the inputs before this amendment (read only): every head mention in the regression set reads uncertain or performed (h4-04's 'Gastroscopy' and 'Colonoscopy' uncertain, h4-02's two uncertain, h2-10's 'ERCP' performed, h4-05's uncertain; h4-03 and h4-06 have none), while the probe heads read planned, cancelled, historical or negated. A missing routing result reads no status, as _pi_today_report already does."
+  },
+  "movements_vs_b840ae756": {
+   "H1": "EQUAL against b840ae756 (no regression head mention is read as not done today, so no head loses a family).",
+   "H2": "No movement.",
+   "H3": "Movements only back toward installed values; measured after.",
+   "H4": "No movement.",
+   "H5": "Unchanged.",
+   "H6": "pi-head-not-today (detector: a head naming the colonoscopy only as planned leaves S1 silent, its 'and colonoscopy' control reads).",
+   "H7": "Linear: one reading per head mention (memoised per analysis), at most the head's 12 lines."
+  }
  }
 }
