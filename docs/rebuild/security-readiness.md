@@ -584,6 +584,73 @@ funds until the worker reaches it, then releases them. Both downloads still read
 stored file itself before the check, as the base does; a failure of that read is not
 the check, and it behaves as it does on the base.
 
+## Round 5 — 2026-11-01: the round-4 refutation (GR1-EXPORT-OPEN repaired, four test gaps pinned, two limits recorded)
+
+A three-lens refutation of round 4 (`8ab57b30c..8866c5769`: provider gate, removal and
+GR-1, false green) found no provider call or usage row past the worker guard, no false
+refusal of a DOCX, template-less or clean PDF encounter, no input lost against the
+pre-P1 failed-job path, and the removed retry surface source-identical to the served
+release `67acb2628`. It filed eight findings; each was verified before acting.
+
+**GR1-EXPORT-OPEN — repaired.** The open failure recorded above as "not covered" is now
+classified by its errno, for the check only: `documents.check_original` turns a
+`source_unavailable` whose cause is an open error other than `ENOENT`, `ENOTDIR` or
+`ELOOP` (a path that became a symbolic link after `private_path` resolved it) into
+`sandbox_unavailable`, and `check_pdf_originals` does the same for its own read. A full
+descriptor table, `ENFILE`, `ENOMEM`, `EACCES` or `EIO` while opening the original now
+answers the export and the original download with 503 "try again", audited
+`sandbox_unavailable`; a missing original is still the permanent 409. Inspection, fill
+and preparation keep `_run`'s code: preparation records an unlisted code as
+`provider_unknown`, which would be false.
+
+**FG-GR1-DOCS-LAYER, FG-CODING-UNCHECKED, FG-UNREADABLE-EIO-ONLY — pinned.** Round 4 was
+correct but drove these arms on one spelling, so a narrowed guard survived its 48 tests.
+`core.tests.test_template_original_safety_r5` adopts the lens's probes unchanged: every
+start failure through `check_pdf_originals`, coding when the check times out or cannot
+start, and a real permission-denied original through the worker.
+
+**FG-SEMANTIC-POSITION-ONLY — a correction to the round-4 proof above.** The semantic
+generation and recheck guards have no control in which a clean form reaches the
+provider: those jobs need a Word form (semantic definitions are Word-only), so a PDF
+form never reaches their provider stage with or without the guard. Their two killing
+mutations show where the guard sits, not that it is what stops the call. The
+"each with a control" sentence above holds for generation, transcription and coding
+only.
+
+**FG-GATE — discharged by the CI citation.** No local full gate completed on a round-4
+commit (the run on `8866c5769` was cut by a session limit after `core.tests`, 3,846 OK on
+6.21.1). CI run 41328573347 ran the full gate on `8866c5769` — fresh application,
+document and operations tests, the dependency audit (pinned 6.21.4) — green, with
+`secrets-scan` green; the lens re-ran the documents list, 211 OK on 6.21.1 and 6.21.4.
+
+**Round-5 proof.** The new module's 7 tests and round 4's 48 pass on pypdf 6.21.1 and
+6.21.4. Six killing mutations, each asserted applied, restored to its sha256 on a
+throwaway clone, all killed: the open conversion removed, `ELOOP` treated as could not
+run, the command's read failure reported as missing, the start-failure catch narrowed to
+`BlockingIOError` (FG1), coding letting a could-not-run check through (FG3), and a
+permission-denied original skipped (FG7).
+
+**Recorded limits (round 5).**
+- **PG-1, minor.** For a PDF-form transcription the worker guard's check (bounded at
+  20 s) runs inside the stretch the worker must finish after `SIGTERM`: 20 + 45 + 90 =
+  155 s against the unit's `TimeoutStopSec=150`. A stop landing within about 5 s of such
+  a job's start, with all three steps near their ceilings, is `SIGKILL`ed during the
+  provider POST; the job goes to reconciliation ("unknown provider outcome") with its
+  hold held, for an administrator. Measured end to end by the lens at full scale.
+  Unreachable today (the live rebuild has no PDF templates); generation (20 + 60 s)
+  stays inside the budget, and coding exceeded it before P1.
+- **GR1-UPLOAD-FILL, minor, pre-existing.** When the isolated worker for upload
+  inspection or for the fill at finalize cannot start, the route answers 500; the upload
+  leaves its stored file with no template row and no audit. Identical on `67acb2628`, so
+  not a P1 change.
+- Not filed by the lens, recorded here: a recording whose transcription failed because
+  the check could not run is kept, but no route resends it (as for any failed job); an
+  identical answer re-save does queue a new coding run (the revision is in its digest);
+  the encounter page aborts its generate request after 20 s, the check's own bound, so a
+  check timeout can show "interrupted" instead of "try again"; `check_pdf_originals`
+  counts every non-`ok` code, `sandbox_unavailable` included, as "refused" (its `counts`
+  keep the exact codes).
+
 # Current internal operations supplement — September20–21,2026
 
 The [privileged operations supplement](privileged-operations-security-20260921.md)
