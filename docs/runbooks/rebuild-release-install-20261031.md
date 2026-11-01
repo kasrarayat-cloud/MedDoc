@@ -330,8 +330,10 @@ bounded: unit actions 170 s each, configuration reads 30 s, systemctl reads 60-1
 health 45 s, and reaping a left-over child 120 s. From its first statement the act blocks SIGTERM, SIGINT and SIGHUP,
 so the ceiling's SIGTERM interrupts nothing: it is taken at the next checkpoint like any other signal (below). The
 SIGKILL that `timeout -k 15` sends 15 s later is the only thing that can still cut the act. It cuts it wherever it
-is, a restore included, with no failure path and no outcome file. After an exit of 124, inspect the units at once,
-then read stderr and whatever evidence exists.
+is, a restore included, with no failure path and no outcome file. The runner then exits **137**, not 124: `timeout`
+reports 128+9 when it had to SIGKILL, and `run_watched` prints its ceiling banner only for 124, so 137 is the only
+sign (measured on this host: the same ceiling exits 124 for a child that dies of SIGTERM, 137 for one that blocks it).
+After an exit of 137 or 124, inspect the units at once, then read stderr and whatever evidence exists.
 
 **Signals during the act.** SIGTERM, SIGINT and SIGHUP stay blocked from the act's first statement until the process
 exits. No handler runs: not the installer's (it has none), not the SIGTERM handler that the managed docker helper
@@ -394,7 +396,7 @@ If an evidence write fails, the same record is printed on stderr as one line
 `[rebuild-release] {"rebuild_release_outcome": {...}}` (the runner's transcript), and `--result` carries it under
 `recovery`. A signal taken before publication takes this same path. Signals that arrive while units are being
 restored or drained are recorded in the outcome (`signals_received`) and never cut the recovery short; only the
-runner's SIGKILL can, so read `failure.json` and the outcome file after any 124.
+runner's SIGKILL can, so read `failure.json` and the outcome file after any 137 or 124.
 
 | exit | meaning | next |
 |---|---|---|
@@ -470,7 +472,7 @@ exists, a failure after publication is answered by a newly declared corrective a
 | step 3 | Any FAIL other than the three declaration rows; a requirements mismatch other than filelock, msgpack and pypdf; `new_dot_paths` other than the two cpt-studio files; a static name or a migration; venv-sharing units other than the Corti pair, or not idle; undeclared live-venv processes; locks held; pending provider work; a citation that is not 2 of 2; a contract that surprises the reader. |
 | step 4 | CI is red on the PR or on the merge commit; the merge adds anything but the declaration; `diff CODE CANDIDATE` is not exactly `A $DECL`. |
 | step 6 | Any FAIL, a backup report older than 12 hours, or a contract mismatch (the venv, foreign units, backup or code changed since step 3: redo steps 2-6 as needed). |
-| step 7 | Exit 1 (read `failure.json`; never re-run); exit 2 (judge; units are serving the candidate). |
+| step 7 | Exit 1 (read `failure.json`; never re-run); exit 2 (judge; units are serving the candidate); exit 137 or 124 (the runner's ceiling SIGKILLed the act wherever it was: inspect the units at once). |
 | step 8 | Health is not the candidate, a unit is inactive, the venv footprint changed, a Corti unit restarted, the shared tree is not clean `main` at `CANDIDATE`, or the mismatch is not exactly the declared one. |
 
 ## What this act never does
