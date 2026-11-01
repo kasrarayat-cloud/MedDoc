@@ -41,5 +41,28 @@
  },
  "state": "H5: unchanged (tests/test_gi4_state.py passes as on the base)",
  "cost": "H7: within the limits; a routing-only reach is evaluated only where cues.REACHED_BEFORE fails and cues.REACHED_BEFORE_ROUTING matches, on the clause window already read (bounded by CLAUSE_REACH), with the family's endpoint memoised per analysis",
- "pins": "re-pinned in a separate final commit: replay.json (h4-04's 7 states: routing 'extent=second part of duodenum' and the inventory extent); cues.json, freeze.json, battery.json and tables.json unchanged"
+ "pins": "re-pinned in a separate final commit: replay.json (h4-04's 7 states: routing 'extent=second part of duodenum' and the inventory extent); cues.json, freeze.json, battery.json and tables.json unchanged",
+ "amendment_20261101_cycle1": {
+  "provenance": "Written on 2026-11-01 BEFORE any code of the GI round 4 Wave 1 repair, cycle 1 of the two refutation-and-fix cycles a releasing family may take (group PI+PE, branch wip/gi4-r2-pipe-20261101 from the integrated head b840ae756). Every movement below is against b840ae756. Every key above this one is unchanged against b840ae756: each value is identical, and the only byte added before this key is the comma that separates it.",
+  "findings": {
+   "F3-PE-navigated-reach-in-attached-report": "reproduced on a sealed export of b840ae756: PE4-navigated, PE4-steered, PE5-navigated and PE5-steered move routing's gi.colonoscopy extent from none to 'cecum' and 45385 from held [extent] (installed) to selected/ready; PE3-navigated (outside heading 9 lines up, and copy heading) moves the extent to 'cecum' while 45385 stays held by performed_status; the 'advanced' variants are READY on installed too (an installed false READY PE does not own)."
+  },
+  "rules": {
+   "copy_guards": "A reach read only by a routing-only verb ('steered', 'navigated') counts only inside today's procedure narrative, read by the same shared copy guards as package PI's S1 and E1 (detect.in_todays_narrative; see pi.json amendment_20261101_cycle1 'todays_narrative'): no foreign block opened before it (an attachment or copy heading, a heading dated another day, a sign-off line, a statement that a copy follows), a governing heading-like line within 200 lines / 20,000 characters that names no other record or occasion, no education, no facility below the head's fields, no other date and is no history, plan or indication heading, a block with no other date and no sign-off, a sentence with no generalisation, not under another occurrence (sections.under_another_occurrence, read there now instead of in _pe_routing_reach's last line) and not beyond heading reach (sections.beyond_heading_reach). Unlike S1 and E1, PE does not require the strong head: the binding rule for PE asks for routing's copy guards, and PE's release is a routing reach the installed verbs already read the same way."
+  },
+  "movements_vs_b840ae756": {
+   "H1": "EQUAL for every regression document and member state: h4-04's 'steered through the stomach and pylorus into the second part of the duodenum' lies under 'Stomach and Duodenum', its block carries no date, and nothing foreign opens before it, so gi.egd's extent stays 'second part of duodenum' and 43251 stays ready with its b840ae756 fingerprint.",
+   "H2": "No movement of any class; the cue inventory is identical (no constant context.py or sections.py reads is added or changed).",
+   "H3": "No cell moves: the 96 seeded h4-04 variants that carry a routing-only verb keep the source's EGD paragraph under an upper-tract heading with no date, so the 75 fixed MUST extent.never-false-incomplete[gi.egd] cells stay fixed; measured after and recorded.",
+   "H4": "No movement (one permanent row carries a routing-only verb, 'unpassed pylorus (steered)', whose reach PE never read).",
+   "H5": "Unchanged.",
+   "H6": "The shared guard's mutants are PE's (pe-, detector tests.test_gi4_pe); pe-another-occurrence is re-anchored on the shared guard's call in _pe_routing_reach.",
+   "H7": "Linear (the shared guard reads the document once per text and date, then bounded windows per reach).",
+   "lens_cases": "PE4-navigated, PE4-steered, PE5-navigated and PE5-steered read routing's gi.colonoscopy extent as installed (none) and 45385 held [extent] as installed; PE3-navigated reads no extent, as installed."
+  },
+  "known_limits": [
+   "The installed verbs ('advanced', 'passed', 'reached') still read a reach inside an attached report (PE4-advanced, PE5-advanced READY on installed and here): not PE's release, recorded for the round.",
+   "Closed hold lists cannot be complete (see pi.json's amendment_20261101_cycle1 known_limits)."
+  ]
+ }
 }
