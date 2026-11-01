@@ -160,10 +160,11 @@ class ParticipantServiceArgumentTests(unittest.TestCase):
         self.assertIn('CPT_STUDIO_ASTRA_MODE=disabled', flags(plain, '-e'))
         self.assertIn('CPT_STUDIO_FABLE_MODE=disabled', flags(plain, '-e'))
         self.assertNotIn('anthropic', ' '.join(plain))
-        # the parse check: the participant's file at the worker's path, read-only, named by its setting, offline, and the
-        # participant itself still disabled
+        # the parse check: the participant's file at the worker's path, read-only, named by its setting, offline,
+        # and the participant itself still disabled
         self.assertEqual(flags(checked, '--network'), ['none'])
-        self.assertEqual(flags(checked, '--mount'), [f'type=bind,src={FABLE["target"]},dst={FABLE["mounted"]},readonly'])
+        self.assertEqual(flags(checked, '--mount'),
+                         [f'type=bind,src={FABLE["target"]},dst={FABLE["mounted"]},readonly'])
         self.assertIn(f'CPT_STUDIO_ANTHROPIC_CREDENTIALS_FILE={FABLE["mounted"]}', flags(checked, '-e'))
         self.assertIn('CPT_STUDIO_FABLE_MODE=disabled', flags(checked, '-e'))
         self.assertIn('CPT_STUDIO_PROVIDER_MODE=disabled', flags(checked, '-e'))
@@ -181,8 +182,9 @@ class ParticipantServiceArgumentTests(unittest.TestCase):
             self.assertEqual(install.PARTICIPANTS[name]['file_env'], f'CPT_STUDIO_{setting}')
 
     def test_no_secret_name_or_value_is_ever_an_argument(self):
-        for argv in (install.service_args('worker', IMAGE, REVISION, 'live', RULING, {'astra': 'live', 'fable': 'live'}),
-                     install.service_args('web', IMAGE, REVISION, 'live', RULING, {'astra': 'live', 'fable': 'live'})):
+        modes = {'astra': 'live', 'fable': 'live'}
+        for argv in (install.service_args('worker', IMAGE, REVISION, 'live', RULING, modes),
+                     install.service_args('web', IMAGE, REVISION, 'live', RULING, modes)):
             joined = ' '.join(argv)
             for name in ('API_KEY', 'WORKSPACE_ID', 'OPENAI_PROJECT', 'SECRET_KEY', 'DB_PASSWORD', 'CLIENT_SECRET'):
                 self.assertNotIn(name, joined)
@@ -319,7 +321,8 @@ class ParticipantSecretsHelperTests(TemporaryDirectoryTest):
             self.assertNotIn(value, json.dumps(report))
             self.assertNotIn(value, json.dumps(call['params']))
         again = self.secrets()
-        self.assertEqual({name: entry['state'] for name, entry in again.items()}, {'astra': 'present', 'fable': 'present'})
+        self.assertEqual({name: entry['state'] for name, entry in again.items()},
+                         {'astra': 'present', 'fable': 'present'})
         self.assertEqual((self.target / 'openai-credentials.env').read_bytes(), OPENAI_FILE)
 
     def test_a_missing_source_leaves_its_participant_not_provided(self):
@@ -1073,7 +1076,8 @@ class RollbackParticipantTests(TemporaryDirectoryTest):
                 mock.patch.object(install, 'read_protected_env', return_value=b''), \
                 mock.patch.object(install, 'require_db'), \
                 mock.patch.object(install, 'undo_hazards', return_value={'e1': ['participant']}), \
-                mock.patch.object(install, 'close_undone_stages') as close, self.assertRaises(install.InstallError) as caught:
+                mock.patch.object(install, 'close_undone_stages') as close, \
+                self.assertRaises(install.InstallError) as caught:
             install.phase_rollback_app(install.Context(SimpleNamespace(phase='rollback-app', revision=REVISION),
                                                        self.tmp))
         self.assertIn('1 encounter(s): participant 1', str(caught.exception))

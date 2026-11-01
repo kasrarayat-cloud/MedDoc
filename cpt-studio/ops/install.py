@@ -834,9 +834,9 @@ if problems:
 print(json.dumps(R, sort_keys=True))
 '''
 
-# Whether output from a container that held participants' credentials files (P['files'], mounted at /scan/<name>) carries
-# a value from them: read here, answered with key names only (HARNESS.md I9). A value is matched as written, without an
-# inline comment and unquoted; one under P['min_length'] characters is not matched (it would match by chance).
+# Whether output from a container that held participants' credentials files (P['files'], mounted at /scan/<name>)
+# carries a value from them: read here, answered with key names only (HARNESS.md I9). A value is matched as written,
+# without an inline comment and unquoted; one under P['min_length'] characters is not matched (it would by chance).
 H_CREDENTIAL_SCAN = '''
 blob = base64.b64decode(P['blob'])
 found = []
@@ -1074,10 +1074,10 @@ def participant_secrets() -> dict:
     if mounted:
         mounts.append(f'type=bind,src={PROVIDER_SOURCES},dst=/sources,readonly')
     params = {'uid': APP_UID, 'limit': PARTICIPANT_FILE_LIMIT, 'sources_mounted': mounted, 'sources': PROVIDER_SOURCES,
-              'participants': [{'name': name, 'source': PurePosixPath(spec['source']).name, 'source_path': spec['source'],
-                                'target': PurePosixPath(spec['target']).name, 'target_path': spec['target'],
-                                'required': list(spec['required']), 'optional': list(spec['optional'])}
-                               for name, spec in PARTICIPANTS.items()]}
+              'participants': [{'name': name, 'source': PurePosixPath(spec['source']).name,
+                                'source_path': spec['source'], 'target': PurePosixPath(spec['target']).name,
+                                'target_path': spec['target'], 'required': list(spec['required']),
+                                'optional': list(spec['optional'])} for name, spec in PARTICIPANTS.items()]}
     return run_helper(H_PARTICIPANT_SECRETS, params, mounts=mounts, sensitive=True)['participants']
 
 
@@ -2299,8 +2299,8 @@ def retire_parked(parked):
 
 def participant_source_problems(paths) -> list:
     """The participants' sources are optional - a missing one leaves its participant disabled - but one that is there
-    must be root-only, in a root-only directory, or the secrets phase refuses it (HARNESS.md 8). ``paths``: helper_stat's
-    answer for PROVIDER_SOURCES and each source."""
+    must be root-only, in a root-only directory, or the secrets phase refuses it (HARNESS.md 8). ``paths``:
+    helper_stat's answer for PROVIDER_SOURCES and each source."""
     problems = []
     folder = paths[PROVIDER_SOURCES]
     if folder.get('exists') and folder != {'exists': True, 'kind': 'dir', 'uid': 0, 'gid': 0, 'mode': '0o700'}:
@@ -2353,8 +2353,9 @@ def phase_preflight(ctx) -> dict:
     details['images'] = {ref: bool(inspect('image', ref)) for ref in (HELPER_IMAGE, POSTGRES_IMAGE)}
     if not all(details['images'].values()):
         problems.append('a pinned image (helper or postgres) is not present locally')
+    participant_paths = [path for spec in PARTICIPANTS.values() for path in (spec['source'], spec['target'])]
     details['paths'] = helper_stat([CORTI_SOURCE, ETC_DIR, *LE_DIRS, ACME_CHALLENGE_DIR, PROVIDER_SOURCES,
-                                    *(path for spec in PARTICIPANTS.values() for path in (spec['source'], spec['target']))])
+                                    *participant_paths])
     if not details['paths'][CORTI_SOURCE].get('exists'):
         problems.append(f'{CORTI_SOURCE} is missing')
     problems += participant_source_problems(details['paths'])
@@ -2404,9 +2405,9 @@ def phase_secrets(ctx) -> dict:
 # --- migrations ----------------------------------------------------------------------
 # The app phase migrates while the previous pair still runs (it replaces the pair afterwards), a failed replacement
 # restores that pair on the migrated schema, rollback-app hands an older pair the rows, and no migration is ever
-# reversed. So every migration after the oldest revision a rollback goes back to must leave that revision's code working:
-# additive, with a database default for every NOT NULL column it adds (an older pair's insert names no such column).
-# 0005 is the leaf of 057a7d39, that oldest revision (UNDO_HAZARDS); 0006 has been applied live since 2b82889f.
+# reversed. So every migration after the oldest revision a rollback goes back to must leave that revision's code
+# working: additive, with a database default for every NOT NULL column it adds (an older pair's insert names none).
+# 0005 is the leaf of 057a7d39, that oldest revision (UNDO_HAZARDS); 0006 is in every revision installed since 2b82889f.
 ROLLING_BASELINE = 5
 MIGRATION_FILE_RE = re.compile(r'(\d{4})_\w+\.py')
 SET_DEFAULT_RE = re.compile(r'\s*ALTER\s+TABLE\s+"?(\w+)"?\s+ALTER\s+COLUMN\s+"?(\w+)"?\s+SET\s+DEFAULT\s+\S.*',
@@ -2520,8 +2521,8 @@ def migration_verdict(source: str) -> dict:
 
 
 def migration_safety(directory: Path) -> dict:
-    """{migration name: migration_verdict} for every migration in ``directory`` after ROLLING_BASELINE; a file there that
-    is not a migration (or __init__.py) is refused, never skipped."""
+    """{migration name: migration_verdict} for every migration in ``directory`` after ROLLING_BASELINE; a file there
+    that is not a migration (or __init__.py) is refused, never skipped."""
     verdicts = {}
     for path in sorted(directory.iterdir()):
         if path.name == '__init__.py' or path.name == '__pycache__':
@@ -2562,8 +2563,8 @@ def phase_image(ctx) -> dict:
         migrations = migration_safety(context / 'studio' / 'migrations')
         unsafe = {name: verdict['why'] for name, verdict in migrations.items() if not verdict['safe']}
         if unsafe:
-            raise InstallError(f'{len(unsafe)} migration(s) after {ROLLING_BASELINE:04d} are not additive for a pair that '
-                               'does not know them, so nothing was built: ' + '; '.join(
+            raise InstallError(f'{len(unsafe)} migration(s) after {ROLLING_BASELINE:04d} are not additive for a pair '
+                               'that does not know them, so nothing was built: ' + '; '.join(
                                    f'{name}: {", ".join(reasons)}' for name, reasons in sorted(unsafe.items())) + '.',
                                details={'migrations': migrations})
         shutil.copyfile(context / 'deploy' / '.dockerignore', context / '.dockerignore')
@@ -2658,7 +2659,7 @@ def after_swap_failure(image_id, mode, states, error, parked, participants=None)
 
 
 def access_receipt(stdout: bytes):
-    """The access check's JSON receipt - its whole stdout, else its last non-empty line - as one JSON object, or None."""
+    """The access check's JSON receipt - its whole stdout, else its last non-empty line - as a JSON object, or None."""
     text = stdout.decode('utf-8', 'replace').strip()
     for candidate in (text, text.splitlines()[-1] if text else ''):
         try:
@@ -2683,12 +2684,13 @@ def participant_access_check(ctx, image_id, env_bytes, name, authorization_ref) 
                          network=NETWORK, participant_files=(name,), environment=environment,
                          timeout=ACCESS_CHECK_SECONDS)
     except InstallError as error:  # it did not finish: whether its request reached the vendor is not known
-        return {'ok': False, 'recorded': False,
-                'problem': f'{error} Whether its request reached the vendor is not known; nothing it wrote was recorded.'}
+        return {'ok': False, 'recorded': False, 'problem': f'{error} Whether its request reached the vendor is not '
+                                                           'known; nothing it wrote was recorded.'}
     stdout, stderr = result.stdout, result.stderr[-8192:]
     entry = {'ok': False, 'exit': result.returncode, 'recorded': False}
     if len(stdout) > ACCESS_CHECK_OUTPUT_LIMIT:
-        return {**entry, 'problem': f'it wrote more than {ACCESS_CHECK_OUTPUT_LIMIT} bytes; nothing it wrote was recorded.'}
+        return {**entry, 'problem': f'it wrote more than {ACCESS_CHECK_OUTPUT_LIMIT} bytes; nothing it wrote was '
+                                    'recorded.'}
     if not credential_free([stdout, stderr], [name]):
         return {**entry, 'problem': 'what it wrote carries a value from its credentials file, or that could not be '
                                     'told; nothing it wrote was recorded.'}
@@ -2878,7 +2880,8 @@ def phase_passages(ctx) -> dict:
                            f'{pending.returncode}): run --phase app first. Nothing was imported.')
     results = {}
     for number, (relative, blob) in enumerate(files.items(), start=1):
-        imported = oneshot(image_id, ['manage', 'import_passages', '--data', f'{PASSAGE_DATA_IN_IMAGE}/{relative}'], env)
+        command = ['manage', 'import_passages', '--data', f'{PASSAGE_DATA_IN_IMAGE}/{relative}']
+        imported = oneshot(image_id, command, env)
         log = ctx.log(f'passages-{number:02d}', imported.stdout + imported.stderr)
         if imported.returncode:
             raise InstallError(f'import_passages {relative} failed (exit {imported.returncode}); see {log}. Files '
