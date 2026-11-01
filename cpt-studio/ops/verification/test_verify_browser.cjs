@@ -1660,3 +1660,73 @@ test('the walk makes no edit when the date question is not open: nothing is post
     assert.equal(record.result, 'fail', label);
   }
 });
+
+// --- harness@1: the Review participants card (HARNESS.md 7) ----------------------------------------------------------
+//
+// The card is held to the API's harness, and nothing the harness adds to the page (the card, a code card's statuses,
+// positions and retrieved references) moves what readDom reads for the walk's other DOM checks.
+
+const API_FIXTURES = path.join(ROOT, 'tests', 'fixtures', 'api');
+const apiFixture = name => JSON.parse(fs.readFileSync(path.join(API_FIXTURES, name), 'utf8'));
+const CARD_ROWS = [['corti', 'done'], ['astra', 'refused'], ['fable', 'unknown'], ['reference_validation', 'done'], ['clarification', 'none'],
+  ['final', 'provider_unknown']].map(([key, state]) => ({ key, state }));
+
+test('checkParticipantsCard holds the card to the harness the API serves, and skips a payload without one', () => {
+  const enc = apiFixture('encounter-harness-degraded.json');
+  assert.deepEqual(vb.checkParticipantsCard(enc, CARD_ROWS).map(r => [r.id, r.status]), [['dom.participants', 'pass']]);
+  // a row in another state than the API's, a missing row, no card: each fails
+  for (const broken of [CARD_ROWS.map(row => (row.key === 'fable' ? { ...row, state: 'done' } : row)), CARD_ROWS.filter(row => row.key !== 'final'),
+    CARD_ROWS.filter(row => row.key !== 'astra'), CARD_ROWS.map(row => (row.key === 'reference_validation' ? { ...row, state: 'waiting' } : row)), []]) {
+    assert.deepEqual(failures(vb.checkParticipantsCard(enc, broken)), ['dom.participants'], JSON.stringify(broken));
+  }
+  assert.deepEqual(vb.checkParticipantsCard(encounter(), []).map(r => r.status), ['skipped']);
+  assert.deepEqual(vb.checkParticipantsCard({ ...enc, harness: { participants: 'x' } }, CARD_ROWS).map(r => r.status), ['skipped']);
+});
+
+test('readDom reads the participants card the live app.js renders, and the walk\'s other DOM checks read the page as before', { skip: !fs.existsSync(APP) && 'studio/static/studio/app.js is not present' }, async () => {
+  const app = require(APP);
+  for (const name of ['encounter-harness-ready.json', 'encounter-harness-degraded.json', 'encounter-processing.json']) {
+    const enc = apiFixture(name);
+    const html = app.reviewView(enc, app.documentLayout(enc), 'codes', true);
+    const dom = await vb.readDom(fakePage(html));
+    assert.equal(dom.participants.length, 6, name);
+    assert.deepEqual(failures(vb.checkParticipantsCard(enc, dom.participants)), [], name);
+    const moved = { ...enc, harness: { ...enc.harness, participants: enc.harness.participants.map(p => (p.name === 'astra' ? { ...p, state: 'failed' } : p)) } };
+    assert.deepEqual(failures(vb.checkParticipantsCard(moved, dom.participants)), ['dom.participants'], name);
+    if (!enc.assessment) continue;
+    assert.equal(html.includes('progress-card'), false, 'a finished review shows no progress card, so waitForReviewScreen resolves');
+    assert.deepEqual(failures(vb.checkEvidenceMarks(enc, dom.marks, dom.cards)), [], name);
+    assert.ok(dom.cards.length >= 1 && dom.cards.every(card => card.badge === 'Ready for review' && card.insight === '' && card.unlocated === 0), JSON.stringify(dom.cards));
+  }
+  // a decision on a code card with the harness statuses is read from its own badge and decision line
+  const ready = apiFixture('encounter-harness-ready.json');
+  const [first, ...rest] = ready.assessment.proposals;
+  const approved = { ...first, decision: { id: 'd-1', action: 'approve', reviewer: AGENT, reviewer_kind: 'agent', note: NOTES.approve, created_at: '2026-10-30T10:00:00Z' },
+    decision_state: 'approved', allowed_actions: ['revoke'] };
+  const decidedEnc = { ...ready, assessment: { ...ready.assessment, proposals: [approved, ...rest] } };
+  const dom = await vb.readDom(fakePage(app.reviewView(decidedEnc, app.documentLayout(decidedEnc), 'codes', false)));
+  const made = [{ proposal_id: first.id, code: first.code, action: 'approve', http_status: 201 }];
+  assert.deepEqual(failures(vb.checkDecisionDom(made, decidedEnc, dom.cards, dom.candidates)), []);
+  assert.ok(dom.cards.find(card => card.id === `card-${first.id}`).insight.startsWith(`Approved by ${AGENT}`));
+  // a state the API leaves out is drawn as the page draws it ("State not recorded", reference validation "not_run") and
+  // held to the API the same way, never failed for a type
+  const odd = { ...ready, harness: { ...ready.harness, participants: ready.harness.participants.map(p => (p.name === 'fable' ? { ...p, state: undefined } : p)),
+    reference_validation: { ...ready.harness.reference_validation, state: undefined } } };
+  const oddDom = await vb.readDom(fakePage(app.reviewView(odd, app.documentLayout(odd), 'codes', false)));
+  assert.deepEqual(oddDom.participants.filter(row => ['fable', 'reference_validation'].includes(row.key)), [{ key: 'fable', state: '' }, { key: 'reference_validation', state: 'not_run' }]);
+  assert.deepEqual(failures(vb.checkParticipantsCard(odd, oddDom.participants)), []);
+});
+
+test('summarize records which participants ran and what reference validation retrieved, never a participant\'s sentence', () => {
+  const enc = apiFixture('encounter-harness-degraded.json');
+  const summary = vb.summarize(enc);
+  assert.deepEqual(summary.harness.participants.map(p => [p.name, p.state, p.model, p.returned_model, p.estimated_cost_usd]),
+    [['corti', 'done', '', '', null], ['astra', 'refused', 'gpt-6-astra', 'gpt-6-astra', '0.8388'], ['fable', 'unknown', 'claude-fable-5-1', '', null]]);
+  assert.deepEqual(summary.harness.reference_validation, { state: 'done', codes_checked: 1, passages: 1,
+    sources: ['cms-pfs-rvu26d', 'cms-mue-practitioner-2026q4', 'cms-ncci-policy-manual-2026-ch6'] });
+  assert.equal(summary.harness.final, 'provider_unknown');
+  const text = JSON.stringify(summary);
+  for (const sentence of enc.harness.participants.map(p => p.detail).filter(Boolean)) assert.equal(text.includes(sentence), false, sentence);
+  assert.equal(text.includes('Cold forceps biopsies of the gastric antrum were taken.'), false);
+  assert.equal(vb.summarize(encounter()).harness, null);
+});

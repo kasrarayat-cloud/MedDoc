@@ -58,7 +58,10 @@
  * GET /api/encounters/<id> with the page's own session, within the deadline; check
  * extraction, context, routing, exact evidence, clarifications, must-not-code services and
  * incomplete services against the manifest (mismatches are recorded, never fail-fast);
- * check the evidence marks in the DOM; approve every ready selected proposal except the
+ * check the evidence marks in the DOM, and that the Review participants card shows each
+ * participant and reference validation in the state the API's harness reports (where it
+ * serves one; the evidence summary records which participants ran, with which models);
+ * approve every ready selected proposal except the
  * manifest's designated rejection; reload and check that the decisions and the revision
  * persisted (JSON and DOM); download the draft TXT + CSV, and the reviewed TXT + CSV when
  * ready, as real browser downloads, hashing each file against the API's sha256; take
@@ -1154,6 +1157,16 @@ function summarize(enc) {
     provider_runs: (enc.provider_runs || []).map(r => ({ provider: r.provider, mode: r.mode, state: r.state, http_status: r.http_status, usage: r.usage, usage_basis: r.usage_basis, reused_from: r.reused_from, latency_ms: r.latency_ms, purpose: r.purpose, scope_items: r.scope_items, request_sha256: r.request_sha256, member_date_hold: isMemberDateHold(r) })),
     user_values: enc.context?.user_values || {},
     readiness: enc.readiness,
+    // Which participants ran, with which models, and what reference validation retrieved (HARNESS.md 7): structured
+    // fields only, never a participant's sentence, which can quote the document.
+    harness: enc.harness && Array.isArray(enc.harness.participants) ? {
+      participants: enc.harness.participants.map(p => ({ name: p?.name, state: p?.state, model: p?.model, returned_model: p?.returned_model,
+        run_id: p?.run_id, reused: p?.reused, codes: p?.codes, unverified_quotes: p?.unverified_quotes, usage_basis: p?.usage_basis,
+        estimated_cost_usd: p?.estimated_cost_usd })),
+      reference_validation: { state: enc.harness.reference_validation?.state, codes_checked: enc.harness.reference_validation?.codes_checked,
+        passages: enc.harness.reference_validation?.passages, sources: (enc.harness.reference_validation?.sources || []).map(s => s?.key) },
+      final: enc.harness.final?.state,
+    } : null,
   };
 }
 
@@ -1306,7 +1319,29 @@ async function readDom(page) {
     proposal: el.dataset.proposal,
     text: (el.closest('.check-item')?.textContent || '').replace(/\s+/g, ' ').trim(),
   })));
-  return { marks, cards, candidates };
+  // The Review participants card (HARNESS.md 7): each row names what it reports and the state the page drew.
+  const participants = await page.$$eval('.participants-card [data-participant]', els => els.map(el => ({
+    key: el.dataset.participant, state: el.dataset.state,
+  })));
+  return { marks, cards, candidates, participants };
+}
+
+// The Review participants card shows what the API's harness reports: a row for each participant in its state, reference
+// validation in its state, then clarification and the final status. Skipped where the API serves no harness (a release
+// before it); the walk judges the page, never whether a participant is configured.
+function checkParticipantsCard(enc, rows) {
+  const harness = enc?.harness;
+  if (!harness || !Array.isArray(harness.participants)) return [skip('dom.participants', 'the API serves no harness for this encounter')];
+  // the page writes a value as app.js's textValue does: a string as it is, a number or boolean as text, anything else ''
+  const text = value => (typeof value === 'string' ? value : typeof value === 'number' || typeof value === 'boolean' ? String(value) : '');
+  const shown = (rows || []).map(row => [row.key, row.state]);
+  const wanted = [...harness.participants.filter(item => item && typeof item === 'object').map(item => [text(item.name) || 'participant', text(item.state)]),
+    ['reference_validation', text(harness.reference_validation?.state) || 'not_run']];
+  const missing = wanted.filter(([key, state]) => !shown.some(([k, s]) => k === key && s === state))
+    .concat(['clarification', 'final'].filter(key => !shown.some(([k]) => k === key)).map(key => [key, 'any']));
+  return [check('dom.participants', 'hard', missing.length === 0, missing.length
+    ? `the card does not show ${missing.map(([key, state]) => `${key}:${state}`).join(', ')}; it shows ${shown.map(([key, state]) => `${key}:${state}`).join(', ') || 'no row'}`
+    : `${shown.length} row(s) as the API reports them: ${shown.map(([key, state]) => `${key}:${state}`).join(', ')}`)];
 }
 
 async function decide(page, encounterId, decision) {
@@ -1561,6 +1596,7 @@ async function verifyDocument(page, opts, manifest, item, sink) {
     });
     const before = await readDom(page);
     add(checkEvidenceMarks(enc, before.marks, before.cards));
+    add(checkParticipantsCard(enc, before.participants));
 
     let current = enc;
     if (editPlan && !editing) {  // nothing is saved, so nothing is sent, on a precondition the walk did not see hold
@@ -1769,7 +1805,7 @@ function stopRequested(outDir) {
 module.exports = {
   stopRequested, parseArgs, UsageError, cpSlice, safeName, sessionProblems, checkPipeline, checkExtraction, checkContext, checkRouting,
   checkEvidenceExact, checkMustNotCode, checkClarifications, checkIncomplete, planDecisions, planConfirmations, checkReadiness,
-  checkPersistence, checkEvidenceMarks, checkDecisionDom, expectedDownloads, checkDownloads, checkListing, summarize,
+  checkPersistence, checkEvidenceMarks, checkDecisionDom, checkParticipantsCard, expectedDownloads, checkDownloads, checkListing, summarize,
   documentResult, readDom, secondReviewPlan, checkSecondReview, attachedProblems, sentRun,
   contextEditPlan, isMemberDateHold, contextRequestDate, primaryRequestSha256, checkUploadDate, checkContextEdit, contextEditPreconditions,
   checkDecisionLabels, planProblems, MEMBER_DATE_HOLD_MESSAGE, PROVIDER_SYSTEMS,
