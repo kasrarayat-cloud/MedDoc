@@ -438,7 +438,11 @@ STRICT_PROMOTIONS = (gi_services.OWN_BOX_CHECKED, 'performed: its form field is 
 
 def _routing_agrees(u: reconcile.Unresolved, inventory, routing: Optional[RoutingResult], text: str,
                     day: Optional[date]) -> bool:
-    """Whether the routing-era reader also reads the unresolved item as done today (see SECOND_REVIEW_CHECKED)."""
+    """Whether the routing-era reader also reads the unresolved item as done today (see SECOND_REVIEW_CHECKED), or -
+    GI round 4, package PO - does not contradict the documented-service reading of it on a document whose own head
+    makes it today's procedure report (_po_not_contradicted). Either only marks the item as one a second review may ask
+    about: the review is still asked for by a member, once per revision and date (jobs.request_second_review), and no
+    stage sends one."""
     if u.reason not in ('no_proposal', 'not_covered') or routing is None:
         return False
     families = {u.family, legacy_family(u.family)}
@@ -459,7 +463,109 @@ def _routing_agrees(u: reconcile.Unresolved, inventory, routing: Optional[Routin
             return True  # its own clause states it done; only routing's family summary doubts the service
         if strict and status == 'uncertain' and cues[:1] and cues[0].startswith(detect.SILENT):
             return True
-    return False
+    return _po_not_contradicted(u, routing, text, day, families)
+
+
+# GI round 4, package PO (the plan's M1 and PO-2). Routing reads a family that is named only in a title, a grid header
+# or a line under a heading it does not know as silent, and reads a passage that a runaway section reaches across an
+# unread heading-like line as that section's (h4-02, h4-05): such readings say nothing against the documented-service
+# reading, so the unresolved item is offered for the member-asked second review. Every condition only withholds the
+# offer (fail-closed), and the document's own head must make it today's procedure report: a records review, a pasted
+# outside report, an education handout or a note written around a procedure (booking, call, consent) is never offered
+# this way, whatever routing reads in it.
+_PO_OWN_TIME = ('historical:', 'planned:')  # routing's cue for a time word of the mention's own clause
+
+
+def _po_not_contradicted(u: reconcile.Unresolved, routing: RoutingResult, text: str, day: Optional[date],
+                         families: set) -> bool:
+    """Whether routing says nothing against the unresolved item ``u`` the installed rule does not offer: the document's
+    head makes it today's procedure report (_po_todays_procedure_report), routing reads the item's family (at least one
+    mention: a family it never names is no reading at all), and either
+    - PO-1: every mention of the family is silent, and no passage of the item (its evidence) is read as not done today
+      or with a worded doubt (_po_says_nothing); or
+    - PO-2: no mention of the family contradicts - each is done today, says nothing, is another occasion's by a time
+      word of its own clause, or is not done today only by a section that reaches it across an unread heading-like line
+      (_po_section_only_across_unread_heading) - and every passage of the item says nothing or is not done today only
+      by such a section, at least one of them so.
+    A passage outside the text is never read as saying nothing."""
+    mentions = [m for f in routing.findings if f.family in families for m in f.mentions]
+    if not mentions or not _po_todays_procedure_report(text):
+        return False
+    from studio.gi import detect  # the analysis is cached per text
+    readings = []
+    for ev in u.evidence:
+        if not (0 <= ev.start < ev.end <= len(text)):
+            return False
+        readings.append((ev.start, *detect.status_for_span(text, ev.start, ev.end, day)))
+    if all(_po_silent(m.status, m.cues) for m in mentions):  # PO-1
+        return all(_po_says_nothing(status, cues) for _, status, cues in readings)
+    for m in mentions:  # PO-2: no mention contradicts
+        if m.status in checks.POSITIVE or _po_says_nothing(m.status, m.cues):
+            continue
+        if m.status in ('historical', 'planned') and (_po_another_occasion(m.cues)
+                                                      or _po_section_only_across_unread_heading(text, m.span.start,
+                                                                                                m.status, m.cues)):
+            continue
+        return False
+    runaway = [_po_section_only_across_unread_heading(text, pos, status, cues) for pos, status, cues in readings]
+    return any(runaway) and all(r or _po_says_nothing(status, cues) for r, (_, status, cues) in zip(runaway, readings))
+
+
+def _po_another_occasion(cues: Sequence[str]) -> bool:
+    """A not-today mention that is another occasion's by a time word of its own clause ("Earlier EUS: 2025-04-09",
+    "slightly larger than at the earlier EUS", "a colonoscopy has been scheduled for 2026-12-03"): at least one such
+    cue, and nothing but such cues, section labels and statements of performance (a doubt or a denial riding along says
+    something)."""
+    return any(c.startswith(_PO_OWN_TIME) for c in cues) and all(
+        c.startswith(_PO_OWN_TIME + (checks.SECTION_CUE_PREFIX, checks.PERFORMED_CUE_PREFIX)) for c in cues)
+
+
+def _po_todays_procedure_report(text: str) -> bool:
+    """Positive evidence that the document is a procedure's own report (GI round 4, PS: the judge's guard 1): its head
+    carries a sedation or anesthesia line or a field naming who performed it, and none of its head lines is the title of
+    a note written around a procedure (booking, scheduling, pre-procedure, telephone or call, instructions, consent,
+    education, handout, correspondence, letter, records review)."""
+    return gi_sections.procedure_report_head(text) and not gi_sections.around_procedure_title(text)
+
+
+def _po_silent(status: str, cues: Sequence[str]) -> bool:
+    """Routing's silence (checks.silent), never read from a reading with no cue at all."""
+    return bool(cues) and checks.silent(status, cues)
+
+
+def _po_says_nothing(status: str, cues: Sequence[str]) -> bool:
+    """A reading that says nothing against today: silence, or an uncertain reading no word decided - only section
+    labels, a statement of performance its section holds (a runaway indication), or routing's family summary
+    (detect.UNESTABLISHED). Any worded doubt (a negation, a hedge, a deferral, a denial) and any not-today status say
+    something."""
+    if _po_silent(status, cues):
+        return True
+    return status == 'uncertain' and bool(cues) and all(
+        c.startswith((checks.SECTION_CUE_PREFIX, checks.PERFORMED_CUE_PREFIX, checks.SILENT_CUE_PREFIX))
+        or c == UNESTABLISHED for c in cues)
+
+
+def _po_section_only_across_unread_heading(text: str, pos: int, status: str, cues: Sequence[str]) -> bool:
+    """Whether a not-today reading at ``pos`` takes its time only from its section (historical or planned, every cue a
+    section label or a statement of performance, at least one section label), and that section reaches ``pos`` only
+    across a heading-like line the layout does not read (sections.beyond_heading_reach), with no occurrence words on the
+    nearest heading-like line above (sections.under_another_occurrence: "Previous EUS Findings" tells another time
+    itself). The section's heading must lie within the helper's reach (HEADING_REACH_CHARS and HEADING_REACH_LINES):
+    beyond it beyond_heading_reach answers True without finding a line, which fails closed for a hold and would release
+    here, so it is never read as a found line."""
+    if status not in ('historical', 'planned') or not cues \
+            or not all(c.startswith((checks.SECTION_CUE_PREFIX, checks.PERFORMED_CUE_PREFIX)) for c in cues) \
+            or not any(c.startswith(checks.SECTION_CUE_PREFIX) for c in cues):
+        return False
+    lay = gi_sections.layout(text)
+    section = lay.section_at(pos)
+    if section.heading is None:
+        return False
+    lo = text.find('\n', section.heading.end)
+    if lo < 0 or lo >= pos or pos - lo > gi_sections.HEADING_REACH_CHARS \
+            or text.count('\n', lo, pos) > gi_sections.HEADING_REACH_LINES:
+        return False
+    return gi_sections.beyond_heading_reach(text, lay, pos) and not gi_sections.under_another_occurrence(text, pos)
 
 
 def _jsonable_inventory(inventory) -> dict:
