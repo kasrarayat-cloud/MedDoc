@@ -27,10 +27,10 @@ Earlier failures and measurements are kept in the log below, never rewritten.
 
 | | Item | Status | Revision | Evidence | Remaining action |
 |---|---|---|---|---|---|
-| [ ] | 1.1 Installed revision, active work and existing provider integrations; fresh worktree; the shared checkout untouched | IN PROGRESS | live `80df1831d168` | this file's starting point | full inventory (Stage 1 map) |
-| [ ] | 1.2 Map of the document-to-code workflow; production clinical reviewers distinguished from engineering agents | IN PROGRESS | — | — | write the map |
-| [ ] | 1.3 Backend access to Corti, Astra and Fable: exact provider, API model or endpoint identifier, a minimal synthetic capability check | IN PROGRESS | — | — | Corti check; Astra and Fable access to be established (no adapter or credential found so far) |
-| [ ] | 1.4 Authorized CPT and reference sources and retrieval tools, with releases, effective dates and permitted uses; unavailable dependencies recorded | IN PROGRESS | — | — | live `reference_sources` read; retrieval tools and egress |
+| [x] | 1.1 Installed revision, active work and existing provider integrations; fresh worktree; the shared checkout untouched | PASS | live `80df1831d168` (image `sha256:88544c7cd33f…`) | `docs/cpt-harness/stage1-starting-point.md` §1 (image labels, `docker inspect`, `.git/HEAD`, read 2026-11-01 21:30Z) | — |
+| [x] | 1.2 Map of the document-to-code workflow; production clinical reviewers distinguished from engineering agents | PASS | `80df1831d168` | `docs/cpt-harness/stage1-starting-point.md` §2 (FILE:LINE map; Corti the only model reading documents; agent account scripted; engineering agents have no runtime role) | — |
+| [ ] | 1.3 Backend access to Corti, Astra and Fable: exact provider, API model or endpoint identifier, a minimal synthetic capability check | BLOCKED (Astra, Fable) | live `80df1831d168` | `docs/cpt-harness/stage1-starting-point.md` §3: Corti live (45 sent primary runs, all with `X-Request-Id`; no model identifier exists in its API); Astra and Fable identities owner-confirmed, no credential reachable | the owner's two credential files (below); then the harness's access check for all three, recording endpoint, requested and returned model, request id and usage |
+| [ ] | 1.4 Authorized CPT and reference sources and retrieval tools, with releases, effective dates and permitted uses; unavailable dependencies recorded | IN PROGRESS | live `80df1831d168` | `docs/cpt-harness/stage1-starting-point.md` §4 (live read: RVU26D 19,453 rows and MUE 2026-Q4 15,212 rows, both 2026-10-01 to 2026-12-31; no retrieval stage) | the publishers' use terms for NCCI PTP, the NCCI Policy Manual and the CMS manuals, read before any import |
 
 ## Stage 2: read the document correctly
 
@@ -82,7 +82,15 @@ Earlier failures and measurements are kept in the log below, never rewritten.
 
 ## External dependencies (one consolidated request)
 
-To be written at the end of Stage 1, once each dependency is verified rather than assumed.
+Sent to the owner 2026-11-01 ~21:30Z. Each dependency blocks only its own live stage; engineering continues meanwhile.
+
+| # | dependency | needed for | protected destination | status |
+|---|---|---|---|---|
+| D1 | An Anthropic API key with access to `claude-fable-5-1`. A dedicated key inside the existing authorized account QuillMD uses is preferred; QuillMD's key is acceptable if the owner prefers it. It cannot be copied out of `rebuild/.env` by this session | 1.3, 3.3, 3.4, 6.3 | `/etc/cpt-studio-provider-sources/anthropic.env`, root:root 0600 in a root 0700 directory, one line `ANTHROPIC_API_KEY=<key>`; the installer copies it unread to `/etc/cpt-studio/` (10150:10150 0400), mounted into the worker only | OPEN |
+| D2 | An OpenAI project API key from an authorized OpenAI project with access to `gpt-6-astra` on the Responses API. No Codex or desktop session token | 1.3, 3.2, 3.4, 6.3 | `/etc/cpt-studio-provider-sources/openai.env`, same ownership and mode, one line `OPENAI_API_KEY=<key>` | OPEN |
+| D3 | Licensed CPT content: either an AMA licence (descriptors, guidelines), or acceptance that validation uses CMS public sources only and says so | 4.2 | — | OPEN; the default is CMS public sources only, recorded as a limit |
+
+No secret is requested in chat. A spending limit on each key in its own console is advised.
 
 ## Progress log (append only)
 
@@ -94,3 +102,14 @@ To be written at the end of Stage 1, once each dependency is verified rather tha
     two-cycle rule;
   - the three retained Corti discrepancies (EUS, EGD with biopsy, ERCP stent exchange) trace to provider omissions;
   - the round-3 live walk (2026-10-31) read 1 of 6 dates, approved 1 code and reached no reviewed report.
+- **2026-11-01T21:40Z Stage 1.**
+  - **Done:** 1.1 and 1.2 PASS on live reads. Corti is the only production participant; Astra and Fable are absent.
+  - **Identities and credentials:** the owner confirmed both identities (Astra = OpenAI `gpt-6-astra` via `/v1/responses`;
+    Fable = Anthropic `claude-fable-5-1` via `/v1/messages`). No credential for either is reachable without reading
+    QuillMD's `rebuild/.env`, so 1.3 is BLOCKED on D1 and D2.
+  - **References:** the live store holds only CMS PFS RVU26D and MUE 2026-Q4; their use terms are being checked before
+    any import (1.4).
+  - **Round-4 work in flight:** the Wave 1 repair cycle 2 finished. The non-converged releasing rules (PV1 C1/C2, PI E1
+    and A1, the PD strong-head hold) were dropped, with narrow fixes kept (PD DT-5, PO-1). Projected HARD 119/123
+    (installed 98) and walk READY {43251, 43274}, the same as installed. The integration is running.
+  - **Next:** the harness design (`cpt-studio/HARNESS.md`), then its build, independent of D1 to D3.
