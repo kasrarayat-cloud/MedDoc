@@ -30,11 +30,20 @@ copied into a private directory made here, proven in place, and installed from t
 sha256 under --require-hashes; the units are proven drained immediately before the pip child. EVERY EXIT records
 its outcome through ``recorder`` ('pip_process' and 'outcome' records), with a MEASURED venv state on any failure
 after pip starts, and every refusal is this module's Refusal (a footprint refusal or a timeout included).
+
+EVERY REFUSAL THE VENV CAN ALREADY DECIDE IS ENFORCED BEFORE PIP (the second refutation): the calibrated population
+(64 distributions, pip 24.0, the premise of the uninstall proof and of the generated metadata) from the before-
+snapshot, and the venv's own checks (imports and round trips on the OLD versions, then `pip check`), run in the venv
+before pip. Each check child is recorded under its own name and refused under its own label, before pip and after.
+SIGTERM, SIGINT and SIGHUP are BLOCKED for the whole of install_once: no handler or KeyboardInterrupt can cut it
+short, a signal taken before pip refuses with nothing changed, and one taken after pip started is recorded while the
+stage runs to its end. Every venv child starts with them blocked and is SIGKILLed if the stage process dies.
 """
 import argparse
 import base64
 from contextlib import contextmanager
 import csv
+import ctypes
 import hashlib
 import importlib
 import io
@@ -45,10 +54,12 @@ from pathlib import Path, PurePosixPath
 import posixpath
 import re
 import shutil
+import signal
 import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import urllib.parse
 import urllib.request
 import zipfile
@@ -74,6 +85,11 @@ DISTRIBUTIONS = 64
 PIP_VERSION = '24.0'
 PIP_TIMEOUT_SECONDS = 180
 CHILD_UMASK = 0o022
+PIP_CHECK = ['-m', 'pip', '--isolated', '--disable-pip-version-check', 'check']
+#: Blocked for the whole of install_once and taken only at its checkpoints (take_signals).
+SIGNALS = ('SIGTERM', 'SIGINT', 'SIGHUP')
+SIGNAL_NUMBERS = tuple(getattr(signal, name) for name in SIGNALS)
+PR_SET_PDEATHSIG = 1
 MAX_WHEEL_BYTES = 16 * 1024 ** 2
 PYPI = 'https://pypi.org'
 FILE_HOST = 'files.pythonhosted.org'
@@ -116,6 +132,68 @@ def one_refusal_class():
 
 def sha(raw):
     return hashlib.sha256(raw).hexdigest()
+
+
+def block_signals():
+    """Block SIGTERM, SIGINT and SIGHUP in this process; returns the previous mask. A signal sent to the process goes
+    to any thread that does not block it, so there must be no other thread."""
+    require(threading.current_thread() is threading.main_thread() and threading.active_count() == 1,
+            'signals_blocked_in_the_only_thread')
+    return signal.pthread_sigmask(signal.SIG_BLOCK, SIGNAL_NUMBERS)
+
+
+def take_signals(received, stage):
+    """Take every pending routed signal without running a handler (sigtimedwait, zero timeout), recording each with
+    the stage and its sender; returns the names taken now."""
+    taken = []
+    while True:
+        info = signal.sigtimedwait(SIGNAL_NUMBERS, 0)
+        if info is None:
+            return taken
+        name = signal.Signals(info.si_signo).name
+        received.append({'signal': name, 'stage': stage, 'sender_pid': info.si_pid, 'sender_uid': info.si_uid})
+        taken.append(name)
+
+
+def signal_names(received):
+    return [row['signal'] for row in received]
+
+
+def refuse_if_signalled(received, stage):
+    """A checkpoint BEFORE pip: a routed signal taken here refuses, with nothing in the venv changed."""
+    taken = take_signals(received, stage)
+    require(not taken, 'interrupted_by_' + ''.join(taken[:1]))
+
+
+def finish_signals(previous, received, recorder):
+    """After the outcome record: record what arrived since (never raising), then restore the previous mask."""
+    if previous is None:
+        return
+    late = take_signals(received, 'after_the_outcome')
+    if late:
+        try:
+            recorder({'record': 'signals_after_outcome', 'signals': late})
+        except BaseException:
+            pass
+    signal.pthread_sigmask(signal.SIG_SETMASK, previous)
+
+
+_LIBC = []
+
+
+def dies_with_the_stage():
+    """preexec_fn of every venv child: the kernel SIGKILLs the child when the stage process dies (PR_SET_PDEATHSIG),
+    so pip never goes on changing the venv after the process that records it is gone. A stage that died before the
+    child armed this is seen through getppid()."""
+    if not _LIBC:
+        _LIBC.append(ctypes.CDLL(None, use_errno=True))
+    libc, parent = _LIBC[0], os.getpid()
+
+    def arm():
+        if (libc.prctl(ctypes.c_int(PR_SET_PDEATHSIG), ctypes.c_ulong(int(signal.SIGKILL)), ctypes.c_ulong(0),
+                       ctypes.c_ulong(0), ctypes.c_ulong(0)) != 0 or os.getppid() != parent):
+            os._exit(127)
+    return arm
 
 
 def footprint():
@@ -298,6 +376,20 @@ def versions(snapshot):
     return {package: snapshot['census']['distributions'].get(package) for package in TRANSITIONS}
 
 
+def calibrated_population(snapshot):
+    """The population the stage was calibrated on (64 distributions, pip 24.0), decided from the snapshot alone.
+
+    transition() requires it of both snapshots AFTER pip, so a venv that differs here (one extra distribution, any
+    other pip) would let pip move all three packages and only then refuse, with no way forward (D2). pip 24.0 is
+    also the premise of uninstall_proof and generated_metadata, so it is proven before pip runs.
+    """
+    module = footprint()
+    distributions = snapshot['census']['distributions']
+    require(snapshot.get('format') == module.FORMAT and len(distributions) == DISTRIBUTIONS
+            and distributions.get('pip') == PIP_VERSION, 'calibrated_population')
+    return {'distributions': len(distributions), 'pip': PIP_VERSION}
+
+
 def transition(before, after, proven):
     """The only acceptable difference between the two snapshots of one venv."""
     module = footprint()
@@ -379,31 +471,39 @@ def child_environment():
             'PYTHONDONTWRITEBYTECODE': '1', 'PYTHONNOUSERSITE': '1'}
 
 
-def interpreter(venv, arguments, *, timeout=120, recorder=None, runner=subprocess.run):
+def interpreter(venv, arguments, *, timeout=120, recorder=None, runner=subprocess.run, record='pip_process',
+                failure='venv_child_failed'):
     """One child of the venv's own interpreter (-I -B), child umask 022, parent 077, bounded output.
 
-    The child's record reaches ``recorder`` whatever happens to it, a timeout included (subprocess.run kills the
-    child at the bound and keeps what it printed).
+    The child's record (named ``record``) reaches ``recorder`` whatever happens to it: an exit, a timeout
+    (subprocess.run kills the child at the bound and keeps what it printed) or a failure to start it. A non-zero exit
+    refuses with ``failure``, so a failing check child is never mistaken for a failed pip install. The child inherits
+    the stage's blocked signals and dies with the stage process (dies_with_the_stage).
     """
     require(umask() == 0o077, 'private_parent_umask')
     argv = [str(Path(venv) / 'bin/python'), '-I', '-B', *arguments]
-    timed_out = False
+    timed_out, returncode, stdout, stderr, start_failure = False, None, b'', b'', None
     try:
         result = runner(argv, cwd=str(venv), env=child_environment(), capture_output=True, timeout=timeout,
-                        umask=CHILD_UMASK)
+                        umask=CHILD_UMASK, preexec_fn=dies_with_the_stage())
         returncode, stdout, stderr = result.returncode, result.stdout, result.stderr
     except subprocess.TimeoutExpired as expired:
-        timed_out, returncode = True, None
+        timed_out = True
         stdout, stderr = expired.stdout or b'', expired.stderr or b''
-    require(umask() == 0o077, 'parent_umask_unchanged')
+    except BaseException as error:
+        start_failure = error
     if recorder is not None:
-        recorder({'record': 'pip_process', 'argv': argv, 'returncode': returncode, 'timed_out': timed_out,
+        recorder({'record': record, 'argv': argv, 'returncode': returncode, 'timed_out': timed_out,
+                  'start_failure': None if start_failure is None else type(start_failure).__name__,
                   'timeout_seconds': timeout, 'stdout': stdout[:1024 ** 2].decode(errors='replace'),
                   'stderr': stderr[:1024 ** 2].decode(errors='replace'), 'child_umask': '0022',
                   'parent_umask': '0077', 'network_index': False, 'dependencies_resolved': False})
+    if start_failure is not None:
+        raise start_failure
+    require(umask() == 0o077, 'parent_umask_unchanged')
     require(not timed_out, 'venv_child_timeout')
     require(len(stdout) <= 1024 ** 2 and len(stderr) <= 1024 ** 2, 'bounded_child_output')
-    require(returncode == 0, 'venv_child_failed')
+    require(returncode == 0, failure)
     return stdout
 
 
@@ -414,20 +514,40 @@ def pip_arguments(requirements):
             '-r', str(requirements)]
 
 
-def checks(venv, after, *, runner=subprocess.run):
-    """Imports and round trips in the venv itself, then pip's own dependency check."""
-    value = json.loads(interpreter(venv, ['-c', CHECK_PROGRAM], runner=runner))
+#: The venv's own checks: (record and refusal of the imports child, record and refusal of `pip check`, version index).
+CHECK_PHASES = {'before': ('check_program_before_pip', 'versions_locations_and_round_trips_before_pip',
+                           'pip_check_before_pip', 0),
+                'after': ('check_program', 'installed_versions_locations_and_round_trips', 'pip_check', 1)}
+
+
+def checks(venv, snapshot, *, phase='after', runner=subprocess.run, recorder=None):
+    """Imports and round trips in the venv itself, then pip's own dependency check.
+
+    'before' runs them before pip on the OLD versions, so whatever they would refuse after pip (a broken PIL, a
+    requirement already broken among the other distributions) refuses while nothing has moved; 'after' proves the new
+    versions. Each child is recorded under its own name and refused under its own label: a broken requirement is
+    'pip_check' (or 'pip_check_before_pip'), never the 'venv_child_failed' of a failed pip install.
+    """
+    require(phase in CHECK_PHASES, 'checks_phase')
+    program_record, program_label, pip_label, index = CHECK_PHASES[phase]
+    raw = interpreter(venv, ['-c', CHECK_PROGRAM], runner=runner, recorder=recorder, record=program_record,
+                      failure=program_label)
+    try:
+        value = json.loads(raw)
+    except ValueError:
+        raise Refusal(program_label) from None
     site = Path(venv) / SITE
-    expected = {'pypdf': TRANSITIONS['pypdf'][1], 'pypdf_file': str(site / 'pypdf/__init__.py'), 'pdf_roundtrip': True,
-                'filelock': TRANSITIONS['filelock'][1], 'filelock_file': str(site / 'filelock/__init__.py'),
-                'filelock_api': True, 'msgpack': [int(x) for x in TRANSITIONS['msgpack'][1].split('.')],
+    version = {package: pair[index] for package, pair in TRANSITIONS.items()}
+    expected = {'pypdf': version['pypdf'], 'pypdf_file': str(site / 'pypdf/__init__.py'), 'pdf_roundtrip': True,
+                'filelock': version['filelock'], 'filelock_file': str(site / 'filelock/__init__.py'),
+                'filelock_api': True, 'msgpack': [int(x) for x in version['msgpack'].split('.')],
                 'msgpack_extension': str(site / NATIVE['msgpack'][0]), 'msgpack_c_packer': True,
                 'msgpack_roundtrip': True, 'cachecontrol_file_cache': str(site / 'cachecontrol/caches/file_cache.py'),
-                'certifi_ca_sha256': after['files'][SITE + '/certifi/cacert.pem']['sha256'],
-                'pillow': after['census']['distributions']['pillow'], 'png_roundtrip': True}
-    require(value == expected, 'installed_versions_locations_and_round_trips')
-    output = interpreter(venv, ['-m', 'pip', '--isolated', '--disable-pip-version-check', 'check'], runner=runner)
-    require(output.strip() == b'No broken requirements found.', 'pip_check')
+                'certifi_ca_sha256': snapshot['files'][SITE + '/certifi/cacert.pem']['sha256'],
+                'pillow': snapshot['census']['distributions']['pillow'], 'png_roundtrip': True}
+    require(value == expected, program_label)
+    output = interpreter(venv, PIP_CHECK, runner=runner, recorder=recorder, record=pip_label, failure=pip_label)
+    require(output.strip() == b'No broken requirements found.', pip_label)
     return value
 
 
@@ -458,9 +578,16 @@ def install_once(venv, wheel_directory, before, *, drained, recorder, live=False
     part-way can leave an earlier package moved. Every exit therefore ends with an 'outcome' record: refused before
     pip (nothing changed), or failed or refused after pip started, with the venv state MEASURED at that moment.
     ``work`` is a private directory for the pinned wheel copies (a new temporary directory by default).
+
+    Every refusal the venv can decide before pip is enforced before pip: the residue, the old versions, the
+    uninstall proof and the calibrated population from ``before``, then the venv's own checks on the old versions.
+    SIGTERM, SIGINT and SIGHUP stay blocked for the whole call: one taken before pip refuses ('interrupted_by_<name>',
+    nothing changed); one taken after pip started is recorded in the outcome ('signals_received', also in the proof)
+    while the stage runs every check to its end, and the caller judges it (calibrate exits 2).
     """
-    stage, pip_started, scratch = 'preconditions', False, []
+    stage, pip_started, scratch, received, previous = 'preconditions', False, [], [], None
     try:
+        previous = block_signals()
         with one_refusal_class():
             module = footprint()
             venv = Path(venv)
@@ -469,34 +596,44 @@ def install_once(venv, wheel_directory, before, *, drained, recorder, live=False
             require(umask() == 0o077, 'private_parent_umask')
             forward_only()
             require(drained() is True, 'owned_units_drained_before_pip')
-            module.require_exact(before, module.snapshot(venv), 'venv_unchanged_since_its_snapshot')
             require(not before['census']['pip_residue'], 'interrupted_pip_residue_in_the_venv')
             require(versions(before) == {p: pair[0] for p, pair in TRANSITIONS.items()}, 'old_versions_installed')
             uninstall = {package: uninstall_proof(before, package) for package in sorted(TRANSITIONS)}
+            population = calibrated_population(before)
+            refuse_if_signalled(received, 'checks_before_pip')
+            checks(venv, before, phase='before', runner=runner, recorder=recorder)
+            # The snapshot is the venv as found, and the checks above changed nothing in it.
+            module.require_exact(before, module.snapshot(venv), 'venv_unchanged_since_its_snapshot')
             proven = wheels(wheel_directory)
             if work is None:
                 work = tempfile.mkdtemp(prefix='rebuild-deps-')
                 scratch.append(work)
             pinned, copies, requirements = private_copies(proven, work)
             scratch.append(pinned)
-            # The last check before the child: a unit that started after the first drained() is seen here.
+            # The last checks before the child: a unit that started after the first drained() is seen here, and a
+            # signal taken here still refuses with nothing changed.
             require(drained() is True, 'owned_units_drained_immediately_before_pip')
+            refuse_if_signalled(received, 'before_pip')
             stage, pip_started = 'pip', True
             interpreter(venv, pip_arguments(requirements), timeout=PIP_TIMEOUT_SECONDS, recorder=recorder,
                         runner=runner)
             stage = 'after_pip'
+            take_signals(received, stage)
             require(drained() is True, 'owned_units_drained_after_pip')
             require(wheels(wheel_directory) == proven and {p: wheel(c['path'], p) for p, c in copies.items()}
                     == copies, 'wheels_unchanged_during_install')
             after = module.snapshot(venv)
             proof = transition(before, after, copies)
             proof['uninstall_proof'] = uninstall
-            proof['checks'] = checks(venv, after, runner=runner)
+            proof['population_before_pip'] = population
+            proof['checks'] = checks(venv, after, runner=runner, recorder=recorder)
             module.require_exact(after, module.snapshot(venv), 'venv_stable_after_install')
     except BaseException as error:
+        take_signals(received, stage)
         label = str(error) if isinstance(error, Refusal) else type(error).__name__
         record = {'record': 'outcome', 'outcome': 'refused', 'stage': stage, 'label': label,
-                  'pip_started': pip_started, 'venv_changed': None if pip_started else False}
+                  'pip_started': pip_started, 'venv_changed': None if pip_started else False,
+                  'signals_received': signal_names(received), 'signal_records': list(received)}
         if pip_started:
             record['measured_after_failure'] = measured_state(venv, before)
         try:
@@ -506,11 +643,18 @@ def install_once(venv, wheel_directory, before, *, drained, recorder, live=False
         finally:
             for path in reversed(scratch):
                 shutil.rmtree(path, ignore_errors=True)
+            finish_signals(previous, received, recorder)
         raise
     for path in reversed(scratch):
         shutil.rmtree(path, ignore_errors=True)
-    recorder({'record': 'outcome', 'outcome': 'installed', 'stage': 'complete', 'label': None, 'pip_started': True,
-              'after_footprint_sha256': after['footprint_sha256'], 'versions': versions(after)})
+    take_signals(received, 'complete')
+    proof['signals_received'] = signal_names(received)
+    try:
+        recorder({'record': 'outcome', 'outcome': 'installed', 'stage': 'complete', 'label': None, 'pip_started': True,
+                  'after_footprint_sha256': after['footprint_sha256'], 'versions': versions(after),
+                  'signals_received': signal_names(received), 'signal_records': list(received)})
+    finally:
+        finish_signals(previous, received, recorder)
     return after, proof
 
 
@@ -644,6 +788,10 @@ def calibrate(copy, wheel_directory, output, *, live_snapshot=None, runner=subpr
                    'copy_before_matches_live': True, 'copy_comparison_fields': list(COPY_FIELDS),
                    'pip_process': {'pin': process['pin'], 'argv': process['value']['argv'],
                                    'returncode': process['value']['returncode']},
+                   'check_processes': {name: {'pin': row['pin'], 'returncode': row['value']['returncode']}
+                                       for name, row in sorted(records.items())
+                                       if name not in ('pip_process', 'outcome', 'signals_after_outcome')},
+                   'signals_received': proof.get('signals_received', []),
                    'outcome': records['outcome']['pin'],
                    'wheels': {p: {'filename': WHEELS[p]['filename'], 'sha256': WHEELS[p]['sha256']} for p in WHEELS},
                    'transition': proof, 'snapshots': pins, 'units_drained': 'not applicable: a copy serves nothing',
@@ -670,8 +818,10 @@ def main(argv=None):
         return 0
     receipt = calibrate(args.venv_copy, args.wheels, args.output)
     print(json.dumps({key: receipt[key] for key in ('live_venv_unchanged', 'copy_before_matches_live', 'copy_before',
-                                                    'copy_after', 'pip_process', 'receipt')}, indent=1, sort_keys=True))
-    return 0
+                                                    'copy_after', 'pip_process', 'signals_received', 'receipt')},
+                     indent=1, sort_keys=True))
+    # A signal taken while the stage ran (recorded, never acted on once pip started) is for judgement: exit 2.
+    return 2 if receipt['signals_received'] else 0
 
 
 if __name__ == '__main__':

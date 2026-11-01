@@ -13,8 +13,11 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
+import sys
 import tempfile
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -26,6 +29,12 @@ from ops import venv_footprint as footprint
 SITE = footprint.SITE
 #: The literal pins, captured before any test replaces them with the fake package.
 REAL_TRANSITIONS, REAL_WHEELS = dict(stage.TRANSITIONS), dict(stage.WHEELS)
+ROUTED_SIGNALS = ('SIGTERM', 'SIGINT', 'SIGHUP')
+
+
+def settle():
+    for _ in range(40):
+        time.sleep(0.005)
 
 
 def record_line(name, data):
@@ -162,11 +171,19 @@ class StageTests(unittest.TestCase):
             patcher = patch.object(stage, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
-        checks = patch.object(stage, 'checks', return_value={'stubbed': True})
-        checks.start()
-        self.addCleanup(checks.stop)
+        self.check_calls = []
+
+        def checks(venv, snapshot, *, phase='after', runner=None, recorder=None):
+            self.check_calls.append(phase)
+            return {'stubbed': True}
+        patcher = patch.object(stage, 'checks', checks)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         umask = os.umask(0o077)
         self.addCleanup(os.umask, umask)
+        mask = signal.pthread_sigmask(signal.SIG_BLOCK, [])
+        self.addCleanup(lambda: self.assertEqual((signal.pthread_sigmask(signal.SIG_BLOCK, []), signal.sigpending()),
+                                                 (mask, set())))
 
     def install(self, pip=None, *, drained=lambda: True, before=None, live=False, venv=None, records=None):
         venv = venv or self.venv
@@ -457,7 +474,213 @@ class StageTests(unittest.TestCase):
             self.assertFalse((self.root / 'calibration-plain').exists())
 
 
+    def test_dep2_r1_a_population_the_stage_was_not_calibrated_on_refuses_before_pip(self):
+        """DEP2-R1(A): one extra distribution (a later `pip install x`), or a pip other than the one the uninstall proof
+        and the generated metadata model, is in the before-snapshot: refused before any pip process. transition()
+        used to find it only AFTER pip had moved every package, and D2 then leaves no way forward."""
+        venv = fake_venv(self.root / 'extra')
+        meta = b'Metadata-Version: 2.1\nName: lens-extra\nVersion: 1.0\n'
+        write(venv / SITE / 'lens_extra-1.0.dist-info/METADATA', meta)
+        write(venv / SITE / 'lens_extra-1.0.dist-info/RECORD', record_text([
+            record_line('lens_extra-1.0.dist-info/METADATA', meta), ['lens_extra-1.0.dist-info/RECORD', '', '']]))
+        record = self.refused_before_pip('calibrated_population', venv=venv)
+        self.assertEqual(record['stage'], 'preconditions')
+        venv = fake_venv(self.root / 'other-pip')
+        write(venv / SITE / 'pip-24.0.dist-info/METADATA', b'Metadata-Version: 2.1\nName: pip\nVersion: 23.3\n')
+        self.refused_before_pip('calibrated_population', venv=venv)
+        self.assertEqual(self.check_calls, [])          # refused before the venv's own checks even ran
+
+    def test_dep2_r1_the_venv_s_own_checks_run_before_pip_and_refuse_with_nothing_changed(self):
+        """DEP2-R1(B): a requirement already broken among the other distributions makes `pip check` exit 1 BEFORE pip:
+        the venv's own checks now run first, on the old versions, so that refusal comes with nothing moved."""
+        order = []
+
+        def checks(venv, snapshot, *, phase='after', runner=None, recorder=None):
+            order.append('checks_' + phase)
+            if phase == 'before' and getattr(self, 'broken', False):
+                raise stage.Refusal('pip_check_before_pip')
+            return {'stubbed': True}
+        with patch.object(stage, 'checks', checks):
+            self.broken = True
+            self.refused_before_pip('pip_check_before_pip')
+            self.broken = False
+            pip = FakePip(self.venv, self.wheel, during=lambda: order.append('pip'))
+            self.install(pip)
+        self.assertEqual(order, ['checks_before', 'checks_before', 'pip', 'checks_after'])
+
+    def test_dep2_r2_a_signal_before_pip_refuses_with_nothing_changed(self):
+        """DEP2-R2: SIGTERM, SIGINT and SIGHUP are blocked for the whole stage; one taken at a checkpoint before pip
+        refuses (interrupted_by_<name>) with nothing changed, and it is in the outcome record."""
+        for name in ROUTED_SIGNALS:
+            with self.subTest(signal=name):
+                venv = fake_venv(self.root / ('before-' + name))
+                calls = {'n': 0}
+
+                def drained(name=name, calls=calls):
+                    calls['n'] += 1
+                    if calls['n'] == 1:
+                        os.kill(os.getpid(), getattr(signal, name))
+                        settle()            # no handler, no KeyboardInterrupt: it waits for the checkpoint
+                    return True
+                record = self.refused_before_pip('interrupted_by_' + name, venv=venv, drained=drained)
+                self.assertEqual((record['signals_received'], record['signal_records'][0]['stage']),
+                                 ([name], 'checks_before_pip'))
+
+    def test_dep2_r2_a_signal_during_pip_is_recorded_and_the_stage_runs_to_its_end(self):
+        """DEP2-R2 (r2_signals): a SIGTERM to the stage alone killed it with no record and left pip running on; a
+        SIGINT left no pip_process record. Blocked, they change nothing: pip ends, every check runs, both records
+        are written, and the outcome and the proof carry the signals for judgement."""
+        def signals():
+            os.kill(os.getpid(), signal.SIGTERM)
+            os.kill(os.getpid(), signal.SIGINT)
+            settle()
+        after, proof, records, pip = self.install(FakePip(self.venv, self.wheel, during=signals))
+        self.assertEqual([r['record'] for r in records], ['pip_process', 'outcome'])
+        self.assertEqual((records[0]['returncode'], records[1]['outcome']), (0, 'installed'))
+        self.assertEqual(sorted(records[1]['signals_received']), ['SIGINT', 'SIGTERM'])
+        self.assertEqual({row['stage'] for row in records[1]['signal_records']}, {'after_pip'})
+        self.assertEqual(sorted(proof['signals_received']), ['SIGINT', 'SIGTERM'])
+        self.assertEqual(self.check_calls, ['before', 'after'])
+        self.assertEqual(after['census']['distributions']['demo'], '1.1')
+
+    def test_dep2_r2_a_child_that_cannot_start_still_leaves_its_record(self):
+        def runner(argv, **options):
+            raise FileNotFoundError(2, 'No such file or directory')
+        records = []
+        with self.assertRaises(FileNotFoundError):
+            self.install(runner, records=records)
+        self.assertEqual([r['record'] for r in records], ['pip_process', 'outcome'])
+        self.assertEqual((records[0]['start_failure'], records[0]['returncode']), ('FileNotFoundError', None))
+        self.assertEqual((records[1]['stage'], records[1]['label'], records[1]['pip_started']),
+                         ('pip', 'FileNotFoundError', True))
+
+    def test_dep2_r2_every_venv_child_starts_blocked_and_dies_with_the_stage(self):
+        """DEP2-R2: a venv child inherits the stage's blocked mask (only SIGKILL stops it) and is SIGKILLed by the
+        kernel when the stage process dies (PR_SET_PDEATHSIG): pip never runs on after the stage is gone."""
+        venv = self.root / 'real-venv'
+        (venv / 'bin').mkdir(parents=True)
+        (venv / 'bin/python').symlink_to(os.path.realpath(sys.executable))
+        pid_file = self.root / 'child.pid'
+        stage_code = ('import os, sys; sys.path.insert(0, sys.argv[1]); from ops import rebuild_dependency_stage as s;'
+                      ' os.umask(0o077); s.block_signals();'
+                      ' s.interpreter(sys.argv[2], ["-c", "import os,sys,time; open(sys.argv[1], \'w\').write('
+                      'str(os.getpid())); time.sleep(60)", sys.argv[3]], timeout=90)')
+        parent = subprocess.Popen([sys.executable, '-I', '-B', '-c', stage_code, str(Path(stage.__file__).parents[1]),
+                                   str(venv), str(pid_file)], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        try:
+            for _ in range(400):
+                if pid_file.exists() and pid_file.read_text():
+                    break
+                time.sleep(0.025)
+            child = int(pid_file.read_text())
+            status = (Path('/proc') / str(child) / 'status').read_text()
+            blocked = int(next(line for line in status.splitlines() if line.startswith('SigBlk:')).split()[1], 16)
+            self.assertTrue(all(blocked >> (getattr(signal, name) - 1) & 1 for name in ROUTED_SIGNALS))
+            os.kill(child, signal.SIGTERM)
+            time.sleep(0.2)
+            self.assertTrue(alive(child))                  # blocked: SIGTERM does not stop it
+            parent.kill()                                  # the stage dies, as only SIGKILL can make it
+            parent.wait(timeout=30)
+            for _ in range(200):
+                if not alive(child):
+                    break
+                time.sleep(0.025)
+            self.assertFalse(alive(child))                 # ... and its child with it
+        finally:
+            if parent.poll() is None:
+                parent.kill()
+                parent.wait()
+            parent.stderr.close()
+
+    def test_dep2_r2_calibrate_exits_2_when_a_signal_arrived_during_the_stage(self):
+        live = fake_venv(self.root / 'live-root')
+        copy = self.root / 'copy-signalled'
+        shutil.copytree(live, copy, symlinks=True)
+        argv = ['calibrate', '--venv-copy', str(copy), '--wheels', str(self.wheels), '--output',
+                str(self.root / 'calibration-signalled')]
+        real = stage.calibrate
+        pip = FakePip(copy, self.wheel, during=lambda: (os.kill(os.getpid(), signal.SIGHUP), settle()))
+        with patch.object(stage, 'VENV', live), \
+                patch.object(stage, 'calibrate', lambda c, w, o: real(c, w, o, runner=pip)), \
+                redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(stage.main(argv), 2)
+        self.assertEqual(json.loads(output.getvalue())['signals_received'], ['SIGHUP'])
+
+
+def alive(pid):
+    try:
+        state = (Path('/proc') / str(pid) / 'stat').read_text().rsplit(')', 1)[1].split()[0]
+    except OSError:
+        return False
+    return state != 'Z'
+
+
 class ChecksTests(unittest.TestCase):
+    def test_dep2_r3_every_check_child_is_recorded_under_its_own_name_and_label(self):
+        """DEP2-R3 (r3): the check children ran without the recorder and a failure read 'venv_child_failed', the label
+        of a failed pip install, while pip check's exit 1 made its own 'pip_check' label unreachable. Each child now
+        leaves its record (argv, return code, output) under its own name and refuses under its own label."""
+        venv = Path('/nonexistent/venv')
+        snapshot = {'files': {SITE + '/certifi/cacert.pem': {'sha256': 'c' * 64}},
+                    'census': {'distributions': {'pillow': '13.0.0'}}}
+
+        def report(index):
+            site = venv / SITE
+            version = {package: pair[index] for package, pair in stage.TRANSITIONS.items()}
+            return {'pypdf': version['pypdf'], 'pypdf_file': str(site / 'pypdf/__init__.py'), 'pdf_roundtrip': True,
+                    'filelock': version['filelock'], 'filelock_file': str(site / 'filelock/__init__.py'),
+                    'filelock_api': True, 'msgpack': [int(x) for x in version['msgpack'].split('.')],
+                    'msgpack_extension': str(site / stage.NATIVE['msgpack'][0]), 'msgpack_c_packer': True,
+                    'msgpack_roundtrip': True,
+                    'cachecontrol_file_cache': str(site / 'cachecontrol/caches/file_cache.py'),
+                    'certifi_ca_sha256': 'c' * 64, 'pillow': '13.0.0', 'png_roundtrip': True}
+        broken = b'tqdm 4.70.1 requires lens-missing-dependency, which is not installed.\n'
+
+        def runner(program, check):
+            def run(argv, **options):
+                if argv[-1] == 'check':
+                    return subprocess.CompletedProcess(argv, *check)
+                return subprocess.CompletedProcess(argv, *program)
+            return run
+        umask = os.umask(0o077)
+        try:
+            for phase, index, names, labels in (
+                    ('after', 1, ('check_program', 'pip_check'),
+                     ('installed_versions_locations_and_round_trips', 'pip_check')),
+                    ('before', 0, ('check_program_before_pip', 'pip_check_before_pip'),
+                     ('versions_locations_and_round_trips_before_pip', 'pip_check_before_pip'))):
+                good = (0, json.dumps(report(index)).encode(), b'')
+                with self.subTest(phase=phase, child='pip_check_exit_1'):
+                    records = []
+                    with self.assertRaises(stage.Refusal) as caught:
+                        stage.checks(venv, snapshot, phase=phase, runner=runner(good, (1, broken, b'')),
+                                     recorder=records.append)
+                    self.assertEqual(str(caught.exception), labels[1])
+                    self.assertEqual([(r['record'], r['returncode']) for r in records], [(names[0], 0), (names[1], 1)])
+                    self.assertIn('lens-missing-dependency', records[1]['stdout'])
+                    self.assertEqual(records[1]['argv'][-1], 'check')
+                with self.subTest(phase=phase, child='import_error'):
+                    records = []
+                    failing = (1, b'', b'ModuleNotFoundError: No module named PIL\n')
+                    with self.assertRaises(stage.Refusal) as caught:
+                        stage.checks(venv, snapshot, phase=phase, runner=runner(failing, (0, b'', b'')),
+                                     recorder=records.append)
+                    self.assertEqual(str(caught.exception), labels[0])
+                    self.assertEqual([(r['record'], r['returncode']) for r in records], [(names[0], 1)])
+                    self.assertIn('No module named PIL', records[0]['stderr'])
+                with self.subTest(phase=phase, child='both_pass'):
+                    records = []
+                    stage.checks(venv, snapshot, phase=phase,
+                                 runner=runner(good, (0, b'No broken requirements found.\n', b'')),
+                                 recorder=records.append)
+                    self.assertEqual([r['record'] for r in records], list(names))
+            # The new versions are not the old ones: an 'after' report fails the 'before' comparison and vice versa.
+            with self.assertRaises(stage.Refusal):
+                stage.checks(venv, snapshot, phase='before',
+                             runner=runner((0, json.dumps(report(1)).encode(), b''), (0, b'', b'')))
+        finally:
+            os.umask(umask)
+
     def test_checks_compare_the_venv_s_own_report_with_the_snapshot(self):
         venv = Path('/nonexistent/venv')
         site = venv / SITE
