@@ -164,15 +164,18 @@ read or reported, and content it would not show is excluded with a message.
   decode alone, a code Python's codec lacks, an odd byte count in a two-byte
   CMap), text in a CMap pypdf does not implement that has no ToUnicode (any
   predefined CMap outside its table but the UCS-2 and UTF-16 ones, which it
-  reads as UTF-16BE as they encode; an embedded CMap that cannot be read, or
-  past the document's MAX_DOCUMENT_CMAP_BYTES of embedded CMaps), text in a
+  reads as UTF-16BE as they encode; an embedded CMap, or one whose code space
+  cannot be read and whose ToUnicode declares none), text in a
   glyph-index font (Identity, no ToUnicode, no CIDToGIDMap stream: pypdf
   reads its glyph indices as UTF-16BE), and text in a font pypdf cannot build,
   cannot parse or the resources do not name (it would draw it in a stand-in
   font that reads every byte as U+FFFD). With a ToUnicode, a CMap pypdf splits
   otherwise than the CMap does (`pdffonts.Codes`: a predefined CMap it does not
   implement, two bytes a code as UTF-16BE; an embedded CMap of mixed code
-  lengths or that uses a predefined one, one byte a code) is read as pypdf
+  lengths or that uses a predefined one, one byte a code; an embedded CMap that
+  cannot be read, malformed, using another CMap or past the document's
+  MAX_DOCUMENT_CMAP_BYTES of embedded CMaps, by its ToUnicode's code space,
+  which PDF 32000-1 9.10.3 requires to be consistent with it) is read as pypdf
   reads it where it splits the string as the CMap does, any other code by code
   by the ToUnicode; an embedded CMap of two-byte codes only is read through an
   Identity copy, one of one-byte codes only one byte a code, each by its

@@ -54,10 +54,12 @@
   a predefined CMap (usecmap), which pypdf reads one byte a code; and a
   predefined CMap pypdf does not implement, which it reads as UTF-16BE, two
   bytes a code. Each is cut into codes by the CMap's own code space (Adobe's,
-  ``PREDEFINED_CODE_SPACES``, or the embedded one's), and with a ToUnicode a
-  string pypdf splits as the CMap does is read as pypdf reads it (exact by
-  construction: two-byte strings under H, KSC-H, GB-H, ... and one-byte
-  strings of a mixed embedded CMap), any other code by code by the ToUnicode.
+  ``PREDEFINED_CODE_SPACES``, or the embedded one's; for an embedded CMap that
+  cannot be read, its ToUnicode's, which PDF 32000-1 9.10.3 requires to be
+  consistent with it), and with a ToUnicode a string pypdf splits as the CMap
+  does is read as pypdf reads it (exact by construction: two-byte strings
+  under H, KSC-H, GB-H, ... and one-byte strings of a mixed embedded CMap), any
+  other code by code by the ToUnicode.
 - **Text pypdf cannot read as the PDF encodes it** (``decodes``): a composite
   font whose CMap pypdf does not implement and that has no ToUnicode (it reads
   the bytes as UTF-16BE, which is what a UCS-2 or UTF-16 CMap encodes and
@@ -584,7 +586,8 @@ def decode_plan(font, built: Font | None = None, cache: dict | None = None) -> b
     is its own character, as in Ghostscript's conversions of a simple font's text) the codes pypdf reads as their own
     ASCII character by its StandardEncoding (_guessed). An embedded CMap of codes of more than one length, or one that
     uses a predefined CMap, and a predefined CMap pypdf does not implement, each with a ToUnicode, are read by their
-    ``Codes``. Any other composite font needs a CMap pypdf implements under which the whole string decodes: pypdf
+    ``Codes``; so is an embedded CMap that cannot be read (malformed, using another CMap, or past the document's bound),
+    by the code space its ToUnicode declares. Any other composite font needs a CMap pypdf implements under which the whole string decodes: pypdf
     6.21.2 refused a string that does not (or wrote lone surrogates), and 6.21.4 writes U+FFFD and mojibake. ``built``:
     pypdf's Font of ``font``, when built already; ``cache``: FontReadings.cache."""
     encoding = resolved(font.get('/Encoding'))
@@ -610,6 +613,8 @@ def decode_plan(font, built: Font | None = None, cache: dict | None = None) -> b
             return _cached(cache, ('given', id(to_unicode)), (to_unicode,), given)
         if layout is None:
             space = _cached(cache, ('space', id(encoding)), (encoding,), lambda: _cmap_space(encoding, cache))
+            if space is None:  # a CMap that cannot be read (malformed, or past the bound): its ToUnicode's code space
+                space = _cached(cache, ('tospace', id(to_unicode)), (to_unicode,), lambda: _to_unicode_space(to_unicode))
             if space is not None:
                 return _cached(cache, ('codes', id(encoding), id(to_unicode)), (encoding, to_unicode),
                                lambda: Codes.read_bytes(space, pypdf_font()))
@@ -992,6 +997,34 @@ def _cmap_space(cmap: StreamObject, cache: dict | None = None) -> CodeSpace | No
             return None
         ranges.extend(space.ranges)
     for found in _cmap_sections(data, (b'codespacerange',)):
+        if found is None:
+            return None
+        parsed = [_hex_code(token, 4) for token in _CMAP_TOKEN.findall(found[1])]
+        if not parsed or len(parsed) % 2 or None in parsed:
+            return None
+        for (low, length), (high, other) in zip(parsed[::2], parsed[1::2]):
+            if length != other or not CodeSpace.valid(length, low, high):
+                return None
+            ranges.append((length, low, high))
+    return CodeSpace(ranges) if ranges else None
+
+
+def _to_unicode_space(to_unicode: StreamObject) -> CodeSpace | None:
+    """The code space a font's ToUnicode declares (its codespacerange sections, in its first MAX_EMBEDDED_CMAP_BYTES, codes
+    one to four bytes long), which PDF 32000-1 9.10.3 requires to be consistent with the font's encoding CMap: the code
+    space of a font whose embedded CMap cannot be read (malformed, or past the document's MAX_DOCUMENT_CMAP_BYTES).
+    None when it declares none there, or a range or a section is malformed."""
+    try:
+        data = to_unicode.get_data()[:MAX_EMBEDDED_CMAP_BYTES]
+    except (MemoryError, RecursionError):
+        raise
+    except Exception:
+        return None
+    end = data.rfind(b'endcodespacerange')
+    if end < 0:
+        return None
+    ranges = []
+    for found in _cmap_sections(data[:end + len(b'endcodespacerange')], (b'codespacerange',)):
         if found is None:
             return None
         parsed = [_hex_code(token, 4) for token in _CMAP_TOKEN.findall(found[1])]

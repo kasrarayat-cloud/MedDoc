@@ -327,9 +327,11 @@ class EmbeddedCMapTests(unittest.TestCase):
                 result = extract(self.page(font, self.LINE.encode('utf-16-be')))
                 self.assertEqual((result.status, result.messages), ('ok', ()))
                 self.assertTrue(result.text.endswith('\n' + self.LINE), result.text)
-        used = shapes.embedded_cmap_font('/Synthetic-Other usecmap\n', pairs, code_bytes=2)  # not a predefined CMap
+        # it uses a CMap that is not a predefined one, which is not read here: its ToUnicode's code space reads it
+        used = shapes.embedded_cmap_font('/Synthetic-Other usecmap\n', pairs, code_bytes=2)
         result = extract(self.page(used, self.LINE.encode('utf-16-be')))
-        self.assertEqual(result.status, 'partial')
+        self.assertEqual((result.status, result.messages), ('ok', ()))
+        self.assertTrue(result.text.endswith('\n' + self.LINE), result.text)
 
     def test_a_one_byte_cmap_whose_tounicode_lacks_codes_that_are_their_own_characters(self):
         """No reading below the installed reader's: where every code the ToUnicode gives is its own character (a
@@ -342,6 +344,24 @@ class EmbeddedCMapTests(unittest.TestCase):
         hebrew = {ord(latin): chr(0x05D0 + index) for index, latin in enumerate('abcdefgh')}
         other = extract(shapes.one_byte_cmap_page('abc def gh', glyphs=hebrew, missing=' '))
         self.assertEqual(other.status, 'partial')  # its codes are not its characters: no code is guessed
+
+
+class UnreadableCMapTests(unittest.TestCase):
+    """An embedded CMap that cannot be read (a section never closed, no code space: R2-COST-A's shape) is read by its
+    font's ToUnicode's code space, which PDF 32000-1 9.10.3 requires to be consistent with the encoding: the 'A' the
+    ToUnicode gives <0041>, the installed reader's text (round 3 left it unread); with no code space there, unread."""
+
+    def test_the_tounicode_gives_the_codes(self):
+        result = extract(shapes.shared_cmap_fonts(2, unclosed=4096))
+        self.assertEqual((result.status, result.messages), ('ok', ()))
+        self.assertTrue(result.text.endswith('\nA\nA'), result.text)
+        space = b'1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n'
+        document = shapes.shared_cmap_fonts(2, unclosed=4096)
+        self.assertEqual(document.count(space), 1)  # the ToUnicode's: blanked in place, every offset kept
+        spaceless = document.replace(space, b' ' * len(space))
+        result = extract(spaceless)
+        self.assertEqual(result.status, 'partial')
+        self.assertTrue(result.text.endswith(FFFD), result.text)
 
 
 class ManyCMapTests(unittest.TestCase):
@@ -364,6 +384,8 @@ class ManyCMapTests(unittest.TestCase):
         self.assertEqual(spent[12], spent[24])
         small, large = shapes.many_cmaps(12, size), shapes.many_cmaps(24, size)
         assert_doubles(self, lambda: in_process(small), lambda: in_process(large), 'many embedded CMaps', 2)
+        result = in_process(large)  # past the bound, each font is read by its ToUnicode's code space
+        self.assertEqual((result.status, result.text.rsplit('\n', 1)[1].replace(' ', '')), ('ok', 'A' * 24))
         result = in_process(shapes.many_cmaps(4, 4096))
         self.assertEqual((result.status, result.text.rsplit('\n', 1)[1].replace(' ', '')), ('ok', 'AAAA'))  # read
 

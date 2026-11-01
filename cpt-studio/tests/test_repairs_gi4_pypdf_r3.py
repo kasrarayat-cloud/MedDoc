@@ -403,8 +403,11 @@ class CostTests(unittest.TestCase):
                                'embedded CMap')
         whole = self.openers(pdffonts.MAX_EMBEDDED_CMAP_BYTES)
         self.assertLess(best(lambda: self.assertIsNone(pdffonts._cmap_layout(whole)), 1), 0.5)
+        # round 4: a CMap that cannot be read is read by its ToUnicode's code space (PDF 32000-1 9.10.3), here two
+        # bytes a code, so each font's <0041> is the 'A' its ToUnicode gives, as the installed reader read it
         result = in_process(shapes.shared_cmap_fonts(3, unclosed=500_000))
-        self.assertEqual((result.status, result.text.count(FFFD)), ('partial', 6))
+        self.assertEqual((result.status, result.text.count(FFFD)), ('ok', 0))
+        self.assertTrue(result.text.endswith('\nA\nA\nA'), result.text)
 
     def test_a_shared_cmap_is_read_once(self):
         """R2-COST-G: every font dictionary sharing an embedded CMap read it again (900 of them: 217 s). Doubling the
