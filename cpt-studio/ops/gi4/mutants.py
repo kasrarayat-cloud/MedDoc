@@ -831,6 +831,18 @@ PO_MUTANTS = (
     Mutant('po1-no-service', "PO-1 P1: no inventory, or no service of the item, is no evidence", _PO_ENGINE,
            '    if service is None:\n        return False\n    for a in service.acts:\n',
            '    if service is None:\n        return True\n    for a in service.acts:\n', _PO_UNIT),
+    # --- PO, Wave 1 repair cycle 2 (po.json amendment_20261101_cycle2; refutation PO1-PASTED-ACT-OFFER): C1, nothing
+    # offered where the document says its procedure was called off or not done today; C2, P1's act under no
+    # heading-like line further up naming another record ---
+    Mutant('po1-called-off', 'PO-1 C1: no offer where the document says its procedure was called off or not done '
+           'today, whatever a pasted act elsewhere says', _PO_ENGINE,
+           '        if _po_called_off(text):  # C1 (cycle 2): the document says its procedure was called off or not '
+           'done today\n            return False\n',
+           '        pass  # mutant: C1 removed\n', _PO_UNIT),
+    Mutant('po1-act-record-heading', "PO-1 C2: P1's act is under no heading-like line further up naming another "
+           'record or an attachment', _PO_ENGINE,
+           '               and not _po_under_another_record(text, ev.start)\n',
+           '               and True  # mutant: C2 removed\n', _PO_UNIT),
 )
 MUTANTS += PD_MUTANTS + PV1_MUTANTS + PE_MUTANTS + PI_MUTANTS + PO_MUTANTS
 # Every round-4 package's mutants by name prefix (the census in tests/test_gi4_mutants.py holds each exactly once);

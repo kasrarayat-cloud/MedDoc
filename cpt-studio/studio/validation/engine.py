@@ -537,6 +537,8 @@ def _po_not_contradicted(u: reconcile.Unresolved, routing: RoutingResult, text: 
             return False
         readings.append((ev.start, *detect.status_for_span(text, ev.start, ev.end, day)))
     if all(_po_silent(m.status, m.cues) for m in mentions):  # PO-1
+        if _po_called_off(text):  # C1 (cycle 2): the document says its procedure was called off or not done today
+            return False
         if not _po_done_in_body(u, inventory, text):  # P1: silence is no evidence that anything was done today
             return False
         return all(_po_says_nothing(status, cues) for _, status, cues in readings)
@@ -564,13 +566,100 @@ def _po_not_contradicted(u: reconcile.Unresolved, routing: RoutingResult, text: 
 # snare") - never an act read only from a title or a procedure line ("Colonoscopy With Cold Snare Polypectomy") - in a
 # passage under no line naming another occurrence's record. Hold-only: it withholds offers and offers nothing new.
 _PO_ACT_PREDICATE = 'performed: an act predicate'  # services: an act predicate of its own, in a current report or not
+# GI round 4, Wave 1 repair cycle 2 (po.json amendment_20261101_cycle2; refutation PO1-PASTED-ACT-OFFER of fbc59ee53):
+# one act pasted from another record gave P1 its positive evidence, so a report whose procedure was called off was
+# offered again - the act 9 lines under "Previous Report" or "Outside Report" (sections.under_another_occurrence reads 6
+# lines and 600 characters back), under "Attached Report" (no occurrence word), or under no heading at all. Two holds:
+# C1, PO-1 offers nothing where the document says its procedure was called off, cancelled or not done today, whatever a
+# pasted act elsewhere says (_PO_CALLED_OFF: a closed list read only to hold - "After discussion we did not go ahead",
+# "the scope was not inserted", "nothing further was done today", "she will be rebooked next week"); C2, P1's act is no
+# evidence where the nearest heading-like line above it, read back as far as a section's heading
+# (sections.HEADING_REACH_LINES lines, HEADING_REACH_CHARS characters), names another occurrence's record or an
+# attachment (_po_under_another_record). Hold-only: each withholds offers and offers nothing new.
+_PO_PROCEDURE_NOUN = (r'(?:procedures?|examinations?|exams?|study|studies|endoscopy|colonoscopy|gastroscopy'
+                      r'|sigmoidoscopy|egd|eus|ercp|case)')
+_PO_CALLED_OFF = re.compile(
+    # "After discussion we did not go ahead", "decided not to proceed with the colonoscopy" (never "could not proceed
+    # beyond the sigmoid": a procedure begun and stopped is an incomplete one, a performed reading)
+    r"\b(?:did\s+not|didn['’]t|could\s+not|couldn['’]t|would\s+not|chose\s+not\s+to|decided\s+not\s+to"
+    r"|elected\s+not\s+to|opted\s+not\s+to|unable\s+to|not\s+able\s+to)\s+go\s+ahead\b"
+    r"|\b(?:did\s+not|didn['’]t|chose\s+not\s+to|decided\s+not\s+to|elected\s+not\s+to|opted\s+not\s+to)\s+proceed"
+    r"(?:\s+with\s+(?:the\s+|her\s+|his\s+|their\s+|this\s+|today['’]s\s+)?" + _PO_PROCEDURE_NOUN + r"\b"
+    r"|[ \t]*+(?:[.;,\n]|\Z|today\b|and\b|because\b|as\b|since\b|given\b|due\b))"
+    # "the scope was not inserted", "nothing further was done today", "she will be rebooked next week"
+    r"|\b(?:scope|endoscope|colonoscope|gastroscope|sigmoidoscope|echoendoscope|duodenoscope|instrument)\s+(?:was|were)"
+    r"\s+(?:not|never)\s+(?:inserted|introduced)\b"
+    r"|\bnothing\s+(?:further\s+|else\s+|more\s+)?(?:was\s+|were\s+)?(?:done|performed)\s+today\b"
+    r"|\b(?:will\s+be|was|were|is|are|has\s+been|have\s+been|had\s+to\s+be|to\s+be|being)\s+(?:re-?booked"
+    r"|re-?scheduled|postponed|called\s+off)\b"
+    # "called off", "not performed today", "no colonoscopy today", "sent home without the procedure"
+    r"|\bcalled\s+off\b"
+    r"|\bnot\s+(?:done|performed|carried\s+out|undertaken|attempted|started|begun)\s+today\b"
+    r"|\bno\s+" + _PO_PROCEDURE_NOUN + r"\s+(?:(?:was|were)\s+(?:done|performed)\s+)?today\b"
+    r"|\bsent\s+home\s+without\s+(?:the\s+|a\s+|any\s+|her\s+|his\s+)?" + _PO_PROCEDURE_NOUN + r"\b"
+    # "the procedure was aborted before insertion", "the case was cancelled", "cancelled at the time-out"
+    r"|\b" + _PO_PROCEDURE_NOUN + r"\s+(?:was\s+|were\s+)?(?:aborted|abandoned|stopped|halted)\s+before\s+"
+    r"(?:insertion|intubation|sedation|induction|starting|it\s+(?:began|started)"
+    r"|the\s+(?:scope|endoscope|colonoscope|start))\b"
+    r"|\bcase\s+(?:was\s+|has\s+been\s+|had\s+to\s+be\s+)?cancel(?:l)?ed\b"
+    r"|\bcancel(?:l)?ed\s+(?:today|on\s+arrival|at\s+(?:the\s+)?time-?out|before\s+(?:sedation|insertion|induction"
+    r"|the\s+procedure|starting))\b", re.A | re.I)
+# C2: the words of an attachment or an enclosed copy, beside sections.ANOTHER_OCCURRENCE_HEAD's ("Attached Report",
+# "Enclosed Records", "Scanned Outside Pages")
+_PO_RECORD_WORDS = re.compile(r'\b(?:attach(?:ed|ments?)|enclos(?:ed|ures?)|scanned|faxed|imported|excerpts?|appended'
+                              r'|external|received)\b', re.A | re.I)
+
+
+@_po_cached
+def _po_called_off(text: str) -> bool:
+    """C1 (cycle 2): whether the document says that its procedure was called off, cancelled or not done today in the
+    words of _PO_CALLED_OFF - read anywhere in the text and only to hold PO-1 (a statement of another encounter written
+    the same way holds too). Read once per text (a cache this module's ROUTING_CACHE_MODULES entry clears)."""
+    return _PO_CALLED_OFF.search(text) is not None
+
+
+def _po_under_another_record(text: str, pos: int) -> bool:
+    """C2 (cycle 2): whether the nearest heading-like line above the line of ``pos`` - a short line (at most 60
+    characters) with a letter and no sentence end, as sections.under_another_occurrence reads one, a closing colon
+    allowed - names another occurrence's record (sections.ANOTHER_OCCURRENCE_HEAD: "Previous Report", "Outside Report")
+    or an attachment (_PO_RECORD_WORDS: "Attached Report"), read back from the line's start as far as a section's
+    heading may stand (sections.HEADING_REACH_LINES lines and HEADING_REACH_CHARS characters; under_another_occurrence
+    reads only OCCURRENCE_HEAD_LINES lines and OCCURRENCE_HEAD_REACH characters). False when no such line is found
+    there. Read once per line of a text (_po_record_line), whatever the number of acts and items asking."""
+    return _po_record_line(text, text.rfind('\n', 0, pos) + 1)
+
+
+def _po_line_cached(fn):
+    """``fn`` cached per (text, line) as functools.lru_cache(maxsize=1024), which jobs.release_routing_caches clears
+    with this module's other caches."""
+    import functools  # local, as in _po_cached
+    return functools.lru_cache(maxsize=1024)(fn)
+
+
+@_po_line_cached
+def _po_record_line(text: str, line_start: int) -> bool:
+    """C2 for the line starting at ``line_start`` (_po_under_another_record). Bounded: at most HEADING_REACH_LINES
+    lines and HEADING_REACH_CHARS characters read back."""
+    lo = max(0, line_start - gi_sections.HEADING_REACH_CHARS)
+    end = line_start - 1
+    for _ in range(gi_sections.HEADING_REACH_LINES):
+        if end <= lo:
+            return False
+        start = text.rfind('\n', lo, end) + 1
+        line = text[max(start, lo):end].strip()
+        if line and len(line) <= 60 and line[-1] not in '.;!?' and any(c.isalpha() for c in line):
+            return bool(gi_sections.ANOTHER_OCCURRENCE_HEAD.search(line) or _PO_RECORD_WORDS.search(line))
+        end = start - 1
+    return False
 
 
 def _po_done_in_body(u: reconcile.Unresolved, inventory, text: str) -> bool:
     """P1 (PO-1's positive evidence): an act of the item's own service - for an act item, that act - that the
     documented-service reader reads performed by an act predicate of its own (_PO_ACT_PREDICATE: never only from a
     title, a procedure line, a box or a field), with a passage in the text under no line naming another occurrence's
-    record (sections.under_another_occurrence: "Outside records"). False without an inventory or the item's service."""
+    record (sections.under_another_occurrence: "Outside records"), nor - cycle 2, C2 - under a heading-like line further
+    up naming another occurrence's record or an attachment (_po_under_another_record: "Previous Report" 9 lines up,
+    "Attached Report"). False without an inventory or the item's service."""
     service = next((s for s in inventory.services if s.id == u.service), None) if inventory is not None else None
     if service is None:
         return False
@@ -582,6 +671,7 @@ def _po_done_in_body(u: reconcile.Unresolved, inventory, text: str) -> bool:
         if not any(c.startswith(_PO_ACT_PREDICATE) for c in a.cues):
             continue
         if any(0 <= ev.start < ev.end <= len(text) and not gi_sections.under_another_occurrence(text, ev.start)
+               and not _po_under_another_record(text, ev.start)
                for ev in a.evidence):
             return True
     return False
