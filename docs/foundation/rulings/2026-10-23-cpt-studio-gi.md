@@ -1286,3 +1286,42 @@ session in its first commit, before the work that depends on it. Verbatim:
 66. **Right by the source, for readers too.** Interpretation 38's bar applies to the pypdf move as well. A reading that
     differs from 6.21.2 is judged against the document, not against equality with 6.21.2. Equality with the installed
     reader is a safety net, never acceptance, wherever the installed reading is known to be wrong.
+
+### Session interpretation, 2026-10-31 (1bf3b49c, fourth round, the rebuild installer) — recorded, not owner-ruled
+
+Decided by the integration owner (interpretation 64) and recorded by the installer's author in its first commit,
+before the code that depends on it.
+
+67. **The rebuild's next install is code only, through a tracked installer.**
+    - **D1.** The next act installs code only. The candidate is `origin/main` at the act: it carries P1, the
+      never-installed PR #1434 instruction text and every other path since `67acb2628`. The live venv
+      `/opt/meddoc-pro/rebuild/.venv` stays exactly as found (pypdf 6.21.1, filelock 4.0.0, msgpack 1.2.2 and the 63
+      unrecorded bytecode files), asserted by a full footprint before and after. `rebuild/requirements.txt` will name
+      newer versions than the venv; that mismatch is declared, not refused. The dependency move is a later, separate
+      act (D1b).
+    - **D2.** No rollback ever downgrades the venv.
+    - **D3.** The Corti candidate units and every other foreign service stay running and unchanged. The act verifies
+      them idle and unchanged before and after, as the October engine did.
+    - **D4.** The declaration reaches `main` through a pull request before the act, so the candidate contains it. The
+      October rule "the declaration is a direct child commit of the candidate adding only that file" is replaced by:
+      the declaration is tracked, unmodified and committed in the candidate, and the strict gate of
+      `scripts/run-ruled-mutation.sh` passes.
+
+    This refines interpretation 62, which is kept as written: the next install carries main's pins in the tree but not
+    in the venv, so it is judged as a code install with a declared requirements/runtime mismatch. The pypdf move is
+    judged later, in D1b, after item 2's regressions are repaired and measured. In the install analyst's plan, D1
+    matches option (ii) of its question O1 and D2 matches the precedent answer of its question O2.
+
+    Added by the integration owner on 2026-11-01, after four refutation rounds of the installer:
+    - **Why the installer is tracked.** The October installs ran through a private, untracked operator that patched the
+      tracked engine at runtime, and their declarations survive only as unpushed commits in execution worktrees. This act's
+      installer lives in the repository with tests, its default mode is a read-only preflight, and it went through four
+      refutation rounds (22, 14, 6 and 4 findings, the last two signal and lock edge cases).
+    - **Signals.** The act blocks every terminating signal and takes them only at checkpoints. It must still not be
+      signalled: under the runner, a group signal ends in SIGKILL after 15 s, and the Go docker client can abort a unit
+      action. It is run detached, with no other operator process, and only a separately declared reverse act recovers a
+      killed act.
+    - **Backups.** Every scheduled rebuild backup has failed since 2026-10-12. Each referenced file is copied through its
+      own helper container, and the file count outgrew the fixed 540-second timeout. The act therefore takes a manual
+      encrypted backup and an isolated restore check first. Repairing the schedule is outside this round and goes to the
+      owner.
