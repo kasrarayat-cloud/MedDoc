@@ -173,6 +173,10 @@ $PY -I -B $C/rebuild/ops/install_rebuild_release.py --base $BASE --candidate $CO
   --new-dot-path cpt-studio/.gitignore --new-dot-path cpt-studio/deploy/.dockerignore
 ```
 
+Every run of the installer, a preflight or the act, needs a `--result` path that does not exist yet, in a private
+(0700) directory: an existing one refuses before anything runs (`new_result_file`). A repeated preflight writes
+`preflight-01b.json`, never over an earlier report.
+
 **Expected result: exit 1, and exactly three FAIL rows:** `declaration_provenance`, `strict_declaration_gate` and
 `declaration_contract` (`declaration_not_in_candidate`). Every other check must PASS:
 
@@ -332,8 +336,9 @@ then read stderr and whatever evidence exists.
 **Signals during the act.** SIGTERM, SIGINT and SIGHUP stay blocked from the act's first statement until the process
 exits. No handler runs: not the installer's (it has none), not the SIGTERM handler that the managed docker helper
 installs for each call, not Ctrl-C's KeyboardInterrupt. So no signal interrupts a stage, a helper call, a child's
-start, or the drain or restore. Every child the act starts (git, the docker helper client, `bash`) inherits the
-blocked mask. A git child keeps it, so only SIGKILL can stop it: a `kill` of the installer or of its process group
+start, or the drain or restore. Every child the act starts (git, the docker helper client, `bash`, `systemctl`)
+inherits the blocked mask, and a child that keeps it can be stopped only by SIGKILL. git keeps it (measured: a git
+child survives SIGTERM, SIGINT and SIGHUP and stops on SIGKILL), so a `kill` of the installer or of its process group
 cannot stop a merge half-way. A pending signal is taken only at the checkpoints between stages, and recorded with
 its sender's pid and uid (`signal_records`). Two signals of the same kind that arrive between two checkpoints are
 one record.

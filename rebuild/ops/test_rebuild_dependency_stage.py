@@ -573,6 +573,7 @@ class StageTests(unittest.TestCase):
                     break
                 time.sleep(0.025)
             child = int(pid_file.read_text())
+            self.addCleanup(lambda: alive(child) and os.kill(child, signal.SIGKILL))    # never left sleeping
             status = (Path('/proc') / str(child) / 'status').read_text()
             blocked = int(next(line for line in status.splitlines() if line.startswith('SigBlk:')).split()[1], 16)
             self.assertTrue(all(blocked >> (getattr(signal, name) - 1) & 1 for name in ROUTED_SIGNALS))
