@@ -829,6 +829,17 @@ NOT_REACHED_BEFORE = rx(r'\b(?:unable\s+to|could\s+not|cannot|failed\s+to|did\s+
 NOT_REACHED_AFTER = rx(r'^[\s,]*(?:was|were|could)\s+not\s+(?:be\s+)?(?:reached|intubated|entered|examined|visualized|'
                        r'seen|evaluated|inspected)\b')
 REACHED_BEYOND = rx(r'\b(?:beyond|past)\s+(?:the\s+)?(?:[\w-]+\s+){0,2}$')
+# GI round 4, package PE (synthesis E2): routing's own reach vocabulary - REACHED_BEFORE with two more reach verbs,
+# "steered" and "navigated", and nothing else changed. h4-04: "The gastroscope was introduced by mouth under visual
+# guidance and steered through the stomach and pylorus into the second part of the duodenum" stood 76 characters from
+# "introduced" to "into", past REACHED_BEFORE's 60, so the EGD read "incomplete: stomach". Read by detect._landmarks
+# only, where a reach that only these two verbs read counts only under its guards (detect._pe_routing_reach: the
+# family's endpoint or beyond, no denial, no accessory). REACHED_BEFORE itself stays as it is: sections reads it to hold
+# a part, and the request side never moves.
+REACHED_BEFORE_ROUTING = rx(r'\b(?:advanced|passed|inserted|introduced|intubated|examined|inspected|traversed|reached|'
+                            r'visualized|steered|navigated)\b[^.;]{0,60}?\b(?:to|into|through|as\s+far\s+as|up\s+to|'
+                            r'to\s+the\s+level\s+of|beyond|past|at)\s+(?:the\s+)?(?:[\w-]+\s+){0,3}$'
+                            r'|\b(?:reached|intubated|entered)\s+(?:the\s+)?$')
 # A reach whose object is a depth, then the landmark that depth lies in (session 7c8d38da, GI round 2, extent: ho-03's
 # "The pediatric colonoscope was advanced to 28 cm from the anal verge in the sigmoid colon"): the landmark is where the
 # instrument got to, so it is reached, exactly as "advanced to the sigmoid colon" is. Only straight after the reach verb

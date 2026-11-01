@@ -3631,13 +3631,15 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                             cut_denials.append((blocked[-1], m.start(), m.end(), ws, we,
                                                 status in ('negated', 'cancelled', 'incomplete')))
                     elif status in ('performed', 'incomplete') and (
-                            cues.REACHED_BEFORE.search(pre) or cues.REACHED_AFTER.search(post)
+                            _pe_reached_before(an, pre, depth, table, m.start(), post)  # GI round 4 PE
+                            or cues.REACHED_AFTER.search(post)
                             or (_reached_label(an, ws, m.start()) and _plain_tail(an, m.end(), we)
                                 and not _P2_label_denied(an, m.end(), depth, table))  # round 4c-2 plan:D
                             or _straight_after_service(an, ws, m.start())):
                         reached.append(hit)
                         if cut is not None and _S2_read_by_the_cut(an, m.end(), we) \
-                                and not (cues.REACHED_BEFORE.search(pre) or cues.REACHED_AFTER.search(post)
+                                and not (_pe_reached_before(an, pre, depth, table, m.start(), post)
+                                         or cues.REACHED_AFTER.search(post)
                                          or _straight_after_service(an, ws, m.start())):
                             cut.append(hit)  # read only by declared:11's cell cut (round 4d regression:3)
                     elif status in ('performed', 'incomplete') and _depth_reach_today(an, ws, pre):
@@ -3674,6 +3676,125 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
         doubted_reaches = {id(hit) for hit in _depth_reach_doubted(depth_only, deeper, refused, stopped)}
         reached = [hit for hit in reached if id(hit) not in doubted_reaches]
     return reached, blocked
+
+
+def _pe_reached_before(an: Analysis, pre: str, depth: int, table, at: int, post: str) -> bool:
+    """Whether ``pre``, the clause window before a landmark at ``depth`` of ``table`` starting at ``at`` (``post``: the
+    window after it), ends with a reach to it, for _landmarks (GI round 4, package PE: synthesis E2). As installed
+    (cues.REACHED_BEFORE), or by one of routing's own reach verbs (cues.REACHED_BEFORE_ROUTING adds "steered" and
+    "navigated": h4-04's "The gastroscope was introduced by mouth under visual guidance and steered through the stomach
+    and pylorus into the second part of the duodenum" read "incomplete: stomach"), and then only where _pe_routing_reach
+    holds. Wherever a routing-only verb is not read, the installed reading stands, so the new vocabulary can only add a
+    reach to a family's endpoint: never a denial, never an incompleteness, and nothing on the request side (sections
+    reads cues.REACHED_BEFORE, unchanged)."""
+    if cues.REACHED_BEFORE.search(pre):
+        return True
+    if not re.search(r'steered|navigated', pre, re.A | re.I):
+        return False  # no routing-only verb: the installed reading, at the installed cost
+    found = cues.REACHED_BEFORE_ROUTING.search(pre)
+    return found is not None and _pe_routing_reach(an, pre, post, found, depth, table, at)
+
+
+def _pe_routing_reach(an: Analysis, pre: str, post: str, found: re.Match, depth: int, table, at: int) -> bool:
+    """Whether a reach that only a routing-only verb reads (``found``: cues.REACHED_BEFORE_ROUTING's match in ``pre``,
+    where cues.REACHED_BEFORE read none) is the endoscope's own reach, today, to the landmark at ``at`` (GI round 4,
+    package PE). The status vocabulary knows neither verb (cues._HEDGE_ACT and the 'could not', 'unable to' and 'not
+    advanced' cues list "advanced", never "steered"), so the hit's own reading may rest on its section alone. Fail
+    closed, each guard giving back the installed reading:
+    - the landmark lies at or beyond the depth the family calls for (_S2_expected_depth: the cecum for the lower tract,
+      the depth the named upper endoscopies call for), so a routing-only verb never reads a shallower landmark and never
+      makes a procedure incomplete ("steered into the stomach" before "Normal duodenal mucosa."; "navigated to the
+      hepatic flexure, where a polyp was removed with a cold snare, and then on to the cecum");
+    - nothing denies, hedges, plans, conditions or generalises the reach (_pe_reach_doubted: "could not be steered into
+      the duodenum", "steered toward but not into the duodenum", "We hoped the scope would be steered to the cecum",
+      "The colonoscope, to be navigated to the cecum later, was withdrawn");
+    - the instrument moved is an endoscope (_pe_endoscope_moved): "A guidewire was navigated through the pylorus into
+      the duodenum" says nothing of where the gastroscope went;
+    - the document is no note written around a procedure (_pe_around_procedure: a letter, a booking, a handout, a records
+      review quoting a report);
+    - the verb is under no line naming another occurrence's record (sections.under_another_occurrence: "Outside Records"
+      over "At Mercy GI the colonoscope was navigated to the cecum")."""
+    if not re.match(r'(?:steered|navigated)\b', found.group(0), re.A | re.I):
+        return False  # every other verb of the pattern is cues.REACHED_BEFORE's, which read no reach here
+    if depth < _S2_expected_depth(an, table):
+        return False  # short of the family's endpoint: never a new incompleteness
+    before, span = pre[:found.start()], pre[found.start():]
+    if _pe_reach_doubted(before, span, post):
+        return False
+    if not _pe_endoscope_moved(before, span):
+        return False
+    if _pe_around_procedure(an):
+        return False
+    return not gi_sections.under_another_occurrence(an.text, at - len(pre) + found.start())
+
+
+def _pe_reach_doubted(before: str, span: str, post: str) -> bool:
+    """Whether a routing-only verb's reach is denied or doubted (GI round 4, package PE), standing in for the status cues
+    that know the installed verbs only. Broad on purpose: a doubt only gives back the installed reading.
+    - ``before`` (the clause window up to the verb) ends, at most three words before the verb, with a negation ("could
+      not be steered", "was not successfully navigated", "couldn't be navigated", "never steered", "unable to be
+      steered", "failed to be navigated"), a modal ("would be steered", "may have been navigated", "will be steered",
+      "can be navigated"), an infinitive ("to be navigated"), a hedge or a generalising adverb ("probably",
+      "reportedly", "usually", "typically") or a present-tense auxiliary ("is then steered": a template or a handout);
+    - or right before the verb with a falling-short adverb (cues._FALLING_SHORT: "partially steered");
+    - or ``before`` holds a wish, a plan, an attempt or a condition anywhere ("We hoped the scope would be ...", "if the
+      scope can be ...", "whether ...", "once ...");
+    - or ``span`` (the verb up to the landmark) holds a negation, a hedge, a falling-short adverb or an attempt ("steered
+      toward but not into the duodenum", "steered, and an attempt was made to pass into the duodenum");
+    - or ``post`` (the clause window after the landmark) puts the reach at another time or under a condition ("to the
+      cecum later", "next time", "at the next procedure", "if ...", "will ...")."""
+    short = '|'.join(cues._FALLING_SHORT)
+    hedge = (r'possibly|probably|likely|presumably|apparently|perhaps|maybe|reportedly|supposedly|seemingly|allegedly|'
+             r'hopefully|ideally|usually|typically|normally|generally|routinely|often|sometimes')
+    if re.search(r"(?:\b(?:not|never|cannot|unable[ \t\n]+to|fail(?:s|ed)?[ \t\n]+to|no[ \t\n]+longer|neither|nor|may|"
+                 r"might|could|would|should|must|will|shall|can|ought|to[ \t\n]+be|is|are|gets?|" + hedge + r")|n't)"
+                 r"(?:[ \t\n]+[\w'-]+){0,3}[ \t\n]+$", before, re.A | re.I):
+        return True  # a negation, a modal, an infinitive, a hedge or the present tense governs the verb
+    if re.search(r'\b(?:' + short + r')[ \t\n]+$', before, re.A | re.I):
+        return True  # it fell short
+    if re.search(r'\b(?:hope[ds]?|hoping|plan(?:s|ned|ning)?|intend(?:s|ed|ing)?|expect(?:s|ed|ing)?|aim(?:s|ed|ing)?|'
+                 r'want(?:s|ed|ing)?|wish(?:es|ed|ing)?|tr(?:y|ies|ied|ying)|attempt(?:s|ed|ing)?|goal|if|unless|'
+                 r'whether|once|until|scheduled|booked|recommend(?:s|ed|ing)?)\b', before, re.A | re.I):
+        return True  # a wish, a plan, an attempt or a condition
+    if re.search(r"\b(?:not|never|no|nor|neither|without|unable|fail(?:s|ed|ing|ure)?|cannot|instead|attempt\w*|"
+                 r"tr(?:y|ies|ied|ying)|" + hedge + '|' + short + r")\b|n't", span, re.A | re.I):
+        return True  # denied or doubted between the verb and the landmark
+    return re.search(r'\b(?:later|tomorrow|upcoming|future|if|unless|when|once|will|would|next[ \t\n]+(?:time|week|'
+                     r'month|year|visit|procedure|attempt|session|examination|exam)|at[ \t\n]+(?:the|a)[ \t\n]+'
+                     r'(?:next|later|future|subsequent|repeat)|on[ \t\n]+repeat)\b', post, re.A | re.I) is not None
+
+
+def _pe_around_procedure(an: Analysis) -> bool:
+    """Whether the document is a note written around a procedure rather than its report (sections.around_procedure_title:
+    a booking, scheduling, pre-procedure, telephone, consent, instructions, education or handout note, a letter, a
+    records review): a reach it narrates is a quoted or a planned one, never read by a routing-only verb (GI round 4,
+    package PE; hold-only). Memoised per analysis."""
+    key = ('pe-around-procedure',)
+    if key not in an.memo:
+        an.memo[key] = gi_sections.around_procedure_title(an.text)
+    return an.memo[key]
+
+
+def _pe_endoscope_moved(before: str, span: str) -> bool:
+    """Whether the instrument a routing-only verb moves is an endoscope (GI round 4, package PE): a scope word
+    ("gastroscope", "colonoscope", "scope", "instrument": the endoscope as cues.REACHED_DEPTH reads it) as the verb's
+    object with no accessory between the verb and the landmark ("We steered the gastroscope into the second part of the
+    duodenum"), or as the nearest instrument word before the verb in its clause window ("The gastroscope was introduced
+    by mouth under visual guidance and steered ..."). An accessory nearer to the verb (a guidewire, a catheter, a
+    balloon, a dilator, a stent, a probe, a snare ...) or no scope word at all is no reach of the endoscope, and the
+    installed reading stands."""
+    accessory = (r'guide-?wires?|wires?|catheters?|balloons?|dilators?|bougies?|stents?|probes?|cannula[es]?|'
+                 r'sphincterotomes?|papillotomes?|baskets?|overtubes?|tubes?|sheaths?|needles?|clips?|snares?|forceps|'
+                 r'devices?|caps?|lasers?|fib(?:er|re)s?|nets?|endoloops?|loops?|ligators?|bands?|capsules?')
+    scope = r'\w*scopes?|instruments?'
+    if re.search(r'\b(?:' + accessory + r')\b', span, re.A | re.I):
+        return False
+    if re.search(r'\b(?:' + scope + r')\b', span, re.A | re.I):
+        return True
+    last = None
+    for last in re.finditer(r'\b(?:(?P<scope>' + scope + r')|' + accessory + r')\b', before, re.A | re.I):
+        pass
+    return last is not None and last.group('scope') is not None
 
 
 _DEPTH_FIGURE = re.compile(r'\d{1,3}\s*cm\b', re.A | re.I)
