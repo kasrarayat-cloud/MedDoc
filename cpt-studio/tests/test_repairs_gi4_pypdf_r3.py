@@ -39,6 +39,8 @@ PDF = 'application/pdf'
 FIELDS = 'Page 1 has PDF form fields; their values were read and added after the page text, labelled as form fields.'
 ANNOTATION = ('Page 1 has text added as PDF annotations; it was read and added after the page text, labelled as '
               'annotation text.')
+MISMATCH = ('Page 1: a text annotation shows text that differs from its stored text; the stored text was read, so '
+            'check it against the original.')
 FFFD = '�'
 
 
@@ -264,6 +266,7 @@ class NulValueTests(unittest.TestCase):
 
     def test_the_appearance_shows_what_a_nul_value_does_not(self):
         for kind, tail, notice in (('field', '[PDF form fields on page 1]\nIndication: Screening colonoscopy', FIELDS),
+                                   ('control', '[PDF form fields on page 1]\nIndication: Screening colonoscopy', FIELDS),
                                    ('terminated', '[PDF form fields on page 1]\nIndication: Screening colonoscopy',
                                     FIELDS),
                                    ('free text', '[PDF annotation text on page 1]\nReviewer note: polyp removed',
@@ -272,6 +275,14 @@ class NulValueTests(unittest.TestCase):
                 result = extract(shapes.nul_value(kind))
                 self.assertEqual((result.status, result.messages), ('ok', (notice,)))
                 self.assertTrue(result.text.endswith(tail), result.text)
+
+    def test_contents_that_name_no_character_give_way_to_the_rich_text(self):
+        """/Contents of only U+0001 names no character, so the stored text is the rich text (/RC), as when /Contents
+        is empty; the appearance, which shows another text, is named as differing from it."""
+        result = extract(shapes.nul_value('control free text'))
+        self.assertEqual((result.status, result.messages), ('partial', (ANNOTATION, MISMATCH)))
+        self.assertTrue(result.text.endswith('[PDF annotation text on page 1]\nReviewer note: biopsy taken'),
+                        result.text)
 
     def test_a_nul_in_a_box_is_still_the_unread_mark(self):
         result = extract(shapes.field_page('/T (History) /V ' + shapes.utf16('[\x00] Hypertension')))
@@ -303,6 +314,17 @@ class OneByteCMapTests(unittest.TestCase):
         reader = PdfReader(io.BytesIO(shapes.one_byte_cmap_page('a 1')))
         font = reader.pages[0]['/Resources']['/Font']['/F2'].get_object()
         self.assertIsNone(pdffonts._one_byte_copy(font, font['/Encoding'].get_object()))  # each code its own CID
+
+    def test_the_text_is_measured_by_its_codes_widths(self):
+        """Its widths are given by code (through the CMap's CIDs), so pypdf measures the line as the font draws it:
+        'mm' drawn 1 pt past its end closes up with it, as on the page. Measured by the widths of the CIDs that
+        equal its codes, the line seemed 12 pt wider than the font draws it, and a space came between them."""
+        text = '1 2 3 4 5 6 7 8 9'
+        width = (9 * 600 + 8 * 250) / 1000 * 11
+        result = extract(shapes.one_byte_cmap_page(text, cid_offset=3,
+                                                   after=f'BT /F1 11 Tf {72 + width + 1:.2f} 600 Td (mm) Tj ET'))
+        self.assertEqual((result.status, result.messages), ('ok', ()))
+        self.assertTrue(result.text.endswith('\n' + text + 'mm'), result.text)
 
     def test_a_code_the_tounicode_does_not_give(self):
         result = extract(shapes.one_byte_cmap_page('Biopsy taken: no', missing='n'))

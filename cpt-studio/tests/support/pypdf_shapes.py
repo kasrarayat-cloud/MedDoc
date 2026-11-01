@@ -1182,15 +1182,19 @@ def box_glyph_rows(*, one_object: bool = False) -> bytes:
 
 def nul_value(kind: str) -> bytes:
     """NUL-VALUE-1: 'field': a text field /V <FEFF0000> (only a NUL) whose appearance draws 'Screening colonoscopy';
-    'terminated': its value is that text and a NUL; 'free text': a FreeText /Contents <FEFF0000> whose appearance draws
-    'Reviewer note: polyp removed'."""
-    if kind == 'free text':
-        objects = {26: (b'<< /Type /Annot /Subtype /FreeText /Rect [72 480 300 500] /F 4 /DA (/Helv 10 Tf 0 g) '
-                        b'/Contents <FEFF0000> /AP << /N 27 0 R >> >>'),
+    'control': its value only U+0001; 'terminated': its value is that text and a NUL; 'free text': a FreeText
+    /Contents <FEFF0000> whose appearance draws 'Reviewer note: polyp removed'; 'control free text': its /Contents
+    only U+0001, with rich text (/RC) 'Reviewer note: biopsy taken'."""
+    if kind in ('free text', 'control free text'):
+        entries = ('/Contents <FEFF0000>' if kind == 'free text' else
+                   '/Contents <FEFF0001> /RC (<body xmlns="http://www.w3.org/1999/xhtml"><p>Reviewer note: biopsy '
+                   'taken</p></body>)')
+        objects = {26: (f'<< /Type /Annot /Subtype /FreeText /Rect [72 480 300 500] /F 4 /DA (/Helv 10 Tf 0 g) '
+                        f'{entries} /AP << /N 27 0 R >> >>').encode(),
                    27: stream('BT /Helv 10 Tf 2 4 Td (Reviewer note: polyp removed) Tj ET',
                               '/Type /XObject /Subtype /Form /BBox [0 0 228 20] /Resources << /Font << /Helv 4 0 R >> >>')}
         return page_pdf(lines(NOTE), extra=objects, annots='/Annots [26 0 R]')
-    value = '<FEFF0000>' if kind == 'field' else utf16('Screening colonoscopy\x00')
+    value = {'field': '<FEFF0000>', 'control': '<FEFF0001>'}.get(kind) or utf16('Screening colonoscopy\x00')
     objects = {26: (f'<< /Type /Annot /Subtype /Widget /FT /Tx /T (Indication) /V {value} /Rect [72 480 300 500] /F 4 '
                     f'/AP << /N 27 0 R >> >>').encode(),
                27: stream('/Tx BMC BT /Helv 10 Tf 2 4 Td (Screening colonoscopy) Tj ET EMC',
@@ -1198,11 +1202,13 @@ def nul_value(kind: str) -> bytes:
     return page_pdf(lines(NOTE), extra=objects, annots='/Annots [26 0 R]', catalog='/AcroForm << /Fields [26 0 R] >>')
 
 
-def one_byte_cmap_page(text: str, *, cid_offset: int = 0, missing: str = '', glyphs: dict | None = None) -> bytes:
+def one_byte_cmap_page(text: str, *, cid_offset: int = 0, missing: str = '', glyphs: dict | None = None,
+                       after: str = '') -> bytes:
     """CAP-R2-1: ``text`` in a Type0 font whose /Encoding is an embedded CMap of one-byte codes (Ghostscript's
     OneByteIdentityH: codespace <00> <FF>, the codes CIDs ``cid_offset`` above them), with /W by CID (a space 250,
     anything else 500, the digits 600) and a one-byte ToUnicode giving each byte of the text its character (or the
-    one ``glyphs`` gives it: {byte: character}), but those of ``missing``; the note before it in Helvetica."""
+    one ``glyphs`` gives it: {byte: character}), but those of ``missing``; the note before it in Helvetica; ``after``:
+    content drawn after it."""
     encoded = text.encode('latin-1')
     cmap = stream('/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo << /Registry (Adobe) '
                   '/Ordering (Identity) /Supplement 0 >> def\n/CMapName /OneByteIdentityH def\n/CMapType 1 def\n'
@@ -1217,7 +1223,7 @@ def one_byte_cmap_page(text: str, *, cid_offset: int = 0, missing: str = '', gly
     font[7] = to_unicode(pairs=[(code, (glyphs or {}).get(code, chr(code))) for code in sorted(set(encoded))
                                 if chr(code) not in missing], code_bytes=1)
     font[12] = cmap
-    return with_font(lines(NOTE) + f'\nBT /F2 11 Tf 72 600 Td <{encoded.hex().upper()}> Tj ET', font)
+    return with_font(lines(NOTE) + f'\nBT /F2 11 Tf 72 600 Td <{encoded.hex().upper()}> Tj ET\n{after}', font)
 
 
 def cjk_codec_page(cmap: str, codes: str, face: str = 'STSong-Light', ordering: str = 'GB1') -> bytes:
