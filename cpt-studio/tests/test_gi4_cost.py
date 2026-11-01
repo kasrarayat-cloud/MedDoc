@@ -23,30 +23,36 @@ class CostProbeTests(SimpleTestCase):
                 self.assertIn(row['analyze']['outcome'], ('read', 'mentions over the limit'), name)
                 self.assertEqual(row['assess']['outcome'], 'assessed', name)
 
-    def test_both_children_read_the_date_of_service_the_probe_codes(self):
+    def test_both_children_read_the_date_of_service_the_context_accepts(self):
         # Round 4 PD asks the date where a wide label stands beside the date of service ('worded date labels'), and
-        # accepts only the date of service: the children then read the member's answer, never a dateless path, and a
-        # shape whose context neither reads nor accepts PROBE_DATE fails loudly instead of measuring another path.
+        # accepts only the date of service: the children then read the member's answer, never a dateless path. Every
+        # registered shape reads its own PROBE_DATE, as installed read it; a shape whose context accepts no date at all
+        # fails loudly instead of measuring another path.
         m = cost.modules()
-        day = cost.dt.date.fromisoformat(cost.PROBE_DATE)
+
+        def read(text):
+            facts = m.context.extract_context(text)
+            values = cost.member_values(m, facts, text)
+            return values, m.jobs._service_date_of(m.jobs._merged_facts(facts, values))
+
         for name, make in cost.SHAPES.items():
-            facts = m.context.extract_context(make(40))
-            values = cost.member_values(m, facts)
+            values, day = read(make(40))
             self.assertIn(values, ({}, {'service_date': cost.PROBE_DATE}), name)
-            self.assertEqual(m.jobs._service_date_of(m.jobs._merged_facts(facts, values)), day, name)
-            if not values:  # the document gives the date itself: the children read exactly what installed read
-                self.assertEqual(facts['service_date'].origin, 'document', name)
+            self.assertEqual(day, cost.dt.date.fromisoformat(cost.PROBE_DATE), name)
         asked = cost.SHAPES['worded date labels'](40)
         self.assertIsNone(m.jobs._service_date_of(m.jobs._merged_facts(m.context.extract_context(asked), {})))
-        self.assertEqual(cost.member_values(m, m.context.extract_context(asked)), {'service_date': cost.PROBE_DATE})
+        self.assertEqual(read(asked)[0], {'service_date': cost.PROBE_DATE})
         rows = cost.probe(m, 'worded date labels', cost.SHAPES['worded date labels'], (3000,))
         self.assertEqual(rows[0]['member_answer'], cost.PROBE_DATE)
         self.assertEqual(rows[0]['assess']['outcome'], 'assessed')
-        for other in (cost.B.replace('10/19/2026', '10/18/2026') + 'The colonoscope reached the cecum.\n',  # refused
-                      cost.B.replace('10/19/2026', '10/17/2026') + 'Date of service: 10/18/2026\nThe colonoscope '
-                      'reached the cecum.\n'):  # a documented conflict PROBE_DATE is no side of
-            with self.assertRaisesRegex(ValueError, 'neither reads nor accepts'):
-                cost.member_values(m, m.context.extract_context(other))
+        head = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nNew Patient Evaluation\n'
+        self.assertEqual(read(head + 'Date seen: 10/26/2026\n'), ({'service_date': '2026-10-26'},
+                                                                   cost.dt.date(2026, 10, 26)))  # its own date
+        self.assertEqual(read(cost.B.replace('10/19/2026', '10/18/2026'))[0], {})  # its own documented date
+        self.assertEqual(read(cost.B.replace('10/19/2026', '10/17/2026') + 'Date of service: 10/18/2026\n')[0],
+                         {'service_date': '2026-10-17'})  # a documented conflict: one of its own dates
+        with self.assertRaisesRegex(ValueError, 'neither reads nor accepts'):
+            read(head + 'Date of service: 20-Oct-26\n')  # a date no answer can be checked against: every one refused
 
     def test_the_ratio_judge(self):
         def row(chars, t, child=0.1):

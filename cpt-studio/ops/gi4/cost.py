@@ -4,11 +4,11 @@ the stages run them (studio/bounded.py, under the stage deadline and memory allo
 most 2.3 (steps under the noise floor of 0.05 s are not judged), the analyze child at most 30 s, the assess child at
 most 60 s, and neither past ASSESS_MEMORY_BYTES (an overrun is a failure, never a skip).
 
-Both children read every shape on its own date of service, PROBE_DATE (the head's "Date of service: 10/19/2026"), as
-installed read them. Where the context asks that date instead of reading it (round 4 PD: a wide label beside the date
-of service makes the context ask, and only the date of service is accepted), the children get the member's answer the
-context accepts, so they still measure the dated path, never a dateless one; a shape whose context accepts no
-PROBE_DATE at all fails the probe loudly (member_values).
+Both children read every shape on its own date of service (PROBE_DATE, the head's "Date of service: 10/19/2026", for
+every registered shape), as installed read them. Where the context asks the date instead of reading it (round 4 PD: a
+wide label beside the date of service makes the context ask, and only the date of service is accepted), the children
+get the member's answer the context accepts, so they still measure the dated path, never a dateless one; a shape whose
+context accepts no date at all fails the probe loudly (member_values).
 
   python -m ops.gi4.cost [--tree DIR] [--sizes 25000,50000,100000,200000,400000] [--only NAME ...]
 """
@@ -75,18 +75,23 @@ def _peak(fn, *args):
     return result, resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024
 
 
-def member_values(m, document_facts) -> dict:
+def member_values(m, document_facts, text='') -> dict:
     """The member's values both children read for a shape whose document facts are ``document_facts``: none where the
-    document gives PROBE_DATE itself; where the context asks it instead, the member's answer PROBE_DATE, taken only when
-    the context accepts it (jobs._merged_facts, exactly as the stages merge an answer). Anything else raises: the
-    children would read another date, or none, and measure another path than the probe says."""
-    want = dt.date.fromisoformat(PROBE_DATE)
-    for values in ({}, {'service_date': PROBE_DATE}):
-        if m.jobs._service_date_of(m.jobs._merged_facts(document_facts, values)) == want:
+    document gives a date of service itself (every registered shape gives PROBE_DATE); where the context asks it instead,
+    the member's answer the context ACCEPTS - each date the text writes, in order (the harness's own date reader,
+    regression.documented_dates, so both trees get the same candidates; a registered shape's first is PROBE_DATE), then
+    PROBE_DATE, the first one jobs._merged_facts takes exactly as the stages merge an answer. Where the context accepts
+    none, this raises: the children would read no date and measure another path than the probe says."""
+    if m.jobs._service_date_of(m.jobs._merged_facts(document_facts, {})) is not None:
+        return {}
+    from ops.gi4 import regression
+    for answer in dict.fromkeys(regression.documented_dates(text) + [PROBE_DATE]):
+        values = {'service_date': answer}
+        if m.jobs._service_date_of(m.jobs._merged_facts(document_facts, values)) == dt.date.fromisoformat(answer):
             return values
     fact = document_facts['service_date']
-    raise ValueError(f'the context neither reads nor accepts {PROBE_DATE} on this shape ({fact.origin}: '
-                     f'{fact.value!r}): the children would not read the date of service the probe codes')
+    raise ValueError(f'the context neither reads nor accepts a date of service on this shape ({fact.origin}: '
+                     f'{fact.value!r}; tried the dates the text writes and {PROBE_DATE}): the children would read none')
 
 
 def _analyze(m, text, values):
@@ -102,7 +107,7 @@ def _assess(m, text, values):
                                                                           1),)),)
     normalized = m.NormalizedResponse(provider='corti', adapter_version='corti-coding-v2@cptstudio-1', codes=codes)
     facts = m.jobs._merged_facts(m.context.extract_context(text), values)
-    day = m.jobs._service_date_of(facts)  # the date the stages derive from the merged facts: PROBE_DATE (member_values)
+    day = m.jobs._service_date_of(facts)  # the date the stages derive from the merged facts (never None: member_values)
     context = m.jobs.context_facts(SimpleNamespace(facts=facts))
     m.jobs._assess_child(text, day, (m.PageSpan(1, 0, len(text)),), context, normalized, m.Lookup([], {}), 'succeeded',
                          'ok', ())
@@ -135,7 +140,7 @@ def probe(m, name, make, sizes) -> list:
         m.sections.around_procedure_title(text) if hasattr(m.sections, 'around_procedure_title') else None
         m.sections.procedure_report_head(text) if hasattr(m.sections, 'procedure_report_head') else None
         t4 = time.perf_counter()
-        values = member_values(m, facts)
+        values = member_values(m, facts, text)
         _clear(m)
         analyze = _bounded(m, _analyze, text, values, m.settings.JOB_DEADLINE_SECONDS['analyze'])
         assess = _bounded(m, _assess, text, values, m.settings.JOB_DEADLINE_SECONDS['assess'])
