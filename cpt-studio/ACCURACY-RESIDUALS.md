@@ -816,6 +816,10 @@ decoded one would be dropped (TXT-3).
 
 ### pypdf 6.21.4 is taken, with the reader repaired (round 4, 2026-10-31; interpretations 61, 62 and 66)
 
+Its refutation found 16 defects in the reader this section describes; round 2, the section after it, repairs them.
+Where the two differ (the unit of unreadable text, the CMaps read, glyph names and encodings, boxes, costs), round 2
+decides; this section is kept as written, as the record round 2 answers.
+
 CPT Studio now pins pypdf 6.21.4 (`requirements.in`, `requirements.txt`; the rebuild's pin is unchanged). A new upload
 records `{'ingest': 'cpt-studio-ingest@4', 'pypdf': '6.21.4'}`, plus the OCR tools' versions or `'ocr': 'not
 available'`. A failure decided outside the reader (the child's memory or unexpected-stop handler, or the parent: a
@@ -915,3 +919,132 @@ browser-verifier). Under 6.21.2 the same tree fails exactly the tests that pin a
 version pins in `test_ingest.py`, and in `test_repairs_gi4_pypdf.py` the engine label, the glyph reader's decode,
 the indirect /W width, the non-numeric TD, parser-10, parser-11 and the structure limits (14 failures and 2
 errors); every row the repair decides passes under both versions.
+
+### Round 2: the refutation of this reader, and its repair (2026-10-31; interpretation 66)
+
+A four-lens refutation of the reader above (`b9d5aa2f1`: wrong text, capability loss, check boxes and forms, cost and
+limits) reported 16 findings. Each was reproduced here through the real extraction child, the installed reader
+(`origin/main` 06e6d204e, pypdf 6.21.2) beside round 1's (`b9d5aa2f1`, pypdf 6.21.4), on the lenses' own inputs, with OCR
+unavailable and with stand-in OCR tools: all 16 reproduce as reported, and all 16 are repaired, each at its cause and in
+general. Every repaired reading below is pinned by `tests/test_repairs_gi4_pypdf_r2.py`, whose documents are built in
+`tests/support/pypdf_shapes.py` (no PDF is committed). The engine label stays `cpt-studio-ingest@4`: round 1's reader
+is not on `main` and was never installed.
+
+| id | finding | installed (6.21.2) | round 1 (6.21.4) | this reader (6.21.4) | by the source |
+|---|---|---|---|---|---|
+| COST-1 | the C1 check classified a composite font again for every string shown (three regular-expression passes over its /BaseFont each time) | a 1,000,000-character /BaseFont, 3,000 strings: ok in 1.4 s; a 4,000-byte name, 500,000 glyph-index strings: ok in 37 s | both stopped at the 240 s deadline ('Extraction stopped after 240 seconds.') | ok in 0.9 s and 20.4 s, the same text as installed (0.8 s and 26.3 s in the same conditions) | **confirmed, repaired**: a font's decode plan and kind are worked out once a document (`FontReadings`), a string is checked against its font's plan |
+| COST-2 | a Type 1 program's clear text (up to 4 MiB) parsed again for every font dictionary in every page's and appearance's walker | 64 fonts sharing one 4 MiB program on 10 pages: ok in 3.3 s; one font in 600 annotation appearances: ok in 3.9 s | both stopped at 240 s | ok in 3.3 s and 3.5 s, the same text (installed 3.0 s and 3.5 s) | **confirmed, repaired**: a program's built-in encoding is parsed once a document, and each font read once a document |
+| LIMIT-1 | font inspections outside any guard: pypdf's array element limit (100,000) raised from a font only one annotation uses | 40 pages and the annotation's /Contents read, partial | failed: 'the extractor stopped unexpectedly (LimitReachedError)'; the /DescendantFonts variant and an unused font the same | partial, all 40 pages read, the annotation named as unreadable; the /DescendantFonts variant: the page read, its line in that font named; an unused such font: the page read, ok (the installed reader lost that page: pypdf failed on the font) | **confirmed, repaired**: every inspection of a font is guarded, and a font pypdf cannot parse is replaced, in what pypdf reads, by `unread_font` |
+| MEM-1 | a list entry kept for every glyph of the page, dropped ones included | 74,000,000 dropped glyphs: peak 657,864 KiB | 1,091,780 KiB, same text | peak 643.7 MiB (installed 643.2 MiB in the same conditions), same text | **confirmed, repaired**: the layer is read in one pass; the box guard keeps one position at a time |
+| F1 (wrong text) | a Type 1 program pypdf 6.21.4 cannot read (an unused 'u' + 20 hex digits, or 'uniFB01FB02'): the built-in codes read as StandardEncoding guesses; /Differences lost to the base encoding | the page's text exactly ('Left knee 2026-10-21: biopsy.'); the uniFB01FB02 variant failed, named | '01234561147879:;8...' at ok; Charter rows as tabs; '[\xa0]' read negated | the page's text exactly, the uniFB01FB02 variant too; '[x]' performed | **confirmed, repaired** |
+| F2 (wrong text) | a /Differences character looked up again as the code of a built-in 'u2610' | '[x]' performed | '[☐]' negated | '[x]' performed | **confirmed, repaired** |
+| F3 (wrong text) | a 'u20' name past item 4,096 of /Differences | '[/u20]' (the name written) | '[ ]' negated | '[?]' held, named | **confirmed, repaired**: the whole array, as pypdf reads it |
+| F4 (wrong text) | a ToUnicode <0000> or empty destination for a check mark in brackets | '[]' negated | '[]' negated | '[?]' held, named | **confirmed (in both), repaired** |
+| CL-1 | /UniKS-UTF16-H and -V (MuPDF's Korean fonts, its field and FreeText appearances) refused | exact, ok (10 files) | failed, or partial with a false notice | exact, ok | **confirmed, repaired** |
+| CL-2 | an embedded CMap stream as /Encoding refused (fpdf2's CID-keyed CFF fonts) | exact below 0x100; mojibake at ok beyond ('SĢSģ...') | failed (3 files) | exact, beyond 0x100 too | **confirmed, repaired** |
+| CL-3 | one unreadable operator discarded the whole page's correct text | the three Helvetica lines, and the CID line as mojibake at ok (42 ReportLab files); the flattened pypdf fills read with their block (6) | failed, or the page OCRed | the Helvetica lines read, the CID line dropped and named (partial); the fills read with their block, the one-byte text named | **confirmed, repaired** (installed wrong by the source on the mojibake line) |
+| F1 (form block) | a page flagged unreadable lost its labelled form-field block (/V, /AS) | ok: the block, the page's layer lost silently where pypdf failed on the footer's font (a /Widths name, an odd-length Identity-H string), or the footer as U+FFFD at ok (a font the resources do not hold, a flattened field without resources) | failed '' (no OCR); OCR text only (with OCR) | partial: the layer, the block, the footer named (the flattened field: ok, its text not extracted, as pypdf reads it); never sent to OCR | **confirmed, repaired** |
+| F2 (resourceless form) | a form XObject without /Resources (pdf-lib's flatten) made the page unreadable | ok, the page's text | failed, or OCR only | ok, as installed; a form with resources but no font: dropped and named, partial (installed: U+FFFD for each byte at ok) | **confirmed, repaired** |
+| F3 (forms: NUL box) | pdfkit's <0000> for .notdef, in brackets; a field value with NUL | '[]' negated | '[]' negated | '[?]' held, named | **confirmed (in both), repaired** |
+| F4 (AGL names) | 'uni2610.alt', 'u2610.001', 'uni2610_uni2612' dropped | the names written ('/uni2610.alt Hypertension') | dropped (bare), '[?]' (bracketed) | ☐, ☒, ☑, ☐, ☐☒, ☒ | **confirmed, repaired** |
+| F5 (forms: U+FFFD box) | libcairo's ToUnicode <fffd> in brackets | '[�]' affirmed | '[�]' affirmed, named | '[?]' held, named | **confirmed (in both), repaired** |
+
+What the reader does now, where it differs from round 1's rules above (which this replaces where they disagree):
+
+- **The unit of unreadable text is the operator, not the page.** A text-showing operator whose text pypdf cannot read
+  as the PDF encodes it is drawn, for extraction, in `pdffonts.unread_font` (codes as wide as its strings, as pypdf
+  measures them, so the text around it is spaced as before), dropped, and the page named: "Page N has text in a font or
+  encoding this server cannot read as the PDF encodes it; that text was not extracted, so check it against the
+  original." (partial). The rest of the page's layer, in fonts pypdf reads as the PDF encodes them, and the page's
+  labelled form-field block (read from /V and /AS, without any font) are read; the page goes to OCR only when what
+  remains is not a usable text layer, as any page. A font pypdf cannot build is replaced, in what pypdf reads, by that
+  font too, so it no longer stops pypdf reading the rest of the page (round 1 and the installed reader lost the page's
+  whole layer to it). An annotation's appearance stays one unit: unreadable, named, partial.
+- **Text pypdf reads no text from is not judged.** pypdf reads nothing from a form XObject without resources of its own
+  (or from a page without any): such text cannot reach the result as U+FFFD or mojibake, so it no longer makes the page
+  unread; and the reader no longer gives such a form its parent's resources in the copy pypdf reads (which made pypdf
+  read its text in a stand-in font, U+FFFD for every byte, when the page also held a font the reader copies).
+- **CMaps.** A UTF-16 CMap pypdf does not list (MuPDF's /UniKS-UTF16-H and -V) is read: pypdf reads every CMap it does
+  not implement as UTF-16BE, which is what a UCS-2 or UTF-16 CMap encodes and nothing else does. A composite font
+  whose /Encoding is an embedded CMap of two-byte codes only, with a ToUnicode (fpdf2's CID-keyed CFF fonts), is read
+  through a copy with the Identity CMap and its widths by code, so its ToUnicode decides every code (pypdf reads such a
+  font one byte a code, right only by accident below 0x100).
+- **Glyph names and encodings.** A font copied for a glyph name pypdf 6.21.4 reads by its own rule, or whose program
+  pypdf cannot read for its built-in encoding, reads every code as the source encodes it (ToUnicode, /Differences, the
+  named encoding, the built-in encoding where none replaces it): never pypdf's StandardEncoding guess for a code the
+  lost program names, and never a /Differences character looked up again as another code's. /Differences is read as
+  pypdf reads it, whole. Glyph names follow the Adobe Glyph List specification's section 2 (a suffix after a period,
+  '_' components).
+- **Boxes.** NUL (a ToUnicode <0000>, a stored value), an empty ToUnicode destination (copied as the private-use mark)
+  and U+FFFD or a lone surrogate alone in typed brackets are the unread mark `[?]` (held, named), in the layer and in
+  the labelled block; a field value or note keeps its NUL until the block's guard counts it.
+- **A FreeText whose appearance cannot be read** is named as an annotation whose text could not be read, not as one
+  whose appearance shows other text than its /Contents (which could not be known).
+- **Cost.** `pdffonts.FontReadings`, kept on the document's reader, works out once per font dictionary what pypdf reads
+  for it (its copy, whether pypdf builds it, how its strings are judged, its kind), and once per Type 1 program its
+  built-in encoding; a string is judged against its font's plan (an even byte count for UTF-16BE). The layer is read
+  in one pass that keeps only the text it writes (the box guard holds one position at a time). Every inspection of a
+  font is guarded: a font pypdf cannot parse (its structure limits among the reasons) is unusable, its text unread and
+  named, never the reason the document fails.
+
+Ordinary files, re-measured (interpretation 66: no difference from the installed reader but where the installed reading
+is wrong by the source). The round's 149 files, the capability lens's 761 real-producer files (Chrome and cairo,
+MuPDF in its save modes, ReportLab, pdf-lib, pdfkit, pdf.js, PDFium, fpdf2, Skia and the pypdf writer) and the 25
+rendered-checkbox documents, 935 in all, read through the real child by the installed reader on 6.21.2 and this reader
+on 6.21.4, with OCR unavailable and with stand-in OCR tools: 836 read identically; 99 differ, each judged:
+
+| files | installed (6.21.2) | this reader | by the source |
+|---|---|---|---|
+| 42 ReportLab CIDFont files under a CMap pypdf does not implement (83pv/90msp/90pv/Add/Ext-RKSJ, EUC, H/V, KSC-EUC, KSCms-UHC(-HW), KSCpc-EUC, B5pc, CNS-EUC, six faces) | the three Helvetica lines, and the CID line as CJK mojibake, at ok | the three Helvetica lines; the CID line dropped and named (partial) | the installed reading is wrong (mojibake returned as text) |
+| 48 files from pdfkit, pdf-lib, MuPDF, PDFium, Skia and ReportLab's TrueType embedding whose font lacks a glyph the text asked for (Greek, symbols, Thai, CJK in a Latin font) | the same text; the .notdef glyphs (ToUnicode <0000>, or code 0) dropped unnamed | the same text, and 'N characters that do not map to text' | the installed reading is silent about glyphs the page draws as .notdef; the notice is right |
+| 6 pypdf fills flattened over pdfkit's DejaVu form (one-byte text in a two-byte font) | partial: the body and the block; 'Page 1 is damaged' (pypdf 6.21.2's decode error) | partial: the same text; the one-byte text named as unread instead of as damage | the bytes are not text in that font: unread is what they are |
+| 2 fpdf2 CID-keyed CFF files using more than 255 glyphs | ok, mojibake from code 0x100 on ('SĢSģSĤ...') | ok, every character exact | the installed reading is wrong |
+| 1 MuPDF file (an embedded Loma simple font) | '1 character that does not map to text' | '2 characters...' (one .notdef glyph NUL more) | as the 48 above |
+
+Time over the 935 files, with OCR unavailable: 407 s against 439 s installed (the two passes ran under different
+load; the longest file 2.9 s against 3.8 s, the largest ratio 1.6 times on a file under half a second); the child's
+peak resident memory at most 137.5 MiB against 137.0 MiB.
+
+Cost and limits, each read through the real child one file at a time (the host's load average was about 12 on 14
+cores, so a time is comparable within its row only):
+
+| shape (the cost lens's inputs) | installed (6.21.2) | round 1 (6.21.4) | this reader (6.21.4) |
+|---|---|---|---|
+| COST-1: Identity-H font, a 1,000,000-character /BaseFont string, one TJ of 3,000 strings | ok, 0.83 s, 67.6 MiB | failed at the 240 s deadline | ok, 0.88 s, 67.9 MiB, same text |
+| COST-1: a 4,000-byte /BaseFont name, 50 TJ of 10,000 glyph-index strings | ok, 26.3 s, 219.8 MiB | failed at 240 s | ok, 20.4 s, 219.4 MiB, same text |
+| COST-1: the same name, 2,000 strings | ok, 0.51 s | ok, 1.46 s | ok, 0.39 s |
+| COST-2: 64 Type 1 fonts sharing a 4 MiB program, 10 pages | ok, 3.01 s, 113.1 MiB | failed at 240 s | ok, 3.28 s, 113.7 MiB, same text |
+| COST-2: one such font in 600 FreeText appearances | ok, 3.47 s | failed at 240 s | ok, 3.54 s, same text |
+| COST-2: 10 fonts, 1 page; 60 appearances | ok, 1.15 s; 1.27 s | ok, 5.43 s; 30.5 s | ok, 1.25 s; 1.46 s |
+| d1: a 99,998-entry /Differences font in 60 appearances | partial, 1.51 s | not measured | partial, 1.27 s, same text |
+| LIMIT-1: an appearance font's /Differences past the array limit, on 1 page; on 40 pages | partial, 0.99 s; partial, 0.81 s (each naming the annotation as differing from its /Contents) | failed ('stopped unexpectedly (LimitReachedError)'), 0.77 s; failed (the lens's run) | partial, 0.62 s; partial, 0.70 s: the same text, the annotation named unreadable |
+| LIMIT-1: one page, that font at 99,999 elements (the control) | partial, 0.84 s | partial, 0.69 s | partial, 0.67 s, same text |
+| LIMIT-1: /DescendantFonts past the limit, used by the page | failed ('no usable text layer') | failed (LimitReachedError) | partial: the page's other line read, the line in that font named |
+| LIMIT-1: a font past the limit only listed in the page's resources | failed ('no usable text layer') | failed (LimitReachedError) | ok: the page read |
+| MEM-1: 74,000,000 glyphs that name no character on one page | ok, 207 s, 643.2 MiB | ok, 219 s, 1,066.2 MiB | ok, 188 s, 643.7 MiB, same text |
+| MEM-1: 10,000,000 such glyphs | ok, 103 s, 130.7 MiB | ok, 115 s, 206.0 MiB | ok, 96 s, 149.8 MiB, same text; the installed reader's code on pypdf 6.21.4 peaks at 148.8 MiB on it, so that rise is pypdf 6.21.4's |
+
+The gates, run as `scripts/ci/verify-cpt-studio.sh` runs them (without `pip_audit`, which queries a network
+service), on the disposable test database on 127.0.0.1:55461 only, on the committed tree under pypdf 6.21.4: every
+gate passes (the system and migration checks; 3,641 Django tests, 3 skipped; 211 ops; 37 verification; 61
+browser-verifier). Seven tests of earlier rounds changed, each with the rule it pins: four of round 1's now read the
+operator, not the page, as the unit (the note beside a cut string, or beside a font pypdf cannot build, is read and
+the page named); one compares a page whose two strings are dropped without the line break left between them; the
+glyph-list test takes 'uni0041.alt' as 'A' (the AGL specification's section 2) and NUL as naming no character; and
+`test_repairs_r4d_ingest2`'s column in a font the resources do not hold reads '[?] MAC', the column dropped and
+named, as round 4d read it. Each of the 25 mutations, each reverting one repair of this round on a copy of the
+tree (applied and checked present, the worktree's files hashed before and after: untouched), was killed by
+`tests/test_repairs_gi4_pypdf_r2.py` (and, for the operator unit, the page tests of round 1).
+
+Remaining after round 2, each read as said:
+
+| input | output | why |
+|---|---|---|
+| text in a form XObject without resources of its own (a /DR-reliant appearance pdf-lib's flatten keeps) | not extracted, unnamed: as both pypdf versions read it, and the installed reader unless the page also holds a font it copies (it then wrote U+FFFD for each byte, at ok) | pypdf reads no text from such a form, and the reader cannot read it either (its font is in no resources); naming it would make every such ordinary file partial |
+| an appearance with one unreadable operator among readable ones | the whole annotation unreadable (named, partial) | the appearance stays one unit, as in round 1; its stored value or /Contents, where it has one, is read |
+| a page whose unreadable text is most of it but whose readable rest is a usable layer (20 characters or more) | the readable rest, and the page named; not sent to OCR | the operator is the unit; OCR replaces a page's text (and its block) whole |
+| a page left without a usable layer by its unreadable text, with a short labelled block | read with OCR, which replaces its block, as for any page OCR reads | unchanged: an OCR'd page's text is what OCR reads |
+| whitespace pypdf writes around a dropped operator | kept (a blank line where a dropped line was, a space) | whitespace; the dropped text is named |
+| pypdf's own built-in-encoding override and double lookup in a font the reader does not copy (no 'u' name, a program pypdf reads) | as both versions read it | unchanged by 6.21.4, and no corpus file needed it |
+| `.notdef` named in a text font's /Differences | `□` (pypdf's glyph list), read as an unchecked box | unchanged by 6.21.4 |
+| a glyph whose ToUnicode gives U+FDD7, the noncharacter the reader writes for text it cannot read | dropped, as text that names no character, but not counted where the page has no unread text | a noncharacter names no character; only its count is lost, on a crafted font |
