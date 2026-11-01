@@ -2854,6 +2854,21 @@ def _pi_own_report(text: str) -> bool:
     return _sections.procedure_report_head(text) and not _sections.around_procedure_title(text)
 
 
+def _pi_today_report(text: str, routing) -> bool:
+    """Positive evidence that the document is today's procedure report, which the instrument's reach (S1) and E1 need
+    before they read more than installed does (the round's rule: a releasing rule needs positive evidence that the
+    document is today's report): the document's head carries a procedure report's own fields and no note written around
+    a procedure titles it (_pi_own_report), and routing reads no office visit done today. An office note's or a records
+    review's procedure narrative is a copied report or another occasion's far more often than today's, and an office
+    note's own "Sedation: none" line passes the head test (GI round 4, PI: an outside banding narrative pasted into an
+    office note, its occurrence words more than OCCURRENCE_HEAD_LINES above it, was READY on E1 alone). Hold-only:
+    False keeps the installed reading (the reach silent, the extent a question)."""
+    visit = routing.finding('gi.office_em') if routing is not None and hasattr(routing, 'finding') else None
+    if visit is not None and visit.status in POSITIVE:
+        return False
+    return _pi_own_report(_ORIGINAL.get() or text)
+
+
 def _pi_reaches(text: str, end: int) -> bool:
     """Whether the instrument word ending at ``end`` is the subject of its own reach (_PI_REACH_AFTER)."""
     return _PI_REACH_AFTER.match(text, end) is not None
@@ -3580,12 +3595,13 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                         and _pi_reaches(text, m.end()):
                     # GI round 4 (S1): the instrument is the subject of its own reach ("The colonoscope reached the
                     # cecum") and nothing in its clause dates, denies, doubts or plans it - read as performed, as the
-                    # passive "was advanced" is, but only with positive evidence that the document is the procedure's
-                    # own report (its head, no note written around a procedure), never under another occurrence and
-                    # never in a clause carrying a date (whose owner this reader did not weigh); else it stays silent
+                    # passive "was advanced" is, but only with positive evidence that the document is today's procedure
+                    # report (its head, no note written around a procedure, no office visit: _pi_today_report), never
+                    # under another occurrence and never in a clause carrying a date (whose owner this reader did not
+                    # weigh); else it stays silent
                     cs, ce = _bounded_clause(text, clause, m.start(), m.end())
                     if not own_report:
-                        own_report.append(_pi_own_report(_ORIGINAL.get() or text))
+                        own_report.append(_pi_today_report(text, routing))
                     if own_report[0] and not _dates_in(dates, cs, ce) \
                             and not _sections.under_another_occurrence(_ORIGINAL.get() or text, m.start()):
                         reading = Reading('performed', reading.cues + (_PI_REACH_CUE,))
@@ -4292,13 +4308,14 @@ def _finish(d: _ServiceDraft, text: str, routing, context_facts, encounter_inten
 
     extent = reach.value if reach is not None else ''
     if not extent and status == 'performed' and completion == 'complete' and not d.completion_neg \
-            and has_endpoint(d.family, d.kind) and routing_status not in POSITIVE:
+            and has_endpoint(d.family, d.kind) and routing_status not in POSITIVE and _pi_today_report(text, routing):
         # GI round 4 (E1): routing reads no extent at all (no reach, no stop) and does not read the family as done
         # today, where this reader reads the examination complete by its own endpoint statement ("Neoterminal ileum:
-        # normal.", "The duodenal bulb and descending duodenum were normal."): the deepest endpoint landmark those
-        # statements name is the extent - never one stated in a history or plan section, under another occurrence or as
-        # an extent label (_endpoint_named), never a guess. Where routing reads the family done today, its extent
-        # reading (a withheld one too) decides, as before.
+        # normal.", "The duodenal bulb and descending duodenum were normal."), in a document that is a procedure's own
+        # report and no visit note (_pi_today_report): the deepest endpoint landmark those statements name is the extent
+        # - never one stated in a history or plan section, under another occurrence or as an extent label
+        # (_endpoint_named), never a guess. Where routing reads the family done today, its extent reading (a withheld one
+        # too) decides, as before.
         named = _endpoint_named(d.family, completion_spans, text)
         if named:
             extent = named

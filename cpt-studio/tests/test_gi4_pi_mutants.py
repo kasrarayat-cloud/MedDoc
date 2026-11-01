@@ -12,10 +12,11 @@ from ops.gi4 import boot
 # (name, guard, path, old, new, detector)
 _T = 'unit:tests.test_gi4_pi'
 PI_MUTANTS = (
-    ('pi-reach-head', 'the reach needs a procedure report head', 'studio/gi/services.py',
+    ('pi-reach-head', 'the reach and E1 need a procedure report head', 'studio/gi/services.py',
      '    return _sections.procedure_report_head(text) and not _sections.around_procedure_title(text)',
      '    return not _sections.around_procedure_title(text)', _T),
-    ('pi-reach-around-title', 'the reach is never read in a note written around a procedure', 'studio/gi/services.py',
+    ('pi-reach-around-title', 'the reach and E1 are never read in a note written around a procedure',
+     'studio/gi/services.py',
      '    return _sections.procedure_report_head(text) and not _sections.around_procedure_title(text)',
      '    return _sections.procedure_report_head(text)', _T),
     ('pi-reach-occurrence', 'the reach is never read under another occurrence', 'studio/gi/services.py',
@@ -61,6 +62,10 @@ PI_MUTANTS = (
      '            if any(not _sections.ANOTHER_OCCURRENCE_HEAD.search(span.text, 0, m.start())\n'
      '                   for m in pattern.finditer(span.text)):',
      '            if any(True for m in pattern.finditer(span.text)):', _T),
+    ('pi-office-visit', 'the reach and E1 are never read in an office visit note (routing reads the visit done)',
+     'studio/gi/services.py',
+     "    if visit is not None and visit.status in POSITIVE:\n        return False",
+     '    if False:\n        return False', _T),
     ('pi-e1-routing-positive', "E1: never where routing reads the family done today", 'studio/validation/checks.py',
      '                    and (finding is None or finding.status not in POSITIVE):', '                    and True:', _T),
     ('pi-w1-another-stent', 'W1: dropped only beside another stent performed (hold-only)', 'studio/gi/services.py',

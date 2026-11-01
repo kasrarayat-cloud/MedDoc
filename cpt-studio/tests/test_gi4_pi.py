@@ -3,14 +3,15 @@ validation/checks.required_fact_states, validation/engine._proposal). Declared b
 tests/fixtures/gi4/declarations/pi.json. Synthetic documents only; no database, nothing sent.
 
 - S1 (inventory half): the instrument as the subject of its own reach ("The colonoscope reached the cecum") states its
-  service performed - only in a procedure report's own document (its head fields, no note written around a procedure),
-  never under another occurrence, never in a clause carrying a date.
+  service performed - only in a procedure report's own document (its head fields, no note written around a procedure,
+  no office visit routing reads done), never under another occurrence, never in a clause carrying a date.
 - A1: with more than one family performed, an act or lesion no part, name or site gives a family takes the family its
   paragraph last named - same part, never a history, plan or indication part, never a field row, the carried family
   performed, every named site one it reaches, within CARRY_REACH and no blank line between; two families named clear it.
 - E1: where routing reads no extent and does not read the family done today, the inventory's own endpoint statement
-  supplies the extent - never from a history or plan section, under another occurrence, with an extent word, or after
-  an earlier-occurrence word.
+  supplies the extent - only in a procedure report's own document (its head fields, no note written around a procedure,
+  no office visit routing reads done), and never from a history or plan section, under another occurrence, with an
+  extent word, or after an earlier-occurrence word.
 - W1 (hold-only): an indwelling stent's state is no performed act, dropped only beside another stent performed.
 
 The mutants that must fail these tests, one per guard, are registered in tests/test_gi4_pi_mutants.py (kept apart, so
@@ -72,6 +73,12 @@ class InstrumentReachTests(SimpleTestCase):
 
     def test_never_under_another_occurrence(self):
         text = LOWER + 'Outside Records Reviewed\n' + self.REACH
+        self.assertIsNone(service(read(text), 'gi.colonoscopy'))
+
+    def test_never_in_an_office_visit_note(self):
+        # an office note's own "Sedation: none" line passes the head test; routing's office visit holds the reach there
+        text = B + 'GI Office Visit\nDate of service: 10/19/2026\nSedation: none (office visit)\n' + self.REACH
+        self.assertIn(detect.route(text, DAY).finding('gi.office_em').status, services.POSITIVE)
         self.assertIsNone(service(read(text), 'gi.colonoscopy'))
 
     def test_never_in_a_clause_carrying_a_date(self):
@@ -206,6 +213,37 @@ class EndpointExtentTests(SimpleTestCase):
         self.assertEqual(checks.required_fact_states(profile, silent, {})[0].problem, 'missing')
         reached = SimpleNamespace(facts=(Fact('extent', 'incomplete: stomach', 'document'),), missing=(), status='uncertain')
         self.assertEqual(checks.required_fact_states(profile, reached, {}, service=s)[0].fact.value, 'incomplete: stomach')
+
+    # an outside banding narrative pasted below its occurrence words, more than OCCURRENCE_HEAD_LINES lines above it
+    EVL = 'The gastroscope was withdrawn, fitted with a multiband ligation device and passed again.'
+    PASTED = ('\nNotes\nThe patient brought copies from Mercy GI.\n' + battery.FILL
+              + 'The gastroscope was passed down the esophagus, through the stomach and pylorus, into the descending '
+                'duodenum. The duodenal bulb and descending duodenum were normal.\n' + EVL + ' Six bands were placed.\n')
+
+    def egd_extent(self, text):
+        return service(read(text), 'gi.egd').extent
+
+    def test_only_in_a_procedure_report_with_its_own_head(self):
+        # positive evidence that the document is today's procedure report (the round's rule for a releasing rule):
+        # without a procedure report's own head fields the extent stays a question, as installed
+        today = B + 'Variceal Banding Session\nDate of service: 10/19/2026\n'
+        self.assertEqual(self.egd_extent(today + HEAD + self.PASTED), 'second part of duodenum')
+        self.assertEqual(self.egd_extent(today + self.PASTED), '')
+        self.assertEqual(self.egd_extent(B + 'GI Records Review\nDate of service: 10/19/2026\n' + HEAD + self.PASTED), '')
+
+    def test_never_in_an_office_visit_note(self):
+        # an office note's own "Sedation: none" line passes the head test; routing's office visit holds E1 there
+        note = B + 'Hepatology Office Visit\nDate of service: 10/19/2026\nSedation: none (office visit)\n' + self.PASTED
+        self.assertIn(detect.route(note, DAY).finding('gi.office_em').status, services.POSITIVE)
+        self.assertEqual(self.egd_extent(note), '')
+
+    def test_a_pasted_outside_banding_narrative_is_never_ready(self):
+        for title, extra in (('Hepatology Office Visit', ''), ('GI Records Review', ''),
+                             ('Hepatology Office Visit', 'Sedation: none (office visit)\n')):
+            text = B + title + '\nDate of service: 10/19/2026\n' + extra + self.PASTED
+            p = assess(title, text, [('43244', self.EVL, 'not_done')], '2026-10-19')['proposals']['43244']
+            self.assertEqual((p['bucket'], p['status']), ('selected', 'needs_clarification'), title + extra)
+            self.assertIn('extent', p['clarifications'], title + extra)
 
     def test_h4_03_and_h4_06_are_ready_with_the_walk_date(self):
         for doc_id, code, quote, day in (
