@@ -95,6 +95,28 @@ rather than widened. Full account and measurements in
   policy name right after a slash (e.g. `(intake, pre/Launch checklist)`). By
   design; kept, not narrowed.
 
+## P1 round 3 — 2026-11-01: the gates corrected (not yet installed)
+
+An independent audit of round 2 found four gate defects and two raw-scan edges,
+each reproduced first and now repaired. Full account in
+[security readiness](security-readiness.md) (section "Round 3"). In brief:
+
+- **SI-1, SI-2** — the round-2 export gate scanned the export itself, and so
+  refused, after finalize, a clean form's export larger than the check's 10 MiB
+  input limit (exports may be 30 MiB) or one whose answer held "trailer" and a
+  later "/Launch". It now checks the export's **form original** with the
+  original-download check; an export of a refused original is refused (409).
+  *(This replaces the DL-1 line above, which describes the round-2 code.)*
+- **SI-3** — saving answers queued a coding run (a provider call) on a refused
+  form; coding and the semantic recheck now run the same guard as generation.
+- **SI-4** — a worker failure of the check (timeout, crash, sandbox) was reported
+  as "this form can no longer be used" and deleted an uploaded recording. It is now
+  "try again", nothing is sent, and the recording is kept for a retry.
+- **DELTA-1** — a commented `>> stream` just before a stream the scan had read was
+  refused as unreadable by round 2's one-pass rewrite; round 1's rule is restored.
+- **COV-RENDITION** — `/Rendition`, `/Movie` and `/Sound` are refused as action
+  types wherever they are (an unreferenced one was accepted; not exploitable).
+
 ## P1 as reported: the upload check can be passed today, on either version
 
 F1 is not a new hole. pypdf 6.21.2 recovers from an unreadable cross-reference

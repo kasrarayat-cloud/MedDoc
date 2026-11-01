@@ -218,6 +218,11 @@ as DOCX originals). **The live rebuild has no PDF templates today**, so no PDF
 export exists to refuse; this closes the path for any PDF export written before
 the repair. The only route that serves a stored PDF export is `export`; the
 coding and coding-draft exports are DOCX-only and build a new document.
+*(⚠️ Superseded 2026-11-01, round 3 — SI-1 and SI-2: scanning the export bytes
+refused a clean form's export that was larger than the check's 10 MiB input limit,
+or whose answer held the word "trailer" and a later "/Launch", after finalize, when
+the document could no longer change. The gate now checks the export's template
+original instead; see "Round 3" below. This paragraph describes the round-2 code.)*
 
 **DL-2 (repaired).** A PDF template whose stored original the gate now refuses
 was still selectable: a doctor could create an encounter on it and spend a paid
@@ -228,6 +233,11 @@ stored original at the two earliest points — encounter creation
 for generation and transcription) — and refuses with a clear message before any
 provider usage. DOCX originals are validated by `source_for_version` as before;
 a missing or changed original is left to the step that reads it.
+*(⚠️ Corrected 2026-11-01, round 3: "every provider enqueue" was not true — saving
+the answers queued a coding run with no check (SI-3), now gated together with the
+semantic recheck; and a worker failure of the check was reported as this permanent
+refusal and deleted an uploaded recording (SI-4), now "try again" with the recording
+kept. See "Round 3" below.)*
 
 **F1 (accepted limit, not widened).** The second layer refuses any file whose
 read makes strict pypdf drop or replace structure. This is **wider than round 1
@@ -274,6 +284,129 @@ encounter/enqueue gates. One killing mutation per new cost guard was verified on
 a throwaway copy (reverting each guard makes its shape blow the cap or regress to
 a refusal, and the copy restores to a pristine sha). A short pdf.js-oracle fuzz
 campaign on the final `pdf_raw.py` found no miss. All on 6.21.1, 6.21.2, 6.21.4.
+
+## Round 3 — 2026-11-01: the export gate redesigned (SI-1, SI-2), every provider path gated (SI-3), a worker failure is not a verdict (SI-4), two raw-scan edges (DELTA-1, COV-RENDITION)
+
+An independent audit of round 2 found four defects in the gates and two edges in
+the raw scan. Each was reproduced first, on `43bf5bd4e`, through the real views and
+the real sandboxed worker (or, for the scan, against the round-1 code), then
+repaired. No active-content refusal was weakened: the export bytes are no longer
+scanned, but the only input of an export the doctor did not write — its form's
+original — gets exactly the check its own download gets.
+
+**SI-1 and SI-2 (repaired; the DL-1 export gate redesigned).** Round 2 ran the
+hostile-input raw scan over the stored export. An export holds the doctor's own
+words, and finalize writes exports of up to 30 MiB while the check reads at most
+10 MiB. Reproduced: a 10,534,558-byte export of a clean four-field form finalized
+and was then refused `upload_limit`, and the answer "Seen with trailer hitch
+injury; plan /Launch" (pypdf writes answers verbatim into uncompressed appearance
+streams, where the word "trailer" opens a hidden range for the byte-pattern pass)
+made a clean form's export refused `unsafe_upload` — both after finalize, when
+nothing could change the document any more. The `export` view now runs
+`check_original` on the export's **template original** (the same check the
+original download runs) and refuses the export — 409, no byte, audited
+`encounter.export_refused` with the code — when the original is refused. DL-1's
+case, an export filled before the P1 repair from an original the repair refuses,
+is refused as before; a PDF template has no prepared source (preparation is
+Word-only), so the original is the file every PDF export was filled from, and an
+answer cannot add an object or an action to the file pypdf writes. A missing or
+changed original refuses the export (409, "cannot be checked"); a check that could
+not run refuses it as 503 "try again". Finalize is unchanged; DOCX exports are
+served as before.
+
+**SI-3 (repaired).** "Every provider enqueue" was not true: saving the answers of
+an encounter whose PDF form the gate refuses queued a coding run automatically, and
+the coding worker called the provider once (reproduced, provider mocked as the
+coding tests mock it), while generation on the same encounter said nothing was
+sent. `coding_service.ensure_run` now runs `assert_pdf_template_usable` before it
+queues a run (after a save, on request, after a context change), and so does the
+semantic recheck's enqueue (Word-only today, so a no-op). Every path that can buy a
+provider call for an encounter now goes through the guard. Not covered, and
+recorded: a job or coding run queued **before** the deploy still runs (the workers
+do not re-check), which only matters in the deploy window.
+
+**SI-4 (repaired).** Every `DocumentError` of the check became the permanent "This
+form can no longer be used … Upload a clean PDF as a new form", worker failures
+included; reproduced with only the check timing out on a clean form, the voice
+route deleted the doctor's uploaded recording. `core.template_source` now raises
+`PdfTemplateRefused` for a verdict about the file (`unsafe_upload`,
+`unreadable_pdf`, `invalid_document`, `upload_limit`, `unsupported_format`) and
+`PdfTemplateCheckUnavailable` when the check could not run (`parser_timeout`,
+`parser_failed`, `sandbox_unavailable`, or the stored file changing between two
+reads). Both still send and serve nothing. A check that could not run says "QuillMD
+could not check this form right now … try again" — 503 on both downloads and the
+JSON generate request; on encounter creation (the form keeps everything entered)
+and on the kept-recording page 409, like every refusal page the doctor continues
+from, because Django saves no session on a 5xx and the session would not be
+extended — and never discards input: on the voice and over-limit-approval routes
+the uploaded recording is **kept** and a page offers to send the same recording
+again or discard it (`voice_retry`). The offer is signed and bound to the user,
+encounter, revision and recording sha; it ends 30 minutes after the first offer
+even when a retry renews the page, so its signed quote is never older than an
+over-limit approval's; the worker removes a kept recording nobody sends after the
+window, exactly like an unapproved over-limit upload, and never while a newer offer
+still holds it. A refused form still removes the upload and says "can no longer be
+used".
+
+**DELTA-1 (repaired).** Round 2's one-pass `_unread_streams` also tested each `>>`
+inside the comments of a run that ends at a stream the scan had read, and refused
+`<< … >>⏎% >> stream⏎stream` as "a stream whose dictionary could not be read".
+Round 1's non-overlapping search never restarted inside a match, and accepted these.
+That rule is kept exactly: a `>>` inside a run ending at a read stream is skipped,
+and inside any other run it is still tested (a commented `>> stream` after a
+dictionary that starts no read stream is refused, as in both earlier rounds). The
+audit's 18 inputs go back to round 1's verdict — accepted by the raw scan, shipped
+and with the budgets lifted, and through the real worker identical to the round-1
+tree (16 `invalid_document`, 2 `unsupported_format`) on 6.21.1 and 6.21.4. A
+differential check of the stream-start rule alone over 2.4 million random inputs
+and stream-start sets found it identical to round 1's every time (round 2 differed
+in 333, always by refusing more). The pass stays linear.
+
+**COV-RENDITION (repaired, defence in depth).** `/Rendition`, `/Movie` and
+`/Sound` are now action types: an unreferenced `<< /S /Rendition >>` was accepted
+while MuPDF reports it as an action. It was not exploitable — every trigger that
+could reach it is refused on its own — but this module refuses an action dictionary
+wherever it is. `/GoTo`, `/SetOCGState`, `/Trans` and `/Transparency` stay
+accepted.
+
+**Measured** (through the real sandboxed worker, inspect and download check, on
+pypdf 6.21.1, 6.21.2 and 6.21.4):
+
+| | 6.21.1 | 6.21.2 | 6.21.4 |
+|---|---|---|---|
+| ordinary corpus (133): verdicts changed vs round 2 | 0 | 0 | 0 |
+| ordinary corpus: changed vs base `4ebba7732` | the documented 6 | the documented 6 | the documented 6 |
+| 18 independent bypass fixtures (of 39) | refused | refused | refused |
+| the audit's coverage variants a viewer reaches (58 of 90) | refused | refused | refused |
+| orphan `/S /Rendition`, `/Movie`, `/Sound` | refused (was supported) | refused | refused |
+
+**Round-3 proof.** `documents.test_pdf_active_content` adds the orphan action
+types (raw scan and real worker) and the commented-`>> stream` cases, with the two
+refusals that must stay; `core.tests.test_template_original_safety` rewrites the
+export-gate tests and adds the coding, recheck, worker-failure and kept-recording
+tests (35 in all, the trailer answer through the real upload-to-export path). Every
+new test fails on `43bf5bd4e` except its controls (a clean form's coding run is
+queued; encounter creation and generation stay refused; a refused form still
+removes the upload). One killing mutation per new guard — 15, each applied and
+restored to a pristine sha on a throwaway clone of the final code — including
+round 2's own shape for the export gate (scan the export again) and for
+`_unread_streams` (test every commented `>>`), a widened skip (skip every commented
+`>>`) which the tests refuse as reopening, and the kept-recording page answering
+503 again. The first mutation run found one new test passing vacuously (it
+iterated the code's own list of worker-failure codes, which the mutation emptied),
+and running the new tests against `43bf5bd4e` found the recheck test accepting the
+recheck's own later refusal; both now fail on their own. The documents list (211
+tests) and the P1 core modules (271 tests, with the recording-limit, audio, coding
+and semantic recheck modules) pass on 6.21.1, 6.21.2 and 6.21.4.
+
+**Not covered, and recorded.** A generation, transcription or coding run queued
+before the deploy still runs: the workers do not re-check the form (deploy window
+only). A refused or unavailable template use writes no audit row except where the
+route already audits (downloads, the kept recording, the automatic coding enqueue's
+`coding.enqueue_failed`). `check_pdf_originals` counts originals; an export is
+refused exactly when its original is, so that count bounds the exports affected.
+A 503 download refusal does not extend the session (Django saves no session on a
+5xx); the pages a doctor acts from answer 409 for that reason.
 
 # Current internal operations supplement — September20–21,2026
 
