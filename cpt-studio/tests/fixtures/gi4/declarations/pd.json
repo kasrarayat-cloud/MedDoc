@@ -619,5 +619,125 @@
    "fix": "NONE. No change restores installed's behaviour exactly: a hold (not sending the dateless request) still leaves the approval invalidated and 45378 held, so it is not installed's reading either; keeping a pre-install context's date across a save is the stale-context state interpretation 49 forbids, and would be a new releasing rule; reverting rule (a) or (c) undoes declared holds over the whole corpus (SEND->ASK 1,391; the narrowing), not this consequence. Under the round's two-cycle rule no releasing rule is added",
    "known_limit": "KNOWN LIMIT, recorded with the rows above: an encounter recorded before the install whose document rule (a) now asks (installed sent its date) sends one new dateless primary request and loses the approvals whose status changes at its first context save or remake after the install; one whose member date rule (c) now holds is held there, nothing sent, its approvals invalidated. Re-saving the installed date first sends nothing and carries the decision. tests/test_gi4_pd_state.py RecordedInstallConsequenceTests pins it, with the pre-install stages under installed's labels; after the label code the save's context is gi-context@4 and every other value of these rows is unchanged (declared here, measured on the final head)"
   }
+ },
+ "after_measurement_20261101_cycle2_integration": {
+  "date": "2026-11-01",
+  "written": "AFTER measurement, as a record: it changes no declaration above it. Final head 4620713d2 (the labels a6ac28c67, declared in integration_20261101_cycle2 at 40b972b58; pins re-written 4620713d2), each tool on sealed exports of it, of installed 80df1831d168 and of fbc59ee53, offline or on the throwaway database (127.0.0.1:55461), with the final head's own harness",
+  "px_a": "as declared. H1: the labels move exactly the 4 /versions paths, against installed and against fbc59ee53, every document and state as the readings move them; the pins move only their commit stamp; H2, H3, H4 and H7 read no label. H5 (tests.test_gi4_state, test_gi4_pd_state, test_gi4_po_state): 17 of 17 on the final export. Negative controls on copies of it (sha256 printed after applying and after restoring, each restore equal to the original): with gi-context@3 left out of EARLIER_CONTEXT_VERSIONS four H5 rows fail (the remake, the queued predict, the second-review refusal, the labels); with the engine label added to engine._fingerprint test_a_label_moves_no_fingerprint fails. Over the H3 corpus (5,664 documents, read for their true dates) the readers' own outputs differ from installed in 1,439 documents (the context fact), 528 (routing) and 653 (the inventory)",
+  "px_d_rows_final_head": [
+   [
+    "1 setting save then the installed date",
+    "before the install, approved",
+    [
+     "dated 2026-10-19"
+    ],
+    "ready",
+    "gi-context@3",
+    [
+     "document",
+     "2026-10-19"
+    ],
+    false,
+    false
+   ],
+   [
+    "1 setting save then the installed date",
+    "after a setting save",
+    [
+     "dated 2026-10-19",
+     "DATELESS"
+    ],
+    "needs_clarification",
+    "gi-context@4",
+    [
+     "conflict",
+     null
+    ],
+    true,
+    false
+   ],
+   [
+    "1 setting save then the installed date",
+    "after answering 2026-10-19",
+    [
+     "dated 2026-10-19",
+     "DATELESS"
+    ],
+    "ready",
+    "gi-context@4",
+    [
+     "user",
+     "2026-10-19"
+    ],
+    true,
+    false
+   ],
+   [
+    "2 the installed date re saved first",
+    "after re-saving 2026-10-19",
+    [
+     "dated 2026-10-19"
+    ],
+    "ready",
+    "gi-context@4",
+    [
+     "user",
+     "2026-10-19"
+    ],
+    false,
+    true
+   ],
+   [
+    "3 a member date of another day on a narrowed document",
+    "before the install, 2026-10-30 taken, approved",
+    [
+     "DATELESS",
+     "dated 36c86c4f"
+    ],
+    "ready",
+    "gi-context@3",
+    [
+     "user",
+     "2026-10-30"
+    ],
+    false,
+    false
+   ],
+   [
+    "3 a member date of another day on a narrowed document",
+    "after a setting save",
+    [
+     "DATELESS",
+     "dated 36c86c4f"
+    ],
+    "not proposed",
+    "gi-context@4",
+    [
+     "conflict",
+     null
+    ],
+    true,
+    false
+   ]
+  ],
+  "px_d": "as declared: every value of the merged head's rows again, the save's context now gi-context@4; the invalidation reasons unchanged. The known limit stands",
+  "h2_declared_count": "against installed with the union declaration (every package's top-level cues_added and battery, PD's movements) over 52,231 texts (the 51,925-text H2 corpus plus the 306 cycle-1 probes first used by the cycle-1 integration): NEW-SEND 0, NEW-TAKE 0, NEW-HELD 5,466, SEND->ASK 1,391, FACT-CHANGED 14,439, 206,761 requests unchanged, layout identical, mention counts unchanged, 44 cues added and declared. The tool's \"GATE FAILS: SEND->ASK = 1391, declared 1386\" is that count only: 1,386 (top-level movements, b840ae756's measurement on the 51,925 texts) is exactly what the 51,925 texts give here (90 seeded and 1,296 h2-corpus texts); the other 5 are cycle1-probes.jsonl lines 786, 787, 788, 790 and 792, PD cycle 1's CTS-5 probes (PD-02, -03, -04, -06, -08: rule (a) asks the 2026-10-19 installed sent beside \"Date performed: 10/21/2026 (pathology)\", \"... by Mercy GI\", \"Case date: 10/12/2026 (booked)\", \"Date seen: 10/12/2026 in clinic; procedure today\", \"Day of procedure: 10/19/2026 Date seen: 10/12/2026 (pre-op clinic)\"). amendment_20261101_cycle2.dt5.expected's \"52,731 texts\" is a typo for 52,231",
+  "h2_vs_fbc59ee53": "NEW-SEND 243, NEW-TAKE 243, NEW-HELD 0, SEND->ASK 0, FACT-CHANGED 56, 201,052 requests unchanged, layout and mention counts identical, cues -6 +2: amendment_20261101_cycle2.expected.vs_fbc59ee53 exactly; every one of the 243 states equals installed's (sends, taken, held, request), checked by set, over 92 texts (reg:h4-03, 89 of S-h4-03-*, and the h2 and probe corpora's copies of h4-03)",
+  "h1": "fixtures and the retained raw inputs (/home/claude/cpt-studio-gi-regression-sets) read the same: HARD installed 98/123 -> fbc59ee53 123/123 -> final 119/123 (h2-08 18/18, h2-10 9/9, h4-01 18/18, h4-02 14/14, h4-03 13/17, h4-04 14/14, h4-05 17/17, h4-06 16/16; h4-03's four failures are installed's own); walk READY installed {43251, 43274} -> fbc59ee53 {99204, 43244, 43251, 45385, 43274} -> final {43251, 43274}. 560 paths differ from installed and 195 from fbc59ee53: the 4 /versions, h4-01 56 (PV1), h4-03 114 (PD's 93 plus PI's 21) and h4-06 21 (PI); the expectations that move are h4-01 SOFT approvable[99204] and routing.not-missing[em_basis], INFO author-code-ready[99204] and routing.fact[em_basis]; h4-03 HARD date.sends-only-the-truth[doc:2026-10-09, far, minus1, plus1], SOFT approvable[43244], INFO author-code-ready[43244]; h4-06 SOFT approvable[45385], INFO author-code-ready[45385] - each back to installed's value. Controls: the final tree against itself EQUAL, the three planted mutations differ (98, 30, 54 paths). 43251's walk fingerprint on the final head 9d6bff8e, as declared (px_c)",
+  "h3": "5,664 documents, 0 reader errors. Against installed: no MUST regression (date.answer-held +3,352, date.no-send-before-answer +90, date.send +977, em.not-office-basis +216, em.time-not-another-occurrence +216, extent.never-false-incomplete +75, status.not-performed +288; SHOULD extent.read +75, status.performed -18: pv1.json's declared 12 and the 6 of amendment_20261101_cycle2_b). Against fbc59ee53: MUST binding.lower-not-on-upper -25 (PI's A1 drop), date.answer-held -72 and date.send -36 (PD's drop), status.not-denied -42 and status.not-performed -18 (PV1's drop), SHOULD em.mdm-read -180, em.time-read -252, status.performed -60; every one of those cells fails on installed too, except the 6 SHOULD status.performed cells pv1.json's _b declares",
+  "h4": "against installed with the union declaration: 3 movements, all declared (S3h 43259, 99213, 99212), 0 undeclared, 0 new violations (5 -> 2); against fbc59ee53: 0 movements. U1 and U2 read the same on the final head as px_b records",
+  "h6": "195 of 195 mutants killed on copies of the sealed final export (unit 182, freeze 4, battery 4, replay 3, state 2), each printed \"mutation applied: True\" with a moved sha256 and \"restored: True\" with the original sha256; all 42 detector baselines passed; the two state detectors ran on a test database of this run's own (the harness hard-codes the suffix gi4mut)",
+  "pins_commit_correction": "53ccc98c0's message counted h4-03's attribution in two units at once: by its 57 differing paths (ops.gi4.boot.differences) PD's tree alone moves 28, PI's alone 9 and the two drops together 20; by JSON leaves 36, 10 and 10 (56). Every other number there stands",
+  "suites": {
+   "manage.py check": "System check identified no issues (0 silenced)",
+   "makemigrations --check --dry-run": "No changes detected",
+   "manage.py test tests (CI settings: the workflow environment, port 55461, suffix w1c2integ)": "Ran 4082 tests in 2081.246 s: OK (skipped=3)",
+   "unittest discover -s ops": "Ran 211 tests: OK (test_install and test_verify_downloads each with passing tests)",
+   "unittest discover -s ops/verification": "Ran 37 tests: OK",
+   "node ops/verification/test_verify_browser.cjs": "81 of 81 pass, 0 fail (the named checkIncomplete test among them)",
+   "node tests/frontend/app.test.cjs (also run by tests.test_frontend inside the Django suite)": "56 of 56 pass, 0 fail, 0 skipped, 0 todo",
+   "pip_audit": "not run: it needs the network, which this integration does not use (interpretation 68: the audit stays red on pypdf 6.21.2, declared)"
+  },
+  "h7": "H7 (ops.gi4.cost, default sizes 25,000-400,000, the 12 registered shapes, sealed final export, load 11-14 with the full Django suite running beside it): every stage limit holds - worst analyze child 8.98 s (limit 30), worst assess child 23.46 s (limit 60), peak child 222 MiB, no overrun. The 2.3 doubling-ratio gate is NOT certified: wall clock flags 29 scattered steps. Re-measured by CPU time (best of 3, the cycle-1 integration's cpu_ratios.py) on the final head and on fbc59ee53 side by side: 10 flags on the final head and 17 on fbc59ee53, at different shapes and steps; total CPU over the 60 probes final/fbc59ee53 context 26.90/27.67 s, routing 115.72/114.59 s, inventory 113.67/111.95 s, PS helpers 1.41/1.45 s; from 25k to 400k (16 times the size) every reader grows 3.1-19.0 times on both trees. No growth class moves; the gate's verdict needs a quiet machine, as at the cycle-1 integration."
  }
 }
