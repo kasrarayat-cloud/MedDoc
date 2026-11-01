@@ -20,7 +20,8 @@ from datetime import date
 from typing import Optional
 
 from studio.gi import cues
-from studio.gi.sections import ADDENDUM_HEADER, DOCUMENT_PART, HEADINGS, Layout, layout
+from studio.gi.sections import (ADDENDUM_HEADER, DOCUMENT_PART, HEADINGS, Layout, around_procedure_title, head_lines_end,
+                                layout)
 from studio.types import CONTEXT_FACTS, Fact, Span
 
 SETTINGS = ('office', 'hospital_outpatient', 'asc', 'inpatient', 'emergency', 'telehealth')
@@ -75,6 +76,16 @@ _CLOCK = r'(?:[ \t]++(?:at[ \t]++)?+\d{1,2}:\d{2}(?::\d{2})?+(?:[ \t]*+[ap]\.?m\
 _DATE_LABEL_SEP = r'\b[ \t]*+(?:\([ \t]*+DOS[ \t]*+\)[ \t]*+)?+[:#=\u2013|-]?+[ \t]*+'
 SERVICE_DATE = cues.rx(r'(?<![\w/-])(?P<label>' + _DATE_LABEL + r')' + _DATE_LABEL_SEP
                        + r'(?P<date>' + _FULL_DATE + r')(?![\w/-])')
+# GI round 4 (D1, step 1; package PD): the encounter's own date written with a label outside _DATE_LABEL ("Date seen",
+# "Exam date", "Case date", "Date performed", "Day of procedure"). Read only in the document's head (_head_end), through
+# the installed label reading (_labelled_kind), and never sent by itself: it only asks or narrows (_service_date_fact).
+# One the label reading places elsewhere, or whose value is no calendar date, is dropped as the installed reading drops
+# the label (no new state holds every answer).
+_WIDE_DATE_LABEL = (r'(?:(?:date|day)[ \t]++of[ \t]++(?:exam(?:ination)?+|case)|day[ \t]++of[ \t]++(?:service|procedure'
+                    r'|visit|encounter)|(?:exam(?:ination)?+|case)[ \t]++(?:date|day)|(?:service|procedure|visit'
+                    r'|encounter)[ \t]++day|date[ \t]++(?:seen|performed))')
+WIDE_SERVICE_DATE = cues.rx(r'(?<![\w/-])(?P<label>' + _WIDE_DATE_LABEL + r')' + _DATE_LABEL_SEP + r'(?P<date>'
+                            + _FULL_DATE + r')(?![\w/-])')
 # Date-shaped text this reader does not read as a date (refutation r1, context-3): a weekday before a date, a
 # two-digit year, dashes, dots or year-first slashes, "20th of October". As a title's date it is documented date text a
 # member value must agree with - never a gap a member value silently fills.
@@ -376,6 +387,13 @@ class _Candidate:
     # answer); 'part' - it stands in a later numbered part that documents no procedure ('unplaced'); 'order' - it is
     # earlier than a date the note reads as an earlier occurrence's ('unplaced').
     doubt: str = ''
+    # GI round 4 (D1, step 1; package PD): read from WIDE_SERVICE_DATE in the head, a label outside _DATE_LABEL, or (D2) a
+    # date-of-service label whose field opens with words ("Service date logged for this case: 10/08/2026"; never alone in
+    # its field). Never the note's own date by itself (``installed`` is False), and read beside the installed candidates,
+    # never among them (_pd_wide_candidates): it only asks or narrows (_service_date_fact)
+    wide: bool = False
+    # GI round 4 (D1): a closing-role line among the document's last lines states its day (_closing_days)
+    corroborated: bool = False
 
     @property
     def spans(self) -> tuple[Span, ...]:
@@ -1810,6 +1828,13 @@ CHARGE_DATE_NOTE = ("The lines from {heading} to the document's end state {block
                     "lines may record this encounter or another occurrence, so the date is asked; a member's answer is "
                     'taken only when it is {value}.')
 _CHARGE_NOTE_HEAD = CHARGE_DATE_NOTE.split('{', 1)[0]
+# GI round 4 (D1, D2; package PD): the same question where a wide or worded own label states another day than the date
+# the installed reading sends - read and answered by the same readers (charge_date_problem, charge_date_own,
+# charge_question_day), so a member's answer is taken only when it is that date, and every reader reads that date
+WIDE_DATE_ASK_NOTE = ('The document also states {wide}, while {value} is read from {own}. Those lines may record this '
+                      "encounter or another occurrence, so the date is asked; a member's answer is taken only when it "
+                      'is {value}.')
+_WIDE_NOTE_HEAD = WIDE_DATE_ASK_NOTE.split('{', 1)[0]
 _CHARGE_NOTE_REST = '. Those lines may record this encounter or another occurrence'
 _CHARGE_NOTE_OWN = re.compile(r', while (\d{4}-\d{2}-\d{2}) is read from ')
 
@@ -1822,7 +1847,8 @@ def charge_date_problem(fact) -> Optional[str]:
     ``fact`` is a Fact or a stored context fact (a mapping); the last marker is the note's own, whatever a quote holds."""
     get = fact.get if isinstance(fact, dict) else (lambda name, default=None: getattr(fact, name, default))
     note = str(get('note', '') or '')
-    if get('origin') != 'conflict' or not note.startswith(_CHARGE_NOTE_HEAD) or _CHARGE_NOTE_REST not in note:
+    if get('origin') != 'conflict' or not note.startswith((_CHARGE_NOTE_HEAD, _WIDE_NOTE_HEAD)) \
+            or _CHARGE_NOTE_REST not in note:  # GI round 4 (package PD): a wide or worded label's question too
         return None
     return note[:note.rindex(_CHARGE_NOTE_REST)]
 
@@ -1900,10 +1926,19 @@ def _charge_block_asks(text: str, lay: Layout, fact: Fact) -> Fact:
 
 def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
     """Every date candidate outside a plan or history section (refutation round 2, rule A): the labelled dates of
-    service, whatever their reading or form, and the dated titles near the top (_title_candidates)."""
+    service, whatever their reading or form, and the dated titles near the top (_title_candidates).
+
+    GI round 4 (D1, D2; package PD): then the wide own-date labels in the head and the worded date-of-service fields
+    (_pd_wide_candidates), read BESIDE the installed candidates, never among them: the installed candidates are read and
+    put in doubt exactly as installed reads them, so _service_date_fact computes the installed fact from exactly those
+    (read among them, a wide label in the head kept an authored addendum's own label 'own' in _after_another_header, so
+    the installed reading's ask became a send). The wide candidates are put in doubt beside them (a wide date equal to
+    the date of birth, earlier than an earlier occurrence's date, or in a later part that documents no procedure, does
+    not speak) and follow them."""
     found = []
     read = set()
     rows = _Rows(text)
+    worded = []  # GI round 4 (D2): date-of-service labels the installed reading drops as prose, read for a worded field
     for m in SERVICE_DATE.finditer(text):
         read.add(m.start())
         if lay.section_at(m.start()).kind in NOT_CURRENT_SECTIONS:
@@ -1930,6 +1965,7 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
             continue
         where = _label_value(text, m, rows)
         if where is None:
+            worded.append(m)  # GI round 4 (D2): never an installed candidate; read by _pd_wide_candidates only
             continue
         if where is _NO_VALUE or where is _UNPLACED:  # P2DN's fix round, issue 4: a header's positions do not match
             # it states no date ('empty'), or a date it cannot place ('unread': asked, the label alone - fr-dr:0)
@@ -1967,7 +2003,142 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
         else:
             span, extra = _span(text, start, value_end), ()
         found.append(_Candidate(span, None, 'label', _READING[kind], 'unread', extra))
-    return _own_dates_in_doubt(text, lay, _after_another_header(text, lay, tuple(found) + _title_candidates(text, lay)))
+    titles = _title_candidates(text, lay)
+    plain = _own_dates_in_doubt(text, lay, _after_another_header(text, lay, tuple(found) + titles))
+    wide = _pd_wide_candidates(text, lay, rows, worded)
+    if not wide:
+        return plain
+    joint = _own_dates_in_doubt(text, lay, _after_another_header(text, lay, tuple(found) + wide + titles))
+    return plain + tuple(c for c in joint if c.wide)
+
+
+def _pd_wide_candidates(text: str, lay: Layout, rows: '_Rows', worded: list) -> tuple[_Candidate, ...]:
+    """GI round 4 (D1, D2; package PD): the wide own-date labels in the document's head (WIDE_SERVICE_DATE, before
+    _head_end) and the worded date-of-service fields (``worded``: the date-of-service labels the installed reading
+    dropped as prose, outside plan and history sections), each read as an own date ('own') of the note through the
+    installed label reading, or dropped as that reading drops a label (another occurrence's, one it cannot place, a
+    birth label joined to it, no calendar date). None at all under a title of a note written AROUND a procedure - a
+    booking, a pre-procedure call, a consent, instructions, a handout, a letter, a records review
+    (sections.around_procedure_title): its "Day of procedure" or "Case date" is the planned procedure's, never the note's
+    own, and the installed fact stands. Each candidate is corroborated when a closing-role line of the note's end states
+    its day (_closing_days, read once, only when a label is read). Bounded: the head, once; each worded label's own
+    line."""
+    head_end = _head_end(text, lay)
+    if not worded and WIDE_SERVICE_DATE.search(text, 0, head_end) is None or around_procedure_title(text):
+        return ()
+    out, closing = [], None
+    for m in WIDE_SERVICE_DATE.finditer(text, 0, head_end):
+        if lay.section_at(m.start()).kind in NOT_CURRENT_SECTIONS or _joined(text, rows, m.start('label'),
+                                                                               m.end('label')) is not None:
+            continue
+        value = date_from_match(m)
+        if value is None:
+            continue  # no calendar date: dropped, as the installed reading drops the label
+        kind, start = _labelled_kind(text, m.start('label'), m.end('label'), m.start('date'), m.end(), value)
+        if _READING[kind] != 'own':
+            continue  # another occurrence's, or one it cannot place: dropped, as the installed reading drops the label
+        closing = _closing_days(text) if closing is None else closing
+        out.append(_Candidate(_span(text, start, m.end()), value.isoformat(), 'label', 'own', 'read',
+                              alone=_alone_in_field(text, m.end(), rows.line(m.start())[1]), installed=False,
+                              wide=True, corroborated=value.isoformat() in closing))
+    for m in worded:
+        field = _worded_field(text, m, rows)
+        if field is None:
+            continue
+        # D2: a label the installed reading drops as prose whose field opens with words ("Service date logged for this
+        # case: 10/08/2026"): never the note's own date by itself (not alone in its field), but a date of service the
+        # document states, so it speaks - a different own date is a conflict. Words of another occurrence or of a status
+        # between the label and its colon ("requested by patient", "of the prior exam") place it elsewhere: dropped
+        ds, de, value = field
+        kind, start = _labelled_kind(text, m.start('label'), m.end('label'), ds, de, value)
+        if _READING[kind] != 'own' or _OCCURRENCE_WORDS.search(text, m.end('label'), ds):
+            continue
+        closing = _closing_days(text) if closing is None else closing
+        out.append(_Candidate(_span(text, start, de), value.isoformat(), 'label', 'own', 'read', alone=False,
+                              installed=False, wide=True, corroborated=value.isoformat() in closing))
+    return tuple(out)
+
+
+def _head_end(text: str, lay: Layout) -> int:
+    """Where the document's head ends (GI round 4, D1): the end of its first TITLE_LINES non-empty lines, or the first
+    section heading the layout reads after its first two non-empty lines (a heading on one of those is the document's
+    title, not a section of it), whichever comes first. Lines are counted by sections.head_lines_end (one pass)."""
+    title_end = head_lines_end(text, 2)
+    first = next((s.start for s in lay.sections if s.heading is not None and s.start >= title_end), len(text))
+    return min(head_lines_end(text, TITLE_LINES), first)
+
+
+# GI round 4 (D1; package PD): a line that signs, attests, authenticates or finalizes the note ("Electronically
+# authenticated by ..., 10/26/2026 18:22", "Report finalized by ..., 2026-10-21 16:05", "Attested: ..., Oct 27, 2026").
+# The day it states corroborates a wide or worded own label of the same day; that only lets the label restrict a member's
+# answer (hold-only). Read only among the note's last _PD_CLOSING_LINES non-empty lines, and never on a line about a
+# consent, an order, a request, a booking or schedule, or a call (_PD_NOT_CLOSING): "Consent signed 11/04/2026", "Call
+# placed and signed 11/04/2026" date that act, not the note.
+_CLOSING_ROLE = cues.rx(r'\b(?:electronically[ \t]++|e-)?+(?:(?:co-?|counter)?signed|dictated|transcribed|'
+                        r'attest(?:ed|ation)|authenticated|finali[sz]ed)\b')
+_PD_CLOSING_LINES = 8
+_PD_NOT_CLOSING = cues.rx(r'\b(?:consent\w*+|order\w*+|request\w*+|book(?:ed|ings?+)|schedul\w*+|call(?:s|ed|ing)?+'
+                          r'|(?:tele)?+phon(?:e|es|ed|ing))\b')
+
+
+def _pd_closing_start(text: str) -> int:
+    """Where the document's last _PD_CLOSING_LINES non-empty lines start (0 when it has fewer): one pass back from the
+    end, each line read once."""
+    end, count = len(text), 0
+    while True:
+        start = text.rfind('\n', 0, end) + 1
+        if _NON_BLANK.search(text, start, end):
+            count += 1
+            if count == _PD_CLOSING_LINES:
+                return start
+        if start == 0:
+            return 0
+        end = start - 1
+
+
+def _closing_days(text: str) -> frozenset:
+    """The calendar days (ISO) the closing-role lines among the document's last _PD_CLOSING_LINES non-empty lines state,
+    never a date of birth, and nothing a consent, order, request, booking or call line states: one pass, each line read
+    once."""
+    days, line_end = set(), -1
+    for m in _CLOSING_ROLE.finditer(text, _pd_closing_start(text)):
+        if m.start() < line_end:
+            continue  # this line was read already (bounded: each line once)
+        start = text.rfind('\n', 0, m.start()) + 1
+        line_end = text.find('\n', m.end())
+        line_end = len(text) if line_end < 0 else line_end
+        if _PD_NOT_CLOSING.search(text, start, line_end):
+            continue
+        for d in FULL_DATE.finditer(text, start, line_end):
+            if _BIRTH_BEFORE.search(text, max(start, d.start() - _BIRTH_REACH), d.start()) is None:
+                day = date_from_match(d)
+                if day:
+                    days.add(day.isoformat())
+    return frozenset(days)
+
+
+# GI round 4 (D2; package PD): the words a worded date-of-service field may carry between its label and its colon
+# ("logged for this case", "for billing", "as recorded"): a short run of words on the label's own line, no digit, no
+# sentence end, no other date.
+_WORDED_FIELD = re.compile(r"[ ](?P<words>[A-Za-z][A-Za-z'’ -]{0,40}?)[ \t]*+:[ \t]*+")
+
+
+def _worded_field(text: str, m: re.Match, rows: '_Rows'):
+    """(date start, date end, date) when a date-of-service label in prose continues with a few words, a colon and a
+    full calendar date alone in its field on its own line ("Service date logged for this case: 10/08/2026"), else
+    None."""
+    tail = _LABEL_TAIL.match(text, m.end())
+    if tail.group('sep') is not None:
+        return None
+    line_end = rows.line(m.start())[1]
+    field = _WORDED_FIELD.match(text, m.end(), line_end)
+    if field is None:
+        return None
+    date_m = FULL_DATE.match(text, field.end(), line_end)
+    if date_m is None or not _alone_in_field(text, date_m.end(), line_end):
+        return None
+    value = date_from_match(date_m)
+    return (date_m.start(), date_m.end(), value) if value else None
 
 
 # Fix round (dates lens, F1; the refutation of the integrated head b8cc7b5b5). The elapsed-time rule stopped reading
@@ -2517,12 +2688,50 @@ BIRTH_DATE_NOTE = ("A labelled date of service states the date the document give
 PART_DATE_NOTE = ('A date of service is labelled in a later numbered part of the document that documents no procedure '
                   '(no technique, findings or impression), so it may date another service than the one the note '
                   'documents and is not taken as the date of service by itself.')
+# GI round 4 (D1, D2; package PD): why a wide or worded own label alone is asked, and a member's answer restricted to it
+WIDE_DATE_NOTE = ('A date is labelled with words this service reads as naming the encounter but does not send by '
+                  'itself (such as "Date seen", "Exam date", "Case date", "Date performed" or "Day of procedure"), so '
+                  "it is asked; a member's answer with that date is taken.")
 ORDER_DATE_NOTE = ('A labelled date of service is earlier than a date the document gives for an earlier occurrence (a '
                    'prior, last, recent or index one), so the two cannot both be right and it is not taken as '
                    'the date of service by itself.')
 
 
 def _service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
+    """GI round 4 (D1, D2; package PD): the installed reading's fact (_installed_service_date_fact over the candidates
+    without the wide and worded labels - exactly the installed candidates, _service_dates) unless those labels may only
+    take a send away or answers away - never add either, and a wide or worded label's date is never sent:
+    (a) where the installed reading sends a date and a wide or worded own label states another day, the date is asked,
+        and only the date it sends is a member's answer (the narrow release's question: WIDE_DATE_ASK_NOTE, read by
+        charge_date_problem and charge_date_own; every reader still reads that date, charge_question_day);
+    (b) where it already asks with evidence, its fact and answers stand;
+    (c) where it asks with no evidence at all (any member date taken), the wide and worded labels are that evidence:
+        several values are a conflict of those values; one value restricts the answer only where a closing-role line
+        states the same day (corroborated) - one no closing line dates, such as a call note's "Day of procedure", may be
+        another occurrence's, so the installed fact stands and the right date is never refused. A wide label alone never
+        makes the fact 'document' (it is never the note's own: installed=False)."""
+    plain = tuple(c for c in found if not c.wide)
+    fact = _installed_service_date_fact(plain)
+    wide = [c for c in found if c.wide and c.form == 'read' and c.reading == 'own']
+    if not wide:
+        return fact
+    if fact.origin == 'document' and fact.value:
+        differing = [c for c in wide if c.value != fact.value]
+        if not differing:
+            return fact
+        own = next((s for s in fact.evidence if s.text.strip()), None)
+        return Fact('service_date', None, 'conflict', fact.evidence, WIDE_DATE_ASK_NOTE.format(
+            wide=', '.join('\u201c' + ' '.join(c.span.text.split()) + '\u201d' for c in differing[:3]),
+            value=fact.value, own='\u201c' + ' '.join(own.text.split()) + '\u201d' if own else 'the document'))
+    if fact.evidence:
+        return fact
+    full = _installed_service_date_fact(found)
+    if full.origin == 'missing' and not any(c.corroborated for c in wide):
+        return fact
+    return full
+
+
+def _installed_service_date_fact(found: tuple[_Candidate, ...]) -> Fact:
     """The service date fact (_date_fact). Fix round 2 (the differential round, F-1): where the own-dates-in-doubt rules
     (BIRTH, ORDER, PART) put an own labelled date in doubt, they may only ask - never let a member's answer be taken
     that the reading without them does not take. With the doubted label read as the note's own (as the installed reading
@@ -2594,10 +2803,13 @@ def _date_fact(found: tuple[_Candidate, ...], answers: Optional[set] = None) -> 
         (any(c.form == 'invalid' for c in unusable), INVALID_DATE_NOTE),
         (any(c.form == 'unread' for c in unusable), UNREAD_DATE_NOTE),
         (any(c.form == 'empty' for c in unusable), EMPTY_DATE_NOTE),
-        (not own and any(c.source == 'label' and c.form == 'read' and c.reading == 'own' and not c.alone for c in found),
-         FIELD_DATE_NOTE),
+        (not own and any(c.source == 'label' and c.form == 'read' and c.reading == 'own' and not c.alone and not c.wide
+                         for c in found), FIELD_DATE_NOTE),
         (not own and any(c.source == 'label' and c.form == 'read' and c.reading == 'own' and c.alone and not c.installed
-                         for c in found), FORM_DATE_NOTE),
+                         and not c.wide for c in found), FORM_DATE_NOTE),
+        # GI round 4 (package PD): a wide or worded own label - a worded field's words stand before its colon, never
+        # after its date, so FIELD_DATE_NOTE is never its note
+        (not own and any(c.wide and c.form == 'read' and c.reading == 'own' for c in found), WIDE_DATE_NOTE),
         (not own and any(c.source != 'label' and c.form == 'read' for c in found), EVIDENCE_DATE_NOTE),
         (any(c.reading == 'beside' and not c.doubt for c in unusable)
          or not own and any(c.form == 'read' and c.reading in ('aside', 'other', 'unplaced') and not c.doubt
@@ -2608,7 +2820,9 @@ def _date_fact(found: tuple[_Candidate, ...], answers: Optional[set] = None) -> 
         (any(c.doubt == 'order' for c in (speaks if lead else found)), ORDER_DATE_NOTE)) if present)
     if lead and len(values) == 1 and all(c.form == 'read' and c.value in values for c in speaks):
         fact = _fact('service_date', [(c.value, s) for c in lead + support for s in c.spans])
-        return fact if own else Fact('service_date', None, 'missing', fact.evidence, FORM_DATE_NOTE)
+        withheld_note = ' '.join(n for present, n in ((any(not c.wide for c in lead), FORM_DATE_NOTE),
+                                                      (any(c.wide for c in lead), WIDE_DATE_NOTE)) if present)
+        return fact if own else Fact('service_date', None, 'missing', fact.evidence, withheld_note)
     unread = tuple(s for c in unusable for s in _evidence_spans(c))
     if lead:
         fact = _fact('service_date', [(c.value, s) for c in lead + speaks if c.form == 'read' and c.reading != 'beside'

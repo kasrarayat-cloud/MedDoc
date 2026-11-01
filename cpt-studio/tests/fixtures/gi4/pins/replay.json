@@ -653,189 +653,15 @@
     "missing",
     null
    ],
-   "failed_hard": [
-    "date.sends-only-the-truth[doc:2026-10-14]",
-    "date.sends-only-the-truth[doc:2026-11-02]",
-    "date.sends-only-the-truth[doc:2026-11-23]",
-    "date.sends-only-the-truth[doc:2026-12-14]",
-    "date.sends-only-the-truth[far]",
-    "date.sends-only-the-truth[minus1]",
-    "date.sends-only-the-truth[plus1]"
-   ],
+   "failed_hard": [],
    "states": {
     "doc:2026-10-14": {
      "answer": "2026-10-14",
      "completeness": [
       "incomplete",
-      0
+      1
      ],
-     "held": false,
-     "inventory": [
-      [
-       "gi.egd",
-       "planned",
-       "unknown",
-       ""
-      ],
-      [
-       "gi.colonoscopy",
-       "planned",
-       "unknown",
-       ""
-      ],
-      [
-       "gi.office_em",
-       "performed",
-       "unknown",
-       ""
-      ]
-     ],
-     "offers": [],
-     "proposals": [
-      [
-       "3074F",
-       "excluded",
-       "excluded",
-       "873b13422810"
-      ],
-      [
-       "3078F",
-       "excluded",
-       "excluded",
-       "303f8ab123ec"
-      ],
-      [
-       "99204",
-       "selected",
-       "needs_clarification",
-       "95a7d8c1bacb"
-      ],
-      [
-       "G8752",
-       "excluded",
-       "excluded",
-       "864256b9b83e"
-      ],
-      [
-       "G8754",
-       "excluded",
-       "excluded",
-       "e830f60ed2f2"
-      ]
-     ],
-     "questions": [],
-     "request": "ef1b554c5f45841c",
-     "response": "COUNTERFACTUAL",
-     "routing": {
-      "gi.colonoscopy": [
-       "planned",
-       []
-      ],
-      "gi.egd": [
-       "planned",
-       []
-      ],
-      "gi.office_em": [
-       "performed",
-       [
-        "patient_status=new",
-        "setting=office"
-       ]
-      ]
-     },
-     "sends": "2026-10-14",
-     "taken": true
-    },
-    "doc:2026-11-02": {
-     "answer": "2026-11-02",
-     "completeness": [
-      "incomplete",
-      0
-     ],
-     "held": false,
-     "inventory": [
-      [
-       "gi.egd",
-       "planned",
-       "unknown",
-       ""
-      ],
-      [
-       "gi.colonoscopy",
-       "planned",
-       "unknown",
-       ""
-      ],
-      [
-       "gi.office_em",
-       "performed",
-       "unknown",
-       ""
-      ]
-     ],
-     "offers": [],
-     "proposals": [
-      [
-       "3074F",
-       "excluded",
-       "excluded",
-       "873b13422810"
-      ],
-      [
-       "3078F",
-       "excluded",
-       "excluded",
-       "303f8ab123ec"
-      ],
-      [
-       "99204",
-       "selected",
-       "needs_clarification",
-       "1153a0001e72"
-      ],
-      [
-       "G8752",
-       "excluded",
-       "excluded",
-       "864256b9b83e"
-      ],
-      [
-       "G8754",
-       "excluded",
-       "excluded",
-       "e830f60ed2f2"
-      ]
-     ],
-     "questions": [],
-     "request": "c27e77b47614f927",
-     "response": "COUNTERFACTUAL",
-     "routing": {
-      "gi.colonoscopy": [
-       "planned",
-       []
-      ],
-      "gi.egd": [
-       "planned",
-       []
-      ],
-      "gi.office_em": [
-       "performed",
-       [
-        "patient_status=new",
-        "setting=office"
-       ]
-      ]
-     },
-     "sends": "2026-11-02",
-     "taken": true
-    },
-    "doc:2026-11-23": {
-     "answer": "2026-11-23",
-     "completeness": [
-      "incomplete",
-      0
-     ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.egd",
@@ -856,48 +682,33 @@
        ""
       ]
      ],
-     "offers": [],
-     "proposals": [
+     "offers": [
       [
-       "3074F",
-       "excluded",
-       "excluded",
-       "873b13422810"
-      ],
-      [
-       "3078F",
-       "excluded",
-       "excluded",
-       "303f8ab123ec"
-      ],
-      [
-       "99204",
-       "selected",
-       "needs_clarification",
-       "57f8f534a3e8"
-      ],
-      [
-       "G8752",
-       "excluded",
-       "excluded",
-       "864256b9b83e"
-      ],
-      [
-       "G8754",
-       "excluded",
-       "excluded",
-       "e830f60ed2f2"
+       "gi.office_em",
+       "no_proposal",
+       true
       ]
      ],
+     "proposals": [],
      "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ],
       [
        "service",
        "gi.egd",
        "extent"
+      ],
+      [
+       "service",
+       "gi.office_em",
+       "em_basis"
       ]
      ],
-     "request": "ac65661c0214410a",
-     "response": "COUNTERFACTUAL",
+     "request": "",
+     "response": "held",
      "routing": {
       "gi.colonoscopy": [
        "planned",
@@ -915,20 +726,168 @@
        ]
       ]
      },
-     "sends": "2026-11-23",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
+    },
+    "doc:2026-11-02": {
+     "answer": "2026-11-02",
+     "completeness": [
+      "incomplete",
+      1
+     ],
+     "held": true,
+     "inventory": [
+      [
+       "gi.egd",
+       "uncertain",
+       "unknown",
+       ""
+      ],
+      [
+       "gi.colonoscopy",
+       "planned",
+       "unknown",
+       ""
+      ],
+      [
+       "gi.office_em",
+       "performed",
+       "unknown",
+       ""
+      ]
+     ],
+     "offers": [
+      [
+       "gi.office_em",
+       "no_proposal",
+       true
+      ]
+     ],
+     "proposals": [],
+     "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ],
+      [
+       "service",
+       "gi.egd",
+       "extent"
+      ],
+      [
+       "service",
+       "gi.office_em",
+       "em_basis"
+      ]
+     ],
+     "request": "",
+     "response": "held",
+     "routing": {
+      "gi.colonoscopy": [
+       "planned",
+       []
+      ],
+      "gi.egd": [
+       "planned",
+       []
+      ],
+      "gi.office_em": [
+       "performed",
+       [
+        "patient_status=new",
+        "setting=office"
+       ]
+      ]
+     },
+     "sends": "HELD",
+     "taken": false
+    },
+    "doc:2026-11-23": {
+     "answer": "2026-11-23",
+     "completeness": [
+      "incomplete",
+      1
+     ],
+     "held": true,
+     "inventory": [
+      [
+       "gi.egd",
+       "uncertain",
+       "unknown",
+       ""
+      ],
+      [
+       "gi.colonoscopy",
+       "planned",
+       "unknown",
+       ""
+      ],
+      [
+       "gi.office_em",
+       "performed",
+       "unknown",
+       ""
+      ]
+     ],
+     "offers": [
+      [
+       "gi.office_em",
+       "no_proposal",
+       true
+      ]
+     ],
+     "proposals": [],
+     "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ],
+      [
+       "service",
+       "gi.egd",
+       "extent"
+      ],
+      [
+       "service",
+       "gi.office_em",
+       "em_basis"
+      ]
+     ],
+     "request": "",
+     "response": "held",
+     "routing": {
+      "gi.colonoscopy": [
+       "planned",
+       []
+      ],
+      "gi.egd": [
+       "planned",
+       []
+      ],
+      "gi.office_em": [
+       "performed",
+       [
+        "patient_status=new",
+        "setting=office"
+       ]
+      ]
+     },
+     "sends": "HELD",
+     "taken": false
     },
     "doc:2026-12-14": {
      "answer": "2026-12-14",
      "completeness": [
       "incomplete",
-      0
+      1
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.egd",
-       "historical",
+       "uncertain",
        "unknown",
        ""
       ],
@@ -945,49 +904,40 @@
        ""
       ]
      ],
-     "offers": [],
-     "proposals": [
+     "offers": [
       [
-       "3074F",
-       "excluded",
-       "excluded",
-       "873b13422810"
-      ],
-      [
-       "3078F",
-       "excluded",
-       "excluded",
-       "303f8ab123ec"
-      ],
-      [
-       "99204",
-       "selected",
-       "needs_clarification",
-       "2ba61267bd72"
-      ],
-      [
-       "G8752",
-       "excluded",
-       "excluded",
-       "864256b9b83e"
-      ],
-      [
-       "G8754",
-       "excluded",
-       "excluded",
-       "e830f60ed2f2"
+       "gi.office_em",
+       "no_proposal",
+       true
       ]
      ],
-     "questions": [],
-     "request": "4b2aab1717283df7",
-     "response": "COUNTERFACTUAL",
+     "proposals": [],
+     "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ],
+      [
+       "service",
+       "gi.egd",
+       "extent"
+      ],
+      [
+       "service",
+       "gi.office_em",
+       "em_basis"
+      ]
+     ],
+     "request": "",
+     "response": "held",
      "routing": {
       "gi.colonoscopy": [
        "planned",
        []
       ],
       "gi.egd": [
-       "historical",
+       "planned",
        []
       ],
       "gi.office_em": [
@@ -998,20 +948,20 @@
        ]
       ]
      },
-     "sends": "2026-12-14",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "far": {
      "answer": "1998-01-01",
      "completeness": [
       "incomplete",
-      0
+      1
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.egd",
-       "planned",
+       "uncertain",
        "unknown",
        ""
       ],
@@ -1028,42 +978,33 @@
        ""
       ]
      ],
-     "offers": [],
-     "proposals": [
+     "offers": [
       [
-       "3074F",
-       "excluded",
-       "excluded",
-       "873b13422810"
-      ],
-      [
-       "3078F",
-       "excluded",
-       "excluded",
-       "303f8ab123ec"
-      ],
-      [
-       "99204",
-       "selected",
-       "needs_clarification",
-       "7b589dbadbde"
-      ],
-      [
-       "G8752",
-       "excluded",
-       "excluded",
-       "864256b9b83e"
-      ],
-      [
-       "G8754",
-       "excluded",
-       "excluded",
-       "e830f60ed2f2"
+       "gi.office_em",
+       "no_proposal",
+       true
       ]
      ],
-     "questions": [],
-     "request": "69826b5d6756894c",
-     "response": "COUNTERFACTUAL",
+     "proposals": [],
+     "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ],
+      [
+       "service",
+       "gi.egd",
+       "extent"
+      ],
+      [
+       "service",
+       "gi.office_em",
+       "em_basis"
+      ]
+     ],
+     "request": "",
+     "response": "held",
      "routing": {
       "gi.colonoscopy": [
        "planned",
@@ -1081,20 +1022,20 @@
        ]
       ]
      },
-     "sends": "1998-01-01",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "minus1": {
      "answer": "2026-10-25",
      "completeness": [
       "incomplete",
-      0
+      1
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.egd",
-       "planned",
+       "uncertain",
        "unknown",
        ""
       ],
@@ -1111,42 +1052,33 @@
        ""
       ]
      ],
-     "offers": [],
-     "proposals": [
+     "offers": [
       [
-       "3074F",
-       "excluded",
-       "excluded",
-       "873b13422810"
-      ],
-      [
-       "3078F",
-       "excluded",
-       "excluded",
-       "303f8ab123ec"
-      ],
-      [
-       "99204",
-       "selected",
-       "needs_clarification",
-       "4c0efd98c55d"
-      ],
-      [
-       "G8752",
-       "excluded",
-       "excluded",
-       "864256b9b83e"
-      ],
-      [
-       "G8754",
-       "excluded",
-       "excluded",
-       "e830f60ed2f2"
+       "gi.office_em",
+       "no_proposal",
+       true
       ]
      ],
-     "questions": [],
-     "request": "dce04b36ef1b7654",
-     "response": "COUNTERFACTUAL",
+     "proposals": [],
+     "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ],
+      [
+       "service",
+       "gi.egd",
+       "extent"
+      ],
+      [
+       "service",
+       "gi.office_em",
+       "em_basis"
+      ]
+     ],
+     "request": "",
+     "response": "held",
      "routing": {
       "gi.colonoscopy": [
        "planned",
@@ -1164,8 +1096,8 @@
        ]
       ]
      },
-     "sends": "2026-10-25",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "none": {
      "answer": null,
@@ -1265,13 +1197,13 @@
      "answer": "2026-10-27",
      "completeness": [
       "incomplete",
-      0
+      1
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.egd",
-       "planned",
+       "uncertain",
        "unknown",
        ""
       ],
@@ -1288,42 +1220,33 @@
        ""
       ]
      ],
-     "offers": [],
-     "proposals": [
+     "offers": [
       [
-       "3074F",
-       "excluded",
-       "excluded",
-       "873b13422810"
-      ],
-      [
-       "3078F",
-       "excluded",
-       "excluded",
-       "303f8ab123ec"
-      ],
-      [
-       "99204",
-       "selected",
-       "needs_clarification",
-       "bec6391db4bb"
-      ],
-      [
-       "G8752",
-       "excluded",
-       "excluded",
-       "864256b9b83e"
-      ],
-      [
-       "G8754",
-       "excluded",
-       "excluded",
-       "e830f60ed2f2"
+       "gi.office_em",
+       "no_proposal",
+       true
       ]
      ],
-     "questions": [],
-     "request": "f77daece07df0716",
-     "response": "COUNTERFACTUAL",
+     "proposals": [],
+     "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ],
+      [
+       "service",
+       "gi.egd",
+       "extent"
+      ],
+      [
+       "service",
+       "gi.office_em",
+       "em_basis"
+      ]
+     ],
+     "request": "",
+     "response": "held",
      "routing": {
       "gi.colonoscopy": [
        "planned",
@@ -1341,8 +1264,8 @@
        ]
       ]
      },
-     "sends": "2026-10-27",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "walk": {
      "answer": "2026-10-26",
@@ -1434,12 +1357,7 @@
     "missing",
     null
    ],
-   "failed_hard": [
-    "date.sends-only-the-truth[far]",
-    "date.sends-only-the-truth[minus1]",
-    "date.sends-only-the-truth[plan]",
-    "date.sends-only-the-truth[plus1]"
-   ],
+   "failed_hard": [],
    "states": {
     "far": {
      "answer": "1998-01-01",
@@ -1447,7 +1365,7 @@
       "incomplete",
       2
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.egd",
@@ -1470,27 +1388,30 @@
       ],
       [
        "gi.flex_sig",
-       "not_covered",
+       "no_proposal",
        false
       ]
      ],
-     "proposals": [
-      [
-       "45330",
-       "selected",
-       "needs_clarification",
-       "5a2a0dbd3f1d"
-      ]
-     ],
+     "proposals": [],
      "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ],
       [
        "service",
        "gi.egd",
        "extent"
+      ],
+      [
+       "service",
+       "gi.flex_sig",
+       "extent"
       ]
      ],
-     "request": "d814a58e854bbfa3",
-     "response": "COUNTERFACTUAL",
+     "request": "",
+     "response": "held",
      "routing": {
       "gi.egd": [
        "uncertain",
@@ -1501,8 +1422,8 @@
        []
       ]
      },
-     "sends": "1998-01-01",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "minus1": {
      "answer": "2026-10-20",
@@ -1510,7 +1431,7 @@
       "incomplete",
       2
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.egd",
@@ -1533,27 +1454,30 @@
       ],
       [
        "gi.flex_sig",
-       "not_covered",
+       "no_proposal",
        false
       ]
      ],
-     "proposals": [
-      [
-       "45330",
-       "selected",
-       "needs_clarification",
-       "60dabcd6b4ed"
-      ]
-     ],
+     "proposals": [],
      "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ],
       [
        "service",
        "gi.egd",
        "extent"
+      ],
+      [
+       "service",
+       "gi.flex_sig",
+       "extent"
       ]
      ],
-     "request": "e589238770ba2617",
-     "response": "COUNTERFACTUAL",
+     "request": "",
+     "response": "held",
      "routing": {
       "gi.egd": [
        "uncertain",
@@ -1564,8 +1488,8 @@
        []
       ]
      },
-     "sends": "2026-10-20",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "none": {
      "answer": null,
@@ -1641,7 +1565,7 @@
       "incomplete",
       2
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.egd",
@@ -1664,27 +1588,30 @@
       ],
       [
        "gi.flex_sig",
-       "not_covered",
+       "no_proposal",
        false
       ]
      ],
-     "proposals": [
-      [
-       "45330",
-       "selected",
-       "needs_clarification",
-       "423883dc01d0"
-      ]
-     ],
+     "proposals": [],
      "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ],
       [
        "service",
        "gi.egd",
        "extent"
+      ],
+      [
+       "service",
+       "gi.flex_sig",
+       "extent"
       ]
      ],
-     "request": "b51c366c5acb0700",
-     "response": "COUNTERFACTUAL",
+     "request": "",
+     "response": "held",
      "routing": {
       "gi.egd": [
        "uncertain",
@@ -1695,8 +1622,8 @@
        []
       ]
      },
-     "sends": "2026-11-18",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "plus1": {
      "answer": "2026-10-22",
@@ -1704,7 +1631,7 @@
       "incomplete",
       2
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.egd",
@@ -1727,27 +1654,30 @@
       ],
       [
        "gi.flex_sig",
-       "not_covered",
+       "no_proposal",
        false
       ]
      ],
-     "proposals": [
-      [
-       "45330",
-       "selected",
-       "needs_clarification",
-       "c7ecd10dfbe9"
-      ]
-     ],
+     "proposals": [],
      "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ],
       [
        "service",
        "gi.egd",
        "extent"
+      ],
+      [
+       "service",
+       "gi.flex_sig",
+       "extent"
       ]
      ],
-     "request": "0c30865066a220e6",
-     "response": "COUNTERFACTUAL",
+     "request": "",
+     "response": "held",
      "routing": {
       "gi.egd": [
        "uncertain",
@@ -1758,8 +1688,8 @@
        []
       ]
      },
-     "sends": "2026-10-22",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "walk": {
      "answer": "2026-10-21",
@@ -1828,15 +1758,10 @@
   },
   "h4-03": {
    "fact": [
-    "missing",
+    "conflict",
     null
    ],
-   "failed_hard": [
-    "date.sends-only-the-truth[doc:2026-10-09]",
-    "date.sends-only-the-truth[far]",
-    "date.sends-only-the-truth[minus1]",
-    "date.sends-only-the-truth[plus1]"
-   ],
+   "failed_hard": [],
    "states": {
     "doc:2026-10-08": {
      "answer": "2026-10-08",
@@ -1873,9 +1798,9 @@
      "answer": "2026-10-09",
      "completeness": [
       "incomplete",
-      0
+      1
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.egd",
@@ -1884,29 +1809,34 @@
        ""
       ]
      ],
-     "offers": [],
-     "proposals": [
+     "offers": [
       [
-       "43244",
-       "selected",
-       "needs_clarification",
-       "f3f8c4de0c94"
+       "gi.egd",
+       "no_proposal",
+       true
       ]
      ],
-     "questions": [],
-     "request": "e36f1d3c3d4c3b80",
-     "response": "COUNTERFACTUAL",
+     "proposals": [],
+     "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ]
+     ],
+     "request": "",
+     "response": "held",
      "routing": {},
-     "sends": "2026-10-09",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "far": {
      "answer": "1998-01-01",
      "completeness": [
       "incomplete",
-      0
+      1
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.egd",
@@ -1915,29 +1845,34 @@
        ""
       ]
      ],
-     "offers": [],
-     "proposals": [
+     "offers": [
       [
-       "43244",
-       "selected",
-       "needs_clarification",
-       "4ef17d66c399"
+       "gi.egd",
+       "no_proposal",
+       true
       ]
      ],
-     "questions": [],
-     "request": "b95e363e8cd1c3ab",
-     "response": "COUNTERFACTUAL",
+     "proposals": [],
+     "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ]
+     ],
+     "request": "",
+     "response": "held",
      "routing": {},
-     "sends": "1998-01-01",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "minus1": {
      "answer": "2026-10-05",
      "completeness": [
       "incomplete",
-      0
+      1
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.egd",
@@ -1946,21 +1881,26 @@
        ""
       ]
      ],
-     "offers": [],
-     "proposals": [
+     "offers": [
       [
-       "43244",
-       "selected",
-       "needs_clarification",
-       "b5f422a046e3"
+       "gi.egd",
+       "no_proposal",
+       true
       ]
      ],
-     "questions": [],
-     "request": "263a866bf34dfde4",
-     "response": "COUNTERFACTUAL",
+     "proposals": [],
+     "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ]
+     ],
+     "request": "",
+     "response": "held",
      "routing": {},
-     "sends": "2026-10-05",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "none": {
      "answer": null,
@@ -2003,9 +1943,9 @@
      "answer": "2026-10-07",
      "completeness": [
       "incomplete",
-      0
+      1
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.egd",
@@ -2014,21 +1954,26 @@
        ""
       ]
      ],
-     "offers": [],
-     "proposals": [
+     "offers": [
       [
-       "43244",
-       "selected",
-       "needs_clarification",
-       "56ef1c44682c"
+       "gi.egd",
+       "no_proposal",
+       true
       ]
      ],
-     "questions": [],
-     "request": "aa47a7b913650de3",
-     "response": "COUNTERFACTUAL",
+     "proposals": [],
+     "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ]
+     ],
+     "request": "",
+     "response": "held",
      "routing": {},
-     "sends": "2026-10-07",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "walk": {
      "answer": "2026-10-06",
@@ -2068,21 +2013,15 @@
     "missing",
     null
    ],
-   "failed_hard": [
-    "date.sends-only-the-truth[doc:2026-09-28]",
-    "date.sends-only-the-truth[far]",
-    "date.sends-only-the-truth[minus1]",
-    "date.sends-only-the-truth[plan]",
-    "date.sends-only-the-truth[plus1]"
-   ],
+   "failed_hard": [],
    "states": {
     "doc:2026-09-28": {
      "answer": "2026-09-28",
      "completeness": [
-      "complete_pending_review",
-      0
+      "incomplete",
+      1
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.egd",
@@ -2097,24 +2036,23 @@
        ""
       ]
      ],
-     "offers": [],
-     "proposals": [
+     "offers": [
       [
-       "43251",
-       "selected",
-       "ready",
-       "9e59a8b11f31"
-      ],
-      [
-       "45378",
-       "excluded",
-       "excluded",
-       "048e65332397"
+       "gi.egd",
+       "no_proposal",
+       true
       ]
      ],
-     "questions": [],
-     "request": "9d5e318e5ec4573e",
-     "response": "COUNTERFACTUAL",
+     "proposals": [],
+     "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ]
+     ],
+     "request": "",
+     "response": "held",
      "routing": {
       "gi.colonoscopy": [
        "negated",
@@ -2127,16 +2065,16 @@
        ]
       ]
      },
-     "sends": "2026-09-28",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "far": {
      "answer": "1998-01-01",
      "completeness": [
-      "complete_pending_review",
-      0
+      "incomplete",
+      1
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.egd",
@@ -2151,24 +2089,23 @@
        ""
       ]
      ],
-     "offers": [],
-     "proposals": [
+     "offers": [
       [
-       "43251",
-       "selected",
-       "ready",
-       "548ff09f6fa1"
-      ],
-      [
-       "45378",
-       "excluded",
-       "excluded",
-       "ee73a67a48fe"
+       "gi.egd",
+       "no_proposal",
+       true
       ]
      ],
-     "questions": [],
-     "request": "fe73d996d05bef1d",
-     "response": "COUNTERFACTUAL",
+     "proposals": [],
+     "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ]
+     ],
+     "request": "",
+     "response": "held",
      "routing": {
       "gi.colonoscopy": [
        "negated",
@@ -2181,16 +2118,16 @@
        ]
       ]
      },
-     "sends": "1998-01-01",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "minus1": {
      "answer": "2026-10-18",
      "completeness": [
-      "complete_pending_review",
-      0
+      "incomplete",
+      1
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.egd",
@@ -2205,24 +2142,23 @@
        ""
       ]
      ],
-     "offers": [],
-     "proposals": [
+     "offers": [
       [
-       "43251",
-       "selected",
-       "ready",
-       "f2652179dea3"
-      ],
-      [
-       "45378",
-       "excluded",
-       "excluded",
-       "9588b9ebe0ea"
+       "gi.egd",
+       "no_proposal",
+       true
       ]
      ],
-     "questions": [],
-     "request": "23fc3b9c2eb392dd",
-     "response": "COUNTERFACTUAL",
+     "proposals": [],
+     "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ]
+     ],
+     "request": "",
+     "response": "held",
      "routing": {
       "gi.colonoscopy": [
        "negated",
@@ -2235,8 +2171,8 @@
        ]
       ]
      },
-     "sends": "2026-10-18",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "none": {
      "answer": null,
@@ -2301,10 +2237,10 @@
     "plan": {
      "answer": "2026-11-16",
      "completeness": [
-      "complete_pending_review",
-      0
+      "incomplete",
+      1
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.egd",
@@ -2319,24 +2255,23 @@
        ""
       ]
      ],
-     "offers": [],
-     "proposals": [
+     "offers": [
       [
-       "43251",
-       "selected",
-       "ready",
-       "6be52d7c46e9"
-      ],
-      [
-       "45378",
-       "excluded",
-       "excluded",
-       "25e01f65c3b2"
+       "gi.egd",
+       "no_proposal",
+       true
       ]
      ],
-     "questions": [],
-     "request": "66c5645b49d93577",
-     "response": "COUNTERFACTUAL",
+     "proposals": [],
+     "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ]
+     ],
+     "request": "",
+     "response": "held",
      "routing": {
       "gi.colonoscopy": [
        "negated",
@@ -2349,16 +2284,16 @@
        ]
       ]
      },
-     "sends": "2026-11-16",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "plus1": {
      "answer": "2026-10-20",
      "completeness": [
-      "complete_pending_review",
-      0
+      "incomplete",
+      1
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.egd",
@@ -2373,24 +2308,23 @@
        ""
       ]
      ],
-     "offers": [],
-     "proposals": [
+     "offers": [
       [
-       "43251",
-       "selected",
-       "ready",
-       "d8ea3c067b08"
-      ],
-      [
-       "45378",
-       "excluded",
-       "excluded",
-       "c4123532dc36"
+       "gi.egd",
+       "no_proposal",
+       true
       ]
      ],
-     "questions": [],
-     "request": "987ef09da06a2927",
-     "response": "COUNTERFACTUAL",
+     "proposals": [],
+     "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ]
+     ],
+     "request": "",
+     "response": "held",
      "routing": {
       "gi.colonoscopy": [
        "negated",
@@ -2403,8 +2337,8 @@
        ]
       ]
      },
-     "sends": "2026-10-20",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "walk": {
      "answer": "2026-10-19",
@@ -2976,21 +2910,15 @@
     "missing",
     null
    ],
-   "failed_hard": [
-    "date.sends-only-the-truth[doc:2025-09-30]",
-    "date.sends-only-the-truth[far]",
-    "date.sends-only-the-truth[minus1]",
-    "date.sends-only-the-truth[plan]",
-    "date.sends-only-the-truth[plus1]"
-   ],
+   "failed_hard": [],
    "states": {
     "doc:2025-09-30": {
      "answer": "2025-09-30",
      "completeness": [
       "incomplete",
-      0
+      1
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.colonoscopy",
@@ -2999,34 +2927,39 @@
        ""
       ]
      ],
-     "offers": [],
-     "proposals": [
+     "offers": [
       [
-       "45385",
-       "selected",
-       "needs_clarification",
-       "2a320b2a8a05"
+       "gi.colonoscopy",
+       "no_proposal",
+       false
       ]
      ],
-     "questions": [],
-     "request": "40cade0bda368fc9",
-     "response": "COUNTERFACTUAL",
+     "proposals": [],
+     "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ]
+     ],
+     "request": "",
+     "response": "held",
      "routing": {
       "gi.colonoscopy": [
        "historical",
        []
       ]
      },
-     "sends": "2025-09-30",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "far": {
      "answer": "1998-01-01",
      "completeness": [
       "incomplete",
-      0
+      1
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.colonoscopy",
@@ -3035,34 +2968,39 @@
        ""
       ]
      ],
-     "offers": [],
-     "proposals": [
+     "offers": [
       [
-       "45385",
-       "selected",
-       "needs_clarification",
-       "c14177b977f6"
+       "gi.colonoscopy",
+       "no_proposal",
+       false
       ]
      ],
-     "questions": [],
-     "request": "fbfd9650bdc6d2a2",
-     "response": "COUNTERFACTUAL",
+     "proposals": [],
+     "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ]
+     ],
+     "request": "",
+     "response": "held",
      "routing": {
       "gi.colonoscopy": [
        "historical",
        []
       ]
      },
-     "sends": "1998-01-01",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "minus1": {
      "answer": "2026-10-26",
      "completeness": [
       "incomplete",
-      0
+      1
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.colonoscopy",
@@ -3071,26 +3009,31 @@
        ""
       ]
      ],
-     "offers": [],
-     "proposals": [
+     "offers": [
       [
-       "45385",
-       "selected",
-       "needs_clarification",
-       "54fa6a29f5c4"
+       "gi.colonoscopy",
+       "no_proposal",
+       false
       ]
      ],
-     "questions": [],
-     "request": "1197a9600a487124",
-     "response": "COUNTERFACTUAL",
+     "proposals": [],
+     "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ]
+     ],
+     "request": "",
+     "response": "held",
      "routing": {
       "gi.colonoscopy": [
        "historical",
        []
       ]
      },
-     "sends": "2026-10-26",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "none": {
      "answer": null,
@@ -3138,9 +3081,9 @@
      "answer": "2026-11-24",
      "completeness": [
       "incomplete",
-      0
+      1
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.colonoscopy",
@@ -3149,34 +3092,39 @@
        ""
       ]
      ],
-     "offers": [],
-     "proposals": [
+     "offers": [
       [
-       "45385",
-       "selected",
-       "needs_clarification",
-       "ec01ed138a16"
+       "gi.colonoscopy",
+       "no_proposal",
+       false
       ]
      ],
-     "questions": [],
-     "request": "6cefc49f8faf2ef8",
-     "response": "COUNTERFACTUAL",
+     "proposals": [],
+     "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ]
+     ],
+     "request": "",
+     "response": "held",
      "routing": {
       "gi.colonoscopy": [
        "historical",
        []
       ]
      },
-     "sends": "2026-11-24",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "plus1": {
      "answer": "2026-10-28",
      "completeness": [
       "incomplete",
-      0
+      1
      ],
-     "held": false,
+     "held": true,
      "inventory": [
       [
        "gi.colonoscopy",
@@ -3185,26 +3133,31 @@
        ""
       ]
      ],
-     "offers": [],
-     "proposals": [
+     "offers": [
       [
-       "45385",
-       "selected",
-       "needs_clarification",
-       "b84306802f9b"
+       "gi.colonoscopy",
+       "no_proposal",
+       false
       ]
      ],
-     "questions": [],
-     "request": "151137dc5f752ba7",
-     "response": "COUNTERFACTUAL",
+     "proposals": [],
+     "questions": [
+      [
+       "encounter",
+       "",
+       "service_date"
+      ]
+     ],
+     "request": "",
+     "response": "held",
      "routing": {
       "gi.colonoscopy": [
        "historical",
        []
       ]
      },
-     "sends": "2026-10-28",
-     "taken": true
+     "sends": "HELD",
+     "taken": false
     },
     "walk": {
      "answer": "2026-10-27",
@@ -3246,6 +3199,6 @@
   }
  },
  "meta": {
-  "commit": "80df1831d168c4ee83d83c37bac9860690986cf3"
+  "commit": "a84f6d1f4e2c8c6ad194e53c14f93cbf8d72e7f6"
  }
 }
