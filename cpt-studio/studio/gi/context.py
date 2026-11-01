@@ -21,7 +21,7 @@ from typing import Optional
 
 from studio.gi import cues
 from studio.gi.sections import (ADDENDUM_HEADER, DOCUMENT_PART, HEADINGS, Layout, around_procedure_title, head_lines_end,
-                                layout, under_another_occurrence)
+                                layout, procedure_report_head, under_another_occurrence)
 from studio.types import CONTEXT_FACTS, Fact, Span
 
 SETTINGS = ('office', 'hospital_outpatient', 'asc', 'inpatient', 'emergency', 'telehealth')
@@ -394,8 +394,8 @@ class _Candidate:
     wide: bool = False
     # GI round 4, Wave 1 repair (PD, cycle 1; DS-1 to DS-4): rule (c) may narrow a member's answers to this candidate's
     # date - the author's own sign-off (naming the performer the head names) states its day, every closing-role day
-    # agrees, the closing region is the note's own, the note is not written around a procedure, and its date stands
-    # alone on a clean line (_pd_wide_candidates, _pd_signoff_day)
+    # agrees, the closing region is the note's own, the note is not written around a procedure, its date stands alone
+    # on a clean line, and a procedure's label stands in a procedure's report (_pd_wide_candidates, _pd_signoff_day)
     narrows: bool = False
     # The label's whole line (a window around the label when the line is longer than _PD_QUOTE_CHARS): what a note or a
     # question quotes, never the label and its date alone (CTS-5); ``quote`` is that line as a note quotes it, and
@@ -2038,14 +2038,15 @@ def _pd_wide_candidates(text: str, lay: Layout, rows: '_Rows', worded: list) -> 
     rule (a) stays off there, as on b840ae756, which read none). A label narrows a member's answers (rule (c),
     ``narrows``) only with positive evidence that its date is the note's own: the author's own sign-off - naming the
     performer or author the head names - states that day and nothing in the note's closing contradicts it
-    (_pd_signoff_day, read once and only when a label is read), its date stands alone in its field, and its line is
-    short and states no other date (_pd_clean_line). Bounded: the head, once; each label's own line; the closing read
-    once."""
+    (_pd_signoff_day, read once and only when a label is read), its date stands alone in its field, its line is short
+    and states no other date (_pd_clean_line), and a label naming a procedure's occurrence stands in a procedure's own
+    report (_PD_PROCEDURE_LABEL, sections.procedure_report_head). Bounded: the head, once; each label's own line; the
+    closing read once."""
     head_end = _head_end(text, lay)
     if not worded and WIDE_SERVICE_DATE.search(text, 0, head_end) is None:
         return ()
     asks = not around_procedure_title(text)
-    out, signoff, unread = [], None, True
+    out, signoff, unread, report_head = [], None, True, None
     for m in WIDE_SERVICE_DATE.finditer(text, 0, head_end):
         if lay.section_at(m.start()).kind in NOT_CURRENT_SECTIONS or _joined(text, rows, m.start('label'),
                                                                                m.end('label')) is not None:
@@ -2061,10 +2062,16 @@ def _pd_wide_candidates(text: str, lay: Layout, rows: '_Rows', worded: list) -> 
         ls, le = rows.line(m.start())
         alone = _alone_in_field(text, m.end(), le)
         line, quote = _pd_line(text, ls, le, start, m.end())
+        # the declaration's fifth entry: a label naming a procedure's occurrence dates that procedure, so it narrows only
+        # in the procedure's own report (sections.procedure_report_head, read once and only for such a label)
+        procedural = _PD_PROCEDURE_LABEL.search(m.group('label')) is not None
+        if procedural and report_head is None:
+            report_head = procedure_report_head(text)
         out.append(_Candidate(_span(text, start, m.end()), value.isoformat(), 'label', 'own', 'read', alone=alone,
                               installed=False, wide=True, asks=asks, line=line, quote=quote, line_at=ls,
                               narrows=alone and signoff == value.isoformat()
-                              and _pd_clean_line(text, ls, le, start, m.end())))
+                              and _pd_clean_line(text, ls, le, start, m.end())
+                              and (not procedural or report_head)))
     for m in worded:
         field = _worded_field(text, m, rows)
         if field is None:
@@ -2097,6 +2104,11 @@ def _head_end(text: str, lay: Layout) -> int:
     return min(head_lines_end(text, TITLE_LINES), first)
 
 
+# GI round 4, Wave 1 repair (PD, cycle 1; the declaration's fifth entry): a wide label naming a procedure's occurrence
+# ("Day of procedure", "Procedure day", "Case date", "Date/Day of case", "Date performed") narrows only in a procedure's
+# own report; a visit or exam label ("Date seen", "Exam date", "Day of visit", "Day of service") as before.
+_PD_PROCEDURE_LABEL = cues.rx(r'\b(?:day[ \t]++of[ \t]++procedure|procedure[ \t]++day|(?:date|day)[ \t]++of[ \t]++case'
+                              r'|case[ \t]++(?:date|day)|date[ \t]++performed)\b')
 # GI round 4, Wave 1 repair (PD, cycle 1; CTS-5): a wide label is quoted with its whole line. A line longer than
 # _PD_QUOTE_CHARS is quoted as a window of _PD_QUOTE_WINDOW characters either side of its label and date, each cut end
 # marked, and its label never narrows (_pd_clean_line).

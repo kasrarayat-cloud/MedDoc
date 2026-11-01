@@ -462,6 +462,23 @@ class SignedByThePerformerTests(SimpleTestCase):
         self.assertFalse(context._pd_signed_by('Signed: 10/21/2026', ()))
 
 
+class ProcedureLabelTests(SimpleTestCase):
+    """The declaration's fifth entry: a label naming a procedure's occurrence narrows only in a procedure's own report."""
+
+    CONSULT = ('GI Consultation\nSeen by: A. Doctor MD\n{label}\nChief complaint: rectal bleeding.\nAssessment: '
+               'hematochezia; colonoscopy scheduled.\nElectronically signed by A. Doctor MD, 11/04/2026 07:30\n')
+
+    def test_a_procedure_label_outside_a_procedure_report(self):  # kills pd-procedure-label-head
+        for label in ('Day of procedure: 11/04/2026', 'Case date: 11/04/2026', 'Date performed: 11/04/2026',
+                      'Procedure day: 11/04/2026'):
+            text = self.CONSULT.format(label=label)  # signed late, on the planned procedure's day (R8)
+            self.assertTrue(quote_only(text), label)
+            every_answer_taken(self, text, ['2026-10-28', '2026-11-04', FAR])
+        self.assertTrue(narrows(self.CONSULT.format(label='Date seen: 11/04/2026'), '2026-11-04', '2026-10-28'))
+        for label in ('Day of procedure: 10/21/2026', 'Case date: 10/21/2026', 'Date performed: 10/21/2026'):
+            self.assertTrue(narrows(report(label=label)), label)  # the procedure's own report: its head's fields
+
+
 class AroundProcedureTests(SimpleTestCase):
     """DS-2: a note written around a procedure, under the broadened detection, narrows nothing; its labels are quoted."""
 
@@ -597,8 +614,9 @@ class ClosingRegionTests(SimpleTestCase):
             every_answer_taken(self, text, answers)
 
     def test_the_head_of_a_short_document_is_never_its_closing(self):  # kills pd-region-not-head
-        # its head names the signer, so only the region keeps the label's own line from signing it
-        text = (B + 'Endoscopy Note\nAuthor: J. Nurse RN\nDay of procedure: 11/04/2026   Signed by: J. Nurse RN\nPatient: '
+        # its head names the signer and its label is a visit's (the fifth entry's rule would refuse a procedure's), so
+        # only the region keeps the label's own line from signing it
+        text = (B + 'Endoscopy Note\nAuthor: J. Nurse RN\nDate seen: 11/04/2026   Signed by: J. Nurse RN\nPatient: '
                 'Alex Synthetic\nAllergies reviewed.\n')
         self.assertTrue(quote_only(text))
         self.assertTrue(taken(text, '2026-10-30'))

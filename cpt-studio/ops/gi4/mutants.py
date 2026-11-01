@@ -254,6 +254,8 @@ PD_MUTANTS = (
     Mutant('pd-no-wide-in-doubt', 'no wide label is in doubt (birth, part, order) or read elsewhere beside the narrowed ones', _PD_CONTEXT,
            '    if all(c.narrows for c in wide) and len(wide) == sum(1 for c in found if c.wide):\n',
            '    if all(c.narrows for c in wide):\n', _PD_UNIT),
+    Mutant('pd-procedure-label-head', "a label naming a procedure's occurrence narrows only in a procedure's own report", _PD_CONTEXT,
+           '                              and (not procedural or report_head)))\n', '                              ))\n', _PD_UNIT),
     Mutant('pd-label-alone', "a narrowing label's date stands alone in its field", _PD_CONTEXT,
            '                              narrows=alone and signoff == value.isoformat()\n',
            '                              narrows=signoff == value.isoformat()\n', _PD_UNIT),
