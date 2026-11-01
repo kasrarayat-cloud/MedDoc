@@ -32,7 +32,8 @@ primitives, and runs their checks and actions in the engine's own order:
 - HTTPS health on the candidate;
 - automatic recovery only when the act fails before publication.
 
-What the installer adds to that shape (the 2026-11-01 refutation, 22 findings, every one repaired with a test):
+What the installer adds to that shape (the 2026-11-01 refutations, 22 findings and then 14 more, every one repaired
+with a test):
 
 - **Path guards.** A dot-named path component is admitted only where the base already tracks that path, or where
   it is a new file that the declaration's contract names exactly in `new_dot_paths` (step 3). No manifest path may
@@ -45,17 +46,33 @@ What the installer adds to that shape (the 2026-11-01 refutation, 22 findings, e
 - **Trusted gates.** The citation and the strict declaration gate run from the base's tracked copies in the shared
   tree, each proven byte-equal to its blob at `BASE` and pinned by sha256 in the plan. `origin/main` is read as
   `refs/remotes/origin/main` (nothing may shadow it) and as exactly `refs/heads/main` on the remote.
-- **Git's own state** in the shared repository refuses: lock files, an unfinished merge, cherry-pick, revert,
-  rebase or bisect, and assume-unchanged or skip-worktree entries.
-- **Re-comparison after the stop.** The venv, foreign services, configuration, clinical files and git's state are
-  measured again after the stop and before the merge. Publication begins only when git has moved `HEAD` or the
-  working tree: a refusal before that, a merge git refused included (measured with the engine's
-  `verify_original_before_resume`, never assumed), restores the original release.
-- **Exception-proof recovery.** Every unit gets its drain or restore attempt whatever happens to an evidence write.
-  A restore counts only when every unit is active and health reports `BASE`. SIGTERM, SIGINT and SIGHUP take the
-  same failure path. Every git process of the act runs with hooks and automatic maintenance switched off.
-- **Nothing drains a healthy install.** After health on the candidate, a foreign restart, a failed configuration
-  read or an interrupt is reported for judgement (exit 2).
+- **Git's own state** refuses, in the shared repository and in the candidate worktree the installer runs from:
+  lock files, an unfinished merge, cherry-pick, revert, rebase or bisect, assume-unchanged or skip-worktree entries,
+  and any `refs/replace` entry. A rebase is unfinished only while `rebase-merge/` or `rebase-apply/` exists, which
+  is how git decides. A lone `.git/REBASE_HEAD` is what a finished rebase leaves behind (`--continue`, `--skip` and
+  `--quit` all leave it). The live repository has had one since 2026-08-10. It is recorded as `observed` in the
+  row's detail. It is never refused and never removed.
+- **No replace objects.** Every git process, the installer's own and every child's, reads the objects behind the
+  certified shas (`GIT_NO_REPLACE_OBJECTS=1`, `--no-replace-objects`, `core.useReplaceRefs=false`).
+- **The candidate worktree is proven before anything is imported from it.** Its git state must be clean, as above.
+  Nothing untracked may sit in `rebuild/ops`, ignored files included: an extension module or a package directory
+  there would be imported instead of the tracked source. No bytecode is read from the source tree.
+- **Re-comparison after the stop.** The venv, foreign services, configuration, clinical files, git's state,
+  `rebuild/.env` and the static inventory are measured again after the stop and before the merge. Publication begins
+  only when git has moved `HEAD` or the working tree. A refusal before that restores the original release, a merge
+  git refused included. First every child process of the act is reaped, so no merge can still be running. Then the
+  original is measured intact: the engine's `verify_original_before_resume`, plus the same shared-tree measurement
+  as before the merge, git's own state included. It is never assumed.
+- **Exception-proof recovery.** Every unit gets its drain or restore attempt whatever happens to an evidence write
+  or to releasing the locks. A restore counts only when every unit is active and health reports `BASE`. Every git
+  process of the act runs with hooks, automatic maintenance and replace objects switched off.
+- **Signals are blocked, never handled.** SIGTERM, SIGINT and SIGHUP are blocked for the whole act, so nothing
+  interrupts a stage, a helper call, a child's start or the recovery. They are taken only at checkpoints between
+  stages. Before publication, a signal takes the automatic recovery. After it, the signal is recorded and the act
+  runs to completion (exit 2). Step 7 has the details.
+- **Nothing drains a healthy install.** After health on the candidate, these are reported for judgement (exit 2):
+  a foreign restart, a failed configuration read, a signal, locks that could not be released, or a result file that
+  could not be written.
 
 It does not call the engine's `execute()`. That function's declaration check (line 193) needs the candidate's own
 sha inside the declaration, which D4 makes impossible. The module docstring explains this, and a unit test pins
@@ -78,9 +95,15 @@ the stage order to the engine's.
   (`/proc/<pid>/exe`) and, for a bare `python3` started from an activated shell, its own `PATH`; an operator
   Python whose use of the venv cannot be determined refuses too. Other users' processes expose only their command
   line: they are decided by an absolute interpreter path and otherwise counted as `uninspectable_other_users`.
+- Between step 3 and step 8, start every Python of your own uid with an absolute interpreter path. A relative one
+  (`.venv/bin/python ...`, or a relative `PATH` entry) was resolved against the directory the process started in,
+  and `/proc` keeps only the directory it is in now: a test that changes directory looks like it left the venv. Such
+  a process is undetermined and refuses the preflight (`undeterminable_operator_interpreter_process`), whichever
+  venv it really runs on.
 - Run no plain `git` command in `/opt/meddoc-pro` during step 7 (use `git --no-optional-locks`): a plain
-  `git status` takes the index lock, and a merge that meets it refuses. The act then restores the original release,
-  but the act is spent.
+  `git status` takes the index lock, and a merge that meets it refuses. The act is then spent. It restores the
+  original release only if git's state is clean again when the restore measures it. While a lock is still there, the
+  units stay drained (`original_recovery_refused` or `recovery: none`) until someone inspects them.
 - Run no synthetic workflow, upload or provider call during step 7. The engine's database baseline is taken while
   the units still serve, and any row written before the stop, other than a health tick, refuses the act. That
   refusal comes before publication, so the original release is restarted automatically.
@@ -154,9 +177,13 @@ $PY -I -B $C/rebuild/ops/install_rebuild_release.py --base $BASE --candidate $CO
 `declaration_contract` (`declaration_not_in_candidate`). Every other check must PASS:
 
 - no git environment variable that redirects or reconfigures git (`git_environment_clean`);
-- the candidate worktree;
+- the candidate worktree: at the candidate, tracked-clean, git's own state clean (no hidden index entry), and nothing
+  untracked in `rebuild/ops`. This row runs before any module is imported from the worktree; if it fails, the module
+  and engine rows fail as `prerequisite_failed`;
 - the shared tree clean on `main` at `BASE`, with no git lock file, no unfinished merge, cherry-pick, revert,
-  rebase or bisect, and no assume-unchanged or skip-worktree entry;
+  rebase (`rebase-merge/` or `rebase-apply/`) or bisect, no assume-unchanged or skip-worktree entry and no
+  `refs/replace` entry. The live repository's lone `REBASE_HEAD` appears as `"observed": ["REBASE_HEAD"]` in the
+  row's `git_state`. That is expected: it does not fail the row. Do not remove it;
 - `origin/main` equal to the candidate, locally (`refs/remotes/origin/main`, unshadowed) and on the remote
   (`refs/heads/main` exactly);
 - the trusted gate scripts: the shared tree's `check-citation.sh`, `lib/runs-api.sh` and `lib/declaration.sh` are
@@ -286,27 +313,70 @@ The installer refuses before anything if:
 - it is not under the runner (`RULED_MUTATION_*` must name this declaration);
 - `--new-dot-path` is given (the act admits only the new dot paths the merged declaration names);
 - its current directory is not `$X`;
-- the evidence directory already exists;
+- the evidence directory already exists, or its parent is not a private (0700) directory it can write;
+- `--result` already exists, is not in a private (0700) directory it can write, or is inside the evidence directory.
+  A refused preflight writes `--result` and creates no evidence directory, so a re-run needs a new `--result`
+  (`act-02.json`) as well as a new evidence directory;
 - any preflight row fails;
 - the manifest differs from `MANIFEST`.
+
+**The runner's ceiling must exceed the act's worst duration.** Leave `RULED_ACT_MAX_SECS` at its default, 3600 s,
+or raise it; never lower it for this act. The act takes about 5 minutes. Every child and helper call in it is
+bounded: unit actions 170 s each, configuration reads 30 s, systemctl reads 60-180 s, database statements 90 s,
+health 45 s, and reaping a left-over child 120 s. From its first statement the act blocks SIGTERM, SIGINT and SIGHUP,
+so the ceiling's SIGTERM interrupts nothing: it is taken at the next checkpoint like any other signal (below). The
+SIGKILL that `timeout -k 15` sends 15 s later is the only thing that can still cut the act. It cuts it wherever it
+is, a restore included, with no failure path and no outcome file. After an exit of 124, inspect the units at once,
+then read stderr and whatever evidence exists.
+
+**Signals during the act.** SIGTERM, SIGINT and SIGHUP stay blocked from the act's first statement until the process
+exits. No handler runs: not the installer's (it has none), not the SIGTERM handler that the managed docker helper
+installs for each call, not Ctrl-C's KeyboardInterrupt. So no signal interrupts a stage, a helper call, a child's
+start, or the drain or restore. Every child the act starts (git, the docker helper client, `bash`) inherits the
+blocked mask. A git child keeps it, so only SIGKILL can stop it: a `kill` of the installer or of its process group
+cannot stop a merge half-way. A pending signal is taken only at the checkpoints between stages, and recorded with
+its sender's pid and uid (`signal_records`). Two signals of the same kind that arrive between two checkpoints are
+one record.
+
+- Taken **before publication**, a signal takes the automatic recovery, exactly as a refusal does. Before the stop,
+  nothing was stopped, so nothing is restored. After the stop, the units are restored once the original is measured
+  intact. Signals during the restore are recorded and do not cut it short.
+- Taken **from publication on**, a signal is recorded and the act runs to completion: resume, health, every
+  post-condition, the receipt. Then it exits 2 for judgement (`interrupted`, `signals_received`). If the act fails
+  after that for another reason, the failure path runs as usual.
+- A signal that arrives after the receipt is recorded in `--result` (`signals_after_the_act`) and the exit is 2.
 
 Then it acts in the engine's order. It checks the venv footprint at the baseline, after the stop (before
 publication) and after the resume. It checks the venv-sharing units for idleness at the baseline and after the
 resume. It compares the foreign services at the baseline, after the stop, before the resume and after the resume.
-After the stop and before the merge it also compares the configuration hashes and the clinical-file inventory with
-their baselines and measures the shared tree again (clean `main` at `BASE`, git's own state, every manifest path
-unobstructed). Every git process of the act runs with `core.hooksPath=/dev/null`, `maintenance.auto=false` and
-`gc.auto=0`.
+After the stop and before the merge it also compares these with their baselines: the configuration hashes, the
+clinical-file inventory, the shared tree (clean `main` at `BASE`, git's own state, every manifest path
+unobstructed), and last, nearest the merge, `rebuild/.env` and the static inventory. Every git process of the act
+runs with `core.hooksPath=/dev/null`, `maintenance.auto=false`, `gc.auto=0` and `core.useReplaceRefs=false`.
 
 **Publication begins only when git has moved `HEAD` or the working tree.** Any refusal before the merge restores
-the original release. So does a merge git refused before changing anything (for example on another process's
-`index.lock`): the act measures that with the engine's `verify_original_before_resume` (HEAD at `BASE`, the tree
-clean, every base file proven, every new path absent) and never assumes it. If that measurement fails (git moved
-the index or the working tree, as with a held `HEAD.lock`), publication has begun and the units stay drained.
+the original release. So does a refusal inside the engine's `publish_source` before it runs `git merge`
+(`merge_invoked: false`). So does a merge git refused before changing anything. The act measures that instead of
+assuming it:
 
-**The failure path.** `failure.json` is written first (stage, fixed label, `recovery`: `restore`, `drain`,
-`refused` or `none`, `publication_attempted`, `merge_invoked`, `original_verification`, `signals_received`). Then,
-whatever happened to that write, every owned unit gets its restore or drain attempt, and one outcome file follows:
+1. it reaps every child it started, so no `git merge` can still move `HEAD` behind the measurement. A child still
+   running after 120 s counts as publication (`act_child_process_still_running`);
+2. it runs the engine's `verify_original_before_resume`: `HEAD` at `BASE`, the tree clean, every base file proven,
+   every new path absent;
+3. it repeats the shared-tree measurement taken before the merge: clean `main` at `BASE`, git's own state, every
+   manifest path unobstructed.
+
+If the measurement fails, nothing is started. That happens if git moved the index or the working tree (as with a
+held `HEAD.lock`), or if git's state is not clean (a lock left behind, or one held by another process). A changed
+`rebuild/.env` also fails it: the original is then not intact. If the merge was invoked, publication counts as
+begun (`recovery: none`). Otherwise the original recovery is refused (`recovery: refused`). In both cases the units
+stay drained.
+
+**The failure path.** `failure.json` is written first: stage, fixed label, `recovery` (`restore`, `drain`,
+`refused` or `none`), `publication_attempted`, `merge_invoked`, `original_verification`, `children` (reaped and
+still running), `signals_received` and `signal_records`. Then, whatever happened to that write, every owned unit
+gets its restore or drain attempt, the locks are released (a failure there is recorded as
+`coordination_released: false` and never replaces the outcome), and one outcome file follows:
 
 - `original-release-resumed.json`: every start returned, health reports `BASE`, and every unit is active with a
   main PID, all MEASURED;
@@ -317,14 +387,14 @@ whatever happened to that write, every owned unit gets its restore or drain atte
 
 If an evidence write fails, the same record is printed on stderr as one line
 `[rebuild-release] {"rebuild_release_outcome": {...}}` (the runner's transcript), and `--result` carries it under
-`recovery`. SIGTERM, SIGINT and SIGHUP raise in the act's main thread and take this same path; while units are being
-restored or drained, further signals are recorded and do not cut the recovery short (the runner's ceiling exits 124
-and SIGKILLs 15 s later, so read `failure.json` and the outcome file after any 124).
+`recovery`. A signal taken before publication takes this same path. Signals that arrive while units are being
+restored or drained are recorded in the outcome (`signals_received`) and never cut the recovery short; only the
+runner's SIGKILL can, so read `failure.json` and the outcome file after any 124.
 
 | exit | meaning | next |
 |---|---|---|
 | 0 | `installation-complete.json`, every post-condition passed | step 8 |
-| 2 | installed and serving the candidate; a post-condition the act cannot cause failed: the configuration changed or could not be read after the resume, a foreign service restarted after the resume, foreign units not idle after the resume, the venv footprint changed during the act, an interrupt arrived after health passed, or the receipt could not be written | judge it from `installation-complete.json` (`postconditions`, `observations`, `venv_change`, `interrupted`) or, if the receipt is missing, from stderr. Nothing was drained. Do not re-run. |
+| 2 | installed and serving the candidate, but something the act cannot undo needs judging: the configuration changed or could not be read after the resume; a foreign service restarted after the resume; foreign units not idle after the resume; the venv footprint changed during the act; a signal arrived after publication began (or after the receipt); the locks could not be released; the receipt or `--result` could not be written | judge it from `installation-complete.json` (`postconditions`, `observations`, `venv_change`, `interrupted`, `signal_records`, `coordination_released`) or, if the receipt is missing, from stderr. Nothing was drained. Do not re-run. |
 | 1, `installation_failed_inspect_retained_evidence` | refused or failed | read `failure.json` first. `recovery: restore` with `original-release-resumed.json`: the original release is back, measured. `recovery: none` with `publication_attempted: true`: the units are drained and only a newly declared corrective act may follow. **Never re-run** an act whose evidence directory exists. |
 | 1, `original_restore_unverified_inspect_retained_evidence` | the restore ran but was not proven | read `original-release-restore-unverified.json` (`starts`, `units_active`, `health`) and the units' state at once. |
 | 1, `original_recovery_refused_inspect_retained_evidence` | the original could not be verified; nothing was started | read `original-recovery-refused.json`; the units are drained. |
