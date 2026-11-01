@@ -13,6 +13,7 @@ import io
 import json
 import os
 from pathlib import Path
+import py_compile
 import shutil
 import signal
 import subprocess
@@ -677,7 +678,10 @@ class SharedRepositoryTests(GitIsolation):
             'REVERT_HEAD': (lambda repo: (repo / '.git/REVERT_HEAD').write_text(base + '\n'),
                             'unfinished_git_operation'),
             'rebase-merge': (lambda repo: (repo / '.git/rebase-merge').mkdir(), 'unfinished_git_operation'),
+            'rebase-apply': (lambda repo: (repo / '.git/rebase-apply').mkdir(), 'unfinished_git_operation'),
             'BISECT_LOG': (lambda repo: (repo / '.git/BISECT_LOG').write_text('x\n'), 'unfinished_git_operation'),
+            'replace-ref': (lambda repo: git(repo, 'update-ref', 'refs/replace/' + base, base),
+                            'git_replace_refs_present'),
             'assume-unchanged': (assume_unchanged, 'assume_unchanged_or_skip_worktree_entries'),
             'skip-worktree': (skip_worktree, 'assume_unchanged_or_skip_worktree_entries')})
         for name, (setup, label) in cases.items():
@@ -687,6 +691,79 @@ class SharedRepositoryTests(GitIsolation):
                 with self.assertRaises(op.Refusal) as caught:
                     op.shared_tree_at_base(base, root=repo)
                 self.assertEqual(str(caught.exception), label)
+
+    def test_gp1_a_finished_rebase_s_rebase_head_is_observed_never_refused(self):
+        """GP-1 (blocking): `rebase --continue` (and --skip, --quit) leaves .git/REBASE_HEAD behind; the live shared
+        repository has had one since 2026-08-10. git decides a rebase is in progress only by rebase-merge/ or
+        rebase-apply/. A lone REBASE_HEAD is reported as observed, the act's merge goes through it, and nothing
+        removes it; with a rebase directory present it still refuses."""
+        repo, base = self.shared()
+        git(repo, 'checkout', '-q', '-b', 'topic')
+        commit(repo, {'rebuild/core/a.py': 'topic\n'}, 'topic')
+        git(repo, 'checkout', '-q', 'main')
+        commit(repo, {'rebuild/core/a.py': 'main\n'}, 'main')
+        git(repo, 'checkout', '-q', 'topic')
+        conflict = subprocess.run(['git', '-C', str(repo), 'rebase', 'main'], capture_output=True,
+                                  env={**os.environ, **GIT_ENV})
+        self.assertNotEqual(conflict.returncode, 0)
+        (repo / 'rebuild/core/a.py').write_text('resolved\n')
+        git(repo, 'add', 'rebuild/core/a.py')
+        subprocess.run(['git', '-C', str(repo), '-c', 'core.editor=true', 'rebase', '--continue'], check=True,
+                       capture_output=True, env={**os.environ, **GIT_ENV, 'GIT_EDITOR': 'true'})
+        self.assertTrue((repo / '.git/REBASE_HEAD').exists())
+        self.assertFalse((repo / '.git/rebase-merge').exists() or (repo / '.git/rebase-apply').exists())
+        git(repo, 'checkout', '-q', 'main')
+        head = git(repo, 'rev-parse', 'HEAD')
+        candidate = git(repo, 'rev-parse', 'topic')
+        detail = op.shared_tree_at_base(head, root=repo)
+        self.assertEqual(detail['git_state']['observed'], ['REBASE_HEAD'])
+        stamp = (repo / '.git/REBASE_HEAD').read_bytes()
+        with op.act_git_environment():
+            subprocess.run(['git', '-C', str(repo), 'merge', '--ff-only', candidate], check=True, capture_output=True)
+        self.assertEqual(git(repo, 'rev-parse', 'HEAD'), candidate)
+        self.assertEqual((repo / '.git/REBASE_HEAD').read_bytes(), stamp)     # never removed
+        self.assertEqual(op.git_state(repo)['observed'], ['REBASE_HEAD'])
+        for directory in ('rebase-merge', 'rebase-apply'):
+            with self.subTest(directory=directory):
+                (repo / '.git' / directory).mkdir()
+                with self.assertRaises(op.Refusal) as caught:
+                    op.git_state(repo)
+                self.assertEqual(str(caught.exception), 'unfinished_git_operation')
+                (repo / '.git' / directory).rmdir()
+        clean, _ = self.shared('clean')
+        self.assertEqual(op.git_state(clean)['observed'], [])
+
+    def test_gp3_no_git_process_reads_a_replace_object(self):
+        """GP-3 (exp2): one `git replace CANDIDATE EVIL` in the shared object store made every content check and the
+        act's own merge read EVIL behind the certified sha. Now git_state refuses any refs/replace entry, the
+        installer's own git reads the real objects (--no-replace-objects), and the act's merge publishes the real
+        bytes (core.useReplaceRefs=false), as does any child once main() exports GIT_NO_REPLACE_OBJECTS."""
+        repo, base = self.shared()
+        git(repo, 'checkout', '-q', '-b', 'candidate')
+        candidate = commit(repo, {'rebuild/core/a.py': 'two  # reviewed\n'}, 'candidate')
+        git(repo, 'checkout', '-q', '-b', 'evil', base)
+        evil = commit(repo, {'rebuild/core/a.py': 'evil\n', 'rebuild/core/c.py': 'added\n'}, 'evil')
+        git(repo, 'checkout', '-q', 'main')
+        git(repo, 'branch', '-q', '-D', 'evil')
+        git(repo, 'replace', candidate, evil)
+        # Control: plain git reads the substitute behind the candidate's sha.
+        self.assertEqual(git(repo, 'show', candidate + ':rebuild/core/a.py'), 'evil')
+        with self.assertRaises(op.Refusal) as caught:
+            op.git_state(repo)
+        self.assertEqual(str(caught.exception), 'git_replace_refs_present')
+        manifest = op.compute_manifest(repo, base, candidate, frozenset())
+        self.assertEqual(sorted(manifest['paths']), ['rebuild/core/a.py'])
+        self.assertEqual(manifest['paths']['rebuild/core/a.py']['sha256'], op.sha(b'two  # reviewed\n'))
+        with op.act_git_environment():
+            subprocess.run(['git', '-C', str(repo), 'merge', '--ff-only', candidate], check=True, capture_output=True)
+            self.assertEqual(op.git(repo, 'status', '--porcelain', '--untracked-files=no'), b'')
+        self.assertEqual((repo / 'rebuild/core/a.py').read_text(), 'two  # reviewed\n')
+        self.assertFalse((repo / 'rebuild/core/c.py').exists())
+        self.assertIn(('core.useReplaceRefs', 'false'), op.ACT_GIT_CONFIG)
+        with patch.dict(os.environ, {op.NO_REPLACE_OBJECTS[0]: op.NO_REPLACE_OBJECTS[1]}):
+            self.assertEqual(git(repo, 'show', candidate + ':rebuild/core/a.py'), 'two  # reviewed')
+        with patch.dict(os.environ, {'GIT_REPLACE_REF_BASE': 'refs/elsewhere/'}), self.assertRaises(op.Refusal):
+            op.git_environment_clean()
 
     def test_gi3_pt5_pre_auto_gc_is_a_merge_time_hook_and_the_act_s_git_runs_no_hook_and_no_gc(self):
         repo = new_repo(self.root)
@@ -760,6 +837,112 @@ class SharedRepositoryTests(GitIsolation):
             with self.assertRaises(op.Refusal) as caught:
                 op.origin_main_is(moved)
             self.assertEqual(str(caught.exception), 'origin_main_unambiguous')
+
+
+class CandidateWorktreeTests(GitIsolation):
+    """GP-4: the worktree the installer runs from, and imports every module from, is proven before any import."""
+
+    def worktree(self, name='candidate'):
+        repo = new_repo(self.root, name)
+        head = commit(repo, {'rebuild/ops/__init__.py': '', 'rebuild/ops/venv_footprint.py': 'VALUE = 1\n'},
+                      'candidate')
+        return repo, head
+
+    def test_gp4_hidden_entries_in_the_candidate_worktree_refuse(self):
+        repo, head = self.worktree()
+        with patch.object(op, 'SOURCE', repo):
+            detail = op.candidate_worktree(head)
+            self.assertEqual((detail['git_state']['hidden_index_entries'], detail['import_package']['untracked']),
+                             (0, 0))
+            git(repo, 'update-index', '--assume-unchanged', 'rebuild/ops/__init__.py')
+            (repo / 'rebuild/ops/__init__.py').write_text('MARKER = "a hidden edit runs on the first import"\n')
+            self.assertEqual(git(repo, 'status', '--porcelain'), '')         # git status is silent about it
+            with self.assertRaises(op.Refusal) as caught:
+                op.candidate_worktree(head)
+            self.assertEqual(str(caught.exception), 'assume_unchanged_or_skip_worktree_entries')
+        repo, head = self.worktree('skip')
+        git(repo, 'update-index', '--skip-worktree', 'rebuild/ops/venv_footprint.py')
+        with patch.object(op, 'SOURCE', repo), self.assertRaises(op.Refusal) as caught:
+            op.candidate_worktree(head)
+        self.assertEqual(str(caught.exception), 'assume_unchanged_or_skip_worktree_entries')
+
+    def test_gp4_an_untracked_module_that_would_shadow_a_source_refuses(self):
+        """Python imports an extension module before the .py beside it, and a package directory before a module of
+        the same name: an untracked one in rebuild/ops would run instead of the tracked, hashed source."""
+        shadows = {'extension': 'rebuild/ops/__init__.cpython-312-x86_64-linux-gnu.so',
+                   'package_directory': 'rebuild/ops/venv_footprint/__init__.py',
+                   'ignored_extension': 'rebuild/ops/venv_footprint.abi3.so'}
+        for name, relative in shadows.items():
+            with self.subTest(shadow=name):
+                repo, head = self.worktree(name)
+                if name == 'ignored_extension':
+                    (repo / '.git/info/exclude').write_text('*.so\n')
+                (repo / relative).parent.mkdir(parents=True, exist_ok=True)
+                (repo / relative).write_bytes(b'\x7fELF')
+                self.assertEqual(git(repo, 'status', '--porcelain', '--untracked-files=no'), '')
+                with patch.object(op, 'SOURCE', repo), self.assertRaises(op.Refusal) as caught:
+                    op.candidate_worktree(head)
+                self.assertEqual(str(caught.exception), 'untracked_file_in_the_import_package')
+        repo, head = self.worktree('bytecode')
+        (repo / 'rebuild/ops/__pycache__').mkdir()
+        (repo / 'rebuild/ops/__pycache__/venv_footprint.cpython-312.pyc').write_bytes(b'inert')
+        with patch.object(op, 'SOURCE', repo):
+            self.assertEqual(op.candidate_worktree(head)['import_package'], {'untracked': 0,
+                                                                             'bytecode_caches_ignored': 1})
+
+    def test_gp4_nothing_is_imported_from_a_worktree_that_is_not_proven(self):
+        imported = []
+        args = SimpleNamespace(base=BASE, candidate=CANDIDATE, manifest_sha256=None, new_dot_path=[],
+                               declaration=self.root / 'missing.md', backup_report=self.root / 'backup.json')
+        with patch.object(op, 'candidate_worktree',
+                          lambda candidate: op.require(False, 'assume_unchanged_or_skip_worktree_entries')), \
+                patch.object(op, 'ops_module', lambda name, source=None: imported.append(name)), \
+                patch.object(op, 'load_engine', lambda source=None: imported.append('engine')):
+            report, context = op.preflight(args)
+        self.assertEqual(imported, [])
+        rows = {row['check']: row for row in report['checks']}
+        self.assertEqual(rows['candidate_worktree']['reason'], 'assume_unchanged_or_skip_worktree_entries')
+        for name in ('operator_module_venv_footprint', 'operator_module_backup', 'engine_pins', 'engine_bound'):
+            self.assertEqual(rows[name]['reason'], 'prerequisite_failed')
+        self.assertFalse(report['passed'])
+
+    def test_gp4_planted_bytecode_under_a_pinned_module_never_runs(self):
+        """exp7: a __pycache__ file compiled from OTHER text, with the header of the pinned source's mtime and size,
+        passed pinned_bytes and load_engine and ran instead of the hashed source (-B only stops writing bytecode).
+        Every module the installer imports is now compiled from its source file."""
+        source = self.root / 'source'
+        (source / 'rebuild/ops').mkdir(parents=True)
+        (source / 'scripts').mkdir()
+        (source / 'rebuild/ops/__init__.py').write_text('')
+        for name in op.ENGINE_PINS:
+            shutil.copy2(op.SOURCE / 'rebuild/ops' / name, source / 'rebuild/ops' / name)
+        shutil.copy2(op.SOURCE / op.STATIC_PRIMITIVES[0], source / op.STATIC_PRIMITIVES[0])
+        target = source / 'rebuild/ops/activation_exclusion.py'
+        info = target.stat()
+        planted = self.root / 'planted.py'
+        planted.write_bytes(target.read_bytes() + b'\nPLANTED = "not the pinned source"\n')
+        # The cache path a default interpreter reads (not importlib's: the installer may already have moved it).
+        cache = target.parent / '__pycache__' / ('activation_exclusion.' + sys.implementation.cache_tag + '.pyc')
+        cache.parent.mkdir()
+        py_compile.compile(str(planted), cfile=str(cache), doraise=True,
+                           invalidation_mode=py_compile.PycInvalidationMode.TIMESTAMP)
+        header = bytearray(cache.read_bytes())
+        header[8:12] = (int(info.st_mtime) & 0xFFFFFFFF).to_bytes(4, 'little')
+        header[12:16] = (info.st_size & 0xFFFFFFFF).to_bytes(4, 'little')
+        cache.write_bytes(bytes(header))
+        self.assertEqual(op.pinned_bytes(source), op.ENGINE_PINS)
+        control = ('import sys; sys.path.insert(0, sys.argv[1] + "/rebuild"); import ops.activation_exclusion as m;'
+                   ' print(getattr(m, "PLANTED", None))')
+        installer = ('import importlib.util, sys; from pathlib import Path;'
+                     ' spec = importlib.util.spec_from_file_location("irr", sys.argv[2]);'
+                     ' irr = importlib.util.module_from_spec(spec); spec.loader.exec_module(irr);'
+                     ' engine = irr.load_engine(Path(sys.argv[1]));'
+                     ' print(getattr(engine.prior.activation_exclusion, "PLANTED", None))')
+        runs = {name: subprocess.run([sys.executable, '-I', '-B', '-c', code, str(source), op.__file__],
+                                     capture_output=True, text=True, timeout=120)
+                for name, code in (('control', control), ('installer', installer))}
+        self.assertEqual(runs['control'].stdout.strip(), 'not the pinned source', runs['control'].stderr)
+        self.assertEqual(runs['installer'].stdout.strip(), 'None', runs['installer'].stderr)
 
 
 class HostReadTests(unittest.TestCase):
@@ -841,7 +1024,13 @@ class HostReadTests(unittest.TestCase):
                 '17': (['python', 'z.py'], None, 999, None, None, None),
                 '18': ([str(venv / 'bin/python'), 'w'], None, uid, root / 'other-binary', None, None),
                 '19': (['gunicorn: worker [app]'], None, uid, interpreter, '/usr/bin', None),
-                '20': (['nginx: worker process'], 'nginx.service', 999, None, None, None)}
+                '20': (['nginx: worker process'], 'nginx.service', 999, None, None, None),
+                # GP-2: a relative argv[0] or PATH entry was resolved against the START directory, which /proc
+                # does not keep; the current one (cwd) proves nothing, so even "cwd resolves to the venv" is
+                # undetermined.
+                '21': (['.venv/bin/python', 'x.py'], None, uid, interpreter, None, root),
+                '22': (['python3', '-c', 'pass'], None, uid, interpreter, 'bin:%s/bin' % venv, None),
+                '23': (['python3', 'y.py'], None, uid, interpreter, '%s/bin:bin' % venv, None)}
             for pid, (argv, unit, owner, exe, path, cwd) in processes.items():
                 entry = proc / pid
                 entry.mkdir(parents=True)
@@ -858,10 +1047,14 @@ class HostReadTests(unittest.TestCase):
             (proc / 'self').mkdir()
             users = op.live_venv_users(proc, venv, uid=uid)
             self.assertEqual(users, [{'pid': 10, 'unit': corti}, {'pid': 11, 'unit': None},
-                                     {'pid': 13, 'unit': worker}, {'pid': 14, 'unit': 'x.service'},
+                                     {'pid': 13, 'unit': worker, 'uninspectable': True},
+                                     {'pid': 14, 'unit': 'x.service'},
                                      {'pid': 16, 'unit': None, 'undetermined': True},
                                      {'pid': 17, 'unit': None, 'uninspectable': True},
-                                     {'pid': 19, 'unit': None, 'undetermined': True}])
+                                     {'pid': 19, 'unit': None, 'undetermined': True},
+                                     {'pid': 21, 'unit': None, 'undetermined': True},
+                                     {'pid': 22, 'unit': None, 'undetermined': True},
+                                     {'pid': 23, 'unit': None}])
             with self.assertRaises(op.Refusal) as caught:
                 op.no_undeclared_venv_users([corti], users)
             self.assertEqual(str(caught.exception), 'undeterminable_operator_interpreter_process')
@@ -869,10 +1062,46 @@ class HostReadTests(unittest.TestCase):
             with self.assertRaises(op.Refusal) as caught:
                 op.no_undeclared_venv_users([corti], determined)
             self.assertEqual(str(caught.exception), 'undeclared_process_on_the_live_venv')
-            allowed = [row for row in determined if row['pid'] not in (11, 14)]
+            allowed = [row for row in determined if row['pid'] not in (11, 14, 23)]
             self.assertEqual(op.no_undeclared_venv_users([corti], allowed),
-                             {'processes': 2, 'units': [corti, worker], 'uninspectable_other_users': 1})
-            self.assertEqual(op.live_venv_users(proc, venv, exclude={10, 11, 13, 14, 16, 17, 19}, uid=uid), [])
+                             {'processes': 1, 'units': [corti], 'uninspectable_other_users': 2})
+            self.assertEqual(op.live_venv_users(proc, venv, exclude={10, 11, 13, 14, 16, 17, 19, 21, 22, 23}, uid=uid),
+                             [])
+
+    def test_gp2_a_relative_interpreter_that_changed_directory_is_undetermined(self):
+        """GP-2 with real processes (exp5): `.venv/bin/python` started from a worktree whose rebuild/.venv links to the
+        venv runs ON the venv. One child then changes directory, as a test in a temporary world or a daemon does; the
+        current directory no longer says where argv[0] was resolved, so both children are listed as undetermined and
+        refuse for the operator's uid, the moved one included."""
+        with tempfile.TemporaryDirectory() as temporary:
+            top = Path(temporary).resolve()
+            venv = top / 'venv'
+            (venv / 'bin').mkdir(parents=True)
+            (venv / 'pyvenv.cfg').write_text('home = %s\n' % Path(os.path.realpath(sys.executable)).parent)
+            (venv / 'bin/python3').symlink_to(os.path.realpath(sys.executable))
+            (venv / 'bin/python').symlink_to('python3')
+            worktree = top / 'worktree/rebuild'
+            worktree.mkdir(parents=True)
+            (worktree / '.venv').symlink_to(venv)
+            code = 'import os,sys; os.chdir(sys.argv[1]); print(sys.prefix, flush=True); sys.stdin.read()'
+            started = [subprocess.Popen(['.venv/bin/python', '-I', '-c', code, target], cwd=worktree,
+                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+                       for target in ('/', str(worktree))]
+            try:
+                self.assertEqual([process.stdout.readline().strip() for process in started],
+                                 [str(worktree / '.venv')] * 2)     # both run on the venv
+                rows = {row['pid']: row for row in op.live_venv_users(venv=venv) if row['pid'] in
+                        {process.pid for process in started}}
+                self.assertEqual(sorted(rows), sorted(process.pid for process in started))
+                self.assertTrue(all(row.get('undetermined') for row in rows.values()))
+                with self.assertRaises(op.Refusal) as caught:
+                    op.no_undeclared_venv_users([], list(rows.values()))
+                self.assertEqual(str(caught.exception), 'undeterminable_operator_interpreter_process')
+            finally:
+                for process in started:
+                    process.stdin.close()
+                    process.wait(timeout=10)
+                    process.stdout.close()
 
     def test_pt1_a_real_bare_interpreter_on_the_venv_s_path_is_found(self):
         """PT-1 with real processes: `source .venv/bin/activate && python3 ...` shows only "python3" in argv."""
@@ -937,28 +1166,89 @@ class ReportingTests(unittest.TestCase):
             with self.assertRaises(op.Refusal):
                 op.write_result(root / 'open/result.json', {})
 
-    def test_as6_signals_raise_interrupted_in_the_main_thread_and_the_handlers_come_back(self):
+    def test_signals_are_blocked_never_handled_and_children_inherit_the_mask(self):
+        """The binding design: SIGTERM, SIGINT and SIGHUP are blocked, no handler runs, a checkpoint takes them with
+        their sender, and a child (git, pip) starts with them blocked, so only SIGKILL stops it."""
         self.assertEqual(set(op.SIGNALS), set(ROUTED_SIGNALS))
-        before = {name: signal.getsignal(getattr(signal, name)) for name in ROUTED_SIGNALS}
-        for name in ROUTED_SIGNALS:
-            with self.subTest(signal=name):
-                with self.assertRaises(op.Interrupted) as caught:
-                    with op.signal_routing():
-                        os.kill(os.getpid(), getattr(signal, name))
-                        wait_for_signal()
-                self.assertEqual(caught.exception.signal_name, name)
-        with op.signal_routing() as state:
-            state['raising'] = False
+        handlers = {name: signal.getsignal(getattr(signal, name)) for name in ROUTED_SIGNALS}
+        mask = signal.pthread_sigmask(signal.SIG_BLOCK, [])
+        with redirect_stderr(io.StringIO()) as stderr:
+            with op.blocked_signals() as ledger:
+                for name in ROUTED_SIGNALS:
+                    os.kill(os.getpid(), getattr(signal, name))
+                os.kill(os.getpid(), signal.SIGTERM)        # standard signals do not queue
+                wait_for_signal()                           # nothing was raised: no handler ran
+                self.assertEqual({pending.name for pending in signal.sigpending()}, set(ROUTED_SIGNALS))
+                self.assertEqual({name: signal.getsignal(getattr(signal, name)) for name in ROUTED_SIGNALS},
+                                 handlers)
+                child = subprocess.Popen(['git', 'cat-file', '--batch'], cwd=op.SOURCE, stdin=subprocess.PIPE,
+                                         stdout=subprocess.DEVNULL)
+                try:
+                    time.sleep(0.2)
+                    status = (Path('/proc') / str(child.pid) / 'status').read_text()
+                    blocked = int(next(line for line in status.splitlines() if line.startswith('SigBlk:')).split()[1],
+                                  16)
+                    self.assertTrue(all(blocked >> (getattr(signal, name) - 1) & 1 for name in ROUTED_SIGNALS))
+                    for name in ROUTED_SIGNALS:
+                        os.kill(child.pid, getattr(signal, name))
+                    time.sleep(0.2)
+                    self.assertIsNone(child.poll())         # a git child that keeps the mask: only SIGKILL stops it
+                finally:
+                    child.kill()
+                    child.wait()
+                    child.stdin.close()
+                self.assertEqual(child.returncode, -signal.SIGKILL)
+                self.assertEqual(sorted(op.take_pending(ledger, 'checkpoint')), sorted(ROUTED_SIGNALS))
+                self.assertEqual(op.take_pending(ledger, 'again'), [])
+                self.assertEqual({(row['stage'], row['sender_pid'], row['sender_uid']) for row in ledger['received']},
+                                 {('checkpoint', os.getpid(), os.getuid())})
+                os.kill(os.getpid(), signal.SIGHUP)         # still pending at the end of the scope
+        self.assertEqual(ledger['received'][-1]['signal'], 'SIGHUP')
+        self.assertEqual(ledger['received'][-1]['stage'], 'after_the_act')
+        self.assertIn('signals_after_the_act', stderr.getvalue())
+        self.assertIsNone(op.SIGNAL_LEDGER)
+        self.assertEqual(signal.sigpending(), set())
+        self.assertEqual(signal.pthread_sigmask(signal.SIG_BLOCK, []), mask)
+        self.assertEqual({name: signal.getsignal(getattr(signal, name)) for name in ROUTED_SIGNALS}, handlers)
+
+    def test_rp3_run_helper_s_handler_cannot_fire_in_the_act_and_still_works_outside_it(self):
+        """RP-3: managed_helper.run_helper installs its own SIGTERM handler for each call. Inside the act's blocked
+        scope it never fires: the helper call completes and the signal waits for the next checkpoint. Outside the act
+        it still turns SIGTERM into HelperFailure('interrupted') and puts the previous handler back."""
+        before = signal.getsignal(signal.SIGTERM)
+        state = {}
+
+        def stream(arguments, data, seconds, stdout_limit, stderr_limit):
+            state['handler_during_call'] = signal.getsignal(signal.SIGTERM)
             os.kill(os.getpid(), signal.SIGTERM)
-            wait_for_signal()
-            self.assertEqual(state['received'], ['SIGTERM'])
-        self.assertEqual({name: signal.getsignal(getattr(signal, name)) for name in ROUTED_SIGNALS}, before)
+            for _ in range(40):                     # the real _stream polls; a handler would fire in here
+                time.sleep(0.005)
+            return subprocess.CompletedProcess(arguments, 0, b'done', b'')
+        argv = ['docker', 'run', '--rm', '-i', '--pull=never', '--log-driver=none', managed_helper.IMAGE,
+                'python', '-B', '-']
+        with patch.object(managed_helper, '_stream', stream), \
+                patch.object(managed_helper, 'cleanup', lambda name, token: 'removed'):
+            with redirect_stderr(io.StringIO()), op.blocked_signals() as ledger:
+                result = managed_helper.run_helper(argv, input=b'pass\n', timeout=10)
+                self.assertEqual(result.stdout, b'done')
+                self.assertNotEqual(state['handler_during_call'], before)    # its handler was installed ...
+                self.assertIn(signal.SIGTERM, signal.sigpending())           # ... and never ran
+                self.assertEqual(op.take_pending(ledger, 'next_checkpoint'), ['SIGTERM'])
+            self.assertEqual(signal.getsignal(signal.SIGTERM), before)
+            # Outside the act: the helper's own behaviour, unchanged.
+            with self.assertRaises(managed_helper.HelperFailure) as caught:
+                managed_helper.run_helper(argv, input=b'pass\n', timeout=10)
+            self.assertEqual(caught.exception.reason, 'interrupted')
+            self.assertEqual(signal.getsignal(signal.SIGTERM), before)
+        self.assertEqual(signal.sigpending(), set())
 
 
 class EngineBindingTests(unittest.TestCase):
     def test_the_pinned_engine_loads_and_any_changed_primitive_refuses(self):
+        prefix = sys.pycache_prefix
         engine = op.load_engine()
         self.assertIs(engine, engine_module)
+        self.assertEqual(sys.pycache_prefix, prefix)     # the no-bytecode prefix is scoped to the import
         with tempfile.TemporaryDirectory() as temporary:
             source = Path(temporary).resolve()
             shutil.copytree(op.SOURCE / 'rebuild/ops', source / 'rebuild/ops',
@@ -1006,16 +1296,46 @@ class EngineBindingTests(unittest.TestCase):
             return [node.value.value for node in sorted(found, key=lambda node: (node.lineno, node.col_offset))]
         inserted = {'baseline_foreign_idle', 'baseline_venv', 'venv_after_stop', 'foreign_services_after_stop',
                     'configuration_after_stop', 'clinical_files_after_stop', 'git_state_after_stop',
-                    'foreign_idle_after_resume', 'venv_after_resume'}
+                    'environment_after_stop', 'static_after_stop', 'foreign_idle_after_resume', 'venv_after_resume'}
         ours = stages(op.__file__, 'act')
         engine = stages(engine_module.__file__, 'execute')
         self.assertTrue(inserted <= set(ours))
         self.assertEqual([stage for stage in ours if stage not in inserted], engine)
-        # Every re-comparison before publication sits after the stop and before the merge.
+        # Every re-comparison before publication sits after the stop and before the merge (RP-5: the environment
+        # and the static tree too, nearest the merge).
         for stage in ('venv_after_stop', 'foreign_services_after_stop', 'configuration_after_stop',
-                      'clinical_files_after_stop', 'git_state_after_stop'):
+                      'clinical_files_after_stop', 'git_state_after_stop', 'environment_after_stop',
+                      'static_after_stop'):
             self.assertLess(ours.index('stop_owned_services'), ours.index(stage))
             self.assertLess(ours.index(stage), ours.index('source_publication'))
+        self.assertEqual(ours[ours.index('source_publication') - 2:ours.index('source_publication')],
+                         ['environment_after_stop', 'static_after_stop'])
+
+    def test_every_stage_of_the_act_begins_at_a_signal_checkpoint(self):
+        """The binding signal design: a signal is taken only at explicit checkpoints, and there is one at the start of
+        every stage, so a stage boundary is where a pending signal recovers (before publication) or is recorded."""
+        tree = ast.parse(Path(op.__file__).read_text())
+        act = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'act')
+        stages, missing = [], []
+        for node in ast.walk(act):
+            for field in ('body', 'orelse', 'finalbody', 'handlers'):
+                statements = getattr(node, field, None)
+                if not isinstance(statements, list):
+                    continue
+                for index, statement in enumerate(statements):
+                    if not (isinstance(statement, ast.Assign) and len(statement.targets) == 1
+                            and isinstance(statement.targets[0], ast.Name) and statement.targets[0].id == 'stage'
+                            and isinstance(statement.value, ast.Constant)):
+                        continue
+                    stages.append(statement.value.value)
+                    if not any(isinstance(after, ast.Expr) and isinstance(after.value, ast.Call)
+                               and getattr(after.value.func, 'id', None) == 'checkpoint'
+                               for after in statements[index + 1:index + 3]):
+                        missing.append(statement.value.value)
+        self.assertGreater(len(stages), 40)
+        self.assertEqual(missing, [])
+        # No handler anywhere in the module: nothing calls signal.signal (managed_helper's is pinned and blocked).
+        self.assertNotIn('signal.signal(', Path(op.__file__).read_text())
 
 
 class FakeCipher:
@@ -1101,6 +1421,9 @@ class World:
     def hold(self, owner, timeout):
         self.calls.append(('exclusion', owner))
         yield
+        self.calls.append(('exclusion_released', owner))
+        if getattr(self, 'release_failure', None) is not None:     # activation_exclusion's unguarded append
+            raise self.release_failure
 
     def snapshot(self, environment):
         self.fault('snapshot_' + str(sum(call[0] == 'snapshot' for call in self.calls)))
@@ -1114,8 +1437,16 @@ class World:
         return {'a.pdf': {'sha256': 'b' * 64}}
 
     def publish(self, plan, guard, prepared):
+        """publish_source's shape: its own refusals first (publish_preamble), then `git merge` through prior.git
+        (activate_rowan_corti.git), then what follows the merge (publish: a merge git refused, a proof after it)."""
         self.calls.append(('publish',))
+        self.fault('publish_preamble')
+        self.prior.git('merge', '--ff-only', plan['candidate'], publication=True)
         self.fault('publish')
+
+    def git(self, *arguments, repo=None, publication=False):
+        self.calls.append(('git', *arguments))
+        return b''
 
     def health(self, revision):
         self.fault('health')
@@ -1154,12 +1485,13 @@ class World:
                                            key_at=lambda key: FakeCipher()),
             source_guard=lambda: SimpleNamespace(),
             source_plan=lambda plan, guard: {'before': {}, 'after': {}},
-            publish_source=self.publish, command=self.command,
+            publish_source=self.publish, command=self.command, git=self.git,
             activation_exclusion=SimpleNamespace(bind_runtime=lambda path: None, hold=self.hold),
             legacy=SimpleNamespace(Host=self.host, operation_locks=self.locks, KEY=Path('/nonexistent'),
                                    static_primitives=lambda: SimpleNamespace(static_inventory=lambda root: {'.': {'kind': 'directory'}})),
             private_storage=SimpleNamespace(inventory=self.inventory),
             foreign_services=self.foreign, await_health=self.health)
+        self.prior = prior
         return SimpleNamespace(
             prior=prior, snapshot=self.snapshot, unchanged=engine_module.unchanged,
             render_environment=lambda original, revision, environment: original.replace(BASE.encode(),
@@ -1257,6 +1589,13 @@ class ActTests(unittest.TestCase):
         for call in (('configuration',), ('inventory',), ('source_state',)):
             self.assertIn(call, between)
         self.assertNotIn('GIT_CONFIG_COUNT', os.environ)
+        # The merge went through prior.git, observed; no signal, the locks released, nothing left blocked.
+        self.assertLess(calls.index(('publish',)), calls.index(('git', 'merge', '--ff-only', CANDIDATE)))
+        self.assertEqual((result['signals_received'], result['interrupted'], result['coordination_released']),
+                         ([], None, {'released': True}))
+        self.assertIn(('exclusion_released', 'rebuild-release:' + CANDIDATE[:12]), calls)
+        self.assertIsNone(op.SIGNAL_LEDGER)
+        self.assertEqual(signal.pthread_sigmask(signal.SIG_BLOCK, []), set())
 
     def test_a_venv_change_before_publication_refuses_and_restores_the_original_release(self):
         self.world.venvs = [self.world.venv, self.world.changed_venv]
@@ -1409,20 +1748,28 @@ class ActTests(unittest.TestCase):
                 self.assertFalse(unverified['original_release_serving'])
                 self.assertEqual(self.evidence('failure.json', world)['recovery'], 'restore')
 
-    def test_as6_a_termination_signal_while_the_units_are_stopped_takes_the_failure_path(self):
-        """AS-6: SIGTERM, SIGINT or SIGHUP outside any helper call restores (here: the database read after the
-        stop), and a second signal during the restore is recorded without cutting it short."""
-        before = {name: signal.getsignal(getattr(signal, name)) for name in ROUTED_SIGNALS}
+    def test_as6_rp2_a_signal_interrupts_nothing_and_the_next_checkpoint_restores(self):
+        """AS-6 and RP-2 under the blocked design. Two signals 0 us apart while the units are stopped (systemd stopping
+        a session scope sends SIGTERM, then SIGHUP) interrupt nothing: the database read returns, the next checkpoint
+        takes both, and the failure path restores. Two more during the restore's first start are recorded and do not
+        cut it short. No handler is ever installed."""
+        handlers = {name: signal.getsignal(getattr(signal, name)) for name in ROUTED_SIGNALS}
         for name in ROUTED_SIGNALS:
             with self.subTest(signal=name):
                 world = self.fresh(name)
                 engine = world.engine()
                 real_snapshot, real_host = engine.snapshot, engine.prior.legacy.Host
+                second = 'SIGHUP' if name != 'SIGHUP' else 'SIGTERM'
+                seen = {}
 
-                def snapshot(environment, world=world, real_snapshot=real_snapshot, name=name):
-                    if sum(call[0] == 'snapshot' for call in world.calls) == 1:
+                def snapshot(environment, world=world, real_snapshot=real_snapshot, name=name, second=second,
+                             seen=seen):
+                    if sum(call[0] == 'snapshot' for call in world.calls) == 1:     # the read after the stop
                         os.kill(os.getpid(), getattr(signal, name))
+                        os.kill(os.getpid(), getattr(signal, second))
                         wait_for_signal()
+                        seen['pending'] = {pending.name for pending in signal.sigpending()}
+                        seen['handlers'] = {n: signal.getsignal(getattr(signal, n)) for n in ROUTED_SIGNALS}
                     return real_snapshot(environment)
 
                 def host(helper, real_host=real_host, world=world):
@@ -1432,6 +1779,7 @@ class ActTests(unittest.TestCase):
                     def signalled(action, unit):
                         if action == 'start' and not any(call[0] == 'start' for call in world.calls):
                             os.kill(os.getpid(), signal.SIGTERM)
+                            os.kill(os.getpid(), signal.SIGINT)
                             wait_for_signal()
                         return service(action, unit)
                     instance.service = signalled
@@ -1439,10 +1787,17 @@ class ActTests(unittest.TestCase):
                 engine.snapshot, engine.prior.legacy.Host = snapshot, host
                 with self.assertRaises(op.Refusal) as caught:
                     self.act(world, engine)
-                failure = self.assert_restored(world, stage='database_after_stop')
-                self.assertEqual((failure['label'], failure['signals_received']), ('interrupted_by_' + name, [name]))
-                self.assertEqual(caught.exception.outcome['signals_received'], [name, 'SIGTERM'])
-        self.assertEqual({name: signal.getsignal(getattr(signal, name)) for name in ROUTED_SIGNALS}, before)
+                self.assertEqual(seen['pending'], {name, second})
+                self.assertEqual(seen['handlers'], handlers)
+                failure = self.assert_restored(world, stage='retain_database_after_stop')
+                self.assertEqual(sorted(failure['signals_received']), sorted([name, second]))
+                self.assertIn(failure['label'], {'interrupted_by_' + name, 'interrupted_by_' + second})
+                self.assertEqual({row['stage'] for row in failure['signal_records']}, {'retain_database_after_stop'})
+                outcome = caught.exception.outcome
+                self.assertEqual(sorted(outcome['signals_received']), sorted([name, second, 'SIGTERM', 'SIGINT']))
+                self.assertTrue(outcome['original_release_serving'])
+                self.assertEqual(signal.sigpending(), set())
+        self.assertEqual({name: signal.getsignal(getattr(signal, name)) for name in ROUTED_SIGNALS}, handlers)
 
     def test_post_conditions_after_resume_are_reported_for_judgement_not_drained(self):
         self.world.venvs = [self.world.venv, self.world.venv, self.world.changed_venv]
@@ -1495,15 +1850,15 @@ class ActTests(unittest.TestCase):
 
             def idle(units):
                 value = next(answers, None)
-                if value is None:
+                if value is None:       # the idle window after the resume: a signal arrives and changes nothing
                     os.kill(os.getpid(), signal.SIGTERM)
                     wait_for_signal()
+                    value = {'idle': True, 'units': {}}
                 return value
             world.idle_function = idle
         cases = {'foreign_restart': (foreign_restart, 'foreign_services_preserved_after_resume', None),
                  'configuration_read_times_out': (configuration_timeout, 'configuration_preserved_after_resume', None),
-                 'interrupt_in_the_idle_window': (interrupt_in_idle, 'venv_sharing_units_idle_after_resume',
-                                                  'SIGTERM')}
+                 'interrupt_in_the_idle_window': (interrupt_in_idle, None, 'SIGTERM')}
         for name, (setup, failed, interrupted) in cases.items():
             with self.subTest(case=name):
                 world = self.fresh(name)
@@ -1517,13 +1872,275 @@ class ActTests(unittest.TestCase):
                                             snapshot_venv=lambda path: world.venvs.pop(0),
                                             source_state=world.source_state)
                 self.assertFalse(passed)
-                self.assertFalse(result['postconditions'][failed])
+                if failed:
+                    self.assertFalse(result['postconditions'][failed])
+                else:   # the signal skipped nothing: every measurement still ran, and it alone fails the act (exit 2)
+                    self.assertTrue(all(result['postconditions'].values()))
+                    self.assertEqual([(row['signal'], row['stage']) for row in result['signal_records']],
+                                     [('SIGTERM', 'venv_after_resume')])
                 self.assertEqual(result['interrupted'], interrupted)
                 self.assertEqual([call[0] for call in self.services(world)], ['stop'] * 3 + ['start'] * 3)
                 self.assertFalse(self.exists('failure.json', world))
                 receipt = self.evidence('installation-complete.json', world)
                 self.assertEqual((receipt['installed_revision'], receipt['all_postconditions_passed']),
                                  (CANDIDATE, False))
+
+    def test_rp1_a_child_left_running_by_an_exception_is_reaped_before_the_tree_is_measured(self):
+        """RP-1: subprocess.run kills its child only once Popen() has returned, so an exception while git is still
+        starting leaves `git merge` running with nobody waiting for it. Here such a child "moves HEAD" (writes a
+        marker) 0.5 s after the exception. The failure path reaps every child the act started BEFORE it measures, so
+        the measurement sees the move and the units stay drained; it never records the original as serving."""
+        world = self.world
+        engine = world.engine()
+        marker = self.root / 'head-moved'
+        spawned = {}
+
+        def publish(plan, guard, prepared):
+            world.calls.append(('publish',))
+            world.prior.git('merge', '--ff-only', plan['candidate'], publication=True)
+            # A child with no process object anywhere (as when Popen.__init__ raised after the fork), then the error.
+            spawned['pid'] = os.posix_spawn(sys.executable, [
+                sys.executable, '-I', '-B', '-c', 'import sys,time; time.sleep(0.5); open(sys.argv[1], "w").close()',
+                str(marker)], dict(os.environ))
+            raise engine_module.Refusal('bounded_command_failed')
+
+        def verify_original(original, guard, prepared):
+            world.calls.append(('verified_original', marker.exists()))
+            op.require(not marker.exists(), 'clean_original_checkout_before_recovery')
+        engine.prior.publish_source, engine.verify_original_before_resume = publish, verify_original
+        with self.assertRaises(op.Refusal) as caught:
+            self.act(engine=engine)
+        self.assertIn(('verified_original', True), world.calls)          # measured only after the child ended
+        failure = self.evidence('failure.json')
+        self.assertEqual((failure['recovery'], failure['publication_attempted'], failure['merge_invoked']),
+                         ('none', True, True))
+        self.assertEqual(failure['children']['reaped'], [{'pid': spawned['pid'], 'exit': 0}])
+        self.assertEqual(failure['children']['running'], [])
+        self.assertEqual(failure['original_verification']['label'], 'clean_original_checkout_before_recovery')
+        self.assertEqual([call[0] for call in self.services()], ['stop', 'stop', 'stop'])
+        self.assertFalse(self.exists('original-release-resumed.json'))
+        self.assertNotIn('original_release_serving', caught.exception.outcome)
+        with self.assertRaises(ChildProcessError):
+            os.waitpid(spawned['pid'], os.WNOHANG)                       # reaped, not left as a zombie
+
+    def test_rp1_a_child_that_never_exits_counts_as_publication(self):
+        """RP-1: a child of the act still alive after the reaping bound means a merge that may yet move HEAD: no
+        measurement, no restore, the units stay drained, and the running pid is recorded."""
+        world = self.world
+        engine = world.engine()
+        spawned = {}
+
+        def publish(plan, guard, prepared):
+            world.calls.append(('publish',))
+            world.prior.git('merge', '--ff-only', plan['candidate'], publication=True)
+            spawned['pid'] = os.posix_spawn(sys.executable, [sys.executable, '-I', '-B', '-c',
+                                                             'import time; time.sleep(30)'], dict(os.environ))
+            raise engine_module.Refusal('bounded_command_failed')
+        engine.prior.publish_source = publish
+        try:
+            with patch.object(op, 'REAP_SECONDS', 0.3), self.assertRaises(op.Refusal):
+                self.act(engine=engine)
+            failure = self.evidence('failure.json')
+            self.assertEqual(failure['children']['running'], [spawned['pid']])
+            self.assertEqual((failure['recovery'], failure['original_verification']['label']),
+                             ('none', 'act_child_process_still_running'))
+            self.assertNotIn(('verified_original',), world.calls)
+            self.assertEqual([call[0] for call in self.services()], ['stop', 'stop', 'stop'])
+        finally:
+            os.kill(spawned['pid'], signal.SIGKILL)
+            os.waitpid(spawned['pid'], 0)
+
+    def test_rp1_a_signal_during_the_publication_merge_is_recorded_and_the_merge_runs_to_its_end(self):
+        """RP-1's trigger, a signal to the installer alone while git merge starts, now changes nothing: the signal
+        stays pending, subprocess starts and waits for git as usual, the merge ends, and the checkpoint after
+        publication records the signal. The act completes and is not passed (exit 2)."""
+        repo = new_repo(self.root, 'shared-merge')
+        commit(repo, {'a.py': 'one\n'}, 'base')
+        git(repo, 'checkout', '-q', '-b', 'candidate')
+        target = commit(repo, {'a.py': 'two\n', 'b.py': 'new\n'}, 'candidate')
+        git(repo, 'checkout', '-q', 'main')
+        engine = self.world.engine()
+
+        def publish(plan, guard, prepared):
+            self.world.calls.append(('publish',))
+            os.kill(os.getpid(), signal.SIGTERM)
+            os.kill(os.getpid(), signal.SIGHUP)
+            # The engine's command() shape: subprocess.run(capture_output=True, umask=0o022), on a scratch repository.
+            merged = subprocess.run(['git', '-C', str(repo), 'merge', '--ff-only', target], capture_output=True,
+                                    umask=0o022)
+            op.require(merged.returncode == 0, 'bounded_command_failed')
+        engine.prior.publish_source = publish
+        result, passed = self.act(engine=engine)
+        self.assertFalse(passed)
+        self.assertEqual(git(repo, 'rev-parse', 'HEAD'), target)
+        self.assertEqual(sorted(result['signals_received']), ['SIGHUP', 'SIGTERM'])
+        self.assertEqual({row['stage'] for row in result['signal_records']}, {'static_publication'})
+        self.assertIn(result['interrupted'], ('SIGHUP', 'SIGTERM'))
+        self.assertTrue(all(result['postconditions'].values()))
+        self.assertEqual([call[0] for call in self.services()], ['stop'] * 3 + ['start'] * 3)
+        self.assertFalse(self.exists('failure.json'))
+        self.assertEqual(self.evidence('installation-complete.json')['signals_received'],
+                         result['signals_received'])
+
+    def test_rp3_a_signal_inside_a_real_helper_call_never_aborts_the_unit_action(self):
+        """RP-3: the act's unit actions go through managed_helper.run_helper, whose own SIGTERM handler aborted the
+        helper call (the client killed, the start or stop never sent). Here the REAL run_helper carries every stop and
+        start (its transport faked, nothing reaches docker) and a SIGTERM lands inside the first stop: the stop
+        completes, the next checkpoint takes the signal, and the restore's three starts complete too."""
+        world = self.world
+        engine = world.engine()
+        argv = ['docker', 'run', '--rm', '-i', '--pull=never', '--log-driver=none', managed_helper.IMAGE,
+                'python', '-B', '-']
+        real_host = engine.prior.legacy.Host
+
+        def host(helper):
+            instance = real_host(helper)
+            apply_service = instance.service
+
+            def service(action, unit):
+                def stream(arguments, data, seconds, stdout_limit, stderr_limit):
+                    if action == 'stop' and unit == op.OWNED_UNITS[0]:
+                        os.kill(os.getpid(), signal.SIGTERM)
+                        for _ in range(40):
+                            time.sleep(0.005)
+                    apply_service(action, unit)                 # systemctl ran in the container
+                    return subprocess.CompletedProcess(arguments, 0, b'', b'')
+                with patch.object(managed_helper, '_stream', stream), \
+                        patch.object(managed_helper, 'cleanup', lambda name, token: 'removed'):
+                    managed_helper.run_helper(argv, input=b'', timeout=170)
+            instance.service = service
+            return instance
+        engine.prior.legacy.Host = host
+        with self.assertRaises(op.Refusal) as caught:
+            self.act(engine=engine)
+        failure = self.assert_restored(stage='verify_owned_services_stopped')
+        self.assertEqual((failure['label'], failure['signals_received']), ('interrupted_by_SIGTERM', ['SIGTERM']))
+        self.assertEqual(self.services(), [('stop', unit) for unit in op.OWNED_UNITS] +
+                         [('start', op.OWNED_UNITS[2]), ('start', op.OWNED_UNITS[0]), ('start', op.OWNED_UNITS[1])])
+        self.assertTrue(caught.exception.outcome['original_release_serving'])
+
+    def test_rp4_a_lock_release_that_fails_never_fails_a_healthy_install_or_replaces_a_refusal(self):
+        """RP-4: activation_exclusion.hold appends 'exclusion_released' on the way out, unguarded. After a complete,
+        healthy install that error is reported in the receipt and the act returns not passed (exit 2), instead of
+        escaping as a failure (exit 1). In a failure path it never replaces the refusal or drops its outcome."""
+        self.world.release_failure = IsADirectoryError(errno.EISDIR, 'Is a directory')
+        result, passed = self.act()
+        self.assertFalse(passed)
+        self.assertEqual(result['coordination_released'], {'released': False, 'label': 'IsADirectoryError'})
+        self.assertTrue(all(result['postconditions'].values()) and result['complete'])
+        receipt = self.evidence('installation-complete.json')
+        self.assertEqual((receipt['complete'], receipt['coordination_released']['released']), (True, False))
+        self.assertIn(('exclusion_released', 'rebuild-release:' + CANDIDATE[:12]), self.world.calls)
+        world = self.fresh('failing')
+        world.release_failure = OSError(errno.ENOSPC, 'No space left on device')
+        world.venvs = [world.venv, world.changed_venv]
+        with self.assertRaises(op.Refusal) as caught:
+            self.act(world)
+        self.assertEqual(str(caught.exception), 'installation_failed_inspect_retained_evidence')
+        self.assertEqual((caught.exception.outcome['recovery'], caught.exception.outcome['coordination_released']),
+                         ('restore', False))
+        self.assert_restored(world, stage='venv_after_stop')
+
+    def test_rp5_the_environment_and_the_static_tree_are_compared_again_after_the_stop(self):
+        """RP-5: rebuild/.env and the static inventory, taken while the units served, are compared again after the
+        stop and before the merge. A change in that window refuses BEFORE publication and the original is restored
+        (here the World's verify; the engine's own verify refuses a changed .env, and nothing is then started)."""
+        def environment(world, engine):
+            real = world.source_state
+
+            def source_state():
+                (world.app / '.env').write_bytes(world.env + b'OPERATOR_EDIT=1\n')
+                return real()
+            world.source_state = source_state
+
+        def static(world, engine):
+            reads = {'n': 0}
+
+            def static_inventory(root):
+                reads['n'] += 1     # static_baseline, revalidate_before_stop, then static_after_stop
+                return {'.': {'kind': 'directory'}, **({'app.js': {'kind': 'file'}} if reads['n'] >= 3 else {})}
+            engine.prior.legacy.static_primitives = lambda: SimpleNamespace(static_inventory=static_inventory)
+        cases = {'environment': (environment, 'environment_after_stop', 'environment_preserved_before_publication'),
+                 'static': (static, 'static_after_stop', 'static_preserved_before_publication')}
+        for name, (setup, stage, label) in cases.items():
+            with self.subTest(change=name):
+                world = self.fresh(name)
+                engine = world.engine()
+                setup(world, engine)
+                with self.assertRaises(op.Refusal) as caught:
+                    self.act(world, engine)
+                self.assertNotIn(('publish',), world.calls)
+                failure = self.assert_restored(world, stage=stage)
+                self.assertEqual((failure['label'], failure['publication_attempted']), (label, False))
+                self.assertEqual(caught.exception.outcome['recovery'], 'restore')
+
+    def test_rp6_the_restore_measures_git_s_own_state_and_never_restarts_over_a_lock(self):
+        """RP-6: verify_original_before_resume measures HEAD, the tracked tree, .env, the base files and the new
+        paths, but not git's own state: a merge killed mid-way can leave index.lock with HEAD at BASE and the tree
+        clean. The restore's measurement now also runs the shared-tree measurement taken before the merge (git's own
+        state included): a lock there means the original is not proven intact, so nothing is started."""
+        cases = {'after_a_merge_attempt': ('publish', 'none', None),
+                 'before_publication': ('venv', 'refused', 'original-recovery-refused.json')}
+        for name, (where, recovery, outcome_file) in cases.items():
+            with self.subTest(case=name):
+                world = self.fresh(name)
+                engine = world.engine()
+                if where == 'publish':
+                    world.faults['publish'] = engine_module.Refusal('bounded_command_failed')
+                else:
+                    world.venvs = [world.venv, world.changed_venv]
+                calls = {'n': 0}
+                real = world.source_state
+
+                def source_state(real=real, calls=calls, where=where):
+                    calls['n'] += 1
+                    if calls['n'] == (2 if where == 'publish' else 1):     # the restore's measurement
+                        raise op.Refusal('git_lock_file_present')
+                    return real()
+                world.source_state = source_state
+                with self.assertRaises(op.Refusal):
+                    self.act(world, engine)
+                failure = self.evidence('failure.json', world)
+                self.assertEqual((failure['recovery'], failure['original_verification']['original_intact'],
+                                  failure['original_verification']['label']),
+                                 (recovery, False, 'git_lock_file_present'))
+                self.assertIn(('verified_original',), world.calls)     # the engine's verify passed; git's state did not
+                self.assertEqual([call[0] for call in self.services(world)], ['stop', 'stop', 'stop'])
+                self.assertFalse(self.exists('original-release-resumed.json', world))
+                if outcome_file:
+                    self.assertEqual(self.evidence(outcome_file, world)['label'], 'git_lock_file_present')
+
+    def test_rp7_merge_invoked_only_when_git_merge_was_called(self):
+        """RP-7: publish_source's own refusals before `git merge` (source_prepublication_identity, no_post_merge_hook)
+        record merge_invoked: false; a merge git refused records true."""
+        for label in ('source_prepublication_identity', 'no_post_merge_hook'):
+            with self.subTest(refusal=label):
+                world = self.fresh(label)
+                world.faults['publish_preamble'] = engine_module.Refusal(label)
+                with self.assertRaises(op.Refusal):
+                    self.act(world)
+                failure = self.assert_restored(world, stage='source_publication')
+                self.assertEqual((failure['label'], failure['merge_invoked']), (label, False))
+                self.assertNotIn(('git', 'merge', '--ff-only', CANDIDATE), world.calls)
+        world = self.fresh('merge-refused')
+        world.faults['publish'] = engine_module.Refusal('bounded_command_failed')
+        with self.assertRaises(op.Refusal):
+            self.act(world)
+        self.assertTrue(self.assert_restored(world, stage='source_publication')['merge_invoked'])
+        self.assertIn(('git', 'merge', '--ff-only', CANDIDATE), world.calls)
+        self.assertEqual(world.prior.git, world.git)    # the engine's function is bound back
+        # A refusal before the merge whose measurement then fails: no merge ran, so publication never began; the
+        # original recovery is refused (nothing started), never reported as an attempted publication.
+        world = self.fresh('preamble-unverified')
+        world.faults['publish_preamble'] = engine_module.Refusal('no_post_merge_hook')
+        world.faults['verify_original'] = engine_module.Refusal('clean_original_checkout_before_recovery')
+        with self.assertRaises(op.Refusal) as caught:
+            self.act(world)
+        self.assertEqual(str(caught.exception), 'original_recovery_refused_inspect_retained_evidence')
+        failure = self.evidence('failure.json', world)
+        self.assertEqual((failure['merge_invoked'], failure['recovery'], failure['publication_attempted']),
+                         (False, 'refused', False))
+        self.assertEqual([call[0] for call in self.services(world)], ['stop', 'stop', 'stop'])
 
     def test_gi1_a_gate_script_changed_after_the_preflight_refuses_before_anything(self):
         (self.root / 'scripts/check-citation.sh').write_text('#!/usr/bin/env bash\nexit 0\n')
@@ -1681,6 +2298,14 @@ class CommandLineTests(unittest.TestCase):
         umask = os.umask(0o022)
         os.umask(umask)
         self.addCleanup(os.umask, umask)
+        # main() blocks SIGTERM, SIGINT and SIGHUP until the process exits; the suite's process gets its mask back.
+        self.addCleanup(op.unblock_signals)
+        # main() also stops bytecode reads for the rest of its process (sys.pycache_prefix): give them back.
+        self.addCleanup(setattr, sys, 'pycache_prefix', sys.pycache_prefix)
+        self.addCleanup(setattr, sys, 'dont_write_bytecode', sys.dont_write_bytecode)
+        environment = patch.dict(os.environ, {})
+        environment.start()
+        self.addCleanup(environment.stop)
 
     def argv(self, *extra):
         return ['--base', BASE, '--candidate', CANDIDATE, '--declaration', str(self.declaration),
@@ -1808,6 +2433,76 @@ class CommandLineTests(unittest.TestCase):
         context['measured']['manifest_sha256'] = 'b' * 64
         with self.assertRaises(op.Refusal):
             self.run_execute((report, context), ({'complete': True}, True))
+
+    def test_rp4_a_result_path_that_exists_or_cannot_be_written_refuses_before_anything(self):
+        """RP-4 (f5b): attempt 1's refused preflight writes --result and creates no evidence directory, so the
+        identical command may be re-run; it used to act in full and then fail on the O_EXCL result write (exit 1
+        after a healthy install). --result is now checked before anything, like the evidence directory."""
+        os.chdir(op.SOURCE)
+        runner = {'RULED_MUTATION_DECLARATION': str(self.declaration), 'RULED_MUTATION_DECL_COMMIT': 'd' * 40}
+        execute = self.argv('--execute', '--evidence-directory', str(self.root / 'evidence'),
+                            '--manifest-sha256', 'a' * 64)
+        (self.root / 'result.json').write_text('{"passed": false}\n')
+        open_directory = self.root / 'open'
+        open_directory.mkdir(mode=0o755)
+        open_directory.chmod(0o755)
+        cases = {'existing_result_execute': (execute, 'new_result_file'),
+                 'existing_result_preflight': (self.argv(), 'new_result_file'),
+                 'result_in_an_open_directory': (execute[:9] + [str(open_directory / 'act.json')] + execute[10:],
+                                                 'private_result_directory'),
+                 'result_in_a_missing_directory': (execute[:9] + [str(self.root / 'missing/act.json')] + execute[10:],
+                                                   'private_result_directory'),
+                 'result_inside_the_evidence_directory': (
+                     execute[:9] + [str(self.root / 'evidence/act.json')] + execute[10:],
+                     'result_outside_the_evidence_directory')}
+        with patch.dict(os.environ, runner), patch.object(op, 'preflight') as preflight, \
+                patch.object(op, 'act') as act:
+            for name, (argv, label) in cases.items():
+                with self.subTest(case=name), self.assertRaises(op.Refusal) as caught:
+                    op.main(argv)
+                self.assertEqual(str(caught.exception), label)
+        preflight.assert_not_called()
+        act.assert_not_called()
+        self.assertFalse((self.root / 'evidence').exists())
+
+    def test_rp4_a_healthy_install_never_ends_as_failed_because_of_the_result_file(self):
+        """RP-4: after a complete, healthy install the result file is a second record (the receipt is the first): a
+        failure to write it is reported on stderr and the exit is 2 (judge), never an exception and exit 1."""
+        with patch.object(op, 'write_result', side_effect=OSError(errno.ENOSPC, 'No space left on device')):
+            code, act = self.run_execute(self.passing(True), ({'complete': True}, True))
+        self.assertEqual(code, 2)
+        act.assert_called_once()
+
+    def test_main_blocks_signals_for_the_act_and_a_signal_after_the_receipt_exits_2(self):
+        """The act runs with SIGTERM, SIGINT and SIGHUP blocked from before its first statement until the process
+        exits: a signal that arrives after the receipt is recorded in --result and the exit is 2, never a death by
+        the signal's default action."""
+        os.chdir(op.SOURCE)
+        runner = {'RULED_MUTATION_DECLARATION': str(self.declaration), 'RULED_MUTATION_DECL_COMMIT': 'd' * 40}
+        seen = {}
+
+        def act(engine, plan, context, footprint):
+            seen['ledger'] = op.SIGNAL_LEDGER is not None
+            seen['no_replace'] = os.environ.get(op.NO_REPLACE_OBJECTS[0])        # GP-3: exported by main()
+            seen['bytecode'] = sys.pycache_prefix                                # GP-4: no bytecode read
+            Path(plan['evidence_directory']).mkdir(mode=0o700)
+            (Path(plan['evidence_directory']) / 'installation-complete.json').write_text('{}')
+            os.kill(os.getpid(), signal.SIGTERM)       # after the receipt: nothing may die of it
+            wait_for_signal()
+            seen['pending'] = signal.SIGTERM in signal.sigpending()
+            return {'complete': True}, True
+        execute = self.argv('--execute', '--evidence-directory', str(self.root / 'evidence'),
+                            '--manifest-sha256', 'a' * 64)
+        with patch.dict(os.environ, runner), patch.object(op, 'preflight', return_value=self.passing(True)), \
+                patch.object(op, 'act', side_effect=act), patch.object(op, 'ROOT', self.root), \
+                redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            code = op.main(execute)
+        self.assertEqual(code, 2)
+        self.assertEqual(seen, {'ledger': True, 'pending': True, 'no_replace': op.NO_REPLACE_OBJECTS[1],
+                                'bytecode': op.BYTECODE_PREFIX})
+        value = json.loads((self.root / 'result.json').read_text())
+        self.assertEqual((value['complete'], value['signals_after_the_act'], value['signals_received']),
+                         (True, ['SIGTERM'], ['SIGTERM']))
 
 
 if __name__ == '__main__':

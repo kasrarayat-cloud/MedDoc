@@ -35,7 +35,7 @@ contain the sha of the commit that contains it. The declaration is proven the D4
 and bound to the code through its contract; everything else is the engine's. A test pins the correspondence of
 the two stage sequences, so a drift in either one fails CI.
 
-WHAT THE INSTALLER ADDS TO THE ENGINE'S SHAPE (the 2026-11-01 refutation, 22 findings)
+WHAT THE INSTALLER ADDS TO THE ENGINE'S SHAPE (the 2026-11-01 refutations: 22 findings, then 14 more)
   * Path guards: a dot-named component only where the base already tracks that path, or a new dot-named file that
     the declaration's contract names exactly (new_dot_paths: never a .git or .env* name, never a path the delta
     does not add); no path whose existing prefix in the shared tree is not a real directory, no added path that
@@ -43,16 +43,33 @@ WHAT THE INSTALLER ADDS TO THE ENGINE'S SHAPE (the 2026-11-01 refutation, 22 fin
     (pre-auto-gc included); no gate instrument and no .gitattributes in the delta.
   * The citation and the strict declaration gate run from the base's tracked copies in the shared tree, proven
     byte-equal to their blobs at BASE; origin/main is read as refs/remotes/origin/main and refs/heads/main exactly.
-  * Git's own state in the shared repository (lock files, an unfinished merge, cherry-pick, revert, rebase or
-    bisect, assume-unchanged or skip-worktree entries) refuses, in the preflight and again after the stop.
-  * Configuration, clinical files, the venv, foreign services and git's state are compared again AFTER the stop
-    and BEFORE publication. Publication begins only when git has moved HEAD or the working tree: any refusal
-    before that, a merge git refused included (measured, never assumed), restores the original release.
+  * Git's own state (lock files, an unfinished merge, cherry-pick, revert, rebase or bisect, assume-unchanged or
+    skip-worktree entries, replace refs) refuses, in the shared tree and in the candidate worktree, in the
+    preflight and again after the stop. A rebase is unfinished only while rebase-merge/ or rebase-apply/ exists: a
+    lone REBASE_HEAD, a finished rebase's leftover, is recorded and never refused or removed. No git process reads
+    a replace object. Nothing is imported from the candidate worktree before it is proven, nothing untracked may
+    sit in rebuild/ops, and no bytecode is read from the source tree.
+  * Configuration, clinical files, the venv, foreign services, git's state, rebuild/.env and the static tree are
+    compared again AFTER the stop and BEFORE publication. Publication begins only when git has moved HEAD or the
+    working tree: a refusal before that, a merge git refused included, restores the original release once every
+    child of the act is reaped and the original is MEASURED intact (the engine's verify_original_before_resume and
+    the same shared-tree measurement as before the merge, git's own state included).
   * The failure path is exception-proof. Every unit gets its drain or restore attempt whatever happens to an
-    evidence write; a restore counts only when every unit is active and health reports BASE. SIGTERM, SIGINT and
-    SIGHUP route into that same path. The act's git processes run with hooks and automatic maintenance off.
+    evidence write or to releasing the locks; a restore counts only when every unit is active and health reports
+    BASE. The act's git processes run with hooks, automatic maintenance and replace objects off.
   * After a completed, healthy install nothing drains: a later observation (a foreign restart, a failed
-    configuration read, an interrupt) is reported for judgement and the act exits 2.
+    configuration read, a signal) is reported for judgement and the act exits 2, as it does when the result file
+    cannot be written. --result must be a new file in a private directory before anything runs.
+
+SIGNALS ARE BLOCKED, NEVER HANDLED (the second refutation: an asynchronous handler kept racing what it protected)
+  SIGTERM, SIGINT and SIGHUP are blocked with pthread_sigmask from the act's first statement until the process
+  exits. No handler runs: this module installs none, managed_helper.run_helper's per-call SIGTERM handler cannot
+  fire, KeyboardInterrupt cannot be raised. So no signal interrupts a stage, a helper call, a subprocess start or
+  the failure path. checkpoint() takes pending signals (sigtimedwait, zero timeout) between stages and records each
+  with its sender: before publication one takes the automatic recovery path; from publication on it is recorded,
+  the act runs to completion, and the exit is 2 for judgement. Children inherit the blocked mask, so a git or pip
+  child stops only on SIGKILL, and SIGKILL is the only thing that can still cut the act: the runner's ceiling must
+  exceed the act's worst duration (docs/runbooks/rebuild-release-install-20261031.md, step 7).
 """
 import argparse
 from contextlib import ExitStack, contextmanager
@@ -108,12 +125,18 @@ LOCK_FILES = ('legacy-model-activation.lock', 'backup-monitor/capture.lock', 'au
 #: candidate may not add one: it would be checked out by the merge and then run by it.
 MERGE_HOOKS = ('post-merge', 'reference-transaction', 'post-index-change', 'post-checkout', 'pre-merge-commit',
                'post-rewrite', 'pre-auto-gc')
-#: Every git process of the act also runs with hooks and automatic maintenance switched off.
-ACT_GIT_CONFIG = (('core.hooksPath', '/dev/null'), ('maintenance.auto', 'false'), ('gc.auto', '0'))
+#: Every git process of the act also runs with hooks, automatic maintenance and replace objects switched off.
+ACT_GIT_CONFIG = (('core.hooksPath', '/dev/null'), ('maintenance.auto', 'false'), ('gc.auto', '0'),
+                  ('core.useReplaceRefs', 'false'))
 #: Environment that would redirect or reconfigure git; refused rather than inherited.
 GIT_ENVIRONMENT_REFUSED = ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY',
                            'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_COMMON_DIR', 'GIT_NAMESPACE', 'GIT_CONFIG',
-                           'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT')
+                           'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'GIT_REPLACE_REF_BASE')
+#: No git process reads a replace object: a `git replace <candidate> <other>` in the shared object store would make
+#: every content check, and the act's own merge, read substituted objects behind the certified sha. main() exports
+#: it, so every child that inherits the environment (the engine's git, the citation, the strict gate) has it too;
+#: this module's own git() also passes --no-replace-objects, and git_state refuses any refs/replace entry.
+NO_REPLACE_OBJECTS = ('GIT_NO_REPLACE_OBJECTS', '1')
 #: The gates the act relies on: the citation, the runner and its strict declaration gate. A delta that changes one
 #: refuses (the legacy installer's dependency_byte_identity rule for the same files), and the two the installer
 #: runs itself are run from the base's tracked copies in the shared tree, never from the candidate.
@@ -121,13 +144,27 @@ GATE_INSTRUMENTS = ('scripts/check-citation.sh', 'scripts/lib/runs-api.sh', 'scr
                     'scripts/run-ruled-mutation.sh', 'scripts/lib/run-watched.sh',
                     'scripts/lib/container-revision.sh')
 TRUSTED_GATE_SCRIPTS = ('scripts/check-citation.sh', 'scripts/lib/runs-api.sh', 'scripts/lib/declaration.sh')
-#: Git's own lock files and unfinished operations in the shared repository (`rev-parse --git-path` names).
+#: Git's own lock files and unfinished operations in the shared repository (`rev-parse --git-path` names). A rebase
+#: is unfinished only while rebase-merge/ or rebase-apply/ exists, which is how git itself decides
+#: (wt_status_check_rebase).
 GIT_LOCKS = ('index.lock', 'HEAD.lock', 'ORIG_HEAD.lock', 'config.lock', 'packed-refs.lock', 'shallow.lock')
-GIT_OPERATIONS = ('MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'REBASE_HEAD', 'rebase-merge', 'rebase-apply',
-                  'sequencer', 'BISECT_LOG', 'BISECT_START')
+GIT_OPERATIONS = ('MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'rebase-merge', 'rebase-apply', 'sequencer',
+                  'BISECT_LOG', 'BISECT_START')
+#: Left behind by a FINISHED operation: `rebase --continue`, `--skip` and `--quit` all leave REBASE_HEAD (git 2.43),
+#: and it does not affect `merge --ff-only`. The live repository has had one since 2026-08-10. Recorded as observed,
+#: never refused, never removed.
+GIT_LEFTOVERS = ('REBASE_HEAD',)
 #: A bare interpreter name: Python then finds itself, and its venv, through the process's own PATH.
 INTERPRETER_NAME = re.compile(r'python[0-9.]*')
+#: Blocked for the whole act (block_signals) and taken only at checkpoints; no handler of any module ever runs.
 SIGNALS = ('SIGTERM', 'SIGINT', 'SIGHUP')
+SIGNAL_NUMBERS = tuple(getattr(signal, name) for name in SIGNALS)
+#: How long the failure path waits for a child of the act (a merge an exception left behind) to exit before it
+#: measures anything; a child still running after that counts as a publication that may still move HEAD.
+REAP_SECONDS = 120
+#: Bytecode is never read from the source tree: a __pycache__ file planted with a pinned source's mtime and size
+#: would otherwise run instead of the bytes that were hashed (-B only stops writing it). See ops_module.
+BYTECODE_PREFIX = os.devnull
 #: Measured after a completed, healthy resume and reported for judgement (exit 2), never drained for.
 POSTCONDITIONS = ('configuration_preserved_after_resume', 'foreign_services_preserved_after_resume',
                   'venv_sharing_units_idle_after_resume', 'venv_exact_after_resume')
@@ -155,7 +192,8 @@ class Refusal(RuntimeError):
 
 
 class Interrupted(BaseException):
-    """A termination signal, raised in the main thread so the act's own failure path runs.
+    """A routed signal taken at a checkpoint before publication (never raised by a handler: none runs), raised so
+    that the act's own failure path drains or restores.
 
     A BaseException, like KeyboardInterrupt, so that no `except Exception` on the way swallows it.
     """
@@ -216,20 +254,31 @@ def run(argv, *, cwd=None, timeout=120, limit=16 * 1024 * 1024, check=True):
 
 
 def git(repo, *arguments, timeout=120, limit=16 * 1024 * 1024):
-    return run(['git', '--no-optional-locks', '-C', str(repo), *arguments], timeout=timeout, limit=limit).stdout
+    return run(['git', '--no-optional-locks', '--no-replace-objects', '-C', str(repo), *arguments], timeout=timeout,
+               limit=limit).stdout
 
 
 def git_ok(repo, *arguments):
-    return run(['git', '--no-optional-locks', '-C', str(repo), *arguments], check=False).returncode == 0
+    return run(['git', '--no-optional-locks', '--no-replace-objects', '-C', str(repo), *arguments],
+               check=False).returncode == 0
 
 
 def ops_module(name, source=None):
-    """An unpinned operator module of THIS release, imported from the tree this file runs from."""
+    """An unpinned operator module of THIS release, imported from the tree this file runs from.
+
+    The import, and every module it imports, compiles the source file itself: sys.pycache_prefix points at a path
+    no bytecode can be read from for its duration, so a planted rebuild/ops/__pycache__ entry never runs in place of
+    the bytes that were hashed. main() keeps it there for the whole process (later imports inside the engine).
+    """
     source = source or SOURCE
     rebuild = str(source / 'rebuild')
     if rebuild not in sys.path:
         sys.path.insert(0, rebuild)
-    module = importlib.import_module('ops.' + name)
+    previous, sys.pycache_prefix = sys.pycache_prefix, BYTECODE_PREFIX
+    try:
+        module = importlib.import_module('ops.' + name)
+    finally:
+        sys.pycache_prefix = previous
     require(Path(module.__file__).resolve() == source / 'rebuild/ops' / (name + '.py'), 'operator_module_location')
     return module
 
@@ -821,13 +870,18 @@ def _process_uid(entry):
     raise Refusal('process_uid')
 
 
-def _search_path(entry, name, cwd):
-    """Where the process found ``name`` on ITS OWN PATH, as Python's getpath does for a bare argv[0]."""
+def _search_path(entry, name):
+    """Where the process found ``name`` on ITS OWN PATH, as Python's getpath does for a bare argv[0].
+
+    None when it has no PATH or no entry holds that file; False when a relative entry comes before the match: that
+    entry was resolved against the directory the process STARTED in, which /proc does not keep.
+    """
     environ = dict(item.split(b'=', 1) for item in (entry / 'environ').read_bytes().split(b'\0') if b'=' in item)
     if b'PATH' not in environ:
         return None
     for directory in os.fsdecode(environ[b'PATH']).split(os.pathsep):
-        directory = os.path.join(cwd, directory) if cwd and not os.path.isabs(directory) else directory
+        if not os.path.isabs(directory):
+            return False
         candidate = os.path.join(directory, name)
         if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
             return directory
@@ -839,9 +893,11 @@ def venv_verdict(entry, first, *, target_bin, target_root, interpreter):
 
     The executable comes first, read from /proc/<pid>/exe: a symlinked venv runs the system binary (its real path
     is the venv interpreter's real path), so the exe alone separates "another program" from "a Python that may be
-    the venv's". Which prefix such a Python took is then decided by how it was started: an argv[0] path, or, for a
-    bare name, the process's own PATH. argv alone is never enough: `source .venv/bin/activate && python3 ...` shows
-    only "python3".
+    the venv's". Which prefix such a Python took is then decided by how it was started: an absolute argv[0] path,
+    or, for a bare name, the process's own PATH. argv alone is never enough: `source .venv/bin/activate && python3
+    ...` shows only "python3". A RELATIVE argv[0] (`.venv/bin/python`) or a relative PATH entry was resolved against
+    the directory the process started in. /proc keeps only its current directory, which a chdir moves (a test in a
+    temporary world, a daemon's chdir('/')), so that use is undetermined, never guessed from the current one.
     """
     try:
         link = os.readlink(entry / 'exe')
@@ -854,26 +910,19 @@ def venv_verdict(entry, first, *, target_bin, target_root, interpreter):
             return True
         if exe != interpreter:
             return False
-    cwd = None
-    try:
-        cwd = os.readlink(entry / 'cwd')
-    except OSError:
-        pass
     if '/' in first:
         if not first.startswith('/'):
-            if cwd is None:
-                return None
-            first = os.path.join(cwd, first)
+            return None    # relative to the start directory, which /proc does not keep
         return os.path.realpath(os.path.dirname(first)) == target_bin
     if exe is None and not INTERPRETER_NAME.fullmatch(first):
         return False
     if not INTERPRETER_NAME.fullmatch(first):
         return None    # the venv's interpreter under a rewritten process title: cannot tell which prefix
     try:
-        found = _search_path(entry, first, cwd)
+        found = _search_path(entry, first)
     except OSError:
         return None
-    return None if found is None else os.path.realpath(found) == target_bin
+    return None if found is None or found is False else os.path.realpath(found) == target_bin
 
 
 def live_venv_users(proc=Path('/proc'), venv=None, exclude=(), uid=None):
@@ -973,6 +1022,14 @@ def preflight(args, *, executing=False):
     checks = Checks()
     measured = {}
     context = {'measured': measured}
+    # Nothing is imported from the candidate worktree before the worktree itself is proven: the first import runs
+    # its rebuild/ops/__init__.py, so a tracked file hidden from `git status` (assume-unchanged, skip-worktree) or an
+    # untracked module that shadows a source would already have run inside this process by the time a row failed.
+    checks.run('git_environment_clean', git_environment_clean)
+    if checks.run('candidate_worktree', candidate_worktree, args.candidate) is None:
+        for name in ('operator_module_venv_footprint', 'operator_module_backup', 'engine_pins', 'engine_bound'):
+            checks.fail(name, 'prerequisite_failed')
+        return finish(args, checks, measured), context
     footprint = checks.keep('operator_module_venv_footprint', ops_module, 'venv_footprint')
     backup = checks.keep('operator_module_backup', ops_module, 'rebuild_release_backup')
     engine = checks.keep('engine_pins', load_engine, describe=lambda _: {'pins': ENGINE_PINS})
@@ -982,8 +1039,6 @@ def preflight(args, *, executing=False):
         return finish(args, checks, measured), context
     prior = engine.prior
     with bound(engine, args.base):
-        checks.run('git_environment_clean', git_environment_clean)
-        checks.run('candidate_worktree', candidate_worktree, args.candidate)
         checks.run('shared_tree_at_base', shared_tree_at_base, args.base)
         checks.run('origin_main_is_candidate', origin_main_is, args.candidate)
         gate_scripts = checks.run('trusted_gate_scripts', trusted_gate_scripts, args.base)
@@ -1124,20 +1179,40 @@ def git_environment_clean():
 
 
 def candidate_worktree(candidate):
+    """The worktree this installer runs from, and imports every operator and engine module from: at the candidate,
+    tracked-clean, with git's own state clean (`git status` is silent about assume-unchanged and skip-worktree
+    entries, so git_state applies here as in the shared tree), and nothing untracked in rebuild/ops."""
     require(full_sha(candidate), 'full_candidate_sha')
     top = Path(git(SOURCE, 'rev-parse', '--show-toplevel').decode().strip())
     require(top == SOURCE and SOURCE != ROOT and SOURCE.resolve() == SOURCE, 'installer_runs_from_a_candidate_worktree')
     require(git(SOURCE, 'rev-parse', 'HEAD').decode().strip() == candidate, 'candidate_worktree_head')
     require(not git(SOURCE, 'status', '--porcelain', '--untracked-files=no').strip(), 'candidate_worktree_clean')
-    return {'worktree': str(SOURCE), 'head': candidate}
+    return {'worktree': str(SOURCE), 'head': candidate, 'git_state': git_state(SOURCE),
+            'import_package': import_package_tracked(SOURCE)}
+
+
+def import_package_tracked(source=None):
+    """rebuild/ops, the package every operator and engine module is imported from, holds nothing git does not track
+    (ignored files included). An untracked file there is imported INSTEAD of a tracked source: an extension module
+    (__init__.cpython-312-x86_64-linux-gnu.so runs before __init__.py) or a package directory named like a module.
+    Bytecode caches are inert (BYTECODE_PREFIX) and allowed."""
+    source = source or SOURCE
+    raw = git(source, 'ls-files', '--others', '-z', '--', 'rebuild/ops')
+    require(raw == b'' or raw.endswith(b'\0'), 'nul_terminated_untracked_listing')
+    names = [os.fsdecode(name) for name in raw.split(b'\0')[:-1]]
+    strays = [name for name in names if '__pycache__' not in PurePosixPath(name).parts]
+    require(not strays, 'untracked_file_in_the_import_package')
+    return {'untracked': 0, 'bytecode_caches_ignored': len(names)}
 
 
 def git_state(repo=None):
-    """Git's own state in the shared repository, read-only: what would make `merge --ff-only` refuse or half-apply.
+    """Git's own state in a repository (the shared tree, or the candidate worktree), read-only: what would make
+    `merge --ff-only` refuse or half-apply, or make git read other objects than the ones a sha names.
 
     Lock files (index, HEAD, ORIG_HEAD, config, packed-refs, shallow, and any under refs/), an unfinished merge,
-    cherry-pick, revert, rebase or bisect, and index entries hidden from `git status` by assume-unchanged or
-    skip-worktree all refuse.
+    cherry-pick, revert, rebase (rebase-merge/ or rebase-apply/, as git decides) or bisect, index entries hidden
+    from `git status` by assume-unchanged or skip-worktree, and any replace ref all refuse. A leftover of a finished
+    operation (a lone REBASE_HEAD) is reported under ``observed``; it is never refused and never removed.
     """
     repo = repo or ROOT
 
@@ -1157,11 +1232,13 @@ def git_state(repo=None):
     refs = git_path('refs')
     require(not any(True for _ in refs.rglob('*.lock')) if refs.is_dir() else True, 'git_ref_lock_present')
     require(not any(present(git_path(name)) for name in GIT_OPERATIONS), 'unfinished_git_operation')
+    observed = [name for name in GIT_LEFTOVERS if present(git_path(name))]
+    require(not git(repo, 'for-each-ref', '--format=%(refname)', 'refs/replace/').strip(), 'git_replace_refs_present')
     entries = git(repo, 'ls-files', '-v', '-z').split(b'\0')
     hidden = [entry for entry in entries if entry and (entry[:1].islower() or entry[:1] == b'S')]
     require(not hidden, 'assume_unchanged_or_skip_worktree_entries')
-    return {'lock_files': 0, 'unfinished_operations': 0, 'hidden_index_entries': 0,
-            'index_entries': sum(1 for entry in entries if entry)}
+    return {'lock_files': 0, 'unfinished_operations': 0, 'hidden_index_entries': 0, 'replace_refs': 0,
+            'index_entries': sum(1 for entry in entries if entry), 'observed': observed}
 
 
 def shared_tree_at_base(base, root=None):
@@ -1232,13 +1309,37 @@ def runner_declaration(args):
     return commit
 
 
+def private_writable_directory(path, label):
+    """An existing real directory the operator owns, mode 0700, that this process can create files in."""
+    try:
+        info = path.lstat()
+    except OSError:
+        raise Refusal(label) from None
+    require(path.resolve() == path and stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid()
+            and stat.S_IMODE(info.st_mode) == 0o700 and os.access(path, os.W_OK | os.X_OK), label)
+    return path
+
+
 def evidence_directory(path):
     path = Path(path)
     require(path.is_absolute() and str(path) == os.path.normpath(str(path)) and not path.exists()
             and not path.is_symlink(), 'new_evidence_directory')
-    parent = path.parent.lstat()
-    require(path.parent.resolve() == path.parent and stat.S_ISDIR(parent.st_mode) and parent.st_uid == os.getuid()
-            and stat.S_IMODE(parent.st_mode) == 0o700, 'private_evidence_parent')
+    private_writable_directory(path.parent, 'private_evidence_parent')
+    return path
+
+
+def result_destination(path, evidence=None):
+    """--result, checked BEFORE anything else: a new file in a private, writable directory, outside the evidence
+    directory. The final write is O_EXCL, and a result path that already exists (a re-run after a refused preflight
+    with the same command) would otherwise surface only after a complete install."""
+    path = Path(path)
+    require(path.is_absolute() and str(path) == os.path.normpath(str(path)) and not path.exists()
+            and not path.is_symlink(), 'new_result_file')
+    if evidence is not None:
+        evidence = Path(evidence)
+        require(path != evidence and not path.is_relative_to(evidence) and not evidence.is_relative_to(path),
+                'result_outside_the_evidence_directory')
+    private_writable_directory(path.parent, 'private_result_directory')
     return path
 
 
@@ -1259,31 +1360,148 @@ def diagnostics(engine, error):
     return value
 
 
-@contextmanager
-def signal_routing():
-    """SIGTERM, SIGINT and SIGHUP raise Interrupted in the main thread, so they reach the act's failure path.
+#: The process's record of routed signals while they are blocked (block_signals); None while they are not.
+SIGNAL_LEDGER = None
 
-    The same shape as managed_helper.run_helper, which turns SIGTERM into HelperFailure('interrupted') for the
-    length of one helper call (and puts this handler back afterwards). Setting ``state['raising'] = False`` keeps
-    recording signals without raising, while units are being drained or restored or the receipt is written.
+
+def block_signals():
+    """Block SIGTERM, SIGINT and SIGHUP in this process and return the signal ledger (idempotent while blocked).
+
+    No asynchronous handler runs while they are blocked: not one of this module's, not the SIGTERM handler that
+    managed_helper.run_helper installs for each helper call, not Python's KeyboardInterrupt. A signal stays pending
+    until a checkpoint takes it (take_pending), so it can interrupt no stage, helper call, subprocess start or
+    failure path. Children inherit the blocked mask: a git or pip child that keeps it stops only on SIGKILL.
+    A signal sent to the process goes to any thread that does not block it, so there must be no other thread.
     """
-    state = {'raising': True, 'received': []}
+    global SIGNAL_LEDGER
+    if SIGNAL_LEDGER is not None:
+        return SIGNAL_LEDGER
+    require(threading.current_thread() is threading.main_thread() and threading.active_count() == 1,
+            'signals_blocked_in_the_only_thread')
+    previous = signal.pthread_sigmask(signal.SIG_BLOCK, SIGNAL_NUMBERS)
+    SIGNAL_LEDGER = {'received': [], 'previous_mask': previous}
+    return SIGNAL_LEDGER
 
-    def handler(number, frame):
-        name = signal.Signals(number).name
-        state['received'].append(name)
-        if state['raising']:
-            raise Interrupted(name)
-    previous = {}
-    if threading.current_thread() is threading.main_thread():
-        for name in SIGNALS:
-            number = getattr(signal, name)
-            previous[number] = signal.signal(number, handler)
+
+def take_pending(ledger, stage):
+    """Take every pending routed signal without running any handler (sigtimedwait, zero timeout) and record each
+    with the stage and its sender. Returns the names taken now. Standard signals do not queue: two SIGTERMs that
+    arrive between two checkpoints are one pending signal and one record."""
+    taken = []
+    while True:
+        info = signal.sigtimedwait(SIGNAL_NUMBERS, 0)
+        if info is None:
+            return taken
+        name = signal.Signals(info.si_signo).name
+        ledger['received'].append({'signal': name, 'stage': stage, 'sender_pid': info.si_pid,
+                                   'sender_uid': info.si_uid})
+        taken.append(name)
+
+
+def signal_names(ledger):
+    return [row['signal'] for row in ledger['received']]
+
+
+def unblock_signals(stage='unblocked'):
+    """Take what is still pending (recorded), then restore the mask block_signals found. main() never calls this:
+    the signals stay blocked until the process exits, so none is ever delivered with its default action."""
+    global SIGNAL_LEDGER
+    ledger = SIGNAL_LEDGER
+    if ledger is None:
+        return None
+    take_pending(ledger, stage)
+    signal.pthread_sigmask(signal.SIG_SETMASK, ledger['previous_mask'])
+    SIGNAL_LEDGER = None
+    return ledger
+
+
+@contextmanager
+def blocked_signals():
+    """The act's signal scope. Under main() the signals are already blocked and the ledger is shared; when act() is
+    called on its own (the tests), it blocks them here and, on the way out, takes and reports what is still pending
+    before the previous mask comes back."""
+    outer = SIGNAL_LEDGER is not None
+    ledger = block_signals()
     try:
-        yield state
+        yield ledger
     finally:
-        for number, old in previous.items():
-            signal.signal(number, old)
+        if not outer:
+            late = take_pending(ledger, 'after_the_act')
+            if late:
+                emit({'signals_after_the_act': late})
+            unblock_signals()
+
+
+def child_processes(parent=None, proc=Path('/proc')):
+    """The pids whose parent is this process (or ``parent``), read from /proc/<pid>/stat; zombies included."""
+    parent = str(os.getpid() if parent is None else parent)
+    children = set()
+    for entry in proc.iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            text = (entry / 'stat').read_text()
+        except OSError:
+            continue
+        fields = text[text.rfind(')') + 2:].split()
+        if len(fields) > 1 and fields[1] == parent:
+            children.add(int(entry.name))
+    return children
+
+
+def reap_children(before, *, seconds=REAP_SECONDS, clock=time.monotonic, sleep=time.sleep):
+    """Wait for, and reap, every child of this process that was not already running at ``before``.
+
+    subprocess.run kills and waits for its child only once Popen() has returned. An exception raised while Popen is
+    still starting `git merge --ff-only` leaves git running with nobody waiting for it, and a measurement of the
+    tree taken then can pass while the merge is still about to move HEAD (RP-1). Nothing measures the tree before
+    this returns. Returns {'reaped': [{pid, exit}], 'running': [pid]}: ``running`` is what was still alive after
+    ``seconds``.
+    """
+    deadline = clock() + seconds
+    reaped = []
+    while True:
+        alive = []
+        for pid in sorted(child_processes() - set(before)):
+            try:
+                done, status = os.waitpid(pid, os.WNOHANG)
+            except ChildProcessError:
+                continue
+            if done:
+                reaped.append({'pid': pid, 'exit': os.waitstatus_to_exitcode(status)})
+            else:
+                alive.append(pid)
+        if not alive or clock() >= deadline:
+            return {'reaped': reaped, 'running': alive}
+        sleep(0.05)
+
+
+@contextmanager
+def merge_observed(prior, flags):
+    """``flags['merge_invoked']`` becomes True only when publish_source calls `git merge` (activate_rowan_corti.git),
+    never for one of its refusals before that call. The engine's function is bound back afterwards."""
+    original = prior.git
+
+    def observed(*arguments, **options):
+        if arguments[:1] == ('merge',):
+            flags['merge_invoked'] = True
+        return original(*arguments, **options)
+    prior.git = observed
+    try:
+        yield
+    finally:
+        prior.git = original
+
+
+def release_coordination(stack):
+    """Leave the operation locks and the activation exclusion. The exclusion's release appends a record, which can
+    fail (a full disk): that is reported, and never replaces the act's own outcome. Closing twice is harmless."""
+    try:
+        stack.close()
+    except BaseException as error:
+        emit({'coordination_release_failed': reason(error)})
+        return {'released': False, 'label': reason(error)}
+    return {'released': True}
 
 
 @contextmanager
@@ -1360,38 +1578,50 @@ def restore_original(engine, host, plan):
             'original_release_serving': serving, 'errors': errors}
 
 
-def failure_path(error, *, engine, host, out, plan, stage, flags, original, guard, prepared, signals):
+def failure_path(error, *, engine, host, out, plan, stage, flags, original, guard, prepared, signals, measure,
+                 children):
     """The act failed before the installation was complete and healthy. Returns the Refusal to raise.
 
-    Exception-proof: whatever happens to an evidence write, every unit gets its drain or restore attempt, and what
-    happened is recorded in failure.json, in an outcome file, on stderr, and in the Refusal's ``outcome`` (which
-    main() writes to --result, in another directory).
+    Exception-proof and uninterruptible (the routed signals are blocked; any that arrive are recorded): whatever
+    happens to an evidence write, every unit gets its drain or restore attempt, and what happened is recorded in
+    failure.json, in an outcome file, on stderr, and in the Refusal's ``outcome`` (which main() writes to --result,
+    in another directory).
 
       resume started               -> drain every owned unit (the engine's stop_failed_resume)
       stopped, nothing published   -> restore the original release, verified first and measured after
       stopped, publication begun   -> the units stay drained; only a newly declared corrective act may follow
 
-    PUBLICATION BEGINS ONLY WHEN GIT HAS MOVED HEAD OR THE WORKING TREE. A refusal inside publish_source before the
-    merge, or a merge git refused (another process's index.lock), leaves HEAD at BASE and the tree clean: the
-    engine's verify_original_before_resume measures exactly that, and only a failed measurement counts as
-    publication. A failure after publish_source returned is always publication.
+    PUBLICATION BEGINS ONLY WHEN GIT HAS MOVED HEAD OR THE WORKING TREE, and that is MEASURED, never assumed. Every
+    child the act started is reaped first (reap_children), so no merge can still move HEAD behind the measurement;
+    one still running counts as publication. Then the engine's verify_original_before_resume (HEAD at BASE, the tree
+    clean, every base file proven, every new path absent) and ``measure`` (the shared tree as measured before the
+    merge: clean main at BASE, git's own state, every manifest path unobstructed) must both pass. A refusal inside
+    publish_source before the merge passes them. A lock or an unfinished operation that git left behind, or that
+    another process holds, does not: the original is then not intact and nothing is started. A failure after
+    publish_source returned is always publication.
     """
-    signals['raising'] = False
+    take_pending(signals, 'failure_path')
     recovery, verification = 'none', None
+    measuring = flags['stopped'] and not flags['resume_started'] and not flags['publication_completed']
+    reaped = reap_children(children, seconds=REAP_SECONDS if measuring else 0)
     if flags['resume_started']:
         recovery = 'drain'
-    elif flags['stopped'] and not flags['publication_completed']:
+    elif measuring:
         try:
+            require(not reaped['running'], 'act_child_process_still_running')
             engine.verify_original_before_resume(original, guard, prepared)
+            measure()
             verification, recovery = {'original_intact': True}, 'restore'
         except BaseException as check:
+            # Only a merge that was invoked can have begun publication; otherwise the original is simply not proven.
             verification = dict(diagnostics(engine, check), original_intact=False)
-            recovery = 'refused' if not flags['publication_started'] else 'none'
-    publication_attempted = flags['publication_completed'] or (flags['publication_started'] and recovery != 'restore')
+            recovery = 'none' if flags['merge_invoked'] else 'refused'
+    publication_attempted = flags['publication_completed'] or (flags['merge_invoked'] and recovery != 'restore')
     failure = dict(format=FORMAT, complete=False, stage=stage, **diagnostics(engine, error),
                    stopped=flags['stopped'], resumed=False, resume_started=flags['resume_started'],
-                   publication_attempted=publication_attempted, merge_invoked=flags['publication_started'],
-                   original_verification=verification, recovery=recovery, signals_received=list(signals['received']),
+                   publication_attempted=publication_attempted, merge_invoked=flags['merge_invoked'],
+                   original_verification=verification, recovery=recovery, children=reaped,
+                   signals_received=signal_names(signals), signal_records=list(signals['received']),
                    provider_calls=0, automatic_retry=False)
     outcome = {'stage': stage, 'label': failure['label'], 'recovery': recovery,
                'publication_attempted': publication_attempted}
@@ -1418,7 +1648,8 @@ def failure_path(error, *, engine, host, out, plan, stage, flags, original, guar
     elif recovery == 'refused':
         outcome['outcome_file'] = retain(engine.prior, out / 'original-recovery-refused.json', verification)
         label = 'original_recovery_refused_inspect_retained_evidence'
-    outcome['signals_received'] = list(signals['received'])
+    take_pending(signals, 'recovery')
+    outcome['signals_received'] = signal_names(signals)
     emit({'rebuild_release_outcome': outcome})
     refusal = Refusal(label)
     refusal.outcome = outcome
@@ -1431,7 +1662,11 @@ def act(engine, plan, context, *, footprint, idle=foreign_idle, snapshot_venv=No
 
     Returns (result, postconditions_passed). Raises Refusal on any failure before the install is complete and
     healthy, after failure_path has drained or restored. ``source_state()`` re-measures the shared tree after the
-    stop (publication_preconditions over prior.ROOT by default).
+    stop (publication_preconditions over prior.ROOT by default), and again in the failure path before a restore.
+
+    SIGTERM, SIGINT and SIGHUP are blocked from the first statement (block_signals). checkpoint() takes them between
+    stages: before publication a signal raises Interrupted into the failure path, which drains or restores; from
+    publication on it is recorded only, the act runs to completion and returns not passed (main exits 2).
     """
     prior = engine.prior
     legacy = prior.legacy
@@ -1440,13 +1675,23 @@ def act(engine, plan, context, *, footprint, idle=foreign_idle, snapshot_venv=No
         def source_state():
             return publication_preconditions(prior.ROOT, plan['base'], context['measured']['manifest'])
     require(Path.cwd().resolve() == prior.ROOT, 'permanent_native_actuation_directory')
-    with signal_routing() as signals, act_git_environment():
+    with blocked_signals() as signals, act_git_environment():
+        children = child_processes()
+        flags = dict(stopped=False, resume_started=False, publication_started=False, publication_completed=False,
+                     merge_invoked=False)
+
+        def checkpoint(where):
+            taken = take_pending(signals, where)
+            if taken and not flags['publication_started']:
+                raise Interrupted(taken[0])
+        checkpoint('act_start')
         original = prior.backup_restore.read_private(prior.APP / '.env', 65536)
         require(original == context['environment']['original'], 'environment_unchanged_since_preflight')
         active = engine.render_environment(original, plan['candidate'], plan['environment'])
         guard = bind_guard(prior.source_guard())
         prepared = prior.source_plan(plan, guard)
         citation(prior, plan['candidate'], plan['gate_scripts'], root=prior.ROOT)
+        checkpoint('evidence_directory')
         out = Path(plan['evidence_directory'])
         out.mkdir(mode=0o700)
         prior.write_new(out / 'plan.json', dict(plan, environment_before_sha256=prior.sha(original)))
@@ -1458,12 +1703,11 @@ def act(engine, plan, context, *, footprint, idle=foreign_idle, snapshot_venv=No
                 'rollback_environment_decryption')
         units = plan['foreign_venv_units']
         venv_before = context['venv']
-        flags = dict(stopped=False, resume_started=False, publication_started=False, publication_completed=False)
-        stage = 'static_baseline'
         host = legacy.Host(prior.managed_helper)
-        with ExitStack() as coordination:
+        coordination = ExitStack()
+        try:
             try:
-                note(stage)
+                stage = 'static_baseline'; note(stage); checkpoint(stage)
                 primitives = legacy.static_primitives()
                 primitives.static_delta = prior.static_delta
                 if plan['static']:
@@ -1476,84 +1720,95 @@ def act(engine, plan, context, *, footprint, idle=foreign_idle, snapshot_venv=No
                 prior.write_new(out / 'rollback-readback.json', dict(environment_decryption_matches=True,
                                 source_revision=plan['base'], static=rollback, live_restore_actions=0))
                 prior.activation_exclusion.bind_runtime(prior.APP / '.runtime')
-                stage = 'coordination_locks'; note(stage)
+                stage = 'coordination_locks'; note(stage); checkpoint(stage)
                 coordination.enter_context(legacy.operation_locks())
                 coordination.enter_context(prior.activation_exclusion.hold(
                     'rebuild-release:' + plan['candidate'][:12], timeout=30))
                 baseline = {'static': static_before}
-                stage = 'baseline_configuration'; baseline['configuration'] = host.configuration()
-                stage = 'baseline_foreign_services'; baseline['services'] = prior.foreign_services()
+                stage = 'baseline_configuration'; checkpoint(stage); baseline['configuration'] = host.configuration()
+                stage = 'baseline_foreign_services'; checkpoint(stage); baseline['services'] = prior.foreign_services()
                 require(baseline['services'] == context['services'], 'foreign_services_unchanged_since_preflight')
-                stage = 'baseline_foreign_idle'; note(stage)
+                stage = 'baseline_foreign_idle'; note(stage); checkpoint(stage)
                 baseline['foreign_idle'] = idle(units)
                 require(baseline['foreign_idle']['idle'], 'venv_sharing_units_idle_before_stop')
-                stage = 'baseline_database'; note(stage); baseline['database'] = engine.snapshot(original)
-                stage = 'baseline_clinical_files'
+                stage = 'baseline_database'; note(stage); checkpoint(stage); baseline['database'] = engine.snapshot(original)
+                stage = 'baseline_clinical_files'; checkpoint(stage)
                 baseline['files'] = prior.private_storage.inventory(Path('/var/lib/quillmd/files'))
-                stage = 'baseline_pending_check'; engine.unchanged(baseline['database'], baseline['database'])
-                stage = 'baseline_venv'; note(stage)
+                stage = 'baseline_pending_check'; checkpoint(stage)
+                engine.unchanged(baseline['database'], baseline['database'])
+                stage = 'baseline_venv'; note(stage); checkpoint(stage)
                 footprint.require_exact(venv_before, snapshot_venv(prior.APP / '.venv'), 'venv_unchanged_since_preflight')
                 require(venv_before['footprint_sha256'] == plan['venv_footprint_sha256'], 'venv_is_the_declared_venv')
                 baseline['venv'] = footprint.summary(venv_before)
-                stage = 'retain_baseline'
+                stage = 'retain_baseline'; checkpoint(stage)
                 prior.write_new(out / 'baseline.json', baseline)
                 prior.write_new(out / 'venv-before.json', venv_before)
-                stage = 'revalidate_before_stop'; note(stage)
+                stage = 'revalidate_before_stop'; note(stage); checkpoint(stage)
                 require(prior.source_plan(plan, guard) == prepared, 'source_cut_unchanged_before_stop')
                 require((prior.APP / '.env').read_bytes() == original, 'environment_unchanged_before_stop')
                 require(primitives.static_inventory(prior.APP / 'staticfiles') == static_before,
                         'static_unchanged_before_stop')
                 require(all(host.state(unit)['ActiveState'] == 'active' and host.state(unit)['MainPID'] != '0'
                             for unit in prior.UNITS), 'owned_units_active_before_stop')
-                stage = 'stop_owned_services'; note(stage); flags['stopped'] = True
+                stage = 'stop_owned_services'; note(stage); checkpoint(stage); flags['stopped'] = True
                 for unit in prior.UNITS:
                     host.service('stop', unit)
-                stage = 'verify_owned_services_stopped'
+                stage = 'verify_owned_services_stopped'; checkpoint(stage)
                 require(all(host.state(unit)['ActiveState'] == 'inactive' and host.state(unit)['MainPID'] == '0'
                             for unit in prior.UNITS), 'owned_units_drained')
-                stage = 'database_after_stop'; after_stop = engine.snapshot(original)
-                stage = 'retain_database_after_stop'
+                stage = 'database_after_stop'; checkpoint(stage); after_stop = engine.snapshot(original)
+                stage = 'retain_database_after_stop'; checkpoint(stage)
                 prior.write_new(out / 'database-after-stop.json', after_stop)
-                stage = 'database_after_stop'; engine.unchanged(baseline['database'], after_stop, health_may_tick=True)
+                stage = 'database_after_stop'; checkpoint(stage)
+                engine.unchanged(baseline['database'], after_stop, health_may_tick=True)
                 # Everything taken while the units still served is compared again now, before publication: a
-                # change in that window refuses here, and the original release is restored.
-                stage = 'venv_after_stop'; note(stage)
+                # change in that window refuses here, and the original release is restored once it is measured
+                # intact (the environment and the static tree last, nearest the merge).
+                stage = 'venv_after_stop'; note(stage); checkpoint(stage)
                 footprint.require_exact(venv_before, snapshot_venv(prior.APP / '.venv'),
                                         'venv_unchanged_before_publication')
-                stage = 'foreign_services_after_stop'
+                stage = 'foreign_services_after_stop'; checkpoint(stage)
                 require(prior.foreign_services() == baseline['services'], 'foreign_services_preserved_before_publication')
-                stage = 'configuration_after_stop'
+                stage = 'configuration_after_stop'; checkpoint(stage)
                 require(host.configuration() == baseline['configuration'], 'configuration_preserved_before_publication')
-                stage = 'clinical_files_after_stop'; note(stage)
+                stage = 'clinical_files_after_stop'; note(stage); checkpoint(stage)
                 require(prior.private_storage.inventory(Path('/var/lib/quillmd/files')) == baseline['files'],
                         'clinical_files_preserved_before_publication')
-                stage = 'git_state_after_stop'; source_state()
-                stage = 'source_publication'; note(stage); flags['publication_started'] = True
-                prior.publish_source(plan, guard, prepared)
+                stage = 'git_state_after_stop'; checkpoint(stage); source_state()
+                stage = 'environment_after_stop'; checkpoint(stage)
+                require(prior.sha((prior.APP / '.env').read_bytes()) == prior.sha(original),
+                        'environment_preserved_before_publication')
+                stage = 'static_after_stop'; checkpoint(stage)
+                require(primitives.static_inventory(prior.APP / 'staticfiles') == static_before,
+                        'static_preserved_before_publication')
+                # The last checkpoint that can still recover: from here on a signal is recorded, never acted on.
+                stage = 'source_publication'; note(stage); checkpoint(stage); flags['publication_started'] = True
+                with merge_observed(prior, flags):
+                    prior.publish_source(plan, guard, prepared)
                 flags['publication_completed'] = True
-                stage = 'static_publication'
+                stage = 'static_publication'; checkpoint(stage)
                 if plan['static']:
                     static_after = primitives.install_static(prior.APP / 'staticfiles', static_stage, static_before,
                                                              staged)
                 else:
                     static_after = primitives.static_inventory(prior.APP / 'staticfiles')
                     require(static_after == static_before, 'static_noop')
-                stage = 'environment_publication'; note(stage)
+                stage = 'environment_publication'; note(stage); checkpoint(stage)
                 require((prior.APP / '.env').read_bytes() == original, 'environment_concurrency')
                 temporary = prior.APP / PENDING_ENVIRONMENT.name
                 prior.write_new(temporary, active); temporary.replace(prior.APP / '.env')
-                stage = 'database_before_resume'; before_resume = engine.snapshot(active)
-                stage = 'retain_database_before_resume'
+                stage = 'database_before_resume'; checkpoint(stage); before_resume = engine.snapshot(active)
+                stage = 'retain_database_before_resume'; checkpoint(stage)
                 prior.write_new(out / 'database-before-resume.json', before_resume)
-                stage = 'database_before_resume'; engine.unchanged(after_stop, before_resume)
-                stage = 'clinical_files_before_resume'
+                stage = 'database_before_resume'; checkpoint(stage); engine.unchanged(after_stop, before_resume)
+                stage = 'clinical_files_before_resume'; checkpoint(stage)
                 require(prior.private_storage.inventory(Path('/var/lib/quillmd/files')) == baseline['files'],
                         'all_clinical_files_preserved')
-                stage = 'configuration_before_resume'
+                stage = 'configuration_before_resume'; checkpoint(stage)
                 require(host.configuration() == baseline['configuration'], 'configuration_preserved')
-                stage = 'foreign_services_before_resume'
+                stage = 'foreign_services_before_resume'; checkpoint(stage)
                 require(prior.foreign_services() == baseline['services'], 'foreign_services_preserved')
-                stage = 'retain_preservation'
+                stage = 'retain_preservation'; checkpoint(stage)
                 evidence_sha256 = {name: prior.sha((out / name).read_bytes()) for name in
                                    ('baseline.json', 'database-after-stop.json', 'database-before-resume.json',
                                     'venv-before.json')}
@@ -1563,37 +1818,34 @@ def act(engine, plan, context, *, footprint, idle=foreign_idle, snapshot_venv=No
                     provider_calls=0, migrations_executed=0, venv_exact_before_publication=True,
                     configuration_and_files_exact_before_publication=True,
                     environment_delta=['QUILLMD_RELEASE_SHA'], static_sources=list(plan['static'])))
-                stage = 'resume_owned_services'; note(stage); flags['resume_started'] = True
+                stage = 'resume_owned_services'; note(stage); checkpoint(stage); flags['resume_started'] = True
                 for unit in (prior.UNITS[2], *prior.UNITS[:2]):
                     host.service('start', unit)
-                stage = 'normal_https_health'; health = prior.await_health(plan['candidate'])
-                stage = 'verify_owned_services_resumed'
+                stage = 'normal_https_health'; checkpoint(stage); health = prior.await_health(plan['candidate'])
+                stage = 'verify_owned_services_resumed'; checkpoint(stage)
                 require(all(host.state(unit)['ActiveState'] == 'active' for unit in prior.UNITS), 'owned_units_active')
             except BaseException as error:
                 try:
                     refusal = failure_path(error, engine=engine, host=host, out=out, plan=plan, stage=stage,
                                            flags=flags, original=original, guard=guard, prepared=prepared,
-                                           signals=signals)
+                                           signals=signals, measure=source_state, children=children)
                 except BaseException:
                     emit({'rebuild_release_failure_path_error': True, 'stage': stage})
                     refusal = Refusal('installation_failed_recovery_state_unknown')
+                # The locks and the exclusion are left after the drain or restore; a failure there is reported and
+                # never replaces the refusal (or drops its outcome from --result).
+                released = release_coordination(coordination)
+                if isinstance(getattr(refusal, 'outcome', None), dict):
+                    refusal.outcome['coordination_released'] = released['released']
                 raise refusal from None
             # INSTALLED AND HEALTHY. From here every observation is reported for judgement and nothing drains: a
-            # foreign restart, a failed configuration read or an interrupt is a post-condition the act cannot undo
-            # by stopping a healthy release. An interrupt skips the remaining measurements; the receipt is written.
-            postconditions, interrupted = {}, []
+            # foreign restart, a failed configuration read or a signal is a post-condition the act cannot undo by
+            # stopping a healthy release. Every measurement still runs; the receipt is written.
+            postconditions = {}
 
             def observe(name, measure):
-                if interrupted:
-                    postconditions[name] = False
-                    return {'not_measured': 'interrupted'}
                 try:
                     passed, detail = measure()
-                except Interrupted as signal_error:
-                    signals['raising'] = False      # one interrupt ends the measurements; the receipt follows
-                    interrupted.append(signal_error.signal_name)
-                    postconditions[name] = False
-                    return {'interrupted': signal_error.signal_name}
                 except BaseException as observation_error:
                     postconditions[name] = False
                     return {'label': reason(observation_error)}
@@ -1614,25 +1866,24 @@ def act(engine, plan, context, *, footprint, idle=foreign_idle, snapshot_venv=No
             def idle_measure():
                 value = idle(units)
                 return value['idle'], value
-            observations, after_idle, venv_change = {}, None, None
-            try:
-                stage = 'configuration_after_resume'
-                observations['configuration'] = observe('configuration_preserved_after_resume', lambda: (
-                    host.configuration() == baseline['configuration'], None))
-                stage = 'foreign_services_after_resume'
-                observations['foreign_services'] = observe('foreign_services_preserved_after_resume', lambda: (
-                    prior.foreign_services() == baseline['services'], None))
-                stage = 'foreign_idle_after_resume'; note(stage)
-                after_idle = observe('venv_sharing_units_idle_after_resume', idle_measure)
-                stage = 'venv_after_resume'; note(stage)
-                venv_change = observe('venv_exact_after_resume', venv_measure)
-            except Interrupted as signal_error:      # between two measurements
-                signals['raising'] = False
-                interrupted.append(signal_error.signal_name)
-            signals['raising'] = False
+            observations = {}
+            stage = 'configuration_after_resume'; checkpoint(stage)
+            observations['configuration'] = observe('configuration_preserved_after_resume', lambda: (
+                host.configuration() == baseline['configuration'], None))
+            stage = 'foreign_services_after_resume'; checkpoint(stage)
+            observations['foreign_services'] = observe('foreign_services_preserved_after_resume', lambda: (
+                prior.foreign_services() == baseline['services'], None))
+            stage = 'foreign_idle_after_resume'; note(stage); checkpoint(stage)
+            after_idle = observe('venv_sharing_units_idle_after_resume', idle_measure)
+            stage = 'venv_after_resume'; note(stage); checkpoint(stage)
+            venv_change = observe('venv_exact_after_resume', venv_measure)
             for name in POSTCONDITIONS:
                 postconditions.setdefault(name, False)
-            passed = all(postconditions.values()) and not interrupted
+            stage = 'retain_completion'; note(stage); checkpoint(stage)
+            released = release_coordination(coordination)
+            # Every signal in the ledger arrived after publication: one taken before it would have recovered.
+            received = signal_names(signals)
+            passed = all(postconditions.values()) and not received and released['released']
             result = dict(format=FORMAT, installed_revision=plan['candidate'], base=plan['base'], complete=True,
                           health=health, migrations_executed=0, provider_calls=0, clinician_decisions_created=0,
                           dependency_installs=0, evidence_sha256=evidence_sha256, plan_sha256=plan['plan_sha256'],
@@ -1643,14 +1894,16 @@ def act(engine, plan, context, *, footprint, idle=foreign_idle, snapshot_venv=No
                           postconditions=postconditions, all_postconditions_passed=passed,
                           observations={key: value for key, value in observations.items() if value is not None},
                           foreign_idle_after_resume=after_idle, venv_change=venv_change,
-                          interrupted=interrupted[0] if interrupted else None,
+                          interrupted=received[0] if received else None, signals_received=received,
+                          signal_records=list(signals['received']), coordination_released=released,
                           strict_preservation_ends_before_resume=True)
-            stage = 'retain_completion'; note(stage)
             result['receipt_retained'] = retain(prior, out / 'installation-complete.json', result)
             if not result['receipt_retained']:
                 emit({'rebuild_release_installed': plan['candidate'], 'all_postconditions_passed': passed,
                       'receipt_retained': False})
             return result, passed and result['receipt_retained']
+        finally:
+            release_coordination(coordination)
 
 
 def build_plan(args, context):
@@ -1741,12 +1994,17 @@ def main(argv=None):
     args = arguments(argv)
     os.umask(0o077)
     sys.dont_write_bytecode = True
-    # Read-only git everywhere: no index refresh, no optional lock in the shared tree or the worktree.
+    # No bytecode is read from the source tree for the rest of the process: every module compiles its source.
+    sys.pycache_prefix = BYTECODE_PREFIX
+    # Read-only git everywhere: no index refresh, no optional lock in the shared tree or the worktree. And no git
+    # process, this module's or a child's, reads a replace object.
     os.environ['GIT_OPTIONAL_LOCKS'] = '0'
+    os.environ[NO_REPLACE_OBJECTS[0]] = NO_REPLACE_OBJECTS[1]
     if args.execute:
         require(Path.cwd().resolve() == SOURCE, 'run_from_the_candidate_worktree_under_the_runner')
         runner_declaration(args)
         evidence_directory(args.evidence_directory)
+    result_destination(args.result, args.evidence_directory if args.execute else None)
     report, context = preflight(args, executing=args.execute)
     if not args.execute:
         write_result(args.result, report)
@@ -1764,24 +2022,47 @@ def main(argv=None):
     plan = build_plan(args, context)
     engine = context['engine']
     os.chdir(ROOT)
+    # From here until the process exits SIGTERM, SIGINT and SIGHUP stay blocked: only SIGKILL can still cut the act
+    # (the runner's ceiling SIGTERMs, then SIGKILLs 15 s later), and every other signal is recorded, never delivered.
+    signals = block_signals()
     with bound(engine, args.base, plan['static']):
         try:
             result, passed = act(engine, plan, context, footprint=ops_module('venv_footprint'))
         except BaseException as error:
+            late = take_pending(signals, 'after_the_act')
             # A second record of the outcome, in another directory; a failure to write it never masks the act's.
             try:
                 write_result(args.result, {'format': FORMAT, 'complete': False, 'label': reason(error),
                                            'recovery': getattr(error, 'outcome', None),
-                                           'evidence_directory': str(args.evidence_directory)})
+                                           'evidence_directory': str(args.evidence_directory),
+                                           'signals_received': signal_names(signals)})
             except BaseException as write_error:
                 emit({'result_write_failed': reason(write_error), 'label': reason(error)})
+            if late:
+                emit({'signals_after_the_act': late})
             raise
-    receipt = Path(plan['evidence_directory']) / 'installation-complete.json'
-    write_result(args.result, {'format': FORMAT, 'complete': True, 'all_postconditions_passed': passed,
-                               'evidence_directory': str(args.evidence_directory),
-                               'receipt_sha256': sha(receipt.read_bytes()) if receipt.is_file() else None})
-    print(json.dumps(result, indent=1, sort_keys=True, default=str))
-    return 0 if passed else 2
+    # INSTALLED. Nothing from here may turn the install into a failure: the result file and stdout are second
+    # records (the receipt is the first), so a failure to write either is reported and the exit is 2, never 1.
+    late = take_pending(signals, 'after_the_act')
+    written = True
+    try:
+        receipt = Path(plan['evidence_directory']) / 'installation-complete.json'
+        write_result(args.result, {'format': FORMAT, 'complete': True, 'all_postconditions_passed': passed,
+                                   'evidence_directory': str(args.evidence_directory),
+                                   'receipt_sha256': sha(receipt.read_bytes()) if receipt.is_file() else None,
+                                   'signals_received': signal_names(signals), 'signals_after_the_act': late})
+    except BaseException as write_error:
+        written = False
+        emit({'result_write_failed': reason(write_error), 'rebuild_release_installed': plan['candidate'],
+              'all_postconditions_passed': passed})
+    try:
+        print(json.dumps(result, indent=1, sort_keys=True, default=str))
+    except (OSError, ValueError):
+        pass
+    late += take_pending(signals, 'after_the_result')
+    if late:
+        emit({'signals_after_the_act': late})
+    return 0 if passed and written and not late else 2
 
 
 if __name__ == '__main__':
