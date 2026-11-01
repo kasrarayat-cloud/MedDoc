@@ -700,6 +700,11 @@
        "service",
        "gi.egd",
        "extent"
+      ],
+      [
+       "service",
+       "gi.office_em",
+       "em_basis"
       ]
      ],
      "request": "",
@@ -716,11 +721,8 @@
       "gi.office_em": [
        "performed",
        [
-        "em_basis=time+mdm",
-        "mdm_level=moderate",
         "patient_status=new",
-        "setting=office",
-        "time_minutes=52"
+        "setting=office"
        ]
       ]
      },
@@ -772,6 +774,11 @@
        "service",
        "gi.egd",
        "extent"
+      ],
+      [
+       "service",
+       "gi.office_em",
+       "em_basis"
       ]
      ],
      "request": "",
@@ -788,11 +795,8 @@
       "gi.office_em": [
        "performed",
        [
-        "em_basis=time+mdm",
-        "mdm_level=moderate",
         "patient_status=new",
-        "setting=office",
-        "time_minutes=52"
+        "setting=office"
        ]
       ]
      },
@@ -844,6 +848,11 @@
        "service",
        "gi.egd",
        "extent"
+      ],
+      [
+       "service",
+       "gi.office_em",
+       "em_basis"
       ]
      ],
      "request": "",
@@ -860,11 +869,8 @@
       "gi.office_em": [
        "performed",
        [
-        "em_basis=time+mdm",
-        "mdm_level=moderate",
         "patient_status=new",
-        "setting=office",
-        "time_minutes=52"
+        "setting=office"
        ]
       ]
      },
@@ -916,6 +922,11 @@
        "service",
        "gi.egd",
        "extent"
+      ],
+      [
+       "service",
+       "gi.office_em",
+       "em_basis"
       ]
      ],
      "request": "",
@@ -932,11 +943,8 @@
       "gi.office_em": [
        "performed",
        [
-        "em_basis=time+mdm",
-        "mdm_level=moderate",
         "patient_status=new",
-        "setting=office",
-        "time_minutes=52"
+        "setting=office"
        ]
       ]
      },
@@ -988,6 +996,11 @@
        "service",
        "gi.egd",
        "extent"
+      ],
+      [
+       "service",
+       "gi.office_em",
+       "em_basis"
       ]
      ],
      "request": "",
@@ -1004,11 +1017,8 @@
       "gi.office_em": [
        "performed",
        [
-        "em_basis=time+mdm",
-        "mdm_level=moderate",
         "patient_status=new",
-        "setting=office",
-        "time_minutes=52"
+        "setting=office"
        ]
       ]
      },
@@ -1060,6 +1070,11 @@
        "service",
        "gi.egd",
        "extent"
+      ],
+      [
+       "service",
+       "gi.office_em",
+       "em_basis"
       ]
      ],
      "request": "",
@@ -1076,11 +1091,8 @@
       "gi.office_em": [
        "performed",
        [
-        "em_basis=time+mdm",
-        "mdm_level=moderate",
         "patient_status=new",
-        "setting=office",
-        "time_minutes=52"
+        "setting=office"
        ]
       ]
      },
@@ -1132,7 +1144,7 @@
        "99204",
        "selected",
        "needs_clarification",
-       "7cdf0e94bfde"
+       "b11de1ee005a"
       ],
       [
        "G8752",
@@ -1173,11 +1185,8 @@
       "gi.office_em": [
        "performed",
        [
-        "em_basis=time+mdm",
-        "mdm_level=moderate",
         "patient_status=new",
-        "setting=office",
-        "time_minutes=52"
+        "setting=office"
        ]
       ]
      },
@@ -1229,6 +1238,11 @@
        "service",
        "gi.egd",
        "extent"
+      ],
+      [
+       "service",
+       "gi.office_em",
+       "em_basis"
       ]
      ],
      "request": "",
@@ -1245,11 +1259,8 @@
       "gi.office_em": [
        "performed",
        [
-        "em_basis=time+mdm",
-        "mdm_level=moderate",
         "patient_status=new",
-        "setting=office",
-        "time_minutes=52"
+        "setting=office"
        ]
       ]
      },
@@ -1259,7 +1270,7 @@
     "walk": {
      "answer": "2026-10-26",
      "completeness": [
-      "complete_pending_review",
+      "incomplete",
       0
      ],
      "held": false,
@@ -1300,8 +1311,8 @@
       [
        "99204",
        "selected",
-       "ready",
-       "8c2e0ee86cf6"
+       "needs_clarification",
+       "ad8a74d1f3bf"
       ],
       [
        "G8752",
@@ -1331,11 +1342,8 @@
       "gi.office_em": [
        "performed",
        [
-        "em_basis=time+mdm",
-        "mdm_level=moderate",
         "patient_status=new",
-        "setting=office",
-        "time_minutes=52"
+        "setting=office"
        ]
       ]
      },
@@ -1753,151 +1761,136 @@
     "missing",
     null
    ],
-   "failed_hard": [],
+   "failed_hard": [
+    "date.sends-only-the-truth[doc:2026-10-09]",
+    "date.sends-only-the-truth[far]",
+    "date.sends-only-the-truth[minus1]",
+    "date.sends-only-the-truth[plus1]"
+   ],
    "states": {
     "doc:2026-10-08": {
      "answer": "2026-10-08",
      "completeness": [
       "incomplete",
-      1
+      0
      ],
-     "held": true,
+     "held": false,
      "inventory": [
       [
        "gi.egd",
        "performed",
        "complete",
-       "second part of duodenum"
+       ""
       ]
      ],
-     "offers": [
+     "offers": [],
+     "proposals": [
       [
-       "gi.egd",
-       "no_proposal",
-       true
+       "43244",
+       "selected",
+       "needs_clarification",
+       "996fe5cfe0ab"
       ]
      ],
-     "proposals": [],
-     "questions": [
-      [
-       "encounter",
-       "",
-       "service_date"
-      ]
-     ],
-     "request": "",
-     "response": "held",
+     "questions": [],
+     "request": "2b828dd3ad5a9e65",
+     "response": "COUNTERFACTUAL",
      "routing": {},
-     "sends": "HELD",
-     "taken": false
+     "sends": "2026-10-08",
+     "taken": true
     },
     "doc:2026-10-09": {
      "answer": "2026-10-09",
      "completeness": [
       "incomplete",
-      1
+      0
      ],
-     "held": true,
+     "held": false,
      "inventory": [
       [
        "gi.egd",
        "performed",
        "complete",
-       "second part of duodenum"
+       ""
       ]
      ],
-     "offers": [
+     "offers": [],
+     "proposals": [
       [
-       "gi.egd",
-       "no_proposal",
-       true
+       "43244",
+       "selected",
+       "needs_clarification",
+       "f3f8c4de0c94"
       ]
      ],
-     "proposals": [],
-     "questions": [
-      [
-       "encounter",
-       "",
-       "service_date"
-      ]
-     ],
-     "request": "",
-     "response": "held",
+     "questions": [],
+     "request": "e36f1d3c3d4c3b80",
+     "response": "COUNTERFACTUAL",
      "routing": {},
-     "sends": "HELD",
-     "taken": false
+     "sends": "2026-10-09",
+     "taken": true
     },
     "far": {
      "answer": "1998-01-01",
      "completeness": [
       "incomplete",
-      1
+      0
      ],
-     "held": true,
+     "held": false,
      "inventory": [
       [
        "gi.egd",
        "performed",
        "complete",
-       "second part of duodenum"
+       ""
       ]
      ],
-     "offers": [
+     "offers": [],
+     "proposals": [
       [
-       "gi.egd",
-       "no_proposal",
-       true
+       "43244",
+       "selected",
+       "needs_clarification",
+       "4ef17d66c399"
       ]
      ],
-     "proposals": [],
-     "questions": [
-      [
-       "encounter",
-       "",
-       "service_date"
-      ]
-     ],
-     "request": "",
-     "response": "held",
+     "questions": [],
+     "request": "b95e363e8cd1c3ab",
+     "response": "COUNTERFACTUAL",
      "routing": {},
-     "sends": "HELD",
-     "taken": false
+     "sends": "1998-01-01",
+     "taken": true
     },
     "minus1": {
      "answer": "2026-10-05",
      "completeness": [
       "incomplete",
-      1
+      0
      ],
-     "held": true,
+     "held": false,
      "inventory": [
       [
        "gi.egd",
        "performed",
        "complete",
-       "second part of duodenum"
+       ""
       ]
      ],
-     "offers": [
+     "offers": [],
+     "proposals": [
       [
-       "gi.egd",
-       "no_proposal",
-       true
+       "43244",
+       "selected",
+       "needs_clarification",
+       "b5f422a046e3"
       ]
      ],
-     "proposals": [],
-     "questions": [
-      [
-       "encounter",
-       "",
-       "service_date"
-      ]
-     ],
-     "request": "",
-     "response": "held",
+     "questions": [],
+     "request": "263a866bf34dfde4",
+     "response": "COUNTERFACTUAL",
      "routing": {},
-     "sends": "HELD",
-     "taken": false
+     "sends": "2026-10-05",
+     "taken": true
     },
     "none": {
      "answer": null,
@@ -1911,7 +1904,7 @@
        "gi.egd",
        "performed",
        "complete",
-       "second part of duodenum"
+       ""
       ]
      ],
      "offers": [],
@@ -1920,7 +1913,7 @@
        "43244",
        "selected",
        "needs_clarification",
-       "c452f0e96b4c"
+       "a3d4305621d9"
       ]
      ],
      "questions": [
@@ -1940,42 +1933,6 @@
      "answer": "2026-10-07",
      "completeness": [
       "incomplete",
-      1
-     ],
-     "held": true,
-     "inventory": [
-      [
-       "gi.egd",
-       "performed",
-       "complete",
-       "second part of duodenum"
-      ]
-     ],
-     "offers": [
-      [
-       "gi.egd",
-       "no_proposal",
-       true
-      ]
-     ],
-     "proposals": [],
-     "questions": [
-      [
-       "encounter",
-       "",
-       "service_date"
-      ]
-     ],
-     "request": "",
-     "response": "held",
-     "routing": {},
-     "sends": "HELD",
-     "taken": false
-    },
-    "walk": {
-     "answer": "2026-10-06",
-     "completeness": [
-      "complete_pending_review",
       0
      ],
      "held": false,
@@ -1984,7 +1941,7 @@
        "gi.egd",
        "performed",
        "complete",
-       "second part of duodenum"
+       ""
       ]
      ],
      "offers": [],
@@ -1992,8 +1949,39 @@
       [
        "43244",
        "selected",
-       "ready",
-       "b84655cd869a"
+       "needs_clarification",
+       "56ef1c44682c"
+      ]
+     ],
+     "questions": [],
+     "request": "aa47a7b913650de3",
+     "response": "COUNTERFACTUAL",
+     "routing": {},
+     "sends": "2026-10-07",
+     "taken": true
+    },
+    "walk": {
+     "answer": "2026-10-06",
+     "completeness": [
+      "incomplete",
+      0
+     ],
+     "held": false,
+     "inventory": [
+      [
+       "gi.egd",
+       "performed",
+       "complete",
+       ""
+      ]
+     ],
+     "offers": [],
+     "proposals": [
+      [
+       "43244",
+       "selected",
+       "needs_clarification",
+       "5002e2b1dbad"
       ]
      ],
      "questions": [],
@@ -2921,7 +2909,7 @@
        "gi.colonoscopy",
        "performed",
        "complete",
-       "terminal ileum"
+       ""
       ]
      ],
      "offers": [
@@ -2962,7 +2950,7 @@
        "gi.colonoscopy",
        "performed",
        "complete",
-       "terminal ileum"
+       ""
       ]
      ],
      "offers": [
@@ -3003,7 +2991,7 @@
        "gi.colonoscopy",
        "performed",
        "complete",
-       "terminal ileum"
+       ""
       ]
      ],
      "offers": [
@@ -3044,7 +3032,7 @@
        "gi.colonoscopy",
        "performed",
        "complete",
-       "terminal ileum"
+       ""
       ]
      ],
      "offers": [],
@@ -3053,7 +3041,7 @@
        "45385",
        "selected",
        "needs_clarification",
-       "7219dab415c1"
+       "8e19dbe15376"
       ]
      ],
      "questions": [
@@ -3086,7 +3074,7 @@
        "gi.colonoscopy",
        "performed",
        "complete",
-       "terminal ileum"
+       ""
       ]
      ],
      "offers": [
@@ -3127,7 +3115,7 @@
        "gi.colonoscopy",
        "performed",
        "complete",
-       "terminal ileum"
+       ""
       ]
      ],
      "offers": [
@@ -3159,7 +3147,7 @@
     "walk": {
      "answer": "2026-10-27",
      "completeness": [
-      "complete_pending_review",
+      "incomplete",
       0
      ],
      "held": false,
@@ -3168,7 +3156,7 @@
        "gi.colonoscopy",
        "performed",
        "complete",
-       "terminal ileum"
+       ""
       ]
      ],
      "offers": [],
@@ -3176,8 +3164,8 @@
       [
        "45385",
        "selected",
-       "ready",
-       "149a4a21b83e"
+       "needs_clarification",
+       "a9f964e0ebc2"
       ]
      ],
      "questions": [],
@@ -3196,6 +3184,6 @@
   }
  },
  "meta": {
-  "commit": "9ef44bb51c9e84070c0351d4d54f905dd0c1aa33"
+  "commit": "18ccea7a5562835329ba349ea7baa84a8c3b6725"
  }
 }
