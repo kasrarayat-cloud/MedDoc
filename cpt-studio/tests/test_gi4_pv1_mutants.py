@@ -9,7 +9,8 @@ from django.test import SimpleTestCase
 
 from ops.gi4 import boot, mutants
 
-UNITS = ('unit:tests.test_gi4_pv1', 'unit:tests.test_gi4_pv1_cycle1')  # Wave 1's guards; repair cycle 1's
+UNITS = ('unit:tests.test_gi4_pv1', 'unit:tests.test_gi4_pv1_cycle1',  # Wave 1's guards; repair cycle 1's
+         'unit:tests.test_gi4_pv1_cycle2')  # repair cycle 2's (pv1-line-quote-sentence)
 MUTANTS = mutants.PV1_MUTANTS
 BY_NAME = {m.name: m for m in MUTANTS}
 
@@ -25,7 +26,17 @@ class PV1MutantRegistryTests(SimpleTestCase):
     def test_names_detectors_and_guards(self):
         names = [m.name for m in MUTANTS]
         self.assertEqual(len(set(names)), len(names))
-        self.assertEqual(len(names), 54)  # Wave 1's 17, less the 2 repair cycle 1 removed, plus its 39
+        # Wave 1's 17, less the 2 repair cycle 1 removed, plus its 39 (54); repair cycle 2 (pv1.json
+        # amendment_20261101_cycle2) retires the 23 that guarded C1, C2 and the visit evidence, with their code, and adds
+        # pv1-line-quote-sentence (32)
+        self.assertEqual(len(names), 32)
+        for retired in ('pv1-c1-after-only', 'pv1-c1-plan-work', 'pv1-c1-planned-time', 'pv1-c1-dates-count',
+                        'pv1-c1-time-only', 'pv1-c2-shared', 'pv1-c2-drop', 'pv1-c2-office-visit', 'pv1-c2-kept-c4',
+                        'pv1-c2-kept-own', 'pv1-c2-opens-line', 'pv1-c2-history-section', 'pv1-c2-governing',
+                        'pv1-c2-section-heading', 'pv1-c2-line-rest', 'pv1-visit-exam', 'pv1-visit-setting',
+                        'pv1-visit-not-a-visit', 'pv1-visit-procedure-day', 'pv1-visit-around-title',
+                        'pv1-visit-reported', 'pv1-c1-office-visit', 'pv1-c1-nouns'):
+            self.assertNotIn(retired, names)
         self.assertTrue(all(n.startswith('pv1-') for n in names))  # never a stage A name
         registered = [m.name for m in mutants.MUTANTS]
         for m in MUTANTS:

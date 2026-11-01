@@ -13,6 +13,11 @@ The rules of the cycle:
   sentence whose subject is today's visit or the patient's attendance - never an incidental phone phrase.
 - A hold never says that a basis the note states is undocumented: where C4 holds the document, the statements it held
   are its documented basis, and its cue quotes the line it rests on.
+
+Repair cycle 2 (pv1.json amendment_20261101_cycle2) DROPPED C1 and C2 (the second refutation: PV1C2-01, -02, -03):
+cues.MDM_LEVEL is installed's again, so no label is read anywhere, and no cue after an activity word is skipped. Every
+test here that pinned a C1 or C2 release, or called the removed visit evidence or statement guards, now pins installed's
+reading of its own input (measured on 80df1831d168) and says so; the C4, C4-time, EMR-9 and CTS-2 tests are unchanged.
 """
 import datetime as dt
 import time
@@ -135,41 +140,36 @@ class EMR1Tests(CycleCase):
             quote = text[text.index(label):text.index('\n', text.index(label))]
             self.assertEqual(outcome(text, code, quote), installed, text)
 
-    def test_the_telephone_inputs_are_held_with_their_level_as_basis(self):
-        # C4 holds these notes whole: the label, the visit's own statement, is held with every other E/M reading and
-        # states the basis (CTS-2) - never released, and no question asks for a basis the note states
-        for text, code, label, line in (
-                (F1B, '99214', 'Complexity of decision making: moderate',
-                 'Spoke with the patient on phone about her biopsy results.'),
-                (F1C, '99214', 'Complexity of decision making: moderate',
-                 'Reviewed the biopsy results with the patient by telephone. H. pylori gastritis; quadruple therapy '
-                 'sent.'),
-                (F1D, '99214', 'Level of decision making: Moderate', 'Telephone')):
-            finding = self.assert_c4_holds(text)
-            cue = next(m.cues[0] for m in finding.mentions if m.span.text == label)
-            self.assertTrue(cue.startswith(f"{detect.EM_NOT_IN_PERSON}: '") and line[20:60] in cue, cue)
-            self.assertEqual(facts(finding).get('mdm_level'), 'moderate', text)
+    def test_the_telephone_inputs_read_as_installed(self):
+        # repair cycle 2: was test_the_telephone_inputs_are_held_with_their_level_as_basis (the label, kept under C4's
+        # hold, stated the basis). With C2 dropped the label is no mention; these notes carry no other E/M statement, so
+        # routing reads no E/M documentation and each code reads exactly as installed (measured on 80df1831d168)
+        installed = ('selected', 'needs_clarification', ('em_basis', 'performed_status'))
+        for text, code, label in ((F1B, '99214', 'Complexity of decision making: moderate'),
+                                  (F1C, '99214', 'Complexity of decision making: moderate'),
+                                  (F1D, '99214', 'Level of decision making: Moderate')):
+            self.assertIsNone(em(text), text)
             quote = text[text.index(label):text.index('\n', text.index(label))]
-            self.assertEqual(outcome(text, code, quote), ('selected', 'needs_clarification', ('performed_status',)),
-                             text)
+            self.assertEqual(outcome(text, code, quote), installed, text)
 
-    def test_a_not_a_visit_word_refuses_it_beside_an_exam(self):  # kills pv1-visit-not-a-visit
+    def test_a_label_beside_a_not_a_visit_word_is_not_read(self):
+        # repair cycle 2: was test_a_not_a_visit_word_refuses_it_beside_an_exam (it also read the removed visit
+        # evidence, _pv1_office_visit; pv1-visit-not-a-visit retired). The label is not read, as installed
         text = office(title='GI Clinic Note', cc='Heartburn. Patient portal message reviewed.',
                       tail='Complexity of decision making: low.\n')
-        self.assertEqual(detect._pv1_office_visit(detect._analysis(text, DAY)[0]), "'portal'")
         self.assert_label_not_read(text, 'Complexity of decision making: low')
 
-    def test_the_label_is_read_only_with_the_office_visits_evidence(self):  # kills pv1-c2-office-visit
-        # the label opens its line under the plan heading and no C4 statement holds the note: only the visit evidence
-        # (here: no exam) refuses it
-        text = office(exam='', tail='Complexity of decision making: low.\n')
-        an = detect._analysis(text, DAY)[0]
-        label = next(m for m in detect._em_mentions(text, an.lay) if detect._pv1_decision_label(an, m))
-        self.assertIsNone(detect._pv1_statement_refused(an, label))
-        self.assertIsNotNone(detect._pv1_label_refused(an, label))
-        self.assert_label_not_read(text, 'Complexity of decision making: low')
+    def test_the_label_is_not_read_with_or_without_an_exam(self):
+        # repair cycle 2: was test_the_label_is_read_only_with_the_office_visits_evidence (it called the removed
+        # _pv1_decision_label, _pv1_statement_refused and _pv1_label_refused; pv1-c2-office-visit retired). Installed
+        # reads no label whatever the visit evidence
+        for text in (office(exam='', tail='Complexity of decision making: low.\n'),
+                     office(tail='Complexity of decision making: low.\n')):
+            self.assert_label_not_read(text, 'Complexity of decision making: low')
+            self.assertEqual(outcome(text, '99213', 'Complexity of decision making: low.'),
+                             ('selected', 'needs_clarification', ('em_basis',)), text)
 
-    def test_a_refused_label_is_no_mention_at_all(self):  # kills pv1-c2-drop
+    def test_a_refused_label_is_no_mention_at_all(self):  # (pv1-c2-drop retired in repair cycle 2: no label is read)
         # a held label would add a performed_status question installed never asks, saying no documentation
         # establishes a visit that routing reads performed (the CTS-2 class)
         text = office(exam='', tail='Complexity of decision making: moderate.\n')
@@ -192,17 +192,18 @@ class EMR2Tests(CycleCase):
         (B + 'Office visit note\n' + HEAD + 'Chief complaint\nHeartburn.\nPatient did not keep the appointment.\n'
          'Complexity of decision making: low.\n', 'Patient did not keep the appointment.'))
 
-    def test_held_whole_and_the_label_never_released(self):
-        # under an Assessment and plan heading the label is the visit's own statement, held with the rest (its level is
-        # the stated basis, CTS-2); right under a chief complaint it is no such statement and is not read (installed)
-        for (text, line), kept in zip(self.INPUTS, (True, True, False, False)):
+    def test_held_whole_and_the_label_never_read(self):
+        # repair cycle 2: was test_held_whole_and_the_label_never_released, where the first two inputs kept the label
+        # under C4's hold as their stated basis (C2). C4 still holds each note whole (kept, unchanged), and no label is
+        # read, so each code also asks the basis, as installed asks it (installed: em_basis alone, with no C4 hold)
+        for text, line in self.INPUTS:
             finding = self.assert_c4_holds(text, line)
-            self.assertEqual('Complexity of decision making: low' in spans(finding), kept, text)
+            self.assertNotIn('Complexity of decision making: low', spans(finding), text)
+            self.assertNotIn('mdm_level', facts(finding), text)
             self.assertEqual(outcome(text, '99213', 'Complexity of decision making: low.'),
-                             ('selected', 'needs_clarification',
-                              ('performed_status',) if kept else ('em_basis', 'performed_status')), text)
+                             ('selected', 'needs_clarification', ('em_basis', 'performed_status')), text)
 
-    def test_a_label_that_is_another_notes_is_dropped_even_there(self):  # kills pv1-c2-kept-own
+    def test_a_label_that_is_another_notes_is_dropped_even_there(self):  # (pv1-c2-kept-own retired in repair cycle 2)
         text = B + ('Office visit note\n' + HEAD + 'The patient did not come in today; appointment to be rebooked.\n'
                     'Previous note:\nComplexity of decision making: high.\n')
         self.assert_c4_holds(text)
@@ -231,23 +232,25 @@ class EMR3Tests(CycleCase):
                       tail='Total time: 10 minutes, spent on chart preparation for the scheduled visit.\n')
         self.assert_c4_holds(text, 'Patient did not show.')
 
-    def test_only_a_noun_of_the_visits_planning_work_is_skipped(self):  # kills pv1-c1-nouns
-        for words in ('the orders', 'the referral to surgery', 'her recommendations', 'next steps'):
-            text = office(tail=f'Total time: 40 minutes, covering her history, {words} and documentation.\n')
-            self.assertEqual(facts(em(text)).get('time_minutes'), '40', words)
-        for words in ('the scheduled visit', 'the upcoming visit', 'awaiting results', 'what we will do about the reflux',
-                      'the plan', 'the booked follow-up'):  # each 'planned' on installed (measured), as here
+    def test_no_plan_word_is_skipped(self):
+        # repair cycle 2: was test_only_a_noun_of_the_visits_planning_work_is_skipped, whose first loop pinned C1's
+        # release of the four nouns (40 minutes read; pv1-c1-nouns retired). Installed reads every one as 'planned'
+        for words in ('the orders', 'the referral to surgery', 'her recommendations', 'next steps', 'the scheduled visit',
+                      'the upcoming visit', 'awaiting results', 'what we will do about the reflux', 'the plan',
+                      'the booked follow-up'):
             text = office(tail=f'Total time: 40 minutes, covering her history, {words} and documentation.\n')
             self.assertNotIn('time_minutes', facts(em(text)), words)
 
-    def test_c1_needs_the_office_visits_evidence(self):  # kills pv1-c1-office-visit
+    def test_the_orders_retime_the_statement_with_or_without_an_exam(self):
+        # repair cycle 2: was test_c1_needs_the_office_visits_evidence, whose first case pinned C1's release with an
+        # exam (45 minutes read; pv1-c1-office-visit retired). Installed's 'planned: orders' stands either way
         line = 'Total time: 45 minutes, covering her history, the orders, and documentation.'
-        self.assertEqual(facts(em(office(tail=line + '\n'))).get('time_minutes'), '45')  # with its exam
-        text = office(exam='', tail=line + '\n')  # no exam: installed's 'planned: orders' stands
-        self.assertNotIn('time_minutes', facts(em(text)))
-        self.assertEqual(outcome(text, '99214', line), ('selected', 'needs_clarification', ('em_basis',)))
+        for text in (office(tail=line + '\n'), office(exam='', tail=line + '\n')):
+            self.assertNotIn('time_minutes', facts(em(text)))
+            self.assertEqual(outcome(text, '99214', line), ('selected', 'needs_clarification', ('em_basis',)))
 
-    def test_c1_needs_the_statement_to_open_its_line(self):
+    def test_a_statement_not_opening_its_line_reads_as_installed(self):
+        # repair cycle 2: renamed from test_c1_needs_the_statement_to_open_its_line (C1 is gone); unchanged
         text = office(tail='Seen today. Total time: 45 minutes, covering her history, the orders, and documentation.\n')
         self.assertNotIn('time_minutes', facts(em(text)))
 
@@ -275,14 +278,16 @@ class EMR4Tests(CycleCase):
             self.assertFalse([s for s in spans(finding) if label in s], text)
             self.assertNotIn('mdm_level', facts(finding), text)
 
-    def test_the_label_must_open_its_line(self):  # kills pv1-c2-opens-line
+    def test_no_label_is_read_whether_or_not_it_opens_its_line(self):
+        # repair cycle 2: was test_the_label_must_open_its_line, whose loop pinned C2's release of a label opening its
+        # line ('low', 'moderate'; pv1-c2-opens-line retired). Installed reads none
         self.assert_label_not_read(office(tail='Seen today. Complexity of decision making: low.\n'),
                                    'Complexity of decision making: low')
-        for line, level in (('- Complexity of decision making: low.', 'low'),
-                            ('2. Level of decision making: moderate.', 'moderate')):
-            self.assertEqual(facts(em(office(tail=line + '\n'))).get('mdm_level'), level, line)
+        for line, label in (('- Complexity of decision making: low.', 'Complexity of decision making: low'),
+                            ('2. Level of decision making: moderate.', 'Level of decision making: moderate')):
+            self.assert_label_not_read(office(tail=line + '\n'), label)
 
-    def test_a_label_in_a_history_section_is_not_read(self):  # kills pv1-c2-history-section
+    def test_a_label_in_a_history_section_is_not_read(self):  # (pv1-c2-history-section retired in repair cycle 2)
         text = B + 'Office visit note\n' + HEAD + 'HPI\nComplexity of decision making: high.\n' + EXAM + \
             'Assessment and plan\nGERD.\n'
         an = detect._analysis(text, DAY)[0]
@@ -294,7 +299,7 @@ class EMR4Tests(CycleCase):
             text = office(tail=f'{heading}\nComplexity of decision making: high.\n')
             self.assert_label_not_read(text, 'Complexity of decision making: high')
 
-    def test_a_governing_line_above_its_own_section_refuses_it(self):  # kills pv1-c2-governing
+    def test_a_governing_line_above_its_own_section_refuses_it(self):  # (pv1-c2-governing retired in repair cycle 2)
         # where each line is a section of its own (h4-01's layout), only the six-line governing line reads the heading
         # above the statements: h4-01 with "Prior visit 09/14/2026" over them reads as installed (neither C1 nor C2)
         from ops.gi4 import regression
@@ -304,23 +309,23 @@ class EMR4Tests(CycleCase):
         self.assertNotIn('mdm_level', got)  # C2: the label is not read
         self.assertNotIn('time_minutes', got)  # C1: 'the orders' re-times the statement, as installed
 
-    def test_a_heading_of_another_occurrence_further_up_its_section_refuses_it(self):  # kills pv1-c2-section-heading
-        # a prior note pasted below today's assessment, its heading more than six lines above its label
+    def test_a_heading_of_another_occurrence_further_up_its_section_refuses_it(self):
+        # a prior note pasted below today's assessment, its heading more than six lines above its label. Repair cycle 2:
+        # today's label read 'low' here (C2's release; pv1-c2-section-heading retired); installed reads neither label
         pasted = ('\nPrior office note from September\nShe was seen for reflux.\nOmeprazole was started.\nLine three.\n'
                   'Line four.\nLine five.\nLine six.\nLine seven.\nComplexity of decision making: high.\n')
         text = office(tail='Complexity of decision making: low.\n' + pasted)
         finding = em(text)
-        self.assertEqual(facts(finding).get('mdm_level'), 'low')  # today's label is read, the pasted one is not
-        self.assertNotIn('Complexity of decision making: high', spans(finding))
+        self.assertNotIn('mdm_level', facts(finding))
+        self.assertFalse([s for s in spans(finding) if s.startswith('Complexity of decision making')])
         self.assert_label_not_read(office(tail=pasted), 'Complexity of decision making: high')
 
-    def test_the_rest_of_its_line_naming_another_visit_refuses_it(self):  # kills pv1-c2-line-rest
-        for rest in (', per prior note.', ' (at last visit).', ', from the prior visit.', ' as of 09/14/2026.'):
+    def test_the_rest_of_its_line_naming_another_visit_refuses_it(self):  # (pv1-c2-line-rest retired in repair cycle 2)
+        for rest in (', per prior note.', ' (at last visit).', ', from the prior visit.', ' as of 09/14/2026.',
+                     # repair cycle 2: this comparison read today's level 'high' (C2's release); installed reads none
+                     ', as at her prior visit.'):
             text = office(tail=f'Complexity of decision making: high{rest}\n')
             self.assert_label_not_read(text, 'Complexity of decision making: high')
-        # a comparison states today's level
-        self.assertEqual(facts(em(office(tail='Complexity of decision making: high, as at her prior visit.\n')))
-                         .get('mdm_level'), 'high')
 
 
 class EMR5Tests(CycleCase):
@@ -335,15 +340,16 @@ class EMR5Tests(CycleCase):
         self.assertEqual(outcome(self.F5, '99213', 'Complexity of decision making: low.'),
                          ('selected', 'needs_clarification', ('em_basis', 'performed_status')))
 
-    def test_procedure_day_words_refuse_it_even_beside_an_exam(self):  # kills pv1-visit-procedure-day
+    def test_procedure_day_words_refuse_it_even_beside_an_exam(self):  # (pv1-visit-procedure-day retired in cycle 2)
         for words in ('ASA II. Airway class 2.', 'Seen prior to today\'s colonoscopy.', 'Day of procedure assessment.',
                       'Colonoscopy is scheduled for this morning.', 'NPO since midnight.'):
             text = office(cc=f'Heartburn. {words}', tail='Complexity of decision making: low.\n')
             self.assert_label_not_read(text, 'Complexity of decision making: low')
 
-    def test_a_note_written_around_a_procedure_is_no_office_visit(self):  # kills pv1-visit-around-title
+    def test_a_note_written_around_a_procedure_reads_no_label(self):
+        # repair cycle 2: was test_a_note_written_around_a_procedure_is_no_office_visit (it also read the removed visit
+        # evidence, _pv1_office_visit; pv1-visit-around-title retired). The label is not read, as installed
         text = office(title='Patient education note', tail='Complexity of decision making: low.\n')
-        self.assertEqual(detect._pv1_office_visit(detect._analysis(text, DAY)[0]), 'a note written around a procedure')
         self.assert_label_not_read(text, 'Complexity of decision making: low')
 
 
@@ -643,54 +649,62 @@ class CTS2Tests(CycleCase):
         self.assertIn('by telephone', quote)
 
 
-# --- the visit evidence the releases need -----------------------------------------------------------------------------
+# --- the visit evidence the releases needed: removed with C1 and C2 in repair cycle 2 ----------------------------------
 
 class VisitEvidenceTests(CycleCase):
-    """_pv1_office_visit: positive evidence of today's in-person office visit, read once per document."""
+    """Repair cycle 2: the visit evidence (_pv1_office_visit) and the statement guards (_pv1_statement_refused) are
+    removed with the releases that read them (pv1-visit-exam, -reported, -setting, -not-a-visit, -procedure-day and
+    -around-title retired). Each test below keeps its own inputs and now pins installed's reading of them: a label is
+    never read, whatever evidence of a visit the note carries, and a note with no E/M statement reads as installed."""
 
-    def evidence(self, text):
-        return detect._pv1_office_visit(detect._analysis(text, DAY)[0])
+    LABEL = 'Complexity of decision making: low'
+
+    def test_the_evidence_and_the_guards_are_gone(self):
+        for gone in ('_pv1_office_visit', '_pv1_office_visit_refusal', '_pv1_first_signal', '_pv1_exam_with_content',
+                     '_pv1_statement_refused', '_pv1_section_heading_above', '_pv1_line_start', '_pv1_read_labels',
+                     '_pv1_label_refused', '_pv1_decision_label', '_pv1_names_another_occurrence'):
+            self.assertFalse(hasattr(detect, gone), gone)
 
     def test_an_office_note_with_an_exam(self):
-        self.assertIsNone(self.evidence(office()))
-        self.assertIsNone(self.evidence(office(exam='Vital Signs and Exam\nWeight 61.4 kg, blood pressure 112/70.\n')))
-        self.assertIsNone(self.evidence(office(exam='Exam: abdomen soft, nontender.\n')))
+        # was: the evidence held (None); now: the label beside that evidence is not read
+        for exam in (EXAM, 'Vital Signs and Exam\nWeight 61.4 kg, blood pressure 112/70.\n',
+                     'Exam: abdomen soft, nontender.\n'):
+            self.assert_label_not_read(office(exam=exam, tail=self.LABEL + '.\n'), self.LABEL)
 
-    def test_no_exam_content_is_no_evidence(self):  # kills pv1-visit-exam
+    def test_no_exam_content_is_no_evidence(self):
         for exam in ('', 'Physical exam\nDeferred.\n', 'Exam: 10/01\n', 'Objective\nCT abdomen 10/01/2026: 3 cm liver '
                                                                           'mass.\n', 'Physical exam\nNot performed.\n'):
-            self.assertEqual(self.evidence(office(exam=exam)), 'no exam or vital signs are recorded', exam)
+            self.assert_label_not_read(office(exam=exam, tail=self.LABEL + '.\n'), self.LABEL)
         text = office(exam='', tail='Complexity of decision making: moderate.\n')
         self.assert_label_not_read(text, 'Complexity of decision making: moderate')
 
-    def test_reported_values_are_no_exam(self):  # kills pv1-visit-reported
+    def test_reported_values_are_no_exam(self):
         for exam in ('Vitals: patient-reported weight 150 lb\n', 'Physical exam: abdomen soft (per last visit)\n',
                      'Vital signs: home blood pressure 130/80\n'):
-            self.assertEqual(self.evidence(office(exam=exam)), 'no exam or vital signs are recorded', exam)
+            self.assert_label_not_read(office(exam=exam, tail=self.LABEL + '.\n'), self.LABEL)
         text = office(title='GI Clinic Note', exam='Vitals: patient-reported weight 150 lb\n',
                       tail='Complexity of decision making: low.\n')
         self.assert_label_not_read(text, 'Complexity of decision making: low')
 
-    def test_no_office_setting_is_no_evidence(self):  # kills pv1-visit-setting
+    def test_no_office_setting_is_no_evidence(self):
         text = office(head='Date of service: 10/26/2026\nPlace of service: inpatient hospital (POS 21)\nEstablished '
                            'patient\n', tail='Complexity of decision making: low.\n')
-        self.assertEqual(self.evidence(text), 'no office setting is documented')
         self.assert_label_not_read(text, 'Complexity of decision making: low')
 
     def test_not_a_visit_words(self):
+        # was: each word refused the evidence; now: no label is read beside it, and none beside a future contact either
         for words in ('E-visit.', 'Online visit questionnaire reviewed.', 'B12 injection visit.', 'RN visit.',
                       'Patient portal message.', 'She cancelled.'):
-            self.assertIsNotNone(self.evidence(office(cc=f'Heartburn. {words}')), words)
-        # a plan clause carrying a planned cue speaks of a future contact; a history clause not saying today, of the past
-        self.assertIsNone(self.evidence(office(plan='GERD. Telephone follow-up in two weeks.')))
-        self.assertIsNone(self.evidence(B + 'Office visit note\n' + HEAD + 'History of present illness\nShe called last '
-                                        'week to report heartburn.\n' + EXAM + 'Assessment and plan\nGERD.\n'))
+            self.assert_label_not_read(office(cc=f'Heartburn. {words}', tail=self.LABEL + '.\n'), self.LABEL)
+        self.assert_label_not_read(office(plan='GERD. Telephone follow-up in two weeks.', tail=self.LABEL + '.\n'),
+                                   self.LABEL)
 
-    def test_h4_01_documents_its_office_visit(self):
+    def test_h4_01_reads_its_statements_as_installed(self):
+        # was test_h4_01_documents_its_office_visit (the evidence held and both statements were the visit's own); now
+        # h4-01's time statement reads 'planned: orders' and its label is no mention, as on installed
         from ops.gi4 import regression
         text = regression.load_fixtures()['h4-01']['text']
         an = detect._analysis(text, DAY)[0]
-        self.assertIsNone(detect._pv1_office_visit(an))
         statements = [m for m in an.em if m.kind in ('em-time', 'em-mdm')]
-        self.assertEqual(len(statements), 2)
-        self.assertEqual([detect._pv1_statement_refused(an, m) for m in statements], [None, None])
+        self.assertEqual([m.kind for m in statements], ['em-time'])
+        self.assertEqual(detect._em_base_reading(an, statements[0]).status, 'planned')

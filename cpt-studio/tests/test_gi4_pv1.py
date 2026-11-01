@@ -19,7 +19,13 @@ documents today's in-person office visit (VISIT below has the exam and the offic
 label is not read at all; C1 skips only a noun of the visit's planning work; C4 holds only on a statement of today's
 encounter type and then counts the statements it holds as the documented basis, quoting the line. The cycle's own
 tests, one per refutation finding, are tests/test_gi4_pv1_cycle1.py.
+
+Repair cycle 2 (2026-11-01, pv1.json amendment_20261101_cycle2): C1 and C2 are DROPPED (the second refutation of a
+releasing family; findings PV1C2-01, -02 and -03). Every test below that pinned a C1 or C2 release now pins installed's
+reading of its own input, and says so where it changed; the C4, C4-time, EMR-9 and V3 tests are unchanged. The mutants
+that guarded C1 and C2 are retired with their code. The cycle's own tests are tests/test_gi4_pv1_cycle2.py.
 """
+import inspect
 import datetime as dt
 import time
 
@@ -60,43 +66,47 @@ def mention(finding, words):
 
 
 class ActivityListTests(SimpleTestCase):
-    """C1: what an E/M time statement covered is the visit's work, never the time's occasion."""
+    """C1 (DROPPED in repair cycle 2): an E/M time statement's activity list re-times it as installed reads it - a plan
+    word there ("the orders") reads 'planned' again. Each test pins installed's reading of its own input; the ones that
+    pinned C1's release changed (named below), the ones that pinned a hold C1 kept are unchanged but for the retired
+    mutants' names."""
 
-    def test_h4_01_reads_its_time_and_its_decision_making(self):
+    def test_h4_01_reads_neither_its_time_nor_its_decision_making_as_installed(self):
+        # repair cycle 2: was test_h4_01_reads_its_time_and_its_decision_making (C1 and C2's release: time+mdm, 52,
+        # moderate). Installed's reading, measured on 80df1831d168: no basis, 'planned: orders' beside 'performed'
         text = regression.load_fixtures()['h4-01']['text']
         finding = em(text)
         self.assertEqual(finding.status, 'performed')
         got = facts(finding)
-        self.assertEqual((got['em_basis'], got['time_minutes'], got['mdm_level']), ('time+mdm', '52', 'moderate'))
-        self.assertEqual(finding.missing, ())
-        self.assertEqual({m.status for m in finding.mentions}, {'performed'})  # installed: 'planned: orders' too
+        self.assertFalse({'em_basis', 'time_minutes', 'mdm_level'} & set(got), got)
+        self.assertEqual(finding.missing, ('em_basis',))
+        self.assertEqual({m.status for m in finding.mentions}, {'performed', 'planned'})
+        self.assertNotIn('Complexity of decision making: moderate', [m.span.text for m in finding.mentions])
 
-    def test_each_activity_word(self):
+    def test_each_activity_word_no_longer_releases_the_orders(self):
+        # repair cycle 2: was test_each_activity_word (C1's release: 40 minutes read); installed re-times each
         for word in ('covering', 'including', 'spent on', 'which included'):
             text = VISIT + f'Total time: 40 minutes, {word} her history, the examination, the orders and documentation.\n'
-            self.assertEqual(facts(em(text)).get('time_minutes'), '40', word)
+            self.assertNotIn('time_minutes', facts(em(text)), word)
 
     def test_without_an_activity_word_the_orders_still_retime_the_statement(self):
         text = VISIT + 'Total time: 40 minutes, the orders and documentation.\n'
         self.assertNotIn('time_minutes', facts(em(text)))  # as installed: 'planned: orders'
 
-    def test_a_cue_before_the_activity_word_still_retimes_it(self):  # kills pv1-c1-after-only
+    def test_a_cue_before_the_activity_word_still_retimes_it(self):  # (pv1-c1-after-only retired in repair cycle 2)
         text = VISIT + 'Total time scheduled: 30 minutes, including counseling and documentation.\n'
         self.assertNotIn('time_minutes', facts(em(text)))
-        # repair cycle 1: a plan-work noun before the activity word ('scheduled' is no longer one) still re-times it
         text = VISIT + 'Total time for the orders: 30 minutes, including counseling and documentation.\n'
         self.assertNotIn('time_minutes', facts(em(text)))
 
-    def test_a_date_in_the_activity_list_still_retimes_it(self):  # kills pv1-c1-dates-count
-        # another visit's date may place the minutes on another day: held as installed (a date reviewed and a date
-        # attended read alike, so the release takes neither)
+    def test_a_date_in_the_activity_list_still_retimes_it(self):  # (pv1-c1-dates-count retired in repair cycle 2)
+        # another visit's date may place the minutes on another day: held, as installed
         text = VISIT + 'Total time: 30 minutes, including the visit on 10/20/2026.\n'
-        self.assertNotIn('time_minutes', facts(em(text)))  # repair cycle 1: C1 is refused (its line names the date)
-        # ... and where the list runs onto the next line, C1 applies and the date still governs
+        self.assertNotIn('time_minutes', facts(em(text)))
         text = VISIT + 'Total time: 30 minutes, including\nthe visit on 10/20/2026.\n'
         self.assertNotIn('time_minutes', facts(em(text)))
 
-    def test_a_denial_or_another_days_time_in_the_list_still_retimes_it(self):  # kills pv1-c1-plan-work
+    def test_a_denial_or_another_days_time_in_the_list_still_retimes_it(self):  # (pv1-c1-plan-work retired)
         # session 2: each is held on installed, and read READY when every cue after the activity word was skipped
         for line in ('Total time: 15 minutes, spent on chart review, as the visit was cancelled.',
                      'Total time: 15 minutes, spent on her visit, which was cancelled.',
@@ -106,54 +116,61 @@ class ActivityListTests(SimpleTestCase):
                      'Total time: 30 minutes, including time spent in the past on her care.'):
             self.assertNotIn('time_minutes', facts(em(VISIT + line + '\n')), line)
 
-    def test_a_planned_time_in_the_list_still_retimes_it(self):  # kills pv1-c1-planned-time
+    def test_a_planned_time_in_the_list_still_retimes_it(self):  # (pv1-c1-planned-time retired in repair cycle 2)
         for line in ('Total time: 30 minutes, including the follow-up visit in 2 weeks.',
                      'Total time: 30 minutes, including 10 minutes with her tomorrow.'):
             self.assertNotIn('time_minutes', facts(em(VISIT + line + '\n')), line)
 
-    def test_each_plan_word_of_the_visits_own_work(self):
-        # repair cycle 1 (EMR-3): only a noun of the visit's planning work; 'arranging', 'awaiting' and 'will' were
-        # dropped from the skip (tests/test_gi4_pv1_cycle1.py, EMR3Tests)
+    def test_no_plan_word_of_the_visits_own_work_is_skipped(self):
+        # repair cycle 2: was test_each_plan_word_of_the_visits_own_work (C1's release of the four nouns: 40 minutes
+        # read); installed reads each as 'planned' and the statement gives no time
         for words in ('the orders', 'the referral to surgery', 'her recommendations', 'next steps'):
             text = VISIT + f'Total time: 40 minutes, covering her history, {words} and documentation.\n'
-            self.assertEqual(facts(em(text)).get('time_minutes'), '40', words)
+            self.assertNotIn('time_minutes', facts(em(text)), words)
 
     def test_a_time_at_another_visit_stays_held(self):  # the diagnosis's C1 counterexample, as installed
         text = VISIT + 'Total time 30 minutes at the follow-up visit next month.\n'
         self.assertNotIn('time_minutes', facts(em(text)))
 
-    def test_a_visit_statement_never_skips_its_own_cues(self):  # kills pv1-c1-time-only
-        # repair cycle 1: a plan-work noun after a visit statement's "including" ('the orders'), in a note with the visit
-        # evidence C1 needs: only a time statement's activity list would skip it
-        # (outside a plan section, where a visit statement's default reading would be planned anyway)
+    def test_a_visit_statement_never_skips_its_own_cues(self):  # (pv1-c1-time-only retired in repair cycle 2)
+        # a plan-work noun after a visit statement's "including" ('the orders'): planned, as installed
         text = VISIT.replace('Chief complaint\n', 'Follow-up office visit, including the orders.\nChief complaint\n')
         self.assertEqual(mention(em(text), 'Follow-up office visit').status, 'planned')
 
-    def test_only_a_time_statement_has_an_activity_list(self):
+    def test_the_cue_readers_take_no_activity_list_and_only_c4_time_finds_one(self):
+        # repair cycle 2: was test_only_a_time_statement_has_an_activity_list (read through _pv1_activities, removed with
+        # C1). The cue readers are installed's again (no 'activities' parameter, no C1 helper), and the activity word is
+        # found only for a time statement, by C4-time's EMR-7 reading (_pv1_activity_word, kept)
+        self.assertEqual(list(inspect.signature(detect._clause_reading_cues).parameters),
+                         ['an', 'clause', 'ts', 'te', 'em'])
+        self.assertEqual(list(inspect.signature(detect._cue_reading).parameters), ['an', 'start', 'end', 'em'])
+        for gone in ('_pv1_activities', '_pv1_activity_work', '_PV1_PLAN_WORK'):
+            self.assertFalse(hasattr(detect, gone), gone)
         an = detect._analysis(VISIT + 'Total time: 40 minutes, covering the orders.\n', DAY)[0]
-        kinds = {m.kind: detect._pv1_activities(an, m) for m in an.em}
+        kinds = {m.kind: detect._pv1_activity_word(an, m) for m in an.em}
         self.assertIsNotNone(kinds['em-time'])
         self.assertIsNone(kinds['em-heading'])
         self.assertIsNone(kinds['em-visit'])
 
 
 class DecisionMakingLabelTests(SimpleTestCase):
-    """C2: the inline complexity or level of decision making is read; shared decision making never gives a level."""
+    """C2 (DROPPED in repair cycle 2): cues.MDM_LEVEL is installed's pattern again, so no "Complexity / Level of decision
+    making: X" label gives a level, with or without the visit's evidence; installed's MDM readings are unchanged and
+    shared decision making still gives none."""
 
     def levels(self, line):
         return [(m.group(0), (m.group('level') or m.group('level2')).lower()) for m in cues.MDM_LEVEL.finditer(line)]
 
-    def test_complexity_and_level_labels(self):
-        self.assertEqual(self.levels('Complexity of decision making: moderate.'),
-                         [('Complexity of decision making: moderate', 'moderate')])
-        self.assertEqual(self.levels('Level of decision-making - high'), [('Level of decision-making - high', 'high')])
-        got = facts(em(VISIT + 'Complexity of decision making: low.\n'))
-        self.assertEqual((got.get('mdm_level'), got.get('em_basis')), ('low', 'mdm'))
-        # repair cycle 1: without the visit's evidence (OFFICE has no exam) the label is not read at all
-        self.assertNotIn('Complexity of decision making: low', [m.span.text for m in
-                                                                 em(OFFICE + 'Complexity of decision making: low.\n').mentions])
+    def test_complexity_and_level_labels_give_no_level_as_installed(self):
+        # repair cycle 2: was test_complexity_and_level_labels (C2's third prefix read both; VISIT read 'low', 'mdm')
+        self.assertEqual(self.levels('Complexity of decision making: moderate.'), [])
+        self.assertEqual(self.levels('Level of decision-making - high'), [])
+        for note in (VISIT, OFFICE):
+            finding = em(note + 'Complexity of decision making: low.\n')
+            self.assertFalse({'mdm_level', 'em_basis'} & set(facts(finding)))
+            self.assertNotIn('Complexity of decision making: low', [m.span.text for m in finding.mentions])
 
-    def test_shared_decision_making_never_gives_a_level(self):  # kills pv1-c2-shared
+    def test_shared_decision_making_never_gives_a_level(self):  # (pv1-c2-shared retired in repair cycle 2)
         for line in ('Shared decision making about colonoscopy, given a bleeding risk that is high.',
                      'Shared decision making about colonoscopy; she accepts the high risk of bleeding.',
                      'Shared decision-making level: high.'):
@@ -184,22 +201,22 @@ class DecisionMakingLabelTests(SimpleTestCase):
             self.assertNotIn('mdm_level', facts(finding), line)
             self.assertFalse([m for m in finding.mentions if 'omplexity of decision making' in m.span.text], line)
 
-    def test_a_label_that_opens_its_line_is_read(self):
-        for line, level in (('- Complexity of decision making: low.', 'low'),
-                            ('2. Level of decision making: moderate.', 'moderate')):
-            self.assertEqual(facts(em(VISIT + line + '\n')).get('mdm_level'), level, line)
+    def test_a_label_that_opens_its_line_gives_no_level_as_installed(self):
+        # repair cycle 2: was test_a_label_that_opens_its_line_is_read (C2's release: 'low', 'moderate')
+        for line in ('- Complexity of decision making: low.', '2. Level of decision making: moderate.'):
+            self.assertNotIn('mdm_level', facts(em(VISIT + line + '\n')), line)
 
     def test_a_label_naming_another_visit_is_not_read(self):
-        # session 2 held these; repair cycle 1 does not read them (the rest of the label's line names another visit)
+        # session 2 held these; repair cycle 1 did not read them; repair cycle 2 reads no label at all (installed)
         for line in ('Complexity of decision making: high (at last visit).',
                      'Complexity of decision making: high, from the prior visit.',
-                     'Complexity of decision making: high (at her last visit).'):
+                     'Complexity of decision making: high (at her last visit).',
+                     # repair cycle 2: this comparison was read as today's level 'high' (C2's release); installed reads
+                     # no level
+                     'Complexity of decision making: high, as at her prior visit.'):
             finding = em(VISIT + line + '\n')
             self.assertNotIn('mdm_level', facts(finding), line)
             self.assertFalse([m for m in finding.mentions if m.span.text.startswith('Complexity')], line)
-        # a comparison is no other time: "high, as at her prior visit" states today's level
-        self.assertEqual(facts(em(VISIT + 'Complexity of decision making: high, as at her prior visit.\n'))
-                         .get('mdm_level'), 'high')
 
 
 class NotInPersonTests(SimpleTestCase):
@@ -363,13 +380,13 @@ class QuoteBoundTests(SimpleTestCase):
     (detect._PV1_QUOTE_WINDOW), never from the sentence's start or a whole match: one sentence may hold thousands of
     labels or time statements."""
 
-    def test_a_label_after_a_run_of_blanks_on_its_line_does_not_open_it(self):
-        # repair cycle 1 (replaces session 2's label quote, gone with the label hold): the look-back crosses only the
-        # line's opening characters, however many, and words before them refuse the label
+    def test_a_label_after_a_run_of_blanks_gives_no_level_as_installed(self):
+        # repair cycle 2: was test_a_label_after_a_run_of_blanks_on_its_line_does_not_open_it, whose second case pinned
+        # C2's release ('high' for a label opening its line after the blanks); installed reads no label either way
         text = VISIT + 'Copied words' + ' ' * (detect._PV1_QUOTE_WINDOW + 40) + 'complexity of decision making: high.\n'
         self.assertNotIn('mdm_level', facts(em(text)))
         text = VISIT + ' ' * (detect._PV1_QUOTE_WINDOW + 40) + 'Complexity of decision making: high.\n'
-        self.assertEqual(facts(em(text)).get('mdm_level'), 'high')
+        self.assertNotIn('mdm_level', facts(em(text)))
 
     def test_the_other_visit_quote_is_cut_from_the_head_of_its_match(self):  # kills pv1-other-visit-window
         text = OFFICE + 'Total time 40 minutes at' + ' ' * (detect._PV1_QUOTE_WINDOW + 40) + 'last visit.\n'
@@ -380,7 +397,7 @@ class QuoteBoundTests(SimpleTestCase):
     def test_one_sentence_of_many_labels_routes_in_linear_time(self):
         # 3800 labels in one 198,000-character sentence: 6.4 s of CPU on 3a6a5e77d (each quote cut from the sentence's
         # start), about 2 s with the window (installed reads no label here: 0.9 s). CPU time, so another process's load
-        # does not count.
+        # does not count. Repair cycle 2 dropped C2, so no label is read here (installed's cost); the bound stays.
         text = OFFICE + 'complexity of decision making: high, at last visit, ' * 3800 + 'end.\n'
         jobs.release_routing_caches()
         started = time.process_time()
@@ -397,12 +414,21 @@ class DeclaredOutcomeTests(SimpleTestCase):
         self.assertEqual(rows['last visit time']['proposals']['99213']['status'], 'needs_clarification')
         self.assertEqual([v for row in rows.values() for p in row['proposals'].values() for v in p['violations']], [])
 
-    def test_h4_01s_99204_is_ready_after_the_walks_date(self):
+    def test_h4_01s_99204_is_held_after_the_walks_date_a_software_false_hold(self):
+        # repair cycle 2: was test_h4_01s_99204_is_ready_after_the_walks_date (C1 and C2's release). With both dropped,
+        # 99204 reads as installed reads it after 10-26: held, asking the basis and warning 'planned: orders' - a
+        # SOFTWARE false hold (pv1.json amendment_20261101_cycle2, known limits): L39 states 52 minutes and L40 a
+        # moderate level, and the reader can read neither. The walk's date and send are PD's, unchanged.
         record = replay.replay_document(replay.modules(), regression.load_fixtures()['h4-01'])
         walk = record['states']['walk']
         self.assertEqual(walk['sends'], '2026-10-26')
         self.assertTrue(walk['response'].startswith('retained'), walk['response'])
         code = next(p for p in walk['proposals'] if p['code'] == '99204')
-        self.assertEqual((code['bucket'], code['status'], code['checks']), ('selected', 'ready', []))
+        self.assertEqual((code['bucket'], code['status'], code['checks']),
+                         ('selected', 'needs_clarification', [['service.status', 'warn'], ['facts.required', 'warn']]))
+        self.assertEqual(walk['routing']['gi.office_em']['missing'], ['em_basis'])
+        self.assertEqual(walk['routing']['gi.office_em']['mentions'], ['performed', 'planned'])
         none = next(p for p in record['states']['none']['proposals'] if p['code'] == '99204')
-        self.assertEqual((none['status'], none['checks']), ('needs_clarification', [['context.service_date', 'fail']]))
+        self.assertEqual((none['status'], none['checks']),
+                         ('needs_clarification', [['service.status', 'warn'], ['facts.required', 'warn'],
+                                                  ['context.service_date', 'fail']]))
