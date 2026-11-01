@@ -149,6 +149,16 @@ CORTI_CREDENTIALS_FILE = _env('CORTI_CREDENTIALS_FILE', '')
 REPLAY_DIR = _env('REPLAY_DIR', '')
 # The recorded owner authority a live send is bound to (ruling file path or id).
 AUTHORIZATION_REF = _env('AUTHORIZATION_REF', '')
+# The harness's independent participants (HARNESS.md 8), each configured on its own: one unavailable blocks only its own
+# stage. Their models and endpoints are code constants (studio/participants/), never settings.
+ASTRA_MODE = _env('ASTRA_MODE', 'disabled')
+FABLE_MODE = _env('FABLE_MODE', 'disabled')
+for _name, _mode in (('ASTRA', ASTRA_MODE), ('FABLE', FABLE_MODE)):
+    if _mode not in {'disabled', 'replay', 'live'}:
+        raise RuntimeError(f'CPT_STUDIO_{_name}_MODE must be disabled, replay or live.')
+OPENAI_CREDENTIALS_FILE = _env('OPENAI_CREDENTIALS_FILE', '')
+ANTHROPIC_CREDENTIALS_FILE = _env('ANTHROPIC_CREDENTIALS_FILE', '')
+PARTICIPANT_REPLAY_DIR = _env('PARTICIPANT_REPLAY_DIR', '')
 
 # Bounded execution.
 EXTRACTION_TIMEOUT_SECONDS = int(_env('EXTRACTION_TIMEOUT_SECONDS', '240'))
@@ -157,10 +167,19 @@ PROVIDER_CONNECT_TIMEOUT_SECONDS = 10
 PROVIDER_READ_TIMEOUT_SECONDS = 120
 PROVIDER_MAX_REQUEST_BYTES = 512_000
 PROVIDER_MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+# A participant reads the whole document and writes a structured reading, so it is given longer than Corti; the send
+# deadline stays below STALE_RUNNING_SECONDS and the worker's stop timeout (ops/install.py) stays above it. A request
+# may carry a PDF original (base64) beside the text: at most the 15 MiB upload limit, so 24 MiB bounds the body.
+PARTICIPANT_CONNECT_TIMEOUT_SECONDS = 10
+PARTICIPANT_READ_TIMEOUT_SECONDS = 300
+PARTICIPANT_SEND_DEADLINE_SECONDS = 330
+PARTICIPANT_MAX_REQUEST_BYTES = 24 * 1024 * 1024
+PARTICIPANT_MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 # The assess stage routes the document again (validation's span readings read that routing's analysis) and then
 # validates, so it has the analyze stage's time and memory and as much again for the validation: a document the analyze
 # stage read within its limits is never sent and then left unassessed for repeating that work (round 7 bounded:1).
-JOB_DEADLINE_SECONDS = {'extract': 300, 'analyze': 60, 'predict': 180, 'assess': 120, 'review2': 180}
+JOB_DEADLINE_SECONDS = {'extract': 300, 'analyze': 60, 'predict': 180, 'assess': 120, 'review2': 180,
+                        'astra': 360, 'fable': 360}
 # Routing and context extraction run in a forked child under these (studio/bounded.py): the stage's deadline
 # above, this growth of address space past what the worker already uses, and a shorter wall clock when a
 # member's context change runs the extraction inside a web request.

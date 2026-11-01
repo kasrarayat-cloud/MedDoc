@@ -239,8 +239,15 @@ parsing take away. The image gains no dependency.
 
 ## 9. INVARIANTS (the claims the adversarial pass attacks)
 
-- **I1 Corti-only parity.** With Astra and Fable disabled, every stage, row, idempotency key, assessment and proposal is
-  byte-identical to the round-4 head. Proved by H1/H2/H4 against `fbc59ee53`'s successor and a parity test.
+- **I1 Corti-only parity.** With Astra and Fable disabled, the following are identical to the round-4 head:
+  - the stages and their idempotency keys;
+  - the engine's result (every proposal's bucket, status, checks, evidence and fingerprint, every clarification,
+    encounter check and reference-source entry);
+  - the assessment's sha256.
+
+  The only additions are new records outside that result: the run columns that record what was called (endpoint,
+  models, response id) and the assessment's `participants` and `retrieval` fields. The `participants` record says
+  "not configured". Proved by H1/H2/H4 against the round-4 head and by a parity test.
 - **I2 Participants never decide a status.** A participant's code is READY only through the same local-reader path as
   Corti's, with located exact evidence.
 - **I3 Agreement never promotes.** Adding a second or third proposer to a code never changes its status or makes it

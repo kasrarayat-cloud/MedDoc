@@ -238,11 +238,18 @@ class ProviderRun(models.Model):
     # 'primary': the revision's whole text; 'second_review': one bounded second request about documented services that
     # had no supported proposal, sent once per revision and service date (ARCHITECTURE 5.11). ``scope`` records what it
     # was for: the excerpt's offsets in the revision text and the unresolved items.
-    PRIMARY, SECOND_REVIEW = 'primary', 'second_review'
+    # 'independent': a harness participant's (Astra, Fable) own reading of the revision (HARNESS.md 2), never Corti's.
+    PRIMARY, SECOND_REVIEW, INDEPENDENT = 'primary', 'second_review', 'independent'
     # scope['held'] of a run deliberately not sent: the service date is a member-vs-document conflict (jobs.stage_predict)
     HELD_MEMBER_DATE_CONFLICT = 'member_date_conflict'
     purpose = models.CharField(max_length=16, default=PRIMARY)
     scope = models.JSONField(default=dict, blank=True)
+    # What was actually called and what answered (HARNESS.md 6); '' on rows recorded before the harness, and the models
+    # are '' for Corti, whose API names none. response_id is the vendor's own object id (resp_..., msg_...).
+    endpoint = models.CharField(max_length=200, blank=True, default='')
+    requested_model = models.CharField(max_length=100, blank=True, default='')
+    returned_model = models.CharField(max_length=100, blank=True, default='')
+    response_id = models.CharField(max_length=140, blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
@@ -270,6 +277,11 @@ class Assessment(ImmutableModel):
     summary = models.JSONField(default=dict)
     services = models.JSONField(default=dict)  # the documented-service inventory (gi/services.py)
     completeness = models.JSONField(default=dict)  # coding completeness, unresolved and bundled items (reconcile.py)
+    # HARNESS.md 6: one entry per harness participant (state, run, models, refusal reason, unverified quotes) and the
+    # reference retrieval traces. Both are recorded beside the engine's result, outside its sha256, so an assessment with
+    # no participant configured is the engine's result exactly (I1); _same_assessment compares them as well.
+    participants = models.JSONField(default=list)
+    retrieval = models.JSONField(default=list)
     sha256 = models.CharField(max_length=64)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -364,6 +376,8 @@ class DecisionInvalidation(ImmutableModel):
 
 class Job(models.Model):
     EXTRACT, ANALYZE, PREDICT, ASSESS, REVIEW2 = 'extract', 'analyze', 'predict', 'assess', 'review2'
+    ASTRA, FABLE = 'astra', 'fable'  # the harness participants' stages (HARNESS.md 2), run after predict
+    PARTICIPANT_KINDS = (ASTRA, FABLE)
     QUEUED, RUNNING, SUCCEEDED, FAILED, UNKNOWN, CANCELLED = 'queued', 'running', 'succeeded', 'failed', 'unknown', 'cancelled'
     TERMINAL = {SUCCEEDED, FAILED, UNKNOWN, CANCELLED}
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -452,6 +466,48 @@ class ReferenceCodeFact(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=['source', 'code', 'modifier'], name='one_fact_row_per_code_modifier')]
         indexes = [models.Index(fields=['code'])]
+
+
+class PassageSource(models.Model):
+    """A CMS document whose verbatim passages the harness retrieves (HARNESS.md 5). Kept apart from ReferenceSource,
+    whose rows every lookup lists, so importing passages never changes an assessment's reference-source entries."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    key = models.CharField(max_length=60, unique=True)
+    kind = models.CharField(max_length=40)  # cms-pfs-documentation | cms-ncci-policy-manual | cms-claims-manual
+    publisher = models.CharField(max_length=120)
+    title = models.CharField(max_length=200)
+    release = models.CharField(max_length=60)
+    url = models.URLField(max_length=400)
+    sha256 = models.CharField(max_length=64)  # of the publisher's file the passages were read from
+    retrieved_at = models.DateTimeField()
+    effective_start = models.DateField()
+    effective_end = models.DateField()
+    license_note = models.TextField()
+    scope_note = models.TextField()
+    passage_count = models.PositiveIntegerField(default=0)
+    loaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.CheckConstraint(condition=Q(effective_start__lte=models.F('effective_end')),
+                                              name='passage_window_ordered')]
+
+
+class ReferencePassage(models.Model):
+    """One verbatim passage of a PassageSource, with where it is (page, section) and the rule it states, keyed by what
+    retrieval matches it on (topic, e.g. 'pfs.mult_proc' with value '3')."""
+    id = models.BigAutoField(primary_key=True)
+    source = models.ForeignKey(PassageSource, on_delete=models.PROTECT, related_name='passages')
+    passage_key = models.CharField(max_length=80)
+    section = models.CharField(max_length=200)
+    page = models.CharField(max_length=20, blank=True)
+    topic = models.CharField(max_length=60)
+    topic_value = models.CharField(max_length=20, blank=True)
+    text = models.TextField()
+    sha256 = models.CharField(max_length=64)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['source', 'passage_key'], name='one_passage_key_per_source')]
+        indexes = [models.Index(fields=['topic', 'topic_value'])]
 
 
 class LoginAttempt(models.Model):
