@@ -15,6 +15,18 @@ _HOLD = "        return Reading('uncertain', (f\"{EM_NOT_IN_PERSON}: '{words}'\"
 _TIME_HOLD = "    if m.kind == 'em-time' or _pv1_decision_label(an, m):"
 _TIME_ONLY = "    if m.kind != 'em-time':\n        return None\n    listed = cues.EM_TIME_ACTIVITIES"
 _DATES = '    for d in an.dates_in(cs, ce):  # GI round 4 (C1): a date in an activity list still governs (see the docstring)\n'
+_SKIP = '        if activities is not None and cue.start >= activities and _pv1_activity_work(cue):'
+# C4's session-2 synonyms in cues.NOT_IN_PERSON, from the line before them to the pattern's end (exact source text)
+_NO_SHOW = (' ' * 19 + r'''r"|\bno[- ]?show(?:s|ed)?\b|\b(?:did\s+not|didn't|failed\s+to)'''
+            r'''\s+(?:arrive|attend|show\s+up)\b"''')
+_SYNONYMS = _NO_SHOW + r'''
+                   # session 2: "The patient was not seen.", a visit-type field naming the telephone ("Visit type:
+                   # Telephone", "Type of encounter: phone"), "missed her appointment", "left without being seen"
+                   r'|\b(?:patient|pt|she|he)\s+(?:was|is)\s+not\s+seen\b|\b(?:(?:visit|encounter|appointment|contact|'
+                   r'consult(?:ation)?)\s+(?:type|mode|modality|method)|(?:type|mode|modality|method)\s+of\s+(?:visit|'
+                   r'encounter|appointment|contact|consult(?:ation)?))[ \t]*[:\-][ \t]*(?:tele)?phone\b'
+                   r"|\bmissed\s+(?:her|his|their|the|this|today'?s)\s+(?:scheduled\s+)?(?:appointment|visit)\b"
+                   r'|\bleft\s+without\s+being\s+seen\b|\bLWBS\b')'''
 
 MUTANTS = (
     mutants.Mutant('pv1-c4-hold', 'C4: a performed E/M reading is held when the note may document no in-person visit',
@@ -29,8 +41,14 @@ MUTANTS = (
     mutants.Mutant('pv1-c2-another-time', "C2: the new decision-making label takes the time statement's hold", DETECT,
                    _TIME_HOLD, "    if m.kind == 'em-time':", UNIT),
     mutants.Mutant('pv1-c1-after-only', 'C1: a cue before the activity word still re-times the time statement', DETECT,
-                   '        if activities is not None and cue.start >= activities:', '        if activities is not None:',
-                   UNIT),
+                   _SKIP, '        if activities is not None and _pv1_activity_work(cue):', UNIT),
+    mutants.Mutant('pv1-c1-plan-work', 'C1 (session 2): after the activity word only a planned cue is skipped (a '
+                   'cancellation or a history still re-times the statement)', DETECT, _SKIP,
+                   '        if activities is not None and cue.start >= activities:', UNIT),
+    mutants.Mutant('pv1-c1-planned-time', 'C1 (session 2): a planned time after the activity word still re-times the '
+                   'statement (only the plan words of the visit\'s work are skipped)', DETECT,
+                   "    return cue.name in _PV1_PLAN_WORK_CUES or (cue.name == 'next' and "
+                   "_PV1_NEXT_STEPS.match(cue.text) is not None)", '    return True', UNIT),
     mutants.Mutant('pv1-c1-dates-count', "C1: a date in an activity list still re-times the time statement", DETECT,
                    _DATES, _DATES + '        if activities is not None and d.start >= activities:\n            continue\n',
                    UNIT),
@@ -42,6 +60,9 @@ MUTANTS = (
                    r"               r'|\b(?:\w+\s+)?(?:of\s+)?decision[- ]making\b[^.;\n]{0,60}?)'", UNIT),
     mutants.Mutant('pv1-v3-ultrasound', "V3: an ultrasound named in an E/M code's negative passage holds the E/M", CHECKS,
                    'labs?|ultrasounds?|sonograms?|', 'labs?|sonograms?|', UNIT),
+    mutants.Mutant('pv1-c4-synonyms', 'C4 (session 2): "the patient was not seen", a visit-type field naming the '
+                   'telephone, "missed her appointment" and "left without being seen" hold every E/M reading', CUES,
+                   _SYNONYMS, _NO_SHOW + ')', UNIT),
 )
 BY_NAME = {m.name: m for m in MUTANTS}
 

@@ -1856,10 +1856,12 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
                          em: bool = False, activities: Optional[int] = None) -> list[tuple[str, str, bool, bool]]:
     """(status, label, about_past, doubt) for every cue that governs the target in one clause. ``em``: the target is
     an E/M documentation mention (see _owned_time_cue). ``activities``: where the list of what an E/M time statement's
-    minutes covered starts (_pv1_activities; GI round 4, C1): no clause cue at or after it governs the target, since
-    such a cue names the visit's own work ("the orders"), not the time's occasion. A date there still does: it may be
-    another visit's ("including the visit on 10/20/2026"), and nothing tells it from the date of a thing reviewed, so it
-    holds as installed. None (every other caller): as installed."""
+    minutes covered starts (_pv1_activities; GI round 4, C1): a planned cue at or after it that names the visit's own
+    planning work (_pv1_activity_work: "the orders", "the referral to", "next steps") does not govern the target, since
+    it is the visit's work, not the time's occasion. Every other cue there still does, as installed: a planned time
+    ("in 2 weeks"), a cancellation ("as the visit was cancelled"), a history ("two days ago"), a doubt. So does a date:
+    it may be another visit's ("including the visit on 10/20/2026"), and nothing tells it from the date of a thing
+    reviewed. None (every other caller): as installed."""
     text = an.text
     cs, ce = an.lay.window(clause, ts, te, CLAUSE_REACH)
     spans, index, members = _groups(an, cs, ce, ts, te)
@@ -1872,8 +1874,8 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
     names = {(m.start, m.end) for m in an.services_in(cs, ce)} | {(iv.start, iv.end) for iv in an.interventions_in(cs, ce)}
     named = [m for m in members if m in names] or [(max(ts, cs), min(max(te, ts + 1), ce))]
     for cue in clause_cues:
-        if activities is not None and cue.start >= activities:
-            continue  # GI round 4 (C1): a word of what an E/M time statement covered ("the orders"), not its occasion
+        if activities is not None and cue.start >= activities and _pv1_activity_work(cue):
+            continue  # GI round 4 (C1): a plan word of the work an E/M time covered ("the orders"), not its occasion
         status, doubt = cue.status, False
         if cue.name == 'aborted':
             status, doubt = _abort_status(an, cue)
@@ -6055,6 +6057,25 @@ def _pv1_activities(an: Analysis, m: Mention) -> Optional[int]:
         return None
     listed = cues.EM_TIME_ACTIVITIES.match(an.text, m.end)
     return listed.end() if listed else None
+
+
+# C1: the planned cues an activity list may carry about the visit's own planning work ("the orders", "the referral to",
+# "scheduled", "arranging", "recommendations", "awaiting", "next steps"). Only these are skipped after the activity word
+# (a closed list: a planned cue not named here governs, as installed). A planned time ("in 2 weeks", "next week",
+# "tomorrow", "due in") and every cue of another status (cancelled, historical, incomplete, uncertain) still govern the
+# time statement: they may say the minutes were another day's, or the visit never happened (GI round 4, session 2).
+_PV1_PLAN_WORK_CUES = frozenset({'ordered', 'referred for', 'scheduled', 'booked', 'recommend', 'consider', 'will',
+                                 'plan', 'to be done', 'should undergo', 'upcoming'})
+_PV1_NEXT_STEPS = re.compile(r'next\s+steps?\Z', re.A | re.I)  # the 'next' cue's only plan-work reading
+
+
+def _pv1_activity_work(cue: Cue) -> bool:
+    """Whether clause cue ``cue``, standing at or after the activity word of an E/M time statement, names the visit's
+    own planning work, so _clause_reading_cues skips it (GI round 4, C1): a planned cue named in _PV1_PLAN_WORK_CUES,
+    or the 'next' cue read as "next steps". Never a planned time and never a cue of another status."""
+    if cue.status != 'planned':
+        return False
+    return cue.name in _PV1_PLAN_WORK_CUES or (cue.name == 'next' and _PV1_NEXT_STEPS.match(cue.text) is not None)
 
 
 def _pv1_held(an: Analysis, m: Mention, reading: Reading) -> Reading:

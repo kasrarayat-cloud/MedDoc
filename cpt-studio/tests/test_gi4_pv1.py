@@ -2,8 +2,9 @@
 code in tests/fixtures/gi4/declarations/pv1.json). Every case is synthetic.
 
 - C1: an E/M time statement followed directly by "covering", "including" or "spent on" lists the visit's own work;
-  a clause cue after that word never re-times the statement (h4-01's "52 minutes, covering ..., the orders, ..."); a
-  date after it still does, since it may be another visit's.
+  a plan word after that word never re-times the statement (h4-01's "52 minutes, covering ..., the orders, ...").
+  Everything else after it still does (session 2): a planned time ("in 2 weeks"), a cancellation, a history ("two days
+  ago"), a doubt, and a date, since each may say the minutes were another day's or the visit never happened.
 - C2: an inline "Complexity / Level of decision making: X" gives MDM level X; "shared decision making" never does.
 - C4: a performed E/M reading of any kind is held when the note says the patient was not seen in person, was seen by
   telephone or phone call, was a no-show or did not arrive; video and telehealth visits are not held. Installed's
@@ -79,6 +80,27 @@ class ActivityListTests(SimpleTestCase):
         # attended read alike, so the release takes neither)
         text = OFFICE + 'Total time: 30 minutes, including the visit on 10/20/2026.\n'
         self.assertNotIn('time_minutes', facts(em(text)))
+
+    def test_a_denial_or_another_days_time_in_the_list_still_retimes_it(self):  # kills pv1-c1-plan-work
+        # session 2: each is held on installed, and read READY when every cue after the activity word was skipped
+        for line in ('Total time: 15 minutes, spent on chart review, as the visit was cancelled.',
+                     'Total time: 15 minutes, spent on her visit, which was cancelled.',
+                     'Total time: 20 minutes, including the visit that was postponed.',
+                     'Total time: 20 minutes, covering a visit that was not done.',
+                     'Total time: 60 minutes, including 30 minutes of care coordination two days ago.',
+                     'Total time: 30 minutes, including time spent in the past on her care.'):
+            self.assertNotIn('time_minutes', facts(em(OFFICE + line + '\n')), line)
+
+    def test_a_planned_time_in_the_list_still_retimes_it(self):  # kills pv1-c1-planned-time
+        for line in ('Total time: 30 minutes, including the follow-up visit in 2 weeks.',
+                     'Total time: 30 minutes, including 10 minutes with her tomorrow.'):
+            self.assertNotIn('time_minutes', facts(em(OFFICE + line + '\n')), line)
+
+    def test_each_plan_word_of_the_visits_own_work(self):
+        for words in ('the orders', 'the referral to surgery', 'arranging the colonoscopy', 'her recommendations',
+                      'next steps', 'awaiting results', 'what we will do about the reflux'):
+            text = OFFICE + f'Total time: 40 minutes, covering her history, {words} and documentation.\n'
+            self.assertEqual(facts(em(text)).get('time_minutes'), '40', words)
 
     def test_a_time_at_another_visit_stays_held(self):  # the diagnosis's C1 counterexample, as installed
         text = OFFICE + 'Total time 30 minutes at the follow-up visit next month.\n'
@@ -172,6 +194,19 @@ class NotInPersonTests(SimpleTestCase):
                       'He did not show up for the visit.', 'Telephone visit only.', 'Audio-only visit.',
                       'No in-person contact today.', 'Phone f/u about her reflux.', 'Patient no showed.'):
             self.assert_held(OFFICE.replace('Heartburn.\n', words + '\n') + 'Total time: 20 minutes.\n')
+
+    def test_session_two_synonyms(self):  # kills pv1-c4-synonyms
+        # each read READY on installed and on PV1's first code in a note that otherwise documents an office visit
+        for words in ('The patient was not seen.', 'Visit type: Telephone.', 'Encounter type: phone.',
+                      'Type of visit: telephone.', 'Patient missed her appointment.', 'Left without being seen.'):
+            self.assert_held(OFFICE.replace('Heartburn.\n', words + '\n') + 'Total time: 20 minutes.\n')
+
+    def test_session_two_synonyms_need_their_own_words(self):
+        for words in ('No polyps were seen.', 'Her primary care clinician has not seen her since June.',
+                      'Visit type: office.', 'She missed work for two days.', 'He left without his medication list.'):
+            text = OFFICE.replace('Heartburn.\n', 'Heartburn. ' + words + '\n') + 'Total time: 20 minutes.\n'
+            finding = em(text)
+            self.assertEqual((finding.status, facts(finding).get('time_minutes')), ('performed', '20'), words)
 
     def test_a_head_title_is_read_whatever_its_section(self):  # kills pv1-c4-head
         # the note opens on "Follow-up", a plan heading: the title line under it is in a plan section

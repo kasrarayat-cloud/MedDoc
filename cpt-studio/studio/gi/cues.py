@@ -740,9 +740,9 @@ EM_TIME_LINE = rx(r'^[ \t]*(?:total\s+)?time(?:\s+spent)?[ \t]*[:\-][ \t]*(?P<mi
 NOT_EM_TIME = rx(r'\b(?:withdrawal|sedation|procedure\s+time|procedural|intra-?service|fluoroscop\w*|insertion|'
                  r'cecal|anesthesia|recovery|monitoring)\b')
 # GI round 4 (C1): the word that opens the list of what an E/M time statement's minutes covered, written right after the
-# minutes ("52 minutes, covering her history, ..., the orders, and documentation"; matched at the statement's end). What
-# follows it is the visit's own work, never the time's occasion: no clause cue after it re-times the statement (a date
-# still does; detect._clause_reading_cues).
+# minutes ("52 minutes, covering her history, ..., the orders, and documentation"; matched at the statement's end). A
+# plan word after it names the visit's own work, never the time's occasion: "the orders" does not re-time the statement.
+# A planned time, a cancellation, a history, a doubt and a date after it still do (detect._pv1_activity_work).
 EM_TIME_ACTIVITIES = rx(r'[ \t]*,?[ \t]*(?:covering|including|included|spent\s+(?:on|in)|devoted\s+to|comprising|'
                         r'consisting\s+of|which\s+(?:covered|included))\b')
 # GI round 4 (C4): words saying the encounter was no in-person visit - the patient not seen in person, no in-person
@@ -755,7 +755,14 @@ NOT_IN_PERSON = rx(r'\bnot\s+seen\s+in\s+(?:the\s+)?(?:office|clinic|person)\b|\
                    r'check-?ins?|contacts?|conversations?|interviews?|appointments?|notes?|discussions?|messages?|'
                    r'triage)\b'
                    r'|\btelephonic(?:ally)?\b|\baudio[- ]only\b'
-                   r"|\bno[- ]?show(?:s|ed)?\b|\b(?:did\s+not|didn't|failed\s+to)\s+(?:arrive|attend|show\s+up)\b")
+                   r"|\bno[- ]?show(?:s|ed)?\b|\b(?:did\s+not|didn't|failed\s+to)\s+(?:arrive|attend|show\s+up)\b"
+                   # session 2: "The patient was not seen.", a visit-type field naming the telephone ("Visit type:
+                   # Telephone", "Type of encounter: phone"), "missed her appointment", "left without being seen"
+                   r'|\b(?:patient|pt|she|he)\s+(?:was|is)\s+not\s+seen\b|\b(?:(?:visit|encounter|appointment|contact|'
+                   r'consult(?:ation)?)\s+(?:type|mode|modality|method)|(?:type|mode|modality|method)\s+of\s+(?:visit|'
+                   r'encounter|appointment|contact|consult(?:ation)?))[ \t]*[:\-][ \t]*(?:tele)?phone\b'
+                   r"|\bmissed\s+(?:her|his|their|the|this|today'?s)\s+(?:scheduled\s+)?(?:appointment|visit)\b"
+                   r'|\bleft\s+without\s+being\s+seen\b|\bLWBS\b')
 # ... and a title line of the note's head naming a telephone or audio-only encounter ("Telephone encounter", "Phone
 # visit"), read whatever section the head falls in (a note may open on a heading such as "Follow-up").
 NOT_IN_PERSON_TITLE = rx(r'^[ \t]*+(?:[\w-]++[ \t]++){0,3}?(?:telephone|phone|audio[- ]only)[ \t]++(?:encounter|call|'
