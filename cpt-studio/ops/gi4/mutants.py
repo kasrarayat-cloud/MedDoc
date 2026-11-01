@@ -593,7 +593,8 @@ PE_MUTANTS = (
            '    return in_todays_narrative(an.text, verb, an.service_date, (at - len(pre), at + len(post)))',
            '    return True', _PE_UNIT),
     # --- GI round 4 Wave 1 repair, cycle 1: the shared copy guards of today's procedure report and narrative
-    # (detect.todays_procedure_report, detect.in_todays_narrative), read by PE's routing-only reach and PI's S1 and E1 ---
+    # (detect.todays_procedure_report, detect.in_todays_narrative), read by PE's routing-only reach and PI's S1 (PI's E1 too
+    # until its drop in Wave 1 repair cycle 2) ---
     Mutant('pe-today-head-date', "the strong head: an own-date field", _PE_DETECT,
            '    if not head.own_dates:  # an own-date field\n        return False',
            '    if False:  # an own-date field\n        return False', _PE_UNIT),
@@ -673,13 +674,20 @@ PE_MUTANTS = (
 # --- package PI: the inventory (detector tests.test_gi4_pi; moved here from tests/test_gi4_pi_mutants.py, which now
 # checks this slice; its (name, guard, path, old, new, detector) tuples are Mutant records here) ---
 _PI_UNIT = 'unit:tests.test_gi4_pi'
+# GI round 4 Wave 1 repair cycle 2 (pi.json amendment_20261101_cycle2): E1 and A1 were DROPPED with their code, and their
+# 16 mutants retired with it (pi-e1-section, pi-e1-occurrence, pi-e1-extent-word, pi-e1-occurrence-word,
+# pi-e1-routing-positive; pi-carry-part, pi-carry-part-kind, pi-carry-performed, pi-carry-region, pi-carry-reach,
+# pi-carry-paragraph, pi-carry-field, pi-carry-two-named, pi-carry-lesion, pi-carry-lesion-paragraph,
+# pi-carry-lesion-heading). Kept: S1's and W1's 8, unchanged but for the three descriptions that named E1. New: one
+# killing mutant per part of S1's binding rule (pi-reach-binding*).
 PI_MUTANTS = (
-    Mutant('pi-reach-head', 'the reach and E1 need a STRONG procedure report head (Wave 1 repair: '
-           'detect.todays_procedure_report replaces sections.procedure_report_head)', 'studio/gi/services.py',
+    Mutant('pi-reach-head', 'the reach needs a STRONG procedure report head (Wave 1 repair: '
+           'detect.todays_procedure_report replaces sections.procedure_report_head; E1, which read it too, was dropped '
+           'in cycle 2)', 'studio/gi/services.py',
            '    return detect.todays_procedure_report(text) and not _sections.around_procedure_title(text)',
            '    return not _sections.around_procedure_title(text)', _PI_UNIT),
-    Mutant('pi-reach-around-title', 'the reach and E1 are never read in a note written around a procedure',
-           'studio/gi/services.py',
+    Mutant('pi-reach-around-title', 'the reach is never read in a note written around a procedure (as E1 was not, '
+           'until its drop in cycle 2)', 'studio/gi/services.py',
            '    return detect.todays_procedure_report(text) and not _sections.around_procedure_title(text)',
            '    return detect.todays_procedure_report(text)', _PI_UNIT),
     Mutant('pi-reach-occurrence', "the reach is read only inside today's procedure narrative (Wave 1 repair: the shared "
@@ -689,47 +697,10 @@ PI_MUTANTS = (
     Mutant('pi-reach-date', 'the reach is never read in a clause carrying a date', 'studio/gi/services.py',
            '                    if own_report[0] and not _dates_in(dates, cs, ce) \\',
            '                    if own_report[0] \\', _PI_UNIT),
-    Mutant('pi-carry-part', 'a paragraph carries its service within its own part only', 'studio/gi/services.py',
-           "    if part_start != part.start or part.kind in ('history', 'plan', 'indication'):",
-           "    if part.kind in ('history', 'plan', 'indication'):", _PI_UNIT),
-    Mutant('pi-carry-part-kind', 'never into a history, plan or indication part', 'studio/gi/services.py',
-           "    if part_start != part.start or part.kind in ('history', 'plan', 'indication'):",
-           '    if part_start != part.start:', _PI_UNIT),
-    Mutant('pi-carry-performed', 'the carried family is one documented performed', 'studio/gi/services.py',
-           '    if len(done) < 2 or family not in done:', '    if len(done) < 2:', _PI_UNIT),
-    Mutant('pi-carry-region', 'every site the statement names is one the carried family reaches', 'studio/gi/services.py',
-           '    if named and not named <= FAMILY_REGIONS.get(family, frozenset()):', '    if False:', _PI_UNIT),
-    Mutant('pi-carry-reach', 'within CARRY_REACH characters', 'studio/gi/services.py',
-           'CARRY_REACH = 1500  # A1:', 'CARRY_REACH = 10 ** 9  # A1:', _PI_UNIT),
-    Mutant('pi-carry-paragraph', 'no blank line between', 'studio/gi/services.py',
-           '    if pos - end > CARRY_REACH or (pos > end and PARAGRAPH_BREAK.search(text, end, pos)):',
-           '    if pos - end > CARRY_REACH:', _PI_UNIT),
-    Mutant('pi-carry-field', 'never a field or check-box row', 'studio/gi/services.py',
-           '                                      field_row=_field_or_box_line(text, ms, me), lesion_carry=lesion_carry)',
-           '                                      field_row=False, lesion_carry=lesion_carry)', _PI_UNIT),
-    Mutant('pi-carry-two-named', 'a sentence naming two families clears the carry', 'studio/gi/services.py',
-           '            elif carrying and named_here:\n                carry = None',
-           '            elif False:\n                carry = None', _PI_UNIT),
-    Mutant('pi-e1-section', 'E1: never from a history or plan section of the layout', 'studio/gi/services.py',
-           "        if _sections.layout(t).section_at(pos).kind in ('history', 'plan'):\n            return True",
-           '        if False:\n            return True', _PI_UNIT),
-    Mutant('pi-e1-occurrence', "E1: only inside today's procedure narrative (Wave 1 repair: the shared copy guards, which "
-           'read under_another_occurrence now)', 'studio/gi/services.py',
-           '        if text and not _pi_todays_statement(text, span):', '        if False:', _PI_UNIT),
-    Mutant('pi-e1-extent-word', 'E1: never from a statement carrying an extent word', 'studio/gi/services.py',
-           '        if EXTENT_WORD.search(span.text) or (text and _pi_not_today_place(text, span.start)):',
-           '        if text and _pi_not_today_place(text, span.start):', _PI_UNIT),
-    Mutant('pi-e1-occurrence-word', 'E1: never a landmark an earlier-occurrence word leads in its statement',
-           'studio/gi/services.py',
-           '            if any(not _sections.ANOTHER_OCCURRENCE_HEAD.search(span.text, 0, m.start())\n'
-           '                   for m in pattern.finditer(span.text)):',
-           '            if any(True for m in pattern.finditer(span.text)):', _PI_UNIT),
-    Mutant('pi-office-visit', 'the reach and E1 are never read in an office visit note (routing reads the visit done)',
-           'studio/gi/services.py',
+    Mutant('pi-office-visit', 'the reach is never read in an office visit note (routing reads the visit done; E1, which '
+           'read it too, was dropped in cycle 2)', 'studio/gi/services.py',
            "    if visit is not None and visit.status in POSITIVE:\n        return False",
            '    if False:\n        return False', _PI_UNIT),
-    Mutant('pi-e1-routing-positive', "E1: never where routing reads the family done today", 'studio/validation/checks.py',
-           '                    and (finding is None or finding.status not in POSITIVE):', '                    and True:', _PI_UNIT),
     Mutant('pi-w1-another-stent', 'W1: dropped only beside another stent performed (hold-only)', 'studio/gi/services.py',
            "            if any(a.kind == 'stent' and a.status == 'performed' and a.id not in phantom for a in d.acts):",
            '            if True:', _PI_UNIT),
@@ -738,21 +709,24 @@ PI_MUTANTS = (
            "evidence, replacing cycle 1's hold-only 'the head excludes')", 'studio/gi/services.py',
            '    if family not in _pi_head_families(original, routing):\n        return False',
            '    if False:\n        return False', _PI_UNIT),
-    Mutant('pi-carry-lesion', "A1: a carry the paragraph's lesion carry stands against holds (a misbinding never binds)",
-           'studio/gi/services.py',
-           "        return ''  # GI round 4 Wave 1 repair (F5): the lesion carry is another family's - hold, never bind",
-           "        pass  # GI round 4 Wave 1 repair (F5): the lesion carry is another family's - hold, never bind",
-           _PI_UNIT),
-    Mutant('pi-carry-lesion-paragraph', 'A1: the lesion carry stands only within its paragraph (no blank line between)',
-           'studio/gi/services.py', '        return False  # a blank line: the paragraph, and its lesion carry, ended',
-           '        pass  # a blank line: the paragraph, and its lesion carry, ended', _PI_UNIT),
-    # --- amendment_20261101_cycle1_c ---
-    Mutant('pi-carry-lesion-heading', 'A1: the lesion carry lapses at a line written as a heading between it and the act',
-           'studio/gi/services.py', '    return not _pi_heading_between(text, end, pos)', '    return True', _PI_UNIT),
     # --- amendment_20261101_cycle1_d ---
     Mutant('pi-head-not-today', "S1: a head name routing reads as not done today names no family", 'studio/gi/services.py',
            '                     if not any(a < m.end() and m.start() < b for a, b in elsewhere))',
            '                     if True)', _PI_UNIT),
+    # --- amendment_20261101_cycle2: S1 never decides the binding of an act or lesion A1 used to carry ---
+    Mutant('pi-reach-binding', 'where more than one family is read performed, a family S1 alone reads performed takes no '
+           "part in pass 3's one-performed-family fallback (those shapes bind as installed binds them)",
+           'studio/gi/services.py',
+           '        binding_families = [f for f in performed_families if f not in reach_only] \\\n',
+           '        binding_families = performed_families \\\n', _PI_UNIT),
+    Mutant('pi-reach-binding-own', "only there: where S1's family is the only family read performed, it still takes an "
+           'act or lesion nothing else gives a family, as before cycle 2', 'studio/gi/services.py',
+           "            if len([f for f in performed_families if f != 'gi.office_em']) > 1 else performed_families\n",
+           '            if True else performed_families\n', _PI_UNIT),
+    Mutant('pi-reach-binding-installed', 'an installed performed reading of the family (after its reach) puts it back '
+           'into the fallback', 'studio/gi/services.py',
+           '                    reach_only.discard(family)  # an installed reading states it performed too\n',
+           '                    pass  # mutant: an installed reading never puts the family back\n', _PI_UNIT),
 )
 # --- package PO: second-review offers, the amendment A1-A5 included (detector tests.test_gi4_po; moved here from
 # tests/test_gi4_po_mutants.py, which now checks this slice) ---
