@@ -373,14 +373,16 @@ class _PeerContract:
         self.assertEqual([(item.question_id, item.settled, item.value) for item in review.answers],
                          [('clar-extent-0001', False, ''), ('clar-extent-0001', False, ''),
                           ('clar-date-0002', True, '2026-10-21')])
+        # a model-written id is quoted in a problem only in a strict shape (a real question id is a clarification's
+        # UUID); these hand-written ids are named by their length (refutation round 3; the pin moved from quoting them)
         self.assertEqual(review.problems, (
-            "question_answers[0] answers a question id the request did not list ('clar-invented-9999'); it was "
+            'question_answers[0] answers a question id the request did not list (a value of 18 characters); it was '
             'dropped.',
-            "question_answers[1] says the document settles 'clar-extent-0001' but gives no value; it is read as not "
-            'settled.',
-            "question_answers[2] answers 'clar-extent-0001' again.",
-            "question_answers[2] says the document does not settle 'clar-extent-0001' but gives a value; the value was "
-            'not kept.'))
+            'question_answers[1] says the document settles a value of 16 characters but gives no value; it is read as '
+            'not settled.',
+            'question_answers[2] answers a value of 16 characters again.',
+            'question_answers[2] says the document does not settle a value of 16 characters but gives a value; the '
+            'value was not kept.'))
         quotes = review.answers[2].evidence
         self.assertEqual([(bool(item.spans), item.reason) for item in quotes],
                          [(True, ''), (False, 'not found'), (False, 'too short')])

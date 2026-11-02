@@ -297,8 +297,12 @@ class PeerRequestTests(PeerMaterialCase):
         astra = next(item for item in trace['participants'] if item['name'] == 'astra')
         reading = next(run['reading'] for run in astra['runs'] if run['reading'])
         shown = json.dumps(reading, ensure_ascii=False)
+        # nowhere in the reading as served - neither as a field's value nor inside a problem the reader wrote about it
+        # (the reader quotes a value in a problem only in a strict shape too, participants.reading._token)
         for token in [ASTRA_CODE, ASTRA_MOD, ASTRA_SID, LESION_SID, NOT_CODED_TOKEN, *SPLIT]:
-            self.assertNotIn(json.dumps(token, ensure_ascii=False), shown, token)
+            self.assertNotIn(token, shown, token)
+        self.assertIn(f'codes[1] (a value of {len(ASTRA_CODE)} characters) is not a five-character CPT code; it is kept '
+                      'as given.', reading['problems'])
         self.assertEqual([item['id'] for item in reading['services']],
                          [named(1, ASTRA_SID), 'c1', named(2, LESION_SID)])
         self.assertEqual([(item['code'], item['service_ids']) for item in reading['codes']],

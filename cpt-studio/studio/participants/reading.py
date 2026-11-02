@@ -70,7 +70,6 @@ _TOP_LISTS = (('services', MAX_SERVICES, 'services'), ('codes', MAX_CODES, 'code
 _SCHEMA_KEYWORDS = frozenset({'type', 'properties', 'required', 'additionalProperties', 'items', 'enum'})
 _DATE = re.compile(r'[0-9]{4}-[0-9]{2}-[0-9]{2}')
 _RECORDED_MODEL = re.compile(r'[\x21-\x7e]{1,100}')  # fits ProviderRun.returned_model
-_TOKEN_CHARS = 20  # a code, service id or date named in a problem; longer text is described, not repeated
 _VENDOR_WORD = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.:/-]*')  # how a vendor states a status, a stop reason, a category
 _WHITESPACE = re.compile(r'\s+')
 _SURROGATE = re.compile('[\ud800-\udfff]')
@@ -341,10 +340,19 @@ def _name(key: str) -> str:
     return _token(key)
 
 
+# The shapes in which a problem quotes a model-written value as written: a CPT code (CODE), an HCPCS Level II code, a
+# short id or modifier of letters and digits, a date or time written with digits and date punctuation only, a question
+# id (a UUID) - none of which can carry descriptor text. Anything else is named only by its length (refutation round 3:
+# the 20-character token rule this replaces quoted 'SYNTH;WITH-POLYP(S)' in problems that the owner's trace shows and a
+# refused reading's reason carries to the page and the reports; I9).
+_QUOTED = (CODE, re.compile(r'[A-Z][0-9]{4}'), re.compile(r'[A-Za-z0-9]{1,8}'), re.compile(r'[0-9][0-9/.:T+-]{0,31}'),
+           re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'))
+
+
 def _token(value: str) -> str:
-    """How a problem names a model-written code, id or date: quoted when it is a short token, otherwise by its
-    length only, so no longer text the model wrote into the field (a descriptor, say; I9) is repeated."""
-    if len(value) <= _TOKEN_CHARS and not _WHITESPACE.search(value.strip()):
+    """How a problem names a model-written code, id, date or key: quoted only in one of the _QUOTED shapes, otherwise
+    by its length only, so no text the model wrote into the field (a piece of a descriptor, say; I9) is repeated."""
+    if any(shape.fullmatch(value) for shape in _QUOTED):
         return repr(value)
     return f'a value of {len(value):,} characters'
 

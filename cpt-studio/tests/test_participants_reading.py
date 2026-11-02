@@ -698,9 +698,13 @@ class ReadingTests(OfflineTestCase):
         values = ('45385', '0001F', 'G0121', '4538', '453850', '45385-59', ' 45385', '1234a', '')
         result = self.read(empty_reading(services=[service()], codes=[code(value) for value in values]))
         self.assertEqual([c.code for c in result.codes], list(values))  # nothing stripped, dropped or rewritten
+        # each named as reading._token names it: quoted in a code, short-id or digits-and-punctuation shape, otherwise
+        # by its length (refutation round 3; this pin moved from quoting every short token)
+        named = ["'G0121'", "'4538'", "'453850'", "'45385-59'", 'a value of 6 characters', "'1234a'",
+                 'a value of 0 characters']
         self.assertEqual(result.problems, tuple(
-            f'codes[{index}] ({value!r}) is not a five-character CPT code; it is kept as given.'
-            for index, value in enumerate(values) if index > 1))
+            f'codes[{index}] ({name}) is not a five-character CPT code; it is kept as given.'
+            for index, name in enumerate(named, start=2)))
 
     def test_problems_name_a_long_value_by_its_length_and_never_repeat_it(self):
         """I9: a model could write descriptor-like text into a code, id or date field. The value is kept as given (the
@@ -741,11 +745,15 @@ class ReadingTests(OfflineTestCase):
             "codes[5] ('45385') gives over a million units, outside 1 to 99; it was dropped."))
 
     def test_a_date_of_service_that_is_not_a_calendar_date_is_not_used(self):
-        for value in ('2026-02-30', '10/21/2026', '2026-10-21T09:00', '2026-1-21', 'yesterday'):
+        # a value written with digits and date punctuation only is quoted; a word is named by its length (refutation
+        # round 3: a problem quotes a model-written value only in a shape that cannot carry descriptor text)
+        named = {'2026-02-30': "'2026-02-30'", '10/21/2026': "'10/21/2026'", '2026-10-21T09:00': "'2026-10-21T09:00'",
+                 '2026-1-21': "'2026-1-21'", 'yesterday': 'a value of 9 characters'}
+        for value, name in named.items():
             with self.subTest(value=value):
                 result = self.read(empty_reading(date_of_service={'value': value, 'evidence': []}))
                 self.assertEqual((result.refused, result.date_of_service), (False, ''))
-                self.assertEqual(result.problems, (f'date_of_service {value!r} is not a YYYY-MM-DD date; it was not '
+                self.assertEqual(result.problems, (f'date_of_service {name} is not a YYYY-MM-DD date; it was not '
                                                    'used.',))
         self.assertEqual(self.read(empty_reading(date_of_service={'value': '2028-02-29', 'evidence': []}))
                          .date_of_service, '2028-02-29')
