@@ -993,6 +993,28 @@ def _check_loop_time(job):
         raise Requeue(LOOP_LATE_MESSAGE)
 
 
+LOOP_LOCK_LOST_MESSAGE = ('The database session that held the provider lock, which keeps every other provider request '
+                          'waiting, ended while the tool loop ran, after {number} exchange{plural}; nothing more was '
+                          'sent, and the run has no final answer.')
+
+
+class _ProviderLockLost(Exception):
+    """This database session does not hold the installation-wide provider lock that _send took on its session."""
+
+
+def _holds_provider_lock():
+    """Whether this database session holds the installation-wide provider lock (PROVIDER_LOCK_KEY), as PostgreSQL's
+    lock table says (a bigint advisory key is its classid and objid halves, objsubid 1). A session advisory lock is held
+    only by the session that took it until that session ends, so a session Django opened after that one ended - a
+    transaction.atomic whose rollback fails closes the connection and opens another - never holds it (refutation
+    round 3, sends-1). A query that fails raises, and the loop never goes on without knowing (loop._halt)."""
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND granted "
+                       'AND pid = pg_backend_pid() AND objsubid = 1 AND (classid::bigint << 32) + objid::bigint = %s)',
+                       [PROVIDER_LOCK_KEY])
+        return bool(cursor.fetchone()[0])
+
+
 def _send_loop(provider, request, run, original_bytes, execute_tool, should_stop):
     """The participant's one tool loop (HARNESS.md 11.2): a loop.LoopOutcome. An adapter answers every run with one; one
     that raised instead, or answered with anything else, may have sent the request, so the outcome is unknown, with no
@@ -1000,12 +1022,32 @@ def _send_loop(provider, request, run, original_bytes, execute_tool, should_stop
     never a run left 'sending' that nothing blocks on and no member can reconcile (I8). ``should_stop``: the member's
     Stop, observed before every later exchange (sends-3). Each exchange is recorded as it ends (_record_exchange,
     refutation round 2, sends-r2-4: they were written only once the whole loop had ended, so a worker that died
-    mid-loop - SIGKILL, an OOM kill, a host reset - left nothing of exchanges that had been answered and paid for)."""
+    mid-loop - SIGKILL, an OOM kill, a host reset - left nothing of exchanges that had been answered and paid for).
+
+    The check the loop asks before it goes on after an exchange (before it answers the tool calls, and again right
+    before the next exchange is sent) also asks, after the member's Stop, whether this database session still holds
+    the provider lock _send took (_holds_provider_lock; refutation round 3, sends-1, I8): the last thing read from
+    the database before each later exchange is sent. An exchange's record that met an ended session let Django open
+    another one, which never took the lock, and the loop sent its next exchange while any other session could take
+    the lock and send. Once the session that holds the lock is gone, the loop ends there and nothing more is sent:
+    the run has no final answer and is failed and sent with the exchanges sent so far, in CPT Studio's own sentence
+    (LOOP_LOCK_LOST_MESSAGE) - never as a member's Stop, so the stage ends as a failed participant's does (I10). A
+    check that fails on the ended session itself stops the loop as before (loop._halt), and the stale sweep settles
+    the run."""
+    lost = []
+
+    def checked():
+        if should_stop():
+            return True
+        if not _holds_provider_lock():
+            lost.append(True)
+            raise _ProviderLockLost()
+        return False
     try:
         with participant_loop.recording(lambda record: _record_exchange(run, record)):
             outcome = provider.send_loop(request, deadline_s=settings.PARTICIPANT_LOOP_DEADLINE_SECONDS,
                                          client_request_id=str(run.run_identity), original_bytes=original_bytes,
-                                         execute_tool=execute_tool, should_stop=should_stop)
+                                         execute_tool=execute_tool, should_stop=checked)
         if (not isinstance(outcome, participant_loop.LoopOutcome) or not isinstance(outcome.final, RawExchange)
                 or outcome.final.outcome not in LOOP_OUTCOMES or not isinstance(outcome.exchanges, tuple)
                 or not all(isinstance(item, participant_loop.ExchangeRecord) for item in outcome.exchanges)):
@@ -1015,6 +1057,11 @@ def _send_loop(provider, request, run, original_bytes, execute_tool, should_stop
         return participant_loop.LoopOutcome(final=RawExchange(
             outcome='unknown', sent=True, error=PARTICIPANT_RAISED_MESSAGE.format(
                 label=participants.LABELS.get(provider.name, provider.name), error=type(exc).__name__)))
+    if lost and outcome.stopped:  # the loop ended at the check that found the lock gone (it never goes on after one)
+        number = len(outcome.exchanges)
+        error = LOOP_LOCK_LOST_MESSAGE.format(number=number, plural='' if number == 1 else 's')
+        return participant_loop.LoopOutcome(final=dataclasses.replace(outcome.final, error=error),
+                                            exchanges=outcome.exchanges)
     return outcome
 
 
@@ -1043,7 +1090,9 @@ def _finish_loop(run, outcome):
 def _record_exchange(run, record):
     """One exchange of ``run``'s tool loop and its tool calls, recorded as the exchange ends - its answer read and its
     tool calls answered, before the next exchange is sent - in a transaction of its own, committed at once (refutation
-    round 2, sends-r2-4). One that cannot be recorded is logged and recorded with the run's outcome (_finish_loop)."""
+    round 2, sends-r2-4). One that cannot be recorded is logged and recorded with the run's outcome (_finish_loop). A
+    write that meets an ended database session leaves Django on another session, which does not hold the provider lock:
+    the loop's next check finds that, and nothing more is sent (_send_loop; refutation round 3, sends-1)."""
     try:
         with transaction.atomic():
             _record_exchanges(run, (record,))
@@ -2424,6 +2473,19 @@ def run_job(job):
     return job
 
 
+def may_have_reached_vendor(runs):
+    """The runs of ``runs`` (a ProviderRun queryset) whose record shows they may have reached the vendor: a recorded
+    exchange in any state but not_sent - a participant's loop records each exchange as it ends - of a run that called a
+    vendor at all, its reservation naming the endpoint its adapter calls. A replay calls none (its endpoint is ''): its
+    exchanges are recorded 'succeeded' and reached nothing (refutation round 3, sends-4). Corti's runs record no
+    exchange. The one rule by which a run left sending is settled as sent, by the stale sweep (mark_stale) and by the
+    installer's undo (ops/install.py CLOSE_STAGES, run in the undone revision's image; refutation round 3, sends-3)."""
+    from django.db.models import Exists, OuterRef
+
+    return runs.exclude(endpoint='').filter(Exists(models.ProviderExchange.objects.filter(run=OuterRef('pk')).exclude(
+        state=models.ProviderRun.NOT_SENT)))
+
+
 def mark_stale():
     """Settle jobs a dead worker left 'running'. A send in flight becomes UNKNOWN, never resent."""
     cutoff = timezone.now() - timedelta(seconds=settings.STALE_RUNNING_SECONDS)
@@ -2447,13 +2509,15 @@ def mark_stale():
             sending = models.ProviderRun.objects.filter(revision=job.revision, state=models.ProviderRun.SENDING)
             reserved = models.ProviderRun.objects.filter(revision=job.revision, state=models.ProviderRun.RESERVED)
             unknown = sends and sending.exists()
+            reached = set(may_have_reached_vendor(sending).values_list('pk', flat=True))
             for run in sending:
                 run.state, run.error, run.finished_at = (models.ProviderRun.UNKNOWN,
                                                          'The worker stopped while the request was in flight.',
                                                          timezone.now())
                 # a participant's loop records each exchange as it ends: one of them that may have reached the vendor
-                # means the run was sent (refutation round 2, sends-r2-4; Corti's runs record no exchange)
-                run.sent = run.sent or run.exchanges.exclude(state=models.ProviderRun.NOT_SENT).exists()
+                # means the run was sent (refutation round 2, sends-r2-4; Corti's runs record no exchange) - by the rule
+                # the installer's undo settles a run with too, and never for a replay (refutation round 3, sends-3/-4)
+                run.sent = run.sent or run.pk in reached
                 run.save(update_fields=['state', 'error', 'finished_at', 'sent'])
             for run in reserved:
                 run.state, run.error, run.finished_at = (models.ProviderRun.NOT_SENT,

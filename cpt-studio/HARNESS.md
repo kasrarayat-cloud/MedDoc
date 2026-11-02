@@ -901,6 +901,42 @@ and 12.1-12.6 differ, this list describes the code; the earlier text is kept so 
     540 s and 4 exchanges) left nothing of exchanges that had been answered and paid for.
   - The stale sweep settles a run left sending as unknown, as before, and as sent when an exchange of it that may have
     reached the vendor (any but `not_sent`) is recorded; Corti's runs record no exchange, so theirs are as before.
+    **Amended after refutation round 3 (sends-3, sends-4, falsegreen-5):** one rule decides that sent,
+    `jobs.may_have_reached_vendor`, and the installer's undo applies it too (`ops/install.py` `CLOSE_STAGES`, run in
+    the undone revision's own image), which had settled such a run unknown with sent false beside its answered exchange
+    while its comment says it settles a run as the sweep does (sends-3). A recorded exchange counts only for a run that
+    called a vendor: its reservation names the endpoint its adapter calls, and a replay calls none - its replayed
+    exchanges, recorded `succeeded`, reached nothing, yet a swept replay run was marked sent (sends-4). The rule is
+    pinned for a recorded `succeeded`, `failed` (an HTTP 529 answer), `unknown` and `not_sent` exchange (falsegreen-5:
+    only `succeeded` was). An image with no such rule, a revision before harness@2's exchanges, records no exchange, and
+    its close settles runs as before.
+  - **The provider lock, held for the whole loop (refutation round 3, sends-1; section 2, I8).** An exchange's record
+    that met an ended database session let Django open another one (`transaction.atomic` closes a connection whose
+    rollback fails, then reconnects), which never took the installation-wide lock, and the loop sent its next exchange
+    while any other session could take the lock and send (the installer's access check, a second worker). The check the
+    loop asks before it goes on after an exchange (`loop._halt`: before it answers the tool calls, and again right
+    before the next exchange is sent) now also asks, after the member's Stop, whether this database session holds the
+    lock (`jobs._holds_provider_lock`, from PostgreSQL's `pg_locks`); that question is the last thing read from the
+    database before each later exchange is sent. When it does not, nothing more is sent: the run is recorded failed and
+    sent with the exchanges sent so far and CPT Studio's own sentence (`jobs.LOOP_LOCK_LOST_MESSAGE`), never as a
+    member's Stop, and the stage ends as a failed participant's does (I10; the next stage takes the lock afresh). A
+    check that fails on the ended session itself stops the loop as before, and the stale sweep settles the run. What no
+    check closes: the lock belongs to a session, so a session that ends while an exchange is in flight, or between the
+    check and the next send (or between the lock and the first send), ends the lock while that exchange may still reach
+    the vendor.
+  - **Known limit (refutation round 3, sends-2).** A worker that dies after the loop's final answer was recorded as it
+    ended and before the run's outcome was (`jobs._finish_loop`; a window of milliseconds) leaves a run the stale sweep
+    settles as unknown, "The worker stopped while the request was in flight.", beside that recorded answer; when the
+    outcome's own write fails there, the run is unknown with `_finish_loop`'s "what reached the vendor is not known",
+    although every exchange is on record. The cost: the record contradicts its own exchanges until a member reconciles
+    it, the encounter waits for that reconciliation (I8), and the reconciliation sends the identical request again and
+    pays for it again (as before D5, when nothing of the loop was recorded). Settling such a run from its recorded
+    exchanges would derive the loop's final record a second way (its usage basis and returned model are not recorded
+    per exchange) and change the rule above, so it is not done in this round.
+  - Tests: `tests/test_harness2_r3_sends.py` (the lock with the worker's session really ended, outside any test
+    transaction; the undo and the sweep alike; a replay; the known limit as it stands), `RecordedAsItEndsTests` in
+    `tests/test_harness2_r2_peer.py` (falsegreen-5) and `SentRunsOnTheDatabaseTests` in `ops/test_install_harness2.py`
+    (the undo on real rows).
   - A tool call whose arguments are missing or null is recorded with JSON null arguments (`jobs._record_exchanges`).
     SQL NULL, which the column refuses, broke the record, and the whole run - its final answer included - was recorded
     unknown with nothing of it kept, holding the other participant (I8, I10).

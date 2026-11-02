@@ -440,6 +440,50 @@ class RecordedAsItEndsTests(Harness2Case):
         self.assertEqual((run.state, run.sent, [e.turn for e in run.exchanges.all()]), ('succeeded', True, [1, 2]))
         self.assertEqual(calls, [[1], [2], [1]])
 
+    # Refutation round 3, falsegreen-5: the sweep's rule - a recorded exchange in any state but not_sent may have
+    # reached the vendor - was pinned only for 'succeeded', so a sweep counting 'succeeded' alone stayed green while it
+    # recorded a run the vendor answered with HTTP 529, or may have received, as never sent.
+
+    def swept_after_its_only_exchange(self, step):
+        """Astra's only exchange is ``step``, recorded as it ended; the worker dies once the loop has ended, before the
+        run's outcome is recorded (_finish_loop); the stale sweep then settles the run. (state, sent, exchanges) before
+        the sweep, and the run after it."""
+        def dies(run, outcome):  # stands in for a SIGKILL between the exchange's record and the run's outcome
+            raise _WorkerDied()
+        self.adapters['astra'].first = [step]
+        encounter_id = self.create()
+        job = self.run_until('astra')
+        with mock.patch('studio.jobs._finish_loop', side_effect=dies), self.assertRaises(_WorkerDied):
+            jobs.run_job(job)
+        (run,) = self.runs_of(encounter_id, 'astra', 'independent')
+        before = (run.state, run.sent, [(e.turn, e.state, e.http_status) for e in run.exchanges.all()])
+        models.Job.objects.filter(pk=job.pk).update(started_at=timezone.now() - timedelta(minutes=11))
+        jobs.mark_stale()
+        run.refresh_from_db()
+        self.assertEqual((run.error, models.Job.objects.get(pk=job.pk).state),
+                         ('The worker stopped while the request was in flight.', 'unknown'))
+        return before, run
+
+    def test_a_recorded_http_529_answer_marks_the_swept_run_sent(self):
+        from tests.test_harness2_pipeline import failed
+        before, run = self.swept_after_its_only_exchange(failed())
+        self.assertEqual(before, ('sending', False, [(1, 'failed', 529)]))
+        self.assertEqual((run.state, run.sent), ('unknown', True))
+
+    def test_a_recorded_unknown_exchange_marks_the_swept_run_sent(self):
+        from tests.test_harness2_pipeline import unknown
+        before, run = self.swept_after_its_only_exchange(unknown())
+        self.assertEqual(before, ('sending', False, [(1, 'unknown', None)]))
+        self.assertEqual((run.state, run.sent), ('unknown', True))
+
+    def test_control_a_recorded_not_sent_exchange_leaves_the_swept_run_unsent(self):
+        from studio.types import RawExchange
+        refused = RawExchange(outcome='not_sent', sent=False,
+                              error='Astra could not be reached (synthetic); nothing was sent.')
+        before, run = self.swept_after_its_only_exchange(refused)
+        self.assertEqual(before, ('sending', False, [(1, 'not_sent', None)]))
+        self.assertEqual((run.state, run.sent), ('unknown', False))
+
 
 class LoopRecordingTests(OfflineTestCase):
     """loop.recording, the hook the pipeline records each exchange through: every loop run hands the callback each

@@ -1809,17 +1809,20 @@ UNDO_HAZARDS_READ = UNDO_HAZARDS + "print(ANSWER + json.dumps({'hazards': undo_h
 # Close what a pair being undone left open since it started (refutation r1, migrate-3/-4): every stage it queued, ran
 # or left resumable (cancelled) becomes FAILED with P['note'] - failed, not cancelled, so no revision's web offers a
 # Resume for it - and every provider run it left unsettled is settled as the stale-stage sweep settles one (sending:
-# unknown, reserved: not sent). So, whichever pair created it, does every stage of a kind the next worker does not run
-# (P['kinds'] are those it runs) that is queued, running, or cancelled as its encounter's latest stage (what a Resume
-# runs again): that worker ends on it (refutation p1, security-0: a second review stopped under an earlier pair of a
-# revision that runs it outlived the window). Nothing finished is touched and no row is removed. The answer names,
-# after the close, what the next pair would still act on wrongly (UNDO_HAZARDS).
+# unknown, reserved: not sent). A run left sending is also recorded sent when its record shows it may have reached the
+# vendor, by the sweep's own rule (jobs.may_have_reached_vendor: an exchange of it recorded in any state but not_sent,
+# never a replay's; refutation round 3, sends-3 - the close had left sent false beside an answered exchange); an image
+# with no such rule, a revision before harness@2's exchanges, records none. So, whichever pair created it, does every
+# stage of a kind the next worker does not run (P['kinds'] are those it runs) that is queued, running, or cancelled as
+# its encounter's latest stage (what a Resume runs again): that worker ends on it (refutation p1, security-0: a second
+# review stopped under an earlier pair of a revision that runs it outlived the window). Nothing finished is touched and
+# no row is removed. The answer names, after the close, what the next pair would still act on wrongly (UNDO_HAZARDS).
 CLOSE_STAGES = UNDO_HAZARDS + f'COMMON_STAGE_KINDS = {list(COMMON_STAGE_KINDS)!r}\n' + '''
 import datetime
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
-from studio import models, review
+from studio import jobs, models, review
 Job, Run = models.Job, models.ProviderRun
 since, now = datetime.datetime.fromisoformat(P['since']), timezone.now()
 kept = set(P.get('kinds') or COMMON_STAGE_KINDS)
@@ -1840,6 +1843,9 @@ with transaction.atomic():
     encounters = sorted({str(pk) for pk in stages.values_list('encounter_id', flat=True)})
     kinds = sorted(set(stages.values_list('kind', flat=True)))
     runs = Run.objects.filter(in_flight)
+    reached = getattr(jobs, 'may_have_reached_vendor', None)  # the stale sweep's rule for sent (sends-3)
+    if reached is not None:
+        reached(runs.filter(state=Run.SENDING)).update(sent=True)
     unknown = runs.filter(state=Run.SENDING).update(
         state=Run.UNKNOWN, finished_at=now, error='The worker stopped while the request was in flight.')
     not_sent = runs.filter(state=Run.RESERVED).update(
