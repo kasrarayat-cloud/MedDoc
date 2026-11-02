@@ -239,3 +239,29 @@ requested in chat.
   uid 10150, the installer's hardening, a throwaway database; output leak-scanned) answered HTTP 200 as `claude-fable-5-1`,
   ran the tool loop live (one `cms_code_facts` call, two exchanges) and its reading was read. Both participants' access
   is shown; 1.3 stays open until the installed release's own `app --access-check` repeats it for Corti, Astra and Fable.
+
+- **2026-11-02T10:44Z Correction to the I1 records of 2026-11-01T23:08Z and 2026-11-02T01:30Z (appended, not
+  rewritten; refutation round 2, parity-r2-1 and parity-r2-2, both reproduced).** Each record's figures are what its
+  instruments printed, but each read them as I1 holding, and I1 covers more than they measure.
+  - **What those instruments measure.** The engine parity test: the engine's result on 11 cases whose reference sources
+    are built in memory (note `licence`). H1 replay: the engine on the retained regression fixtures, whose reference
+    sources keep the round-4 note. H4 battery: the assess child with no reference rows. None of them loads a source
+    through the importers, runs the pipeline's stages or re-assesses an encounter.
+  - **2026-11-01T23:08Z ("I1 proven"):** the stages and keys and the reference-source entries of a source loaded through
+    the importers were not measured. At that commit (`7c79270cd`) `studio/jobs.py`, `studio/review.py` and the
+    importers were still the round-4 head's, so those parts had not moved (the note changed at 23:27Z, `ad025537c`),
+    but nothing showed it.
+  - **2026-11-02T01:30Z ("I1 against the round-4 head: H1 replay EQUAL, H4 battery 0 movements", on `ec00a5b87`):** I1
+    did not hold as written. (a) `ad025537c` had changed the note the importers write on the CMS sources, so on an
+    installed system every Corti-only assessment's two imported CMS entries and its sha256 differed from the round-4
+    head's, and I1 did not say so (parity-r2-1; for the refutation lens's colonoscopy `07315c45fbda` on the round-4
+    head and `c961e7e69c35` on the harness, the note the only difference). (b) The pipeline package (`367612adb`) had made the participants record and the
+    retrieval traces decide whether a re-assessment is the recorded one, so a Corti-only re-assessment on identical
+    inputs after the CMS passages were imported recorded a second assessment, carried the decision onto it and asked
+    its question again (parity-r2-2). Neither instrument could see either.
+  - **Now (R2-PARITY, branch `wip/harness-r2-parity-20261102`, offline; nothing verified live):** I1 states its one
+    exception, the licence note, and the re-persist rule is the round-4 head's with no model participant configured
+    (`05860513b`; HARNESS.md 9). `tests/test_harness2_r2_parity.py` loads the CMS tables through the importers and
+    pins both digests, and pins the re-persist rule on the round-4 head's paths (14 tests). The I1 pins
+    (`tests/test_harness_engine_parity.py`, `CortiOnlyParityTests`) pass unchanged. Against `80f2f2dc8` on
+    `05860513b`: H1 replay base to head EQUAL; H4 battery 0 movements, 0 undeclared, 0 new violations.

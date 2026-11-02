@@ -1,6 +1,14 @@
 """Refutation round 2, R2-PARITY (HARNESS.md 9, I1; the round-2 repair plan's D6): Corti-only parity where the harness
 and the round-4 head (80f2f2dc8) could differ and no earlier proof looked.
 
+parity-r2-1. I1's one declared exception: the licence note studio.reference.importers.LICENSE_NOTE writes on every CMS
+source it imports was corrected after the round-4 head (the owner's 11.6 correction, ad025537c), and the installer's
+license-note phase rewrites the installed rows, so every Corti-only assessment listing such a source differs from the
+round-4 head's in those entries and in its sha256. No earlier proof loaded a source through the importers (the engine
+parity test builds its sources in memory, the pipeline tests by hand, H1 reads the retained fixtures' sources), so none
+could see it. Here the CMS tables are loaded through the importers and both digests are pinned: with the note reset to
+the round-4 text, the round-4 head's; with the importer's own, the harness's.
+
 parity-r2-2. Re-persisting an identical result on identical inputs returns the current assessment unchanged
 (review.persist_assessment). The harness had made what is recorded beside the result - the participants record and the
 reference retrieval traces - decide it, so an identical re-assessment made after the CMS passages were imported (the
@@ -13,19 +21,22 @@ Synthetic data only. Corti is the in-process FakeProvider read by the real norma
 configured, the pipeline tests' fakes); the CMS tables are loaded through the importers from the synthetic fixtures in
 the real CMS layouts (tests.test_reference). Nothing is sent anywhere.
 """
+import ast
 import hashlib
 import json
 import uuid
 from datetime import timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from django.conf import settings
 from django.db import connection
-from django.test import Client, TestCase, override_settings
+from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 
 from studio import jobs, models, participants, review
-from studio.reference import passages
+from studio.reference import importers, passages
 from studio.types import RawExchange
 from tests.support import factories as f
 from tests.test_harness_pipeline import BOTH, HarnessCase
@@ -381,3 +392,129 @@ class ConfiguredSameAssessmentTests(SameAssessmentMixin, HarnessCase):
             assessment.participants = malformed
             self.assertFalse(review._same_assessment(*common, record, assessment.retrieval), malformed)
             assessment.participants = record
+
+
+# --- parity-r2-1: I1's one declared exception, the CMS sources' licence note -----------------------------------------
+
+# The note the round-4 head's importer wrote on every CMS source it imported (80f2f2dc8, studio/reference/importers.py),
+# which the owner's 11.6 correction (ad025537c) replaced; the installer's license-note phase rewrites the installed rows
+# that hold it (ops/install.py, LICENSE_NOTE_OLD).
+ROUND_4_LICENSE_NOTE = ('CPT codes are copyright the American Medical Association; descriptors are not imported or '
+                        'displayed. Used for internal synthetic evaluation only; commercial CPT use requires an AMA '
+                        'license.')
+# The sha256 of the Corti-only assessment of COLON, Corti selecting 45385 (the hot snare) and 45378 (the cecum
+# sentence), the CMS PFS and MUE tables loaded through the importers from the synthetic fixtures: as an export of the
+# round-4 head made it with its own note (measured by the refutation lens, by its verifier and again for this repair),
+# and as the harness makes it with the importer's own note. The round-4 head makes HEAD_SHA256 with the harness's note,
+# and the harness ROUND_4_SHA256 with the round-4 note: the note is the only difference.
+ROUND_4_SHA256 = '07315c45fbdaed9668696efea28795e9e29f0ac4be8c72548b15ffa3832ee9ff'
+HEAD_SHA256 = 'c961e7e69c35ad1e9b22b5b4b88d4284fb649145a17d9dd945a2638a0246d3e7'
+IMPORTED = ('cms-mue-practitioner-2026q4', 'cms-pfs-rvu26d')
+SELECTIONS = (('45385', SNARE), ('45378', REACHED))
+# What a proposal row and a clarification row hold, compared field by field (every field but its ids and its row).
+PROPOSAL_FIELDS = ('key', 'bucket', 'code', 'code_kind', 'family', 'profile_version', 'status', 'exclusion_reason',
+                   'reinstatable', 'provider_display', 'evidence', 'rationale', 'checks', 'modifier_considerations',
+                   'units', 'fingerprint', 'position', 'support')
+CLARIFICATION_FIELDS = ('scope', 'family', 'fact', 'question', 'reason', 'state')
+ASSESSMENT_FIELDS = ('profiles_version', 'engine_version', 'encounter_checks', 'unsupported', 'summary', 'services',
+                     'completeness', 'participants')
+
+
+@override_settings(**LIVE)
+class ImportedReferenceParityTests(ArchiveMixin, TestCase):
+    """I1's one declared exception, pinned through the importers: Corti alone on COLON, the CMS PFS and practitioner
+    MUE tables loaded by studio.reference.importers. Re-pin only with a declaration of the change (HARNESS.md 9): a
+    moved digest is a change to every Corti-only assessment on an installed system."""
+
+    def setUp(self):
+        super().setUp()
+        self.assertEqual(participants.configured(), ())
+        self.provider = FakeProvider(selections=list(SELECTIONS))
+        patcher = mock.patch('studio.jobs.get_provider', return_value=self.provider)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        sources = [self.load_pfs(), self.load_mue()]
+        self.assertEqual(sorted(source.key for source in sources), list(IMPORTED))
+        self.assertEqual({source.license_note for source in sources}, {importers.LICENSE_NOTE})
+
+    def assess(self, note=None):
+        """The Corti-only assessment of COLON in a workspace of its own, the imported sources' note set to ``note``
+        first when one is given."""
+        if note is not None:
+            self.assertEqual(models.ReferenceSource.objects.filter(key__in=IMPORTED).update(license_note=note), 2)
+        client = Client(enforce_csrf_checks=False)
+        client.force_login(f.member(f.workspace()))
+        with self.captureOnCommitCallbacks(execute=True):
+            response = client.post('/api/encounters', {'text': COLON, 'synthetic_attestation': 'yes'})
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+        assessment = models.Encounter.objects.get(pk=response.json()['id']).current_assessment
+        self.assertEqual([(p.key, p.code, p.bucket) for p in assessment.proposals.order_by('position')],
+                         [('sel:0', '45385', 'selected'), ('sel:1', '45378', 'selected')])
+        return assessment
+
+    def notes(self, assessment):
+        return {entry['key']: entry['license_note'] for entry in assessment.reference_sources}
+
+    def test_with_the_importers_note_it_is_the_declared_head_digest(self):
+        assessment = self.assess()
+        self.assertEqual(assessment.sha256, HEAD_SHA256)
+        notes = self.notes(assessment)
+        self.assertEqual({key: notes.pop(key) for key in IMPORTED}, dict.fromkeys(IMPORTED, importers.LICENSE_NOTE))
+        self.assertTrue(notes)  # the AMA CPT and NCCI PTP entries: their own notes, neither of the two
+        self.assertFalse({importers.LICENSE_NOTE, ROUND_4_LICENSE_NOTE} & set(notes.values()), notes)
+
+    def test_with_the_round_4_note_it_is_the_round_4_heads_assessment(self):
+        assessment = self.assess(ROUND_4_LICENSE_NOTE)
+        self.assertEqual(assessment.sha256, ROUND_4_SHA256)
+        self.assertEqual({key: self.notes(assessment)[key] for key in IMPORTED},
+                         dict.fromkeys(IMPORTED, ROUND_4_LICENSE_NOTE))
+
+    def test_the_note_is_the_only_difference(self):
+        """Every proposal (its fingerprint included, so decisions carry by it as before), every question and every
+        record of the result is the same, and the reference-source entries are once the note is mapped back."""
+        harness = self.assess()
+        round_4 = self.assess(ROUND_4_LICENSE_NOTE)
+        self.assertEqual((harness.sha256, round_4.sha256), (HEAD_SHA256, ROUND_4_SHA256))
+        for name in ASSESSMENT_FIELDS:
+            self.assertEqual(getattr(harness, name), getattr(round_4, name), name)
+        mapped = [dict(entry, license_note=ROUND_4_LICENSE_NOTE) if entry['key'] in IMPORTED else entry
+                  for entry in harness.reference_sources]
+        self.assertNotEqual(harness.reference_sources, round_4.reference_sources)
+        self.assertEqual(mapped, round_4.reference_sources)
+
+        def rows(assessment):
+            proposals = [{name: getattr(p, name) for name in PROPOSAL_FIELDS} for p in assessment.proposals.order_by(
+                'position')]
+            questions = sorted((tuple(str(getattr(c, name)) for name in CLARIFICATION_FIELDS),
+                                c.proposal.key if c.proposal_id else '') for c in assessment.clarifications.all())
+            return proposals, questions
+        self.assertEqual(rows(harness), rows(round_4))
+        self.assertTrue(rows(harness)[1])  # 45378's question about its endoscopic base is asked in both
+
+
+class DeclaredExceptionTests(SimpleTestCase):
+    """HARNESS.md 9 declares the exception ImportedReferenceParityTests pins (parity-r2-1: the difference was real and
+    undeclared, so I1 claimed more than was true): I1 names the licence note, quotes the round-4 head's text and the
+    importer's own, names both digests and this proof. And the installer's license-note phase replaces exactly the
+    round-4 text with exactly the importer's (ops/install.py), so an installed system holds what I1 declares."""
+
+    def i1(self):
+        text = (Path(settings.BASE_DIR) / 'HARNESS.md').read_text(encoding='utf-8')
+        start = text.index('- **I1 Corti-only parity.**')
+        return ' '.join(text[start:text.index('- **I2 ', start)].split())
+
+    def test_i1_declares_the_licence_note_as_its_one_exception(self):
+        i1 = self.i1()
+        for needed in ('`ReferenceSource.license_note`', '`studio.reference.importers.LICENSE_NOTE`', '`ad025537c`',
+                       '`license-note`', f'"{ROUND_4_LICENSE_NOTE}"', f'"{importers.LICENSE_NOTE}"',
+                       f'`{ROUND_4_SHA256[:12]}`', f'`{HEAD_SHA256[:12]}`', '`tests/test_harness2_r2_parity.py`'):
+            self.assertIn(needed, i1)
+
+    def test_the_installer_replaces_exactly_the_round_4_note_with_the_importers(self):
+        tree = ast.parse((Path(settings.BASE_DIR) / 'ops' / 'install.py').read_text(encoding='utf-8'))
+        found = {node.targets[0].id: ast.literal_eval(node.value) for node in tree.body
+                 if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                 and node.targets[0].id in ('LICENSE_NOTE_OLD', 'LICENSE_NOTE_NEW')}
+        self.assertEqual(found, {'LICENSE_NOTE_OLD': ROUND_4_LICENSE_NOTE, 'LICENSE_NOTE_NEW': importers.LICENSE_NOTE})
+        self.assertNotEqual(ROUND_4_LICENSE_NOTE, importers.LICENSE_NOTE)
