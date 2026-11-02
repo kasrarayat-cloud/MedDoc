@@ -12,7 +12,7 @@ import json
 import re
 from types import SimpleNamespace
 
-from django.test import Client
+from django.test import Client, TestCase, override_settings
 
 from studio import models, review
 from tests import test_harness2_pipeline as hp
@@ -111,7 +111,8 @@ class FirstReadingPositionTests(R2WordingCase):
         (retained,) = self.runs_of(first, 'astra', 'independent')
         (reuse,) = self.runs_of(second, 'astra', 'independent')
         self.assertEqual(reuse.reused_from_id, retained.pk)
-        self.assertEqual((record_a['reading_sha256'], record_a['codes']), (record_b['reading_sha256'], record_b['codes']))
+        self.assertEqual((record_a['reading_sha256'], record_a['codes']),
+                         (record_b['reading_sha256'], record_b['codes']))
         position_a, position_b = (snare_a['participant_positions']['astra'], snare_b['participant_positions']['astra'])
         self.assertEqual((position_a['position'], position_a['quote']), (position_b['position'], position_b['quote']))
         self.assertEqual((position_a['detail'], position_b['detail']), (LISTED + LATER, LISTED))
@@ -135,3 +136,244 @@ class FirstReadingPositionTests(R2WordingCase):
         plain = review.participant_positions(SimpleNamespace(code='45385', support={}), located)
         self.assertEqual(plain['astra'], {'position': 'proposed', 'quote': SNARE,
                                           'detail': 'Astra proposed this code with evidence located in the document.'})
+
+
+# --- truth-4 and falsegreen-6: Corti's unlisted count is the engine's, per answer, in the row, the TXT and Checks --
+
+LONG_SELECTED, LONG_CANDIDATE = '45385-SYNTHETIC-LONG-VALUE', '45380-SYNTHETIC-CANDIDATE'  # 26 and 25 characters
+LISTED_COUNT = re.compile(r'returned (\d+) codes? that cannot be listed')
+UNLISTED_TWO = ('It returned 2 codes that cannot be listed: empty, or longer than 10 characters (a CPT code has five). '
+                'They are not shown and never truncated.')
+UNLISTED_ONE = ('It returned 1 code that cannot be listed: empty, or longer than 10 characters (a CPT code has five). '
+                'It is not shown and never truncated.')
+
+
+def _txt(encounter):
+    from studio import reports
+
+    return reports.render_txt(reports.snapshot(encounter, 'draft')).decode('utf-8')
+
+
+def _section(text, title):
+    """The lines of the TXT section ``title`` (up to its blank line)."""
+    return text.split(f'\n{title}\n', 1)[1].split('\n\n', 1)[0].splitlines()
+
+
+def _block(lines, head):
+    """The lines of one entry of a TXT section: the line starting with ``head`` and those under it."""
+    start = next(index for index, line in enumerate(lines) if line.startswith(head))
+    end = next((index for index in range(start + 1, len(lines)) if lines[index].startswith('  - ')), len(lines))
+    return lines[start:end]
+
+
+def _span(text, quote):
+    start = text.index(quote)
+    return [{'contextIndex': 0, 'start': start, 'end': start + len(quote), 'text': quote}]
+
+
+def _corti_item(code, text, quote):
+    return {'system': 'cpt', 'code': code, 'display': hp.CORTI_DISPLAY, 'evidences': _span(text, quote),
+            'alternatives': []}
+
+
+class CortiUnlistedCountMixin:
+    """Corti's answer returns codes the engine cannot list beside codes it can: the engine's provider.unlisted check
+    counts every one of them, whatever its role (selected, a candidate, an alternative), "The provider returned 2 codes
+    that cannot be listed". Corti's row and its REVIEW PARTICIPANTS entry counted only the selected ones, "It returned 1
+    code that cannot be listed", so the Checks tab showed both sentences one after the other (refutation round 4,
+    truth-4). They now count what the engine counts, and say the same number."""
+
+    def corti_row(self, detail):
+        return next(row for row in detail['harness']['participants'] if row['name'] == 'corti')
+
+    def run_with(self, edit):
+        with self.corti_answer(edit):
+            encounter_id = self.create(TWO_EXTENTS)
+            drain()
+        return encounter_id, self.detail(encounter_id)
+
+    def engine_count(self, detail):
+        (check,) = [c for c in detail['assessment']['encounter_checks'] if c['id'] == 'provider.unlisted']
+        self.assertEqual(check['status'], 'warn')
+        (count,) = LISTED_COUNT.findall(check['detail'])
+        return int(count)
+
+    def assertSaysTheEngineCount(self, encounter_id, detail, count, words, state):
+        """The row, the page's row and Checks tab, and the TXT's REVIEW PARTICIPANTS and checks say ``count``."""
+        self.assertEqual(self.engine_count(detail), count)
+        row = self.corti_row(detail)
+        self.assertEqual((row['detail'], row['unlisted_codes']), (f'{state[:1].upper()}{state[1:]}. {words}', count))
+        self.assertEqual([int(n) for n in LISTED_COUNT.findall(row['detail'])], [count])
+        page_row = browser('rowOf(page(), "data-participant", "corti")', detail)
+        self.assertEqual([int(n) for n in LISTED_COUNT.findall(page_row)], [count])
+        checks_tab = browser('visible(page("checks")).split("\\n").filter(l => /cannot be listed/.test(l))', detail)
+        self.assertTrue(checks_tab)
+        self.assertEqual({int(n) for line in checks_tab for n in LISTED_COUNT.findall(line)}, {count})
+        text = _txt(self.encounter(encounter_id))
+        lines = _block(_section(text, 'REVIEW PARTICIPANTS'), '  - Corti · ')
+        self.assertEqual(lines[0], f'  - Corti · Corti · {state}')
+        self.assertIn(f'    Not listed: {words}', lines)
+        self.assertEqual({int(n) for line in text.splitlines() if 'cannot be listed' in line
+                          for n in LISTED_COUNT.findall(line)}, {count})
+        for value in (LONG_SELECTED, LONG_CANDIDATE):  # never served, never printed (I9)
+            self.assertNotIn(value, json.dumps(detail))
+            self.assertNotIn(value, text)
+
+    def test_a_selected_code_and_a_candidate_it_cannot_list_are_two(self):
+        def edit(answer, text):
+            answer['codes'].append(_corti_item(LONG_SELECTED, text, SNARE))
+            answer['candidates'] = [_corti_item(LONG_CANDIDATE, text, SNARE)]
+        encounter_id, detail = self.run_with(edit)
+        self.assertEqual(self.corti_row(detail)['codes'], ['45380', '45385'])
+        self.assertSaysTheEngineCount(encounter_id, detail, 2, UNLISTED_TWO,
+                                      'answered; its codes that can be listed were checked')
+
+    def test_a_candidate_it_cannot_list_beside_selections_it_can(self):
+        # every code it selected can be listed: the row said "Answered; its codes were checked." with no count, beside
+        # the engine's "The provider returned 1 code that cannot be listed"
+        def edit(answer, text):
+            answer['candidates'] = [_corti_item(LONG_CANDIDATE, text, SNARE)]
+        encounter_id, detail = self.run_with(edit)
+        self.assertEqual(self.corti_row(detail)['codes'], ['45380', '45385'])
+        self.assertSaysTheEngineCount(encounter_id, detail, 1, UNLISTED_ONE,
+                                      'answered; its codes that can be listed were checked')
+
+    def test_it_selected_only_a_code_it_cannot_list_beside_a_candidate_it_can(self):
+        # the row said "none of its codes can be listed", beside the candidate the Alternatives list shows; it proposed
+        # none that can be listed, and none was checked
+        def edit(answer, text):
+            answer['codes'] = [_corti_item(LONG_SELECTED, text, SNARE)]
+            answer['candidates'] = [_corti_item('45380', text, BIOPSY)]
+        encounter_id, detail = self.run_with(edit)
+        [listed] = [p for p in self.proposals(detail, '45380', bucket='alternative') if self.origin(p) == 'primary']
+        self.assertTrue(listed['exclusion_reason'].startswith('Provider candidate; not selected.'),
+                        listed['exclusion_reason'])
+        self.assertEqual(self.corti_row(detail)['codes'], [])
+        self.assertSaysTheEngineCount(encounter_id, detail, 1, UNLISTED_ONE,
+                                      'answered; it proposed no code that can be listed, so none was checked')
+        page_row = browser('rowOf(page(), "data-participant", "corti")', detail)
+        self.assertIn('It proposed no code that can be listed.', page_row)
+        self.assertNotIn('none of its codes can be listed', page_row)
+
+    def test_codes_it_returned_that_can_all_be_listed_read_as_before(self):
+        def edit(answer, text):
+            answer['candidates'] = [_corti_item('45378', text, hp.LAND)]
+        encounter_id, detail = self.run_with(edit)
+        row = self.corti_row(detail)
+        self.assertEqual((row['detail'], row['codes'], row['unlisted_codes']),
+                         ('Answered; its codes were checked.', ['45380', '45385'], 0))
+        self.assertFalse([c for c in detail['assessment']['encounter_checks'] if c['id'] == 'provider.unlisted'])
+        lines = _block(_section(_txt(self.encounter(encounter_id)), 'REVIEW PARTICIPANTS'), '  - Corti · ')
+        self.assertEqual(lines[0], '  - Corti · Corti · answered; its codes were checked')
+        self.assertFalse([line for line in lines if line.startswith('    Not listed: ')])
+
+
+class CortiUnlistedCountTests(CortiUnlistedCountMixin, R2WordingCase):
+    pass
+
+
+@override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
+class CortiOnlyUnlistedCountTests(CortiUnlistedCountMixin, R2WordingCase):
+    def test_the_chain_is_i1_s(self):
+        def edit(answer, text):
+            answer['candidates'] = [_corti_item(LONG_CANDIDATE, text, SNARE)]
+        encounter_id, detail = self.run_with(edit)
+        self.assertEqual(self.kinds(encounter_id), ['extract', 'analyze', 'predict', 'assess'])
+        self.assertEqual(detail['harness']['phase'], 0)
+
+
+@override_settings(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
+class SecondReviewUnlistedTests(TestCase):
+    """falsegreen-6: Corti's row counts the codes its answers returned that cannot be listed - "its primary run and any
+    bounded second review" - yet no test had a second review return one: a mutant counting the primary run alone made
+    the row read "Answered; its codes were checked." with 0, and every gate stayed green. The second review's count is
+    pinned here, through the real ask and drain (tests.test_services_second_review's two-pass Corti, read by the real
+    normalizer), as the engine's provider.second_review check says it: "The second review returned 1 code ...", and the
+    row and the TXT say it of the second review ("Its second review returned 1 code ..."), apart from the primary's."""
+
+    SECOND_LONG = '45380-SYNTHETIC-LONG-VALUE'  # 26 characters
+    FIRST_LONG = '45385-SYNTHETIC-LONG-VALUE'
+
+    def setUp(self):
+        from unittest import mock
+
+        from tests.test_services_second_review import TwoPassProvider
+
+        self.ws = f.workspace()
+        self.reviewer = f.member(self.ws, f.user('reviewer_r4fg6'))
+        self.client = Client(enforce_csrf_checks=False)
+        self.client.force_login(self.reviewer)
+        self.provider = TwoPassProvider(first=[('45385', 'was removed with a cold snare')],
+                                        later=[('45380', 'was sampled with cold biopsy forceps'),
+                                               (self.SECOND_LONG, 'was sampled with cold biopsy forceps'),
+                                               ('45385', 'was removed with a cold snare')])
+        patcher = mock.patch('studio.jobs.get_provider', return_value=self.provider)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def run_second_review(self):
+        from tests.test_services_second_review import REPORT, ask
+
+        reply = self.client.post('/api/encounters', {'text': REPORT, 'synthetic_attestation': 'yes'})
+        self.assertEqual(reply.status_code, 201, reply.content)
+        encounter_id = reply.json()['id']
+        drain()
+        self.assertEqual(ask(self.client, encounter_id).status_code, 201)
+        drain()
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        self.assertIsNotNone(encounter.current_assessment.second_run_id)
+        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        return encounter, detail
+
+    def checks(self, detail):
+        return {c['id']: c for c in detail['assessment']['encounter_checks']}
+
+    def corti_lines(self, encounter):
+        return _block(_section(_txt(encounter), 'REVIEW PARTICIPANTS'), '  - Corti · ')
+
+    def test_a_code_the_second_review_returned_that_cannot_be_listed_is_counted_as_its_own(self):
+        encounter, detail = self.run_second_review()
+        checks = self.checks(detail)
+        self.assertNotIn('provider.unlisted', checks)  # the primary answer returned none
+        self.assertEqual(LISTED_COUNT.findall(checks['provider.second_review']['detail']), ['1'])
+        self.assertIn('The second review returned 1 code that cannot be listed',
+                      checks['provider.second_review']['detail'])
+        row = next(r for r in detail['harness']['participants'] if r['name'] == 'corti')
+        second = UNLISTED_ONE.replace('It returned', 'Its second review returned', 1)
+        self.assertEqual((row['state'], row['detail'], row['codes'], row['unlisted_codes']),
+                         ('done', f'Answered; its codes that can be listed were checked. {second}', ['45380', '45385'],
+                          1))
+        lines = self.corti_lines(encounter)
+        self.assertEqual(lines[0], '  - Corti · Corti · answered; its codes that can be listed were checked')
+        self.assertIn(f'    Not listed: {second}', lines)
+        self.assertNotIn(self.SECOND_LONG, json.dumps(detail))
+        self.assertNotIn(self.SECOND_LONG, '\n'.join(lines))
+
+    def test_each_answer_s_count_is_said_as_its_own_check_says_it(self):
+        self.provider.first = [('45385', 'was removed with a cold snare'),
+                               (self.FIRST_LONG, 'was removed with a cold snare')]
+        encounter, detail = self.run_second_review()
+        checks = self.checks(detail)
+        self.assertEqual(LISTED_COUNT.findall(checks['provider.unlisted']['detail']), ['1'])
+        self.assertEqual(LISTED_COUNT.findall(checks['provider.second_review']['detail']), ['1'])
+        row = next(r for r in detail['harness']['participants'] if r['name'] == 'corti')
+        second = UNLISTED_ONE.replace('It returned', 'Its second review returned', 1)
+        self.assertEqual((row['detail'], row['unlisted_codes']),
+                         (f'Answered; its codes that can be listed were checked. {UNLISTED_ONE} {second}', 2))
+        self.assertIn(f'    Not listed: {UNLISTED_ONE} {second}', self.corti_lines(encounter))
+
+    def test_a_second_review_the_engine_did_not_read_is_not_counted(self):
+        # the engine reads the second review only where its documented-service reading is consistent, and then records
+        # its provider.second_review check; read without that record (the same runs), none of its codes is counted, as
+        # the engine counted none
+        from studio import serializers
+
+        encounter, _ = self.run_second_review()
+        assessment = encounter.current_assessment
+        self.assertEqual(serializers.corti_unlisted_counts(assessment), (0, 1))
+        unread = SimpleNamespace(provider_run=assessment.provider_run, second_run=assessment.second_run,
+                                 encounter_checks=[c for c in assessment.encounter_checks
+                                                   if c['id'] != 'provider.second_review'])
+        self.assertEqual(serializers.corti_unlisted_counts(unread), (0, 0))
+        self.assertEqual(serializers.corti_unlisted(unread), 0)
+

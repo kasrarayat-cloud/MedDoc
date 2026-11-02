@@ -394,9 +394,12 @@ def _participant_entry(name, label, vendor, run, state, reason='', unverified=0,
 def _participants(assessment):
     """The review participants as this assessment read them (HARNESS.md 6): Corti's run, and each harness participant's
     Assessment.participants entry with the run it names. An assessment recorded before the harness has no entry. Corti's
-    answered state is its row's (serializers.corti_answered), and where its answers selected codes the engine cannot
-    list its entry counts them (``unlisted_codes``, only then), never naming one (refutation round 3, truth-3)."""
-    from .serializers import corti_answered, corti_codes, corti_unlisted  # local: one implementation, the row's
+    answered state is its row's (serializers.corti_answered), and where its answers returned codes the engine cannot
+    list its entry counts them as the engine does (``unlisted_codes``, only then; ``unlisted_second_review``, the bounded
+    second review's part of them, only when it has one), never naming one (refutation round 3, truth-3; round 4,
+    truth-4)."""
+    from .serializers import (corti_answered, corti_codes, corti_listed_apart,  # local: one implementation, the row's
+                              corti_unlisted_counts)
 
     records = _records(assessment)
     runs = {str(run.pk): run for run in ProviderRun.objects.filter(
@@ -411,10 +414,13 @@ def _participants(assessment):
             refused = review._refused_run(assessment) == run
             held = (run.state == ProviderRun.NOT_SENT
                     and (run.scope or {}).get('held') == ProviderRun.HELD_MEMBER_DATE_CONFLICT)
-            unlisted = corti_unlisted(assessment) if run.state == ProviderRun.SUCCEEDED and not refused else 0
+            primary, second = (corti_unlisted_counts(assessment) if run.state == ProviderRun.SUCCEEDED and not refused
+                               else (0, 0))
+            unlisted, codes = primary + second, corti_codes(assessment)
+            apart = bool(unlisted) and not codes and corti_listed_apart(assessment)
             state = ('answered; the response was not used' if refused else
                      'nothing was sent: the service date entered as encounter metadata conflicts with the document'
-                     if held else corti_answered(bool(corti_codes(assessment)), unlisted)
+                     if held else corti_answered(bool(codes), unlisted, apart)
                      if run.state == ProviderRun.SUCCEEDED else CORTI_STATES.get(run.state, run.state))
             # a refused response's reason is its own provider check's (provider.status), as the encounter view says it
             reason = (next((check.get('detail') or '' for check in assessment.encounter_checks or []
@@ -423,6 +429,8 @@ def _participants(assessment):
             entry = _participant_entry(name, label, vendor, run, state, reason, refused=refused)
             if unlisted:
                 entry['unlisted_codes'] = unlisted
+            if second:
+                entry['unlisted_second_review'] = second
             out.append(entry)
             continue
         record = records.get(name)
@@ -1084,8 +1092,12 @@ def _participants_section(snap):
             lines.append('    Estimated cost: not estimated (no published rate could be applied to the usage reported)')
         else:
             lines.append('    Estimated cost: none (no usage reported for this run)')
-        if entry.get('unlisted_codes'):  # codes Corti selected that cannot be listed: counted, never named (I9)
-            lines.append(f'    Not listed: {_indent(review.unlisted_words(entry["unlisted_codes"]), "      ")}')
+        if entry.get('unlisted_codes'):  # codes Corti returned that cannot be listed: counted, never named (I9)
+            from .serializers import corti_unlisted_words  # local: the row's own sentences, each answer's count apart
+
+            second = entry.get('unlisted_second_review') or 0
+            words = corti_unlisted_words(entry['unlisted_codes'] - second, second)
+            lines.append(f'    Not listed: {_indent(words, "      ")}')
         if entry['unverified_quotes']:
             lines.append(f'    Unverified quotes: {entry["unverified_quotes"]} (not found in the document; never used '
                          'as evidence)')
