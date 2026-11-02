@@ -427,6 +427,13 @@ hold raised, never by agreement and never on its own. This is the documented pat
      the proposal's code accounts for in the documented service its hold was decided on, or, for a base code, an E/M or
      a code whose profile is another family's, that documented service. The history, plan and indication rule stays in
      front of it; a question whose hold no documented service decided has no status candidate that verifies (12.5).
+   - **Amended after refutation round 2 (EV2-2, EV2-3, truth-1; design decision D2):** a passage about another
+     occasion, or one that denies what it names, verified an extent, a structure, an E/M basis or a date "for this
+     encounter" (an indication line's 2019 colonoscopy, "The cecum was not reached", an earlier visit's time in a
+     history section, a date of birth). So every fact's passage now gets the section rule (no history, plan or
+     indication section); an extent or a structure is never verified where CPT Studio's readers find it not reached,
+     not entered or not seen, or qualified in its clause by a negation, an attempt or a doubt; and a date the context
+     reader takes as a date of birth is never a date of service (rule N2).
 2. **Confirmation.** An owner or reviewer accepts one candidate with an attestation: "I read this passage in the source
    document; it documents <value> for this encounter."
    - The confirmation is an immutable `FindingConfirmation`: the clarification, the revision, the fact, the value, the
@@ -651,6 +658,17 @@ read, so a status confirmation stored before this amendment, or forged, never de
 on its passage. Each candidate also carries `sentences`: for each span, in its order, `{start, end, text}` of its whole
 sentence, so the page shows a span that is a slice of a longer sentence with that sentence ("a part of the sentence
 ...") and a hedge is never hidden behind a Verified badge; a page that cannot show it offers no Confirm.
+
+**Every fact's check, amended after refutation round 2 (EV2-2, EV2-3, truth-1; design decision D2; the date, extent,
+target and E/M-basis checks above stay as their first steps).** Every passage, whatever its fact, is in no history, plan
+or indication section (`reconcile.held_section`), as the status check's always was. **Date:** a mention the context
+reader takes as a date of birth (`context._is_birth`, rule N2) is never a date of service. **Extent** and **target:**
+around each mention of the landmark or structure, in its clause of the passage's whole sentence (`services.clauses`),
+routing's cue that it was not reached, entered, seen or visualized (`cues.NOT_REACHED_BEFORE`, `NOT_REACHED_AFTER`), or a
+negation, an attempt or a doubt (the `_QUALIFIED` rule a value is read by) that is not about something else - a
+complication, a difficulty, another care step or a finding denied, a measurement's "about" (`candidates._qualified`) -
+leaves it unverified: "The passage states the cecum as not reached or not seen.", "The passage qualifies the cecum (a
+negation, an attempt or a doubt).".
 
 **Confirmation** `POST /api/encounters/<id>/clarifications/<clarification_id>/confirm` with
 `{candidate_id, attestation}`:

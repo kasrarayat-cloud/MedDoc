@@ -8,6 +8,9 @@
   document through POST /api/encounters, the real pipeline, the served candidates, the confirmation endpoint - and each
   ends with its snare or biopsy code NOT ready; a status confirmation stored before the repair is listed as not read,
   with why, and never applied; and a passage that truly states the act is still confirmed (the check is not vacuous).
+- EV2-2, truth-1 and EV2-3 (the plan's D2): every fact's passage gets the section rule, an extent or a structure the
+  readers find not reached, not seen or qualified never verifies, and a date of birth or a history date is never
+  offered as the date of service - each through the same pipeline and endpoint, ending with nothing confirmed.
 
 Synthetic data only; nothing is sent. Corti is the harness@1 suite's in-process fake; Astra and Fable are the real
 replay adapters on the real tool loop (tests.test_harness2_pipeline), and CPT Studio's real CMS tool executor answers
@@ -379,3 +382,144 @@ class OneCheckTests(SimpleTestCase):
         read_ = engine_run(DISAGREE, codes, [self.confirmation(DISAGREE, before, 'sel:0', DONE_BX)])
         self.assertEqual((proposal(read_, 'sel:0').status, proposal(read_, 'sel:0').support['confirmed']),
                          ('ready', ['conf-1']))
+
+
+# --- EV2-2 and truth-1 (the plan's D2): an extent, a structure or a basis on a passage about another occasion, or on
+# one that denies what it names, is never verified --------------------------------------------------------------------
+
+EARLIER = 'Indication: surveillance; the colonoscopy in 2019 reached the cecum.'
+DENIED = 'The cecum was not reached because of poor preparation.'
+CUT_SHORT = 'The cecum could not be reached because of a poor preparation.'
+POLYP = 'A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.'
+FLAT = 'A separate 12 mm flat lesion in the ascending colon was biopsied with cold forceps.'
+COLON_HEAD = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\n'
+              'Place of service: Ambulatory surgery center\n')
+NO_EXTENT = COLON_HEAD + EARLIER + '\nProcedure: Colonoscopy\n' + POLYP + '\n' + FLAT + '\n'
+DENIAL = COLON_HEAD + 'Procedure: Colonoscopy\n' + DENIED + '\n' + POLYP + '\n' + FLAT + '\n'
+CUT = COLON_HEAD + 'Procedure: Colonoscopy\n' + POLYP + '\n' + FLAT + '\n' + CUT_SHORT + '\n'
+SNARE_QUOTE, BIOPSY_QUOTE = 'was removed with a hot snare', 'was biopsied with cold forceps'
+
+
+def extent_reading(quote, extent='cecum'):
+    return empty_reading(codes=[code_item('45385', service_ids=[], evidence=[SNARE_QUOTE]),
+                                code_item('45380', service_ids=[], evidence=[BIOPSY_QUOTE])],
+                         services=[service_item(1, id='c1', family='colonoscopy', extent=extent, evidence=[quote])])
+
+
+def answers_extent_with(quote, value='cecum', number=2):
+    """A peer review answering 45385's open extent question with ``value``, quoting ``quote``."""
+    def answer(body):
+        questions = open_questions('astra', body)
+        return answered('astra', peer_answer(answers=[(q['question_id'], True, value, quote) for q in questions
+                                                      if q['fact'] == 'extent' and q['proposal_key'] == 'sel:0']),
+                        number)
+    return answer
+
+
+class ExtentEvidenceTests(EvidenceCase):
+    corti_codes = (('45385', SNARE_QUOTE), ('45380', BIOPSY_QUOTE))
+
+    def extent_question(self, encounter_id):
+        return self.final(encounter_id).clarifications.get(proposal__code='45385', fact='extent',
+                                                           state=models.Clarification.OPEN)
+
+    def test_an_earlier_procedure_s_indication_line_never_verifies_today_s_extent(self):
+        """EV2-2 (a): no extent is documented today; Astra's extent 'cecum' quotes the indication's 2019 colonoscopy."""
+        self.first(extent_reading(EARLIER))
+        encounter_id = self.create(NO_EXTENT)
+        drain()
+        question = self.extent_question(encounter_id)
+        candidate = self.candidate_on(encounter_id, question, EARLIER, value='cecum')
+        self.assertRefusedNotReady(encounter_id, question, candidate, 'The passage is in an indication section, which '
+                                   'never documents a service at this encounter.', '45385')
+
+    def test_a_passage_that_denies_the_landmark_never_verifies_it(self):
+        """EV2-2 (b): the note says the cecum was not reached; Astra's extent 'cecum' quotes that denial."""
+        self.first(extent_reading(DENIED))
+        encounter_id = self.create(DENIAL)
+        drain()
+        question = self.extent_question(encounter_id)
+        candidate = self.candidate_on(encounter_id, question, DENIED, value='cecum')
+        self.assertRefusedNotReady(encounter_id, question, candidate,
+                                   'The passage states the cecum as not reached or not seen.', '45385')
+
+    def test_a_peer_answer_quoting_a_slice_of_the_denial_never_verifies_it(self):
+        """truth-1 (s6): Astra's peer review answers the extent 'cecum', quoting "The cecum could not be reached"."""
+        self.first(reading(codes=[('45385', SNARE_QUOTE)], services=[('c1', 'colonoscopy', 'performed', POLYP)]),
+                   astra_peer=answers_extent_with('The cecum could not be reached'))
+        encounter_id = self.create(CUT)
+        drain()
+        question = self.extent_question(encounter_id)
+        candidate = self.candidate_on(encounter_id, question, 'The cecum could not be reached', value='cecum')
+        self.assertRefusedNotReady(encounter_id, question, candidate,
+                                   'The passage states the cecum as not reached or not seen.', '45385')
+        start = CUT.index(CUT_SHORT)
+        self.assertEqual(candidate['sentences'], [{'start': start, 'end': start + len(CUT_SHORT), 'text': CUT_SHORT}])
+
+
+PRIOR = 'At the visit on 2026-03-02, total time was 45 minutes.'
+VISIT = 'Established patient office visit for follow-up of reflux.'
+NO_BASIS = (HEAD + 'Office visit note (fictional)\nDate of service: 2026-10-20\nPlace of service: Office\n' + VISIT
+            + '\nHistory: ' + PRIOR + '\nAssessment: reflux, stable on current therapy.\nPlan: continue omeprazole.\n')
+
+
+class BasisEvidenceTests(EvidenceCase):
+    """EV2-2 (c): no time and no MDM are documented for today; Astra's office visit quotes an earlier visit's time."""
+    corti_codes = (('99214', VISIT),)
+
+    def setUp(self):
+        super().setUp()
+        self.first(empty_reading(codes=[code_item('99214', service_ids=[], evidence=[VISIT])],
+                                 services=[service_item(1, id='v1', family='office_em', evidence=[PRIOR])]))
+
+    def test_an_earlier_visit_s_time_never_verifies_today_s_basis(self):
+        encounter_id = self.create(NO_BASIS)
+        drain()
+        question = self.final(encounter_id).clarifications.get(fact='em_basis', state=models.Clarification.OPEN)
+        candidate = self.candidate_on(encounter_id, question, PRIOR, value='time')
+        self.assertRefusedNotReady(encounter_id, question, candidate, 'The passage is in a history section, which '
+                                   'never documents a service at this encounter.', '99214')
+
+
+# --- EV2-3 (the plan's D2): a date of birth, or a history date, is never offered as the date of service ---------------
+
+DOB = 'Date of birth: 1960-01-05'
+PRIOR_DATE = 'History: Prior colonoscopy on 2025-03-14 showed two adenomas.'
+
+
+def undated(line):
+    return (HEAD + 'Colonoscopy report (fictional)\nPatient: Synthetic Person\n' + line + '\n'
+            'Place of service: Ambulatory surgery center\nProcedure: Colonoscopy\n' + CECUM + '\n' + POLYP + '\n')
+
+
+class DateEvidenceTests(EvidenceCase):
+    corti_codes = (('45385', SNARE_QUOTE),)
+
+    def date_case(self, line, value, quote, why):
+        self.first(reading(codes=[('45385', SNARE_QUOTE)], services=[('c1', 'colonoscopy', 'performed', POLYP)],
+                           date_value=value, date_evidence=[quote]))
+        encounter_id = self.create(undated(line))
+        drain()
+        question = self.final(encounter_id).clarifications.get(scope='encounter', fact='service_date',
+                                                               state=models.Clarification.OPEN)
+        self.assertEqual(question.question, 'Confirm the date of service for this encounter.')
+        sent = len(self.corti.requests)
+        candidate = self.candidate_on(encounter_id, question, quote, value=value)
+        self.assertEqual((candidate['verified'], candidate['why'], candidate['attestation']), (False, why, ''))
+        response = self.confirm(encounter_id, question, candidate)
+        self.assertEqual(response.status_code, 409, response.content)
+        self.assertEqual(response.json()['error'], NOT_VERIFIED + why)
+        drain()
+        encounter = self.encounter(encounter_id)
+        # nothing entered the context and nothing more was sent: the date of service is still asked
+        self.assertEqual((encounter.user_values, len(self.corti.requests)), ({}, sent))
+        self.assertEqual(encounter.current_context.facts['service_date']['origin'], 'missing')
+        self.assertFalse(models.FindingConfirmation.objects.exists())
+
+    def test_a_date_of_birth_is_never_the_date_of_service(self):
+        self.date_case(DOB, '1960-01-05', DOB, 'The passage states 1960-01-05 as a date of birth, and a date of '
+                                               'birth is never a date of service.')
+
+    def test_a_history_date_is_never_the_date_of_service(self):
+        self.date_case(PRIOR_DATE, '2025-03-14', 'Prior colonoscopy on 2025-03-14 showed two adenomas.',
+                       'The passage is in a history section, which never documents a service at this encounter.')

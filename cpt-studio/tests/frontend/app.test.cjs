@@ -1625,7 +1625,7 @@ test('each open question lists its candidate answers: the value, the passage quo
   assert.ok(block.includes('<div class="evidence-label">Candidate answers from the participants&#x27; located passages · 2</div>'));
   const [verified, unverified] = extent.candidates;
   assert.ok(block.includes(`<span class="participant-head"><strong>cecum</strong><span class="status green">Verified</span></span><p class="candidate-quote">“The colonoscope was advanced to the cecum.” (page 1)</p><small class="check-source">Located by Astra and Fable in their independent first readings.</small>`), block);
-  assert.ok(block.includes('<small class="check-source">Verified: its passage is an exact slice of the document and it names that landmark. It is still only a candidate: read the passage before confirming it.</small>'));
+  assert.ok(block.includes('<small class="check-source">Verified: its passage is an exact slice of the document, in no history, plan or indication section, and it names that landmark, which CPT Studio&#x27;s readers read neither as not reached nor as qualified (a negation, an attempt or a doubt). It is still only a candidate: read the passage before confirming it.</small>'));
   assert.ok(block.includes('<span class="status amber">Not verified</span>'));
   assert.ok(block.includes(`<small class="check-source">Not verified, so it cannot be confirmed: ${app.escapeHtml(unverified.why)}</small>`));
   assert.equal(count(block, 'data-action="confirm-finding"'), 1, 'only the verified candidate can be confirmed');
@@ -2042,4 +2042,20 @@ test('a candidate whose served sentence cannot be shown as its span\'s is marked
   const { sentences, ...older } = good;
   const before = r2evAnswers(doc, older);
   assert.ok(before.includes(`<p class="candidate-quote">“${slice}” (page 1)</p>`) && count(before, 'data-action="confirm-finding"') === 1);
+});
+
+test('each fact\'s Verified note says what its check established: the section rule for every fact, a status on the code\'s own act', () => {
+  const doc = fixture(H2_FINAL);
+  const sentence = 'Technique: The colonoscope was advanced to the cecum.';
+  const said = {
+    extent: 'it names that landmark, which CPT Studio&#x27;s readers read neither as not reached nor as qualified (a negation, an attempt or a doubt)',
+    performed_status: 'CPT Studio&#x27;s readers read its whole sentence as stating that status for the act this code accounts for (for a code of the whole service, for that service)',
+    service_date: 'it states that calendar date, which CPT Studio&#x27;s readers do not read as a date of birth',
+    target: 'it names that structure, which CPT Studio&#x27;s readers read neither as not seen nor as qualified (a negation, an attempt or a doubt)',
+  };
+  for (const [fact, words] of Object.entries(said)) {
+    const html = r2evAnswers(doc, r2evCandidate(doc, sentence, sentence, { fact }));
+    assert.ok(html.includes(`Verified: its passage is an exact slice of the document, in no history, plan or indication section, and ${words}. It is still only a candidate: read the passage before confirming it.`), `${fact}: ${html}`);
+    assert.equal(html.includes('the check does not read whether it names this code'), false, fact);
+  }
 });

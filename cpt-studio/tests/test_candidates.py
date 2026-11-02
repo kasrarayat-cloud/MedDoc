@@ -56,6 +56,13 @@ def located(text, quote):
     return reading.Locator(text).locate(quote)
 
 
+def findings(*lines):
+    """NOTE with ``lines`` after its findings, before its history section (a line opening with a label opens its own
+    section there)."""
+    assert NOTE.count('History:') == 1
+    return NOTE.replace('History:', '\n'.join(lines) + '\nHistory:')
+
+
 def service(text, family='colonoscopy', *, status='performed', extent='', anatomy='', quotes=(), service_id='s1'):
     return ParticipantService(id=service_id, family=family, status=status, description='', anatomy=anatomy,
                               extent=extent, technique='', evidence=tuple(located(text, q) for q in quotes))
@@ -95,10 +102,35 @@ class DateTests(SimpleTestCase):
         self.assertEqual((candidate['verified'], candidate['why'], candidate['attestation']),
                          (False, 'The passage does not state 2026-10-21 as a calendar date.', ''))
         # a year names no calendar date at day precision
-        (candidate,) = c.candidates(DATE, NOTE, PAGES, [frozen('fable', NOTE, date='2019-01-01',
-                                                               date_quotes=[HISTORY_QUOTE])])
+        text = NOTE + 'Equipment: the colonoscope was serviced in 2019.\n'
+        (candidate,) = c.candidates(DATE, text, (), [frozen('fable', text, date='2019-01-01',
+                                                            date_quotes=['the colonoscope was serviced in 2019.'])])
         self.assertFalse(candidate['verified'])
         self.assertIn('does not state 2019-01-01', candidate['why'])
+
+    def test_a_date_of_birth_or_a_history_or_plan_date_never_verifies(self):
+        """Refutation round 2, EV2-3: a date of birth is never a date of service (rule N2, as the context reader reads
+        it), and a date in a history or plan section is another occasion's."""
+        text = findings('Date of birth: 1960-01-05', 'Visit: Date of birth: 1960-01-05; Date of service: 2026-10-21',
+                        'History: Prior colonoscopy on 2025-03-14 showed two adenomas.',
+                        'Plan: repeat colonoscopy on 2031-10-14.')
+        for value, quote, why in (
+                ('1960-01-05', 'Date of birth: 1960-01-05',
+                 'The passage states 1960-01-05 as a date of birth, and a date of birth is never a date of service.'),
+                ('2025-03-14', 'Prior colonoscopy on 2025-03-14 showed two adenomas.',
+                 'The passage is in a history section, which never documents a service at this encounter.'),
+                ('2031-10-14', 'repeat colonoscopy on 2031-10-14.',
+                 'The passage is in a plan section, which never documents a service at this encounter.')):
+            for given in ({'readings': [frozen('astra', text, date=value, date_quotes=[quote])]},
+                          {'answers': [peer('fable', text, value, quote)]}):
+                with self.subTest(value=value, source=list(given)):
+                    (candidate,) = c.candidates(DATE, text, (), **given)
+                    self.assertEqual((candidate['value'], candidate['verified'], candidate['why'],
+                                      candidate['attestation']), (value, False, why, ''))
+        # the date of service beside a date of birth on one line is still the date of service
+        (candidate,) = c.candidates(DATE, text, (), [frozen('astra', text, date='2026-10-21', date_quotes=[
+            'Visit: Date of birth: 1960-01-05; Date of service: 2026-10-21'])])
+        self.assertEqual((candidate['verified'], candidate['why']), (True, ''))
 
     def test_a_peer_answer_is_restated_as_a_calendar_date_or_left_unverified(self):
         out = c.candidates(DATE, NOTE, PAGES, answers=[peer('fable', NOTE, 'October 21, 2026', DATE_QUOTE)])
@@ -116,9 +148,42 @@ class ExtentTests(SimpleTestCase):
     def test_the_passage_must_name_the_landmark_the_value_names(self):
         (verified,) = c.candidates(EXTENT, NOTE, PAGES, [self.reading('to the cecum', CECUM_QUOTE)])
         self.assertEqual((verified['value'], verified['verified'], verified['why']), ('cecum', True, ''))
-        (unverified,) = c.candidates(EXTENT, NOTE, PAGES, [self.reading('cecum', PLAN_QUOTE)])
+        (unverified,) = c.candidates(EXTENT, NOTE, PAGES, [self.reading('cecum', SNARE_QUOTE)])
         self.assertEqual((unverified['value'], unverified['verified'], unverified['why']),
                          ('cecum', False, 'The passage does not name the cecum.'))
+
+    def test_a_passage_that_denies_doubts_or_places_elsewhere_its_landmark_never_verifies_it(self):
+        """Refutation round 2, EV2-2 and truth-1: the readers' own reading of the passage decides - a landmark not
+        reached (routing's NOT_REACHED cues around it), qualified in its clause, or named in an indication passage about
+        an earlier procedure is never the extent reached at this encounter, whatever the value says."""
+        lines = ('The cecum was not reached because of poor preparation.',
+                 'The cecum could not be reached because of a poor preparation.',
+                 'The colonoscope could not be advanced to the cecum.',
+                 'The cecum was probably reached.',
+                 'Short of the cecum, the examination ended.',
+                 'The colonoscope was advanced to the cecum without difficulty.',
+                 'Indication: surveillance; the colonoscopy in 2019 reached the cecum.')  # last: it opens its section
+        text = findings(*lines)
+        expected = {
+            'The cecum was not reached because of poor preparation.':
+                'The passage states the cecum as not reached or not seen.',
+            'The cecum could not be reached': 'The passage states the cecum as not reached or not seen.',
+            'The colonoscope could not be advanced to the cecum.':
+                'The passage states the cecum as not reached or not seen.',
+            'The cecum was probably reached.': 'The passage qualifies the cecum (a negation, an attempt or a doubt).',
+            'Short of the cecum, the examination ended.': 'The passage states the cecum as not reached or not seen.',
+            'surveillance; the colonoscopy in 2019 reached the cecum.':
+                'The passage is in an indication section, which never documents a service at this encounter.',
+            # a difficulty denied is about the examination, never the landmark (cues.COMPLICATION_NEGATION)
+            'The colonoscope was advanced to the cecum without difficulty.': '',
+        }
+        for quote, why in expected.items():
+            stated = [frozen('astra', text, services=[service(text, extent='cecum', quotes=[quote])])]
+            for given in ({'readings': stated}, {'answers': [peer('astra', text, 'cecum', quote)]}):
+                with self.subTest(quote=quote, source=list(given)):
+                    (candidate,) = c.candidates(EXTENT, text, (), **given)
+                    self.assertEqual((candidate['value'], candidate['verified'], candidate['why']),
+                                     ('cecum', why == '', why))
 
     def test_a_value_naming_two_landmarks_or_qualifying_itself_has_no_value(self):
         (two,) = c.candidates(EXTENT, NOTE, PAGES, [self.reading('cecum and terminal ileum', CECUM_QUOTE)])
@@ -162,6 +227,15 @@ class TargetTests(SimpleTestCase):
                                                               quotes=['Two lymph nodes were seen'])])
         self.assertEqual(c.candidates(question, EUS_NOTE, (), [unknown])[0]['why'],
                          'The value names no structure CPT Studio reads.')
+
+
+    def test_a_structure_not_visualized_never_verifies(self):
+        """Refutation round 2, EV2-2: a structure the passage says could not be seen is not the structure examined."""
+        text = EUS_NOTE + 'The pancreas could not be visualized because of overlying gas.\n'
+        (candidate,) = c.candidates(TARGET, text, (), answers=[peer(
+            'fable', text, 'pancreas', 'The pancreas could not be visualized because of overlying gas.')])
+        self.assertEqual((candidate['value'], candidate['verified'], candidate['why']),
+                         ('pancreas', False, 'The passage states the pancreas as not reached or not seen.'))
 
 
 class CannulationTests(SimpleTestCase):
@@ -244,10 +318,14 @@ class StatusTests(SimpleTestCase):
         self.assertEqual((candidate['verified'], candidate['why']),
                          (False, 'The passage is in a history section, which never documents a service at this '
                                  'encounter.'))
+        # refutation round 2, EV2-2 and truth-1: every fact's passage gets the section rule, so an extent with one of
+        # its spans in a history section is no longer verified (this pinned it verified)
         twice = NOTE + 'History: The colonoscope was advanced to the cecum.\n'
         (extent,) = c.candidates(EXTENT, twice, (), [frozen('astra', twice, services=[service(
             twice, extent='cecum', quotes=[CECUM_QUOTE])])])
-        self.assertEqual((len(extent['spans']), extent['verified']), (2, True))
+        self.assertEqual((len(extent['spans']), extent['verified'], extent['why']),
+                         (2, False, 'The passage is in a history section, which never documents a service at this '
+                                    'encounter.'))
 
 
 class BasisTests(SimpleTestCase):
@@ -260,6 +338,16 @@ class BasisTests(SimpleTestCase):
         out = c.candidates(BASIS, OFFICE_NOTE, (), [frozen('astra', OFFICE_NOTE, services=[visit])])
         self.assertEqual([(x['value'], x['verified'], x['spans'][0]['text']) for x in out],
                          [('time', True, self.TIME), ('mdm', True, self.MDM)])
+
+    def test_an_earlier_visit_s_time_in_a_history_section_never_verifies(self):
+        """Refutation round 2, EV2-2: the time of an earlier visit, in a history section, is no basis for today's."""
+        text = OFFICE_NOTE + 'History: At the visit on 2026-03-02, total time was 45 minutes.\n'
+        quote = 'At the visit on 2026-03-02, total time was 45 minutes.'
+        visit = service(text, 'office_em', quotes=[quote])
+        (candidate,) = c.candidates(BASIS, text, (), [frozen('astra', text, services=[visit])])
+        self.assertEqual((candidate['value'], candidate['verified'], candidate['why']),
+                         ('time', False, 'The passage is in a history section, which never documents a service at '
+                                         'this encounter.'))
 
     def test_a_peer_answer_must_state_what_its_passage_states(self):
         (wrong,) = c.candidates(BASIS, OFFICE_NOTE, (), answers=[peer('fable', OFFICE_NOTE, 'total time', self.MDM)])

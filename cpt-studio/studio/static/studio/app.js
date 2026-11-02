@@ -113,12 +113,14 @@ const PEER_POSITIONS = { supports: 'supports it', disputes: 'disputes it', canno
 const ASSESSMENT_PHASES = { 0: 'No model participant: Corti only', 1: 'Phase 1: the frozen first readings', 2: 'Phase 2: after peer review' };
 const FINDING_FACTS = { service_date: 'Date of service', performed_status: 'Performed at this encounter', extent: 'Extent reached', target: 'Structure examined', cannulation: 'Cannulation outcome', em_basis: 'Basis for the visit level (total time or medical decision making)' };
 const CANDIDATE_NOTE = 'A candidate answers nothing until a reviewer confirms it. Agreement between participants never verifies or confirms one, and a confirmation approves no code.';
-// What a verified candidate's consistency check established, by fact (HARNESS.md 12.5): a status is read by CPT Studio's
-// readers on the act the code accounts for, in the passage's whole sentence (refutation round 2, EV2-1).
+// What a verified candidate's consistency check established, by fact (HARNESS.md 12.5, as refutation round 2 left it):
+// every fact's passage lies in no history, plan or indication section (VERIFIED_SECTIONS), and a status is read by CPT
+// Studio's readers on the act the code accounts for, in the passage's whole sentence (EV2-1, EV2-2, EV2-3, truth-1).
+const VERIFIED_SECTIONS = 'in no history, plan or indication section';
 const VERIFIED_CHECKS = {
-  service_date: 'it states that calendar date',
-  extent: 'it names that landmark',
-  target: 'it names that structure',
+  service_date: 'it states that calendar date, which CPT Studio\'s readers do not read as a date of birth',
+  extent: 'it names that landmark, which CPT Studio\'s readers read neither as not reached nor as qualified (a negation, an attempt or a doubt)',
+  target: 'it names that structure, which CPT Studio\'s readers read neither as not seen nor as qualified (a negation, an attempt or a doubt)',
   cannulation: 'it states that cannulation outcome',
   performed_status: 'CPT Studio\'s readers read its whole sentence as stating that status for the act this code accounts for (for a code of the whole service, for that service)',
   em_basis: 'it states a total time in minutes or a level of medical decision making',
@@ -885,7 +887,7 @@ function candidateAnswer(candidate, clarificationId, confirmable, exact) {
   const quotes = quotedSpans(spans, exact, candidate.sentences);
   const value = textValue(candidate.value).trim();
   const checked = lookup(VERIFIED_CHECKS, candidate.fact, 'it passes the consistency check for this fact');
-  const why = verified ? `Verified: its passage is an exact slice of the document and ${checked}. It is still only a candidate: read the passage before confirming it.`
+  const why = verified ? `Verified: its passage is an exact slice of the document, ${VERIFIED_SECTIONS}, and ${checked}. It is still only a candidate: read the passage before confirming it.`
     : `Not verified, so it cannot be confirmed: ${textValue(candidate.why).trim() || 'no reason was recorded.'}`;
   // fail closed: a span whose whole sentence cannot be shown is never confirmed from this page
   const shown = spans.every((span, index) => spanSentence(span, index, candidate.sentences, exact) !== '');
