@@ -934,7 +934,18 @@ def _trace_reading(run):
             'codes': [_code_entry(item) for item in data['codes']],
             'not_coded': [_code_entry(item) for item in data['not_coded']],
             'questions': [dict(item, service_ids=_tokens(item.get('service_ids'))) for item in data['questions']],
-            'extraction_issues': data['extraction_issues'], 'references_used': data['references_used']}
+            'extraction_issues': data['extraction_issues'],
+            'references_used': _checked_against(run, data['references_used'])}
+
+
+def _checked_against(run, used):
+    """A run's references used as the trace serves them: as the reader recorded them, and for a run that reused a
+    retained answer each with ``reused_from``, the retained run whose tool calls CPT Studio checked it against
+    (jobs.loop_run), so the trace never says a reuse retrieved anything by its own tool calls (refutation round 2,
+    truth-13)."""
+    if not run.reused_from_id:
+        return used
+    return [dict(item, reused_from=str(run.reused_from_id)) if isinstance(item, dict) else item for item in used]
 
 
 def _trace_review(run):
@@ -950,7 +961,8 @@ def _trace_review(run):
                 'positions': [], 'additional_codes': [], 'references_used': []}
     data = to_jsonable(peer_review)
     return {**data, 'positions': [_code_entry(item) for item in data['positions']],
-            'additional_codes': [_code_entry(item) for item in data['additional_codes']]}
+            'additional_codes': [_code_entry(item) for item in data['additional_codes']],
+            'references_used': _checked_against(run, data['references_used'])}
 
 
 def _trace_exchanges(run):

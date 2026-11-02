@@ -302,7 +302,9 @@ once assess #2 is recorded, its `state` in the row vocabulary (`done`, `refused`
 `retrieved` lists every ref that run's own tool calls returned (a `fact:<source>:<code>:<field>` ref or a passage key,
 with the source, release and effective window its tool result stated - read by the CMS tool executor's own reader of a
 stored result - '' where it stated none, and the tool; a run that reused a retained answer has the tool calls of the
-run it reused, which answered for it; a tool call whose result the participant was never sent - the loop ended after
+run it reused, which answered for it, and says so: its block alone carries `reused_from`, that retained run's id, and
+the page and the reports say these references were retrieved by the retained run's tool calls, never by its own
+(refutation round 2, truth-13); a tool call whose result the participant was never sent - the loop ended after
 CPT Studio answered it, its next exchange not sent or never made (a member's Stop, a follow-up it could not build, the
 deadline) - is not listed: refutation round 2, sends-r2-3; the trace's `exchanges` keep every tool call CPT Studio
 answered), and `used` every reference the run's answer says it relied on, with `retrieved`
@@ -423,7 +425,9 @@ harness@2 adds to each run `exchanges` - each HTTP exchange of a participant's t
 `error`) with its `tool_calls` (`call_id`, `tool`, `arguments`, `refs`, `result_sha256`, `executed_at`; [] for Corti's
 runs) - and `review`, a peer-review run's PeerReview as JSON (its answers, positions, additional codes, references used
 checked against its own tool calls, the frozen inputs it was shown and its problems; null for every other run, whose
-`reading` it is instead). `reading.references_used` checks each reference against that run's own tool results. The
+`reading` it is instead). `reading.references_used` checks each reference against that run's own tool results; for a
+run that reused a retained answer (`reused_from`), against the retained run's, and each of its references used then
+carries `reused_from` too (refutation round 2, truth-13). The
 trace also lists `assessments`: each assessment of the current revision, oldest first, with `current`, its `phase`,
 whether it is its chain's `final` assessment, and the `frozen` list it recorded (`[[input name, sha256], ...]`: Corti's
 response, each model participant's reading, the revision text; [] before harness@2).
@@ -646,8 +650,11 @@ in `evidence_support`, `confirmation=<id>;clarification=<id>;scope=<scope>` in `
 `not_settled`, the value, passages, `question=<id>;fact=<fact>`), `peer_position` (code, position, passages),
 `peer_additional_code` (code, units, `proposed_after_peer_review`, passages) and `participant_reference` (`retrieved`,
 `used` or `cited_not_retrieved`, the ref in `exclusion_reason`, the source in `documented_service`, kind, release and
-window in `evidence_support`, `run=<id>` in `checks`); each names its participant in `proposed_by` and its phase in
-`proposal_origin`, and none carries a `decision`.
+window in `evidence_support`, `run=<id>` in `checks`, and `run=<id>;reused_from=<id>` for a run that reused a
+retained answer, whose tool calls they are: PARTICIPANT REFERENCES says the same of that run, "reuses the retained
+answer of run <id>, whose tool calls these are; this run made none", and of each reference it used, "retrieved by the
+retained run it reuses"); each names its participant in `proposed_by` and its phase in `proposal_origin`, and none
+carries a `decision`.
 
 ## GET /api/encounters/{id}/original
 

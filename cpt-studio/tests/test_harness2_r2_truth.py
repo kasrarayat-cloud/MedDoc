@@ -6,6 +6,8 @@ Synthetic data only; nothing is sent. The encounters are carried through the rea
 (tests.test_harness2_pipeline: ScriptedCorti, the real replay adapters and tool loop with CPT Studio's CMS tool
 executor, the readers, the engine, the API and the report renderers), as the round's verifiers reproduced each finding.
 """
+import csv
+import io
 import json
 from types import SimpleNamespace
 
@@ -423,3 +425,71 @@ class UndeliveredReferenceTests(Harness2Case):
     def test_results_an_exchange_sent_with_an_unknown_outcome_carried_are_retrieved(self):
         # the request carrying them was written to the vendor: they were sent to the participant
         self.assertCarried(unknown())
+
+
+# --- truth-13: a reuse's references are said to be the retained run's, retrieved by its tool calls --------------------
+
+class ReusedRunReferenceTests(Harness2Case):
+    """A run that reuses a retained answer made no tool call: its references are the retained run's (HARNESS.md 12.7, a
+    reuse shows the calls of the run it reuses), and the API names that run (references.reused_from, and each of the
+    trace's references used), so the page, the trace and the reports say they were retrieved by the retained run's tool
+    calls, never "by its own tool calls in this run" (refutation round 2, truth-13)."""
+
+    def setUp(self):
+        super().setUp()
+        self.owner = f.member(self.ws, f.user('owner_r2truth13'), role=models.Membership.OWNER)
+        self.owner_client = Client()
+        self.owner_client.force_login(self.owner)
+
+    def astra(self, encounter_id):
+        rows = self.owner_client.get(f'/api/encounters/{encounter_id}').json()['harness']['participants']
+        return next(row for row in rows if row['name'] == 'astra')
+
+    def references_lines(self, encounter_id, run):
+        text = reports.render_txt(reports.snapshot(self.encounter(encounter_id), 'draft')).decode('utf-8')
+        lines = text.split('\nPARTICIPANT REFERENCES\n', 1)[1].split('\n\n', 1)[0].splitlines()
+        start = next(i for i, line in enumerate(lines) if line.startswith('  - Astra · independent reading · run '))
+        end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith('  - ')), len(lines))
+        self.assertIn(str(run.pk), lines[start])
+        return lines[start], [line for line in lines[start + 1:end] if line.startswith('    Used: ')]
+
+    def csv_checks(self, encounter_id):
+        data = reports.render_csv(reports.snapshot(self.encounter(encounter_id), 'draft')).decode('utf-8')
+        rows = list(csv.DictReader(io.StringIO(data)))
+        return {row['checks'] for row in rows if row['item_list'] == 'participant_reference'
+                and row['proposed_by'] == 'astra' and row['proposal_origin'] == 'independent'}
+
+    def trace_used(self, encounter_id, run):
+        trace = self.owner_client.get(f'/api/encounters/{encounter_id}/trace').json()
+        (traced,) = [item for participant in trace['participants'] for item in participant['runs']
+                     if item['id'] == str(run.pk)]
+        return traced['reading']['references_used']
+
+    def test_a_reuse_names_the_retained_run_whose_tool_calls_it_shows(self):
+        first = self.create()
+        drain()
+        second = self.create()
+        drain()
+        (retained,) = self.runs_of(first, 'astra', 'independent')
+        (reuse,) = self.runs_of(second, 'astra', 'independent')
+        self.assertEqual((reuse.reused_from_id, reuse.sent, reuse.exchanges.count()), (retained.pk, False, 0))
+        # the TXT: the run says whose tool calls these are, and a used reference was retrieved by that run
+        head, used = self.references_lines(first, retained)
+        self.assertEqual(head, f'  - Astra · independent reading · run {retained.pk}')
+        self.assertIn('    Used: fact:cms-pfs-rvu26d:99213:status — retrieved by this run', used)
+        head, used = self.references_lines(second, reuse)
+        self.assertEqual(head, f'  - Astra · independent reading · run {reuse.pk} · reuses the retained answer of run '
+                               f'{retained.pk}, whose tool calls these are; this run made none')
+        self.assertIn('    Used: fact:cms-pfs-rvu26d:99213:status — retrieved by the retained run it reuses', used)
+        self.assertIn('    Used: rule-01 — cited, not retrieved by the retained run it reuses, so never shown as '
+                      'retrieved', used)
+        self.assertEqual(self.csv_checks(first), {f'run={retained.pk}'})
+        self.assertEqual(self.csv_checks(second), {f'run={reuse.pk};reused_from={retained.pk}'})
+        # the API: the same references, and the run whose tool calls they are
+        own, reused = self.astra(first)['references'], self.astra(second)['references']
+        self.assertTrue(own['retrieved'] and own['used'])
+        self.assertEqual(('reused_from' in own, reused['reused_from']), (False, str(retained.pk)))  # a reuse's only
+        self.assertEqual((reused['retrieved'], reused['used']), (own['retrieved'], own['used']))
+        # the owner's trace: each reference used names the run whose tool calls it was checked against
+        self.assertEqual({'reused_from' in item for item in self.trace_used(first, retained)}, {False})
+        self.assertEqual({item['reused_from'] for item in self.trace_used(second, reuse)}, {str(retained.pk)})

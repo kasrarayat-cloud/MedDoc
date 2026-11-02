@@ -2068,3 +2068,29 @@ test('R2-TRUTH truth-12: a run whose sent exchange reported no usage shows no es
   assert.ok(runOf(unsent).includes('<dt>Estimated cost</dt><dd>Not estimated</dd>'));
   assert.ok(runOf(first).includes(`<dt>Estimated cost</dt><dd>$${first.estimated_cost_usd} (estimated from published rates, not reconciled to an invoice)</dd>`));
 });
+
+test('R2-TRUTH truth-13: a reuse\'s references are said to be the retained run\'s tool calls\', never its own', () => {
+  const final = fixture(H2_FINAL);
+  const reused = { ...final, harness: { ...final.harness, participants: final.harness.participants.map(row => (row.name === 'astra'
+    ? { ...row, reused: true, references: { ...row.references, reused_from: UUID } } : row)) } };
+  const html = render(reused);
+  const row = harnessRow(html, 'astra');
+  assert.ok(row.includes('This run made no tool call: the retained run it reuses retrieved 1 reference with its own tool calls; it says it used 2, 1 of them cited, not retrieved.'), row);
+  assert.equal(row.includes('Its own tool calls retrieved'), false);
+  const snare = codeCardOf(html, '45385');
+  assert.ok(snare.includes('<li><b>Astra · first reading (the retained run it reuses):</b> fact:cms-pfs-rvu26d:45385:mult_proc<small class="check-source">'), snare);
+  assert.ok(snare.includes('<li><b>Astra · first reading (the retained run it reuses):</b> ncci-2026-ch6-c-1 — cited, not retrieved: the tool calls of the retained run this run reuses never returned it'), snare);
+  assert.ok(snare.includes('<li><b>Astra · first reading (the retained run it reuses):</b> fact:cms-pfs-rvu26d:45385:mult_proc — retrieved by the tool calls of the retained run this run reuses'), snare);
+  assert.equal(snare.includes('Astra · first reading:</b> ncci-2026-ch6-c-1 — cited, not retrieved: its own tool calls in this run'), false, 'its own first reading is the reuse');
+  // a run's own tool calls read as before
+  assert.ok(harnessRow(render(final), 'astra').includes('Its own tool calls retrieved 1 reference; it says it used 2, 1 of them cited, not retrieved.'));
+  // the owner's trace: each reference used names the retained run it was checked against
+  const trace = fixture(H2_TRACE);
+  const astra = trace.participants.find(item => item.name === 'astra');
+  const [first] = astra.runs;
+  const reuse = { ...first, reused_from: UUID, exchanges: [], reading: { ...first.reading, references_used: first.reading.references_used.map(item => ({ ...item, reused_from: UUID })) } };
+  const traced = app.traceView({ ...trace, participants: [{ ...astra, runs: [reuse] }] }, trace.encounter.id);
+  assert.ok(traced.includes(`<li><b>fact:cms-pfs-rvu26d:45385:mult_proc — retrieved by the tool calls of the retained run this run reuses (${UUID})</b>`), traced);
+  assert.ok(traced.includes(`<li><b>ncci-2026-ch6-c-1 — cited, not retrieved by the retained run this run reuses (${UUID})</b>`), traced);
+  assert.equal(traced.includes('retrieved by its own tool calls in this run'), false);
+});

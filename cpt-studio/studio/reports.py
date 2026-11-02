@@ -592,7 +592,7 @@ def _participant_reference_runs(assessment):
                 continue
             references = review.participant_references(run)
             out.append({'name': name, 'label': participants.LABELS[name], 'phase': phase, 'run': str(run.pk),
-                        'retrieved': references['retrieved'],
+                        'reused_from': references.get('reused_from'), 'retrieved': references['retrieved'],
                         'used': [{'ref': item['ref'] if REF_SHAPE.fullmatch(str(item['ref'])) else '',
                                   'retrieved': bool(item['retrieved'])} for item in references['used']]})
     return out
@@ -1171,12 +1171,17 @@ def _window(item):
 
 def _references_section(snap):
     """What each participant run's own tool calls retrieved and what its answer says it used (HARNESS.md 11.2): kept
-    apart by participant and phase, and from the reconciliation's REFERENCE RETRIEVAL."""
+    apart by participant and phase, and from the reconciliation's REFERENCE RETRIEVAL. A run that reused a retained
+    answer made no tool call: its references are the retained run's, and it says so (refutation round 2, truth-13)."""
     lines = ["  Each participant run's own tool results (retrieved) and the references its answer says it relied on "
              "(used, checked against that run's own results); the reconciliation's retrieval is REFERENCE RETRIEVAL."]
     runs = snap.get('participant_references') or []
     for run in runs:
-        lines.append(f'  - {run["label"]} · {PHASE_WORDS.get(run["phase"], run["phase"])} · run {run["run"]}')
+        reused = run.get('reused_from')
+        lines.append(f'  - {run["label"]} · {PHASE_WORDS.get(run["phase"], run["phase"])} · run {run["run"]}'
+                     + (f' · reuses the retained answer of run {reused}, whose tool calls these are; this run made none'
+                        if reused else ''))
+        by = 'the retained run it reuses' if reused else 'this run'
         for item in run['retrieved']:
             ref = item['ref'] if REF_SHAPE.fullmatch(str(item['ref'])) else UNKEYED_REF
             lines.append(f'    Retrieved: {ref} ({item["kind"]} · {item["source_key"] or "unknown source"}, release '
@@ -1185,8 +1190,8 @@ def _references_section(snap):
             lines.append('    Retrieved: none')
         for item in run['used']:
             lines.append(f'    Used: {item["ref"] or UNKEYED_REF} — ' + (
-                'retrieved by this run' if item['retrieved'] else
-                'cited, not retrieved by this run, so never shown as retrieved'))
+                f'retrieved by {by}' if item['retrieved'] else
+                f'cited, not retrieved by {by}, so never shown as retrieved'))
         if not run['used']:
             lines.append('    Used: none')
     if not runs:
@@ -1588,16 +1593,18 @@ def _harness2_rows(snap):
                          'status': 'proposed_after_peer_review', 'evidence': _csv_spans(added['evidence'])})
     for run in snap.get('participant_references') or []:
         source = {**base, 'proposed_by': run['name'], 'proposal_origin': run['phase']}
+        # a reuse's references are the tool calls of the retained run it reuses (refutation round 2, truth-13)
+        named = f'run={run["run"]}' + (f';reused_from={run["reused_from"]}' if run.get('reused_from') else '')
         for item in run['retrieved']:
             rows.append({**source, 'item_list': 'participant_reference', 'status': 'retrieved',
                          'exclusion_reason': item['ref'] if REF_SHAPE.fullmatch(str(item['ref'])) else '',
                          'documented_service': item['source_key'],
                          'evidence_support': f'{item["kind"]} · release {item["release"] or "not stated"}'
-                                             f'{_window(item)}', 'checks': f'run={run["run"]}'})
+                                             f'{_window(item)}', 'checks': named})
         for item in run['used']:
             rows.append({**source, 'item_list': 'participant_reference',
                          'status': 'used' if item['retrieved'] else 'cited_not_retrieved',
-                         'exclusion_reason': item['ref'], 'checks': f'run={run["run"]}'})
+                         'exclusion_reason': item['ref'], 'checks': named})
     return [[row[column] for column in CSV_COLUMNS] for row in rows]
 
 

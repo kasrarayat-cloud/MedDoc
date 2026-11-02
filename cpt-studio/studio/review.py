@@ -1500,12 +1500,19 @@ def participant_references(run, review=None):
     the executor's own reader of a stored result, studio.reference.tools.retrieved_references, '' where it states none -
     and the tool; then each reference the run's answer says it used, with ``retrieved``: the reader's own check against
     those refs (ReferenceUse.retrieved), never the participant's claim (``used`` with retrieved false is
-    cited_not_retrieved). ``review``: the run's reading or peer review when already read. Empty lists for no run."""
+    cited_not_retrieved); and, only for a run that reused a retained answer and made no tool call itself,
+    ``reused_from``: the id of the retained run whose tool calls these are, so no page or report says they are this
+    run's own (refutation round 2, truth-13). ``review``: the run's reading or peer review when already read. Empty
+    lists for no run."""
+    from .jobs import loop_run  # local import: jobs imports this module
     from .reference.tools import retrieved_references  # local import: the tools module reads the reference store
 
     out = {'retrieved': [], 'used': []}
     if run is None:
         return out
+    answered = loop_run(run)
+    if answered is not None and answered.pk != run.pk:
+        out['reused_from'] = str(answered.pk)
     seen = set()
     delivered = _delivered_turns(run)
     for call in run_tool_calls(run):

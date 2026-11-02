@@ -985,14 +985,18 @@ function referenceLists(proposal, doc) {
   for (const row of objects(doc.harness.participants)) {
     for (const [field, phase] of [['references', 'first reading'], ['peer_references', 'peer review']]) {
       const refs = row[field] && typeof row[field] === 'object' ? row[field] : {};
-      const who = `${lookup(PARTICIPANT_LABELS, row.name, textValue(row.name) || 'Participant')} · ${phase}`;
+      // a reuse's references are the tool calls of the retained run it reuses (refutation round 2, truth-13)
+      const reused = Boolean(textValue(refs.reused_from));
+      const who = `${lookup(PARTICIPANT_LABELS, row.name, textValue(row.name) || 'Participant')} · ${phase}${reused ? ' (the retained run it reuses)' : ''}`;
       for (const item of objects(refs.retrieved).filter(entry => refConcerns(entry.ref, proposal.code))) {
         const window = textValue(item.effective_start) && textValue(item.effective_end) ? `effective ${formatDate(item.effective_start) || item.effective_start} – ${formatDate(item.effective_end) || item.effective_end}` : '';
         const passage = textValue(item.ref).startsWith('fact:') ? '' : ' (a policy passage, not tied to one code)';
         retrieved.push(`<li><b>${escapeHtml(who)}:</b> ${escapeHtml(`${textValue(item.ref)}${passage}`)}<small class="check-source">${escapeHtml([textValue(item.tool), textValue(item.source_key), textValue(item.release), window].filter(Boolean).join(' · '))}</small></li>`);
       }
       for (const item of objects(refs.used).filter(entry => refConcerns(entry.ref, proposal.code))) {
-        const checked = item.retrieved === true ? 'retrieved by its own tool calls in this run' : 'cited, not retrieved: its own tool calls in this run never returned it';
+        const checked = reused
+          ? (item.retrieved === true ? 'retrieved by the tool calls of the retained run this run reuses' : 'cited, not retrieved: the tool calls of the retained run this run reuses never returned it')
+          : (item.retrieved === true ? 'retrieved by its own tool calls in this run' : 'cited, not retrieved: its own tool calls in this run never returned it');
         // a cited reference is the participant's own text (a ref it was never given reads as written): withheld where
         // it reads like a CPT descriptor
         const use = participantText(item.use);
@@ -1472,14 +1476,17 @@ function harnessRow(key, rowState, [look, label, labelTone], title, lines, notes
 
 // What one participant run's own tool calls retrieved and what its answer says it used
 // (harness.participants[].references or .peer_references, HARNESS.md 11.2), counted; '' when the API serves none or the
-// run has neither.
+// run has neither. A run that reused a retained answer made no tool call: its references are the retained run's
+// (references.reused_from), and it says so (refutation round 2, truth-13).
 function referencesNote(references) {
   if (!references || typeof references !== 'object') return '';
   const retrieved = objects(references.retrieved).length;
   const used = objects(references.used);
   const cited = used.filter(item => item.retrieved !== true).length;
   if (!retrieved && !used.length) return '';
-  return `Its own tool calls retrieved ${plural(retrieved, 'reference', 'references')}; it says it used ${used.length}${cited ? `, ${cited} of them cited, not retrieved` : ''}.`;
+  const said = `it says it used ${used.length}${cited ? `, ${cited} of them cited, not retrieved` : ''}.`;
+  if (textValue(references.reused_from)) return `This run made no tool call: the retained run it reuses retrieved ${plural(retrieved, 'reference', 'references')} with its own tool calls; ${said}`;
+  return `Its own tool calls retrieved ${plural(retrieved, 'reference', 'references')}; ${said}`;
 }
 
 // A participant's row: its state as the API reports it, with the API's own sentence - after the plain one when it gives
@@ -1776,11 +1783,16 @@ function traceCode(code, after = '') {
 }
 
 // The references a participant's answer says it used (references_used), each with CPT Studio's check against that run's
-// own tool calls: one it cited and never retrieved is marked so, never shown as retrieved (HARNESS.md 11.2).
+// own tool calls: one it cited and never retrieved is marked so, never shown as retrieved (HARNESS.md 11.2). A run that
+// reused a retained answer was checked against the retained run's tool calls (each item's reused_from), and says so
+// (refutation round 2, truth-13).
 function traceReferencesUsed(items) {
   return objects(items).map(item => {
     const use = participantText(item.use);
-    return `<li><b>${escapeHtml(`${participantText(item.ref) || 'Reference not named'} — ${item.retrieved === true ? 'retrieved by its own tool calls in this run' : 'cited, not retrieved'}`)}</b>${use ? `<br>${escapeHtml(`Its use: ${use}`)}` : ''}</li>`;
+    const checked = textValue(item.reused_from)
+      ? (item.retrieved === true ? `retrieved by the tool calls of the retained run this run reuses (${item.reused_from})` : `cited, not retrieved by the retained run this run reuses (${item.reused_from})`)
+      : (item.retrieved === true ? 'retrieved by its own tool calls in this run' : 'cited, not retrieved');
+    return `<li><b>${escapeHtml(`${participantText(item.ref) || 'Reference not named'} — ${checked}`)}</b>${use ? `<br>${escapeHtml(`Its use: ${use}`)}` : ''}</li>`;
   });
 }
 

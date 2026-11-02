@@ -342,7 +342,9 @@ class OneReadingTests(Harness2Case):
                 self.assertEqual((reused.reused_from_id, reused.exchanges.count()), (original.pk, 0))
                 self.assertEqual(review.run_refs(reused), jobs.run_refs(original))
                 self.assertEqual(review.stored_reading(reused), jobs.participant_reading(original))
-                self.assertEqual(review.participant_references(reused), review.participant_references(original))
+                # the same references, and the retained run whose tool calls they are (refutation round 2, truth-13)
+                self.assertEqual(review.participant_references(reused),
+                                 {**review.participant_references(original), 'reused_from': str(original.pk)})
                 self.assertTrue(review.participant_references(reused)['retrieved'])
         # the second encounter's final assessment reads both frozen readings back as recorded: none is dropped
         readings, reviews = review.frozen_inputs(self.encounter(second_id).current_assessment)
