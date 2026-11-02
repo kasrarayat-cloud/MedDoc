@@ -3049,20 +3049,25 @@ class _Harness:
               listed: Sequence[str] = (), second_listed: Sequence[str] = ()) -> str:
         """The rationale's first sentence of a participant's own proposal (HARNESS.md 11.4): who proposed it, and what
         Corti did with the code - selected it with no exact passage (its selection listed apart, excluded), listed it
-        only as a candidate or an alternative (``listed``), listed it in its bounded second review as an alternative
-        (``second_listed``: alt2, a code that review selected and that was not added, or a candidate of it), or nothing
-        at all; never "Selected by". "Corti did not propose this code." is said only where Corti has no entry for the
-        code (refutation round 2, truth-7: a Corti candidate of the same code was its alternative while this sentence
-        denied it; the page's words, review.corti_relation and app.js CORTI_RELATIONS, are the same)."""
+        without selecting it (``listed``: a candidate, or an alternative to a code it selected), listed it in its
+        bounded second review without that review adding it (``second_listed``: alt2, a code that review selected and
+        that was not added, or a candidate or an alternative of it), or nothing at all; never "Selected by". "Corti did
+        not propose this code." is said only where Corti has no entry for the code (refutation round 2, truth-7: a Corti
+        candidate of the same code was its alternative while this sentence denied it; the page's words,
+        review.corti_relation and app.js CORTI_RELATIONS, are the same). ``listed`` and ``second_listed`` name codes
+        only, not the role each was listed in, so neither sentence names one role: the Alternatives row of the code says
+        which (refutation round 3, truth-5: an alternative to 45385 was said to be "listed only as a candidate", and a
+        second review's candidate "listed ... as an alternative")."""
         who = self._who(code, proposers)
         if any(s.code == code and s.origin == 'primary' for s in selections):
             return (f'Proposed by {who}; Corti also selected this code, with no exact passage; it is listed apart, '
                     'excluded.')
         if code in listed:
-            return f'Proposed by {who}; Corti listed this code only as a candidate, not selected; see Alternatives.'
-        if code in second_listed:
-            return (f"Proposed by {who}; Corti's second review also listed this code, as an alternative; see "
+            return (f'Proposed by {who}; Corti listed this code as a candidate or an alternative, not selected; see '
                     'Alternatives.')
+        if code in second_listed:
+            return (f"Proposed by {who}; Corti's second review also listed this code without adding it as a proposal; "
+                    'see Alternatives.')
         return f'Proposed by {who}; Corti did not propose this code.'
 
     def _good(self, code: str, names: Sequence[str]) -> tuple[EvidenceSpan, ...]:

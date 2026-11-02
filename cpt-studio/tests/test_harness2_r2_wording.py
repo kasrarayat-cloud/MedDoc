@@ -146,8 +146,12 @@ class CortiRelationTests(R2WordingCase):
         [own] = self.proposals(detail, '45380', bucket='selected')
         [listed] = self.proposals(detail, '45380', bucket='alternative')
         self.assertEqual((self.origin(own), self.origin(listed)), ('participant', 'primary'))
-        self.assertEqual(self.proposer_line(detail, own), 'Astra (independent reading); Corti listed this code only as '
-                                                          'a candidate, not selected; see Alternatives.')
+        # moved by refutation round 3, R3-TRUTH truth-5, to what the page now says: the engine's record names no role a
+        # code was listed in, so the sentence is true of a candidate and of an alternative (tests/test_harness2_r3_truth
+        # pins both); the Alternatives row says which
+        self.assertEqual(self.proposer_line(detail, own), 'Astra (independent reading); Corti listed this code as a '
+                                                          'candidate or an alternative, not selected; see '
+                                                          'Alternatives.')
         self.assertEqual((own['corti_relation'], listed['corti_relation']), ('candidate', 'proposer'))
 
     def test_every_proposal_carries_the_relation_and_corti_s_own_are_corti_s(self):

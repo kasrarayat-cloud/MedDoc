@@ -90,19 +90,23 @@ const PEER_NOT_RUN = 'Not run: only a participant whose own first reading was us
 // for 'failed' and 'not_verified', which must be said plainly - the words the API's own sentence (its detail) has to
 // contain for the plain one to be left out. A retrieval that failed is shown as failed, never as not run or done
 // (refutation round 1, parity-1); one no installed CMS reference file applied to checked no code, and says so, never
-// done (refutation round 2, truth-3).
+// done (refutation round 2, truth-3). The plain sentence for a failure is said of any assessment, so it claims neither
+// that the codes' checks read the CMS facts nor that none was checked: the API's own sentence says which (refutation
+// round 3, truth-1).
 const REFERENCE_STATES = {
   waiting: [STAGE_LOOKS.queued, 'Waiting', 'Runs once the participants have answered: every proposed code is looked up in the connected CMS reference files.'],
   done: [STAGE_LOOKS.succeeded, 'Done', ''],
   not_verified: [STAGE_LOOKS.unknown, 'Not verified', 'No code was checked against the CMS reference files: no installed CMS reference file applies to the service date.', 'no code was checked'],
-  failed: [STAGE_LOOKS.failed, 'Failed', 'Reference validation failed: CPT Studio could not record which CMS reference facts and passages it retrieved, so none is listed here; each code\'s checks read the CMS facts before that and stand as shown.', 'failed'],
+  failed: [STAGE_LOOKS.failed, 'Failed', 'Reference validation failed: CPT Studio\'s retrieval for this assessment\'s codes failed, so no CMS reference fact or passage is listed here; each code\'s CMS reference checks stand as its status line shows them.', 'failed'],
   not_run: [['muted', 'info'], 'Not run', 'No proposal was checked against the CMS references for this revision.'],
 };
-// What a code card says where the assessment's retrieval failed (harness.reference_validation 'failed'): no record of the
-// reference facts and passages retrieved is listed for any code - never to be read as a lookup that found nothing for
-// this one, nor as checks that did not run: the code's CMS reference checks read the facts first, and stand as its
-// status lines show them (refutation round 2, truth-4).
-const RETRIEVAL_FAILED = 'Reference validation failed for this assessment: CPT Studio could not record which CMS reference facts and passages it retrieved, so none is listed for this code. Its CMS reference checks read the facts before that and stand as shown.';
+// What a code card says where the assessment's retrieval failed (harness.reference_validation 'failed'): no CMS
+// reference fact or passage is listed for any code - never to be read as a lookup that found nothing for this one - and
+// the code's CMS reference checks stand as its status line shows them (refutation round 2, truth-4). Said of every
+// card, so it claims neither that the checks read the CMS facts - where no CMS reference file applied to the service
+// date none did, and each reads "not verified" - nor that none did: the Reference validation row's own sentence says
+// which (refutation round 3, truth-1).
+const RETRIEVAL_FAILED = 'Reference validation failed for this assessment, so no CMS reference fact or passage is listed for this code. Its CMS reference checks stand as its status line shows them; the Reference validation row says what failed.';
 // A code's three statuses (HARNESS.md I4): proposed (by whom), reference-checked and approved, never one merged state.
 const REFERENCE_CHECK_LABELS = { passed: 'passed', attention: 'needs attention', not_verified: 'not verified' };
 const POSITION_WORDS = { proposed: 'proposed it', not_proposed: 'did not propose it', advised_not_to_code: 'advised not to code it', not_run: 'gave no reading' };
@@ -799,20 +803,40 @@ function decisionLine(proposal) {
   return `<div class="review-insight">${icon('shield')}<div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p>${decision.note ? `<p>${escapeHtml(`Note: ${decision.note}`)}</p>` : ''}</div></div>`;
 }
 
+// A code card states the NCCI procedure-to-procedure limit once (HARNESS.md I4: PTP is always "not verified"): in its
+// status line wherever that is shown (codeStatusLines: the API's reference_check detail says it, or the page's own
+// parenthetical does); else in its "Not verified" note, from its ncci.ptp check; else in its modifier considerations.
+// Each later place leaves it out (refutation round 3, truth-6: every real card stated it in all three).
+function ptpInStatusLine(proposal) {
+  return Array.isArray(proposal.proposed_by) || Boolean(proposal.reference_check && typeof proposal.reference_check === 'object');
+}
+
+function ptpInNotVerified(proposal) {
+  return !ptpInStatusLine(proposal) && (Array.isArray(proposal.checks) ? proposal.checks : []).some(check => check?.status === 'not_verified' && check.id === 'ncci.ptp');
+}
+
 function referenceNote(proposal) {
   const checks = Array.isArray(proposal.checks) ? proposal.checks : [];
   const lines = [];
   if (proposal.status === 'excluded' && proposal.exclusion_reason) lines.push(`Excluded: ${proposal.exclusion_reason}`);
   if (proposal.supported === false) lines.push(`${proposal.family_label || 'This service'} is not covered by a profiled GI service family in this release — review required.`);
   for (const check of checks) if (check.status === 'fail' || check.status === 'warn') lines.push(`${lookup(CHECK_LABELS, check.status, '')} · ${check.label}: ${check.detail}`);
-  const notVerified = checks.filter(check => check.status === 'not_verified').map(check => check.label);
+  // the ncci.ptp check is listed only where the status line does not state the limit (ptpInStatusLine)
+  const stated = ptpInStatusLine(proposal);
+  const notVerified = checks.filter(check => check.status === 'not_verified' && !(stated && check.id === 'ncci.ptp')).map(check => check.label);
   if (notVerified.length) lines.push(`Not verified: ${notVerified.join('; ')}.`);
   return lines.length ? `<div class="reference-note">${icon('info')}<span>${lines.map(escapeHtml).join('<br>')}</span></div>` : '';
 }
 
+// The engine's separate-lesions consideration ends by stating the limit again; where the card states it above (its
+// status line, or its "Not verified" note) the line keeps the consideration and says only that no modifier is assigned.
+const MODIFIER_PTP = 'NCCI edits are not connected; no modifier is assigned.';
+
 function modifierNote(proposal) {
   const items = Array.isArray(proposal.modifier_considerations) ? proposal.modifier_considerations : [];
-  return items.length ? `<div class="reference-note">${icon('info')}<span>${escapeHtml(`Modifier considerations, never assigned automatically: ${items.join(' ')}`)}</span></div>` : '';
+  const stated = ptpInStatusLine(proposal) || ptpInNotVerified(proposal);
+  const shown = items.map(item => (stated && typeof item === 'string' && item.endsWith(MODIFIER_PTP) ? `${item.slice(0, -MODIFIER_PTP.length)}No modifier is assigned.` : item));
+  return shown.length ? `<div class="reference-note">${icon('info')}<span>${escapeHtml(`Modifier considerations, never assigned automatically: ${shown.join(' ')}`)}</span></div>` : '';
 }
 
 function evidenceChips(proposal, layout) {
@@ -981,12 +1005,15 @@ function codeStatusLines(proposal) {
 
 // How Corti stands to a code it is not a proposer of (proposal.corti_relation, HARNESS.md 11.4), in the engine's own
 // words: "Corti did not propose this code" only when Corti has no entry for the code at all (refutation round 2,
-// truth-6: it was said whenever Corti was not a proposer, beside Corti's own excluded selection of the code).
+// truth-6: it was said whenever Corti was not a proposer, beside Corti's own excluded selection of the code). A code
+// Corti listed without selecting it, or its second review listed without adding it, is said to be listed, in words
+// that name no one role - the record gives the engine none - and its Alternatives row says which (refutation round 3,
+// truth-5: an alternative to another code was said to be listed "only as a candidate").
 const CORTI_RELATIONS = {
   selected_without_exact_passage: 'Corti also selected this code, with no exact passage; it is listed apart, excluded.',
   selected_apart: 'Corti also selected this code; its selection is listed apart.',
-  candidate: 'Corti listed this code only as a candidate, not selected; see Alternatives.',
-  second_review: 'Corti\'s second review also listed this code, as an alternative; see Alternatives.',
+  candidate: 'Corti listed this code as a candidate or an alternative, not selected; see Alternatives.',
+  second_review: 'Corti\'s second review also listed this code without adding it as a proposal; see Alternatives.',
   none: 'Corti did not propose this code.',
 };
 

@@ -201,8 +201,12 @@ member reconciles it (`POST reconcile` takes any participant's run). `codes` are
 (Corti's: its selected codes), each once - a participant's only when the engine lists it (1 to 10 characters): a longer
 "code" may carry wording, a CPT descriptor say, so it is never served, and the row's `detail` ends with the engine's own
 sentence ("It returned 1 code that cannot be listed: ... It is not shown and never truncated."); `unlisted_codes`
-counts those (0 on Corti's row and wherever none was returned), so the page says the reading proposed no code "that can
-be listed", never that it proposed none (refutation round 2, truth-11);
+counts those (0 wherever none was returned), so the page says the reading proposed no code "that can be listed", never
+that it proposed none (refutation round 2, truth-11). Corti's row counts the codes its answers selected that the engine
+cannot list (its primary answer and any bounded second review, read again as the engine read them), and its `detail`
+then says that only its codes that can be listed were checked, or that none can be listed, so none was checked, before
+the same count sentence; the reports' REVIEW PARTICIPANTS says the same (refutation round 3, truth-3: "Answered; its
+codes were checked." and "It proposed no code." beside a code it selected that cannot be listed);
 `usage` is as the vendor reported it, with its `usage_basis`; `estimated_cost_usd` is a string estimated from published
 rates, not reconciled to an invoice, to four decimals (`"0.0270"`, rounded half up), and null for Corti (credits, not
 USD), for a run that reported no usage (a reuse), and where the installed pricing module cannot price the usage. A tool
@@ -227,12 +231,19 @@ reference file applies." or "... no installed CMS reference file applies to the 
 (refutation round 2, truth-3: this was `done`, its codes counted as checked). A retrieval that fails never stops the
 assessment, which stands as made (HARNESS.md 5): its retrieval is recorded as one entry `{"code": "", "failed": true,
 "notes": ["Reference validation failed: ..."]}` (no fact, no passage), and the state is then `failed` - never
-`not_run` or `done` - with that entry's note, CPT Studio's own sentence, as `detail`: it says what failed (CPT Studio
-could not record which CMS reference facts and passages it retrieved, so none is listed) and that each code's checks,
-which read the CMS facts before that, stand as shown (refutation round 2, truth-4: it said no proposal was checked).
-`detail` is `""` in every other state, and a failed entry is counted in neither `codes_checked` nor `passages`. The
-code cards then say that reference validation failed for the assessment, and the reports' REFERENCE RETRIEVAL section
-prints the entry as one line, "Reference validation failed: ...".
+`not_run` or `done` - with that entry's note, CPT Studio's own sentence, as `detail`. It says what failed and what that
+leaves of the codes' checks, by the engine's record of the lookup (`reference_sources[].applies`): where an installed
+CMS reference file applied to the service date, that CPT Studio could not record which CMS reference facts and passages
+it retrieved, so none is listed, and that each code's checks, which read the CMS facts before that, stand as shown
+(refutation round 2, truth-4: it said no proposal was checked); where none applied, that CPT Studio's retrieval for the
+codes failed, so no CMS reference fact or passage is listed, and that no code was checked against the CMS reference
+files, with `not_verified`'s own reason ("... no service date is established for this encounter, so no dated CMS
+reference file applies." or "... no installed CMS reference file applies to the service date, 2025-03-02."; refutation
+round 3, truth-1: it said the checks read the CMS facts beside checks that all read "not verified"). A failed entry
+that carries no note is served with a sentence that claims neither. `detail` is `""` in every other state, and a failed
+entry is counted in neither `codes_checked` nor `passages`. The code cards then say that reference validation failed
+for the assessment and that each code's CMS reference checks stand as its status line shows them, and the reports'
+REFERENCE RETRIEVAL section prints the entry as one line, "Reference validation failed: ...".
 `harness.final` is the encounter's state and its label.
 
 Each proposal keeps three statuses apart (I4): `proposed_by` (who proposed it: `corti` for Corti's own proposals and
@@ -245,6 +256,11 @@ that was found verbatim in the document ('' when none was); it is `{}` when no p
 participant that first proposed the code after peer review (its `phases` entry is `peer_review`) keeps its first
 reading's position, and its `detail` says both: "Fable did not propose this code in its first reading. It proposed it
 after peer review." (refutation round 2, truth-2), in the encounter view and in the trace's reconciliation rows alike.
+A first reading that listed the code with no quote found in the document proposed nothing (the engine counts no such
+entry), so where that participant then proposed the code after peer review its position is `not_proposed`: "Astra
+listed this code in its first reading, but none of its quotes was found in the document, so that reading did not
+propose it. It proposed it after peer review." (refutation round 3, truth-2: it said Astra proposed it in its first
+reading and "again" after peer review, beside `phases` and the peer row's "never independent").
 A position never decides a status, and agreement never approves anything. `retrieval` lists the CMS facts
 the checks read for the code and the verbatim CMS passages retrieved for it, with source key, release, page and
 section ([] for a code that was not looked up: a provider's alternatives never are).
@@ -412,12 +428,17 @@ code."). Every proposal carries `corti_relation` (refutation round 2, truth-6), 
 the assessment's own proposals of that code (Corti's are those of origin primary or second_review): `proposer` (Corti
 is among `proposed_by`); `selected_without_exact_passage` (Corti's response selected the code and that selection is
 excluded because none of its passages matches the document text exactly: listed apart, carrying no proposal);
-`selected_apart` (Corti selected it and that selection is another entry, excluded for another reason); `candidate`
-(Corti's response listed it only as a candidate or an alternative, not selected); `second_review` (only Corti's bounded
-second review listed it, as an alternative); `none` (Corti has no entry for the code). The page says "Corti did not
-propose this code." only for `none`, words the others as the engine's rationale does ("Corti also selected this code,
-with no exact passage; it is listed apart, excluded."; "Corti listed this code only as a candidate, not selected; see
-Alternatives."), and says nothing of Corti for a proposal served without the field. A candidate, a confirmation and a
+`selected_apart` (Corti selected it and that selection is another entry, excluded for another reason: out of scope,
+beside a participant's own entry of the code, which is then an alternative); `candidate` (Corti's response listed it
+without selecting it: a candidate, or an alternative to a code it selected - the token names no role); `second_review`
+(only Corti's bounded second review listed it, without adding it as a proposal: a code it selected and did not add, or
+a candidate or an alternative of it); `none` (Corti has no entry for the code). The page says "Corti did not propose
+this code." only for `none`, words the others as the engine's rationale does ("Corti also selected this code, with no
+exact passage; it is listed apart, excluded."; "Corti listed this code as a candidate or an alternative, not selected;
+see Alternatives."; "Corti's second review also listed this code without adding it as a proposal; see Alternatives.":
+the engine is told which codes Corti listed, not the role, so neither names one, and the code's Alternatives row says
+which - refutation round 3, truth-5: an alternative to another code was said to be listed "only as a candidate"), and
+says nothing of Corti for a proposal served without the field. A candidate, a confirmation and a
 peer position never decide a status or approve anything: `decision_state`
 stays a member's decision (I2-I4). `pipeline.stages` includes the peer stages (`astra_peer`, `fable_peer`); a
 replayed peer-review run reads `mode` `replay`. The Activity tab reads "Finding confirmed from a participant's located
@@ -702,7 +723,10 @@ no first reading was read, a member date conflict holds the encounter, or no par
 and a PARTICIPANT REFERENCES section (by
 participant and phase, what that run's own tool calls retrieved and what it says it used, "cited, not retrieved" where
 its own run never returned it) - apart from REFERENCE RETRIEVAL, which stays the reconciliation's. REVIEW PARTICIPANTS
-gives a tool loop's exchanges and tool calls, and PROVIDER USAGE lists a peer-review run as a "peer review". No
+gives a tool loop's exchanges and tool calls - for a run that reused a retained answer, its own (none) and then those of
+the retained run, named as that run's ("Exchanges: 0 · tool calls: 0 (this run reuses the retained answer of run
+<id>, which made 2 exchanges and 1 tool call)"; refutation round 3, truth-4: the retained run's were printed as the
+reuse's own) - and PROVIDER USAGE lists a peer-review run as a "peer review". No
 participant's own wording is printed: questions are CPT Studio's, values CPT Studio's words, passages the revision's
 own slices, codes and references only in their shapes. The CSV keeps its columns and adds rows that are not proposals,
 after the encounter rows: `confirmed_finding` (fact in `status`, value in `exclusion_reason`, passages in `evidence`,

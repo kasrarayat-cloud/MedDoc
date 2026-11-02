@@ -645,8 +645,10 @@ class CortiLeadTests(SimpleTestCase):
 
     def test_a_code_corti_listed_only_as_a_candidate_is_said_so(self):
         rationale, result = self.lead((('selected', '45385', SNARE_QUOTE), ('candidate', '45380', BIOPSY_QUOTE)))
-        self.assertTrue(rationale.startswith('Proposed by Astra (independent participant); Corti listed this code only '
-                                             'as a candidate, not selected; see Alternatives.'), rationale)
+        # moved by refutation round 3, R3-TRUTH truth-5, to what _Harness._lead now says: it is told the codes Corti
+        # listed, never the role, so its sentence is true of a candidate and of an alternative
+        self.assertTrue(rationale.startswith('Proposed by Astra (independent participant); Corti listed this code as a '
+                                             'candidate or an alternative, not selected; see Alternatives.'), rationale)
         self.assertNotIn('Corti did not propose this code', rationale)
         self.assertEqual([(p.key, p.code) for p in result.proposals if p.bucket == 'alternative'], [('alt:0', '45380')])
 
@@ -675,9 +677,11 @@ class CortiLeadTests(SimpleTestCase):
                          [('alt2:0', '45380')])
         added = next(p for p in result.proposals if p.code == '45380' and p.bucket != 'alternative'
                      and p.support.get('origin') == 'participant')
+        # moved by refutation round 3, R3-TRUTH truth-5: the second review listed 45380 as a candidate, and its alt2 row
+        # says so; the lead says it was listed without being added, never "as an alternative"
         self.assertTrue(added.rationale.startswith("Proposed by Astra (independent participant); Corti's second review "
-                                                   'also listed this code, as an alternative; see Alternatives.'),
-                        added.rationale)
+                                                   'also listed this code without adding it as a proposal; see '
+                                                   'Alternatives.'), added.rationale)
         self.assertNotIn('Corti did not propose this code', added.rationale)
 
 

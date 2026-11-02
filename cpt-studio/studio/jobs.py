@@ -1907,6 +1907,14 @@ RETRIEVAL_FAILED = ("Reference validation failed: CPT Studio could not record wh
                     "it retrieved for this assessment's codes ({error}, logged), so none is listed here. Each code's "
                     "checks read the CMS facts before that and stand as shown; retrieval only informs the reviewer "
                     "and decides no status, so the assessment stands as made.")
+# The note where no installed CMS reference file applied to the assessment's service date: no code's checks read a CMS
+# fact (each is not verified), so the note says that no code was checked against a CMS reference file and why -
+# {why}, serializers.no_source_sentence, the words reference validation says when the retrieval itself succeeds -
+# never that the checks read the CMS facts (refutation round 3, truth-1: it said so beside checks that were all "not
+# verified", and that CPT Studio could not record the facts it retrieved, when no file applied and none was).
+RETRIEVAL_FAILED_UNCHECKED = ("Reference validation failed: CPT Studio's retrieval for this assessment's codes failed "
+                              "({error}, logged), so no CMS reference fact or passage is listed here. {why} Retrieval "
+                              "only informs the reviewer and decides no status, so the assessment stands as made.")
 
 
 def _retrieval(result, service_date, reference, prefetched):
@@ -1918,7 +1926,9 @@ def _retrieval(result, service_date, reference, prefetched):
     A retrieval that fails never stops the assessment (I1, I10; refutation round 1, parity-1: a Corti code ending in a
     superscript digit raised here and the encounter was left with no assessment at all). Retrieval only informs the
     reviewer, so the assessment is recorded as made and its retrieval is one entry marked 'failed' whose note says that
-    reference validation failed (retrieval_failure): never a trace that reads as a code checked."""
+    reference validation failed (retrieval_failure): never a trace that reads as a code checked. Whether an installed
+    CMS reference file applied to the service date - so that the codes' checks read the CMS facts - is the engine's own
+    record of the lookup (``result.reference_sources``), read here in memory, never asked of the database again."""
     codes = sorted({proposal.code for proposal in result.proposals} & set(prefetched))
     if not codes:
         return []
@@ -1927,14 +1937,27 @@ def _retrieval(result, service_date, reference, prefetched):
                                                             reference_passages.load_passages())))
     except Exception as exc:  # noqa: BLE001 - logged; the record says reference validation failed, never the internals
         log.exception('reference retrieval failed for %d code(s) of an assessment', len(codes))
-        return [retrieval_failure(service_date, type(exc).__name__)]
+        from .serializers import source_applied  # local import: serializers imports this module's peers
+
+        return [retrieval_failure(service_date, type(exc).__name__,
+                                  applied=source_applied(getattr(result, 'reference_sources', ())))]
 
 
-def retrieval_failure(service_date, error):
+def retrieval_failure(service_date, error, *, applied=False):
     """The one Assessment.retrieval entry of a retrieval that failed: no code, no fact, no passage, and CPT Studio's own
-    sentence saying reference validation failed. Marked 'failed', so no reader counts it as a code checked."""
-    return {'code': '', 'service_date': service_date.isoformat() if service_date else None, 'facts': [],
-            'passages': [], 'lookups': [], 'notes': [RETRIEVAL_FAILED.format(error=error)], 'failed': True}
+    sentence saying reference validation failed and what that leaves of the codes' checks. ``applied``: an installed
+    CMS reference file applied to the service date (the engine's reference_sources), so each code's checks read the CMS
+    facts before the retrieval and stand (RETRIEVAL_FAILED); otherwise none read one, and the note says that no code was
+    checked against a CMS reference file, and why (RETRIEVAL_FAILED_UNCHECKED; refutation round 3, truth-1). False
+    unless the caller read that one applied, so the note never claims a check read a CMS fact it did not read. Marked
+    'failed', so no reader counts it as a code checked."""
+    from .serializers import no_source_sentence  # local import: serializers imports this module's peers
+
+    day = service_date.isoformat() if service_date else None
+    note = (RETRIEVAL_FAILED.format(error=error) if applied else
+            RETRIEVAL_FAILED_UNCHECKED.format(error=error, why=no_source_sentence(day)))
+    return {'code': '', 'service_date': day, 'facts': [], 'passages': [], 'lookups': [], 'notes': [note],
+            'failed': True}
 
 
 def _provider_inputs(run):

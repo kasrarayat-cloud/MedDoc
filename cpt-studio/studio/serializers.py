@@ -560,14 +560,65 @@ def _record_detail(record, run):
 
 
 def _row(name, label, vendor, model, state, detail, run, codes=(), unverified=0, unlisted=0):
-    # ``unlisted``: how many codes the reading proposed that the engine cannot list, never served (I9): the page says
-    # which codes can be listed, never that a participant proposed none (refutation round 2, truth-11)
+    # ``unlisted``: how many codes the reading proposed - Corti's answers selected (corti_unlisted) - that the engine
+    # cannot list, never served (I9): the page says which codes can be listed, never that a participant proposed none
+    # (refutation round 2, truth-11; Corti's row, refutation round 3, truth-3)
     return {'name': name, 'label': label, 'vendor': vendor, 'model': model, 'state': state, 'detail': detail,
             'run_id': str(run.pk) if run is not None else None,
             'reused': bool(run is not None and run.reused_from_id), 'codes': list(codes), 'unlisted_codes': unlisted,
             'unverified_quotes': unverified, 'usage': dict(run.usage or {}) if run is not None else {},
             'usage_basis': run.usage_basis if run is not None else '', 'estimated_cost_usd': review.estimated_cost(run),
             'returned_model': run.returned_model if run is not None else ''}
+
+
+def corti_codes(assessment) -> list:
+    """The codes Corti proposed on ``assessment``, each once, sorted: the codes its answers selected that are a
+    proposal - selected or excluded, of origin primary or second_review - never a code it only listed (an
+    alternative)."""
+    return sorted({p.code for p in assessment.proposals.all() if p.bucket != models.Proposal.ALTERNATIVE
+                   and (p.support or {}).get('origin', 'primary') in ('primary', 'second_review')})
+
+
+def corti_unlisted(assessment) -> int:
+    """How many codes Corti's answers that ``assessment`` read (its primary run and any bounded second review)
+    selected that the engine cannot list (engine._listable: empty, or longer than MAX_LISTED_CODE). The engine drops
+    each with its provider.unlisted warning, and none is ever served or truncated (I9); counted from each stored answer
+    as the engine read it (jobs._provider_inputs: its bytes checked against their sha256, read by the run's own
+    normalizer), so Corti's row and the reports never say that it proposed no code, or that its codes were checked,
+    beside codes it selected that cannot be listed (refutation round 3, truth-3). An answer that cannot be read again
+    counts none, and the error is logged: the page never fails on it."""
+    from .jobs import _provider_inputs  # local import: jobs imports this module's peers
+    from .validation import engine  # local import: only the engine's rule is needed here
+
+    count = 0
+    for run in (assessment.provider_run, assessment.second_run):
+        if run is None or run.state != models.ProviderRun.SUCCEEDED:
+            continue
+        try:
+            _, normalized = _provider_inputs(run)
+        except Exception:  # noqa: BLE001 - logged; the count is informational and never fails the page or a report
+            import logging
+
+            logging.getLogger(__name__).exception('the answer of run %s could not be read again', run.pk)
+            continue
+        if normalized is not None and not normalized.refused:
+            count += sum(1 for item in normalized.codes if item.role == 'selected' and not engine._listable(item.code))
+    return count
+
+
+# Corti's answered state, as its row's detail and the reports' REVIEW PARTICIPANTS say it: its codes were checked, or,
+# where it selected codes that cannot be listed (corti_unlisted), those that can be listed were, or none was.
+CORTI_CHECKED = 'answered; its codes were checked'
+CORTI_SOME_LISTED = 'answered; its codes that can be listed were checked'
+CORTI_NONE_LISTED = 'answered; none of its codes can be listed, so none was checked'
+
+
+def corti_answered(listed, unlisted) -> str:
+    """Corti's answered state in one clause: ``listed``, whether it proposed a code that can be listed (corti_codes);
+    ``unlisted``, how many it selected that cannot be (corti_unlisted)."""
+    if not unlisted:
+        return CORTI_CHECKED
+    return CORTI_SOME_LISTED if listed else CORTI_NONE_LISTED
 
 
 def _corti_row(encounter, assessment, jobs):
@@ -590,8 +641,7 @@ def _corti_row(encounter, assessment, jobs):
         if not configured:
             return _row(name, label, vendor, model, 'not_configured', 'Not configured on this installation.', None)
         return _row(name, label, vendor, model, 'not_sent', 'No request was made for this revision.', None)
-    codes = sorted({p.code for p in assessment.proposals.all() if p.bucket != models.Proposal.ALTERNATIVE
-                    and (p.support or {}).get('origin', 'primary') in ('primary', 'second_review')}) if current else []
+    codes = corti_codes(assessment) if current else []
     if run.state == models.ProviderRun.SUCCEEDED and current and review._refused_run(assessment) == run:
         check = next((c for c in assessment.encounter_checks or [] if c.get('id') == 'provider.status'), {})
         return _row(name, label, vendor, model, 'refused',
@@ -600,10 +650,16 @@ def _corti_row(encounter, assessment, jobs):
         return _row(name, label, vendor, model, 'not_sent', run.error or 'Nothing was sent.', run)
     state = RUN_STATES.get(run.state, 'unknown')
     if run.state == models.ProviderRun.SUCCEEDED:
-        detail = ('Answered; its codes were checked.' if current else _run_detail(run))
+        # the codes it selected that the engine cannot list are counted, never served (I9; refutation round 3, truth-3)
+        unlisted = corti_unlisted(assessment) if current else 0
+        if current:
+            words = corti_answered(bool(codes), unlisted)
+            detail = f'{words[:1].upper()}{words[1:]}.' + (f' {review.unlisted_words(unlisted)}' if unlisted else '')
+        else:
+            detail = _run_detail(run)
         if run.reused_from_id:
             detail = 'Reused the retained answer to the identical request; nothing was sent. ' + detail
-        return _row(name, label, vendor, model, state, detail, run, codes)
+        return _row(name, label, vendor, model, state, detail, run, codes, unlisted=unlisted)
     return _row(name, label, vendor, model, state, _run_detail(run), run)
 
 
@@ -655,10 +711,13 @@ def _reference_sources(keys):
     return found
 
 
-# A failed entry's note where it carries none: the facts jobs.RETRIEVAL_FAILED states (refutation round 2, truth-4).
-REFERENCE_FAILED = ("Reference validation failed: CPT Studio could not record which CMS reference facts and passages "
-                    "it retrieved for this assessment's codes, so none is listed here. Each code's checks read the "
-                    "CMS facts before that and stand as shown.")
+# A failed entry's note where it carries none (refutation round 2, truth-4). It is said of any assessment, so it claims
+# neither that the codes' checks read the CMS facts (jobs.RETRIEVAL_FAILED, true only where a CMS reference file
+# applied) nor that none was checked (jobs.RETRIEVAL_FAILED_UNCHECKED): each code's checks stand as they are shown
+# (refutation round 3, truth-1).
+REFERENCE_FAILED = ("Reference validation failed: CPT Studio's retrieval for this assessment's codes failed, so no CMS "
+                    "reference fact or passage is listed here; each code's CMS reference checks stand as shown for "
+                    "that code.")
 
 
 def retrieval_failed(entry) -> bool:
@@ -683,19 +742,31 @@ NO_SOURCE_FOR_DATE = ('No code was checked against the CMS reference files: no i
                       'to the service date, {date}.')
 
 
+def source_applied(reference_sources) -> bool:
+    """Whether an installed CMS reference file applied to the service date, so the codes were looked up in one: the
+    engine's own record of the lookup the checks read and the retrieval traced (AssessmentResult.reference_sources, kept
+    as Assessment.reference_sources: 'applies' is true only for the one source of its kind used for the date). The
+    assess stage reads it to word a retrieval that failed (jobs.retrieval_failure), and reference validation here."""
+    return any(isinstance(source, dict) and source.get('applies') is True for source in reference_sources or [])
+
+
 def _source_applied(assessment) -> bool:
-    """Whether an installed CMS reference file applied to the assessment's service date, so its codes were looked up
-    in one: the engine's own record of the lookup the checks read and the retrieval traced
-    (Assessment.reference_sources: 'applies' is true only for the one source of its kind used for the date)."""
-    return any(isinstance(source, dict) and source.get('applies') is True
-               for source in assessment.reference_sources or [])
+    """Whether an installed CMS reference file applied to the assessment's service date (source_applied)."""
+    return source_applied(assessment.reference_sources)
+
+
+def no_source_sentence(service_date) -> str:
+    """Why no code was checked against the CMS reference files: no service date was established (None or ''), or no
+    installed CMS reference file applies to ``service_date`` (an ISO date) - one sentence for reference validation and
+    for a retrieval that failed (jobs.RETRIEVAL_FAILED_UNCHECKED)."""
+    return NO_SOURCE_FOR_DATE.format(date=service_date) if service_date else NO_SOURCE_NO_DATE
 
 
 def _no_source(retrieval) -> str:
     """Why no code was checked: no service date was established (the traces record none), or none applies to it."""
     dates = sorted({entry.get('service_date') for entry in retrieval if isinstance(entry.get('service_date'), str)
                     and entry.get('service_date')})
-    return NO_SOURCE_FOR_DATE.format(date=dates[0]) if dates else NO_SOURCE_NO_DATE
+    return no_source_sentence(dates[0] if dates else None)
 
 
 def _reference_validation(assessment, active):

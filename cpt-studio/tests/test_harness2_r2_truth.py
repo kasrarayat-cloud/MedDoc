@@ -69,10 +69,13 @@ class PeerProposedPositionTests(ColonCase):
                    {'name': 'fable', 'state': 'read', 'codes': [],
                     'not_coded': [{'code': '45378', 'reason': 'not_performed_at_this_encounter', 'quote': 'Q.'}]}]
         positions = review.participant_positions(later, records)
+        # moved by refutation round 3, R3-TRUTH truth-2, to what the code now serves: a first reading's entry whose
+        # quotes were not found proposed nothing (the engine's phase, EV-2 = IND-3), so the participant that then
+        # proposed the code after peer review did not propose it in its first reading, and never "again"
         self.assertEqual(positions['astra'], {
-            'position': 'proposed', 'quote': '',
-            'detail': 'Astra proposed this code in its first reading; none of its quotes was found in the document. '
-                      'It proposed it again after peer review.'})
+            'position': 'not_proposed', 'quote': '',
+            'detail': 'Astra listed this code in its first reading, but none of its quotes was found in the document, '
+                      'so that reading did not propose it. It proposed it after peer review.'})
         self.assertEqual(positions['fable'], {
             'position': 'advised_not_to_code', 'quote': 'Q.',
             'detail': 'Fable advised not to code it in its first reading: not performed at this encounter. It '
@@ -158,9 +161,13 @@ RETRIEVAL_FAILED = ("Reference validation failed: CPT Studio could not record wh
                     "it retrieved for this assessment's codes ({error}, logged), so none is listed here. Each code's "
                     "checks read the CMS facts before that and stand as shown; retrieval only informs the reviewer "
                     "and decides no status, so the assessment stands as made.")
-REFERENCE_FAILED = ("Reference validation failed: CPT Studio could not record which CMS reference facts and passages "
-                    "it retrieved for this assessment's codes, so none is listed here. Each code's checks read the "
-                    "CMS facts before that and stand as shown.")
+# The fallback for a failed entry with no note. Moved by refutation round 3, R3-TRUTH truth-1, to what the serializer
+# now serves: it is said of any assessment, and where no CMS reference file applied no code's checks read a CMS fact,
+# so it claims neither that they did nor that none did (tests/test_harness2_r3_truth.py pins both notes the assess
+# stage records).
+REFERENCE_FAILED = ("Reference validation failed: CPT Studio's retrieval for this assessment's codes failed, so no CMS "
+                    "reference fact or passage is listed here; each code's CMS reference checks stand as shown for "
+                    "that code.")
 
 
 def tamper_one_passage():
