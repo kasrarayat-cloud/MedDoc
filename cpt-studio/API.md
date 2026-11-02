@@ -252,6 +252,11 @@ that was found verbatim in the document ('' when none was); it is `{}` when no p
 participant that first proposed the code after peer review (its `phases` entry is `peer_review`) keeps its first
 reading's position, and its `detail` says both: "Fable did not propose this code in its first reading. It proposed it
 after peer review." (refutation round 2, truth-2), in the encounter view and in the trace's reconciliation rows alike.
+A first reading that listed the code with no quote found in the document proposed nothing (the engine counts no such
+entry), so where that participant then proposed the code after peer review its position is `not_proposed`: "Astra
+listed this code in its first reading, but none of its quotes was found in the document, so that reading did not
+propose it. It proposed it after peer review." (refutation round 3, truth-2: it said Astra proposed it in its first
+reading and "again" after peer review, beside `phases` and the peer row's "never independent").
 A position never decides a status, and agreement never approves anything. `retrieval` lists the CMS facts
 the checks read for the code and the verbatim CMS passages retrieved for it, with source key, release, page and
 section ([] for a code that was not looked up: a provider's alternatives never are).

@@ -180,3 +180,65 @@ class RetrievalFailureEntryTests(TestCase):
                 self.assertNotIn(claim, said)
         self.assertEqual(serializers.failure_note({'code': '', 'failed': True, 'notes': []}),
                          serializers.REFERENCE_FAILED)
+
+
+# --- truth-2: a first reading's code with no located quote, located in peer review: one account --------------------
+
+UNLOCATED = 'a hot snare removed it completely without any trouble at all'  # in no document: never located
+LISTED_FIRST = ('Astra listed this code in its first reading, but none of its quotes was found in the document, so '
+                'that reading did not propose it. It proposed it after peer review.')
+
+
+class FirstReadingUnlocatedTests(R2WordingCase):
+    """Astra's frozen first reading lists 45385 with a quote the document does not hold, and its peer review lists it
+    again with the snare passage. The engine counts no first-reading entry whose quotes were not found (refutation
+    round 1, EV-2 = IND-3), so it records Astra's phase as peer_review, and the peer row, the TXT and the CSV call 45385
+    proposed after peer review, never independent. The position said both: "Astra proposed this code in its first
+    reading; ... It proposed it again after peer review." (refutation round 3, truth-2). It now says what the record
+    holds: the first reading listed it and proposed nothing; Astra proposed it after peer review."""
+
+    def setUp(self):
+        super().setUp()
+        self.adapters['astra'].first = [hp.answered('astra', hp.reading(
+            codes=[('45385', UNLOCATED), ('45380', BIOPSY)], services=[('c1', 'colonoscopy', 'performed', SNARE)]))]
+        self.adapters['astra'].peer = [hp.answered('astra', hp.peer_answer(codes=[('45385', SNARE)]), number=2)]
+        self.encounter_id = self.create(TWO_EXTENTS)
+        drain()
+
+    def test_the_position_and_the_phase_give_one_account(self):
+        detail = self.detail(self.encounter_id)
+        [snare] = self.proposals(detail, '45385', bucket='selected')
+        self.assertEqual((snare['phases'].get('astra'), 'astra' in snare['proposed_by']), ('peer_review', True))
+        self.assertEqual(snare['participant_positions']['astra'],
+                         {'position': 'not_proposed', 'quote': '', 'detail': LISTED_FIRST})
+        record = self.records(self.encounter(self.encounter_id).current_assessment)['astra']
+        self.assertIn({'code': '45385', 'quote': ''}, record['codes'])  # the frozen first reading listed it, unlocated
+        peer = next(row['peer'] for row in detail['harness']['participants'] if row['name'] == 'astra')
+        self.assertEqual(peer['codes_added'], ['45385'])  # proposed after peer review, never independent
+        card = json.dumps(snare['id'])
+        lines = browser(f'visible(cardOf(page(), {card})).split("\\n")', detail)
+        said = [line for line in lines if line.startswith('Astra ')]
+        self.assertEqual(said, [f'Astra did not propose it: {LISTED_FIRST}'])
+        self.assertEqual(browser(f'statusLine(cardOf(page(), {card}), "Proposed by")', detail),
+                         'Corti, Astra (after peer review), Fable (independent reading)')
+        trace = _owner(self, 'owner_r3truth2').get(f'/api/encounters/{self.encounter_id}/trace').json()
+        (row,) = [item for item in trace['reconciliation'] if item['code'] == '45385' and 'astra' in item['positions']
+                  and item['proposed_by'] == snare['proposed_by']]
+        self.assertEqual(row['positions']['astra']['detail'], LISTED_FIRST)
+        # controls: a located first reading keeps its own wording, Fable's 45385 and Astra's 45380
+        self.assertEqual(snare['participant_positions']['fable']['detail'],
+                         'Fable proposed this code with evidence located in the document.')
+        [biopsy] = self.proposals(detail, '45380', bucket='selected')
+        self.assertEqual(biopsy['participant_positions']['astra'],
+                         {'position': 'proposed', 'quote': BIOPSY,
+                          'detail': 'Astra proposed this code with evidence located in the document.'})
+
+    def test_a_first_reading_s_unlocated_code_with_no_later_proposal_reads_as_before(self):
+        # a participant whose first reading lists a code it never located, and that proposes it in no later phase,
+        # keeps harness@1's wording (it is not counted as a proposer, and nothing says it proposed it later)
+        records = [{'name': 'astra', 'state': 'read', 'codes': [{'code': '45385', 'quote': ''}], 'not_coded': []}]
+        for support in ({'proposed_by': ['corti'], 'phases': {}}, {}, None):
+            plain = review.participant_positions(type('P', (), {'code': '45385', 'support': support})(), records)
+            self.assertEqual(plain['astra'], {'position': 'proposed', 'quote': '',
+                                              'detail': 'Astra proposed this code; none of its quotes was found in '
+                                                        'the document.'})

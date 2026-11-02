@@ -1251,8 +1251,12 @@ def participant_positions(proposal, records):
     proposed the code after peer review (the engine's support['phases'], HARNESS.md 11.1) keeps its first reading's
     position, and its detail says both - that this is its first reading's position, and that it proposed the code after
     peer review - so a proposer is never said not to have proposed its own code (refutation round 2, truth-2: "Fable did
-    not propose this code." beside proposed_by ['fable']). Positions are kept beside the proposal and decide nothing
-    (I2, I3)."""
+    not propose this code." beside proposed_by ['fable']). A first reading that listed the code with no quote found in
+    the document proposed nothing (the engine counts no such entry: refutation round 1, EV-2 = IND-3), so where the
+    participant then proposed it after peer review its position is 'not_proposed', and its detail says the first
+    reading listed it and did not propose it - never that it proposed the code in its first reading and "again" after
+    peer review, beside the phase, the peer row and the reports that call it proposed after peer review, never
+    independent (refutation round 3, truth-2). Positions are kept beside the proposal and decide nothing (I2, I3)."""
     phases = (proposal.support or {}).get('phases')
     later = ({name for name, phase in phases.items() if phase == ProviderRun.PEER_REVIEW}
              if isinstance(phases, dict) else set())
@@ -1268,7 +1272,12 @@ def participant_positions(proposal, records):
         proposed = {item.get('code'): item.get('quote') or '' for item in record.get('codes') or []}
         advised = {item.get('code'): item for item in record.get('not_coded') or []}
         first = ' in its first reading' if name in later else ''
-        if proposal.code in proposed:
+        if proposal.code in proposed and first and not proposed[proposal.code]:
+            out[name] = {'position': 'not_proposed', 'quote': '',
+                         'detail': f'{label} listed this code in its first reading, but none of its quotes was found '
+                                   'in the document, so that reading did not propose it.'}
+            again = ''
+        elif proposal.code in proposed:
             quote = proposed[proposal.code]
             located = (' with evidence located in the document' if quote else
                        '; none of its quotes was found in the document')

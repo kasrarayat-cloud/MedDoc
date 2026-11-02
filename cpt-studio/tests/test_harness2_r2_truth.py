@@ -69,10 +69,13 @@ class PeerProposedPositionTests(ColonCase):
                    {'name': 'fable', 'state': 'read', 'codes': [],
                     'not_coded': [{'code': '45378', 'reason': 'not_performed_at_this_encounter', 'quote': 'Q.'}]}]
         positions = review.participant_positions(later, records)
+        # moved by refutation round 3, R3-TRUTH truth-2, to what the code now serves: a first reading's entry whose
+        # quotes were not found proposed nothing (the engine's phase, EV-2 = IND-3), so the participant that then
+        # proposed the code after peer review did not propose it in its first reading, and never "again"
         self.assertEqual(positions['astra'], {
-            'position': 'proposed', 'quote': '',
-            'detail': 'Astra proposed this code in its first reading; none of its quotes was found in the document. '
-                      'It proposed it again after peer review.'})
+            'position': 'not_proposed', 'quote': '',
+            'detail': 'Astra listed this code in its first reading, but none of its quotes was found in the document, '
+                      'so that reading did not propose it. It proposed it after peer review.'})
         self.assertEqual(positions['fable'], {
             'position': 'advised_not_to_code', 'quote': 'Q.',
             'detail': 'Fable advised not to code it in its first reading: not performed at this encounter. It '
