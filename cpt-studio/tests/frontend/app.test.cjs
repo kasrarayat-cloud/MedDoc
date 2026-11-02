@@ -1987,3 +1987,28 @@ test('a peer-review run is named as one in the Activity tab, on the reconciliati
   const stopped = { ...final, state: 'stopped', pipeline: { ...final.pipeline, stopped_by_member: false, can_resume: true, stages } };
   assert.ok(render(stopped).includes('<p>Peer review: Astra (OpenAI GPT-6 Astra): The worker stopped before this stage finished (synthetic).</p>'));
 });
+
+// refutation round 2, R2-TRUTH
+
+test('R2-TRUTH truth-3: reference validation that no CMS reference file applied to says no code was checked, never done', () => {
+  const ready = fixture(HARNESS_READY);
+  const detail = 'No code was checked against the CMS reference files: no service date is established for this encounter, so no dated CMS reference file applies.';
+  const served = { ...ready.harness.reference_validation, state: 'not_verified', detail, codes_checked: 0, passages: 0, sources: [] };
+  const rowOf = reference => harnessRow(render({ ...ready, harness: { ...ready.harness, reference_validation: reference } }), 'reference_validation');
+  const row = rowOf(served);
+  assert.ok(row.includes('<span class="status amber">Not verified</span>'), row);
+  const [[tone], label, plain, required] = app.REFERENCE_STATES.not_verified;
+  assert.equal(required, 'no code was checked');
+  assert.ok(row.startsWith(`<div class="check-item ${tone}" data-participant="reference_validation" data-state="not_verified">`), row);
+  assert.equal(label, 'Not verified');
+  assert.ok(row.includes(`<p>${app.escapeHtml(detail)}</p>`) && count(row, '<p>') === 1, 'the API\'s own sentence, once');
+  for (const other of ['Done', 'checked against the CMS reference files;', 'Not run']) assert.equal(row.includes(other), false, other);
+  assert.ok(row.includes('Not connected: NCCI procedure-to-procedure edits'), 'what is not connected is still listed');
+  // a detail that does not say no code was checked follows the plain sentence; none is the plain sentence alone
+  assert.ok(rowOf({ ...served, detail: 'Synthetic reason.' }).includes(`<p>${app.escapeHtml(plain)}</p><p>Synthetic reason.</p>`));
+  const bare = rowOf({ ...served, detail: '' });
+  assert.ok(bare.includes(`<p>${app.escapeHtml(plain)}</p>`) && count(bare, '<p>') === 1, bare);
+  // 'done' still counts its codes, and never shows a detail
+  const done = rowOf({ ...ready.harness.reference_validation, detail });
+  assert.ok(done.includes('<p>2 codes checked against the CMS reference files; 3 passages of verbatim CMS text retrieved.</p>') && !done.includes(app.escapeHtml(detail)), done);
+});

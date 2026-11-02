@@ -372,10 +372,11 @@ class HarnessBlockTests(HarnessCase):
         self.assertEqual((corti['peer'], corti['references'], corti['peer_references']),
                          ({}, {'retrieved': [], 'used': []}, {'retrieved': [], 'used': []}))
         # retrieval ran and traced every decidable code: 99213 only (Astra's 99214 quotes nothing in the note, so it is
-        # no proposal); this test database installs no CMS source, so nothing was found for it
+        # no proposal); this test database installs no CMS source, so no CMS reference file applied and no code was
+        # checked against one: 'not_verified', never 'done' of a code no file was read for (refutation round 2, truth-3)
         validation = harness['reference_validation']
         self.assertEqual({key: validation[key] for key in ('state', 'codes_checked', 'passages', 'sources')},
-                         {'state': 'done', 'codes_checked': 1, 'passages': 0, 'sources': []})
+                         {'state': 'not_verified', 'codes_checked': 0, 'passages': 0, 'sources': []})
 
     def test_a_pricing_error_shows_no_estimate_and_never_fails_the_page(self):
         broken = types.ModuleType('studio.participants.pricing')

@@ -85,12 +85,15 @@ const PEER_STATES = {
 // Why a participant whose first reading was not used takes no part in peer review (HARNESS.md 11.1).
 const PEER_NOT_RUN = 'Not run: only a participant whose own first reading was used takes part in peer review, so this one never sees its peers\' conclusions.';
 // Reference validation (harness.reference_validation, HARNESS.md 5): its look, label and plain sentence by state, and -
-// for 'failed', which must be said plainly - the word the API's own sentence (its detail) has to contain for the plain
-// one to be left out. A retrieval that failed is shown as failed, never as not run or done (refutation round 1, parity-1).
+// for 'failed' and 'not_verified', which must be said plainly - the words the API's own sentence (its detail) has to
+// contain for the plain one to be left out. A retrieval that failed is shown as failed, never as not run or done
+// (refutation round 1, parity-1); one no installed CMS reference file applied to checked no code, and says so, never
+// done (refutation round 2, truth-3).
 const REFERENCE_STATES = {
   waiting: [STAGE_LOOKS.queued, 'Waiting', 'Runs once the participants have answered: every proposed code is looked up in the connected CMS reference files.'],
   done: [STAGE_LOOKS.succeeded, 'Done', ''],
-  failed: [STAGE_LOOKS.failed, 'Failed', 'Reference validation failed: the CMS facts and passages could not be retrieved, so no proposal was checked against them.', 'failed'],
+  not_verified: [STAGE_LOOKS.unknown, 'Not verified', 'No code was checked against the CMS reference files: no installed CMS reference file applies to the service date.', 'no code was checked'],
+  failed: [STAGE_LOOKS.failed, 'Failed', 'Reference validation failed: CPT Studio could not record which CMS reference facts and passages it retrieved, so none is listed here; each code\'s checks read the CMS facts before that and stand as shown.', 'failed'],
   not_run: [['muted', 'info'], 'Not run', 'No proposal was checked against the CMS references for this revision.'],
 };
 // What a code card says where the assessment's retrieval failed (harness.reference_validation 'failed'): nothing was
@@ -1532,8 +1535,9 @@ function referenceRow(reference) {
   const served = reference && typeof reference === 'object' ? reference : {};
   const [look, label, plain, required] = lookup(REFERENCE_STATES, served.state, REFERENCE_STATES.not_run);
   const counted = name => (Number.isInteger(served[name]) && served[name] >= 0 ? served[name] : 0);
-  // a failed retrieval says why in the API's own sentence (its detail), after the plain one where it does not say so
-  const said = served.state === 'failed' ? textValue(served.detail).trim() : '';
+  // a failed retrieval, or one no CMS reference file applied to, says why in the API's own sentence (its detail), after
+  // the plain one where it does not say so
+  const said = served.state === 'failed' || served.state === 'not_verified' ? textValue(served.detail).trim() : '';
   const lines = served.state === 'done' ? [`${plural(counted('codes_checked'), 'code', 'codes')} checked against the CMS reference files; ${plural(counted('passages'), 'passage', 'passages')} of verbatim CMS text retrieved.`]
     : !said ? [plain] : required && !said.toLowerCase().includes(required) ? [plain, said] : [said];
   const sources = (Array.isArray(served.sources) ? served.sources : []).filter(source => source && typeof source === 'object').map(source => {

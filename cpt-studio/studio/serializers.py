@@ -656,14 +656,42 @@ def failure_note(entry) -> str:
     return next((item.strip() for item in notes if isinstance(item, str) and item.strip()), REFERENCE_FAILED)
 
 
+# What reference validation says when no installed CMS reference file applied to the assessment's service date, so no
+# code was looked up in one (refutation round 2, truth-3: it said "Done - 2 codes checked against the CMS reference
+# files" while every card's CMS checks were not verified).
+NO_SOURCE_NO_DATE = ('No code was checked against the CMS reference files: no service date is established for this '
+                     'encounter, so no dated CMS reference file applies.')
+NO_SOURCE_FOR_DATE = ('No code was checked against the CMS reference files: no installed CMS reference file applies '
+                      'to the service date, {date}.')
+
+
+def _source_applied(assessment) -> bool:
+    """Whether an installed CMS reference file applied to the assessment's service date, so its codes were looked up
+    in one: the engine's own record of the lookup the checks read and the retrieval traced
+    (Assessment.reference_sources: 'applies' is true only for the one source of its kind used for the date)."""
+    return any(isinstance(source, dict) and source.get('applies') is True
+               for source in assessment.reference_sources or [])
+
+
+def _no_source(retrieval) -> str:
+    """Why no code was checked: no service date was established (the traces record none), or none applies to it."""
+    dates = sorted({entry.get('service_date') for entry in retrieval if isinstance(entry.get('service_date'), str)
+                    and entry.get('service_date')})
+    return NO_SOURCE_FOR_DATE.format(date=dates[0]) if dates else NO_SOURCE_NO_DATE
+
+
 def _reference_validation(assessment, active):
     """'waiting' while processing; 'failed' when the assessment's retrieval failed - any entry is a failed one
     (retrieval_failed) - with that entry's note as ``detail``: never 'not_run' or 'done' (refutation round 1,
-    parity-1); 'done' when retrieval ran for the assessment and its traces cover every code a proposal can be decided on
-    (selected or excluded); 'not_run' when there is no assessment, it predates the harness, or no retrieval ran for it -
-    also when it has no code to retrieve for, never 'done' of nothing (no trace at all is what an absent passages
-    module records too). ``detail`` is '' in every state but 'failed'. A failed entry is no code checked, so it is
-    counted in neither ``codes_checked`` nor ``passages``."""
+    parity-1); 'done' when retrieval ran for the assessment, its traces cover every code a proposal can be decided on
+    (selected or excluded), and an installed CMS reference file applied to its service date (_source_applied);
+    'not_verified' when they cover every such code but no CMS reference file applied - no service date established, or
+    none covering it - so no code was checked against one, with why as ``detail`` (refutation round 2, truth-3: that was
+    'done', its codes counted as checked); 'not_run' when there is no assessment, it predates the harness, or no
+    retrieval ran for it - also when it has no code to retrieve for, never 'done' of nothing (no trace at all is what
+    an absent passages module records too). ``detail`` is '' in every other state. ``codes_checked`` counts the traced
+    codes only when a CMS reference file applied (0 otherwise), and a failed entry is no code checked, so it is counted
+    in neither ``codes_checked`` nor ``passages``."""
     out = {'state': 'not_run', 'detail': '', 'codes_checked': 0, 'passages': 0, 'sources': [],
            'not_connected': list(review.NOT_CONNECTED)}
     if active:
@@ -675,10 +703,14 @@ def _reference_validation(assessment, active):
     retrieval = [entry for entry in entries if not retrieval_failed(entry)]
     traced = {entry.get('code') for entry in retrieval}
     decidable = {p.code for p in assessment.proposals.all() if p.bucket != models.Proposal.ALTERNATIVE}
+    applied = _source_applied(assessment)
     if not active and failures:
         out.update(state='failed', detail=failure_note(failures[0]))
     elif not active and assessment.participants and traced and decidable <= traced:
-        out['state'] = 'done'
+        if applied:
+            out['state'] = 'done'
+        else:
+            out.update(state='not_verified', detail=_no_source(retrieval))
     sources = {}
     for entry in retrieval:
         for item in review.retrieved(entry, 'facts') + review.retrieved(entry, 'passages'):
@@ -686,7 +718,8 @@ def _reference_validation(assessment, active):
             if key:
                 sources.setdefault(key, str(item.get('release') or ''))
     known = _reference_sources(sorted(sources))
-    out.update(codes_checked=len(traced), passages=sum(len(review.retrieved(entry, 'passages')) for entry in retrieval),
+    out.update(codes_checked=len(traced) if applied else 0,
+               passages=sum(len(review.retrieved(entry, 'passages')) for entry in retrieval),
                sources=[{'key': key, 'title': known.get(key, ('', '', ''))[0], 'release': release,
                          'effective_start': known.get(key, ('', '', ''))[1],
                          'effective_end': known.get(key, ('', '', ''))[2]} for key, release in sorted(sources.items())])

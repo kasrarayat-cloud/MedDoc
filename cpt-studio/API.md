@@ -209,14 +209,22 @@ its recorded exchanges do not add up to its usage. `reused` is true when a retai
 reused and nothing was sent.
 
 `harness.reference_validation.state` is `waiting` while processing, `failed` when the current assessment's retrieval
-failed, `done` when retrieval ran for it and its traces cover every code a proposal can be decided on, and `not_run`
-otherwise (no assessment, one recorded before the harness, or no trace at all - never `done` over zero codes);
-`not_connected` is always listed. A retrieval that fails never stops the assessment, which stands as made (HARNESS.md
-5): its retrieval is recorded as one entry `{"code": "", "failed": true, "notes": ["Reference validation failed: ..."]}`
-(no fact, no passage), and the state is then `failed` - never `not_run` or `done` - with that entry's note, CPT
-Studio's own sentence, as `detail`. `detail` is `""` in every other state, and a failed entry is counted in neither
-`codes_checked` nor `passages`. The code cards then say that reference validation failed for the assessment, and the
-reports' REFERENCE RETRIEVAL section prints the entry as one line, "Reference validation failed: ...".
+failed, `done` when retrieval ran for it, its traces cover every code a proposal can be decided on and an installed
+CMS reference file applied to its service date, `not_verified` when the traces cover those codes but no installed CMS
+reference file applied (no service date is established - none documented, or a member's date in conflict with the
+document - or none covers it, as `reference_sources[].applies` records), so no code was checked against one, and
+`not_run` otherwise (no assessment, one recorded before the harness, or no trace at all - never `done` over zero
+codes); `not_connected` is always listed. `codes_checked` counts the traced codes only when a CMS reference file
+applied (0 for `not_verified`), and `not_verified`'s `detail` says why, in CPT Studio's own sentence: "No code was
+checked against the CMS reference files: no service date is established for this encounter, so no dated CMS
+reference file applies." or "... no installed CMS reference file applies to the service date, 2025-03-02."
+(refutation round 2, truth-3: this was `done`, its codes counted as checked). A retrieval that fails never stops the
+assessment, which stands as made (HARNESS.md 5): its retrieval is recorded as one entry `{"code": "", "failed": true,
+"notes": ["Reference validation failed: ..."]}` (no fact, no passage), and the state is then `failed` - never
+`not_run` or `done` - with that entry's note, CPT Studio's own sentence, as `detail`. `detail` is `""` in every other
+state, and a failed entry is counted in neither `codes_checked` nor `passages`. The code cards then say that reference
+validation failed for the assessment, and the reports' REFERENCE RETRIEVAL section prints the entry as one line,
+"Reference validation failed: ...".
 `harness.final` is the encounter's state and its label.
 
 Each proposal keeps three statuses apart (I4): `proposed_by` (who proposed it: `corti` for Corti's own proposals and

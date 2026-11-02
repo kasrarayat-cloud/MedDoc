@@ -8,9 +8,9 @@ API and the report renderers), as the round's verifiers reproduced each finding.
 """
 from types import SimpleNamespace
 
-from django.test import Client
+from django.test import Client, override_settings
 
-from studio import models, review
+from studio import models, review, serializers
 from tests.support import factories as f
 from tests.test_harness2_pipeline import TWO_EXTENTS, ColonCase
 from tests.test_pipeline_api import drain
@@ -77,3 +77,68 @@ class PeerProposedPositionTests(ColonCase):
             self.assertEqual(plain['astra']['detail'], 'Astra proposed this code; none of its quotes was found in the '
                                                        'document.')
             self.assertEqual(plain['fable']['detail'], 'Fable advised not to code it: not performed at this encounter.')
+
+
+# --- truth-3: reference validation never says codes were checked against the CMS files when no file applied ----------
+
+NOT_CONNECTED = list(review.NOT_CONNECTED)
+NO_DATE = TWO_EXTENTS.replace('Date of service: 2026-10-14\n', '')
+OUTSIDE = TWO_EXTENTS.replace('Date of service: 2026-10-14', 'Date of service: 2025-03-02')  # before every release held
+NO_SOURCE_NO_DATE = ('No code was checked against the CMS reference files: no service date is established for this '
+                     'encounter, so no dated CMS reference file applies.')
+NO_SOURCE_FOR_DATE = ('No code was checked against the CMS reference files: no installed CMS reference file applies '
+                      'to the service date, {date}.')
+
+
+class ReferenceValidationTruthMixin:
+    """harness.reference_validation is 'done', with its codes counted as checked against the CMS reference files, only
+    when an installed CMS reference file applied to the assessment's service date (Assessment.reference_sources, the
+    engine's record of the lookup the retrieval traced); when none did - no service date established, or none covering
+    it - it is 'not_verified', counts no code and says why (refutation round 2, truth-3: "Done - 2 codes checked
+    against the CMS reference files" beside cards whose every CMS check was "not verified")."""
+
+    def block(self, encounter_id):
+        return self.client.get(f'/api/encounters/{encounter_id}').json()['harness']['reference_validation']
+
+    def assertNoCodeChecked(self, encounter_id, detail):
+        self.assertEqual(self.block(encounter_id), {'state': 'not_verified', 'detail': detail, 'codes_checked': 0,
+                                                    'passages': 0, 'sources': [], 'not_connected': NOT_CONNECTED})
+        self.assertEqual((serializers.NO_SOURCE_NO_DATE, serializers.NO_SOURCE_FOR_DATE),
+                         (NO_SOURCE_NO_DATE, NO_SOURCE_FOR_DATE))
+        for proposal in self.encounter(encounter_id).current_assessment.proposals.exclude(bucket='alternative'):
+            statuses = {check['id']: check['status'] for check in proposal.checks}
+            self.assertEqual((statuses['pfs.presence'], statuses['mue.units']), ('not_verified', 'not_verified'),
+                             proposal.code)
+
+
+class ReferenceValidationTruthTests(ReferenceValidationTruthMixin, ColonCase):
+    def test_a_member_date_conflict_leaves_every_code_unchecked_and_the_row_says_so(self):
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        block = self.block(encounter_id)  # the control: the documented date's release applied
+        self.assertEqual((block['state'], block['detail'], block['codes_checked']), ('done', '', 3))
+        self.assertTrue(block['passages'] and block['sources'], block)
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context',
+                                   {'service_date': '2026-10-20'}).status_code, 201)
+        drain()
+        self.assertNoCodeChecked(encounter_id, NO_SOURCE_NO_DATE)
+
+
+@override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
+class CortiOnlyReferenceValidationTruthTests(ReferenceValidationTruthMixin, ColonCase):
+    def test_no_documented_date(self):
+        encounter_id = self.create(NO_DATE)
+        drain()
+        self.assertEqual(self.kinds(encounter_id), ['extract', 'analyze', 'predict', 'assess'])  # I1's chain
+        self.assertNoCodeChecked(encounter_id, NO_SOURCE_NO_DATE)
+
+    def test_a_documented_date_no_installed_release_covers(self):
+        encounter_id = self.create(OUTSIDE)
+        drain()
+        self.assertNoCodeChecked(encounter_id, NO_SOURCE_FOR_DATE.format(date='2025-03-02'))
+
+    def test_the_documented_date_s_release_applies(self):
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        block = self.block(encounter_id)
+        self.assertEqual((block['state'], block['detail'], block['codes_checked']), ('done', '', 2))
