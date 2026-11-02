@@ -310,9 +310,10 @@ class HarnessBlockTests(HarnessCase):
                          ('done', ['99213', '99214'], 1, 'gpt-6-astra'))
         self.assertIn('1 of its quotes was not found', astra['detail'])
         self.assertEqual(astra['estimated_cost_usd'], '0.0270')  # 1,200 in x $10/M + 300 out x $50/M
+        stored = self.runs_of(encounter_id, 'astra')[0]  # the row serves its run's usage and basis as recorded
         self.assertEqual((astra['usage'], astra['usage_basis'], astra['reused']),
-                         ({'input_tokens': 1200, 'output_tokens': 300}, 'vendor_reported_tokens', False))
-        self.assertEqual(astra['run_id'], str(self.runs_of(encounter_id, 'astra')[0].pk))
+                         ({'input_tokens': 1200, 'output_tokens': 300}, stored.usage_basis, False))
+        self.assertEqual(astra['run_id'], str(stored.pk))
         self.assertEqual(fable['state'], 'done')
         self.assertEqual(harness['clarification'], {'open': 0})
         self.assertEqual(harness['final'], {'state': 'ready_for_review', 'label': 'Ready for review'})

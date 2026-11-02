@@ -17,6 +17,7 @@ from django.conf import settings
 from django.test import TestCase, override_settings
 
 from studio import jobs, models, reports, review, serializers
+from studio.participants.http import USAGE_BASIS  # what the adapters record: 'provider_reported_tokens'
 from tests.support import pipeline_factories as pf
 from tests.test_harness_api import record
 from tests.test_harness_pipeline import BOTH, TIME_QUOTE, HarnessCase, fake_passages
@@ -91,7 +92,7 @@ class HandBuiltReportTests(TestCase):
         model = {'astra': 'gpt-6-astra', 'fable': 'claude-fable-5-1'}[name]
         run = pf.provider_run(self.s.encounter, self.s.revision, provider=name, usage=usage)
         models.ProviderRun.objects.filter(pk=run.pk).update(
-            purpose='independent', service_date=None, scope={'mode': 'live'}, usage_basis='vendor_reported_tokens',
+            purpose='independent', service_date=None, scope={'mode': 'live'}, usage_basis=USAGE_BASIS,
             endpoint={'astra': 'https://api.openai.com/v1/responses',
                       'fable': 'https://api.anthropic.com/v1/messages'}[name],
             requested_model=model, returned_model=returned or model, provider_request_id=f'req_{name}_1',
@@ -112,7 +113,7 @@ class HandBuiltReportTests(TestCase):
             '    Endpoint: https://api.openai.com/v1/responses',
             '    Models: requested gpt-6-astra · returned gpt-6-astra',
             '    Request id: req_astra_1 · response id: resp_synthetic_1',
-            '    Usage: {"input_tokens": 2000, "output_tokens": 400} (vendor_reported_tokens)',
+            '    Usage: {"input_tokens": 2000, "output_tokens": 400} (provider_reported_tokens)',
             '    Estimated cost: USD 0.0400 (estimated from published rates, not reconciled to an invoice)',
             '    Unverified quotes: 1 (not found in the document; never used as evidence)'])
         fable = lines.index('  - Fable · Anthropic · answered; the reading was not used')
