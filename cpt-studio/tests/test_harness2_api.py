@@ -57,6 +57,10 @@ PAGES = (PageSpan(page=1, start=0, end=len(PAGE_ONE)), PageSpan(page=2, start=le
 SNARE = 'was removed with a cold snare'  # the passage Corti's selection of 45385 cites
 FACT_REF = 'fact:cms-pfs-rvu26d:45385:mult_proc'
 PASSAGE_REF = 'ncci-2026-ch6-c-1'
+# Each of them where a run's own tool calls never returned it: the participant's own text, which the API, the trace and
+# the reports show only by its length (refutation round 4, R4-SHAPES, shapes-3)
+FACT_UNRETRIEVED = 'a value of 35 characters (not shown)'
+PASSAGE_UNRETRIEVED = 'a value of 17 characters (not shown)'
 # The two tools' stored results in the layout CPT Studio's executor writes them (studio.reference.tools), which the
 # API's references read back with its own reader (tools.retrieved_references).
 FACTS_RESULT = {'tool': 'cms_code_facts', 'date_of_service': '', 'releases': 'every release held', 'codes': [
@@ -639,19 +643,21 @@ class DetailTests(Harness2Case):
         self.assertEqual((fable['peer']['state'], fable['peer']['codes_added']), ('done', []))
         self.assertEqual((corti['peer'], corti['references'], corti['peer_references']),
                          ({}, {'retrieved': [], 'used': []}, {'retrieved': [], 'used': []}))
-        # 1: what each participant retrieved, by phase; 2: what it says it used, checked against that run's own tools
+        # 1: what each participant retrieved, by phase; 2: what it says it used, checked against that run's own tools -
+        # moved by refutation round 4 (R4-SHAPES, shapes-3): a ref its own tool calls never returned is the
+        # participant's own text, served only as a short id or by its length
         self.assertEqual(astra['references'], {
             'retrieved': [{'ref': FACT_REF, 'kind': 'fact', 'source_key': 'cms-pfs-rvu26d', 'release': 'RVU26D',
                            'effective_start': '2026-10-01', 'effective_end': '2026-12-31', 'tool': 'cms_code_facts'}],
             'used': [{'ref': FACT_REF, 'use': 'The endoscopic base of the snare removal.', 'retrieved': True},
-                     {'ref': PASSAGE_REF, 'use': 'A rule this run never retrieved.', 'retrieved': False}]})
+                     {'ref': PASSAGE_UNRETRIEVED, 'use': 'A rule this run never retrieved.', 'retrieved': False}]})
         self.assertEqual(astra['peer_references'], {
             'retrieved': [{'ref': PASSAGE_REF, 'kind': 'passage', 'source_key': 'cms-ncci-policy-manual-2026',
                            'release': 'Revision 2026', 'effective_start': '2026-01-01', 'effective_end': '2026-12-31',
                            'tool': 'cms_policy_passages'}],
             'used': [{'ref': PASSAGE_REF, 'use': 'The NCCI endoscopy rule.', 'retrieved': True},
                      # its first reading's retrieval never counts for its peer review: cited, not retrieved
-                     {'ref': FACT_REF, 'use': 'Retrieved only by its first reading.', 'retrieved': False}]})
+                     {'ref': FACT_UNRETRIEVED, 'use': 'Retrieved only by its first reading.', 'retrieved': False}]})
         self.assertEqual(fable['references'], {'retrieved': [], 'used': []})
         # 3: the reconciliation's own retrieval stays reference_validation's, never merged with either
         self.assertEqual(data['harness']['reference_validation']['codes_checked'], 0)
@@ -765,14 +771,20 @@ class TraceTests(Harness2Case):
             'refs': [FACT_REF], 'result_sha256': sha(canonical_body(FACTS_RESULT)),
             'executed_at': first['exchanges'][0]['tool_calls'][0]['executed_at']}])
         self.assertEqual(first['exchanges'][1]['tool_calls'], [])
+        # moved by refutation round 4 (R4-SHAPES, shapes-3): a ref its own tool calls never returned, by its length
         self.assertEqual(first['reading']['references_used'],
                          [{'ref': FACT_REF, 'use': 'The endoscopic base of the snare removal.', 'retrieved': True},
-                          {'ref': PASSAGE_REF, 'use': 'A rule this run never retrieved.', 'retrieved': False}])
+                          {'ref': PASSAGE_UNRETRIEVED, 'use': 'A rule this run never retrieved.', 'retrieved': False}])
         self.assertIsNone(first['review'])
         self.assertIsNone(peer_run['reading'])
         expected = json.loads(json.dumps(to_jsonable(review.stored_peer_review(self.peer_runs['astra'])[0])))
         # each additional code with the phase its participant first proposed it in (R2-WORDING truth-8)
         expected['additional_codes'] = [dict(item, phase='peer_review') for item in expected['additional_codes']]
+        # moved by refutation round 4 (R4-SHAPES, shapes-3): FACT_REF, which only its first reading retrieved, is
+        # served by its length
+        self.assertEqual([(item['ref'], item['retrieved']) for item in expected['references_used']],
+                         [(PASSAGE_REF, True), (FACT_REF, False)])
+        expected['references_used'][1]['ref'] = FACT_UNRETRIEVED
         self.assertEqual(peer_run['review'], expected)
         self.assertEqual([a['question_id'] for a in peer_run['review']['answers']],
                          [str(self.first.clarifications.get(fact=fact, proposal__key=key).pk) for fact, key in

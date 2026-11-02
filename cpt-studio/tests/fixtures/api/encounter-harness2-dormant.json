@@ -107,7 +107,7 @@
        "retrieved": true
       },
       {
-       "ref": "ncci-2026-ch6-c-1",
+       "ref": "a value of 17 characters (not shown)",
        "use": "A rule this run never retrieved.",
        "retrieved": false
       }
@@ -132,7 +132,7 @@
        "retrieved": true
       },
       {
-       "ref": "fact:cms-pfs-rvu26d:45385:mult_proc",
+       "ref": "a value of 35 characters (not shown)",
        "use": "Retrieved only by its first reading.",
        "retrieved": false
       }
