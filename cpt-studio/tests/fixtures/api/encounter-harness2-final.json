@@ -184,23 +184,8 @@
    "state": "not_verified",
    "detail": "No code was checked against the CMS reference files: no service date is established for this encounter, so no dated CMS reference file applies.",
    "codes_checked": 0,
-   "passages": 2,
-   "sources": [
-    {
-     "key": "cms-ncci-policy-manual-2026-ch6",
-     "title": "",
-     "release": "Revision 1/1/2026",
-     "effective_start": "",
-     "effective_end": ""
-    },
-    {
-     "key": "cms-pfs-rvu26d",
-     "title": "",
-     "release": "RVU26D",
-     "effective_start": "",
-     "effective_end": ""
-    }
-   ],
+   "passages": 0,
+   "sources": [],
    "not_connected": [
     "NCCI procedure-to-procedure edits (AMA licence agreement not accepted)",
     "AMA CPT descriptors and guidelines (no licence)",
@@ -537,8 +522,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "681373ab5612dc8a812b939b1c310643947614d006bcbde52106e073f0e6062f",
-   "response_sha256": "672f1790bba02eb4150a4a2a4318106c501c75a39d2fe4e56a1b52311cdc1bbb",
+   "request_sha256": "ac40520b1aa9296686c5808eb94320728edab765c632337bd85114d9f025938a",
+   "response_sha256": "621f4498da786c2d83f48f93c841040f1ac6a796a56eccf234b738aeb361119d",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -560,8 +545,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "96eab8fdabba5b662aedc371992d31c6b719066aecac6cf7f284cb87bc28e837",
-   "response_sha256": "e3a4d3f962063bb7738564e7d7f6945a936c21442345e8639b1e7bc4c37385ad",
+   "request_sha256": "7d886fd3528971a2b1002f601c3bdf575b1e7a0a3f936f302b214db95e6574b2",
+   "response_sha256": "3a7591140173ea2d42c6a0df5faaee315f1ce36490b2efe43c7d20a7c847c289",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -799,48 +784,7 @@
      "state": "not_verified",
      "detail": "Present in the CMS fee schedule file: not verified; Units within the practitioner MUE: not verified; Endoscopic family combination: not verified. NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified."
     },
-    "retrieval": [
-     {
-      "kind": "fact",
-      "source_key": "cms-pfs-rvu26d",
-      "release": "RVU26D",
-      "label": "status",
-      "value": "A",
-      "page": "",
-      "section": "",
-      "text": ""
-     },
-     {
-      "kind": "fact",
-      "source_key": "cms-pfs-rvu26d",
-      "release": "RVU26D",
-      "label": "mult_proc",
-      "value": "3",
-      "page": "",
-      "section": "",
-      "text": ""
-     },
-     {
-      "kind": "fact",
-      "source_key": "cms-pfs-rvu26d",
-      "release": "RVU26D",
-      "label": "endo_base",
-      "value": "45378",
-      "page": "",
-      "section": "",
-      "text": ""
-     },
-     {
-      "kind": "passage",
-      "source_key": "cms-ncci-policy-manual-2026-ch6",
-      "release": "Revision 1/1/2026",
-      "label": "pfs.endo_base",
-      "value": "",
-      "page": "VI-14",
-      "section": "Chapter VI, section C: Endoscopic Services",
-      "text": "SYNTHETIC FIXTURE TEXT, not CMS text: stands in for the rule that a surgical endoscopy includes the diagnostic endoscopy."
-     }
-    ],
+    "retrieval": [],
     "phases": {
      "astra": "independent",
      "fable": "independent"
@@ -1067,48 +1011,7 @@
      "state": "not_verified",
      "detail": "Present in the CMS fee schedule file: not verified; Units within the practitioner MUE: not verified; Endoscopic family combination: not verified. NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified."
     },
-    "retrieval": [
-     {
-      "kind": "fact",
-      "source_key": "cms-pfs-rvu26d",
-      "release": "RVU26D",
-      "label": "status",
-      "value": "A",
-      "page": "",
-      "section": "",
-      "text": ""
-     },
-     {
-      "kind": "fact",
-      "source_key": "cms-pfs-rvu26d",
-      "release": "RVU26D",
-      "label": "mult_proc",
-      "value": "3",
-      "page": "",
-      "section": "",
-      "text": ""
-     },
-     {
-      "kind": "fact",
-      "source_key": "cms-pfs-rvu26d",
-      "release": "RVU26D",
-      "label": "endo_base",
-      "value": "45378",
-      "page": "",
-      "section": "",
-      "text": ""
-     },
-     {
-      "kind": "passage",
-      "source_key": "cms-ncci-policy-manual-2026-ch6",
-      "release": "Revision 1/1/2026",
-      "label": "pfs.endo_base",
-      "value": "",
-      "page": "VI-14",
-      "section": "Chapter VI, section C: Endoscopic Services",
-      "text": "SYNTHETIC FIXTURE TEXT, not CMS text: stands in for the rule that a surgical endoscopy includes the diagnostic endoscopy."
-     }
-    ],
+    "retrieval": [],
     "phases": {
      "astra": "independent",
      "fable": "peer_review"

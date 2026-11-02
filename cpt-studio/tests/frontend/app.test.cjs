@@ -1847,7 +1847,15 @@ test('a code card says who proposed it in which phase, 11.4\'s sentence, the con
   const bare = { ...final, harness: { ...final.harness, participants: final.harness.participants.map(row => ({ ...row, references: { retrieved: [], used: [] }, peer_references: { retrieved: [], used: [] } })) } };
   const nothing = codeCardOf(render(bare), '45380');
   assert.ok(nothing.includes('No participant retrieved a reference for this code.') && nothing.includes('No participant cites a reference for this code.'));
-  assert.equal(count(nothing, '<details class="reference-passage">'), 1, 'the reconciliation\'s passage stays listed');
+  // moved by refutation round 4 (falsegreen-4): the fixture's reconciliation retrieval is the assess stage's, which for
+  // this document - no service date established - retrieves no CMS fact or passage; its own list still stands apart and
+  // says so (a stand-in of dated facts and a passage was listed here, beside a Reference validation row saying none was
+  // checked). A served passage stays listed: the reconciliation's list is the one fed below
+  assert.equal(count(nothing, '<details class="reference-passage">'), 0);
+  assert.ok(nothing.includes('<div class="evidence-label">CMS reference facts and passages retrieved by the reconciliation</div><p class="harness-note">No CMS reference fact or passage was retrieved for this code.</p>'), nothing);
+  const passage = { kind: 'passage', source_key: 'cms-ncci-policy-manual-2026-ch6', release: 'Revision 1/1/2026', passage_key: 'vi-c-3', section: 'Chapter VI, section C: Endoscopic Services', page: 'VI-14', text: 'SYNTHETIC FIXTURE TEXT, not CMS text.', sha256: '0'.repeat(64) };
+  const fed = { ...bare, assessment: { ...bare.assessment, proposals: bare.assessment.proposals.map(p => (p.code === '45380' ? { ...p, retrieval: [passage] } : p)) } };
+  assert.equal(count(codeCardOf(render(fed), '45380'), '<details class="reference-passage">'), 1, 'the reconciliation\'s passage stays listed');
   // the confirmed finding the re-assessment read: a fact, never a decision
   const confirmedDoc = fixture(H2_CONFIRMED);
   const confirmedCard = codeCardOf(render(confirmedDoc), '45385');
@@ -2601,4 +2609,18 @@ test('R4-CONF d7-5: the Checks tab says what a participant\'s peer answers are, 
   assert.ok(checks.includes('It answered 3 open questions; an answer is recorded and decides nothing by itself.'), checks);
   assert.ok(checks.includes('It answered 1 open question; an answer is recorded and decides nothing by itself.'), checks);
   assert.equal(/reviewer confirms|read only as the passage/.test(checks), false);
+});
+
+test('R4-CONF falsegreen-4: the final fixture\'s reconciliation lists no CMS fact or passage beside a Reference validation row that says none was checked', () => {
+  const doc = fixture(H2_FINAL);
+  const html = render(doc);
+  const row = harnessRow(html, 'reference_validation');
+  assert.ok(row.includes('data-state="not_verified"') && row.includes('No code was checked against the CMS reference files'), row);
+  assert.equal(row.includes('RVU26D') || row.includes('Revision 1/1/2026'), false, row);
+  for (const proposal of doc.assessment.proposals.filter(item => item.bucket === 'selected')) {
+    // the reconciliation's whole section: its label and the note that it retrieved nothing for this code
+    const card = codeCardOf(html, proposal.code);
+    assert.ok(card.includes('<div class="evidence-section reference-retrieval"><div class="evidence-label">CMS reference facts and passages retrieved by the reconciliation</div><p class="harness-note">No CMS reference fact or passage was retrieved for this code.</p></div>'), proposal.code);
+    assert.equal(count(card, '<div class="evidence-section reference-retrieval">'), 1, proposal.code);
+  }
 });

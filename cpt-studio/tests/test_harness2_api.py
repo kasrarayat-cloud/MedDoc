@@ -22,7 +22,7 @@ from studio.participants.openai_astra import AstraParticipant
 from studio.gi import context as gi_context
 from studio.providers.base import canonical_body
 from studio.providers.replay import ReplayProvider
-from studio.types import ExtractionResult, PageSpan, sha256_json, to_jsonable
+from studio.types import ExtractionResult, PageSpan, to_jsonable
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
 from tests.test_harness2_pipeline import TWO_EXTENTS
@@ -108,7 +108,10 @@ class Harness2Case(TestCase):
     call); assess #1, the engine's, with its open questions; both peer reviews (Astra's with a tool call), built from
     assess #1 by the pipeline's own peer material; and assess #2, the engine's, the final assessment. Refutation round
     3, falsegreen-11: the assessments were hand-built and asked what the readers never ask of their note; every row the
-    case pins is now what the assess stage's own engine makes of the case's stored runs (result)."""
+    case pins is now what the assess stage's own engine makes of the case's stored runs (result). Refutation round 4
+    (falsegreen-7, falsegreen-4): so are the participants entries beside it (entry: they were written by hand, every
+    code's quote '' and the frozen list in another order) and the reconciliation's retrieval (retrieval_of: it was
+    [])."""
 
     def setUp(self):
         self.ws = f.workspace()
@@ -128,9 +131,7 @@ class Harness2Case(TestCase):
             self.exchanges(run, request.body, data, calls if name == 'astra' else [])
             self.runs[name], self.requests[name] = run, request
             self.readings[name] = self.adapters[name].read(request, data, frozenset(review.run_refs(run)))
-        self.frozen = sorted([['astra', sha256_json(self.readings['astra'])], ['corti', self.corti.response_sha256],
-                              ['fable', sha256_json(self.readings['fable'])],
-                              ['revision', self.revision.text_sha256]])
+        self.frozen = self.frozen_list()
         self.first = self.persist([self.entry(name) for name in ADAPTERS])
         self.peer_runs, self.reviews = {}, {}
         for name in ADAPTERS:
@@ -212,43 +213,57 @@ class Harness2Case(TestCase):
         proposed = {code.code for item in inputs if item.reading is not None for code in item.reading.codes}
         proposed |= {code.code for item in inputs if item.peer is not None for code in item.peer.additional_codes}
         service_date = jobs.context_service_date(self.context)
-        reference = jobs.prefetched_lookup(tuple(sorted(set(jobs.selected_codes(normalized)) | proposed)))
+        prefetched = tuple(sorted(set(jobs.selected_codes(normalized)) | proposed))
+        reference = jobs.prefetched_lookup(prefetched)
         data, result = jobs._assess_child(
             self.revision.text, service_date, tuple(PageSpan(**page) for page in self.revision.pages),
             jobs.context_facts(self.context), normalized, reference, provider_status, self.revision.extraction_status,
             tuple(self.revision.messages), None, None, inputs, tuple(confirmed))
         self.routing_run = jobs._record_routing(self.revision, data, service_date)
+        self.lookup = (service_date, reference, prefetched)
         return result
 
+    def retrieval_of(self, result):
+        """The reconciliation's retrieval the assess stage records beside ``result`` (jobs._retrieval), from the lookup
+        the engine read (result: the service date, the prefetched reference and its codes). Refutation round 4,
+        falsegreen-4: the website fixtures' was a stand-in of dated CMS facts and a passage, which the stage cannot
+        retrieve for this document - its dates of service disagree, so no service date is established - beside a
+        Reference validation row that says no code was checked; the API case's was []."""
+        return jobs._retrieval(result, *self.lookup)
+
+    def frozen_list(self):
+        """assess #1's and #2's frozen list as the stage records it (jobs._frozen): Corti's response, each reading's
+        sha256 and the revision's, in harness order (refutation round 4, falsegreen-7: it was written sorted by
+        name)."""
+        readings = {name: {'reading_sha256': jobs.answer_sha256(self.readings[name])} for name in ADAPTERS}
+        return jobs._frozen(self.revision, self.corti, readings)
+
     def entry(self, name, *, peer=False):
-        """An Assessment.participants entry in the 12.3 shape: harness@1's keys, the frozen record, and on assess #2 the
-        peer review."""
-        run, reading = self.runs[name], self.readings[name]
-        out = {'name': name, 'state': 'read', 'run': str(run.pk), 'adapter_version': run.adapter_version,
-               'requested_model': MODELS[name], 'returned_model': MODELS[name],
-               'unverified_quotes': reading.unverified_quotes, 'reason': '',
-               'codes': [{'code': item.code, 'quote': ''} for item in reading.codes], 'not_coded': [],
-               'reading_sha256': sha256_json(reading), 'exchanges': run.exchanges.count(),
-               'tool_calls': models.ToolCall.objects.filter(exchange__run=run).count(), 'frozen': self.frozen}
+        """An Assessment.participants entry in the 12.3 shape, as the assess stage records it: the record
+        jobs._first_input makes of the participant's phase-1 run - harness@1's keys, the codes and not-coded items each
+        with its first located quote, the reading's sha256, the exchanges and tool calls - with, on assess #2, its peer
+        review's (jobs._with_peer), and the frozen list. Refutation round 4, falsegreen-7: it was written by hand, every
+        code's quote '' (the API then said each participant's codes had no quote found in the document) and the frozen
+        list in another order."""
+        item, record = jobs._first_input(self.encounter, name, self.runs[name])
         if peer:
-            peer_run, peer_review = self.peer_runs[name], self.reviews[name]
-            out.update(peer_state='read', peer_run=str(peer_run.pk), peer_reason='',
-                       peer_sha256=sha256_json(peer_review), peer_unverified_quotes=peer_review.unverified_quotes)
-        return out
+            record = jobs._with_peer(self.encounter, item, record, self.peer_runs[name])[1]
+        return {**record, 'frozen': self.frozen}
 
     def persist(self, entries, result=None, routing_run=None):
-        """Persist an assessment of the case's runs with ``entries``: ``result``, or the engine's of the phase the
-        entries record - 2 when any carries its peer review, 0 when none records a configured participant (Corti alone:
-        the engine is given no participant, I1), 1 otherwise. A test's variation of an entry (a peer review recorded
-        refused, a reading's sha256) varies the record beside the result, never the result. ``routing_run``: a routing
-        record of the test's own, for an assessment review._same_assessment would otherwise take for the current one."""
+        """Persist an assessment of the case's runs with ``entries`` and the retrieval the stage records beside its
+        result (retrieval_of): ``result``, or the engine's of the phase the entries record - 2 when any carries its
+        peer review, 0 when none records a configured participant (Corti alone: the engine is given no participant,
+        I1), 1 otherwise. A test's variation of an entry (a peer review recorded refused, a reading's sha256) varies
+        the record beside the result, never the result. ``routing_run``: a routing record of the test's own, for an
+        assessment review._same_assessment would otherwise take for the current one."""
         self.encounter.refresh_from_db()
         if result is None:
             configured = [entry for entry in entries if entry.get('state') != 'not_configured']
             result = self.result(0 if not configured else 2 if any('peer_state' in e for e in entries) else 1)
         return review.persist_assessment(encounter=self.encounter, revision=self.revision, context=self.context,
                                          routing_run=routing_run or self.routing_run, provider_run=self.corti,
-                                         result=result, participants=entries, retrieval=[])
+                                         result=result, participants=entries, retrieval=self.retrieval_of(result))
 
     def peer_answer(self, name):
         """The peer answers, to assess #1's questions by (fact, proposal key) - sel:0 is 45385, sel:1 45380."""

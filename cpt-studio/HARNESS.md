@@ -1247,6 +1247,20 @@ verifies, even on the dormant path). `tests/test_harness2_r3_conf.py` pins that 
 assessment, digest for digest, and that its final one is the engine's for the stored runs; the fixtures are regenerated
 from it and every pin moved to what they serve, saying so.
 
+**Amended after refutation round 4 (falsegreen-7, falsegreen-4): the rows beside the assessments are the stage's too.**
+Two were not. The case's `Assessment.participants` entries were written by hand - every code's quote `''`, so the API
+said of each participant's codes "none of its quotes was found in the document", and the frozen list sorted by name -
+while the digest the fidelity test compared could not see them. And the website fixtures' reconciliation retrieval was
+a stand-in of dated CMS facts and a passage, which the stage cannot retrieve for this document (its dates of service
+disagree, so no service date is established), beside a Reference validation row saying no code was checked (the API
+case's was `[]`). Both are now what the assess stage records: each entry is `jobs._first_input`'s record of the
+participant's phase-1 run, with `jobs._with_peer`'s on assess #2, and `jobs._frozen`'s list (`Harness2Case.entry`); the
+retrieval is `jobs._retrieval` of the persisted result with the lookup its engine read (`Harness2Case.retrieval_of`),
+for the API case and the fixtures alike; the fixtures are regenerated. `tests/test_harness2_r4_conf.py` pins that the
+real assess stage records the case's first entries and retrieval, that assess #2's entries are the stage's records, and
+that no fixture serves a reconciliation fact or passage beside a row that says none was checked; the website pin that
+rested on the stand-in's passage is moved to a passage it is served, saying so.
+
 **Checklist 4.6 is NOT DONE in this release.** What it becomes is an open owner question (a product decision with no
 ruled precedent), with two options: (i) a human-override confirmation that claims nothing CPT Studio cannot check - the
 reviewer's reading decides, and the page says so; or (ii) no override, with the false holds repaired at the readers

@@ -20,6 +20,10 @@ default, settings.STUDIO_OFFER_CONFIRMATIONS (a code-level False):
   that code, which can still be rejected; a question about a documented service no code carries holds neither.
 - d7-4: the reports print CONFIRMED FINDINGS only while confirmations are offered.
 - d7-5: the engine's participants.summary says of a participant's peer answers what is true in both modes.
+- falsegreen-7 and falsegreen-4: tests/test_harness2_api.py's Harness2Case - whose rows the API tests pin and the
+  website fixtures serialize - records the participants entries and the reconciliation retrieval the assess stage
+  records, and the committed fixtures serve no reconciliation fact or passage beside a Reference validation row that
+  says none was checked.
 
 Each test failed on the base 3daafa91b. Synthetic data only; nothing is sent: Corti is the harness@1 suite's in-process
 fake, Astra and Fable the real replay adapters on the real tool loop (tests.test_harness2_pipeline) or the recorded rows
@@ -37,6 +41,7 @@ from django.test import SimpleTestCase, override_settings
 from studio import jobs, models, reports, review
 from studio.types import sha256_json
 from tests import test_harness2_api as h2
+from tests.test_frontend import HARNESS2_SCENARIOS, _fixture
 from tests.test_harness2_pipeline import EMPTY_PEER, HEAD, TWO_EXTENTS, ColonCase, answered, reading
 from tests.test_harness2_pipeline import Harness2Case as PipelineCase
 from tests.test_harness2_r2_evidence import NO_BASIS, PRIOR, VISIT, page
@@ -309,3 +314,60 @@ class ConfirmationWordingTests(h2.Harness2Case):
         # the engine reads no setting: the dormant path's assessment of the same rows says the same
         with override_settings(**DORMANT):
             self.assertEqual(sha256_json(self.result(2)), self.final.sha256)
+
+
+# --- falsegreen-7, falsegreen-4: the case's and the fixtures' rows are the assess stage's -----------------------------
+
+@override_settings(**h2.BOTH)
+class CaseRowsTests(h2.Harness2Case):
+    def test_the_participants_entries_and_the_retrieval_are_the_stage_s(self):
+        # assess #1, made by the real assess stage from the case's own stored rows
+        job = jobs.enqueue(models.Job.ASSESS, encounter=self.encounter, revision=self.revision, context=self.context,
+                           provider_run=self.corti, requested_by=self.reviewer,
+                           key=jobs._assess_key(f'assess:{self.context.pk}:{self.corti.pk}', self.revision))
+        self.assertEqual(jobs.claim_next(), job)
+        job.refresh_from_db()
+        jobs.run_job(job)
+        job.refresh_from_db()
+        self.assertEqual(job.state, models.Job.SUCCEEDED, job.error)
+        made = models.Assessment.objects.get(pk=job.result['assessment'])
+        self.assertEqual(made.sha256, self.first.sha256)
+        self.assertEqual(made.participants, self.first.participants)
+        self.assertEqual(made.retrieval, self.first.retrieval)
+        # assess #2's entries, as the stage records them: each first reading's record with its peer review's, and the
+        # frozen list
+        records = []
+        for name in h2.ADAPTERS:
+            item, record = jobs._first_input(self.encounter, name, self.runs[name])
+            records.append(jobs._with_peer(self.encounter, item, record, self.peer_runs[name])[1])
+        frozen = jobs._frozen(self.revision, self.corti, {record['name']: record for record in records})
+        self.assertEqual(self.final.participants, [{**record, 'frozen': frozen} for record in records])
+        # so each participant's position on 45385 is its own located quote, never "none of its quotes was found"
+        detail = self.client_for(self.reviewer).get(f'/api/encounters/{self.encounter.pk}').json()
+        snare = next(p for p in detail['assessment']['proposals'] if p['code'] == '45385' and p['bucket'] == 'selected')
+        positions = snare['participant_positions']
+        self.assertEqual({name: (item['position'], item['quote']) for name, item in positions.items()},
+                         {name: ('proposed', 'was removed with a cold snare') for name in h2.ADAPTERS})
+
+
+class FixtureRetrievalTests(SimpleTestCase):
+    def test_no_fixture_serves_a_reconciliation_fact_beside_a_row_that_says_none_was_checked(self):
+        checked = 0
+        for name in HARNESS2_SCENARIOS:
+            doc = _fixture(name)
+            reference = doc['harness']['reference_validation']
+            if reference['state'] == 'waiting':  # processing: no retrieval is stated yet
+                continue
+            with self.subTest(name):
+                self.assertEqual(reference['state'], 'not_verified')
+                self.assertEqual((reference['codes_checked'], reference['passages'], reference['sources']), (0, 0, []))
+                self.assertEqual([item for p in doc['assessment']['proposals'] for item in p['retrieval']], [])
+                checked += 1
+        self.assertEqual(checked, 3)
+        # the trace's reconciliation retrieval is the stage's for a document with no service date: each code looked up
+        # on an unknown date, nothing applied
+        trace = _fixture('trace-harness2-final.json')
+        self.assertEqual([(e['code'], e['service_date'], e['facts'], e['passages']) for e in trace['retrieval']],
+                         [(code, None, [], []) for code in ('45380', '45381', '45385')])
+        self.assertTrue(all('Service date unknown; dated references cannot be applied.' in e['notes']
+                            for e in trace['retrieval']))
