@@ -23,8 +23,9 @@ from studio.participants.anthropic_fable import FableParticipant
 from studio.participants.openai_astra import AstraParticipant
 from studio.participants.replay import ReplayParticipant
 from studio.providers.base import canonical_body, request_sha256
-from studio.types import ProviderRequest
+from studio.types import ProviderRequest, sha256_json
 
+from tests.test_participants_peer import CPT_STUDIO, GOOD
 from tests.test_participants_support import (ASTRA_TOOL_USAGE, CLIENT_REQUEST_ID, FABLE_TOOL_USAGE, FACTS_ARGUMENTS,
                                              NOTE, ORIGINAL, PAGES, PASSAGES_ARGUMENTS, PDF, SECRETS, FakeClock,
                                              FakeExecutor, FakeResponse, FakeSession, OfflineTestCase, anthropic_env,
@@ -757,6 +758,32 @@ class FableLoopTests(_LoopContract, OfflineTestCase):
         reading = adapter.read(request, outcome.final.response_bytes, outcome.refs_retrieved)
         self.assertEqual((reading.refused, reading.adapter_version, [code.code for code in reading.codes]),
                          (False, 'anthropic-messages@cptstudio-harness-3', ['45385', '45380']))
+
+    def test_a_peer_review_loop_keeps_the_harness_3_shape_and_passes_thinking_back(self):
+        """HARNESS.md 11.2, 12.8: the peer review runs the same loop - no exchange asks for an output format, each
+        carries the peer system prompt with the peer schema unchanged, the answer's thinking block travels back with
+        its signature - and its final answer, alone in a fence, is read by the peer reader."""
+        probe = self.adapter_class(self.tmp / 'never-read.env')
+        own = probe.read(probe.build_request(NOTE, PAGES, 'paste', None), self.final_raw)
+        frozen = [('fable', sha256_json(own)), ('revision', hashlib.sha256(NOTE.encode()).hexdigest()),
+                  ('cpt_studio', sha256_json(CPT_STUDIO))]
+        request = probe.build_peer_request(NOTE, PAGES, 'paste', own, {}, CPT_STUDIO, frozen)
+        first = self.tool_answer(self.facts_call('toolu_peer_1'), number=1)
+        final = fable_with(f'```json\n{json.dumps(GOOD)}\n```')
+        outcome, session, adapter, _, _ = self.run_loop(self.ok(first, 1), self.ok(final, 2), request=request)
+        system = prompt.PEER_INSTRUCTIONS + prompt.schema_instruction(prompt.PEER_SCHEMA)
+        for record, call in zip(outcome.exchanges, session.calls):
+            with self.subTest(turn=record.turn):
+                for body in (record.request_body, json.loads(call['data'])):
+                    self.assertEqual((body['output_config'], body['system']), ({'effort': 'medium'}, system))
+        (assistant,) = [message for message in outcome.exchanges[1].request_body['messages']
+                        if message['role'] == 'assistant']
+        self.assertEqual(assistant['content'], json.loads(first)['content'])
+        self.assertEqual(assistant['content'][0]['signature'], 'synthetic-signature-0001')
+        review = adapter.read_peer(request, outcome.final.response_bytes, outcome.refs_retrieved)
+        self.assertEqual((review.refused, review.problems, review.adapter_version),
+                         (False, (), 'anthropic-messages@cptstudio-harness-3'))
+        self.assertEqual([answer.question_id for answer in review.answers], ['clar-extent-0001', 'clar-date-0002'])
 
 
 class UsageTests(OfflineTestCase):

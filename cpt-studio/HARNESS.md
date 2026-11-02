@@ -700,10 +700,12 @@ change.**
   it is exactly one JSON object, or exactly one JSON object alone inside a single ```` ```json ```` (or ```` ``` ````)
   fence (`reading.sole_object`, one implementation for the reading and the peer review). Anything else - prose before
   or after, an array, a fence naming another language, two objects, two fences, a truncated object - refuses the whole
-  reading or peer review with CPT Studio's own sentence, never quoting the model's text. Then everything that already
-  happened happens: before the text is looked at, the wrong-model, fallback and stop-reason refusals (I6); after it,
-  strict JSON (repeated keys, NaN, NUL and lone surrogates refused), CPT Studio's own schema validation, the bounds and
-  the located quotes (I7). Nothing is repaired or coerced.
+  reading or peer review with CPT Studio's own sentence, never quoting the model's text: the object rule's own, or, for
+  text that opens with `{` and closes with `}` but is still not exactly one object (two objects, two fences, an object
+  cut off after an inner `}`), the strict JSON reader's. Then everything that already happened happens: before the text
+  is looked at, the wrong-model, fallback and stop-reason refusals (I6); after it, strict JSON (repeated keys, NaN, NUL
+  and lone surrogates refused), CPT Studio's own schema validation, the bounds and the located quotes (I7). Nothing is
+  repaired or coerced.
 - **Fable's reading has no vendor-side schema guarantee.** CPT Studio's own validation, which never trusted the vendor's
   (section 4), is now the only check of its shape; a reading that is not exactly one valid object is refused whole, as
   any reading that breaks the schema always was.
