@@ -1476,7 +1476,7 @@ function peerFallback(doc, participant) {
   if (doc.pipeline?.busy) return ['waiting', ''];
   const stages = Array.isArray(doc.pipeline?.stages) ? doc.pipeline.stages : [];
   const stage = stages.filter(item => item?.kind === `${textValue(participant.name)}_peer`).pop();
-  const outcome = stage ? `Its peer-review stage: ${lookup(STAGE_STATES, stage.state, textValue(stage.state) || 'state not recorded')}${textValue(stage.error) ? ` — ${stage.error}` : ''}.` : '';
+  const outcome = stage ? sentence(`Its peer-review stage: ${lookup(STAGE_STATES, stage.state, textValue(stage.state) || 'state not recorded')}${textValue(stage.error) ? ` — ${stage.error}` : ''}`) : '';
   return ['not_run', [PEER_STATES.not_run[2], outcome].filter(Boolean).join(' ')];
 }
 
