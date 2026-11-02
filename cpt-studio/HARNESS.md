@@ -730,10 +730,10 @@ model participant configured the record is today's ("not configured") and there 
     text for its code).
   - **The page** applies the same rule to what it is served (`shownReference`, `shownArguments`): a value served in no
     such shape is named by its length, whatever `DESCRIPTOR_LIKE` reads.
-  The note above that the owner's trace "still serves these fields by the 20-character rule", and 12.7's IND-1 sentence
-  on the trace (`participants.reading._token`), describe the code before refutation round 3's integration (12.11) and
-  are superseded by it and by this amendment. Pinned besides: the reader's quoting shapes
-  (`participants.reading._token`) against text that opens with a date or a code - '2026-10-21;W/LES(S)',
+  The note above that the owner's trace "still serves these fields by the 20-character rule", 12.7's IND-1 sentence on
+  the trace (`participants.reading._token`) and section 7's "not a short token" describe the code before refutation
+  round 3's integration (12.11) and are superseded by it and by this amendment. Pinned besides: the reader's quoting
+  shapes (`participants.reading._token`) against text that opens with a date or a code - '2026-10-21;W/LES(S)',
   '45385;WITH-POLYP(S)' and '45380(S)', each named by its length (falsegreen-3) - and the trace's peer-review positions
   and additional codes (falsegreen-2).
   **Open, recorded:** a participant row's `codes` (`review.listed_codes`, which `serializers._participant_row` serves
