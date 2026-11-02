@@ -277,10 +277,16 @@ class CortiOnlyParityTests(HarnessCase):
                                extraction_messages=tuple(revision.messages), second=None, second_scope=None)
         self.assertEqual(assessment.sha256, sha256_json(result))
         self.assertEqual([p.code for p in assessment.proposals.all()], ['99213'])
-        # the records beside the result: both participants 'not configured', no retrieval module, no retrieval
+        # the records beside the result: both participants 'not configured', and the retrieval trace of the one
+        # proposal's code (outside the result and its sha256; this test database installs no CMS source)
         self.assertEqual([(r['name'], r['state'], r['run']) for r in assessment.participants],
                          [('astra', 'not_configured', None), ('fable', 'not_configured', None)])
-        self.assertEqual(assessment.retrieval, [])
+        self.assertEqual(assessment.retrieval,
+                         [{'code': '99213', 'service_date': '2026-10-20', 'facts': [], 'passages': [],
+                           'lookups': ['reference lookup 99213 on 2026-10-20: no source applied'],
+                           'notes': ['99213: no installed CMS Physician Fee Schedule source covers 2026-10-20.',
+                                     '99213: no installed CMS practitioner MUE source covers 2026-10-20.',
+                                     '99213 has no PFS facts for 2026-10-20; no PFS definition was retrieved for it.']}])
         # Corti's audit rows are as before: no provider named on its 'provider.finished' row
         finished = models.AuditEvent.objects.get(encounter_id=encounter_id, event='provider.finished')
         self.assertEqual(set(finished.data), {'run', 'state', 'http_status', 'usage', 'latency_ms', 'purpose'})
@@ -923,7 +929,7 @@ class SweepAndResumeTests(HarnessCase):
 class AssessReadsTests(HarnessCase):
     def test_retrieval_reads_the_same_lookup_for_every_proposal_code(self):
         recorded = []
-        with mock.patch.dict(sys.modules, {'studio.reference.passages': fake_passages(recorded)}):
+        with mock.patch('studio.jobs.reference_passages', fake_passages(recorded)):
             encounter_id = self.create()
             drain()
         assessment = self.encounter(encounter_id).current_assessment
@@ -931,10 +937,15 @@ class AssessReadsTests(HarnessCase):
         self.assertEqual([(entry['code'], entry['passages'][0]['section']) for entry in assessment.retrieval],
                          [('99213', 'Chapter VI §C')])
 
-    def test_without_the_passages_module_retrieval_is_empty(self):
+    def test_retrieval_traces_each_looked_up_code_and_says_when_no_source_applies(self):
         encounter_id = self.create()
         drain()
-        self.assertEqual(self.encounter(encounter_id).current_assessment.retrieval, [])
+        self.assertEqual(self.encounter(encounter_id).current_assessment.retrieval,
+                         [{'code': '99213', 'service_date': '2026-10-20', 'facts': [], 'passages': [],
+                           'lookups': ['reference lookup 99213 on 2026-10-20: no source applied'],
+                           'notes': ['99213: no installed CMS Physician Fee Schedule source covers 2026-10-20.',
+                                     '99213: no installed CMS practitioner MUE source covers 2026-10-20.',
+                                     '99213 has no PFS facts for 2026-10-20; no PFS definition was retrieved for it.']}])
 
     def test_a_participant_code_is_prefetched_for_the_engine(self):
         seen = []

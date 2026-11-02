@@ -258,7 +258,7 @@ class RealDownloadsTests(HarnessCase):
     def test_the_download_verifier_still_passes_both_formats(self):
         recorded = []
         self.adapters['fable'].returned_model = 'claude-other-model'  # one participant refused
-        with mock.patch.dict(sys.modules, {'studio.reference.passages': fake_passages(recorded)}):
+        with mock.patch('studio.jobs.reference_passages', fake_passages(recorded)):
             encounter_id = self.create()
             drain()
         encounter = self.encounter(encounter_id)

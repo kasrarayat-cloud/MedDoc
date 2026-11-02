@@ -11,7 +11,6 @@ for the encounter until a member reconciles it.
 from __future__ import annotations
 
 import hashlib
-import importlib
 import logging
 import sys
 import time
@@ -30,6 +29,7 @@ from .providers import get_provider, normalizer_for
 from .providers.corti import CortiProvider, build_coding_request
 from .providers.replay import ReplayProvider
 from .providers.base import ProviderUnavailable
+from .reference import passages as reference_passages
 from .reference.store import prefetched_lookup, selected_codes
 from .storage import ALLOWED_SUFFIXES, OriginalCorrupted, read_original
 from .types import (EvidenceSpan, Fact, NormalizedResponse, PageSpan, ParticipantInput, ProviderCode, ProviderRequest,
@@ -1044,24 +1044,16 @@ def _participant_input(encounter, revision, name, *, held=False):
             _participant_record(name, state, run, reading, reason))
 
 
-PASSAGES_MODULE = 'studio.reference.passages'
-
-
 def _retrieval(result, service_date, reference, prefetched):
     """The retrieval traces (HARNESS.md 5, Assessment.retrieval) for the codes of the assessment's proposals that the
     checks' own lookup holds - every code a proposal can be decided on; a provider's informational alternatives were
     never looked up - from that same lookup, with the CMS passages that govern its facts, read here in the parent, which
-    has the database. [] where studio.reference.passages is not installed."""
-    try:
-        passages = importlib.import_module(PASSAGES_MODULE)
-    except ModuleNotFoundError as exc:
-        if exc.name != PASSAGES_MODULE:
-            raise
-        return []
+    has the database. [] only when no proposal has a looked-up code."""
     codes = sorted({proposal.code for proposal in result.proposals} & set(prefetched))
     if not codes:
         return []
-    return to_jsonable(list(passages.retrieve(codes, service_date, reference, passages.load_passages())))
+    return to_jsonable(list(reference_passages.retrieve(codes, service_date, reference,
+                                                        reference_passages.load_passages())))
 
 
 def _provider_inputs(run):

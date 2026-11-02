@@ -263,7 +263,11 @@ class HarnessBlockTests(HarnessCase):
         self.assertEqual(fable['state'], 'done')
         self.assertEqual(harness['clarification'], {'open': 0})
         self.assertEqual(harness['final'], {'state': 'ready_for_review', 'label': 'Ready for review'})
-        self.assertEqual(harness['reference_validation']['state'], 'not_run')  # no passages module installed
+        # retrieval ran and traced every decidable code: 99213 only (Astra's 99214 quotes nothing in the note, so it is
+        # no proposal); this test database installs no CMS source, so nothing was found for it
+        validation = harness['reference_validation']
+        self.assertEqual({key: validation[key] for key in ('state', 'codes_checked', 'passages', 'sources')},
+                         {'state': 'done', 'codes_checked': 1, 'passages': 0, 'sources': []})
 
     def test_a_pricing_error_shows_no_estimate_and_never_fails_the_page(self):
         broken = types.ModuleType('studio.participants.pricing')
@@ -395,8 +399,8 @@ class TraceTests(HarnessCase):
 
     def test_the_trace_shows_each_run_its_reading_the_retrieval_and_the_reconciliation(self):
         recorded = []
-        with mock.patch.dict(sys.modules, {'studio.reference.passages': fake_passages(recorded),
-                                           'studio.participants.pricing': fake_pricing()}):
+        with mock.patch('studio.jobs.reference_passages', fake_passages(recorded)), \
+                mock.patch.dict(sys.modules, {'studio.participants.pricing': fake_pricing()}):
             encounter_id = self.create()
             drain()
             trace = self.get(self.owner, encounter_id).json()
