@@ -288,3 +288,10 @@ class RealDownloadsTests(HarnessCase):
         self.assertTrue(any(line.startswith('  - astra · REPLAY (recorded response, not live output) · succeeded')
                             for line in usage), usage)
         self.assertTrue(TIME_QUOTE in text)
+        # harness@2 (HARNESS.md 12.6): Astra's peer review is listed as one, also replayed, and the report has its
+        # PEER REVIEW and PARTICIPANT REFERENCES sections; Fable's refused first reading took no part in peer review
+        self.assertTrue(any(line.startswith('  - astra · REPLAY (recorded response, not live output) · succeeded')
+                            and ' · peer review · ' in line for line in usage), usage)
+        self.assertFalse(any(line.startswith('  - fable ') and ' · peer review · ' in line for line in usage), usage)
+        self.assertIn('PEER REVIEW', text.splitlines())
+        self.assertIn('PARTICIPANT REFERENCES', text.splitlines())

@@ -76,10 +76,14 @@ class FieldCase(TestCase):
 
 class PermissionsTests(FieldCase):
     def test_is_owner_beside_can_review(self):
+        # harness@2 (HARNESS.md 12.6): permissions.can_confirm is can_review
         pf.assess(self.s.encounter, pf.standard_result())
-        self.assertEqual(self.detail(self.owner)['permissions'], {'can_review': True, 'is_owner': True})
-        self.assertEqual(self.detail(self.s.reviewer)['permissions'], {'can_review': True, 'is_owner': False})
-        self.assertEqual(self.detail(self.s.viewer)['permissions'], {'can_review': False, 'is_owner': False})
+        self.assertEqual(self.detail(self.owner)['permissions'],
+                         {'can_review': True, 'is_owner': True, 'can_confirm': True})
+        self.assertEqual(self.detail(self.s.reviewer)['permissions'],
+                         {'can_review': True, 'is_owner': False, 'can_confirm': True})
+        self.assertEqual(self.detail(self.s.viewer)['permissions'],
+                         {'can_review': False, 'is_owner': False, 'can_confirm': False})
 
 
 class ProposalFieldsTests(FieldCase):
@@ -263,6 +267,15 @@ class HarnessBlockTests(HarnessCase):
         self.assertEqual(fable['state'], 'done')
         self.assertEqual(harness['clarification'], {'open': 0})
         self.assertEqual(harness['final'], {'state': 'ready_for_review', 'label': 'Ready for review'})
+        # harness@2 (HARNESS.md 12.6): the final assessment read both peer reviews; each row names its own, and the
+        # row's first-reading run stays the one it reports (its usage is that run's, never the peer review's)
+        self.assertEqual(harness['phase'], 2)
+        for row in (astra, fable):
+            peer = self.runs_of(encounter_id, row['name'], 'peer_review')[0]
+            self.assertEqual((row['peer']['state'], row['peer']['run_id'], row['peer']['codes_added']),
+                             ('done', str(peer.pk), []))
+        self.assertEqual((corti['peer'], corti['references'], corti['peer_references']),
+                         ({}, {'retrieved': [], 'used': []}, {'retrieved': [], 'used': []}))
         # retrieval ran and traced every decidable code: 99213 only (Astra's 99214 quotes nothing in the note, so it is
         # no proposal); this test database installs no CMS source, so nothing was found for it
         validation = harness['reference_validation']
@@ -317,6 +330,10 @@ class HarnessBlockTests(HarnessCase):
         self.assertEqual((row['state'], row['detail']),
                          ('failed', 'The request failed (HTTP 529): Overloaded (synthetic).'))
         self.assertEqual(self.detail(encounter_id)['harness']['final']['state'], 'ready_for_review')
+        # a failed first assessment takes no part in peer review, and its row says so (HARNESS.md 11.1, 12.6)
+        self.assertEqual((row['peer']['state'], row['peer']['run_id']), ('not_sent', None))
+        self.assertTrue(row['peer']['detail'].startswith('Peer review: '), row['peer']['detail'])
+        self.assertIn(jobs.PEER_FIRST_NOT_READ.rstrip('.'), row['peer']['detail'])
 
     def test_a_refused_reading_row(self):
         self.adapters['fable'].returned_model = 'claude-other-model'
@@ -429,7 +446,16 @@ class TraceTests(HarnessCase):
         self.assertEqual((unverified['spans'], unverified['reason']), ([], 'not found in the document'))
         located = reading['codes'][0]['evidence'][0]['spans'][0]
         self.assertEqual(encounter.current_revision.text[located['start']:located['end']], TIME_QUOTE)
-        self.assertEqual([run['state'] for run in fable['runs']], ['succeeded'])
+        # harness@2 (HARNESS.md 12.6): each participant's first reading, then its peer review, with its exchanges
+        self.assertEqual([(run['purpose'], run['state']) for run in fable['runs']],
+                         [('independent', 'succeeded'), ('peer_review', 'succeeded')])
+        self.assertEqual([len(run['exchanges']) for run in astra['runs']], [1, 1])
+        peer_run = astra['runs'][1]
+        self.assertEqual((peer_run['reading'], peer_run['review']['refused'], peer_run['mode']),
+                         (None, False, 'replay'))
+        self.assertEqual(self.adapters['astra'].peer_sent[0]['client_request_id'], peer_run['run_identity'])
+        self.assertEqual([(a['phase'], a['final'], a['current']) for a in trace['assessments']],
+                         [(1, False, False), (2, True, True)])
         self.assertEqual([entry['code'] for entry in trace['retrieval']], ['99213'])
         self.assertEqual(trace['reconciliation'], [{
             'code': '99213', 'family': trace['reconciliation'][0]['family'], 'bucket': 'selected', 'status': 'ready',

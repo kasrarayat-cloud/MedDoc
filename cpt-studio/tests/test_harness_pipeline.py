@@ -1,9 +1,14 @@
-"""The harness pipeline (HARNESS.md 2, 5-6; I1, I8, I10): the participants' stages, their runs, the assess that reads
-them, and the records it keeps beside the engine's result.
+"""The harness pipeline (HARNESS.md 2, 5-6, 11-12; I1, I8, I10): the participants' stages, their runs, the assess that
+reads them, and the records it keeps beside the engine's result.
 
 Synthetic data only. Corti and the participants are in-process fakes - no network, no credentials. The engine's own
 handling of the participants belongs to the engine package: these tests call the real engine through a wrapper that
 notes what it was given, and with no participant configured they call it untouched.
+
+harness@2 (HARNESS.md 11.1, 12.1): with a model participant configured, the chain goes on past the first assess to the
+peer stages and a second assess - predict, astra, fable, assess #1, astra_peer, fable_peer, assess #2 - and each
+participant phase is one tool loop (send_loop). The fakes speak that interface; tests.test_harness2_pipeline covers
+what harness@2 adds with the real replay adapters.
 """
 import dataclasses
 import hashlib
@@ -13,16 +18,18 @@ import types
 from datetime import date, timedelta
 from unittest import mock
 
+from django.conf import settings
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from studio import audit, jobs, models, review, storage
 from studio.gi import detect as gi_detect
-from studio.participants import prompt
+from studio.participants import loop, prompt
 from studio.providers.base import ProviderUnavailable, canonical_body
 from studio.reference.store import prefetched_lookup, selected_codes
 from studio.types import (EvidenceSpan, LocatedQuote, PageSpan, ParticipantCode, ParticipantNotCoded,
-                          ParticipantReading, ProviderRequest, RawExchange, RoutingResult, from_jsonable, sha256_json)
+                          ParticipantReading, PeerReview, ProviderRequest, RawExchange, RoutingResult, from_jsonable,
+                          sha256_json)
 from studio.validation import engine
 from tests.support import docgen
 from tests.support import factories as f
@@ -58,19 +65,24 @@ class ScriptedCorti(FakeProvider):
 
 
 class FakeParticipant:
-    """Stands in for a harness adapter (studio.participants.Participant): builds its request from the revision alone,
-    through the real framing, and 'sends' to an in-process stub that records each call. ``codes`` and ``not_coded`` are
-    what its answer proposes: (code, quote) and (code, reason, quote)."""
+    """Stands in for a harness adapter (studio.participants.Participant): builds its first request from the revision
+    alone, and its peer-review request (HARNESS.md 12.4) from the frozen inputs it is given, each through the real
+    framing; and runs each as ONE tool loop (send_loop, HARNESS.md 11.2: the real studio.participants.loop) whose single
+    exchange 'sends' to an in-process stub (send) that records each call and answers with no tool call. ``codes`` and
+    ``not_coded`` are what its first answer proposes: (code, quote) and (code, reason, quote); ``peer_codes`` what its
+    peer review proposes after peer review: (code, quote). ``sent`` records its first-reading exchanges and
+    ``peer_sent`` its peer reviews'; ``outcome(s)`` and ``peer_outcome(s)`` script each phase."""
 
     def __init__(self, name, *, mode='replay', codes=(), not_coded=(), outcome='succeeded', refused=False,
-                 model=None, adapter_version=None):
+                 model=None, adapter_version=None, peer_codes=(), peer_outcome='succeeded'):
         self.name, self.mode = name, mode
         self.adapter_version = adapter_version or f'{name}-test@1'
         self.requested_model, self.endpoint = MODELS[name], ENDPOINTS[name]
         self.codes, self.not_coded, self.refused = list(codes), list(not_coded), refused
         self.returned_model = model or MODELS[name]
         self.outcome, self.outcomes = outcome, []
-        self.built, self.sent = [], []
+        self.peer_codes, self.peer_outcome, self.peer_outcomes = list(peer_codes), peer_outcome, []
+        self.built, self.sent, self.peer_built, self.peer_sent, self.executors = [], [], [], [], []
 
     def build_request(self, text, pages, kind, original):
         self.built.append((kind, original))
@@ -82,11 +94,44 @@ class FakeParticipant:
         return ProviderRequest(provider=self.name, adapter_version=self.adapter_version, body=body,
                                canonical_sha256=hashlib.sha256(canonical_body(body)).hexdigest(), contexts=(text,))
 
+    def build_peer_request(self, text, pages, kind, own, peers, cpt_studio, frozen):
+        """The peer-review request: the same framed text with no original, and the frozen inputs as the real peer
+        document (prompt.peer_document, which refuses any input that is not the documented shape)."""
+        self.peer_built.append({'kind': kind, 'own': own, 'peers': peers, 'cpt_studio': cpt_studio,
+                                'frozen': [list(pair) for pair in frozen]})
+        framed = prompt.peer_framed_document(text, pages, kind)
+        if framed is None:
+            raise ProviderUnavailable('The document could not be framed; nothing was sent.')
+        body = {'model': self.requested_model, 'instructions': prompt.PEER_INSTRUCTIONS, 'input': framed,
+                'peer': prompt.peer_document(own, peers, cpt_studio, frozen)}
+        return ProviderRequest(provider=self.name, adapter_version=self.adapter_version, body=body,
+                               canonical_sha256=hashlib.sha256(canonical_body(body)).hexdigest(), contexts=(text,))
+
+    def send_loop(self, request, *, deadline_s, client_request_id, original_bytes, execute_tool):
+        """The run (HARNESS.md 11.2): the real tool loop, its one exchange answered by send, asking for no tool."""
+        self.executors.append(execute_tool)
+
+        def post(turn, body, deadline):
+            return self.send(request, deadline_s=deadline_s, client_request_id=client_request_id,
+                             original_bytes=original_bytes)
+
+        def follow_up(body, turn, outputs):
+            raise AssertionError('a FakeParticipant answer asks for no tool call')
+
+        return loop.run(self, request, post=post, parse_turn=lambda data: loop.FINAL, follow_up=follow_up,
+                        execute_tool=execute_tool, deadline_s=deadline_s,
+                        longest_s=settings.PARTICIPANT_LOOP_DEADLINE_SECONDS,
+                        max_exchanges=settings.PARTICIPANT_MAX_EXCHANGES,
+                        max_tool_result_bytes=settings.PARTICIPANT_MAX_TOOL_RESULT_BYTES,
+                        max_request_bytes=settings.PARTICIPANT_MAX_REQUEST_BYTES, body_keys=frozenset(request.body))
+
     def send(self, request, *, deadline_s, client_request_id, original_bytes):
-        outcome = self.outcomes.pop(0) if self.outcomes else self.outcome
-        self.sent.append({'request': request.canonical_sha256, 'client_request_id': client_request_id,
-                          'deadline_s': deadline_s,
-                          'original': hashlib.sha256(original_bytes).hexdigest() if original_bytes else None})
+        peer = request.body.get('instructions') == prompt.PEER_INSTRUCTIONS
+        log, outcomes = (self.peer_sent, self.peer_outcomes) if peer else (self.sent, self.outcomes)
+        outcome = outcomes.pop(0) if outcomes else (self.peer_outcome if peer else self.outcome)
+        log.append({'request': request.canonical_sha256, 'client_request_id': client_request_id,
+                    'deadline_s': deadline_s,
+                    'original': hashlib.sha256(original_bytes).hexdigest() if original_bytes else None})
         identity = {'endpoint': self.endpoint, 'requested_model': self.requested_model}
         if outcome == 'unknown':
             return RawExchange(outcome='unknown', sent=True, error='Read timed out after the request was sent '
@@ -96,16 +141,21 @@ class FakeParticipant:
             return RawExchange(outcome='failed', sent=True, http_status=529, response_bytes=data,
                                response_sha256=hashlib.sha256(data).hexdigest(), error='Overloaded (synthetic).',
                                provider_request_id='req_synthetic_failed', **identity)
-        answer = {'model': self.returned_model, 'refused': self.refused,
-                  'codes': [{'code': code, 'quote': quote} for code, quote in self.codes],
-                  'not_coded': [{'code': code, 'reason': reason, 'quote': quote}
-                                for code, reason, quote in self.not_coded]}
+        if peer:
+            answer = {'model': self.returned_model, 'refused': False,
+                      'additional_codes': [{'code': code, 'quote': quote} for code, quote in self.peer_codes]}
+        else:
+            answer = {'model': self.returned_model, 'refused': self.refused,
+                      'codes': [{'code': code, 'quote': quote} for code, quote in self.codes],
+                      'not_coded': [{'code': code, 'reason': reason, 'quote': quote}
+                                    for code, reason, quote in self.not_coded]}
         data = json.dumps(answer, sort_keys=True).encode()
+        number = f'{"peer_" if peer else ""}{len(log)}'
         return RawExchange(outcome='succeeded', sent=True, http_status=200, response_bytes=data,
                            response_sha256=hashlib.sha256(data).hexdigest(), latency_ms=21.5,
                            usage={'input_tokens': 1200, 'output_tokens': 300}, usage_basis='vendor_reported_tokens',
-                           provider_request_id=f'req_{self.name}_{len(self.sent)}', returned_model=self.returned_model,
-                           response_id=f'resp_{self.name}_{len(self.sent)}', **identity)
+                           provider_request_id=f'req_{self.name}_{number}', returned_model=self.returned_model,
+                           response_id=f'resp_{self.name}_{number}', **identity)
 
 
 def locate(quote, text):
@@ -137,16 +187,42 @@ def fake_reader(provider, adapter_version):
     return read
 
 
+def fake_peer_reader(provider, adapter_version):
+    """studio.participants.peer_reader_for's stand-in: reads a FakeParticipant's peer review, with the frozen inputs its
+    own stored request listed (prompt.peer_document_inputs), locating each quote in the request's text (context 0), and
+    refuses a review another model answered."""
+    def read(request, data, refs_retrieved=frozenset()):
+        answer = json.loads(data)
+        text = request.contexts[0]
+        _, frozen = prompt.peer_document_inputs(request.body['peer'])
+        added = tuple(ParticipantCode(code=c['code'], evidence=(locate(c['quote'], text),))
+                      for c in answer['additional_codes'])
+        refused = bool(answer['refused']) or answer['model'] != MODELS[provider]
+        problems = (('The vendor refused the request.',) if answer['refused'] else
+                    (f'Answered by {answer["model"]}, not {MODELS[provider]}.',) if refused else ())
+        return PeerReview(provider=provider, adapter_version=adapter_version, review_version=prompt.PEER_VERSION,
+                          requested_model=MODELS[provider], returned_model=answer['model'], frozen_inputs=frozen,
+                          additional_codes=() if refused else added, problems=problems, refused=refused,
+                          unverified_quotes=0 if refused else sum(1 for c in added for q in c.evidence if not q.spans))
+    return read
+
+
 def recording_engine(**kwargs):
     """The real engine, called without the participants (handled by the engine package); what it was given is noted in
-    the result's summary, so a test reads it across the bounded child's fork."""
+    the result's summary, so a test reads it across the bounded child's fork. An assess that reads the peer reviews
+    (assess #2, HARNESS.md 12.1) notes each participant's peer state and the codes its review added as well."""
     given = kwargs.pop('participants', None)
     result = REAL_ENGINE(**kwargs)
     if given is None:
         return result
     seen = [[item.provider, item.state, sorted({c.code for c in item.reading.codes}) if item.reading else [],
              item.reason] for item in given]
-    return dataclasses.replace(result, summary={**result.summary, 'participants_given': seen})
+    summary = {**result.summary, 'participants_given': seen}
+    if any(item.peer_state for item in given):
+        summary['peers_given'] = [[item.provider, item.peer_state,
+                                   sorted({c.code for c in item.peer.additional_codes}) if item.peer else []]
+                                  for item in given]
+    return dataclasses.replace(result, summary=summary)
 
 
 def engine_refusing_participants(**kwargs):
@@ -205,6 +281,7 @@ class HarnessCase(TestCase):
         for target, kwargs in (('studio.jobs.get_provider', {'return_value': self.corti}),
                                ('studio.participants.get_participant', {'side_effect': adapter}),
                                ('studio.participants.reader_for', {'side_effect': fake_reader}),
+                               ('studio.participants.peer_reader_for', {'side_effect': fake_peer_reader}),
                                ('studio.jobs.run_assessment', {'side_effect': recording_engine})):
             patcher = mock.patch(target, **kwargs)
             patcher.start()
@@ -224,13 +301,21 @@ class HarnessCase(TestCase):
     def jobs_of(self, encounter_id):
         return list(models.Job.objects.filter(encounter_id=encounter_id).order_by('created_at'))
 
-    def runs_of(self, encounter_id, provider=None):
+    def runs_of(self, encounter_id, provider=None, purpose=None):
         runs = models.ProviderRun.objects.filter(encounter_id=encounter_id).order_by('created_at')
-        return list(runs.filter(provider=provider) if provider else runs)
+        runs = runs.filter(provider=provider) if provider else runs
+        return list(runs.filter(purpose=purpose) if purpose else runs)
 
     def records(self, encounter_id):
         assessment = self.encounter(encounter_id).current_assessment
         return {record['name']: record for record in assessment.participants}
+
+    def assessments(self, encounter_id):
+        return list(models.Assessment.objects.filter(encounter_id=encounter_id).order_by('created_at', 'pk'))
+
+    def peer_sends(self):
+        """(Astra's, Fable's) peer reviews sent (HARNESS.md 11.1)."""
+        return len(self.adapters['astra'].peer_sent), len(self.adapters['fable'].peer_sent)
 
 
 # --- I1: no participant configured -----------------------------------------------------------------------------------
@@ -386,31 +471,58 @@ class ChainTests(HarnessCase):
         encounter = self.encounter(encounter_id)
         context, corti = encounter.current_context, self.runs_of(encounter_id, 'corti')[0]
         chain = self.jobs_of(encounter_id)
-        self.assertEqual([j.kind for j in chain], ['extract', 'analyze', 'predict', 'astra', 'fable', 'assess'])
+        # harness@2 (HARNESS.md 12.1): the first assess is followed by the peer stages and the final assess
+        self.assertEqual([j.kind for j in chain], ['extract', 'analyze', 'predict', 'astra', 'fable', 'assess',
+                                                   'astra_peer', 'fable_peer', 'assess'])
         self.assertTrue(all(j.state == 'succeeded' for j in chain), [(j.kind, j.state, j.error) for j in chain])
         predict = chain[2]
         digest = hashlib.sha256(f'assess:{context.pk}:{corti.pk}|{predict.pk}'.encode()).hexdigest()[:32]
         self.assertEqual([j.idempotency_key for j in chain[3:5]], [f'astra:{digest}', f'fable:{digest}'])
         self.assertEqual({j.provider_run_id for j in chain[3:]}, {corti.pk})  # the Corti run travels on the chain
-        astra, fable = self.runs_of(encounter_id, 'astra')[0], self.runs_of(encounter_id, 'fable')[0]
+        astra = self.runs_of(encounter_id, 'astra', 'independent')[0]
+        fable = self.runs_of(encounter_id, 'fable', 'independent')[0]
         ids = hashlib.sha256(f'{astra.pk},{fable.pk}'.encode()).hexdigest()[:12]
         self.assertEqual(chain[5].idempotency_key, f'assess:{context.pk}:{corti.pk}:p:{ids}')
-        # each participant sent once, with its run's identity as the client request id and the participant's deadline
+        first, final = self.assessments(encounter_id)
+        peer = hashlib.sha256(str(first.pk).encode()).hexdigest()[:12]
+        self.assertEqual([j.idempotency_key for j in chain[6:8]], [f'astra_peer:{peer}', f'fable_peer:{peer}'])
+        peers = {name: self.runs_of(encounter_id, name, 'peer_review')[0] for name in ('astra', 'fable')}
+        both = ','.join(str(run.pk) for run in (astra, fable, peers['astra'], peers['fable']))
+        self.assertEqual(chain[8].idempotency_key,
+                         f'assess:{context.pk}:{corti.pk}:q:{hashlib.sha256(both.encode()).hexdigest()[:12]}')
+        # each participant sent once in each phase, with its run's identity as the client request id and the loop's
+        # deadline (HARNESS.md 11.2), given CPT Studio's own CMS tool executor
         for adapter, run in ((self.adapters['astra'], astra), (self.adapters['fable'], fable)):
             self.assertEqual(adapter.built, [('paste', None)])
             self.assertEqual(adapter.sent, [{'request': run.request_sha256, 'client_request_id': str(run.run_identity),
-                                             'deadline_s': 330, 'original': None}])
+                                             'deadline_s': settings.PARTICIPANT_LOOP_DEADLINE_SECONDS,
+                                             'original': None}])
             self.assertEqual((run.purpose, run.service_date, run.state, run.sent, run.scope),
                              ('independent', None, 'succeeded', True, {'mode': 'replay'}))
             self.assertEqual((run.endpoint, run.requested_model, run.returned_model),
                              (adapter.endpoint, adapter.requested_model, adapter.requested_model))
             self.assertTrue(run.response_id.startswith('resp_') and run.provider_request_id.startswith('req_'))
+            self.assertEqual((run.exchanges.count(), models.ToolCall.objects.filter(exchange__run=run).count()),
+                             (1, 0))
+            peer_run = peers[adapter.name]
+            self.assertEqual(adapter.peer_sent, [{'request': peer_run.request_sha256,
+                                                  'client_request_id': str(peer_run.run_identity),
+                                                  'deadline_s': settings.PARTICIPANT_LOOP_DEADLINE_SECONDS,
+                                                  'original': None}])
+            self.assertEqual((peer_run.state, peer_run.sent, peer_run.scope),
+                             ('succeeded', True, {'mode': 'replay', 'assessment': str(first.pk)}))
+            self.assertEqual([executor.__qualname__ for executor in adapter.executors],
+                             ['executor.<locals>.execute_tool'] * 2)
         self.assertEqual(len(self.corti.requests), 1)
         # the request is the revision alone: no title, member value or CPT Studio reading in it (I5)
         self.assertNotIn(encounter.title, json.dumps(astra.request_body))
         assessment = encounter.current_assessment
-        self.assertEqual(assessment.summary['participants_given'],
-                         [['astra', 'read', ['99213', '99214'], ''], ['fable', 'read', ['99213'], '']])
+        self.assertEqual(assessment, final)
+        for read in (first, final):  # assess #1 and assess #2 read the same frozen phase-1 readings
+            self.assertEqual(read.summary['participants_given'],
+                             [['astra', 'read', ['99213', '99214'], ''], ['fable', 'read', ['99213'], '']])
+        self.assertNotIn('peers_given', first.summary)
+        self.assertEqual(final.summary['peers_given'], [['astra', 'read', []], ['fable', 'read', []]])
         records = self.records(encounter_id)
         self.assertEqual((records['astra']['state'], records['astra']['run'], records['astra']['unverified_quotes']),
                          ('read', str(astra.pk), 1))
@@ -418,6 +530,9 @@ class ChainTests(HarnessCase):
                                                      {'code': '99214', 'quote': ''}])
         self.assertEqual((records['fable']['requested_model'], records['fable']['returned_model']),
                          ('claude-fable-5-1', 'claude-fable-5-1'))
+        self.assertEqual({name: (record['peer_state'], record['peer_run']) for name, record in records.items()},
+                         {name: ('read', str(peers[name].pk)) for name in ('astra', 'fable')})
+        self.assertEqual((jobs.assessment_phase(first), jobs.assessment_phase(final)), (1, 2))
         self.assertEqual(encounter.state, 'ready_for_review')
         summaries = [row['summary'] for row in self.client.get(f'/api/encounters/{encounter_id}').json()['activity']]
         self.assertIn('Astra request started', summaries)
@@ -429,12 +544,16 @@ class ChainTests(HarnessCase):
             encounter_id = self.create()
             drain()
             self.assertEqual([j.kind for j in self.jobs_of(encounter_id)],
-                             ['extract', 'analyze', 'predict', 'astra', 'assess'])
-            self.assertEqual(self.adapters['fable'].sent, [])
+                             ['extract', 'analyze', 'predict', 'astra', 'assess', 'astra_peer', 'assess'])
+            self.assertEqual((self.adapters['fable'].sent, self.adapters['fable'].peer_sent), ([], []))
             records = self.records(encounter_id)
             self.assertEqual((records['astra']['state'], records['fable']['state']), ('read', 'not_configured'))
             self.assertEqual(self.encounter(encounter_id).current_assessment.summary['participants_given'][0][:2],
                              ['astra', 'read'])
+            # the disabled participant has no peer review either, and its entry is harness@1's 'not configured'
+            self.assertEqual((records['astra']['peer_state'], records['fable']), ('read', jobs.not_configured_record(
+                'fable')))
+            self.assertEqual(self.peer_sends(), (1, 0))
 
     def test_a_participant_disabled_after_its_stage_was_queued_records_nothing_and_the_chain_goes_on(self):
         encounter_id = self.create()
@@ -442,10 +561,12 @@ class ChainTests(HarnessCase):
             jobs.run_job(jobs.claim_next())  # extract, analyze, predict: the Astra stage is queued
         with override_settings(ASTRA_MODE='disabled'):
             drain()
-        self.assertEqual([j.kind for j in self.jobs_of(encounter_id)][-3:], ['astra', 'fable', 'assess'])
+        self.assertEqual([j.kind for j in self.jobs_of(encounter_id)][-5:],
+                         ['astra', 'fable', 'assess', 'fable_peer', 'assess'])
         self.assertEqual(self.jobs_of(encounter_id)[3].result, {'participant': 'astra', 'state': 'disabled'})
         self.assertEqual(self.runs_of(encounter_id, 'astra'), [])
         self.assertEqual(len(self.adapters['fable'].sent), 1)
+        self.assertEqual(self.peer_sends(), (0, 1))
 
     def test_an_unavailable_participant_blocks_only_itself(self):
         # I10: its request cannot be built (e.g. no credentials) - a not-sent run with why; Corti and Fable run
@@ -460,6 +581,10 @@ class ChainTests(HarnessCase):
         records = self.records(encounter_id)
         self.assertEqual((records['astra']['state'], records['astra']['reason'], records['fable']['state']),
                          ('not_sent', 'Astra needs CPT_STUDIO_OPENAI_CREDENTIALS_FILE.', 'read'))
+        # its first assessment failed, so it never gets a peer review; Fable's still runs (HARNESS.md 11.1, I10)
+        self.assertEqual((records['astra']['peer_state'], records['astra']['peer_reason'],
+                          records['fable']['peer_state']), ('not_run', jobs.PEER_FIRST_NOT_READ, 'read'))
+        self.assertEqual(self.peer_sends(), (0, 1))
         self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
 
     def test_a_misconfigured_participant_is_recorded_not_sent(self):
@@ -477,6 +602,7 @@ class ChainTests(HarnessCase):
                          ('not_sent', '', {'mode': 'replay'}, None))
         self.assertEqual(self.records(encounter_id)['astra']['state'], 'not_sent')
         self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual((self.runs_of(encounter_id, 'astra', 'peer_review'), self.peer_sends()), ([], (0, 1)))
 
     def test_a_participant_failure_never_makes_the_encounter_provider_failed(self):
         self.adapters['astra'].outcome = 'failed'
@@ -487,6 +613,7 @@ class ChainTests(HarnessCase):
         self.assertEqual(self.records(encounter_id)['astra']['state'], 'failed')
         self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')  # I10, never provider_failed
         self.assertEqual(len(self.adapters['fable'].sent), 1)
+        self.assertEqual(self.peer_sends(), (0, 1))  # a failed first assessment takes no part in peer review
 
     def test_a_refused_reading_is_recorded_refused_and_never_read(self):
         self.adapters['fable'].returned_model = 'claude-other-model'  # I6: another model answered
@@ -498,6 +625,9 @@ class ChainTests(HarnessCase):
         self.assertIn('not claude-fable-5-1', record['reason'])
         given = self.encounter(encounter_id).current_assessment.summary['participants_given']
         self.assertEqual(given[1][:3], ['fable', 'refused', []])
+        # a reading that was not read takes no part in peer review, and no peer is shown it (HARNESS.md 11.1)
+        self.assertEqual((record['peer_state'], self.peer_sends()), ('not_run', (1, 0)))
+        self.assertNotIn('fable', self.adapters['astra'].peer_built[0]['peers'])
 
     def test_the_live_gate_refuses_a_live_participant_and_only_it(self):
         self.adapters['astra'].mode = 'live'
@@ -510,17 +640,23 @@ class ChainTests(HarnessCase):
         self.assertEqual(self.adapters['astra'].sent, [])
         self.assertEqual(len(self.adapters['fable'].sent), 1)  # Fable (replay) still runs (I10)
         self.assertEqual(self.encounter(encounter_id).current_assessment.provider_run, None)
+        self.assertEqual(self.peer_sends(), (0, 1))  # and its peer review: Astra's first assessment was never made
 
     def test_corti_disabled_still_runs_the_participants(self):
         with mock.patch('studio.jobs.get_provider', return_value=None):
             encounter_id = self.create()
             drain()
         chain = self.jobs_of(encounter_id)
-        self.assertEqual([j.kind for j in chain], ['extract', 'analyze', 'predict', 'astra', 'fable', 'assess'])
+        self.assertEqual([j.kind for j in chain], ['extract', 'analyze', 'predict', 'astra', 'fable', 'assess',
+                                                   'astra_peer', 'fable_peer', 'assess'])
         self.assertIsNone(chain[-1].provider_run_id)
-        self.assertTrue(chain[-1].idempotency_key.startswith(f'assess:{chain[2].context_id}:no-provider:p:'))
+        self.assertTrue(chain[5].idempotency_key.startswith(f'assess:{chain[2].context_id}:no-provider:p:'))
+        self.assertTrue(chain[-1].idempotency_key.startswith(f'assess:{chain[2].context_id}:no-provider:q:'))
         self.assertEqual(self.encounter(encounter_id).state, 'provider_not_run')
         self.assertEqual(self.records(encounter_id)['astra']['state'], 'read')
+        # with no Corti answer, a peer is shown the other model's frozen reading and no Corti conclusion
+        self.assertEqual(sorted(self.adapters['astra'].peer_built[0]['peers']), ['fable'])
+        self.assertEqual(self.peer_sends(), (1, 1))
 
     def test_a_second_review_s_assess_reads_the_participants_as_they_are(self):
         from tests.test_services_second_review import REPORT, TwoPassProvider, ask
@@ -536,13 +672,19 @@ class ChainTests(HarnessCase):
             drain()
         primary = self.runs_of(encounter_id, 'corti')[0]
         second = models.ProviderRun.objects.get(encounter_id=encounter_id, purpose='second_review')
-        astra, fable = self.runs_of(encounter_id, 'astra'), self.runs_of(encounter_id, 'fable')
+        astra = self.runs_of(encounter_id, 'astra', 'independent')
+        fable = self.runs_of(encounter_id, 'fable', 'independent')
         self.assertEqual((len(astra), len(fable)), (1, 1))  # the second review is Corti's own: nothing else is sent
         ids = hashlib.sha256(f'{astra[0].pk},{fable[0].pk}'.encode()).hexdigest()[:12]
         context = self.encounter(encounter_id).current_context
-        self.assertEqual(self.jobs_of(encounter_id)[-1].idempotency_key,
-                         f'assess:{context.pk}:{primary.pk}:review2:{second.pk}:p:{ids}')
+        # the assess it queues is an assess #1 (HARNESS.md 12.1), keyed as before, and its own peer chain follows it
+        chain = self.jobs_of(encounter_id)
+        self.assertEqual([j.kind for j in chain[-5:]], ['review2', 'assess', 'astra_peer', 'fable_peer', 'assess'])
+        self.assertEqual(chain[-4].idempotency_key, f'assess:{context.pk}:{primary.pk}:review2:{second.pk}:p:{ids}')
+        self.assertTrue(chain[-1].idempotency_key.startswith(
+            f'assess:{context.pk}:{primary.pk}:review2:{second.pk}:q:'))
         self.assertEqual(self.records(encounter_id)['astra']['run'], str(astra[0].pk))
+        self.assertEqual(self.encounter(encounter_id).current_assessment.second_run_id, second.pk)
 
 
 # --- unknown outcomes, reuse, failures --------------------------------------------------------------------------------
@@ -561,6 +703,9 @@ class UnknownOutcomeTests(HarnessCase):
         self.assertEqual(self.adapters['fable'].sent, [])
         records = self.records(encounter_id)
         self.assertEqual((records['astra']['state'], records['fable']['state']), ('unknown', 'blocked'))
+        # no first reading was read, so no peer stage follows: the first assessment is the final one (HARNESS.md 12.1)
+        self.assertEqual(([j.kind for j in self.jobs_of(encounter_id)][-1], self.peer_sends()), ('assess', (0, 0)))
+        self.assertEqual(jobs.assessment_phase(self.encounter(encounter_id).current_assessment), 1)
         encounter = self.encounter(encounter_id)
         self.assertEqual(encounter.state, 'provider_unknown')  # the encounter-wide block stays
         self.assertIn('reconciliation', self.client.get('/api/encounters').json()['encounters'][0]['queue_reasons'])
@@ -577,6 +722,8 @@ class UnknownOutcomeTests(HarnessCase):
         self.assertEqual(len(self.adapters['fable'].sent), 1)  # never sent before: sent once now
         records = self.records(encounter_id)
         self.assertEqual((records['astra']['state'], records['fable']['state']), ('read', 'read'))
+        self.assertEqual(self.peer_sends(), (1, 1))  # phase 2 runs for the new phase-1 set
+        self.assertEqual((records['astra']['peer_state'], records['fable']['peer_state']), ('read', 'read'))
         self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
         reconciled = models.AuditEvent.objects.get(encounter_id=encounter_id, event='provider.reconciled')
         self.assertEqual(reconciled.data, {'run': str(astra[0].pk), 'provider': 'astra'})
@@ -584,9 +731,11 @@ class UnknownOutcomeTests(HarnessCase):
         self.assertIn('Unknown Astra outcome reconciled', summaries)
 
     def test_an_adapter_that_raises_while_sending_leaves_an_unknown_outcome_to_reconcile(self):
-        # I8: an adapter answers every attempt with a RawExchange; one that raised may have sent the request, so its
-        # outcome is unknown - recorded, blocking every further send, and reconcilable - never a run left 'sending'
-        with mock.patch.object(self.adapters['astra'], 'send', side_effect=RuntimeError('synthetic adapter defect')), \
+        # I8: an adapter answers every run with a loop.LoopOutcome (harness@2's send_loop, HARNESS.md 11.2); one that
+        # raised may have sent the request, so its outcome is unknown - recorded, blocking every further send, and
+        # reconcilable - never a run left 'sending'
+        with mock.patch.object(self.adapters['astra'], 'send_loop',
+                               side_effect=RuntimeError('synthetic adapter defect')), \
                 self.assertLogs('studio.jobs', level='ERROR') as logged:
             encounter_id = self.create()
             drain()
@@ -596,6 +745,7 @@ class UnknownOutcomeTests(HarnessCase):
         self.assertEqual(astra[0].error, jobs.PARTICIPANT_RAISED_MESSAGE.format(label='Astra', error='RuntimeError'))
         self.assertNotIn('synthetic adapter defect', astra[0].error)  # the exception's text is logged, never shown
         self.assertEqual(astra[0].endpoint, ENDPOINTS['astra'])  # what the reservation named it calls
+        self.assertEqual(astra[0].exchanges.count(), 0)  # nothing the loop recorded is invented
         self.assertEqual([r.scope.get('held') for r in self.runs_of(encounter_id, 'fable')], ['unknown_outcome'])
         self.assertEqual([(j.kind, j.state) for j in self.jobs_of(encounter_id)][-3:],
                          [('astra', 'succeeded'), ('fable', 'succeeded'), ('assess', 'succeeded')])
@@ -606,6 +756,7 @@ class UnknownOutcomeTests(HarnessCase):
         drain()
         self.assertEqual((len(self.corti.requests), len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)),
                          (1, 1, 1))
+        self.assertEqual(self.peer_sends(), (1, 1))
         self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
 
     def test_corti_unknown_blocks_both_participants(self):
@@ -615,6 +766,7 @@ class UnknownOutcomeTests(HarnessCase):
         self.assertEqual(self.adapters['astra'].sent + self.adapters['fable'].sent, [])
         records = self.records(encounter_id)
         self.assertEqual((records['astra']['state'], records['fable']['state']), ('blocked', 'blocked'))
+        self.assertEqual(self.peer_sends(), (0, 0))  # nothing read, so no peer review is owed
         self.assertEqual(self.encounter(encounter_id).state, 'provider_unknown')
         corti = self.runs_of(encounter_id, 'corti')[0]
         response = self.post(f'/api/encounters/{encounter_id}/reconcile',
@@ -623,6 +775,7 @@ class UnknownOutcomeTests(HarnessCase):
         drain()
         self.assertEqual((len(self.corti.requests), len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)),
                          (2, 1, 1))
+        self.assertEqual(self.peer_sends(), (1, 1))
         self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
 
     def test_a_retained_answer_is_reused_and_nothing_is_sent(self):
@@ -639,6 +792,12 @@ class UnknownOutcomeTests(HarnessCase):
             self.assertEqual((reused.endpoint, reused.returned_model, reused.response_id, reused.scope),
                              (original.endpoint, original.returned_model, original.response_id, original.scope))
             self.assertEqual(self.records(second)[name]['state'], 'read')
+            # no open question here, so the peer request repeats too: its retained answer is reused as well
+            original, reused = self.runs_of(first, name, 'peer_review')[0], self.runs_of(second, name, 'peer_review')[0]
+            self.assertEqual((reused.state, reused.sent, reused.reused_from_id, reused.scope['assessment']),
+                             ('succeeded', False, original.pk, str(self.assessments(second)[0].pk)))
+            self.assertEqual(self.records(second)[name]['peer_state'], 'read')
+        self.assertEqual(self.peer_sends(), (1, 1))
         summaries = [row['summary'] for row in self.client.get(f'/api/encounters/{second}').json()['activity']]
         self.assertIn('Retained Astra result reused (no new request)', summaries)
 
@@ -651,6 +810,10 @@ class UnknownOutcomeTests(HarnessCase):
         self.assertEqual((len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)), (2, 1))
         live = self.runs_of(second, 'astra')[0]
         self.assertEqual((live.sent, live.reused_from_id, live.scope), (True, None, {'mode': 'live'}))
+        # nor in phase 2: the live participant's identical peer request is sent, never answered by the replayed one
+        peer = self.runs_of(second, 'astra', 'peer_review')[0]
+        self.assertEqual((peer.sent, peer.reused_from_id, peer.scope['mode']), (True, None, 'live'))
+        self.assertEqual(self.peer_sends(), (2, 1))
 
     def test_a_request_that_failed_is_never_sent_again(self):
         self.adapters['astra'].outcome = 'failed'
@@ -669,6 +832,7 @@ class UnknownOutcomeTests(HarnessCase):
         self.assertTrue(astra[1].error.startswith(jobs.FAILED_BEFORE_MESSAGE))
         self.assertEqual((astra[1].request_sha256, astra[1].purpose), (astra[0].request_sha256, 'independent'))
         self.assertEqual(self.records(encounter_id)['astra']['state'], 'not_sent')
+        self.assertEqual(self.records(encounter_id)['astra']['peer_state'], 'not_run')  # no first reading, no review
         self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
 
     def test_a_context_change_that_keeps_corti_s_request_reads_the_participants_as_they_are(self):
@@ -677,7 +841,8 @@ class UnknownOutcomeTests(HarnessCase):
         response = self.post(f'/api/encounters/{encounter_id}/context', {'setting': 'office'})
         self.assertEqual(response.status_code, 201, response.content)
         last = self.jobs_of(encounter_id)[-1]
-        astra, fable = self.runs_of(encounter_id, 'astra')[0], self.runs_of(encounter_id, 'fable')[0]
+        astra = self.runs_of(encounter_id, 'astra', 'independent')[0]
+        fable = self.runs_of(encounter_id, 'fable', 'independent')[0]
         corti = self.runs_of(encounter_id, 'corti')[0]
         ids = hashlib.sha256(f'{astra.pk},{fable.pk}'.encode()).hexdigest()[:12]
         self.assertEqual((last.kind, last.idempotency_key),
@@ -685,6 +850,12 @@ class UnknownOutcomeTests(HarnessCase):
         drain()
         self.assertEqual((len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)), (1, 1))
         self.assertEqual(self.records(encounter_id)['astra']['run'], str(astra.pk))
+        # the new assess #1 makes its own peer chain; its requests are the earlier ones (no open question, the same
+        # frozen readings), so their answers are reused and nothing more is sent
+        self.assertEqual(self.peer_sends(), (1, 1))
+        reused = [run for run in self.runs_of(encounter_id, purpose='peer_review') if run.reused_from_id]
+        self.assertEqual(sorted(run.provider for run in reused), ['astra', 'fable'])
+        self.assertEqual(jobs.assessment_phase(self.encounter(encounter_id).current_assessment), 2)
 
 
 @override_settings(**LIVE, **BOTH)
@@ -713,6 +884,7 @@ class MemberDateHoldTests(HarnessCase):
                                       'it gives Astra its turn.'))
         self.assertEqual(jobs._participants_owed(self.encounter(encounter_id).current_revision,
                                                  self.encounter(encounter_id).current_context), ())
+        self.assertEqual(self.peer_sends(), (0, 0))  # nor is a peer review sent while the hold stands
         response = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': ''})
         self.assertEqual(response.status_code, 201, response.content)
         drain()
@@ -720,6 +892,7 @@ class MemberDateHoldTests(HarnessCase):
                          (1, 1, 1))
         records = self.records(encounter_id)
         self.assertEqual((records['astra']['state'], records['fable']['state']), ('read', 'read'))
+        self.assertEqual(self.peer_sends(), (1, 1))  # settling the date gives the peer reviews their turn too
         self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
 
     def test_a_swept_predict_that_recorded_a_hold_queues_the_assess(self):
@@ -775,15 +948,17 @@ class SweepAndResumeTests(HarnessCase):
                          ('succeeded', 'astra', 'succeeded', str(astra.pk)))
         queued = self.jobs_of(encounter_id)[-1]
         self.assertEqual((queued.kind, queued.idempotency_key), ('fable', 'fable:' + jobs._chain_of(job)))
+        self.assertEqual(self.runs_of(encounter_id, 'astra')[0].exchanges.count(), 1)  # recorded with the outcome
         drain()
         self.assertEqual((len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)), (1, 1))
         self.assertEqual(self.records(encounter_id)['astra']['state'], 'read')
+        self.assertEqual(self.peer_sends(), (1, 1))
         self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
 
     def test_a_participant_left_mid_send_is_unknown_and_reconcile_resends_only_it(self):
         encounter_id = self.create()
         job = self.run_until('astra')
-        with mock.patch.object(self.adapters['astra'], 'send', side_effect=_WorkerDied()):
+        with mock.patch.object(self.adapters['astra'], 'send_loop', side_effect=_WorkerDied()):
             with self.assertRaises(_WorkerDied):
                 jobs.run_job(job)
         self.age(job)
@@ -798,6 +973,7 @@ class SweepAndResumeTests(HarnessCase):
         drain()
         self.assertEqual(len(self.corti.requests), 1)  # Corti's identical request is reused
         self.assertEqual((len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)), (1, 1))
+        self.assertEqual(self.peer_sends(), (1, 1))
         self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
 
     def test_a_participant_that_died_with_its_run_only_reserved_is_resumable(self):
@@ -818,7 +994,9 @@ class SweepAndResumeTests(HarnessCase):
         drain()
         self.assertEqual((len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)), (1, 1))
         # the swept reservation is no outcome: the assess reads the run the resumed stage sent
-        self.assertEqual(self.records(encounter_id)['astra']['run'], str(self.runs_of(encounter_id, 'astra')[1].pk))
+        self.assertEqual(self.records(encounter_id)['astra']['run'],
+                         str(self.runs_of(encounter_id, 'astra', 'independent')[1].pk))
+        self.assertEqual(self.peer_sends(), (1, 1))
         self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
 
     def test_a_stop_before_the_participant_sends_cancels_it_and_resume_sends_once(self):
@@ -833,6 +1011,7 @@ class SweepAndResumeTests(HarnessCase):
         self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
         drain()
         self.assertEqual((len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)), (1, 1))
+        self.assertEqual(self.peer_sends(), (1, 1))
         self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
 
     def test_a_chain_the_upgrade_started_stops_where_a_participant_would_send(self):
@@ -852,12 +1031,18 @@ class SweepAndResumeTests(HarnessCase):
         self.assertEqual((len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)), (1, 1))
         fable_job = [j for j in self.jobs_of(encounter_id) if j.kind == 'fable'][-1]
         self.assertFalse(fable_job.idempotency_key.endswith(jobs.UPGRADE_MARK))  # a member's Resume sends on
+        # and so does the chain's phase 2: its peer stages carry no mark and send (HARNESS.md 12.1)
+        peer_jobs = [j for j in self.jobs_of(encounter_id) if j.kind in models.Job.PEER_KINDS]
+        self.assertEqual([(j.kind, j.state, j.idempotency_key.endswith(jobs.UPGRADE_MARK)) for j in peer_jobs],
+                         [('astra_peer', 'succeeded', False), ('fable_peer', 'succeeded', False)])
+        self.assertEqual(self.peer_sends(), (1, 1))
 
     def test_the_upgrade_s_predict_marks_its_chain_and_no_participant_sends_for_it(self):
         with override_settings(FABLE_MODE='disabled'):
             encounter_id = self.create()
             drain()
         self.assertEqual((len(self.corti.requests), len(self.adapters['astra'].sent)), (1, 1))
+        self.assertEqual(self.peer_sends(), (1, 0))  # Astra's peer review, for the chain a member's upload started
         encounter = self.encounter(encounter_id)
         # the predict an upgrade's remake queues at a stage that never sends: Corti's answer is retained (reused) and so
         # is Astra's, but Fable - configured since - has none, and stops where it would send
@@ -872,10 +1057,15 @@ class SweepAndResumeTests(HarnessCase):
         self.assertEqual(chain[2].error, jobs.PARTICIPANT_UPGRADE_MESSAGE.format(label='Fable'))
         self.assertEqual((len(self.corti.requests), len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)),
                          (1, 1, 0))
+        self.assertEqual(self.peer_sends(), (1, 0))  # no assess #1 followed, so no peer review was asked for either
         self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
         drain()
         self.assertEqual(len(self.adapters['fable'].sent), 1)  # a member's Resume sends it, once
         self.assertEqual(self.records(encounter_id)['fable']['state'], 'read')
+        # the chain the Resume continued is a member's: its assess #1 is followed by both peer reviews, and Astra's
+        # request is new (it now shows Fable's frozen reading), so it is sent
+        self.assertEqual(self.peer_sends(), (2, 1))
+        self.assertEqual(jobs.assessment_phase(self.encounter(encounter_id).current_assessment), 2)
 
     def test_a_context_change_after_a_stop_gives_a_participant_with_no_outcome_its_turn(self):
         encounter_id = self.create()
@@ -896,6 +1086,7 @@ class SweepAndResumeTests(HarnessCase):
                          (1, 1, 1))
         records = self.records(encounter_id)
         self.assertEqual((records['astra']['state'], records['fable']['state']), ('read', 'read'))
+        self.assertEqual(self.peer_sends(), (1, 1))
         self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
 
     def test_a_participant_configured_since_gets_its_turn_and_the_other_reuses_its_answer(self):
@@ -908,10 +1099,14 @@ class SweepAndResumeTests(HarnessCase):
         drain()
         self.assertEqual((len(self.corti.requests), len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)),
                          (1, 1, 1))
-        astra = self.runs_of(encounter_id, 'astra')
+        astra = self.runs_of(encounter_id, 'astra', 'independent')
         self.assertEqual([(r.sent, r.reused_from_id) for r in astra], [(True, None), (False, astra[0].pk)])
         records = self.records(encounter_id)
         self.assertEqual((records['astra']['run'], records['fable']['state']), (str(astra[1].pk), 'read'))
+        # phase 2 for the new phase-1 set: Fable's first peer review, and Astra's again - its request now shows
+        # Fable's frozen reading, so it is a new request and sent
+        self.assertEqual(self.peer_sends(), (2, 1))
+        self.assertEqual((records['astra']['peer_state'], records['fable']['peer_state']), ('read', 'read'))
 
     def test_the_longest_assess_key_fits_with_a_resume(self):
         base = f'assess:{models.uuid.uuid4()}:{models.uuid.uuid4()}:review2:{models.uuid.uuid4()}'
@@ -933,9 +1128,12 @@ class AssessReadsTests(HarnessCase):
             encounter_id = self.create()
             drain()
         assessment = self.encounter(encounter_id).current_assessment
-        self.assertEqual(recorded, [(['99213'], date(2026, 10, 20), ('synthetic-passage-set',))])
-        self.assertEqual([(entry['code'], entry['passages'][0]['section']) for entry in assessment.retrieval],
-                         [('99213', 'Chapter VI §C')])
+        # once for assess #1 and once for assess #2 (HARNESS.md 12.1), each from its own prefetched lookup
+        self.assertEqual(recorded, [(['99213'], date(2026, 10, 20), ('synthetic-passage-set',))] * 2)
+        for item in self.assessments(encounter_id):
+            self.assertEqual([(entry['code'], entry['passages'][0]['section']) for entry in item.retrieval],
+                             [('99213', 'Chapter VI §C')])
+        self.assertEqual(assessment, self.assessments(encounter_id)[-1])
 
     def test_retrieval_traces_each_looked_up_code_and_says_when_no_source_applies(self):
         encounter_id = self.create()
@@ -957,7 +1155,24 @@ class AssessReadsTests(HarnessCase):
         with mock.patch('studio.jobs.prefetched_lookup', side_effect=recording):
             self.create()
             drain()
-        self.assertEqual(seen, [('99213', '99214')])  # Corti's selected code and both participants' codes
+        # Corti's selected code and both participants' codes, for assess #1 and again for assess #2, whose peer reviews
+        # add no code here (HARNESS.md 12.1)
+        self.assertEqual(seen, [('99213', '99214'), ('99213', '99214')])
+
+    def test_a_code_proposed_after_peer_review_is_prefetched_for_the_final_assessment(self):
+        seen = []
+        real = prefetched_lookup
+
+        def recording(codes):
+            seen.append(tuple(codes))
+            return real(codes)
+        self.adapters['fable'].peer_codes = [('99212', TIME_QUOTE)]
+        with mock.patch('studio.jobs.prefetched_lookup', side_effect=recording):
+            encounter_id = self.create()
+            drain()
+        self.assertEqual(seen, [('99213', '99214'), ('99212', '99213', '99214')])
+        self.assertEqual(self.encounter(encounter_id).current_assessment.summary['peers_given'],
+                         [['astra', 'read', []], ['fable', 'read', ['99212']]])
 
     def test_a_stored_answer_that_no_longer_matches_its_hash_is_refused_not_failed(self):
         encounter_id = self.create()
@@ -1042,6 +1257,12 @@ class DocumentKindTests(HarnessCase):
         run = self.runs_of(encounter_id, 'astra')[0]
         self.assertEqual(run.request_body['original'], original)  # named, never its bytes
         self.assertNotIn('%PDF', json.dumps(run.request_body))
+        # the peer review attaches no original (HARNESS.md 12.4): none is named in its request, none given to its loop
+        peer = self.runs_of(encounter_id, 'astra', 'peer_review')[0]
+        adapter = self.adapters['astra']
+        self.assertEqual((adapter.peer_built[0]['kind'], adapter.peer_sent[0]['original']), ('pdf', None))
+        self.assertNotIn('original', peer.request_body)
+        self.assertNotIn(source.sha256, json.dumps(peer.request_body))
 
     def test_an_original_that_no_longer_reads_back_is_not_sent(self):
         pdf = docgen.make_pdf([OFFICE_NOTE.replace('\n', ' ')[:900]])
@@ -1059,6 +1280,7 @@ class DocumentKindTests(HarnessCase):
         self.assertEqual(self.adapters['astra'].sent, [])
         drain()
         self.assertEqual(len(self.adapters['fable'].sent), 1)
+        self.assertEqual(self.peer_sends(), (0, 1))
 
     def test_kinds_for_docx_txt_paste_and_addendum(self):
         self.assertEqual(self.kind_of(self.upload(b'Synthetic plain text note.\n' + OFFICE_NOTE.encode(), 'note.txt')),
@@ -1072,12 +1294,15 @@ class DocumentKindTests(HarnessCase):
         drain()
         revision = self.encounter(paste).current_revision
         self.assertEqual(jobs._participant_document(revision), ('addendum', None, None))
-        # the addendum revision keeps its parent's pages; the participants' framing still reads all of its text
+        # the addendum revision keeps its parent's pages; the participants' framing still reads all of its text, in
+        # their first readings and in their peer reviews
         for name in ('astra', 'fable'):
-            run = models.ProviderRun.objects.filter(revision=revision, provider=name).get()
-            self.assertEqual((run.state, run.sent), ('succeeded', True))
-            self.assertIn('Synthetic addendum text.', run.request_body['input'])
+            for purpose in ('independent', 'peer_review'):
+                run = models.ProviderRun.objects.filter(revision=revision, provider=name, purpose=purpose).get()
+                self.assertEqual((run.state, run.sent), ('succeeded', True))
+                self.assertIn('Synthetic addendum text.', run.request_body['input'])
         self.assertEqual(self.adapters['astra'].built[-1], ('addendum', None))
+        self.assertEqual(self.adapters['astra'].peer_built[-1]['kind'], 'addendum')
         docx = docgen.make_docx([OFFICE_NOTE])
         self.assertEqual(self.kind_of(self.upload(docx, 'note.docx')), ('docx', None))
 
