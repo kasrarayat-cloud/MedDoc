@@ -1,10 +1,12 @@
-"""The participant access check (HARNESS.md 8, 11.2; checklist item 1.3): it refuses unless the participant is live,
-the installation synthetic-only and authorized, and the single-flight lock free; it sends one request through the real
-adapter's tool loop and its real session factory (the tools answered by a trivial local executor), prints one JSON
-receipt with no secret in it - every exchange's ids included - writes nothing to the database and releases the lock.
-Offline: requests.Session is patched to return a fake session; data is synthetic."""
+"""The participant access check (HARNESS.md 8, 11.2, 12.8; checklist item 1.3): it refuses unless the participant is
+live, the installation synthetic-only and authorized, and the single-flight lock free; it sends one request through the
+real adapter's tool loop and its real session factory (the tools answered by a trivial local executor) - Fable's the
+harness-3 one, with no output format - prints one JSON receipt with no secret in it - every exchange's ids included -
+writes nothing to the database and releases the lock. Offline: requests.Session is patched to return a fake session;
+data is synthetic."""
 from __future__ import annotations
 
+import hashlib
 import json
 from io import StringIO
 from unittest import mock
@@ -15,11 +17,12 @@ from django.db import connection, connections
 from django.test import override_settings
 
 from studio.jobs import PROVIDER_LOCK_KEY
+from studio.participants import prompt, reading
 
 from tests.test_participants_support import (ANTHROPIC_KEY, FACTS_ARGUMENTS, OPENAI_KEY, SECRETS, FakeResponse,
                                              FakeSession, OfflineDatabaseTestCase, anthropic_env, astra_tool_call,
-                                             astra_with, empty_reading, fable_tool_use, fixture_bytes, openai_env,
-                                             write_file)
+                                             astra_with, empty_reading, fable_tool_use, fable_with, fixture_bytes,
+                                             fixture_reading, openai_env, write_file)
 from tests.test_providers import (CLIENT_ID, CLIENT_SECRET, FIXTURES as CORTI_FIXTURES, TOKEN, dotenv as corti_env,
                                   token_response)
 
@@ -185,6 +188,36 @@ class AccessCheckTests(OfflineDatabaseTestCase):
                           'succeeded', 'req_synth_2', 'msg_synthetic_fixture_0001', ''))
         self.assertEqual(receipt['estimated_cost']['estimated_usd'], '0.078200')
         self.assertEqual(receipt['reading']['codes'], ['45385', '45380'])
+        self.assertLockFree()
+
+    def test_fable_sends_the_harness_3_request_with_no_output_format(self):
+        """HARNESS.md 12.8: the check sends the pipeline's own Fable request - no output format, the reading schema in
+        the system prompt, the two strict tools with tool_choice auto - and reads its answer as the pipeline does."""
+        raw = fixture_bytes('fable-colonoscopy.response.json')
+        receipt, error, session = self.check('fable', FakeResponse(200, raw, headers={'request-id': 'req_synth_3'}))
+        self.assertIsNone(error)
+        (call,) = session.calls
+        sent = json.loads(call['data'])
+        self.assertEqual(receipt['adapter_version'], 'anthropic-messages@cptstudio-harness-3')
+        self.assertEqual(sent['output_config'], {'effort': 'medium'})
+        self.assertEqual(sent['system'], prompt.INSTRUCTIONS + prompt.schema_instruction(prompt.SCHEMA))
+        self.assertEqual(([tool['name'] for tool in sent['tools']], [tool['strict'] for tool in sent['tools']],
+                          sent['tool_choice']), (['cms_code_facts', 'cms_policy_passages'], [True, True],
+                                                 {'type': 'auto'}))
+        self.assertNotIn('"format"', call['data'].decode())
+        self.assertEqual(receipt['request_sha256'], hashlib.sha256(call['data']).hexdigest())  # pasted: sent as stored
+
+    def test_fable_reads_a_fenced_answer_and_fails_on_one_that_is_not_one_object(self):
+        fenced = fable_with(f'```json\n{json.dumps(fixture_reading())}\n```')
+        receipt, error, _ = self.check('fable', FakeResponse(200, fenced))
+        self.assertIsNone(error)
+        self.assertEqual((receipt['reading']['refused'], receipt['reading']['codes']), (False, ['45385', '45380']))
+        prose = fable_with(f'Here is my reading. {json.dumps(fixture_reading())}')
+        receipt, error, _ = self.check('fable', FakeResponse(200, prose))
+        self.assertEqual((receipt['outcome'], receipt['reading']['refused'], receipt['reading']['problems']),
+                         ('succeeded', True, [f'The reading was not used: {reading.NOT_ONE_OBJECT}.']))
+        self.assertEqual(error, 'The Fable access check did not pass: see the receipt.')
+        self.assertNotIn('Here is my reading', json.dumps(receipt))
         self.assertLockFree()
 
     def test_corti_one_coding_request_and_a_receipt_with_no_secret(self):

@@ -1,6 +1,8 @@
-"""Participant readings (HARNESS.md 4; I6, I7): each vendor's answer shapes (good, refusal, truncated, wrong model,
-fallback), the strict JSON and CPT Studio's own schema validation, the bounds, the item-level rules, and quote location
-(every span an exact slice of the revision text; anything else unverified and never evidence). Offline and synthetic
+"""Participant readings (HARNESS.md 4, 12.8; I6, I7): each vendor's answer shapes (good, refusal, truncated, wrong
+model, fallback), the strict JSON and CPT Studio's own schema validation, the bounds, the item-level rules, and quote
+location (every span an exact slice of the revision text; anything else unverified and never evidence); Fable's
+harness-3 answer, which nothing at Anthropic constrained, read only when it is exactly one JSON object (alone or alone
+in one json code fence), and Fable's earlier versions' stored runs read exactly as before. Offline and synthetic
 (test_participants_support)."""
 from __future__ import annotations
 
@@ -12,15 +14,25 @@ import time
 from studio.participants import anthropic_fable, loop, openai_astra, prompt, reading
 from studio.participants.anthropic_fable import FableParticipant
 from studio.participants.openai_astra import AstraParticipant
-from studio.types import EvidenceSpan, ExtractionIssue, ParticipantLesion, ProviderRequest
+from studio.providers.base import request_sha256
+from studio.types import EvidenceSpan, ExtractionIssue, ParticipantLesion, ProviderRequest, sha256_json
 
-from tests.test_participants_support import (FIXTURE_SHA256, FIXTURES, NOTE, PAGE_BREAK, PAGES, OfflineTestCase,
-                                             astra_envelope, astra_tool_call, astra_with, changed, code, empty_reading,
-                                             fable_envelope, fable_with, fixture_bytes, fixture_reading, service)
+from tests.test_participants_support import (FIXTURE_SHA256, FIXTURES, NOTE, ORIGINAL, PAGE_BREAK, PAGES,
+                                             OfflineTestCase, astra_envelope, astra_tool_call, astra_with, changed,
+                                             code, empty_reading, fable_envelope, fable_harness_2, fable_with,
+                                             fixture_bytes, fixture_reading, service)
 
 # Model-written text shaped like a descriptor (synthetic placeholder wording, refutation round 1, IND-2): never repeated
 REFUSAL_WORDING = ('I will not code this. 45385 is SYNTHETIC-DESCRIPTOR-WORDING with removal of lesion(s) by snare '
                    'technique, single or multiple, PLACEHOLDER-FOR-LICENSED-TEXT.')
+PROSE_MARK = 'SYNTHETIC-MODEL-PROSE-0001'  # model-written words around an answer: never repeated in a problem
+NOT_ONE = f'The reading was not used: {reading.NOT_ONE_OBJECT}.'
+# The harness@2 head's own readings of stored Fable runs (9d773838c; sha256_json of the whole ParticipantReading).
+HARNESS_2_READINGS = {
+    'fixture': '55d0186ae7283cba8f5ed7db54572e283cc300c803d679fc40d210e66ad0d179',
+    'fenced': 'f953fb596922a47aff32369734e3d177be40badb091013b32667d18abc2af5a8',
+    'fixture as harness@1': 'f1733b797ef8723496c2604702db9b13cd90e3e0fcd893a15c4df8c183857d34',
+}
 
 
 def located(text: str, quote: str) -> list[tuple[int, int, str]]:
@@ -328,6 +340,229 @@ class FableAnswerTests(_GoodAnswerContract, OfflineTestCase):
             {'type': 'thinking', 'thinking': poisoned, 'signature': 'synthetic'}, {'type': 'text', 'text': answer[:25]},
             {'type': 'redacted_thinking', 'data': 'synthetic'}, {'type': 'text', 'text': answer[25:]}]))
         self.assertEqual((result.refused, [c.code for c in result.codes]), (False, ['45385', '45380']))
+
+
+class SoleObjectTests(OfflineTestCase):
+    """reading.sole_object (HARNESS.md 12.8), the one implementation both of Fable's harness-3 readers use: exactly one
+    JSON object, alone or alone in a single json code fence, its text returned unchanged; anything else refused in CPT
+    Studio's own words; what still is not one object is left to the strict reader."""
+    OBJECT = '{"a": [1, "```"], "b": {"c": "x"}}'  # backticks inside a string are the object's own
+
+    def test_a_bare_object_or_one_alone_in_a_single_fence_is_returned_unchanged(self):
+        o = self.OBJECT
+        cases = {o: o, f' \n\t{o}\r\n ': o, f'```json\n{o}\n```': o, f'```\n{o}\n```': o,
+                 f'```json\r\n{o}\r\n```': o, f'\n\n```json  \n\n  {o}\n\n  ```\n': o, '{}': '{}',
+                 '```json\n{\n  "a": 1\n}\n```': '{\n  "a": 1\n}'}
+        for text, expected in cases.items():
+            with self.subTest(text=text[:16]):
+                self.assertEqual(reading.sole_object(text), (expected, ''))
+
+    def test_anything_else_is_refused_in_cpt_studios_own_words(self):
+        o = self.OBJECT
+        cases = {
+            'prose before': f'{PROSE_MARK}: {o}', 'prose after': f'{o}\n{PROSE_MARK}.',
+            'prose before a fence': f'{PROSE_MARK}\n```json\n{o}\n```',
+            'prose after a fence': f'```json\n{o}\n```\n{PROSE_MARK}',
+            'a fence naming another language': f'```javascript\n{o}\n```',
+            'a fence naming JSON in capitals': f'```JSON\n{o}\n```', 'a fence on one line': f'```json {o} ```',
+            "a fence closed on the object's line": f'```json\n{o}```', 'an unclosed fence': f'```json\n{o}',
+            'a fence closed twice': f'```json\n{o}\n```\n```', 'an empty fence': '```json\n\n```',
+            'tildes for a fence': f'~~~json\n{o}\n~~~', 'an array': f'[{o}]', 'a string': '"{}"', 'a number': '7',
+            'a truncated object': o[:-3], 'nothing': '', 'only whitespace': ' \n\t\r',
+            'a no-break space before': ' ' + o, 'a form feed after': o + '\x0c', 'a byte order mark': '﻿' + o,
+            'a zero-width space after': o + '​',
+        }
+        for label, text in cases.items():
+            with self.subTest(label):
+                self.assertEqual(reading.sole_object(text), ('', reading.NOT_ONE_OBJECT))
+        for value in (None, b'{}', 7):
+            self.assertEqual(reading.sole_object(value), ('', 'there is no answer text'))
+
+    def test_what_still_is_not_one_object_is_handed_on_unchanged_and_the_strict_reader_refuses_it(self):
+        o = self.OBJECT
+        cases = ((f'{o}\n{o}', f'{o}\n{o}'),  # two objects
+                 (f'```json\n{o}\n```\n```json\n{o}\n```', f'{o}\n```\n```json\n{o}'),  # two fences
+                 (f'```json\n{o}\n{o}\n```', f'{o}\n{o}'),  # two objects in one fence
+                 (o[:-1], o[:-1]),  # a truncated object that happens to close a brace
+                 (f'{o} and {{x}}', f'{o} and {{x}}'))  # prose that happens to close a brace
+        for text, handed in cases:
+            with self.subTest(text=text[:20]):
+                self.assertEqual(reading.sole_object(text), (handed, ''))
+                with self.assertRaises(reading.JSONRefused):
+                    reading.strict_json_text(handed)
+
+
+class FableUnconstrainedAnswerTests(OfflineTestCase):
+    """HARNESS.md 12.8: a harness-3 Fable answer, which nothing at Anthropic constrained, is read only when it is
+    exactly one JSON object, alone or alone in a single json code fence; anything else is refused whole in CPT Studio's
+    own words. Then everything that already happened happens: strict JSON, CPT Studio's own schema validation, the
+    bounds and the located quotes (I7) - and before all of it the wrong-model, fallback and stop-reason refusals
+    (I6)."""
+
+    def setUp(self):
+        super().setUp()
+        self.adapter = FableParticipant(self.tmp / 'never-read.env')
+        self.request = self.adapter.build_request(NOTE, PAGES, 'paste', None)
+        self.answer = json.dumps(fixture_reading())
+        self.good = self.adapter.read(self.request, fixture_bytes('fable-colonoscopy.response.json'))
+        self.assertEqual((self.good.refused, self.good.problems, self.good.unverified_quotes,
+                          self.good.adapter_version), (False, (), 0, 'anthropic-messages@cptstudio-harness-3'))
+
+    def read(self, text, **fields):
+        return self.adapter.read(self.request, fable_with(text, **fields))
+
+    def content(self, *blocks):
+        return self.adapter.read(self.request, json.dumps(dict(fable_envelope(), content=list(blocks))).encode())
+
+    def refused(self, text, **fields):
+        result = self.read(text, **fields)
+        self.assertTrue(result.refused)
+        self.assertEqual((result.codes, result.services, result.date_of_service, result.questions), ((), (), '', ()))
+        (problem,) = result.problems
+        return problem
+
+    def test_a_bare_object_and_one_alone_in_a_single_fence_are_read_alike(self):
+        pretty = json.dumps(fixture_reading(), indent=2)
+        for text in (self.answer, f'\n  {self.answer}\n\n', f'```json\n{self.answer}\n```', f'```\n{self.answer}\n```',
+                     f'\n```json\r\n{pretty}\r\n```\n', f'```json\n\n{pretty}\n\n```'):
+            with self.subTest(text=text[:12]):
+                self.assertEqual(self.read(text), self.good)
+
+    def test_text_blocks_are_joined_before_the_object_is_found_and_thinking_is_never_read(self):
+        fenced = f'```json\n{self.answer}\n```'
+        thinking = {'type': 'thinking', 'thinking': '', 'signature': 'synthetic'}
+        self.assertEqual(self.content(thinking, {'type': 'text', 'text': fenced[:9]},
+                                      {'type': 'text', 'text': fenced[9:]}), self.good)
+        held = {'type': 'thinking', 'thinking': fenced, 'signature': 'synthetic'}  # an object there answers nothing
+        self.assertEqual(self.content(held, {'type': 'text', 'text': PROSE_MARK}).problems, (NOT_ONE,))
+        self.assertEqual(self.content(thinking, {'type': 'text', 'text': 'Here is the reading.'},
+                                      {'type': 'text', 'text': self.answer}).problems, (NOT_ONE,))
+
+    def test_anything_but_one_object_is_refused_whole_in_cpt_studios_own_words(self):
+        answer = self.answer
+        not_one = {'prose before': f'{PROSE_MARK} {answer}', 'prose after': f'{answer}\n\n{PROSE_MARK}',
+                   'prose before a fence': f'{PROSE_MARK}\n```json\n{answer}\n```',
+                   'prose after a fence': f'```json\n{answer}\n```\n{PROSE_MARK}',
+                   'a fence naming another language': f'```js\n{answer}\n```',
+                   'an unclosed fence': f'```json\n{answer}',
+                   'a truncated object': answer[:-40], 'an array': f'[{answer}]',
+                   'model wording alone': REFUSAL_WORDING, 'nothing': ''}
+        for label, text in not_one.items():
+            with self.subTest(label):
+                problem = self.refused(text)
+                self.assertEqual(problem, NOT_ONE)
+        closes = answer[:answer.index('}, "services"') + 1]  # a truncated object that happens to close a brace
+        self.assertTrue(closes.endswith('}'))
+        strict = {'two objects': f'{answer}\n{answer}', 'two objects in one fence': f'```json\n{answer}\n{answer}\n```',
+                  'two fences': f'```json\n{answer}\n```\n\n```json\n{answer}\n```',
+                  'a truncated object that closes a brace': closes,
+                  'prose closing a brace after the object': f'{answer} {PROSE_MARK} {{1}}'}
+        for label, text in strict.items():
+            with self.subTest(label):
+                problem = self.refused(text)
+                self.assertTrue(problem.startswith('The reading was not used: the answer is not valid JSON ('), problem)
+                self.assertNotIn(PROSE_MARK, problem)
+        for words in (PROSE_MARK, 'SYNTHETIC-DESCRIPTOR', 'I will not code', 'colonoscope'):
+            self.assertNotIn(words, NOT_ONE)
+
+    def test_strict_json_the_schema_and_the_bounds_refuse_as_before_inside_a_fence(self):
+        def fenced(value):
+            return f'```json\n{value if isinstance(value, str) else json.dumps(value)}\n```'
+        good = fixture_reading()
+        cases = {
+            fenced(dict(good, summary='x')):
+                "the answer breaks the reading schema: the reading has a field the schema does not allow ('summary')",
+            fenced(changed(good, codes=[dict(good['codes'][0], units='1')])):
+                'the answer breaks the reading schema: codes[0].units is not an integer',
+            fenced('{"date_of_service":{"value":"","evidence":[]},"date_of_service":{"value":"","evidence":[]}}'):
+                'the answer repeats a JSON object key',
+            fenced(json.dumps(empty_reading())[:-1] + ',"x":NaN}'): 'the answer contains a non-finite number',
+            fenced(json.dumps(empty_reading(), ensure_ascii=True).replace('[]', '["\\ud800"]', 1)):
+                'the answer contains NUL or unpaired surrogate characters',
+            fenced(empty_reading(codes=[code() for _ in range(65)])):
+                'it lists 65 codes, more than the 64 this adapter accepts',
+        }
+        for text, expect in cases.items():
+            with self.subTest(expect=expect):
+                problem = self.refused(text)
+                self.assertTrue(problem.startswith(f'The reading was not used: {expect}'), problem)
+        result = self.read(fenced(empty_reading(services=[service(evidence=[
+            'The colonoscope was advanced to the cecum.', 'not in the note at all, verbatim'])])))
+        quotes = result.services[0].evidence  # located exactly as a bare object's are (I7)
+        self.assertEqual([(bool(item.spans), item.reason) for item in quotes], [(True, ''), (False, 'not found')])
+        self.assertEqual([NOTE[span.start:span.end] == span.text for span in quotes[0].spans], [True])
+
+    def test_the_vendors_refusals_come_first_and_never_meet_the_object_rule(self):
+        prose = f'{PROSE_MARK} and no object'
+        wrong = self.read(prose, model='claude-opus-5-5')
+        self.assertEqual((wrong.refused, wrong.returned_model), (True, 'claude-opus-5-5'))
+        self.assertIn("it names model 'claude-opus-5-5' as the model that answered, not claude-fable-5-1",
+                      wrong.problems[0])
+        self.assertEqual(self.refused(self.answer[:-40], stop_reason='max_tokens'),
+                         'The reading was not used: the response was cut off at the output limit.')
+        self.assertEqual(self.refused(prose, stop_reason='refusal', stop_details={'category': 'cyber'}),
+                         'The reading was not used: the model refused (category cyber).')
+        self.assertIn('it stopped for tool_use, not at the end of its turn',
+                      self.refused(f'```json\n{self.answer}\n```', stop_reason='tool_use'))
+        envelope = json.loads(fable_with(f'```json\n{self.answer}\n```'))
+        envelope['usage']['iterations'] = [{'type': 'fallback_message', 'model': 'claude-fable-5-1'}]
+        self.assertIn('a server-side fallback took part',
+                      self.adapter.read(self.request, json.dumps(envelope).encode()).problems[0])
+
+
+class FableEarlierVersionTests(OfflineTestCase):
+    """HARNESS.md 12.8: a stored harness@2 or harness@1 Fable run is read exactly as before. Its answer's text is read
+    as JSON as it stands, so a fence or prose is refused there as it always was, and the readings are the harness@2
+    head's own (sha256 pinned at 9d773838c). The requests are the harness@2 adapter's own bodies (fable_harness_2)."""
+
+    def setUp(self):
+        super().setUp()
+        self.adapter = FableParticipant(self.tmp / 'never-read.env')
+        self.current = self.adapter.build_request(NOTE, PAGES, 'pdf', ORIGINAL)
+        body = fable_harness_2(self.current.body)
+        self.requests = {version: ProviderRequest(provider='fable', adapter_version=version, body=body,
+                                                  canonical_sha256=request_sha256(body), contexts=(NOTE,))
+                         for version in (anthropic_fable.ADAPTER_VERSION_2, anthropic_fable.ADAPTER_VERSION_1)}
+
+    def test_each_version_is_still_read_and_reads_as_the_harness_2_head_read_it(self):
+        self.assertEqual(anthropic_fable.READ_VERSIONS, ('anthropic-messages@cptstudio-harness-3',
+                                                         'anthropic-messages@cptstudio-harness-2',
+                                                         'anthropic-messages@cptstudio-harness-1'))
+        raw = fixture_bytes('fable-colonoscopy.response.json')
+        older, oldest = (anthropic_fable.read_response(self.requests[version], raw) for version in
+                         (anthropic_fable.ADAPTER_VERSION_2, anthropic_fable.ADAPTER_VERSION_1))
+        self.assertEqual((older.refused, older.adapter_version), (False, anthropic_fable.ADAPTER_VERSION_2))
+        self.assertEqual(sha256_json(older), HARNESS_2_READINGS['fixture'])
+        self.assertEqual(sha256_json(oldest), HARNESS_2_READINGS['fixture as harness@1'])
+        current = self.adapter.read(self.current, raw)  # a bare object reads alike in every version but its name
+        self.assertEqual(dataclasses.replace(older, adapter_version=current.adapter_version), current)
+
+    def test_a_fence_or_prose_is_refused_there_as_it_always_was(self):
+        answer = json.dumps(fixture_reading())
+        cases = ((f'```json\n{answer}\n```', 'the answer is not valid JSON (Expecting value at character 0)'),
+                 (f'```\n{answer}\n```', 'the answer is not valid JSON (Expecting value at character 0)'),
+                 (f'Here is the reading: {answer}', 'the answer is not valid JSON (Expecting value at character 0)'),
+                 (f'{answer}\nDone.', f'the answer is not valid JSON (Extra data at character {len(answer) + 1})'))
+        for version, request in self.requests.items():
+            for text, expect in cases:
+                with self.subTest(version=version, text=text[:12]):
+                    result = anthropic_fable.read_response(request, fable_with(text))
+                    self.assertEqual((result.refused, result.adapter_version, result.problems),
+                                     (True, version, (f'The reading was not used: {expect}.',)))
+        fenced = anthropic_fable.read_response(self.requests[anthropic_fable.ADAPTER_VERSION_2],
+                                               fable_with(f'```json\n{answer}\n```'))
+        self.assertEqual(sha256_json(fenced), HARNESS_2_READINGS['fenced'])
+
+    def test_a_harness_3_answer_is_never_read_as_an_earlier_version_nor_an_earlier_one_as_harness_3(self):
+        fenced = fable_with(f'```json\n{json.dumps(fixture_reading())}\n```')
+        self.assertFalse(self.adapter.read(self.current, fenced).refused)  # harness-3 reads its fence
+        self.assertTrue(anthropic_fable.read_response(self.requests[anthropic_fable.ADAPTER_VERSION_2], fenced).refused)
+        for version in ('anthropic-messages@cptstudio-harness-4', 'anthropic-messages@cptstudio-harness-0'):
+            request = dataclasses.replace(self.current, adapter_version=version)
+            with self.subTest(version=version):
+                self.assertEqual(self.adapter.read(request, fenced).problems, (
+                    f"The reading was not used: it was recorded for 'fable' with adapter {version!r}, not 'fable' with "
+                    "'anthropic-messages@cptstudio-harness-3'.",))
 
 
 class ReadingTests(OfflineTestCase):

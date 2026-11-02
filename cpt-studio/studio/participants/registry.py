@@ -16,11 +16,14 @@ from studio.types import ParticipantReading, PeerReview
 _ADAPTERS = {openai_astra.NAME: openai_astra.AstraParticipant, anthropic_fable.NAME: anthropic_fable.FableParticipant}
 _CREDENTIALS = {openai_astra.NAME: ('OPENAI_CREDENTIALS_FILE', 'Astra'),
                 anthropic_fable.NAME: ('ANTHROPIC_CREDENTIALS_FILE', 'Fable')}
-# A stored first reading is read by the version that recorded it: harness@2's, or harness@1's exactly as before.
+# A stored first reading is read by the version that recorded it: the current one's, or an earlier one's exactly as
+# before (Astra: harness@2, harness@1; Fable: harness-3, harness@2, harness@1 - HARNESS.md 12.8).
 _READERS = {(module.NAME, version): module.read_response
             for module in (openai_astra, anthropic_fable) for version in module.READ_VERSIONS}
-# Only harness@2 has a peer review (HARNESS.md 11.1).
-_PEER_READERS = {(module.NAME, module.ADAPTER_VERSION): module.read_peer for module in (openai_astra, anthropic_fable)}
+# Only harness@2 and later have a peer review (HARNESS.md 11.1): Astra's harness@2, Fable's harness-3 and harness@2.
+_PEER_READERS = {(openai_astra.NAME, openai_astra.ADAPTER_VERSION): openai_astra.read_peer,
+                 **{(anthropic_fable.NAME, version): anthropic_fable.read_peer
+                    for version in anthropic_fable.PEER_READ_VERSIONS}}
 
 
 def build(name: str, mode: str):
@@ -53,10 +56,10 @@ def build(name: str, mode: str):
 
 
 def reader(provider: str, adapter_version: str) -> Callable[..., ParticipantReading]:
-    """The reader for a stored first-reading run, by the provider and adapter version that recorded it (harness@2's, or
-    harness@1's, read exactly as before); ProviderUnavailable for any other pair, so a response is only ever read as the
-    version that recorded it. It is called as ``reader(request, response_bytes)`` or with the refs the run's own tool
-    calls returned, ``reader(request, response_bytes, refs_retrieved)``."""
+    """The reader for a stored first-reading run, by the provider and adapter version that recorded it (the current
+    version's, or an earlier one's, read exactly as before); ProviderUnavailable for any other pair, so a response is
+    only ever read as the version that recorded it. It is called as ``reader(request, response_bytes)`` or with the refs
+    the run's own tool calls returned, ``reader(request, response_bytes, refs_retrieved)``."""
     try:
         return _READERS[(provider, adapter_version)]
     except (KeyError, TypeError):
@@ -66,7 +69,7 @@ def reader(provider: str, adapter_version: str) -> Callable[..., ParticipantRead
 
 def peer_reader(provider: str, adapter_version: str) -> Callable[..., PeerReview]:
     """The reader for a stored peer-review run (HARNESS.md 11.1), called as ``peer_reader(request, response_bytes,
-    refs_retrieved)``; ProviderUnavailable for any pair but a harness@2 participant's."""
+    refs_retrieved)``; ProviderUnavailable for any pair but a version with a peer review (harness@2 or later)."""
     try:
         return _PEER_READERS[(provider, adapter_version)]
     except (KeyError, TypeError):

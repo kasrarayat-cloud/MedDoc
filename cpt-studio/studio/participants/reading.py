@@ -21,6 +21,11 @@ has are named.
 references_used (harness-reading@2, HARNESS.md 11.2) is the participant's claim. Each entry's ``retrieved`` is CPT
 Studio's check of it: True only when the ref is among ``refs_retrieved``, the refs the tool results of that participant's
 own run returned to it (loop.LoopOutcome.refs_retrieved); a reference cited but never retrieved stays False.
+
+An answer no structured-output mode constrained (Fable's since anthropic-messages@cptstudio-harness-3, HARNESS.md 12.8)
+is first reduced by sole_object - one implementation for the reading and the peer review - to the one JSON object it
+must be, alone or alone in a single json code fence; anything else refuses it whole. The object's text is then read
+here (or by peer.py) exactly as any answer is.
 """
 from __future__ import annotations
 
@@ -132,6 +137,37 @@ def _unstorable(value) -> bool:
     if isinstance(value, list):
         return any(_unstorable(item) for item in value)
     return False
+
+
+# --- an answer no structured-output mode constrained (HARNESS.md 12.8) ----------------------------------------------
+
+NOT_ONE_OBJECT = ('the answer is not exactly one JSON object with nothing before or after it, either alone or alone in '
+                  'a single json code fence')
+_JSON_WHITESPACE = ' \t\n\r'  # the only whitespace JSON allows around a value (RFC 8259): no other is stripped
+# One fence: ``` or ```json on its own line, the content, then ``` on its own line, ending the answer.
+_FENCED = re.compile(r'```(?:json)?[ \t]*\r?\n(.*)\r?\n[ \t]*```', re.DOTALL)
+
+
+def sole_object(text) -> tuple[str, str]:
+    """(the object's text, '') when ``text`` - the answer of a request whose output no structured-output mode
+    constrained - is, once the JSON whitespace around it is stripped, exactly one JSON object, or exactly one JSON
+    object inside a single ```json (or ```) fence with nothing else; otherwise ('', why), ``why`` being CPT Studio's own
+    sentence and never the model's text.
+
+    Nothing is repaired or coerced. The text returned is the model's own, unchanged: the stripped answer, or the
+    stripped content of its one fence, and it must open with '{' and close with '}' - so prose before or after the
+    object, an array, a fence naming another language and anything after a fence are refused here. The strict reader
+    (read, peer.read) then refuses whatever is still not exactly one JSON object - two objects, two fences, a truncated
+    object that happens to close with '}' - exactly as it refuses any answer."""
+    if not isinstance(text, str):
+        return '', 'there is no answer text'
+    candidate = text.strip(_JSON_WHITESPACE)
+    fenced = _FENCED.fullmatch(candidate)
+    if fenced is not None:
+        candidate = fenced.group(1).strip(_JSON_WHITESPACE)
+    if not (candidate.startswith('{') and candidate.endswith('}')):
+        return '', NOT_ONE_OBJECT
+    return candidate, ''
 
 
 # --- the reading ---------------------------------------------------------------------

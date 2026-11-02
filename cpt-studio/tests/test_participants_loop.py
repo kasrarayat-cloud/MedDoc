@@ -1,9 +1,10 @@
-"""The participants' tool loop (HARNESS.md 11.2; I6, I8, I9), for Astra and Fable alike: two- and three-exchange loops
-with the answer passed back exactly (reasoning items, thinking blocks) and append-only; tool results and every error
-result; the limits (exchanges, the loop deadline, the per-exchange read timeout, an oversized result); unknown, failed
-and unsent exchanges mid-loop; the PDF placeholder re-verified and expanded on every exchange; another model's tool
-request never acted on; usage summed and the run's record; and replayed loops keyed by each exchange's request sha256.
-Offline and synthetic (test_participants_support): every exchange goes to a fake session."""
+"""The participants' tool loop (HARNESS.md 11.2, 12.8; I6, I8, I9), for Astra and Fable alike: two- and three-exchange
+loops with the answer passed back exactly (reasoning items, thinking blocks) and append-only; tool results and every
+error result; the limits (exchanges, the loop deadline, the per-exchange read timeout, an oversized result); unknown,
+failed and unsent exchanges mid-loop; the PDF placeholder re-verified and expanded on every exchange; another model's
+tool request never acted on; usage summed and the run's record; replayed loops keyed by each exchange's request sha256,
+Astra's and Fable's harness-3 loop alike; and an earlier version's Fable request never replayed or sent. Offline and
+synthetic (test_participants_support): every exchange goes to a fake session."""
 from __future__ import annotations
 
 import base64
@@ -16,18 +17,19 @@ from unittest import mock
 import requests
 from urllib3.exceptions import ConnectTimeoutError, MaxRetryError, ReadTimeoutError
 
-from studio.participants import anthropic_fable, loop, openai_astra
+from studio.participants import anthropic_fable, loop, openai_astra, prompt
 from studio.participants import http as participants_http
 from studio.participants.anthropic_fable import FableParticipant
 from studio.participants.openai_astra import AstraParticipant
 from studio.participants.replay import ReplayParticipant
 from studio.providers.base import canonical_body, request_sha256
+from studio.types import ProviderRequest
 
 from tests.test_participants_support import (ASTRA_TOOL_USAGE, CLIENT_REQUEST_ID, FABLE_TOOL_USAGE, FACTS_ARGUMENTS,
                                              NOTE, ORIGINAL, PAGES, PASSAGES_ARGUMENTS, PDF, SECRETS, FakeClock,
                                              FakeExecutor, FakeResponse, FakeSession, OfflineTestCase, anthropic_env,
-                                             astra_tool_call, canonical, fable_tool_use, fixture_bytes, openai_env,
-                                             write_file)
+                                             astra_tool_call, canonical, fable_harness_2, fable_tool_use, fable_with,
+                                             fixture_bytes, fixture_reading, openai_env, write_file)
 
 UNKNOWN = 'The outcome is unknown; reconcile it before any new attempt.'
 
@@ -732,6 +734,30 @@ class FableLoopTests(_LoopContract, OfflineTestCase):
         outcome, session, _, _, executor = self.run_loop(self.ok(json.dumps(body).encode()))
         self.assertEqual((len(session.calls), executor.calls), (1, []))
 
+    def test_every_exchange_keeps_the_harness_3_shape_and_a_fenced_final_answer_is_read(self):
+        """HARNESS.md 12.8: no exchange of the loop asks for an output format; each carries the system prompt with the
+        schema, unchanged, and the thinking blocks of every answer travel back with their signatures; the final answer,
+        which nothing constrained, is read when it is one JSON object alone in a fence."""
+        first = self.tool_answer(self.facts_call('toolu_shape_1'), number=1)
+        second = self.tool_answer(('toolu_shape_2', 'cms_policy_passages', PASSAGES_ARGUMENTS), number=2)
+        final = fable_with(f'```json\n{json.dumps(fixture_reading())}\n```')
+        outcome, session, adapter, request, _ = self.run_loop(self.ok(first, 1), self.ok(second, 2), self.ok(final, 3))
+        system = prompt.INSTRUCTIONS + prompt.schema_instruction(prompt.SCHEMA)
+        for record, call in zip(outcome.exchanges, session.calls):
+            with self.subTest(turn=record.turn):
+                for body in (record.request_body, json.loads(call['data'])):
+                    self.assertEqual((body['output_config'], body['system'], body['tool_choice']),
+                                     ({'effort': 'medium'}, system, {'type': 'auto'}))
+        assistant = [message['content'] for message in outcome.exchanges[2].request_body['messages']
+                     if message['role'] == 'assistant']
+        self.assertEqual(assistant, [json.loads(first)['content'], json.loads(second)['content']])
+        self.assertEqual([turn[0] for turn in assistant], [
+            {'type': 'thinking', 'thinking': 'Synthetic reasoning 1.', 'signature': 'synthetic-signature-0001'},
+            {'type': 'thinking', 'thinking': 'Synthetic reasoning 2.', 'signature': 'synthetic-signature-0002'}])
+        reading = adapter.read(request, outcome.final.response_bytes, outcome.refs_retrieved)
+        self.assertEqual((reading.refused, reading.adapter_version, [code.code for code in reading.codes]),
+                         (False, 'anthropic-messages@cptstudio-harness-3', ['45385', '45380']))
+
 
 class UsageTests(OfflineTestCase):
     def test_usage_is_summed_key_by_key(self):
@@ -852,3 +878,112 @@ class ReplayLoopTests(OfflineTestCase):
                                wraps=participants_http.verify_original) as spy:
             self.replay(kind='pdf', original_bytes=PDF)
         self.assertEqual(spy.call_count, 3)
+
+
+class FableReplayLoopTests(OfflineTestCase):
+    """A replayed Fable harness-3 loop (HARNESS.md 11.2, 12.8): each exchange is the request the live loop makes, keyed
+    by its own stored request's sha256, with every answer's thinking blocks passed back unchanged; it is deterministic,
+    sends nothing, reports no new usage and is read exactly as the live loop's answer. A request of an earlier version
+    is never replayed or sent."""
+
+    def setUp(self):
+        super().setUp()
+        self.credentials = write_file(self.tmp / 'anthropic.env', anthropic_env())
+        self.recordings = self.tmp / 'replay'
+
+    def live_loop(self, kind='paste', original_bytes=None, final=None):
+        steps = [FakeResponse(200, fable_tool_use(('toolu_r1', 'cms_code_facts', FACTS_ARGUMENTS), number=1)),
+                 FakeResponse(200, fable_tool_use(('toolu_r2', 'cms_policy_passages', PASSAGES_ARGUMENTS),
+                                                  ('toolu_r3', 'cms_code_facts', {'codes': ['45380'],
+                                                                                  'date_of_service': ''}), number=2)),
+                 FakeResponse(200, final if final is not None else fixture_bytes('fable-colonoscopy.response.json'))]
+        session = FakeSession(*steps)
+        adapter = FableParticipant(self.credentials, session_factory=lambda: session)
+        request = adapter.build_request(NOTE, PAGES, kind, ORIGINAL if kind == 'pdf' else None)
+        outcome = adapter.send_loop(request, deadline_s=540, client_request_id=CLIENT_REQUEST_ID,
+                                    original_bytes=original_bytes, execute_tool=FakeExecutor())
+        self.assertEqual((outcome.final.outcome, len(outcome.exchanges), len(session.calls)), ('succeeded', 3, 3))
+        return outcome, request, adapter
+
+    def record(self, outcome, turns=None):
+        folder = self.recordings / 'fable'
+        folder.mkdir(parents=True, exist_ok=True)
+        for record in outcome.exchanges:
+            if turns is None or record.turn in turns:
+                write_file(folder / f'{record.request_sha256}.json', record.response_bytes)
+
+    def replay(self, kind='paste', original_bytes=None, **stop):
+        replay = ReplayParticipant('fable', self.recordings)
+        request = replay.build_request(NOTE, PAGES, kind, ORIGINAL if kind == 'pdf' else None)
+        return replay.send_loop(request, deadline_s=540, client_request_id=CLIENT_REQUEST_ID,
+                                original_bytes=original_bytes, execute_tool=FakeExecutor(), **stop)
+
+    def test_a_recorded_three_exchange_loop_replays_exchange_by_exchange(self):
+        live, request, adapter = self.live_loop()
+        self.assertEqual(request.adapter_version, 'anthropic-messages@cptstudio-harness-3')
+        self.record(live)
+        replayed = self.replay()
+        self.assertEqual(ReplayLoopTests.shape(replayed), ReplayLoopTests.shape(live))
+        self.assertEqual(ReplayLoopTests.shape(self.replay()), ReplayLoopTests.shape(replayed))  # deterministic
+        final = replayed.final
+        self.assertEqual((final.outcome, final.sent, final.usage, final.usage_basis, final.endpoint, final.latency_ms),
+                         ('succeeded', False, {}, 'historical_replay_not_new_usage', '', None))
+        bodies = [record.request_body for record in replayed.exchanges]
+        self.assertEqual([body['output_config'] for body in bodies], [{'effort': 'medium'}] * 3)
+        answers = [json.loads(record.response_bytes)['content'] for record in replayed.exchanges[:2]]
+        self.assertEqual([message['content'] for message in bodies[2]['messages'] if message['role'] == 'assistant'],
+                         answers)  # every answer passed back exactly, its thinking block and signature first
+        self.assertEqual([answer[0]['signature'] for answer in answers],
+                         ['synthetic-signature-0001', 'synthetic-signature-0002'])
+        self.assertEqual(replayed.refs_retrieved, live.refs_retrieved)
+        replay = ReplayParticipant('fable', self.recordings)
+        self.assertEqual(replay.read(request, final.response_bytes, replayed.refs_retrieved),
+                         adapter.read(request, live.final.response_bytes, live.refs_retrieved))
+
+    def test_a_replayed_loop_whose_final_answer_is_fenced_is_read_as_the_live_one(self):
+        final = fable_with(f'```json\n{json.dumps(fixture_reading())}\n```')
+        live, request, adapter = self.live_loop(final=final)
+        self.record(live)
+        replayed = self.replay()
+        reading = ReplayParticipant('fable', self.recordings).read(request, replayed.final.response_bytes,
+                                                                   replayed.refs_retrieved)
+        self.assertEqual(reading, adapter.read(request, live.final.response_bytes, live.refs_retrieved))
+        self.assertEqual((reading.refused, [code.code for code in reading.codes]), (False, ['45385', '45380']))
+
+    def test_a_missing_later_recording_fails_and_a_pdf_loop_reverifies_its_original(self):
+        live, _, _ = self.live_loop()
+        self.record(live, turns={1, 2})
+        replayed = self.replay()
+        self.assertEqual([record.outcome for record in replayed.exchanges], ['succeeded', 'succeeded', 'not_sent'])
+        self.assertEqual((replayed.final.outcome, replayed.final.sent), ('failed', False))
+        live, _, _ = self.live_loop(kind='pdf', original_bytes=PDF)
+        self.record(live)
+        with mock.patch.object(participants_http, 'verify_original', wraps=participants_http.verify_original) as spy:
+            self.assertEqual(self.replay(kind='pdf', original_bytes=PDF).final.outcome, 'succeeded')
+        self.assertEqual(spy.call_count, 3)
+        refused = self.replay(kind='pdf', original_bytes=PDF + b'x')
+        self.assertEqual((refused.final.outcome, len(refused.exchanges)), ('not_sent', 1))
+
+    def test_a_request_of_an_earlier_version_is_never_replayed_nor_sent(self):
+        live, request, _ = self.live_loop()
+        self.record(live)
+        body = fable_harness_2(request.body)
+        older = ProviderRequest(provider='fable', adapter_version=anthropic_fable.ADAPTER_VERSION_2, body=body,
+                                canonical_sha256=request_sha256(body), contexts=(NOTE,))
+        # a recording exists for it, so only the version can refuse it
+        write_file(self.recordings / 'fable' / f'{older.canonical_sha256}.json',
+                   fixture_bytes('fable-colonoscopy.response.json'))
+        replay = ReplayParticipant('fable', self.recordings)
+        session = FakeSession()
+        live_adapter = FableParticipant(self.credentials, session_factory=lambda: session)
+        for adapter in (replay, live_adapter):
+            with self.subTest(adapter=adapter.mode):
+                outcome = adapter.send_loop(older, deadline_s=540, client_request_id=CLIENT_REQUEST_ID,
+                                            original_bytes=None, execute_tool=FakeExecutor())
+                self.assertEqual((outcome.final.outcome, outcome.final.sent, outcome.exchanges),
+                                 ('not_sent', False, ()))
+                self.assertIn('different provider or adapter version', outcome.final.error)
+                exchange = adapter.send(older, deadline_s=60, client_request_id=CLIENT_REQUEST_ID, original_bytes=None)
+                self.assertEqual((exchange.outcome, exchange.sent), ('not_sent', False))
+                self.assertIn('different provider or adapter version', exchange.error)
+        self.assertEqual(session.calls, [])
