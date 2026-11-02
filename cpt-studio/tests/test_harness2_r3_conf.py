@@ -39,7 +39,7 @@ from django.test import Client, SimpleTestCase, override_settings
 
 from studio import candidates, jobs, models, review
 from studio.gi import context as gi_context
-from studio.types import PageSpan, sha256_json
+from studio.types import EvidenceSpan, LocatedQuote, PageSpan, ParticipantReading, ParticipantService, sha256_json
 from tests import test_harness2_api as h2
 from tests.support import factories as f
 from tests.test_frontend import candidate_id
@@ -419,3 +419,50 @@ class CaseFidelityTests(h2.Harness2Case):
         self.assertEqual(sha256_json(result), self.final.sha256)
         # and the context is the one the document's own reader reads
         self.assertEqual(context.facts, jobs._merged_facts(gi_context.extract_context(self.revision.text), {}))
+
+
+class LocatedPassageTests(SimpleTestCase):
+    """review.located_passages, the candidates this release serves (HARNESS.md 12.10): a participant's passage is
+    served only as exact slices of the revision text - one that cites no passage, one its quote was not located for,
+    and one whose span is not the text's are not served - and never as checked, whatever it says."""
+    TEXT = ('Colonoscopy report (fictional)\nThe cecum was not reached.\n'
+            'Landmarks photographed: appendiceal orifice and ileocecal valve.\n')
+
+    def quote(self, passage, *, exact=True):
+        start = self.TEXT.index(passage)
+        text = passage if exact else passage.upper()
+        return LocatedQuote(passage, (EvidenceSpan(0, start, start + len(passage), text, True),))
+
+    def reading(self, *services):
+        return ParticipantReading(provider='astra', adapter_version='astra-test@1', reading_version='test',
+                                  requested_model='gpt-6-astra', returned_model='gpt-6-astra', services=services)
+
+    def service(self, extent, *quotes):
+        return ParticipantService('s1', 'colonoscopy', 'performed', 'A colonoscopy.', '', extent, '',
+                                  evidence=tuple(quotes))
+
+    def test_only_exact_slices_are_served_and_none_is_checked(self):
+        question = candidates.Question(id='q-extent', scope='proposal', fact='extent', family='gi.colonoscopy',
+                                       proposal_key='sel:0', code='45385', service='S1')
+        denied = 'The cecum was not reached.'
+        landmarks = 'Landmarks photographed: appendiceal orifice and ileocecal valve.'
+        readings = [candidates.FrozenReading('astra', 'run-1', self.reading(
+            self.service('cecum', self.quote(denied), self.quote(landmarks, exact=False),
+                         LocatedQuote('A sentence in no document.', (), 'not found')),
+            self.service('cecum'),  # cites no passage
+            self.service('cecum, not reached', self.quote(landmarks))))]  # a value CPT Studio cannot restate
+        served = review.located_passages(question, self.TEXT, (), readings)
+        self.assertEqual([(c['value'], [s['text'] for s in c['spans']]) for c in served],
+                         [('cecum', [denied]), ('', [landmarks])])
+        for candidate in served:
+            self.assertEqual((candidate['verified'], candidate['why'], candidate['attestation']),
+                             (False, UNCHECKED, ''))
+            self.assertEqual(candidate['id'], candidate_id(question.id, candidate))
+            self.assertEqual([s['text'] for s in candidate['sentences']], [s['text'] for s in candidate['spans']])
+        # the dormant path checks the same sources: the denial is refused there, never verified
+        dormant = candidates.candidates(question, self.TEXT, (), readings)
+        self.assertFalse(any(c['verified'] for c in dormant))
+        # a question no candidate answers is served none
+        other = candidates.Question(id='q', scope='proposal', fact='base_included', family='gi.colonoscopy',
+                                    proposal_key='sel:0', code='45385')
+        self.assertEqual(review.located_passages(other, self.TEXT, (), readings), [])
