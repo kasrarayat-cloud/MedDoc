@@ -564,8 +564,10 @@ def _confirmed_findings(assessment):
             effect = 'read by this assessment'
         elif str(item.pk) in ignored:
             effect = f'not read by this assessment: {ignored[str(item.pk)]}'
-        else:
+        elif assessment.created_at < item.created_at:
             effect = 'not read by this assessment, which was made before it'
+        else:
+            effect = 'not read by this assessment, which records no reading of it'
         question = item.clarification
         out.append({'id': str(item.pk), 'clarification_id': str(item.clarification_id), 'scope': item.scope,
                     'fact': item.fact, 'family': item.family, 'proposal_key': item.proposal_key,
