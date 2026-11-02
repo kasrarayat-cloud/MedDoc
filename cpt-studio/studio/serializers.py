@@ -580,46 +580,91 @@ def corti_codes(assessment) -> list:
                    and (p.support or {}).get('origin', 'primary') in ('primary', 'second_review')})
 
 
-def corti_unlisted(assessment) -> int:
-    """How many codes Corti's answers that ``assessment`` read (its primary run and any bounded second review)
-    selected that the engine cannot list (engine._listable: empty, or longer than MAX_LISTED_CODE). The engine drops
-    each with its provider.unlisted warning, and none is ever served or truncated (I9); counted from each stored answer
-    as the engine read it (jobs._provider_inputs: its bytes checked against their sha256, read by the run's own
-    normalizer), so Corti's row and the reports never say that it proposed no code, or that its codes were checked,
-    beside codes it selected that cannot be listed (refutation round 3, truth-3). An answer that cannot be read again
-    counts none, and the error is logged: the page never fails on it."""
+SECOND_REVIEW_CHECK = 'provider.second_review'  # the engine's check of the bounded second review it read
+
+
+def corti_unlisted_counts(assessment) -> tuple[int, int]:
+    """(primary, second): how many codes Corti's answers that ``assessment`` read returned that the engine cannot list
+    (engine._listable: empty, or longer than MAX_LISTED_CODE) - every code of an answer, whatever its role (selected,
+    a candidate, an alternative), as the engine counts them: its primary answer as its provider.unlisted check does,
+    and a bounded second review as its provider.second_review check does, only where the engine read that second
+    review (the assessment records that check: it reads none where its documented-service reading is inconsistent).
+    The engine drops each such code, and none is ever served or truncated (I9). Counted from each stored answer as the
+    engine read it (jobs._provider_inputs: its bytes checked against their sha256, read by the run's own normalizer;
+    an answer refused whole has none), so Corti's row and the reports say the engine's own numbers: they counted only
+    the codes Corti selected, "It returned 1 code that cannot be listed" beside the engine's "The provider returned 2
+    codes" for a candidate it returned too (refutation round 4, truth-4), and never say that it proposed no code, or
+    that its codes were checked, beside codes that cannot be listed (refutation round 3, truth-3). An answer that
+    cannot be read again counts none, and the error is logged: the page never fails on it."""
     from .jobs import _provider_inputs  # local import: jobs imports this module's peers
     from .validation import engine  # local import: only the engine's rule is needed here
 
-    count = 0
-    for run in (assessment.provider_run, assessment.second_run):
-        if run is None or run.state != models.ProviderRun.SUCCEEDED:
-            continue
-        try:
-            _, normalized = _provider_inputs(run)
-        except Exception:  # noqa: BLE001 - logged; the count is informational and never fails the page or a report
-            import logging
+    read_second = any(isinstance(check, dict) and check.get('id') == SECOND_REVIEW_CHECK
+                      for check in assessment.encounter_checks or [])
+    counts = []
+    for run, read in ((assessment.provider_run, True), (assessment.second_run, read_second)):
+        count = 0
+        if read and run is not None and run.state == models.ProviderRun.SUCCEEDED:
+            try:
+                _, normalized = _provider_inputs(run)
+            except Exception:  # noqa: BLE001 - logged; the count is informational and never fails the page or a report
+                import logging
 
-            logging.getLogger(__name__).exception('the answer of run %s could not be read again', run.pk)
-            continue
-        if normalized is not None and not normalized.refused:
-            count += sum(1 for item in normalized.codes if item.role == 'selected' and not engine._listable(item.code))
-    return count
+                logging.getLogger(__name__).exception('the answer of run %s could not be read again', run.pk)
+                normalized = None
+            if normalized is not None and not normalized.refused:
+                count = sum(1 for item in normalized.codes if not engine._listable(item.code))
+        counts.append(count)
+    return counts[0], counts[1]
+
+
+def corti_unlisted(assessment) -> int:
+    """How many codes Corti's answers that ``assessment`` read returned that the engine cannot list, its primary answer
+    and any bounded second review together (corti_unlisted_counts): Corti's row's ``unlisted_codes``."""
+    return sum(corti_unlisted_counts(assessment))
+
+
+def corti_unlisted_words(primary, second) -> str:
+    """The engine's own sentences for the codes Corti's answers returned that cannot be listed ('' for none), each
+    answer's count apart, as the engine says them: the primary answer's as provider.unlisted does ("It returned 2 codes
+    that cannot be listed: ..."), then the bounded second review's as provider.second_review does ("Its second review
+    returned 1 code that cannot be listed: ..."), so the row and the reports say each number the Checks tab says."""
+    from .validation import checks, engine  # local import: only the engine's wording is needed here
+
+    words = [checks.unlisted_codes(primary, engine.MAX_LISTED_CODE, 'It')] if primary else []
+    if second:
+        words.append(checks.unlisted_codes(second, engine.MAX_LISTED_CODE, 'Its second review'))
+    return ' '.join(words)
+
+
+def corti_listed_apart(assessment) -> bool:
+    """Whether Corti listed a code that can be listed without its being one of its proposals (corti_codes): an
+    alternative of origin primary or second_review - a candidate, an alternative, or a code its bounded second review
+    selected and did not add."""
+    return any(p.bucket == models.Proposal.ALTERNATIVE and (p.support or {}).get('origin', 'primary')
+               in ('primary', 'second_review') for p in assessment.proposals.all())
 
 
 # Corti's answered state, as its row's detail and the reports' REVIEW PARTICIPANTS say it: its codes were checked, or,
-# where it selected codes that cannot be listed (corti_unlisted), those that can be listed were, or none was.
+# where its answers returned codes that cannot be listed (corti_unlisted), those that can be listed were, or it proposed
+# none that can be listed (beside a code it listed apart), or none of its codes can be listed; in the last two, none
+# was checked.
 CORTI_CHECKED = 'answered; its codes were checked'
 CORTI_SOME_LISTED = 'answered; its codes that can be listed were checked'
+CORTI_NONE_PROPOSED = 'answered; it proposed no code that can be listed, so none was checked'
 CORTI_NONE_LISTED = 'answered; none of its codes can be listed, so none was checked'
 
 
-def corti_answered(listed, unlisted) -> str:
+def corti_answered(listed, unlisted, apart=False) -> str:
     """Corti's answered state in one clause: ``listed``, whether it proposed a code that can be listed (corti_codes);
-    ``unlisted``, how many it selected that cannot be (corti_unlisted)."""
+    ``unlisted``, how many codes it returned that cannot be (corti_unlisted); ``apart``, whether it listed a code that
+    can be listed apart from its proposals (corti_listed_apart), where "none of its codes can be listed" would be false
+    of the code its Alternatives list shows (refutation round 4, truth-4)."""
     if not unlisted:
         return CORTI_CHECKED
-    return CORTI_SOME_LISTED if listed else CORTI_NONE_LISTED
+    if listed:
+        return CORTI_SOME_LISTED
+    return CORTI_NONE_PROPOSED if apart else CORTI_NONE_LISTED
 
 
 def _corti_row(encounter, assessment, jobs):
@@ -651,11 +696,15 @@ def _corti_row(encounter, assessment, jobs):
         return _row(name, label, vendor, model, 'not_sent', run.error or 'Nothing was sent.', run)
     state = RUN_STATES.get(run.state, 'unknown')
     if run.state == models.ProviderRun.SUCCEEDED:
-        # the codes it selected that the engine cannot list are counted, never served (I9; refutation round 3, truth-3)
-        unlisted = corti_unlisted(assessment) if current else 0
+        # the codes its answers returned that the engine cannot list are counted, each answer's as the engine counts
+        # it, never served (I9; refutation round 3, truth-3; round 4, truth-4)
+        primary, second = corti_unlisted_counts(assessment) if current else (0, 0)
+        unlisted = primary + second
         if current:
-            words = corti_answered(bool(codes), unlisted)
-            detail = f'{words[:1].upper()}{words[1:]}.' + (f' {review.unlisted_words(unlisted)}' if unlisted else '')
+            apart = bool(unlisted) and not codes and corti_listed_apart(assessment)
+            words = corti_answered(bool(codes), unlisted, apart)
+            detail = f'{words[:1].upper()}{words[1:]}.' + (f' {corti_unlisted_words(primary, second)}' if unlisted
+                                                           else '')
         else:
             detail = _run_detail(run)
         if run.reused_from_id:

@@ -61,6 +61,14 @@ def _owner(case, name):
 UNCHECKED = ("Reference validation failed: CPT Studio's retrieval for this assessment's codes failed (ValueError, "
              "logged), so no CMS reference fact or passage is listed here. {why} Retrieval only informs the reviewer "
              "and decides no status, so the assessment stands as made.")
+# Where the passages could not be loaded (a stored passage changed after import, the case below), the retrieval never
+# ran. Moved by refutation round 4, R4-TRUTH truth-5, to what the code now serves: the tampered passage's note was
+# UNCHECKED, "CPT Studio's retrieval ... failed", and now says which step failed, with the same reason why no code was
+# checked (UNCHECKED stays the retrieval's own sentence, RetrievalFailureEntryTests below).
+LOAD_UNCHECKED = ("Reference validation failed: CPT Studio could not load the stored CMS reference passages "
+                  "(ValueError, logged), so the retrieval for this assessment's codes did not run and no CMS reference "
+                  "fact or passage is listed here. {why} Retrieval only informs the reviewer and decides no status, so "
+                  "the assessment stands as made.")
 NO_DATE_WHY = ('No code was checked against the CMS reference files: no service date is established for this '
                'encounter, so no dated CMS reference file applies.')
 OUTSIDE_WHY = ('No code was checked against the CMS reference files: no installed CMS reference file applies to the '
@@ -86,7 +94,7 @@ class RetrievalFailureWithoutSourceMixin:
         return encounter_id
 
     def assertSaysNoCodeWasChecked(self, encounter_id, day, why):
-        note = UNCHECKED.format(why=why)
+        note = LOAD_UNCHECKED.format(why=why)  # moved by refutation round 4, truth-5 (LOAD_UNCHECKED above)
         final = self.encounter(encounter_id).current_assessment
         self.assertEqual(final.retrieval, [{'code': '', 'service_date': day, 'facts': [], 'passages': [],
                                             'lookups': [], 'notes': [note], 'failed': True}])
@@ -128,7 +136,10 @@ class RetrievalFailureWithoutSourceTests(RetrievalFailureWithoutSourceMixin, R2W
         encounter_id = self.run_tampered(TWO_EXTENTS)
         final = self.encounter(encounter_id).current_assessment
         (note,) = final.retrieval[0]['notes']
-        self.assertEqual(note, jobs.RETRIEVAL_FAILED.format(error='ValueError'))
+        # moved by refutation round 4, R4-TRUTH truth-5, to what the code now serves: the passages could not be loaded,
+        # so the note says that, never jobs.RETRIEVAL_FAILED's retrieval that ran (which had said CPT Studio "could not
+        # record which CMS reference facts and passages it retrieved"); the checks' sentence stands
+        self.assertEqual(note, jobs.RETRIEVAL_LOAD_FAILED.format(error='ValueError'))
         self.assertIn("Each code's checks read the CMS facts before that and stand as shown", note)
         for proposal in final.proposals.exclude(bucket='alternative'):
             statuses = {check['id']: check['status'] for check in proposal.checks}
@@ -236,14 +247,19 @@ class FirstReadingUnlocatedTests(R2WordingCase):
                           'detail': 'Astra proposed this code with evidence located in the document.'})
 
     def test_a_first_reading_s_unlocated_code_with_no_later_proposal_reads_as_before(self):
-        # a participant whose first reading lists a code it never located, and that proposes it in no later phase,
-        # keeps harness@1's wording (it is not counted as a proposer, and nothing says it proposed it later)
+        # a participant whose first reading lists a code it never located, and that proposes it in no later phase: it
+        # is not counted as a proposer, and nothing says it proposed it later. Moved by refutation round 4, R4-TRUTH
+        # truth-2, to what the code now serves: this pinned harness@1's "Astra proposed this code; none of its quotes
+        # was found in the document." ('proposed'), so one frozen first reading had two positions - this one, and
+        # 'not_proposed' where peer review then proposed the code. That reading proposed nothing either way, so its
+        # position is 'not_proposed' with the same sentence, and nothing more (tests/test_harness2_r4_truth.py)
         records = [{'name': 'astra', 'state': 'read', 'codes': [{'code': '45385', 'quote': ''}], 'not_coded': []}]
         for support in ({'proposed_by': ['corti'], 'phases': {}}, {}, None):
             plain = review.participant_positions(type('P', (), {'code': '45385', 'support': support})(), records)
-            self.assertEqual(plain['astra'], {'position': 'proposed', 'quote': '',
-                                              'detail': 'Astra proposed this code; none of its quotes was found in '
-                                                        'the document.'})
+            self.assertEqual(plain['astra'], {'position': 'not_proposed', 'quote': '',
+                                              'detail': 'Astra listed this code in its first reading, but none of its '
+                                                        'quotes was found in the document, so that reading did not '
+                                                        'propose it.'})
 
 
 # --- truth-3: Corti's row counts the codes it selected that cannot be listed ---------------------------------------
