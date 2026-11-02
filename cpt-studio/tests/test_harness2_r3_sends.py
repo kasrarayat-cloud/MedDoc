@@ -247,7 +247,8 @@ class LockedSessionTests(OfflineMixin, TransactionTestCase):
                     took.append(False)
                     return
                 time.sleep(0.05)
-            took.append(True)  # kept until the test ends and its session closes
+            took.append(True)  # kept until the test ends
+            self.addCleanup(self.other.unlock)
         return ended, took
 
     def assert_lock_held_elsewhere_sends_nothing_more(self, end):
@@ -329,12 +330,14 @@ class LockedSessionTests(OfflineMixin, TransactionTestCase):
         self.assertEqual(final, ('succeeded', False, '', ''))  # the loop's own final: nothing reached a vendor
         self.assert_settled_as_a_replay(run)
         self.assertEqual(recorded(run), [(1, 'succeeded', None)])  # recorded as it ended, before the session ended
+        self.assertTrue(lock_free_elsewhere(self.other, wait=5.0))  # the ended session's backend has exited
 
     def test_nor_a_replayed_loop_that_ended_at_the_lock_check(self):
         final, run = self.replay_whose_outcome_meets_an_ended_session(
             asks('astra', facts_call('call_astra_1', ['99213'])), end_after_tools=end_session_by_socket)
         self.assertEqual(final, ('failed', False, '', jobs.LOOP_LOCK_LOST_MESSAGE.format(number=1, plural='')))
         self.assert_settled_as_a_replay(run)
+        self.assertTrue(lock_free_elsewhere(self.other, wait=5.0))
 
 
 # --- sends-3 and sends-4: the installer's undo settles a run as the sweep does; a replay reached nothing --------------

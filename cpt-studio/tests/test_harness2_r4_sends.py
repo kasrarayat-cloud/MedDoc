@@ -74,6 +74,8 @@ class AccessCheckLockTests(OfflineMixin, TransactionTestCase):
         self.addCleanup(connection.close)
         self.openai = write_file(self.tmp / 'openai.env', openai_env())
         self.other = _OtherSession(self)  # the worker's session, or a second worker's
+        # a session an earlier test ended lets the lock go only once its backend has exited
+        self.assertTrue(lock_free_elsewhere(self.other, wait=5.0), 'an earlier test left the provider lock held')
 
     def rows(self):
         return {model.__name__: model.objects.count() for model in apps.get_app_config('studio').get_models()}
@@ -184,6 +186,8 @@ class HoldsProviderLockTests(TransactionTestCase):
     def setUp(self):
         super().setUp()
         self.other = _OtherSession(self)
+        # a session an earlier test ended lets the lock go only once its backend has exited
+        self.assertTrue(lock_free_elsewhere(self.other, wait=5.0), 'an earlier test left the provider lock held')
 
     def this_session(self, sql, params):
         """Take an advisory lock on this test's own session; it is released when the test ends."""
