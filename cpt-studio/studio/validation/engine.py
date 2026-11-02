@@ -3374,9 +3374,14 @@ class _Harness:
             parts.append(participant_unlisted_codes(self.peer_unlisted[p.provider], 'In peer review it'))
         if peer.answers:
             # true whether or not confirmations are offered (refutation round 4, d7-5; HARNESS.md 12.10 as amended): it
-            # said an answer "is read only as the passage a reviewer confirms", in a release that offers no confirmation
-            parts.append(f'It answered {checks.plural(len(peer.answers), "open question")}; an answer is recorded and '
-                         'decides nothing by itself.')
+            # said an answer "is read only as the passage a reviewer confirms", in a release that offers no confirmation.
+            # The questions are counted by the ids its answers name (the reader keeps every answer to a question it
+            # listed, a repeated one with a note), never by its answers: one question answered twice was "It answered 2
+            # open questions" (refutation round 5, d8-3)
+            asked = len({str(answer.question_id) for answer in peer.answers})
+            said = (f'It answered {checks.plural(asked, "open question")}' if asked == len(peer.answers) else
+                    f'It gave {checks.plural(len(peer.answers), "answer")} to {checks.plural(asked, "open question")}')
+            parts.append(f'{said}; an answer is recorded and decides nothing by itself.')
         if peer.unverified_quotes:
             one = peer.unverified_quotes == 1
             parts.append(f'{checks.plural(peer.unverified_quotes, "quote")} it gave in peer review '

@@ -247,3 +247,49 @@ class PeerAnswerReportTests(ErcpCase):
                     review.assessment_candidates(self.encounter(encounter_id).current_assessment)
             self.assertEqual(readers['candidates'].call_count, 1)
 
+
+# --- d8-3: the open questions answered are counted as questions --------------------------------------------------------
+
+ANSWERED_TWICE = 'It gave 2 answers to 1 open question; an answer is recorded and decides nothing by itself.'
+ANSWERED_ONCE = 'It answered 1 open question; an answer is recorded and decides nothing by itself.'
+
+
+class AnsweredQuestionCountTests(ErcpCase):
+    """d8-3: one open question, answered twice in one peer review (the reader keeps both and notes the repeat): the
+    summary said "It answered 2 open questions"."""
+
+    def test_two_answers_to_one_question_are_two_answers_to_one_question(self):
+        encounter_id = self.chain((True, 'Biliary cannulation failed.', FAILED_C), (True, 'successful', DONE_C))
+        first = self.assessments(encounter_id)[0]
+        self.assertEqual(first.clarifications.filter(state=models.Clarification.OPEN, fact='cannulation').count(), 1)
+        summary = self.summary(self.client.get(f'/api/encounters/{encounter_id}').json())
+        self.assertIn(ANSWERED_TWICE, summary)
+        self.assertNotIn('2 open questions', summary)
+        # and the reports print each answer as the participant's claim, neither value (D10)
+        text = self.download(encounter_id, 'draft', 'txt')
+        lines = _block(_section(text, reports.PEER_TITLE), '  - Astra · ')
+        self.assertEqual(lines.count(ANSWER_LINE + 'Astra says the document settles it'), 2)
+        self.assertEqual([line for line in lines if SUCCESS.search(line) or 'failed' in line], [])
+
+    def test_one_answer_to_one_question_reads_as_before(self):
+        encounter_id = self.chain((True, FAILED_ANSWER, FAILED_C))
+        self.assertIn(ANSWERED_ONCE, self.summary(self.client.get(f'/api/encounters/{encounter_id}').json()))
+
+
+class AnsweredQuestionEngineTests(SimpleTestCase):
+    """d8-3 in the engine: answers counted by the distinct question ids they answer."""
+
+    def summary_of(self, *question_ids):
+        colon = he.COLON
+        answers = [QuestionAnswer(question_id, True, 'cecum', (he.located(colon, he.CECUM),))
+                   for question_id in question_ids]
+        given = he.reviewed('astra', [he.code(colon, '45385', he.SNARE)], he.peer('astra', answers=answers))
+        result = he.run(colon, he.corti(('45385', he.span(colon, he.SNARE))), [given])
+        return he.encounter_check(result, 'participants.summary').detail
+
+    def test_answers_are_counted_by_the_questions_they_answer(self):
+        self.assertIn(ANSWERED_TWICE, self.summary_of('q-1', 'q-1'))
+        self.assertIn('It answered 2 open questions; ', self.summary_of('q-1', 'q-2'))
+        self.assertIn('It gave 3 answers to 2 open questions; ', self.summary_of('q-1', 'q-2', 'q-1'))
+        self.assertIn(ANSWERED_ONCE, self.summary_of('q-1'))
+
