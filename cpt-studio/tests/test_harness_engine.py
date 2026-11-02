@@ -379,6 +379,29 @@ class AgreementNeverPromotesTests(SimpleTestCase):
         self.assertEqual(len([p for p in a.proposals if p.code == '45380']), 1)
 
 
+    def test_agreement_never_releases_a_held_code(self):
+        """I3 on a HELD code (refutation round 1, FG-1: every agreement test above uses a code that is ready already, so
+        a regression releasing a held code once a second proposer agrees passed them all). 45378 beside 45385 is held on
+        the base-inclusion question - exactly where a ready result would offer a wrong code - and stays held, its
+        decision unchanged, whoever else proposes it with the same passage."""
+        codes = corti(('45385', span(COLON, SNARE)), ('45378', span(COLON, CECUM)))
+        alone = proposal(run(COLON, codes), '45378')
+        self.assertEqual((alone.status, [q.fact for q in alone.clarifications]),
+                         ('needs_clarification', ['base_included']))
+        astra, fable = read('astra', [code(COLON, '45378', CECUM)]), read('fable', [code(COLON, '45378', CECUM)])
+        for participants in ([astra], [astra, fable]):
+            agreed = proposal(run(COLON, codes, participants), '45378')
+            self.assertEqual(decision(agreed), decision(alone), [p.provider for p in participants])
+            self.assertEqual(agreed.support['proposed_by'], ['corti', *[p.provider for p in participants]])
+        # the proposal provider's answer failed: the participants' own proposal, by one proposer and then by two
+        own = read('astra', [code(COLON, '45385', SNARE), code(COLON, '45378', CECUM)])
+        one = proposal(run(COLON, (), [own], provider_status='failed'), '45378')
+        self.assertEqual((one.status, [q.fact for q in one.clarifications]), ('needs_clarification', ['base_included']))
+        two = proposal(run(COLON, (), [own, fable], provider_status='failed'), '45378')
+        self.assertEqual(decision(two), decision(one))
+        self.assertEqual(two.support['proposed_by'], ['astra', 'fable'])
+
+
 class ContradictionTests(SimpleTestCase):
     def test_not_performed_with_a_quote_is_a_warning_never_a_status(self):
         alone = run(COLON, corti(('45385', span(COLON, SNARE))))
@@ -741,6 +764,15 @@ class PeerReviewTests(SimpleTestCase):
             self.assertEqual((result.clarifications, result.completeness), (alone.clarifications, alone.completeness))
             self.assertEqual(item.support['participants']['fable']['peer']['position'], position)
         self.assertEqual(proposal(alone, '45385').support['participants']['fable']['peer']['position'], 'no_position')
+        # and on a HELD code (FG-1): 45378 beside 45385 stays held on the base-inclusion question
+        codes = corti(('45385', span(COLON, SNARE)), ('45378', span(COLON, CECUM)))
+        held = proposal(run(COLON, codes, [reviewed('fable')]), '45378')
+        self.assertEqual((held.status, [q.fact for q in held.clarifications]),
+                         ('needs_clarification', ['base_included']))
+        for position in ('supports', 'cannot_tell'):
+            item = proposal(run(COLON, codes, [reviewed('fable', review=peer(
+                'fable', positions=[stance(COLON, '45378', position, CECUM)]))]), '45378')
+            self.assertEqual(decision(item), decision(held), position)
 
     def test_an_additional_code_is_read_as_a_participant_code_and_recorded_as_after_peer_review(self):
         first = run(COLON, corti(('45385', span(COLON, SNARE))), [read('fable', [code(COLON, '45380', BIOPSY)])])
