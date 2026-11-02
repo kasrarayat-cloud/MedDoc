@@ -201,3 +201,17 @@ requested in chat.
     - H1 replay base to head EQUAL (fixtures and retained inputs; controls behave: self EQUAL, three planted DIFFER);
     - H4 battery: 0 movements.
   - **Pending:** the website and pipeline packages are still being built. Nothing is verified live.
+
+- **2026-11-02T01:30Z Integration owner changed; harness@1 and harness@2 part A integrated (offline only).**
+  - **Takeover:** session 1bf3b49c ended at 00:39:35Z, with its two builder workflows in their final full suites; the
+    owner chose that session cd048041 take over after it stopped. Every builder's work was committed; none had written
+    its final report, so the integrated tree was verified afresh.
+  - **Merged:** the engine's last commit, the website, the pipeline, and harness@2 part A (tool loop and peer review,
+    the engine's confirmed findings and peer inputs, the installer's updates). One conflict, a union of appended tests.
+  - **Integration fix (`ec00a5b87`):** the pipeline imports the CMS passages module directly, so a missing module fails
+    instead of recording an empty retrieval; four tests updated to the installed module; the reports test's titles.
+  - **Measured on `ec00a5b87`:** Django 4,593 tests OK (3 skipped); ops 289 OK; ops/verification 37 OK; node browser
+    verifier 84/84; node app 71/71; check and makemigrations clean. I1 against the round-4 head `80f2f2dc8`: H1 replay
+    EQUAL (HARD 119/123 both sides), H4 battery 0 movements, 0 new violations. Draft PR #1459 opened for CI.
+  - **Next:** refutation round 1 on `ec00a5b87` (five lenses, running); harness@2 part B to the contract in
+    `cpt-studio/HARNESS.md` section 12 (`99939d764`). Nothing is verified live; D1 to D5 stay open.
