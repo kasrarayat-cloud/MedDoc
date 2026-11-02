@@ -753,7 +753,9 @@ window in `evidence_support`, `run=<id>` in `checks`, and `run=<id>;reused_from=
 retained answer, whose tool calls they are: PARTICIPANT REFERENCES says the same of that run, "reuses the retained
 answer of run <id>, whose tool calls these are; this run made none", and of each reference it used, "retrieved by the
 retained run it reuses"); each names its participant in `proposed_by` and its phase in `proposal_origin`, and none
-carries a `decision`.
+carries a `decision`. **Amended after refutation round 4 (d7-4; HARNESS.md 12.10):** CONFIRMED FINDINGS and the
+`confirmed_finding` rows are printed only while confirmations are offered; this release offers none, so neither appears
+(the section's "None: no reviewer has confirmed a finding for this revision." implied a reviewer could).
 
 ## GET /api/encounters/{id}/original
 

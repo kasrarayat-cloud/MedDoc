@@ -1199,6 +1199,15 @@ release default is tested as the default (`tests/test_harness2_r3_conf.py`, and 
 block of `tests/frontend/app.test.cjs`). Re-offering any confirmation re-opens all of it, the page's located-passage
 rendering included (its note states this release's scope).
 
+**Amended after refutation round 4 (d7-4): the reports' CONFIRMED FINDINGS is printed only while confirmations are
+offered.** It was not dormant: every harness@2 report printed it at the release default, "None: no reviewer has
+confirmed a finding for this revision.", which implies a reviewer could. Now `reports._harness2` adds
+`confirmed_findings` only while `review.confirmations_offered()`: at the release default the snapshot has none, the TXT
+no section and the CSV no `confirmed_finding` row; on the dormant path all three are as before. A `FindingConfirmation`
+that exists anyway (none can be recorded in this release) is still listed by the API's `confirmations` and printed by
+no report, so `ops/verify_downloads.py` would report the section missing for it (fail closed). With D8 the page's
+located-passage rendering is gone, not dormant (above).
+
 **Dormant-path findings, recorded and not repaired: to be attacked again whenever any confirmation is offered.**
 None is reachable in this release.
 - status-1..4: 'performed' verified on a hedge the inventory does not read ("reportedly", "was thought to have been")

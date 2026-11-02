@@ -18,6 +18,7 @@ default, settings.STUDIO_OFFER_CONFIRMATIONS (a code-level False):
   Clarification row says what the readiness rules make true - checked against review.readiness and review._review_state
   on the pipeline's own cases: a question about the encounter holds the reviewed report; a question about a code holds
   that code, which can still be rejected; a question about a documented service no code carries holds neither.
+- d7-4: the reports print CONFIRMED FINDINGS only while confirmations are offered.
 
 Each test failed on the base 3daafa91b. Synthetic data only; nothing is sent: Corti is the harness@1 suite's in-process
 fake, Astra and Fable the real replay adapters on the real tool loop (tests.test_harness2_pipeline) or the recorded rows
@@ -32,7 +33,7 @@ from unittest import mock
 from django.conf import settings
 from django.test import SimpleTestCase, override_settings
 
-from studio import jobs, models, review
+from studio import jobs, models, reports, review
 from tests import test_harness2_api as h2
 from tests.test_harness2_pipeline import EMPTY_PEER, HEAD, TWO_EXTENTS, ColonCase, answered, reading
 from tests.test_harness2_pipeline import Harness2Case as PipelineCase
@@ -273,3 +274,23 @@ class ServiceQuestionTests(PipelineCase):
         reject_selected(encounter, final, self.reviewer, self.ws)
         self.assertEqual(review.readiness(encounter), {'draft': True, 'reviewed': True, 'blockers': []})
         self.assertEqual(review._review_state(self.encounter(encounter_id), final), 'reviewed')
+
+
+# --- d7-4: no confirmation wording where none is offered --------------------------------------------------------------
+
+@override_settings(**h2.BOTH)
+class ConfirmationWordingTests(h2.Harness2Case):
+    def txt(self):
+        return reports.render_txt(reports.snapshot(self.encounter, 'draft')).decode('utf-8')
+
+    def test_the_reports_print_no_confirmed_findings_section(self):
+        snap = reports.snapshot(self.encounter, 'draft')
+        self.assertNotIn('confirmed_findings', snap)
+        text = reports.render_txt(snap).decode('utf-8')
+        self.assertNotIn('\nCONFIRMED FINDINGS\n', text)
+        self.assertNotIn('no reviewer has confirmed a finding', text)
+        self.assertNotIn('confirmed_finding', reports.render_csv(snap).decode('utf-8'))
+        # the control: the dormant path prints it
+        with override_settings(**DORMANT):
+            self.assertIn('\nCONFIRMED FINDINGS\n  None: no reviewer has confirmed a finding for this revision.\n',
+                          self.txt())
