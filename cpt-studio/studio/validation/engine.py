@@ -231,7 +231,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         selections, proposals, procedure_day = confirmation.apply(
             selections, proposals, procedure_day, harness=harness,
             provider=response.provider if response is not None else '', context=context, routing=routing,
-            sources=sources, date_state=date_state, inventory=usable)
+            sources=sources, date_state=date_state, inventory=usable, day=service_date)
     if harness is not None:
         proposals = harness.recorded(proposals)
         provider = harness.provider_checks(provider, provider_status, response, proposals)
@@ -2197,11 +2197,25 @@ def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] =
     release = enc.pfs_source.release if enc.pfs_source else ''
     m, supported = s.evaluation.match, s.evaluation.support
     told = s.evaluation.confirmed  # a reviewer-confirmed status, read in place of the readers' hold
+    states = checks.required_fact_states(profile, finding, enc.context)
+    used: list[_Answer] = []  # the reviewer-confirmed answers this proposal reads (HARNESS.md 11.3)
+    if answers is not None and answers.facts:
+        # a confirmed value stands only where the readers leave the fact missing or in conflict: never over a reading
+        states = tuple(answers.state(state) for state in states)
+        used = [answers.facts[state.name] for state in states if state.confirmed]
+    if told is not None:
+        used.insert(0, told)
+    # a confirmed fact the readers read as an incomplete procedure gives a performed service their incomplete result:
+    # the incomplete check, the modifier 52/53 consideration, the status worded incomplete (refutation round 1, EV-4)
+    short = next((answer for answer in used if answer.short), None) if outcome.state == 'performed' else None
     if told is not None:
         status_found = checks.confirmed_status_check(told.performed, told.status, told.words, told.quoted,
                                                      s.evaluation.held)
     else:
         status_found = checks.status_check(outcome, name) if m is None else _service_status_check(m, s.evaluation.note)
+    if short is not None:
+        note = checks.confirmed_incomplete_note(short.fact, short.value, short.words)
+        status_found = replace(status_found, detail=f'{status_found.detail} {note}')
     found: list[Check] = [checks.scope_check(s.code_kind, s.scope_reason),
                           *checks.evidence_checks(s.evidence, s.dropped),
                           checks.routing_check(profile, finding), status_found]
@@ -2211,7 +2225,10 @@ def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] =
         found.append(s.evaluation.placed)
     clarifications: list[ClarificationSpec] = []
     considerations: list[str] = []
-    if outcome.state == 'incomplete':
+    if short is not None:
+        found.append(checks.confirmed_incomplete_check(short.fact, short.value, short.words, short.quoted, short.short))
+        considerations.append(checks.incomplete_consideration(s.code, ref.pfs, release))
+    elif outcome.state == 'incomplete':
         found.append(checks.incomplete_check(outcome))
         considerations.append(checks.incomplete_consideration(s.code, ref.pfs, release))
     if m is not None:
@@ -2232,14 +2249,6 @@ def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] =
                                                 proposal_key=key, reason=reason,
                                                 question=f'Is {s.code} reported separately from {", ".join(included)} '
                                                          'for this examination?'))
-    states = checks.required_fact_states(profile, finding, enc.context)
-    used: list[_Answer] = []  # the reviewer-confirmed answers this proposal reads (HARNESS.md 11.3)
-    if answers is not None and answers.facts:
-        # a confirmed value stands only where the readers leave the fact missing or in conflict: never over a reading
-        states = tuple(answers.state(state) for state in states)
-        used = [answers.facts[state.name] for state in states if state.confirmed]
-    if told is not None:
-        used.insert(0, told)
     facts_check = checks.required_facts_check(profile, states)
     if facts_check:
         found.append(facts_check)
@@ -2317,11 +2326,14 @@ def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] =
                                                          else _participant_names(s.proposers)
                                                          if s.origin == 'participant' else enc.provider),
                                                units=s.units, evidence_count=len(s.evidence),
-                                               profile=profile, detected=finding is not None, outcome=outcome,
+                                               profile=profile, detected=finding is not None,
+                                               outcome=replace(outcome, state='incomplete') if short else outcome,
                                                facts=_documented_facts(finding, states, m),
                                                entered=_entered_facts(states),
                                                lead=s.lead if s.origin == 'participant' else '',
-                                               status_words=told.words if told is not None else '',
+                                               status_words=(told.words if told is not None else
+                                                             f'on the reviewer-confirmed '
+                                                             f'{checks.fact_label(short.fact)}' if short else ''),
                                                confirmed=tuple(answer.sentence() for answer in used
                                                                if answer is not told)),
         checks=tuple(found), modifier_considerations=tuple(considerations), units=s.units,
@@ -3396,10 +3408,47 @@ MOVED = ('the proposal it was made for is not in this assessment (no proposal of
          'under the same context), so it answers nothing here; it is never read for the proposal that holds its key '
          'now')
 TWICE = 'the proposal it was made for is in this assessment more than once, so CPT Studio cannot tell which it answers'
+# The required facts the readers read a procedure's completion from (refutation round 1, EV-4): a confirmed value of one
+# is read as they read the same fact, so one they would read as incomplete makes the procedure incomplete.
+REACH_FACTS = ('extent', 'cannulation')
+UNPLACED = ("CPT Studio cannot place its value on its readers' own scale - one landmark routing reads, for an extent; "
+            'successful or failed, for a cannulation - so it cannot tell whether the procedure was completed, and the '
+            'question stays open')
 
 
 def _status_value(value: str) -> str:
     return re.sub(r'[\s-]+', '_', value.strip().lower())
+
+
+def _shortfall(family: str, fact: str, value: str, text: str, day: Optional[date]) -> Optional[str]:
+    """How a reviewer-confirmed ``value`` of ``fact`` leaves its procedure incomplete, as CPT Studio's readers read the
+    same fact: '' when they would read it completed, why when incomplete ('a failed cannulation'; 'short of the cecum,
+    ...'), None when CPT Studio cannot place it (UNPLACED). An extent is one of routing's own landmarks, placed against
+    the depth the procedure calls for as detect places a reach: the cecum for a colonoscopy (cues.CECUM_DEPTH), the
+    depth the document's named upper endoscopy calls for (detect._expected_upper_depth), none for a flexible
+    sigmoidoscopy. A cannulation is successful or failed, as detect._cannulation reads one. Any other fact has no
+    completion reading ('')."""
+    from studio.gi import cues, detect  # local, as in _routing_agrees; the analysis is cached per text and date
+    word = ' '.join(value.split()).casefold()
+    if fact == 'cannulation':
+        return {'successful': '', 'failed': 'a failed cannulation'}.get(word)
+    if fact != 'extent':
+        return ''
+    if family == 'gi.colonoscopy':
+        table, expected = cues.LOWER_LANDMARKS, cues.CECUM_DEPTH
+    elif family == 'gi.flex_sig':
+        table, expected = cues.LOWER_LANDMARKS, 0  # a flexible sigmoidoscopy calls for no depth
+    elif family in ('gi.egd', 'gi.enteroscopy'):  # an enteroscopy's codes are read through the EGD routing (legacy)
+        table, expected = cues.UPPER_LANDMARKS, detect._expected_upper_depth(detect._analysis(text, day)[0])
+    else:
+        return None
+    depth = next((depth for label, depth, _ in table if label == word), None)
+    if depth is None:
+        return None
+    if depth >= expected:
+        return ''
+    called = next((label for label, at, _ in table if at == expected), 'depth')
+    return f'short of the {called}, the depth the procedure calls for'
 
 
 def _confirmation_order(c: ConfirmedFinding) -> tuple:
@@ -3422,6 +3471,7 @@ class _Answer:
     spans: tuple[EvidenceSpan, ...]  # their passages: exact slices of the revision text, each once, in document order
     ids: tuple[str, ...]
     words: str  # "confirmed from Fable's located passage by <reviewer>" (each confirmation's)
+    short: str = ''  # how the confirmed value leaves the procedure incomplete, as the readers read it (_shortfall)
 
     @property
     def performed(self) -> bool:
@@ -3524,6 +3574,7 @@ class _Confirmations:
 
     def __init__(self, confirmed: Sequence[ConfirmedFinding], text: str, pages):
         confirmed = tuple(confirmed)
+        self.text = text
         for c in confirmed:
             if not isinstance(c, ConfirmedFinding):
                 raise ValueError(f'A confirmed finding must be a ConfirmedFinding, not {type(c).__name__}.')
@@ -3592,9 +3643,11 @@ class _Confirmations:
         return 'confirmed from ' + '; and from '.join(dict.fromkeys(phrases))
 
     def apply(self, selections: list, proposals: tuple, procedure_day: bool, *, harness, provider: str, context,
-              routing: RoutingResult, sources, date_state, inventory) -> tuple[list, tuple, bool]:
+              routing: RoutingResult, sources, date_state, inventory,
+              day: Optional[date] = None) -> tuple[list, tuple, bool]:
         """(selections, proposals, procedure day) with the confirmed answers read. ``proposals``: the assessment's
-        proposals without any - one per selection (_keyed), then the alternatives, which no confirmation touches."""
+        proposals without any - one per selection (_keyed), then the alternatives, which no confirmation touches.
+        ``day``: the date the routing was read on (an extent is placed as its reading places one, _shortfall)."""
         count = len(selections)
         keyed, tail = tuple(proposals[:count]), tuple(proposals[count:])
         keys = _keys(selections)
@@ -3635,11 +3688,16 @@ class _Confirmations:
             if len(same) > 1:
                 self.ignored += [(c, DISAGREEING) for c, _ in items]
                 continue
+            value = ' '.join(items[0][0].value.split())
+            short = _shortfall(family, fact, value, self.text, day) if fact in REACH_FACTS else ''
+            if short is None:  # neither complete nor incomplete on the readers' scale: fail closed (EV-4)
+                self.ignored += [(c, UNPLACED) for c, _ in items]
+                continue
             spans = {(sp.start, sp.end): sp for _, kept in items for sp in kept}
             answer = _Answer(scope, family, key, selections[index[key]].code if scope == 'proposal' else '', fact,
-                             ' '.join(items[0][0].value.split()), tuple(spans[k] for k in sorted(spans)),
+                             value, tuple(spans[k] for k in sorted(spans)),
                              tuple(sorted(dict.fromkeys(c.confirmation_id for c, _ in items))),
-                             self._words([c for c, _ in items]))
+                             self._words([c for c, _ in items]), short)
             self.applied.append(answer)
             if fact == STATUS_FACT:
                 status[index[key]] = answer

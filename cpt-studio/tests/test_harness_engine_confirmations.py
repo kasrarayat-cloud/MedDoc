@@ -223,12 +223,12 @@ class ConfirmedFactTests(SimpleTestCase):
         before = run(EGD_UNCODED, (('45385', SNARE),))
         self.assertEqual([(q.scope, q.family, q.fact) for q in before.clarifications], [('service', 'gi.egd', 'extent')])
         after = run(EGD_UNCODED, (('45385', SNARE),), [confirm(EGD_UNCODED, DUODENUM, fact='extent', family='gi.egd',
-                                                               value='second part of the duodenum')])
+                                                               value='second part of duodenum')])  # CPT Studio's words
         self.assertEqual(after.clarifications, ())
         self.assertEqual(after.proposals, before.proposals)  # no proposal of the family: none reads it
         applied = encounter_check(after, 'confirmations.applied')
         self.assertIn('extent reached of the documented Upper GI endoscopy (EGD, esophagoscopy, POEM) = second part of '
-                      f'the duodenum, {WORDS} (“{DUODENUM}”)', applied.detail)
+                      f'duodenum, {WORDS} (“{DUODENUM}”)', applied.detail)
         self.assertEqual(after.completeness['confirmations']['applied'][0]['scope'], 'service')
 
     def test_an_em_basis_question_takes_the_cited_passage_as_its_basis(self):
@@ -254,10 +254,11 @@ class ConfirmedFactTests(SimpleTestCase):
         before = run(ERCP, (('43274', STENT),))
         self.assertEqual(questions(proposal(before, 'sel:0')), [('proposal', 'gi.ercp', 'cannulation')])
         after = run(ERCP, (('43274', STENT),), [confirm(ERCP, CONTRAST, fact='cannulation', family='gi.ercp',
-                                                        key='sel:0', value='bile duct cannulated')])
+                                                        key='sel:0', value='successful')])  # CPT Studio's words
         item = proposal(after, 'sel:0')
         self.assertEqual((item.status, questions(item)), ('ready', []))
-        self.assertIn(f'cannulation outcome = bile duct cannulated, {WORDS} (“{CONTRAST}”)',
+        self.assertIsNone(check(item, 'service.incomplete'))
+        self.assertIn(f'cannulation outcome = successful, {WORDS} (“{CONTRAST}”)',
                       check(item, 'facts.required').detail)
 
     def test_a_confirmed_value_never_replaces_a_value_the_readers_read(self):
@@ -487,6 +488,105 @@ class GuardTests(SimpleTestCase):
         detail = check(item, 'facts.required').detail
         self.assertIn(f"extent reached = cecum, {WORDS}; and from Astra's and Fable's located passage by Second "
                       'Synthetic-Reviewer (fictional)', detail)
+
+
+# EV-4: a confirmed value the readers would read as an incomplete procedure - an extent short of the depth the procedure
+# calls for, a failed cannulation - is read as they read the same fact.
+COLON_HEAD = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\n'
+              'Place of service: Ambulatory surgery center\nProcedure: Colonoscopy\n')
+POLYP_LINE = 'A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.\n'
+SHORT_PREP = 'The colonoscope was advanced only to the splenic flexure because of poor preparation.'
+PHOTOS = 'Photos: splenic flexure reached, scope withdrawn.'
+SHORT_READ = COLON_HEAD + SHORT_PREP + '\n' + POLYP_LINE  # the readers read the extent: short of the cecum
+SHORT_UNREAD = COLON_HEAD + POLYP_LINE + PHOTOS + '\n'  # they read none: the photos line is no reach they read
+ERCP_HEAD = (HEAD + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
+             'Procedure: ERCP\nThe duodenoscope was advanced to the major papilla. ' + STENT + '\n')
+NO_ACCESS = 'Duct access note: no cannulation achieved; procedure ended.'
+ERCP_READ = ERCP_HEAD + 'Cannulation of the bile duct failed despite multiple attempts.\n'
+ERCP_UNREAD = ERCP_HEAD + NO_ACCESS + '\n'
+ANTRUM = 'Biopsies of the gastric antrum were taken with cold forceps.'
+EGD_UNREAD = (HEAD + 'Procedure note (fictional)\nDate of service: 2026-10-14\n'
+              'Place of service: Ambulatory surgery center\nProcedure: EGD\n' + ANTRUM + '\n' + DUODENUM
+              + '\n')  # an EGD calls for the duodenal bulb
+
+
+class IncompleteTests(SimpleTestCase):
+    """HARNESS.md 11.3: "the engine reads the confirmed fact as documented by the cited passage" - through the readers'
+    own path (I2), so a confirmed fact that they would read as an incomplete procedure gives the proposal their
+    incomplete result: the service.incomplete warn and the modifier 52/53 consideration (refutation round 1, EV-4)."""
+
+    def test_a_confirmed_extent_short_of_the_cecum_is_read_as_the_readers_read_one(self):
+        read_ = proposal(run(SHORT_READ, (('45385', SNARE),)), 'sel:0')
+        self.assertEqual(check(read_, 'service.incomplete').status, 'warn')  # the readers' own reading of it
+        before = proposal(run(SHORT_UNREAD, (('45385', SNARE),)), 'sel:0')
+        self.assertEqual(questions(before), [('proposal', 'gi.colonoscopy', 'extent')])
+        after = proposal(run(SHORT_UNREAD, (('45385', SNARE),), [confirm(
+            SHORT_UNREAD, PHOTOS, fact='extent', family='gi.colonoscopy', key='sel:0', value='splenic flexure')]),
+            'sel:0')
+        self.assertEqual((after.status, questions(after)), ('ready', []))
+        warn = check(after, 'service.incomplete')
+        self.assertEqual((warn.status, warn.source), ('warn', checks.CONFIRMATION_SOURCE))
+        self.assertIn(f'extent reached = splenic flexure, {WORDS} (“{PHOTOS}”)', warn.detail)
+        self.assertIn('short of the cecum', warn.detail)
+        self.assertIn('Kept for review: not treated as completed and not excluded.', warn.detail)
+        self.assertEqual(after.modifier_considerations, read_.modifier_considerations)  # the 52/53 consideration
+        self.assertIn('Service status: incomplete (performed in part)', after.rationale)
+        self.assertIn('read as incomplete (performed in part)', check(after, 'service.status').detail)
+        self.assertNotEqual(after.fingerprint, proposal(run(SHORT_UNREAD, (('45385', SNARE),), [confirm(
+            SHORT_UNREAD, PHOTOS, fact='extent', family='gi.colonoscopy', key='sel:0', value='cecum')]),
+            'sel:0').fingerprint)
+        # an extent at or beyond the cecum is a completed examination, as before
+        for value in ('cecum', 'terminal ileum'):
+            complete = proposal(run(SHORT_UNREAD, (('45385', SNARE),), [confirm(
+                SHORT_UNREAD, PHOTOS, fact='extent', family='gi.colonoscopy', key='sel:0', value=value)]), 'sel:0')
+            self.assertEqual(complete.status, 'ready', value)
+            self.assertIsNone(check(complete, 'service.incomplete'), value)
+            self.assertEqual(complete.modifier_considerations, before.modifier_considerations, value)
+            self.assertIn('Service status: performed', complete.rationale, value)
+
+    def test_a_confirmed_failed_cannulation_is_read_as_the_readers_read_one(self):
+        read_ = proposal(run(ERCP_READ, (('43274', STENT),)), 'sel:0')
+        self.assertEqual(check(read_, 'service.incomplete').status, 'warn')
+        self.assertEqual(questions(proposal(run(ERCP_UNREAD, (('43274', STENT),)), 'sel:0')),
+                         [('proposal', 'gi.ercp', 'cannulation')])
+        failed = proposal(run(ERCP_UNREAD, (('43274', STENT),), [confirm(
+            ERCP_UNREAD, NO_ACCESS, fact='cannulation', family='gi.ercp', key='sel:0', value='failed')]), 'sel:0')
+        warn = check(failed, 'service.incomplete')
+        self.assertEqual(warn.status, 'warn')
+        self.assertIn(f'cannulation outcome = failed, {WORDS} (“{NO_ACCESS}”)', warn.detail)
+        self.assertIn('a failed cannulation', warn.detail)
+        self.assertEqual(failed.modifier_considerations, read_.modifier_considerations)
+        self.assertIn('Service status: incomplete (performed in part)', failed.rationale)
+        succeeded = proposal(run(ERCP_UNREAD, (('43274', STENT),), [confirm(
+            ERCP_UNREAD, NO_ACCESS, fact='cannulation', family='gi.ercp', key='sel:0', value='successful')]), 'sel:0')
+        self.assertEqual(succeeded.status, 'ready')
+        self.assertIsNone(check(succeeded, 'service.incomplete'))
+
+    def test_an_upper_extent_is_placed_against_the_depth_the_named_procedure_calls_for(self):
+        codes = (('43239', ANTRUM[:-1]),)
+        self.assertEqual(questions(proposal(run(EGD_UNREAD, codes), 'sel:0')), [('proposal', 'gi.egd', 'extent')])
+        short = proposal(run(EGD_UNREAD, codes, [confirm(EGD_UNREAD, ANTRUM, fact='extent', family='gi.egd',
+                                                        key='sel:0', value='stomach')]), 'sel:0')
+        self.assertIn('short of the duodenal bulb', check(short, 'service.incomplete').detail)
+        for value in ('duodenal bulb', 'second part of duodenum'):
+            deep = proposal(run(EGD_UNREAD, codes, [confirm(EGD_UNREAD, DUODENUM, fact='extent', family='gi.egd',
+                                                           key='sel:0', value=value)]), 'sel:0')
+            self.assertEqual(deep.status, 'ready', value)
+            self.assertIsNone(check(deep, 'service.incomplete'), value)
+
+    def test_a_value_cpt_studio_cannot_place_is_not_read(self):
+        """Fail closed: a value that is not one of routing's landmarks (for the extent) or successful or failed (for a
+        cannulation) cannot be read as complete or incomplete, so it answers nothing and the question stays open."""
+        for text, codes, phrase, fact, family, value in (
+                (SHORT_UNREAD, (('45385', SNARE),), PHOTOS, 'extent', 'gi.colonoscopy', 'ileocolic anastomosis'),
+                (SHORT_UNREAD, (('45385', SNARE),), PHOTOS, 'extent', 'gi.colonoscopy', 'splenic flexure only'),
+                (SHORT_UNREAD, (('45385', SNARE),), PHOTOS, 'extent', 'gi.colonoscopy', 'incomplete: splenic flexure'),
+                (ERCP_UNREAD, (('43274', STENT),), NO_ACCESS, 'cannulation', 'gi.ercp', 'no cannulation achieved'),
+                (ERCP_UNREAD, (('43274', STENT),), NO_ACCESS, 'cannulation', 'gi.ercp', 'bile duct cannulated')):
+            before = run(text, codes)
+            after = run(text, codes, [confirm(text, phrase, fact=fact, family=family, key='sel:0', value=value)])
+            self.assertEqual(without_confirmations(after), before, value)
+            self.assertIn(engine.UNPLACED, encounter_check(after, 'confirmations.ignored').detail, value)
 
 
 # EV-1: a revision's assessments do not keep their keys - a code a first reading listed with no located quote is

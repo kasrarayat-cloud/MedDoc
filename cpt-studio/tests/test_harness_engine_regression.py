@@ -20,19 +20,21 @@ from django.test import SimpleTestCase
 from ops.gi4 import regression, replay
 from studio.gi import detect
 from studio.types import ConfirmedFinding, EvidenceSpan, ParticipantInput, RoutingResult, from_jsonable, to_jsonable
-from studio.validation import checks
+from studio.validation import checks, engine
 from studio.validation.engine import assess
 
 PIN = json.loads((Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'pins' / 'replay.json').read_text())
 REVIEWER = 'Rowan Synthetic-Reviewer (fictional)'
 CONFIGURED = (ParticipantInput('astra', 'failed', reason='HTTP 529 (synthetic)'),)  # a participant that read nothing
-# What each document's open question asks and the passage of the document itself that answers it.
+# What each document's open question asks and the passage of the document itself that answers it. An extent is in CPT
+# Studio's own words, as a candidate restates the passage (HARNESS.md 12.7: routing's landmark label): the engine places
+# it on its readers' scale and reads no other value (refutation round 1, EV-4).
 CONFIRMATIONS = {
     'h4-01': ('em_basis', 'gi.office_em', 'sel:0', 'total time on the date of the visit: 52 minutes',
               'Total time I spent on her care on the date of this visit: 52 minutes'),
-    'h4-06': ('extent', 'gi.colonoscopy', 'sel:0', 'ileocolic anastomosis',
+    'h4-06': ('extent', 'gi.colonoscopy', 'sel:0', 'terminal ileum',
               'Reach of the examination: ileocolic anastomosis, with 6 cm of neoterminal ileum viewed through it.'),
-    'h4-03': ('extent', 'gi.egd', 'sel:0', 'descending duodenum',
+    'h4-03': ('extent', 'gi.egd', 'sel:0', 'second part of duodenum',
               'passed down the esophagus, through the stomach and pylorus, into the descending duodenum'),
 }
 # The record: (document, member state) -> (code, (status, its questions) without the confirmation, the same with it,
@@ -172,3 +174,16 @@ class RegressionConfirmationTests(SimpleTestCase):
         pa, pb = (next(p for p in r.proposals if p.key == 'sel:0') for r in (a, b))
         self.assertEqual((pa.status, pb.status), ('ready', 'ready'))
         self.assertNotEqual(pa.fingerprint, pb.fingerprint)
+
+    def test_a_value_its_readers_cannot_place_is_not_read(self):
+        """An anastomosis is no landmark routing reads: confirmed as the extent, it leaves CPT Studio unable to tell
+        whether the colonoscopy was completed, so it is not read and the proposal stays held (refutation round 1,
+        EV-4: fail closed)."""
+        i = self.inputs(self.docs['h4-06'], 'walk')
+        before = self.assessed(i)
+        after = self.assessed(i, (self.confirmation('h4-06', i, value='ileocolic anastomosis'),))
+        item = next(p for p in after.proposals if p.key == 'sel:0')
+        self.assertEqual((item.status, [q.fact for q in item.clarifications]), ('needs_clarification', ['extent']))
+        self.assertEqual(after.proposals, before.proposals)
+        ignored = next(c for c in after.encounter_checks if c.id == 'confirmations.ignored')
+        self.assertIn(engine.UNPLACED, ignored.detail)
