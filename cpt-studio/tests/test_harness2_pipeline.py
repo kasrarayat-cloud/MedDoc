@@ -319,6 +319,13 @@ class ChainTests(Harness2Case):
         self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
         self.assertEqual(len(self.corti.requests), 1)
         self.assertEqual([(self.sent(n, 'first'), self.sent(n, 'peer')) for n in ('astra', 'fable')], [(1, 1), (1, 1)])
+        # I5 (refutation round 1, FG-2): each first request, as the real adapter built and stored it, is exactly the
+        # revision's own framed text and the adapter's constants - nothing else of CPT Studio's or of another's
+        revision = self.encounter(encounter_id).current_revision
+        framed = prompt.framed_document(revision.text, jobs._participant_pages(revision), 'paste')
+        for name, run in (('astra', astra), ('fable', fable)):
+            self.assertEqual(run.request_body, LIVE_MODULES[name].request_body(framed, None))
+            self.assertEqual(self.adapters[name].loops_of('first')[0]['bodies'][0], run.request_body)
         for run in (astra_peer, fable_peer):
             self.assertEqual((run.state, run.sent, run.scope), ('succeeded', True,
                                                                 {'mode': 'replay', 'assessment': str(first.pk)}))

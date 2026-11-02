@@ -87,9 +87,11 @@ class FakeParticipant:
         self.outcome, self.outcomes = outcome, []
         self.peer_codes, self.peer_outcome, self.peer_outcomes = list(peer_codes), peer_outcome, []
         self.built, self.sent, self.peer_built, self.peer_sent, self.executors = [], [], [], [], []
+        self.given = []  # exactly what stage_participant handed this adapter's request builder (I5)
 
     def build_request(self, text, pages, kind, original):
         self.built.append((kind, original))
+        self.given.append({'text': text, 'pages': pages, 'kind': kind, 'original': original})
         framed = prompt.framed_document(text, pages, kind)
         if framed is None:
             raise ProviderUnavailable('The document could not be framed; nothing was sent.')
@@ -523,8 +525,18 @@ class ChainTests(HarnessCase):
             self.assertEqual([executor.__qualname__ for executor in adapter.executors],
                              ['executor.<locals>.execute_tool'] * 2)
         self.assertEqual(len(self.corti.requests), 1)
-        # the request is the revision alone: no title, member value or CPT Studio reading in it (I5)
-        self.assertNotIn(encounter.title, json.dumps(astra.request_body))
+        # the request is the revision alone: no title, member value, CPT Studio reading or other participant's output in
+        # it (I5). What the stage hands each builder is the revision's own text and pages, and the stored body frames
+        # exactly that text (refutation round 1, FG-2: only the title was checked, and only for Astra)
+        revision = encounter.current_revision
+        pages = jobs._participant_pages(revision)
+        framed = prompt.framed_document(revision.text, pages, 'paste')
+        for adapter, run in ((self.adapters['astra'], astra), (self.adapters['fable'], fable)):
+            self.assertEqual(adapter.given, [{'text': revision.text, 'pages': pages, 'kind': 'paste',
+                                              'original': None}])
+            self.assertEqual(run.request_body, {'model': adapter.requested_model, 'instructions': prompt.INSTRUCTIONS,
+                                                'input': framed, 'original': None})
+            self.assertNotIn(encounter.title, json.dumps(run.request_body))
         assessment = encounter.current_assessment
         self.assertEqual(assessment, final)
         for read in (first, final):  # assess #1 and assess #2 read the same frozen phase-1 readings
@@ -1457,6 +1469,13 @@ class DocumentKindTests(HarnessCase):
         source = models.SourceFile.objects.get(encounter_id=encounter_id)
         original = {'sha256': source.sha256, 'bytes': source.size}
         self.assertEqual(self.adapters['astra'].built, [('pdf', original)])
+        # the revision's own text and pages, and the original named by sha256 and size only (I5; FG-2)
+        revision = self.encounter(encounter_id).current_revision
+        for name in ('astra', 'fable'):
+            self.assertEqual(self.adapters[name].given, [{'text': revision.text, 'kind': 'pdf', 'original': original,
+                                                          'pages': jobs._participant_pages(revision)}])
+            self.assertEqual(self.runs_of(encounter_id, name)[0].request_body['input'],
+                             prompt.framed_document(revision.text, jobs._participant_pages(revision), 'pdf'))
         self.assertEqual(self.adapters['astra'].sent[0]['original'], hashlib.sha256(pdf).hexdigest())
         run = self.runs_of(encounter_id, 'astra')[0]
         self.assertEqual(run.request_body['original'], original)  # named, never its bytes
