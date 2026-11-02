@@ -12,14 +12,13 @@ import dataclasses
 import hashlib
 import json
 import tempfile
-import uuid
 from datetime import date, timedelta
 from unittest import mock
 
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
-from studio import audit, jobs, models, review
+from studio import audit, jobs, models
 from studio.participants import anthropic_fable, loop, openai_astra, prompt
 from studio.participants.http import describe
 from studio.participants.replay import ReplayParticipant
