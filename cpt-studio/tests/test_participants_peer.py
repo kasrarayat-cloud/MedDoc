@@ -464,7 +464,8 @@ class AstraPeerTests(_PeerContract, OfflineTestCase):
                                  'arguments': '{}', 'status': 'completed'})
         asking['output'][1]['content'][0]['text'] = json.dumps(GOOD)
         cases = {
-            'the model refused: Synthetic refusal.': json.dumps(refusal).encode(),
+            # the model's own words are named by their length, never repeated (refutation round 1, IND-2)
+            'the model refused (its message, 18 characters, is not repeated)': json.dumps(refusal).encode(),
             'the response was cut off at the output limit': self.answer(GOOD, status='incomplete',
                                                                         incomplete_details={'reason':
                                                                                             'max_output_tokens'}),

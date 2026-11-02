@@ -362,7 +362,7 @@ def _answer(response_bytes, *, tools: bool) -> tuple[str, str, str]:
     if status == 'incomplete':
         return '', returned, _incomplete(envelope.get('incomplete_details'))
     if status != 'completed':
-        return '', returned, f'its status is {reading.quoted(status, 40)}, not completed'
+        return '', returned, f'its status is {reading.vendor_word(status, 40)}, not completed'
     output = envelope.get('output')
     if not isinstance(output, list):
         return '', returned, 'the response has no output list'
@@ -379,8 +379,8 @@ def _answer(response_bytes, *, tools: bool) -> tuple[str, str, str]:
             return '', returned, 'a message in the response has no content list'
         for part in content:
             kind = part.get('type') if isinstance(part, dict) else None
-            if kind == 'refusal':
-                return '', returned, f'the model refused: {reading.quoted(part.get("refusal"))}'
+            if kind == 'refusal':  # the model's own words: named by their length, never repeated (I9, IND-2)
+                return '', returned, reading.refused_by_model(part.get('refusal'))
             if kind == 'output_text':
                 if not isinstance(part.get('text'), str):
                     return '', returned, 'an output text part of the response has no text'
@@ -397,5 +397,5 @@ def _incomplete(details) -> str:
     if reason == 'max_output_tokens':
         return 'the response was cut off at the output limit'
     if isinstance(reason, str) and reason.strip():
-        return f'the response is incomplete ({reading.quoted(reason, 60)})'
+        return f'the response is incomplete ({reading.vendor_word(reason, 60)})'
     return 'the response is incomplete'

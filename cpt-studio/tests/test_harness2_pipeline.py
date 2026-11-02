@@ -509,6 +509,42 @@ class PhaseOneLoopTests(Harness2Case):
         self.assertEqual(self.encounter(second).state, 'ready_for_review')
 
 
+class RefusalWordingTests(Harness2Case):
+    """Refutation round 1, IND-2 (I9: no CPT descriptor text displayed): a model writes its own refusal, and it can
+    write descriptor-like wording there. The refusal is named by its length; its words reach no record, page, report or
+    trace."""
+    WORDING = ('I will not code this. 45385 is SYNTHETIC-DESCRIPTOR-WORDING with removal of lesion(s) by snare '
+               'technique, single or multiple, PLACEHOLDER-FOR-LICENSED-TEXT.')
+
+    def test_a_refusal_s_own_words_reach_no_record_page_report_or_trace(self):
+        from studio import reports
+
+        envelope = json.loads(answered('astra', ASTRA_READING))
+        envelope['output'][1]['content'] = [{'type': 'refusal', 'refusal': self.WORDING}]
+        self.adapters['astra'].first = [json.dumps(envelope).encode()]
+        owner = f.member(self.ws, f.user('owner'), role=models.Membership.OWNER)
+        encounter_id = self.create()
+        drain()
+        encounter = self.encounter(encounter_id)
+        record = self.records(encounter.current_assessment)['astra']
+        self.assertEqual((record['state'], record['reason']),
+                         ('refused', f'The reading was not used: the model refused (its message, {len(self.WORDING)} '
+                                     'characters, is not repeated).'))
+        owner_client = Client()
+        owner_client.force_login(owner)
+        shown = [json.dumps(self.client.get(f'/api/encounters/{encounter_id}').json()),
+                 json.dumps(owner_client.get(f'/api/encounters/{encounter_id}/trace').json()),
+                 json.dumps([a.encounter_checks for a in self.assessments(encounter_id)]),
+                 json.dumps([a.participants for a in self.assessments(encounter_id)])]
+        for kind in ('draft',):
+            snap = reports.snapshot(encounter, kind)
+            shown += [reports.render_txt(snap).decode('utf-8'), reports.render_csv(snap).decode('utf-8')]
+        for text in shown:
+            for words in ('SYNTHETIC-DESCRIPTOR', 'removal of lesion', 'I will not code', 'PLACEHOLDER-FOR-LICENSED'):
+                self.assertNotIn(words, text)
+        self.assertIn('the model refused (its message, 156 characters, is not repeated)', shown[0])
+
+
 class StopInLoopTests(Harness2Case):
     """Refutation round 1, sends-3 (HARNESS.md 2: a Stop observed before sending): a member's Stop recorded while a tool
     loop runs ends it before its next exchange. The run records what was sent and has no final answer, so it is failed

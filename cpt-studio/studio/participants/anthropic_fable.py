@@ -316,14 +316,18 @@ def _answer(response_bytes) -> tuple[str, str, str]:
     stop = envelope.get('stop_reason')
     if stop == 'max_tokens':
         return '', returned, 'the response was cut off at the output limit'
-    if stop == 'refusal':
+    if stop == 'refusal':  # its category only, as one word; never the explanation (I9, IND-2)
         details = envelope.get('stop_details')
         category = details.get('category') if isinstance(details, dict) else None
-        named = f'category {reading.quoted(category, 60)}' if isinstance(category, str) and category.strip() \
-            else 'no category was given'
+        if not isinstance(category, str) or not category.strip():
+            named = 'no category was given'
+        elif reading.vendor_word(category) == category:
+            named = f'category {category}'
+        else:
+            named = f'a category of {len(category):,} characters, not repeated'
         return '', returned, f'the model refused ({named})'
     if stop != 'end_turn':
-        reason = reading.quoted(stop, 40) if isinstance(stop, str) else 'no stated reason'
+        reason = reading.vendor_word(stop, 40) if isinstance(stop, str) else 'no stated reason'
         return '', returned, f'it stopped for {reason}, not at the end of its turn'
     texts = []
     for block in content:
