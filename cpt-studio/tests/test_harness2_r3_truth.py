@@ -236,14 +236,19 @@ class FirstReadingUnlocatedTests(R2WordingCase):
                           'detail': 'Astra proposed this code with evidence located in the document.'})
 
     def test_a_first_reading_s_unlocated_code_with_no_later_proposal_reads_as_before(self):
-        # a participant whose first reading lists a code it never located, and that proposes it in no later phase,
-        # keeps harness@1's wording (it is not counted as a proposer, and nothing says it proposed it later)
+        # a participant whose first reading lists a code it never located, and that proposes it in no later phase: it
+        # is not counted as a proposer, and nothing says it proposed it later. Moved by refutation round 4, R4-TRUTH
+        # truth-2, to what the code now serves: this pinned harness@1's "Astra proposed this code; none of its quotes
+        # was found in the document." ('proposed'), so one frozen first reading had two positions - this one, and
+        # 'not_proposed' where peer review then proposed the code. That reading proposed nothing either way, so its
+        # position is 'not_proposed' with the same sentence, and nothing more (tests/test_harness2_r4_truth.py)
         records = [{'name': 'astra', 'state': 'read', 'codes': [{'code': '45385', 'quote': ''}], 'not_coded': []}]
         for support in ({'proposed_by': ['corti'], 'phases': {}}, {}, None):
             plain = review.participant_positions(type('P', (), {'code': '45385', 'support': support})(), records)
-            self.assertEqual(plain['astra'], {'position': 'proposed', 'quote': '',
-                                              'detail': 'Astra proposed this code; none of its quotes was found in '
-                                                        'the document.'})
+            self.assertEqual(plain['astra'], {'position': 'not_proposed', 'quote': '',
+                                              'detail': 'Astra listed this code in its first reading, but none of its '
+                                                        'quotes was found in the document, so that reading did not '
+                                                        'propose it.'})
 
 
 # --- truth-3: Corti's row counts the codes it selected that cannot be listed ---------------------------------------
