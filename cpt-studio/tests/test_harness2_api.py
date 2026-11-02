@@ -280,6 +280,22 @@ class CandidateTests(Harness2Case):
         self.assertEqual(review.assessment_phase(corti_only), 0)
         self.assertEqual(review.assessment_candidates(corti_only), {})
 
+    def test_a_peer_answer_never_answers_a_question_whose_proposal_changed(self):
+        # assess #2 selected another code under the key assess #1's question named: the peer answered about 45380, so
+        # its answer is no candidate for the question about 45381 (sel:1 there)
+        result = self.result()
+        biopsy = next(p for p in result.proposals if p.key == 'sel:1')
+        other = replace(biopsy, code='45381', clarifications=tuple(replace(q, question='Colonoscopy: confirm whether '
+                                                                                'the injection was performed.')
+                                                                   for q in biopsy.clarifications))
+        changed = self.persist([self.entry(name, peer=True) for name in ADAPTERS],
+                               replace(result, proposals=tuple(other if p.key == 'sel:1' else p
+                                                               for p in result.proposals)))
+        question = changed.clarifications.get(fact='performed_status')
+        offered = review.assessment_candidates(changed)[str(question.pk)]
+        self.assertEqual([c['phase'] for c in offered], ['independent', 'independent'])  # no peer-review candidate
+        self.assertNotIn(str(self.peer_runs['astra'].pk), {run for c in offered for run in c['runs']})
+
     def test_a_frozen_reading_that_no_longer_matches_its_recorded_sha256_is_not_used(self):
         entries = [self.entry(name, peer=True) for name in ADAPTERS]
         entries[1]['reading_sha256'] = '0' * 64

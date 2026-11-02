@@ -1435,17 +1435,20 @@ def frozen_inputs(assessment):
 
 
 def question_identity(clarification):
-    """What a question asks, whichever assessment raised it: (scope, family, fact, the key of its proposal) - the match
-    engine._Confirmations reads a confirmation by."""
-    return (clarification.scope, clarification.family, clarification.fact,
-            clarification.proposal.key if clarification.proposal_id else '')
+    """What a question asks, whichever assessment raised it: (scope, family, fact, the key and code of its proposal). A
+    proposal's key counts within its list in selection order, and assess #2 can select a code assess #1 did not (a
+    participant's code that peer review located) ahead of later ones, so the same key may name another code there: the
+    code is part of the match, and a question whose proposal changed takes no peer answer (fail closed)."""
+    proposal = clarification.proposal if clarification.proposal_id else None
+    return (clarification.scope, clarification.family, clarification.fact, proposal.key if proposal else '',
+            proposal.code if proposal else '')
 
 
 def peer_answers(assessment, questions, reviews):
     """{clarification pk: [candidates.PeerAnswer]} for ``questions`` of ``assessment``. A peer request named the open
-    questions of the assess #1 it read by their clarification ids (12.4); assess #2 raised its own rows, so each answer
-    is matched to the question of this assessment that asks the same thing (question_identity) as the clarification of
-    this revision its id names."""
+    questions of the assess #1 it read by their clarification ids (12.4: "QuestionAnswer.value for its id"); assess #2
+    raised its own rows, so each answer is matched to the question of this assessment that asks the same thing
+    (question_identity) as the clarification of this revision its id names."""
     named = {_uuid(answer.question_id) for _, _, review in reviews for answer in review.answers} - {None}
     asked = {str(item.pk): question_identity(item) for item in Clarification.objects.select_related('proposal').filter(
         pk__in=named, encounter_id=assessment.encounter_id, assessment__revision_id=assessment.revision_id)}
