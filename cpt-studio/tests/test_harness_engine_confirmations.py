@@ -56,7 +56,8 @@ VISIT = (HEAD + 'Office visit (fictional)\nDate of service: 2026-10-14\nPlace of
          'Plan: Omeprazole 20 mg daily.\n' + TIME + '\n')
 SEEN = 'Established patient seen for heartburn'
 # An EGD documented with no extent and no EGD code beside a coded colonoscopy: a service-scope extent question.
-EGD_UNCODED = (HEAD + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\n'
+EGD_UNCODED = (HEAD + 'Procedure note (fictional)\nDate of service: 2026-10-14\n'
+               'Place of service: Ambulatory surgery center\n'
                'Procedure: EGD\nBiopsies of the gastric antrum were taken with cold forceps.\n'
                'Photo documentation: duodenal bulb and second portion.\n'
                'Procedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\n'

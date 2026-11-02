@@ -670,7 +670,8 @@ class InputTests(SimpleTestCase):
                             'its peer review state is read but no peer review was given'),
                            (ParticipantInput('astra', 'read', astra, peer_state='failed', peer=added),
                             'a peer review was given with a peer state other than read'),
-                           (ParticipantInput('astra', 'read', astra, peer_state='read', peer=replace(added, provider='fable')),
+                           (ParticipantInput('astra', 'read', astra, peer_state='read',
+                                             peer=replace(added, provider='fable')),
                             "its peer review is another participant's"),
                            (ParticipantInput('astra', 'read', astra, peer_state='read', peer=replace(added, refused=True)),
                             'its peer review was refused'),
@@ -781,7 +782,8 @@ class PeerReviewTests(SimpleTestCase):
                      [reviewed('fable', review=peer('fable', additional=[code(COLON, '45385', SNARE)]))])
         item = proposal(result, '45385')
         self.assertEqual(without_record(item), proposal(alone, '45385'))
-        self.assertEqual((item.support['proposed_by'], item.support['phases']), (['corti', 'fable'], {'fable': 'peer_review'}))
+        self.assertEqual((item.support['proposed_by'], item.support['phases']),
+                         (['corti', 'fable'], {'fable': 'peer_review'}))
 
     def test_an_additional_code_that_is_no_proposal_is_an_alternative_saying_so(self):
         result = run(COLON, corti(('45385', span(COLON, SNARE))), [reviewed('fable', review=peer('fable', additional=[
