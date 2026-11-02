@@ -443,6 +443,44 @@ class HarnessBlockTests(HarnessCase):
 
 
 @override_settings(**LIVE, **BOTH)
+class FrontendContractTests(HarnessCase):
+    """The website's contract constants (tests.test_frontend) are the serializer's own keys (refutation r1 FG-5)."""
+
+    def test_the_contract_constants_are_the_keys_the_api_serves(self):
+        from tests import test_frontend as contract
+
+        owner = f.member(self.ws, f.user('owner'), role=models.Membership.OWNER)
+        client = Client()
+        client.force_login(owner)
+        with mock.patch('studio.jobs.reference_passages', fake_passages([])):
+            encounter_id = self.create()
+            drain()
+        detail = client.get(f'/api/encounters/{encounter_id}').json()
+        trace = client.get(f'/api/encounters/{encounter_id}/trace').json()
+        runs = [run for participant in trace['participants'] for run in participant['runs']]
+        readings = [run['reading'] for run in runs if run['reading'] is not None]
+        retrieval = [item for proposal in detail['assessment']['proposals'] for item in proposal['retrieval']]
+        self.assertTrue(runs and readings and retrieval and trace['reconciliation'] and detail['provider_runs'])
+        shapes = ([('harness', detail['harness'], contract.HARNESS_KEYS),
+                   ('permissions', detail['permissions'], contract.PERMISSION_KEYS),
+                   ('reference validation', detail['harness']['reference_validation'],
+                    contract.REFERENCE_VALIDATION_KEYS), ('trace', trace, contract.TRACE_KEYS)]
+                  + [('participant row', row, contract.PARTICIPANT_KEYS) for row in detail['harness']['participants']]
+                  + [('provider run', run, contract.PROVIDER_RUN_KEYS) for run in detail['provider_runs']]
+                  + [('retrieval item', item, contract.RETRIEVAL_ITEM_KEYS) for item in retrieval]
+                  + [('trace run', run, contract.TRACE_RUN_KEYS) for run in runs]
+                  + [('reading', reading, contract.READING_KEYS) for reading in readings]
+                  + [('reconciliation row', row, contract.RECONCILIATION_ROW_KEYS) for row in trace['reconciliation']])
+        for label, served, keys in shapes:
+            with self.subTest(label):
+                self.assertEqual(set(served), keys)
+        # the Activity tab names the model a participant's run asked for and the one that answered (refutation r1 FG-5:
+        # the provider runs never carried them, so its "Model requested" line never rendered from the real API)
+        astra = next(run for run in detail['provider_runs'] if run['provider'] == 'astra')
+        self.assertEqual((astra['requested_model'], astra['returned_model']), ('gpt-6-astra', 'gpt-6-astra'))
+
+
+@override_settings(**LIVE, **BOTH)
 class ActivityTests(HarnessCase):
     def test_participant_attempts_are_named_and_corti_s_read_as_before(self):
         self.adapters['astra'].outcome = 'failed'

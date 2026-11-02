@@ -230,9 +230,10 @@ outcome for the revision (its stage was stopped, expired or swept before it reco
 gets its turn at such a context change, its stage running before the assess. While a member date conflict is held
 nothing is sent, the participants' requests included (their rows say so), and settling the date gives them their turn.
 `provider_runs` lists the participants' runs too (`purpose` `independent`); a participant run replayed from a
-recording reads `mode` `replay`. The Activity tab names a participant's attempts: "Astra request started", "Astra
-response recorded", "Fable request failed (HTTP 529)", "Retained Astra result reused (no new request)", "Unknown Astra
-outcome reconciled"; Corti's read as before.
+recording reads `mode` `replay`. Each provider run also carries `requested_model` and `returned_model` (`""` for Corti,
+whose API takes no model identifier), which the Activity tab names. The Activity tab names a participant's attempts:
+"Astra request started", "Astra response recorded", "Fable request failed (HTTP 529)", "Retained Astra result reused
+(no new request)", "Unknown Astra outcome reconciled"; Corti's read as before.
 
 ### harness@2: phases, peer reviews, references, candidates and confirmations (HARNESS.md 11-12)
 

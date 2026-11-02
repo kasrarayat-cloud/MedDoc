@@ -24,19 +24,46 @@ UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 DETAIL_KEYS = {'id', 'title', 'state', 'state_label', 'created_at', 'created_by', 'permissions', 'revision', 'context',
                'routing', 'pipeline', 'provider_runs', 'assessment', 'clarifications', 'decisions', 'readiness',
                'reports', 'activity'}
-# The harness@1 API contract the website renders (HARNESS.md 7): encounter detail's harness and permissions, each
-# proposal's harness fields, and the owner's trace.
+# The API contract the website renders (HARNESS.md 7, 12.6): encounter detail's harness and permissions, each proposal's
+# harness fields, the provider runs and the owner's trace - the serializer's own keys, which
+# tests.test_harness_api.FrontendContractTests pins against the real API (refutation r1 FG-5: these had drifted from it,
+# so a fixture taken from the real API was rejected, and no frontend test could see a key the API serves).
 PARTICIPANTS = ['corti', 'astra', 'fable']
-PARTICIPANT_KEYS = {'name', 'label', 'vendor', 'model', 'state', 'detail', 'run_id', 'reused', 'codes', 'unverified_quotes',
-                    'usage', 'usage_basis', 'estimated_cost_usd', 'returned_model'}
+PARTICIPANT_KEYS = {'name', 'label', 'vendor', 'model', 'state', 'detail', 'run_id', 'reused', 'codes',
+                    'unverified_quotes', 'usage', 'usage_basis', 'estimated_cost_usd', 'returned_model', 'peer',
+                    'references', 'peer_references'}
 PARTICIPANT_STATES = {'not_configured', 'waiting', 'running', 'done', 'refused', 'failed', 'unknown', 'not_sent', 'blocked',
                       'stopped'}
+HARNESS_KEYS = {'participants', 'phase', 'reference_validation', 'clarification', 'final'}
+PERMISSION_KEYS = {'can_review', 'is_owner', 'can_confirm'}
+REFERENCE_VALIDATION_KEYS = {'state', 'codes_checked', 'passages', 'sources', 'not_connected'}
 RETRIEVAL_ITEM_KEYS = {'kind', 'source_key', 'release', 'label', 'value', 'page', 'section', 'text'}
-TRACE_RUN_KEYS = {'id', 'state', 'purpose', 'adapter_version', 'endpoint', 'requested_model', 'returned_model', 'request_id',
-                  'response_id', 'http_status', 'latency_ms', 'usage', 'usage_basis', 'estimated_cost_usd', 'request_sha256',
-                  'response_sha256', 'response_bytes', 'created_at', 'finished_at', 'error', 'reused_from', 'reading'}
+PROVIDER_RUN_KEYS = {'id', 'provider', 'mode', 'state', 'http_status', 'latency_ms', 'usage', 'usage_basis',
+                     'request_sha256', 'response_sha256', 'reused_from', 'error', 'reconciled', 'created_at', 'purpose',
+                     'scope_items', 'requested_model', 'returned_model'}
+TRACE_KEYS = {'encounter', 'revision', 'participants', 'assessments', 'retrieval', 'reconciliation'}
+TRACE_RUN_KEYS = {'id', 'state', 'sent', 'mode', 'purpose', 'run_identity', 'authorization_ref', 'requested_by',
+                  'adapter_version', 'endpoint', 'requested_model', 'returned_model', 'request_id', 'response_id',
+                  'http_status', 'latency_ms', 'usage', 'usage_basis', 'estimated_cost_usd', 'request_sha256',
+                  'response_sha256', 'response_bytes', 'created_at', 'finished_at', 'error', 'reused_from',
+                  'reconciled', 'reading', 'review', 'exchanges'}
 READING_KEYS = {'refused', 'problems', 'unverified_quotes', 'date_of_service', 'services', 'codes', 'not_coded', 'questions',
-                'extraction_issues'}
+                'extraction_issues', 'references_used'}
+RECONCILIATION_ROW_KEYS = {'code', 'family', 'bucket', 'status', 'proposed_by', 'positions', 'reference_check',
+                           'approved'}
+# The harness fixtures (tests/fixtures/api) were written at b4655e634, before these keys existed. What each shape still
+# lacks is stated here rather than accepted silently, until the website package regenerates the fixtures from the
+# serializer's output: a regenerated fixture fails these tests until its entry is emptied (refutation r1 FG-5).
+FIXTURE_LACKS = {
+    'permissions': {'can_confirm'},
+    'harness': {'phase'},
+    'participant': {'peer', 'references', 'peer_references'},
+    'trace': {'assessments'},
+    'trace_run': {'sent', 'mode', 'run_identity', 'authorization_ref', 'requested_by', 'reconciled', 'review',
+                  'exchanges'},
+    'reading': {'references_used'},
+    'reconciliation_row': {'bucket'},
+}
 
 
 class _Audit(HTMLParser):
@@ -218,16 +245,16 @@ class FixtureTests(SimpleTestCase):
                          'encounter-processing.json'} <= set(harnessed))
         for name, doc in harnessed.items():
             with self.subTest(name):
-                self.assertEqual(set(doc['permissions']), {'can_review', 'is_owner'})
+                self.assertEqual(set(doc['permissions']), PERMISSION_KEYS - FIXTURE_LACKS['permissions'])
                 harness = doc['harness']
-                self.assertEqual(set(harness), {'participants', 'reference_validation', 'clarification', 'final'})
+                self.assertEqual(set(harness), HARNESS_KEYS - FIXTURE_LACKS['harness'])
                 self.assertEqual([item['name'] for item in harness['participants']], PARTICIPANTS)
                 for item in harness['participants']:
-                    self.assertEqual(set(item), PARTICIPANT_KEYS)
+                    self.assertEqual(set(item), PARTICIPANT_KEYS - FIXTURE_LACKS['participant'])
                     self.assertIn(item['state'], PARTICIPANT_STATES)
                     self.assertTrue(item['run_id'] is None or UUID.match(item['run_id']))
                 reference = harness['reference_validation']
-                self.assertEqual(set(reference), {'state', 'codes_checked', 'passages', 'sources', 'not_connected'})
+                self.assertEqual(set(reference), REFERENCE_VALIDATION_KEYS)
                 self.assertIn(reference['state'], {'waiting', 'done', 'not_run'})
                 self.assertEqual(harness['clarification'], {'open': doc['open_clarifications']})
                 self.assertEqual(harness['final'], {'state': doc['state'], 'label': doc['state_label']})
@@ -246,16 +273,16 @@ class FixtureTests(SimpleTestCase):
     def test_trace_fixture_carries_the_api_contract_and_quotes_the_document_exactly(self):
         trace, ready = _fixture('trace-harness-ready.json'), _fixture('encounter-harness-ready.json')
         text = ready['revision']['text']
-        self.assertEqual(set(trace), {'encounter', 'revision', 'participants', 'retrieval', 'reconciliation'})
+        self.assertEqual(set(trace), TRACE_KEYS - FIXTURE_LACKS['trace'])
         self.assertEqual((trace['encounter']['id'], trace['revision']['id']), (ready['id'], ready['revision']['id']))
         self.assertEqual([item['name'] for item in trace['participants']], PARTICIPANTS)
         located = 0
         for participant in trace['participants']:
             for run in participant['runs']:
-                self.assertEqual(set(run), TRACE_RUN_KEYS)
+                self.assertEqual(set(run), TRACE_RUN_KEYS - FIXTURE_LACKS['trace_run'])
                 if run['reading'] is None:
                     continue
-                self.assertEqual(set(run['reading']), READING_KEYS)
+                self.assertEqual(set(run['reading']), READING_KEYS - FIXTURE_LACKS['reading'])
                 reading = run['reading']
                 items = reading['services'] + reading['codes'] + reading['not_coded'] + reading['questions']
                 quotes = [quote for item in items for quote in item['evidence']]
@@ -275,7 +302,7 @@ class FixtureTests(SimpleTestCase):
         self.assertEqual([row['code'] for row in trace['reconciliation']],
                          [proposal['code'] for proposal in ready['assessment']['proposals']])
         for row in trace['reconciliation']:
-            self.assertEqual(set(row), {'code', 'family', 'status', 'proposed_by', 'positions', 'reference_check', 'approved'})
+            self.assertEqual(set(row), RECONCILIATION_ROW_KEYS - FIXTURE_LACKS['reconciliation_row'])
 
     def test_session_fixtures_label_agent_users(self):
         agent, human = _fixture('session-agent.json'), _fixture('session.json')

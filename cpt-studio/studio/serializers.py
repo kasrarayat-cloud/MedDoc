@@ -359,14 +359,16 @@ def _question_json(clarification, candidates=(), confirmation=None):
 
 
 def _provider_run_json(run):
-    # a harness participant's replayed run reads 'replay' too: its run records the mode it ran in (review.run_mode)
+    # a harness participant's replayed run reads 'replay' too: its run records the mode it ran in (review.run_mode); and
+    # the model it asked for and the one that answered, which the Activity tab names (refutation r1 FG-5: never served)
     return {'id': str(run.pk), 'provider': run.provider, 'mode': review.run_mode(run),
             'state': run.state, 'http_status': run.http_status, 'latency_ms': run.latency_ms, 'usage': run.usage,
             'usage_basis': run.usage_basis, 'request_sha256': run.request_sha256,
             'response_sha256': run.response_sha256,
             'reused_from': str(run.reused_from_id) if run.reused_from_id else None, 'error': run.error,
             'reconciled': run.reconciled_at is not None, 'created_at': _iso(run.created_at),
-            'purpose': run.purpose, 'scope_items': list((run.scope or {}).get('items', []))}
+            'purpose': run.purpose, 'scope_items': list((run.scope or {}).get('items', [])),
+            'requested_model': run.requested_model, 'returned_model': run.returned_model}
 
 
 def confirmation_json(confirmation):
