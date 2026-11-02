@@ -693,6 +693,55 @@ model participant configured the record is today's ("not configured") and there 
   assessment to read and the path cannot be reached; it is to be attacked again, with its two repairs (label the
   cross-proposal wording in the engine; give every reason and open question the confirmation test), whenever any
   confirmation is offered. Tests: `tests/test_harness2_r3_peer.py`.
+- **Amended after refutation round 4 (the session's D9; shapes-1..4, truth-3, falsegreen-2, falsegreen-3): one
+  strict-shape rule for every value a model participant wrote that CPT Studio lists or displays, not only for what a
+  peer request sends.** The shapes above - a code only in a CPT or HCPCS code's shape (`peer.code_shaped`, which
+  `shown_code` reads), a modifier only as two capital letters or digits, an id only as letters and digits of at most 8
+  characters (any other under one name of CPT Studio's own), a reference never retrieved only as such a short id, and
+  anything else only by its length - now hold where such a value is listed or shown:
+  - **The engine** reads a participant's code only in a code's shape (`engine.participant_listable`), in its first
+    reading and its peer review alike. Any other code it gives is counted in its own sentence ("It returned 1 code that
+    cannot be listed: not in the shape of a CPT code (four digits, then a digit or a capital letter) or of an HCPCS
+    Level II code (a capital letter, then four digits). It is not shown and never truncated.",
+    `engine.participant_unlisted_codes`), as Corti's codes that cannot be listed are, and is never a proposal, an
+    alternative or a reference lookup, so it reaches neither the reconciliation, the retrieval, the participants.summary
+    check, the page's Alternatives nor the reports (shapes-1: 'W/LES(S)', 8 characters, passed the proposal provider's
+    rule of 1 to 10 characters and reached all of them as a participant's alternative, while the trace's reading named
+    it by its length). A not-coded item or a peer-review position in no code's shape is not read either, and a
+    participant's position on Corti's own code of that very value says so (`engine.UNREAD_CODE_POSITION`,
+    `UNREAD_PEER_POSITION`), never that it did not propose it. Corti's own listing (`engine._listable`,
+    `MAX_LISTED_CODE`) is I1's and does not change: a Corti code of up to 10 characters is still listed, excluded for
+    scope, and shown as harness@1 shows it.
+  - **The owner's trace** shows a participant's codes, modifiers and ids in these shapes (`serializers._code_entry`)
+    with one `ShownIds` for all of a participant's runs (`serializers._trace_runs`), so a withheld id has one name
+    across its reading and its peer review and two ids never share one (shapes-2, truth-3: a peer review's 45380 on
+    'colon-b' was shown on 'id 1', the name the same trace gave the snare service); and a tool call's tool and
+    arguments only in the tools' own shapes - a tool CPT Studio has; each of `codes` in a code's shape,
+    `date_of_service` as YYYY-MM-DD or '', `topic` one of the policy topics - with any other value, field or argument
+    text by its length (`peer.shown_tool`, `shown_arguments`; shapes-4: a call's codes 'Colonoscopy, flexible,
+    diagnostic' were served as written).
+  - **A reference a participant says it used** is shown as given only when that run's own tool results returned it
+    (CPT Studio's own identifier), otherwise only as a short id or by its length (`peer.shown_reference`): in the API's
+    `references.used` and `peer_references.used` (`serializers.shown_references`), the trace (`_checked_against`), both
+    reports (`reports._used_ref`; `REF_SHAPE` is read only of a retrieved ref) and on the page (shapes-3:
+    'colonoscopy-flexible-with-biopsy-single-or-multiple', CPT 45380's descriptor written with hyphens, was served,
+    drawn on every code card and printed in both reports as written). A reference no tool returned names no code CPT
+    Studio reads, so the page lists it with every code, as a policy passage is (`refConcerns` reads no participant's
+    text for its code).
+  - **The page** applies the same rule to what it is served (`shownReference`, `shownArguments`): a value served in no
+    such shape is named by its length, whatever `DESCRIPTOR_LIKE` reads.
+  The note above that the owner's trace "still serves these fields by the 20-character rule", and 12.7's IND-1 sentence
+  on the trace (`participants.reading._token`), describe the code before refutation round 3's integration (12.11) and
+  are superseded by it and by this amendment. Pinned besides: the reader's quoting shapes
+  (`participants.reading._token`) against text that opens with a date or a code - '2026-10-21;W/LES(S)',
+  '45385;WITH-POLYP(S)' and '45380(S)', each named by its length (falsegreen-3) - and the trace's peer-review positions
+  and additional codes (falsegreen-2).
+  **Open, recorded:** a participant row's `codes` (`review.listed_codes`, which `serializers._participant_row` serves
+  and the page's participant row draws) still lists a participant's code of 1 to 10 characters by the proposal
+  provider's rule, so 'W/LES(S)' is listed there and its count is worded as Corti's; the repair (`review.listed_codes`
+  reading `engine.participant_listable`, and the row's count in `engine.participant_unlisted_codes`'s sentence) is
+  outside this repair's files and is made where the rounds' repairs are merged. Tests:
+  `tests/test_harness2_r4_shapes.py` and the `// refutation round 4, R4-SHAPES` block of `tests/frontend/app.test.cjs`.
 
 ### 12.5 Candidates and confirmations (11.3)
 
@@ -1229,6 +1278,14 @@ UUID, naming anything else by its length (`participants.reading._token`: the mut
 'SYNTH;WITH-POLYP(S)' still quoted inside a problem, which a refused reading's reason carries to the page and the
 reports). The dev preview server refuses a confirmation as the release does. Each change has its test and a mutation
 proof (applied, failing, restored by sha256).
+
+**Amended after refutation round 4 (the session's D9; 12.4):** the trace claim above held for the trace's readings and
+peer reviews only. One `ShownIds` per served reading named a peer review's service ids apart from its own first
+reading's, so the biopsy code Astra's peer review added on 'colon-b' was shown on the snare service's name (shapes-2,
+truth-3; one `ShownIds` per participant for all of its runs since); and the trace's reconciliation and retrieval rows,
+its tool calls' tools and arguments and its references used - and the API, the page and both reports - still showed such
+values as written (shapes-1, shapes-3, shapes-4). Round 4 holds every value a participant wrote to the one rule where it
+is listed or shown; 12.4 records how, and what is still open.
 
 **Open, recorded:**
 - The 45378 card can still state the procedure-to-procedure limit beyond once, through the engine's own
