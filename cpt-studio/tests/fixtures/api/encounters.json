@@ -5,15 +5,15 @@
    "title": "Colonoscopy after peer review, confirmation offered",
    "state": "needs_clarification",
    "state_label": "Needs clarification",
-   "service_date": "2026-10-21",
-   "service_date_conflict": false,
+   "service_date": null,
+   "service_date_conflict": true,
    "service_date_asked": false,
    "service_date_evidence": "",
    "families": [
     "Colonoscopy"
    ],
    "source_kind": "paste",
-   "open_clarifications": 3,
+   "open_clarifications": 4,
    "coding_state": "incomplete",
    "queue_reasons": [
     "question",
@@ -27,15 +27,15 @@
    "title": "Colonoscopy with a confirmed finding",
    "state": "needs_clarification",
    "state_label": "Needs clarification",
-   "service_date": "2026-10-21",
-   "service_date_conflict": false,
+   "service_date": null,
+   "service_date_conflict": true,
    "service_date_asked": false,
    "service_date_evidence": "",
    "families": [
     "Colonoscopy"
    ],
    "source_kind": "paste",
-   "open_clarifications": 2,
+   "open_clarifications": 3,
    "coding_state": "incomplete",
    "queue_reasons": [
     "question",
@@ -49,15 +49,15 @@
    "title": "Colonoscopy after peer review",
    "state": "needs_clarification",
    "state_label": "Needs clarification",
-   "service_date": "2026-10-21",
-   "service_date_conflict": false,
+   "service_date": null,
+   "service_date_conflict": true,
    "service_date_asked": false,
    "service_date_evidence": "",
    "families": [
     "Colonoscopy"
    ],
    "source_kind": "paste",
-   "open_clarifications": 3,
+   "open_clarifications": 4,
    "coding_state": "incomplete",
    "queue_reasons": [
     "question",
@@ -71,15 +71,15 @@
    "title": "Colonoscopy while the peer reviews run",
    "state": "processing",
    "state_label": "Processing",
-   "service_date": "2026-10-21",
-   "service_date_conflict": false,
+   "service_date": null,
+   "service_date_conflict": true,
    "service_date_asked": false,
    "service_date_evidence": "",
    "families": [
     "Colonoscopy"
    ],
    "source_kind": "paste",
-   "open_clarifications": 3,
+   "open_clarifications": 4,
    "coding_state": "incomplete",
    "queue_reasons": [],
    "created_at": "2026-11-01T09:00:00Z"

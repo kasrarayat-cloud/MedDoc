@@ -38,6 +38,8 @@ from django.conf import settings
 from django.test import Client, SimpleTestCase, override_settings
 
 from studio import candidates, jobs, models, review
+from studio.gi import context as gi_context
+from studio.types import PageSpan, sha256_json
 from tests import test_harness2_api as h2
 from tests.support import factories as f
 from tests.test_frontend import candidate_id
@@ -107,22 +109,25 @@ class SettingTests(SimpleTestCase):
 
 @override_settings(**h2.BOTH)
 class EndpointTests(h2.Harness2Case):
-    def dormant_verified(self, fact):
-        """The verified candidate the dormant path serves for ``fact``: one a reviewer confirmed on the base."""
+    def dormant_verified(self, question):
+        """The verified candidate the dormant path serves for ``question``: one a reviewer confirmed on the base."""
         with override_settings(**DORMANT):
-            return self.verified(fact)
+            return next(c for c in review.assessment_candidates(self.final)[str(question.pk)] if c['verified'])
 
     def url(self, fact):
         return f'/api/encounters/{self.encounter.pk}/clarifications/{self.questions[fact].pk}/confirm'
 
     def test_a_reviewer_s_confirmation_of_a_served_candidate_is_refused_and_nothing_is_recorded(self):
-        offered = {fact: self.dormant_verified(fact) for fact in ('extent', 'service_date', 'performed_status')}
+        # every question the dormant path offers a verified candidate for: 45385's and 45380's extent and the date
+        offered = {key: (question, self.dormant_verified(question))
+                   for key, question in self.questions['by_key'].items() if key[0] != 'performed_status'}
+        self.assertEqual(sorted(offered), [('extent', 'sel:0'), ('extent', 'sel:1'), ('service_date', '')])
         self.encounter.refresh_from_db()
         before, context, values = counts(), self.encounter.current_context_id, dict(self.encounter.user_values or {})
         for user in (self.reviewer, self.owner):
-            for fact, candidate in offered.items():
-                with self.subTest(user=user.username, fact=fact):
-                    response = self.confirm(fact, candidate, user=user)
+            for (fact, key), (question, candidate) in offered.items():
+                with self.subTest(user=user.username, fact=fact, key=key):
+                    response = self.confirm(fact, candidate, user=user, question=question)
                     self.assertEqual(response.status_code, 409, response.content)
                     self.assertEqual(response.json()['error'], NOT_OFFERED)
         self.encounter.refresh_from_db()
@@ -132,7 +137,7 @@ class EndpointTests(h2.Harness2Case):
         self.assertEqual(review.revision_confirmations(self.revision), [])
 
     def test_it_refuses_before_it_reads_the_body_the_role_the_question_or_the_candidate(self):
-        candidate = self.dormant_verified('extent')
+        candidate = self.dormant_verified(self.questions['extent'])
         before = counts()
         read = ('studio.review.confirm_finding', 'studio.review.assessment_candidates', 'studio.review.live_assessment',
                 'studio.api._payload', 'studio.api._require_reviewer')
@@ -161,13 +166,13 @@ class EndpointTests(h2.Harness2Case):
         self.assertEqual(counts(), before)
 
     def test_review_confirm_finding_refuses_before_it_locks_or_reads_anything(self):
-        candidate = self.dormant_verified('performed_status')
+        candidate = self.dormant_verified(self.questions['extent'])
         membership = models.Membership.objects.get(user=self.reviewer, workspace=self.ws)
         before = counts()
         with mock.patch('studio.review._lock', side_effect=AssertionError('the encounter was locked')), \
                 mock.patch('studio.review.assessment_candidates', side_effect=AssertionError('a candidate was read')):
             with self.assertRaises(review.ConfirmationRefused) as refused:
-                review.confirm_finding(encounter=self.encounter, clarification_id=self.questions['performed_status'].pk,
+                review.confirm_finding(encounter=self.encounter, clarification_id=self.questions['extent'].pk,
                                        candidate_id=candidate['id'],
                                        attestation=candidates.attestation(candidate['value']), user=self.reviewer,
                                        membership=membership)
@@ -365,3 +370,52 @@ class PeerRequestTests(PipelineCase):
         self.assertFalse([p.code for p in later.proposals.all() if 'confirmed' in (p.support or {})])
         with override_settings(**DORMANT):  # the control: the dormant path would read it
             self.assertEqual([item.confirmation_id for item in jobs.confirmed_findings(revision)], [str(row.pk)])
+
+
+# --- falsegreen-11: the rows the API tests and the website fixtures pin are the pipeline's own ----------------------
+
+@override_settings(**h2.BOTH)
+class CaseFidelityTests(h2.Harness2Case):
+    """Refutation round 3's falsegreen-11: tests.test_harness2_api.Harness2Case - whose assessments the API tests pin
+    and tests/test_frontend_harness2.py serializes into the website's fixtures - persisted rows written by hand, a 45380
+    performed-status hold among them that CPT Studio's readers never produce for its note. The assessments it pins are
+    the ones the assess stage makes of the case's own stored rows."""
+
+    def test_the_assess_stage_makes_the_first_assessment_the_case_pins(self):
+        job = jobs.enqueue(models.Job.ASSESS, encounter=self.encounter, revision=self.revision, context=self.context,
+                           provider_run=self.corti, requested_by=self.reviewer,
+                           key=jobs._assess_key(f'assess:{self.context.pk}:{self.corti.pk}', self.revision))
+        self.assertEqual(jobs.claim_next(), job)
+        job.refresh_from_db()
+        jobs.run_job(job)
+        job.refresh_from_db()
+        self.assertEqual(job.state, models.Job.SUCCEEDED, job.error)
+        made = models.Assessment.objects.get(pk=job.result['assessment'])
+        self.assertEqual([(p.key, p.code, p.status) for p in made.proposals.order_by('position')],
+                         [(p.key, p.code, p.status) for p in self.first.proposals.order_by('position')])
+        self.assertEqual(made.sha256, self.first.sha256)
+
+    def test_the_final_assessment_is_the_engine_s_for_the_stored_runs(self):
+        """assess #2 as stage_assess reads it: each participant's newest finished first-reading run and the peer run made
+        for assess #1 (jobs._peer_run: its scope names that assessment), read by the pipeline's readers, Corti's run
+        read by its normalizer, the context the analyze stage records - through the stage's own engine child."""
+        inputs = []
+        for name in h2.ADAPTERS:
+            item, record = jobs._first_input(self.encounter, name, jobs._participant_run(self.revision, name))
+            item, record = jobs._with_peer(self.encounter, item, record,
+                                           jobs._peer_run(self.revision, name, self.first))
+            inputs.append(item)
+        self.assertEqual([(item.state, item.peer_state) for item in inputs], [('read', 'read')] * 2)
+        provider_status, normalized = jobs._provider_inputs(self.final.provider_run)
+        self.assertEqual((provider_status, normalized.refused), ('succeeded', False))
+        context = self.final.context
+        proposed = {code.code for item in inputs for code in item.reading.codes}
+        proposed |= {code.code for item in inputs for code in item.peer.additional_codes}
+        _, result = jobs._assess_child(
+            self.revision.text, jobs.context_service_date(context), tuple(PageSpan(**p) for p in self.revision.pages),
+            jobs.context_facts(context), normalized,
+            jobs.prefetched_lookup(tuple(sorted(set(jobs.selected_codes(normalized)) | proposed))), provider_status,
+            self.revision.extraction_status, tuple(self.revision.messages), None, None, tuple(inputs), ())
+        self.assertEqual(sha256_json(result), self.final.sha256)
+        # and the context is the one the document's own reader reads
+        self.assertEqual(context.facts, jobs._merged_facts(gi_context.extract_context(self.revision.text), {}))

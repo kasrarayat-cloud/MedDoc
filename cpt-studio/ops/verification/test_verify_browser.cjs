@@ -2511,11 +2511,14 @@ test('summarize records the phase, the peer reviews, the candidates and the conf
   assert.deepEqual(summary.harness.participants.map(p => [p.name, p.peer?.state, p.peer?.codes_added]),
     [['corti', undefined, undefined], ['astra', 'done', ['45381']], ['fable', 'done', ['45380']]]);
   assert.deepEqual(summary.harness.participants[1].references, { retrieved: 1, used: 2, cited_not_retrieved: 1 });
+  // moved by refutation round 3 (falsegreen-11): the fixtures' rows are the engine's - 45380's status (no candidate
+  // verifies on a biopsy the readers leave in doubt) and extent, and the date, stay open after 45385's extent is confirmed
   assert.deepEqual(summary.clarifications.map(c => [c.fact, c.candidates.map(x => [x.value, x.verified]), c.confirmation]),
-    [['performed_status', [['performed', true], ['performed', false], ['performed', false]], null], ['service_date', [['2026-10-21', true]], null]]);
+    [['performed_status', [['performed', false], ['performed', false], ['performed', false]], null],
+      ['extent', [['cecum', true], ['cecum', false]], null], ['service_date', [['2026-10-21', true]], null]]);
   assert.deepEqual(summary.confirmations.map(c => [c.fact, c.value, c.located_by, c.confirmed_by]), [['extent', 'cecum', ['astra', 'fable'], 'Synthetic Reviewer']]);
   const text = JSON.stringify(summary);
-  for (const passage of ['The colonoscope was advanced to the cecum.', 'Date of service: 2026-10-21', 'I read this passage', 'The endoscopic base']) {
+  for (const passage of ['Landmarks photographed: appendiceal orifice and ileocecal valve.', 'Date of service: 2026-10-21', 'I read this passage', 'The endoscopic base']) {
     assert.equal(text.includes(passage), false, passage);
   }
   // a payload served before harness@2 records as before

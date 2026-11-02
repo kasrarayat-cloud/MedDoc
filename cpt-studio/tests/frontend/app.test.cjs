@@ -1584,7 +1584,9 @@ test('the Review participants card shows each participant\'s first reading, then
   assert.ok(harnessRow(render(peer), 'astra').includes('Its own tool calls retrieved 1 reference; it says it used 2, 1 of them cited, not retrieved.'));
   const final = render(fixture(H2_FINAL));
   const astra = peerRowOf(final, 'astra');
-  assert.ok(astra.includes('<span class="status green">Done</span>') && astra.includes('<p>Answered in peer review, after its first reading was frozen; the review was used.</p>'));
+  // moved by refutation round 3 (falsegreen-11): the fixtures' rows are the engine's; Astra's peer-review code quotes a sentence in
+  // no document, which its row says
+  assert.ok(astra.includes('<span class="status green">Done</span>') && astra.includes('<p>Answered in peer review, after its first reading was frozen; the review was used. 1 of its quotes was not found in the document, so it is never used as evidence.</p>'));
   assert.ok(astra.includes('Codes it proposed after peer review, never independent: 45381.'));
   assert.ok(astra.includes('Its own tool calls retrieved 1 reference; it says it used 2, 1 of them cited, not retrieved.'), 'its peer-review run\'s, not its first reading\'s');
   assert.ok(peerRowOf(final, 'fable').includes('Codes it proposed after peer review, never independent: 45380.'));
@@ -1631,7 +1633,8 @@ test('each open question lists its candidate answers: the value, the passage quo
     extent.candidates.map(candidate => [candidate.id, String(candidate.verified)]));
   assert.ok(block.includes('<div class="evidence-label">Candidate answers from the participants&#x27; located passages · 2</div>'));
   const [verified, unverified] = extent.candidates;
-  assert.ok(block.includes(`<span class="participant-head"><strong>cecum</strong><span class="status green">Verified</span></span><p class="candidate-quote">“The colonoscope was advanced to the cecum.” (page 1) — a part of the sentence “Technique: The colonoscope was advanced to the cecum.”</p><small class="check-source">Located by Astra and Fable in their independent first readings.</small>`), block);
+  // moved by refutation round 3 (falsegreen-11): the fixtures' rows are the engine's; the extent's verified passage is its landmarks line
+  assert.ok(block.includes(`<span class="participant-head"><strong>cecum</strong><span class="status green">Verified</span></span><p class="candidate-quote">“Landmarks photographed: appendiceal orifice and ileocecal valve.” (page 1) — a part of the sentence “Technique: Landmarks photographed: appendiceal orifice and ileocecal valve.”</p><small class="check-source">Located by Astra and Fable in their independent first readings.</small>`), block);
   assert.ok(block.includes('<small class="check-source">Verified: its passage is an exact slice of the document, in no history, plan or indication section, and it names that landmark, which CPT Studio&#x27;s readers read neither as not reached nor as qualified (a negation, an attempt or a doubt). It is still only a candidate: read the passage before confirming it.</small>'));
   assert.ok(block.includes('<span class="status amber">Not verified</span>'));
   assert.ok(block.includes(`<small class="check-source">Not verified, so it cannot be confirmed: ${app.escapeHtml(unverified.why)}</small>`));
@@ -1677,8 +1680,11 @@ test('a verified candidate\'s Confirm action shows its served attestation exactl
       assert.ok(html.includes(control), `${clarification.fact} ${candidate.id}`);
     }
   }
-  // refutation round 2, EV2-1: of the status candidates only the rectum biopsy's passage states 45380's act
+  // refutation round 2, EV2-1: no status candidate is verified where no passage states 45380's act - and moved by
+  // refutation round 3 (falsegreen-11): the readers leave this document's biopsy in doubt, so none does; the three are
+  // 45385's and 45380's extent and the date
   assert.equal(count(html, 'data-action="confirm-finding"'), 3);
+  assert.equal(doc.clarifications.flatMap(item => item.candidates).filter(item => item.fact === 'performed_status' && item.verified).length, 0);
   // the served sentence is shown as served, never rebuilt from the value
   const extent = clarificationOf(doc, 'extent');
   const served = { ...doc, clarifications: doc.clarifications.map(item => (item.id === extent.id ? { ...item, candidates: [{ ...item.candidates[0], attestation: 'A sentence the server serves.' }] } : item)) };
@@ -1694,7 +1700,8 @@ test('a verified candidate\'s Confirm action shows its served attestation exactl
   for (const [name, variant] of Object.entries(variants)) {
     const page = render(variant);
     assert.equal(page.includes('confirm-finding'), false, name);
-    assert.equal(count(page, 'data-candidate='), 6, `${name}: the candidates are still listed`);
+    // moved by refutation round 3 (falsegreen-11): the engine asks 45380's extent too - eight candidates in all
+    assert.equal(count(page, 'data-candidate='), 8, `${name}: the candidates are still listed`);
   }
 });
 
@@ -1787,7 +1794,8 @@ test('a confirmed question names whose located passage and which reviewer; agree
   const block = questionOf(render(confirmed), extent.id);
   assert.ok(block.startsWith(`<div class="candidate-answers" data-question="${extent.id}" data-confirmation="${confirmation.id}">`), block.slice(0, 200));
   assert.ok(block.includes('<strong>Confirmed from Astra&#x27;s and Fable&#x27;s located passage by Synthetic Reviewer: cecum</strong>'));
-  assert.ok(block.includes('<p>“The colonoscope was advanced to the cecum.” (page 1)</p>'));
+  // moved by refutation round 3 (falsegreen-11): the fixtures' rows are the engine's; the confirmed passage is the landmarks line
+  assert.ok(block.includes('<p>“Landmarks photographed: appendiceal orifice and ileocecal valve.” (page 1)</p>'));
   assert.ok(block.includes(`<p>Attestation recorded: ${app.escapeHtml(ATTESTATION('cecum'))}</p>`));
   assert.ok(block.includes('1 Nov 2026, 09:00 UTC · A confirmed finding is not a decision: each code still needs its own.'));
   assert.equal(block.includes('confirm-finding'), false, 'a question takes one confirmation');
@@ -1833,8 +1841,11 @@ test('a code card says who proposed it in which phase, 11.4\'s sentence, the con
   // the confirmed finding the re-assessment read: a fact, never a decision
   const confirmedDoc = fixture(H2_CONFIRMED);
   const confirmedCard = codeCardOf(render(confirmedDoc), '45385');
-  assert.ok(confirmedCard.includes('<div class="confirmed-fact">') && confirmedCard.includes('<strong>Confirmed finding, not a decision</strong><br>Extent reached: cecum — confirmed from Astra&#x27;s and Fable&#x27;s located passage by Synthetic Reviewer · “The colonoscope was advanced to the cecum.” (page 1)</span>'), confirmedCard);
-  assert.ok(confirmedCard.includes('<li><b>Reviewer decision:</b> not decided yet</li>') && confirmedCard.includes('data-decision="approve"'));
+  // moved by refutation round 3 (falsegreen-11): the fixtures' rows are the engine's; the re-assessment reads the confirmed extent,
+  // and 45385 is still held on the encounter's date question, so it can be rejected and not yet approved
+  assert.ok(confirmedCard.includes('<div class="confirmed-fact">') && confirmedCard.includes('<strong>Confirmed finding, not a decision</strong><br>Extent reached: cecum — confirmed from Astra&#x27;s and Fable&#x27;s located passage by Synthetic Reviewer · “Landmarks photographed: appendiceal orifice and ileocecal valve.” (page 1)</span>'), confirmedCard);
+  assert.ok(confirmedCard.includes('<li><b>Reviewer decision:</b> not decided yet</li>') && confirmedCard.includes('data-decision="reject"'));
+  assert.equal(confirmedCard.includes('data-decision="approve"'), false);
   const unknown = { ...confirmedDoc, confirmations: [] };
   assert.ok(codeCardOf(render(unknown), '45385').includes(`A confirmed finding that is not listed for this revision (${confirmedDoc.confirmations[0].id}).`));
   // a Corti-only payload (phase 0) keeps its cards as harness@1 drew them
@@ -1872,9 +1883,10 @@ test('the trace shows each run\'s exchanges and tool calls, each peer review in 
   assert.ok(html.includes('<p class="harness-note">No tool call in this exchange.</p>'));
   // the peer review: the frozen inputs it was shown, its answers by question id, positions, codes after peer review
   for (const [name, digest] of peer.review.frozen_inputs) assert.ok(html.includes(`<dt>${name}</dt><dd>${digest}</dd>`), name);
-  assert.ok(html.includes(`<li><b>Question ${peer.review.answers[0].question_id}</b><br>Answer: cecum<ul class="trace-quotes"><li>“The colonoscope was advanced to the cecum.” — found in the document (1 place)</li></ul></li>`));
+  // moved by refutation round 3 (falsegreen-11): the fixtures' rows are the engine's; the answer quotes the landmarks line
+  assert.ok(html.includes(`<li><b>Question ${peer.review.answers[0].question_id}</b><br>Answer: cecum<ul class="trace-quotes"><li>“Landmarks photographed: appendiceal orifice and ileocecal valve.” — found in the document (1 place)</li></ul></li>`));
   assert.ok(html.includes('<li><b>45380 · supports it</b><br>Why: Participant wording.'));
-  assert.ok(html.includes('<li><b>45381 · units 1 · confidence low · services s1 · proposed after peer review, never independent</b>'));
+  assert.ok(html.includes('<li><b>45381 · units 1 · confidence low · services s1 · proposed after peer review, never independent</b><br>Basis: Participant wording.<ul class="trace-quotes"><li>“A submucosal injection was given.” — unverified (not found); never used as evidence</li></ul></li>'));
   assert.ok(html.includes('<li><b>fact:cms-pfs-rvu26d:45385:mult_proc — cited, not retrieved</b><br>Its use: Retrieved only by its first reading.</li>'));
   assert.ok(html.includes('<li><b>Question ' + trace.participants[2].runs[1].review.answers[0].question_id + '</b><br>Answer: Cecum, appendiceal orifice seen'), 'the participant\'s own words, in the trace');
   // a first reading's references used, checked against its own run
@@ -2031,8 +2043,9 @@ function r2evAnswers(doc, candidate) {
 test('a candidate span that is a slice of a longer sentence is shown with that whole sentence, and its whole sentence alone is shown as it is', () => {
   // moved by refutation round 3 (HARNESS.md 12.10): the dormant confirmation path's rendering, drawn for the fixture it serves
   const doc = fixture(H2_DORMANT);
-  const slice = 'The colonoscope was advanced to the cecum.';
-  const sentence = 'Technique: The colonoscope was advanced to the cecum.';
+  // moved by refutation round 3 (falsegreen-11): the fixtures' document's slice and sentence are its landmarks line
+  const slice = 'Landmarks photographed: appendiceal orifice and ileocecal valve.';
+  const sentence = 'Technique: Landmarks photographed: appendiceal orifice and ileocecal valve.';
   const html = r2evAnswers(doc, r2evCandidate(doc, slice, sentence));
   assert.ok(html.includes(`<p class="candidate-quote">“${slice}” (page 1) — a part of the sentence “${sentence}”</p>`), html);
   assert.equal(count(html, 'data-action="confirm-finding"'), 1, 'a slice shown with its sentence can be confirmed');
@@ -2044,8 +2057,9 @@ test('a candidate span that is a slice of a longer sentence is shown with that w
 test('a candidate whose served sentence cannot be shown as its span\'s is marked so and is never confirmed from the page', () => {
   // moved by refutation round 3 (HARNESS.md 12.10): the dormant confirmation path's rendering, drawn for the fixture it serves
   const doc = fixture(H2_DORMANT);
-  const slice = 'The colonoscope was advanced to the cecum.';
-  const good = r2evCandidate(doc, slice, 'Technique: The colonoscope was advanced to the cecum.');
+  // moved by refutation round 3 (falsegreen-11): the fixtures' document's slice and sentence are its landmarks line
+  const slice = 'Landmarks photographed: appendiceal orifice and ileocecal valve.';
+  const good = r2evCandidate(doc, slice, 'Technique: Landmarks photographed: appendiceal orifice and ileocecal valve.');
   const elsewhere = { ...good, sentences: [{ ...good.sentences[0], start: good.sentences[0].start + 1 }] };  // not exact
   const apart = { ...good, sentences: [r2evCandidate(doc, slice, 'Bowel preparation was good.').sentences[0]] };  // not holding it
   const missing = { ...good, sentences: [] };
@@ -2063,7 +2077,8 @@ test('a candidate whose served sentence cannot be shown as its span\'s is marked
 test('each fact\'s Verified note says what its check established: the section rule for every fact, a status on the code\'s own act', () => {
   // moved by refutation round 3 (HARNESS.md 12.10): the dormant confirmation path's rendering, drawn for the fixture it serves
   const doc = fixture(H2_DORMANT);
-  const sentence = 'Technique: The colonoscope was advanced to the cecum.';
+  // moved by refutation round 3 (falsegreen-11): the fixtures' document's slice and sentence are its landmarks line
+  const sentence = 'Technique: Landmarks photographed: appendiceal orifice and ileocecal valve.';
   const said = {
     extent: 'it names that landmark, which CPT Studio&#x27;s readers read neither as not reached nor as qualified (a negation, an attempt or a doubt)',
     performed_status: 'CPT Studio&#x27;s readers read its whole sentence as stating that status for the act this code accounts for (for a code of the whole service, for that service)',
@@ -2345,7 +2360,7 @@ test('R3-CONF D7: the final fixture serves every candidate as a located passage,
   const doc = fixture(H2_FINAL);
   assert.equal(doc.permissions.can_confirm, false);
   const served = doc.clarifications.filter(item => item.candidates.length);
-  assert.deepEqual(served.map(item => item.fact).sort(), ['extent', 'performed_status', 'service_date']);
+  assert.deepEqual(served.map(item => item.fact).sort(), ['extent', 'extent', 'performed_status', 'service_date']);
   for (const item of served) {
     for (const candidate of item.candidates) {
       assert.deepEqual([candidate.verified, candidate.why, candidate.attestation], [false, R3_UNCHECKED, ''], candidate.id);

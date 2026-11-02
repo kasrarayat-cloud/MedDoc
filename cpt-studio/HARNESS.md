@@ -1119,6 +1119,18 @@ None is reachable in this release.
 - peer-2: a confirmation of one proposal's status worded another proposal's same-day rule as CPT Studio's own reading in
   a later chain's peer requests and on the page, unlabelled.
 
+**The rows the tests and the website fixtures pin are the pipeline's (falsegreen-11).** `tests/test_harness2_api.py`'s
+`Harness2Case`, whose assessments the API tests pin and `tests/test_frontend_harness2.py` serializes into the harness@2
+fixtures, persisted assessments written by hand: questions and a 45380 performed-status hold, with its support and
+candidates, that CPT Studio's readers never produce for its note. Its rows are now the assess stage's own: the context
+as its reader reads the document, Corti's run read by Corti's normalizer, the participants' runs read by the pipeline's
+readers, peer requests built from the pipeline's own peer material, and each assessment the engine's of those inputs
+(`jobs._assess_child`). Its document is the participants' fixture note with what the readers do ask about: two dates of
+service that disagree, landmarks photographed but no extent reached, and a biopsy left in doubt (so no status candidate
+verifies, even on the dormant path). `tests/test_harness2_r3_conf.py` pins that the assess stage makes the case's first
+assessment, digest for digest, and that its final one is the engine's for the stored runs; the fixtures are regenerated
+from it and every pin moved to what they serve, saying so.
+
 **Checklist 4.6 is NOT DONE in this release.** What it becomes is an open owner question (a product decision with no
 ruled precedent), with two options: (i) a human-override confirmation that claims nothing CPT Studio cannot check - the
 reviewer's reading decides, and the page says so; or (ii) no override, with the false holds repaired at the readers

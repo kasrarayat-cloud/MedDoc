@@ -4,7 +4,6 @@ once both packages were integrated)."""
 import json
 import os
 import re
-from dataclasses import replace
 from datetime import datetime, timedelta, timezone as dt_timezone
 from unittest import mock
 
@@ -12,9 +11,7 @@ from django.test import override_settings
 from django.utils import timezone
 
 from studio import jobs, models, review, serializers
-from studio.gi import services as gi_services
-from studio.types import ClarificationSpec, ExtractionResult, sha256_json, to_jsonable
-from studio.validation import checks as validation_checks
+from studio.types import sha256_json
 from tests import test_harness2_api as h2
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
@@ -91,10 +88,12 @@ class StableIds:
 @override_settings(ASTRA_MODE='replay', FABLE_MODE='replay')
 class Harness2FixtureTests(h2.Harness2Case):
     """Four encounters as harness@2 records them, serialized: one whose peer reviews are running (assess #1 current,
-    Astra's peer stage in flight, Fable's waiting), one after both peer reviews (assess #2, three open questions with
+    Astra's peer stage in flight, Fable's waiting), one after both peer reviews (assess #2, its open questions with
     their candidates, served unchecked: this release offers no confirmation, HARNESS.md 12.10), and - made with the
     dormant confirmation path on - the same scenario as that path serves it, and one whose extent question a reviewer
-    confirmed, with the re-assessment that read it."""
+    confirmed, with the re-assessment that read it. Every assessment is the engine's of the case's stored rows
+    (Harness2Case.result; refutation round 3, falsegreen-11: they were written by hand, a hold among them that the
+    readers never produce for their note)."""
 
     def setUp(self):  # the parent's builds one encounter; these tests build each scenario as the pipeline records it
         self.ws = f.workspace()
@@ -132,11 +131,7 @@ class Harness2FixtureTests(h2.Harness2Case):
 
     def phase1(self, title):
         self.encounter = f.encounter(self.ws, self.reviewer, title=title)
-        self.revision = f.pasted_revision(self.encounter, self.reviewer, h2.NOTE, extract=False)
-        f.record(self.revision, ExtractionResult(status='ok', method='paste', text=h2.NOTE, pages=h2.PAGES))
-        self.revision.refresh_from_db()
-        self.context = pf.context(self.encounter, self.revision)
-        self.corti = pf.provider_run(self.encounter, self.revision)
+        self.document()  # the revision, its context as the analyze stage records it, and Corti's run (Harness2Case)
         self.now = timezone.now()
         self.adapters = {name: h2.ADAPTERS[name]('/nonexistent/never-read.env') for name in h2.ADAPTERS}
         self.runs, self.readings, self.requests = {}, {}, {}
@@ -152,15 +147,15 @@ class Harness2FixtureTests(h2.Harness2Case):
                               ['fable', sha256_json(self.readings['fable'])],
                               ['revision', self.revision.text_sha256]])
         self.jobs(PHASE1_JOBS)
-        self.first = self.save([self.entry(name) for name in h2.ADAPTERS], self.result_of(1))
+        self.first = self.save([self.entry(name) for name in h2.ADAPTERS], self.result(1))
 
     def phase2(self):
         self.peer_runs, self.reviews = {}, {}
         for name in h2.ADAPTERS:
             self.peer_review(name)
         self.jobs(PHASE2_JOBS)
-        self.final = self.save([self.entry(name, peer=True) for name in h2.ADAPTERS], self.result_of(2))
-        self.questions = {c.fact: c for c in self.final.clarifications.all()}
+        self.final = self.save([self.entry(name, peer=True) for name in h2.ADAPTERS], self.result(2))
+        self.questions = h2.questions_of(self.final)
 
     def jobs(self, kinds, state=models.Job.SUCCEEDED):
         for kind in kinds:
@@ -172,9 +167,8 @@ class Harness2FixtureTests(h2.Harness2Case):
     def save(self, entries, result):
         self.encounter.refresh_from_db()
         assessment = review.persist_assessment(
-            encounter=self.encounter, revision=self.revision, context=self.context,
-            routing_run=pf.routing(self.revision), provider_run=self.corti, result=result, participants=entries,
-            retrieval=self.retrieval())
+            encounter=self.encounter, revision=self.revision, context=self.context, routing_run=self.routing_run,
+            provider_run=self.corti, result=result, participants=entries, retrieval=self.retrieval())
         review.refresh_state(self.encounter)
         return assessment
 
@@ -191,86 +185,26 @@ class Harness2FixtureTests(h2.Harness2Case):
                     'sha256': h2.sha(b'synthetic pfs file'), 'field': field, 'value': value, **extra}
         rule = passage('vi-c-3', 'Chapter VI, section C: Endoscopic Services', 'VI-14', 'pfs.endo_base', '',
                        'stands in for the rule that a surgical endoscopy includes the diagnostic endoscopy.')
-        return [{'code': code, 'service_date': '2026-10-21',
+        # the service date the stage records it for: none (refutation round 3, falsegreen-11: the document's two
+        # dates of service disagree, so its context establishes none; this stand-in had named 2026-10-21)
+        return [{'code': code, 'service_date': None,
                  'facts': [fact(code, 'status', 'A'), fact(code, 'mult_proc', '3'), fact(code, 'endo_base', '45378')],
                  'passages': [rule], 'lookups': [f'pfs {code} 2026-10-21', 'passages pfs.endo_base'],
                  'notes': ['NCCI procedure-to-procedure edits are not connected, so code pairs are not verified.']}
                 for code in ('45385', '45380')]
 
-    def result_of(self, phase, confirmation=None):
-        """The assessment as the engine words it: Corti's snare removal, which every participant also proposed in its
-        first reading, and the biopsy no decidable proposal carries - Astra's in its first reading and, in phase 2,
-        Fable's after peer review - with Astra's peer-review code listed apart; held by the extent, the biopsy's status
-        and the date of service. ``confirmation``: the extent, confirmed and read by a re-assessment."""
-        extent = pf.clarification('extent', family='gi.colonoscopy', proposal_key='sel:0',
-                                  question='Colonoscopy: confirm the furthest extent reached.',
-                                  reason='The extent reached is not documented; the Colonoscopy profile requires it.')
-        status = pf.clarification('performed_status', family='gi.colonoscopy', proposal_key='sel:1',
-                                  question='Colonoscopy: confirm whether 45380 was performed at this encounter.',
-                                  reason='Whether the biopsy was performed at this encounter is in doubt.')
-        date_question = ClarificationSpec(scope='encounter', fact='service_date',
-                                          question='Confirm the date of service.',
-                                          reason='The date of service is in question.')
-        proposers = ['astra', 'fable'] if phase == 2 else ['astra']
-        phases = {'astra': 'independent', 'fable': 'peer_review'} if phase == 2 else {'astra': 'independent'}
-        who = 'Astra (independent participant) and Fable after peer review' if phase == 2 else (
-            'Astra (independent participant)')
-        # each decidable proposal records the identity a confirmation of its question is bound to (HARNESS.md 12.5,
-        # refutation r1 EV-1), as tests/test_harness2_api.py's rows do
-        snare_support = {'origin': 'primary', 'proposed_by': ['corti', 'astra', 'fable'],
-                         'phases': {'astra': 'independent', 'fable': 'independent'},
-                         'identity': h2.sha(b'synthetic identity of 45385')}
-        snare = pf.proposal('sel:0', '45385', ['was removed with a cold snare'], text=h2.NOTE,
-                            status='needs_clarification', clarifications=(extent,),
-                            rationale='A polyp removed with a cold snare is documented as performed on the service '
-                                      'date.')
-        checks = None
-        if confirmation is not None:
-            words = (f"confirmed from Astra's and Fable's located passage by {confirmation.confirmed_by.label()}")
-            quoted = validation_checks.quoted_passages([span['text'] for span in confirmation.spans])
-            item = (f'{validation_checks.fact_label("extent")} of 45385 (sel:0) = {confirmation.value}, {words} '
-                    f'({quoted})')
-            checks = (pf.check('extraction.status', 'pass', 'Text extraction'),
-                      pf.check('service_date', 'pass', 'Service date documented'),
-                      validation_checks.confirmations_applied_check([item]))
-            snare = replace(snare, status='ready', clarifications=(),
-                            rationale=f'{snare.rationale} Extent reached: {confirmation.value}, {words} ({quoted}).')
-            snare_support = {**snare_support, 'confirmed': [str(confirmation.pk)]}
-        snare = replace(snare, support=snare_support)
-        biopsy = replace(pf.proposal('sel:1', '45380', [h2.RECTUM_QUOTE], text=h2.NOTE, status='needs_clarification',
-                                     clarifications=(status,),
-                                     rationale=f'Proposed by {who}; Corti did not propose this code.'),
-                         support={'origin': 'participant', 'proposed_by': proposers, 'phases': phases,
-                                  'identity': h2.sha(b'synthetic identity of 45380'),
-                                  # the documented service the readers decided its hold on (refutation round 2,
-                                  # EV2-1: a status is read there, on the act its code accounts for)
-                                  'service': 'S1', 'reason': 'readings_disagree'})
-        proposals = [snare, biopsy]
-        if phase == 2:
-            proposals.append(replace(
-                pf.proposal('altp:0', '45381', [], text=h2.NOTE, bucket='alternative', checks=(),
-                            exclusion_reason='Proposed by Astra after peer review, but not added as a proposal: its '
-                                             'quote does not show the coded act. Alternatives cannot be approved.',
-                            rationale='Proposed by Astra after peer review; not added as a proposal: its quote does '
-                                      'not show the coded act. Informational only.'),
-                support={'origin': 'participant', 'proposed_by': ['astra'], 'phases': {'astra': 'peer_review'}}))
-        result = pf.result(*proposals, clarifications=(date_question,),
-                           **({'encounter_checks': checks} if checks is not None else {}))
-        # the documented-service reading the readers make of the note (one colonoscopy, its snare removal and biopsy
-        # performed), which a status candidate is read against (refutation round 2, EV2-1)
-        services = to_jsonable(gi_services.build(h2.NOTE, service_date=None, pages=h2.PAGES))
-        return replace(result, services=services, completeness={'covered': {'S1': ['45385', '45380']}})
-
     def confirm_extent(self):
-        """The reviewer confirms the verified extent candidate through the real endpoint; the re-assessment it queues
-        (built by the pipeline package) is recorded here as the assessment that read the confirmation."""
+        """The reviewer confirms 45385's verified extent candidate through the real endpoint; the re-assessment it
+        queues is recorded here as the engine makes it, reading the revision's confirmation (jobs.confirmed_findings).
+        """
         candidate = self.verified('extent')
         with mock.patch('studio.jobs.reassess_after_confirmation'):
             response = self.confirm('extent', candidate)
         self.assertEqual(response.status_code, 201, response.content)
         confirmation = models.FindingConfirmation.objects.get(clarification=self.questions['extent'])
         self.jobs((models.Job.ASSESS,))
-        self.save([self.entry(name, peer=True) for name in h2.ADAPTERS], self.result_of(2, confirmation))
+        self.save([self.entry(name, peer=True) for name in h2.ADAPTERS],
+                  self.result(2, jobs.confirmed_findings(self.revision)))
         return confirmation
 
     # --- the scenarios, serialized ------------------------------------------------------------------------------------

@@ -18,10 +18,10 @@ from django.conf import settings
 from django.test import TestCase, override_settings
 
 from studio import candidates, jobs, models, reports, review, serializers
-from tests.test_harness2_api import (BOTH, CECUM_QUOTE, DATE_QUOTE, FACT_REF, PASSAGE_REF, PREP_QUOTE, RECTUM_QUOTE,
-                                     Harness2Case)
+# moved by refutation round 3 (falsegreen-11): Harness2Case's own document and quotes, whose rows are the engine's
+from tests.test_harness2_api import (BOTH, DATE_QUOTE, FACT_REF, LANDMARK_QUOTE, NOTE, PASSAGE_REF, RECTUM_QUOTE,
+                                     UNLOCATED_QUOTE, Harness2Case, questions_of)
 from tests.support import pipeline_factories as pf
-from tests.test_participants_support import NOTE
 
 _spec = importlib.util.spec_from_file_location('cpt_verify_downloads_harness2',
                                                Path(settings.BASE_DIR) / 'ops' / 'verify_downloads.py')
@@ -78,14 +78,14 @@ class SectionTests(Harness2Case):
 
     def test_peer_review(self):
         lines = section(self.txt(), 'PEER REVIEW')
-        first = {c.fact: c for c in self.first.clarifications.all()}
+        first = questions_of(self.first)  # moved by refutation round 3 (falsegreen-11): 45380 asks its extent too
         frozen = ' · '.join(f'{name} {value}' for name, value in self.reviews['astra'].frozen_inputs)
         self.assertEqual(lines[:12], [
             '  - Astra · answered in peer review; the review was used',
             f'    Run: {self.peer_runs["astra"].pk} · REPLAY (recorded response, not live output)',
             f'    Frozen inputs shown: {frozen}',
             f'    Answer to "{first["extent"].question}" (extent reached): cecum',
-            f'      {at(CECUM_QUOTE, 1)}',
+            f'      {at(LANDMARK_QUOTE, 1)}',
             f'    Answer to "{first["service_date"].question}" (service date): 2026-10-21',
             f'      {at(DATE_QUOTE, 1)}',
             f'    Answer to "{first["performed_status"].question}" (performed status): performed',
@@ -93,11 +93,14 @@ class SectionTests(Harness2Case):
             '    Position on 45380: supports',
             f'      {at(RECTUM_QUOTE, 2)}',
             '    Additional code 45381 · units 1 — proposed after peer review, never independent'])
-        self.assertEqual(lines[12], f'      {at(PREP_QUOTE, 1)}')
+        # moved by refutation round 3 (falsegreen-11): Astra's peer-review code quotes a sentence in no document (the
+        # engine lists 45381 apart), so the section counts the quote as not found, and shows none of it
+        self.assertEqual(lines[12], '    Unverified quotes: 1 (not found in the document; never used as evidence)')
+        self.assertNotIn(UNLOCATED_QUOTE, self.txt())
         fable = lines.index('  - Fable · answered in peer review; the review was used')
         # its answer is stated in CPT Studio's words (the landmark its value names), never its own
         self.assertEqual(lines[fable + 3:fable + 5], [
-            f'    Answer to "{first["extent"].question}" (extent reached): cecum', f'      {at(CECUM_QUOTE, 1)}'])
+            f'    Answer to "{first["extent"].question}" (extent reached): cecum', f'      {at(LANDMARK_QUOTE, 1)}'])
         text = self.txt()
         for words in WORDING:  # a participant's own wording never reaches a report
             self.assertNotIn(words, text)
@@ -146,7 +149,7 @@ class SectionTests(Harness2Case):
                                    r'Reviewer2B \(human\) at \d{4}-\d\d-\d\dT[0-9:]+Z$')
         self.assertEqual(lines[1:], [
             f'    Confirmation: {confirmation.pk} · question {self.questions["extent"].pk}',
-            f'    Passage: {at(CECUM_QUOTE, 1)}', '    Located by: Astra, Fable',
+            f'    Passage: {at(LANDMARK_QUOTE, 1)}', '    Located by: Astra, Fable',
             f'    Attestation: {candidates.attestation("cecum")}',
             '    Effect: not read by this assessment, which was made before it'])
         # the re-assessment that reads it says so
@@ -207,12 +210,12 @@ class CsvTests(Harness2Case):
         for row in rows:
             by_list.setdefault(row['item_list'], []).append(row)
         (found,) = by_list['confirmed_finding']
-        start = NOTE.index(CECUM_QUOTE)
+        start = NOTE.index(LANDMARK_QUOTE)
         self.assertEqual({key: found[key] for key in ('code', 'family', 'status', 'exclusion_reason', 'evidence',
                                                       'proposed_by', 'reviewer', 'reviewer_kind', 'decision', 'checks',
                                                       'evidence_support')},
                          {'code': '45385', 'family': 'gi.colonoscopy', 'status': 'extent', 'exclusion_reason': 'cecum',
-                          'evidence': f'"{CECUM_QUOTE}" [{start}-{start + len(CECUM_QUOTE)}, p1]',
+                          'evidence': f'"{LANDMARK_QUOTE}" [{start}-{start + len(LANDMARK_QUOTE)}, p1]',
                           'proposed_by': 'astra;fable', 'reviewer': self.reviewer.label(), 'reviewer_kind': 'human',
                           'decision': '', 'evidence_support': candidates.attestation('cecum'),
                           'checks': f'confirmation={confirmation.pk};clarification={self.questions["extent"].pk};'
@@ -301,19 +304,19 @@ class DownloadVerifierTests(Harness2Case):
 
     def test_a_tampered_passage_or_a_missing_confirmation_fails(self):
         self.confirmed()
-        start = NOTE.index(CECUM_QUOTE)
-        right = f'[chars {start}–{start + len(CECUM_QUOTE)}, page 1]'
-        shifted = f'[chars {start + 1}–{start + len(CECUM_QUOTE) + 1}, page 1]'
-        results = self.checked(txt=lambda text: text.replace(f'    Passage: "{CECUM_QUOTE}" {right}',
-                                                             f'    Passage: "{CECUM_QUOTE}" {shifted}', 1))
+        start = NOTE.index(LANDMARK_QUOTE)
+        right = f'[chars {start}–{start + len(LANDMARK_QUOTE)}, page 1]'
+        shifted = f'[chars {start + 1}–{start + len(LANDMARK_QUOTE) + 1}, page 1]'
+        results = self.checked(txt=lambda text: text.replace(f'    Passage: "{LANDMARK_QUOTE}" {right}',
+                                                             f'    Passage: "{LANDMARK_QUOTE}" {shifted}', 1))
         self.assertEqual(results['txt.harness2_passages'][0], 'fail')
         dropped = self.checked(txt=lambda text: '\n'.join(line for line in text.split('\n')
                                                           if not line.startswith('    Confirmation: ')))
         self.assertEqual(dropped['txt.confirmed_findings'][0], 'fail')
         rows = self.checked(csv_text=lambda text: text.replace(f'"confirmation=', '"confirmations=', 1))
         self.assertEqual(rows['csv.confirmed_findings'][0], 'fail')
-        moved = self.checked(csv_text=lambda text: text.replace(f'[{start}-{start + len(CECUM_QUOTE)}, p1]',
-                                                                f'[{start + 2}-{start + len(CECUM_QUOTE)}, p1]', 1))
+        moved = self.checked(csv_text=lambda text: text.replace(f'[{start}-{start + len(LANDMARK_QUOTE)}, p1]',
+                                                                f'[{start + 2}-{start + len(LANDMARK_QUOTE)}, p1]', 1))
         self.assertEqual(moved['csv.harness2_passages'][0], 'fail')
 
     def test_a_persisted_confirmation_the_report_leaves_out_fails(self):

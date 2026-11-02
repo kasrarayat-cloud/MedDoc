@@ -6,7 +6,7 @@
  "revision": {
   "id": "e2b00000-0000-4000-8000-000000000007",
   "number": 1,
-  "text_sha256": "9436025908574d0e062d54bc450521b378f013a55f4530fab1457a234b9c3d67"
+  "text_sha256": "57d9b103213beca06af051eebbf54a96ab4a198fe6d5eba86c2982efb0b1a91f"
  },
  "participants": [
   {
@@ -21,10 +21,10 @@
      "sent": true,
      "mode": "replay",
      "purpose": "primary",
-     "run_identity": "e2b00000-0000-4000-8000-00000000000f",
+     "run_identity": "e2b00000-0000-4000-8000-000000000010",
      "authorization_ref": "",
      "requested_by": null,
-     "adapter_version": "replay@test",
+     "adapter_version": "corti-coding-v2@cptstudio-1",
      "endpoint": "",
      "requested_model": "",
      "returned_model": "",
@@ -37,9 +37,9 @@
      },
      "usage_basis": "provider_reported_credits_not_usd",
      "estimated_cost_usd": null,
-     "request_sha256": "6ab6954a74503cfdd5f7f1e7b3e9f7cf3445fdd642bc572e668fb632cbc56af9",
-     "response_sha256": "a0f2f76360300d830cbc1851f7460923bdb2c4db2939cf3def4f135c7f56c5a6",
-     "response_bytes": 13,
+     "request_sha256": "935a870b884eeb1851bbe698a5935ba3c125f1ef01db0535790c7218c8c8a187",
+     "response_sha256": "70baee6528ce769508007fb2ede6a88384c5255d3983c67c895bb29218f8a898",
+     "response_bytes": 270,
      "created_at": "2026-11-01T09:00:16Z",
      "finished_at": "2026-11-01T09:00:15Z",
      "error": "",
@@ -63,7 +63,7 @@
      "sent": true,
      "mode": "replay",
      "purpose": "independent",
-     "run_identity": "e2b00000-0000-4000-8000-000000000010",
+     "run_identity": "e2b00000-0000-4000-8000-000000000011",
      "authorization_ref": "",
      "requested_by": null,
      "adapter_version": "openai-responses@cptstudio-harness-2",
@@ -80,9 +80,9 @@
      },
      "usage_basis": "provider_reported_tokens_summed_over_exchanges",
      "estimated_cost_usd": "0.0300",
-     "request_sha256": "6dd3fd761a59431b04c2a3faefcc976ec1a2be555a2cf9706b578cb967ad2292",
-     "response_sha256": "5540c69071ccfbaaaf053d6dc082e8bdb0aab8bc62dea2be32a777c71a29b634",
-     "response_bytes": 2290,
+     "request_sha256": "b45465d9b07f7472d5572db97c4721563a379668a5426f096fe09c82abeeb59e",
+     "response_sha256": "32f567395d3151914eff05ba1dd3b1df0a6ca1a95ed262b44658107586da41e2",
+     "response_bytes": 2321,
      "created_at": "2026-11-01T09:00:18Z",
      "finished_at": "2026-11-01T09:00:17Z",
      "error": "",
@@ -100,8 +100,8 @@
          "spans": [
           {
            "context_index": 0,
-           "start": 108,
-           "end": 135,
+           "start": 106,
+           "end": 133,
            "text": "Date of service: 2026-10-21",
            "exact": true,
            "page": null
@@ -139,13 +139,13 @@
         "provider_role": "",
         "evidence": [
          {
-          "quote": "The colonoscope was advanced to the cecum.",
+          "quote": "Landmarks photographed: appendiceal orifice and ileocecal valve.",
           "spans": [
            {
             "context_index": 0,
-            "start": 207,
-            "end": 249,
-            "text": "The colonoscope was advanced to the cecum.",
+            "start": 232,
+            "end": 296,
+            "text": "Landmarks photographed: appendiceal orifice and ileocecal valve.",
             "exact": true,
             "page": null
            }
@@ -157,8 +157,8 @@
           "spans": [
            {
             "context_index": 0,
-            "start": 353,
-            "end": 455,
+            "start": 335,
+            "end": 437,
             "text": "A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology.",
             "exact": true,
             "page": null
@@ -184,8 +184,8 @@
           "spans": [
            {
             "context_index": 0,
-            "start": 397,
-            "end": 426,
+            "start": 379,
+            "end": 408,
             "text": "was removed with a cold snare",
             "exact": true,
             "page": null
@@ -208,13 +208,13 @@
         "basis": "The report records a separate polyp biopsied with cold forceps.",
         "evidence": [
          {
-          "quote": "A 3 mm polyp in the rectum was biopsied with cold forceps.",
+          "quote": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps.",
           "spans": [
            {
             "context_index": 0,
-            "start": 456,
-            "end": 514,
-            "text": "A 3 mm polyp in the rectum was biopsied with cold forceps.",
+            "start": 438,
+            "end": 505,
+            "text": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps.",
             "exact": true,
             "page": null
            }
@@ -252,7 +252,7 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "6dd3fd761a59431b04c2a3faefcc976ec1a2be555a2cf9706b578cb967ad2292",
+       "request_sha256": "b45465d9b07f7472d5572db97c4721563a379668a5426f096fe09c82abeeb59e",
        "response_sha256": "54f05296d87ae9002112779b5f58493e5f292c84afba2573b534591cfe468c46",
        "provider_request_id": "req_astra_1",
        "response_id": "resp_astra_1",
@@ -284,8 +284,8 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "6dd3fd761a59431b04c2a3faefcc976ec1a2be555a2cf9706b578cb967ad2292",
-       "response_sha256": "5540c69071ccfbaaaf053d6dc082e8bdb0aab8bc62dea2be32a777c71a29b634",
+       "request_sha256": "b45465d9b07f7472d5572db97c4721563a379668a5426f096fe09c82abeeb59e",
+       "response_sha256": "32f567395d3151914eff05ba1dd3b1df0a6ca1a95ed262b44658107586da41e2",
        "provider_request_id": "req_astra_2",
        "response_id": "resp_astra_2",
        "error": "",
@@ -299,7 +299,7 @@
      "sent": true,
      "mode": "replay",
      "purpose": "peer_review",
-     "run_identity": "e2b00000-0000-4000-8000-000000000011",
+     "run_identity": "e2b00000-0000-4000-8000-000000000012",
      "authorization_ref": "",
      "requested_by": null,
      "adapter_version": "openai-responses@cptstudio-harness-2",
@@ -316,9 +316,9 @@
      },
      "usage_basis": "provider_reported_tokens_summed_over_exchanges",
      "estimated_cost_usd": "0.0300",
-     "request_sha256": "9ace2f22bf6d80fe8c89c33c0e192ba1df06df5c12b465558f111e719b658f7b",
-     "response_sha256": "6f0bca849a9c2208e8c054870abbf6963407906834ac2a9f64b159f49073b87c",
-     "response_bytes": 1745,
+     "request_sha256": "3c9f36c078db4277dd0c12acec1079330b1b0c2ea03b1569f2e5fab7a9436137",
+     "response_sha256": "168a82df272c15489fb4959d4033a100d22549bc6abaefa38d60488629f8cedf",
+     "response_bytes": 1791,
      "created_at": "2026-11-01T09:00:28Z",
      "finished_at": "2026-11-01T09:00:17Z",
      "error": "",
@@ -334,60 +334,39 @@
       "frozen_inputs": [
        [
         "astra",
-        "01f27db1b78bfc3eaa0b9468b9f5602de45caee80200ca6872887747c7ee5784"
+        "c46d7e1bcdff6cfc9dd1bfa523593a637f01277e66060f768ba9705cf4309873"
        ],
        [
         "corti",
-        "a0f2f76360300d830cbc1851f7460923bdb2c4db2939cf3def4f135c7f56c5a6"
+        "70baee6528ce769508007fb2ede6a88384c5255d3983c67c895bb29218f8a898"
        ],
        [
         "cpt_studio",
-        "3f38f11dfcb1ded836965f23b133fd641ad9793c01c30a380f862d3507fd02eb"
+        "00bf83b2a08a8d1b2d50e1f9a594d4f8a0f7a02392c2109d5fe899763cd387da"
        ],
        [
         "fable",
-        "4a4acdd646bbaa2785d6bdcd66de969c02ccc687c9afc34064e2d9d0b3dc8c93"
+        "6db924e0a10de784a6fc501f54a1909c65dbf05e0d3a2fa6d1913ae4c9cc5514"
        ],
        [
         "revision",
-        "9436025908574d0e062d54bc450521b378f013a55f4530fab1457a234b9c3d67"
+        "57d9b103213beca06af051eebbf54a96ab4a198fe6d5eba86c2982efb0b1a91f"
        ]
       ],
       "answers": [
        {
-        "question_id": "e2b00000-0000-4000-8000-000000000012",
+        "question_id": "e2b00000-0000-4000-8000-000000000013",
         "settled": true,
         "value": "cecum",
         "evidence": [
          {
-          "quote": "The colonoscope was advanced to the cecum.",
+          "quote": "Landmarks photographed: appendiceal orifice and ileocecal valve.",
           "spans": [
            {
             "context_index": 0,
-            "start": 207,
-            "end": 249,
-            "text": "The colonoscope was advanced to the cecum.",
-            "exact": true,
-            "page": null
-           }
-          ],
-          "reason": ""
-         }
-        ]
-       },
-       {
-        "question_id": "e2b00000-0000-4000-8000-000000000013",
-        "settled": true,
-        "value": "2026-10-21",
-        "evidence": [
-         {
-          "quote": "Date of service: 2026-10-21",
-          "spans": [
-           {
-            "context_index": 0,
-            "start": 108,
-            "end": 135,
-            "text": "Date of service: 2026-10-21",
+            "start": 232,
+            "end": 296,
+            "text": "Landmarks photographed: appendiceal orifice and ileocecal valve.",
             "exact": true,
             "page": null
            }
@@ -399,16 +378,37 @@
        {
         "question_id": "e2b00000-0000-4000-8000-000000000014",
         "settled": true,
-        "value": "performed",
+        "value": "2026-10-21",
         "evidence": [
          {
-          "quote": "A 3 mm polyp in the rectum was biopsied with cold forceps.",
+          "quote": "Date of service: 2026-10-21",
           "spans": [
            {
             "context_index": 0,
-            "start": 456,
-            "end": 514,
-            "text": "A 3 mm polyp in the rectum was biopsied with cold forceps.",
+            "start": 106,
+            "end": 133,
+            "text": "Date of service: 2026-10-21",
+            "exact": true,
+            "page": null
+           }
+          ],
+          "reason": ""
+         }
+        ]
+       },
+       {
+        "question_id": "e2b00000-0000-4000-8000-000000000015",
+        "settled": true,
+        "value": "performed",
+        "evidence": [
+         {
+          "quote": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps.",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 438,
+            "end": 505,
+            "text": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps.",
             "exact": true,
             "page": null
            }
@@ -425,13 +425,13 @@
         "reason": "Participant wording.",
         "evidence": [
          {
-          "quote": "A 3 mm polyp in the rectum was biopsied with cold forceps.",
+          "quote": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps.",
           "spans": [
            {
             "context_index": 0,
-            "start": 456,
-            "end": 514,
-            "text": "A 3 mm polyp in the rectum was biopsied with cold forceps.",
+            "start": 438,
+            "end": 505,
+            "text": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps.",
             "exact": true,
             "page": null
            }
@@ -452,18 +452,9 @@
         "basis": "Participant wording.",
         "evidence": [
          {
-          "quote": "Bowel preparation was good.",
-          "spans": [
-           {
-            "context_index": 0,
-            "start": 315,
-            "end": 342,
-            "text": "Bowel preparation was good.",
-            "exact": true,
-            "page": null
-           }
-          ],
-          "reason": ""
+          "quote": "A submucosal injection was given.",
+          "spans": [],
+          "reason": "not found"
          }
         ],
         "confidence": "low",
@@ -484,7 +475,7 @@
       ],
       "problems": [],
       "refused": false,
-      "unverified_quotes": 0
+      "unverified_quotes": 1
      },
      "exchanges": [
       {
@@ -496,7 +487,7 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "9ace2f22bf6d80fe8c89c33c0e192ba1df06df5c12b465558f111e719b658f7b",
+       "request_sha256": "3c9f36c078db4277dd0c12acec1079330b1b0c2ea03b1569f2e5fab7a9436137",
        "response_sha256": "54f05296d87ae9002112779b5f58493e5f292c84afba2573b534591cfe468c46",
        "provider_request_id": "req_astra_1",
        "response_id": "resp_astra_1",
@@ -528,8 +519,8 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "9ace2f22bf6d80fe8c89c33c0e192ba1df06df5c12b465558f111e719b658f7b",
-       "response_sha256": "6f0bca849a9c2208e8c054870abbf6963407906834ac2a9f64b159f49073b87c",
+       "request_sha256": "3c9f36c078db4277dd0c12acec1079330b1b0c2ea03b1569f2e5fab7a9436137",
+       "response_sha256": "168a82df272c15489fb4959d4033a100d22549bc6abaefa38d60488629f8cedf",
        "provider_request_id": "req_astra_2",
        "response_id": "resp_astra_2",
        "error": "",
@@ -551,7 +542,7 @@
      "sent": true,
      "mode": "replay",
      "purpose": "independent",
-     "run_identity": "e2b00000-0000-4000-8000-000000000015",
+     "run_identity": "e2b00000-0000-4000-8000-000000000016",
      "authorization_ref": "",
      "requested_by": null,
      "adapter_version": "anthropic-messages@cptstudio-harness-3",
@@ -568,9 +559,9 @@
      },
      "usage_basis": "provider_reported_tokens_summed_over_exchanges",
      "estimated_cost_usd": null,
-     "request_sha256": "e83a1d279c8e21b4db76ab2234dff224b39ed6202f48416d9be4a58416101a18",
-     "response_sha256": "2f42c11d9fb1c7ec959bd7074584b8f32d68e548a336a8454b833c87f4894503",
-     "response_bytes": 1722,
+     "request_sha256": "50877d66fea78492b77cae860e5940b845317e6f52f22e5cab12eea18752f42e",
+     "response_sha256": "3d73902525f8cf0ca032076a9db50082848a309271ecbcbe5de9ad5b3af165c9",
+     "response_bytes": 1744,
      "created_at": "2026-11-01T09:00:19Z",
      "finished_at": "2026-11-01T09:00:17Z",
      "error": "",
@@ -588,8 +579,8 @@
          "spans": [
           {
            "context_index": 0,
-           "start": 108,
-           "end": 135,
+           "start": 106,
+           "end": 133,
            "text": "Date of service: 2026-10-21",
            "exact": true,
            "page": null
@@ -627,13 +618,13 @@
         "provider_role": "",
         "evidence": [
          {
-          "quote": "The colonoscope was advanced to the cecum.",
+          "quote": "Landmarks photographed: appendiceal orifice and ileocecal valve.",
           "spans": [
            {
             "context_index": 0,
-            "start": 207,
-            "end": 249,
-            "text": "The colonoscope was advanced to the cecum.",
+            "start": 232,
+            "end": 296,
+            "text": "Landmarks photographed: appendiceal orifice and ileocecal valve.",
             "exact": true,
             "page": null
            }
@@ -645,8 +636,8 @@
           "spans": [
            {
             "context_index": 0,
-            "start": 353,
-            "end": 455,
+            "start": 335,
+            "end": 437,
             "text": "A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology.",
             "exact": true,
             "page": null
@@ -672,8 +663,8 @@
           "spans": [
            {
             "context_index": 0,
-            "start": 397,
-            "end": 426,
+            "start": 379,
+            "end": 408,
             "text": "was removed with a cold snare",
             "exact": true,
             "page": null
@@ -701,8 +692,8 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "e83a1d279c8e21b4db76ab2234dff224b39ed6202f48416d9be4a58416101a18",
-       "response_sha256": "2f42c11d9fb1c7ec959bd7074584b8f32d68e548a336a8454b833c87f4894503",
+       "request_sha256": "50877d66fea78492b77cae860e5940b845317e6f52f22e5cab12eea18752f42e",
+       "response_sha256": "3d73902525f8cf0ca032076a9db50082848a309271ecbcbe5de9ad5b3af165c9",
        "provider_request_id": "req_fable_1",
        "response_id": "resp_fable_1",
        "error": "",
@@ -716,7 +707,7 @@
      "sent": true,
      "mode": "replay",
      "purpose": "peer_review",
-     "run_identity": "e2b00000-0000-4000-8000-000000000016",
+     "run_identity": "e2b00000-0000-4000-8000-000000000017",
      "authorization_ref": "",
      "requested_by": null,
      "adapter_version": "anthropic-messages@cptstudio-harness-3",
@@ -733,9 +724,9 @@
      },
      "usage_basis": "provider_reported_tokens_summed_over_exchanges",
      "estimated_cost_usd": null,
-     "request_sha256": "5bcff18539b2e6e989770fe02ea2292d1bf2c59374c0ad88fece902bc1c635b4",
-     "response_sha256": "9baafc1a0ae54e14f33b6f920c9a2c1f4e7d58a277c53f1241dcc630730885cd",
-     "response_bytes": 1052,
+     "request_sha256": "45c27d2aeb009f2c057db7dacf79e54727d06c10c4a9f61423a61b8bfabb2842",
+     "response_sha256": "9799de6e0132492b583e30c7d6a918e884027cbbb72805699cfda8c45c4c5b99",
+     "response_bytes": 1083,
      "created_at": "2026-11-01T09:00:29Z",
      "finished_at": "2026-11-01T09:00:17Z",
      "error": "",
@@ -751,39 +742,39 @@
       "frozen_inputs": [
        [
         "astra",
-        "01f27db1b78bfc3eaa0b9468b9f5602de45caee80200ca6872887747c7ee5784"
+        "c46d7e1bcdff6cfc9dd1bfa523593a637f01277e66060f768ba9705cf4309873"
        ],
        [
         "corti",
-        "a0f2f76360300d830cbc1851f7460923bdb2c4db2939cf3def4f135c7f56c5a6"
+        "70baee6528ce769508007fb2ede6a88384c5255d3983c67c895bb29218f8a898"
        ],
        [
         "cpt_studio",
-        "3f38f11dfcb1ded836965f23b133fd641ad9793c01c30a380f862d3507fd02eb"
+        "00bf83b2a08a8d1b2d50e1f9a594d4f8a0f7a02392c2109d5fe899763cd387da"
        ],
        [
         "fable",
-        "4a4acdd646bbaa2785d6bdcd66de969c02ccc687c9afc34064e2d9d0b3dc8c93"
+        "6db924e0a10de784a6fc501f54a1909c65dbf05e0d3a2fa6d1913ae4c9cc5514"
        ],
        [
         "revision",
-        "9436025908574d0e062d54bc450521b378f013a55f4530fab1457a234b9c3d67"
+        "57d9b103213beca06af051eebbf54a96ab4a198fe6d5eba86c2982efb0b1a91f"
        ]
       ],
       "answers": [
        {
-        "question_id": "e2b00000-0000-4000-8000-000000000012",
+        "question_id": "e2b00000-0000-4000-8000-000000000013",
         "settled": true,
         "value": "Cecum, appendiceal orifice seen",
         "evidence": [
          {
-          "quote": "The colonoscope was advanced to the cecum.",
+          "quote": "Landmarks photographed: appendiceal orifice and ileocecal valve.",
           "spans": [
            {
             "context_index": 0,
-            "start": 207,
-            "end": 249,
-            "text": "The colonoscope was advanced to the cecum.",
+            "start": 232,
+            "end": 296,
+            "text": "Landmarks photographed: appendiceal orifice and ileocecal valve.",
             "exact": true,
             "page": null
            }
@@ -805,13 +796,13 @@
         "basis": "The report records a polyp biopsied with cold forceps.",
         "evidence": [
          {
-          "quote": "A 3 mm polyp in the rectum was biopsied with cold forceps.",
+          "quote": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps.",
           "spans": [
            {
             "context_index": 0,
-            "start": 456,
-            "end": 514,
-            "text": "A 3 mm polyp in the rectum was biopsied with cold forceps.",
+            "start": 438,
+            "end": 505,
+            "text": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps.",
             "exact": true,
             "page": null
            }
@@ -838,8 +829,8 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "5bcff18539b2e6e989770fe02ea2292d1bf2c59374c0ad88fece902bc1c635b4",
-       "response_sha256": "9baafc1a0ae54e14f33b6f920c9a2c1f4e7d58a277c53f1241dcc630730885cd",
+       "request_sha256": "45c27d2aeb009f2c057db7dacf79e54727d06c10c4a9f61423a61b8bfabb2842",
+       "response_sha256": "9799de6e0132492b583e30c7d6a918e884027cbbb72805699cfda8c45c4c5b99",
        "provider_request_id": "req_fable_1",
        "response_id": "resp_fable_1",
        "error": "",
@@ -852,7 +843,7 @@
  ],
  "assessments": [
   {
-   "id": "e2b00000-0000-4000-8000-000000000017",
+   "id": "e2b00000-0000-4000-8000-000000000018",
    "created_at": "2026-11-01T09:00:26Z",
    "current": false,
    "phase": 1,
@@ -860,19 +851,19 @@
    "frozen": [
     [
      "astra",
-     "01f27db1b78bfc3eaa0b9468b9f5602de45caee80200ca6872887747c7ee5784"
+     "c46d7e1bcdff6cfc9dd1bfa523593a637f01277e66060f768ba9705cf4309873"
     ],
     [
      "corti",
-     "a0f2f76360300d830cbc1851f7460923bdb2c4db2939cf3def4f135c7f56c5a6"
+     "70baee6528ce769508007fb2ede6a88384c5255d3983c67c895bb29218f8a898"
     ],
     [
      "fable",
-     "4a4acdd646bbaa2785d6bdcd66de969c02ccc687c9afc34064e2d9d0b3dc8c93"
+     "6db924e0a10de784a6fc501f54a1909c65dbf05e0d3a2fa6d1913ae4c9cc5514"
     ],
     [
      "revision",
-     "9436025908574d0e062d54bc450521b378f013a55f4530fab1457a234b9c3d67"
+     "57d9b103213beca06af051eebbf54a96ab4a198fe6d5eba86c2982efb0b1a91f"
     ]
    ]
   },
@@ -885,19 +876,19 @@
    "frozen": [
     [
      "astra",
-     "01f27db1b78bfc3eaa0b9468b9f5602de45caee80200ca6872887747c7ee5784"
+     "c46d7e1bcdff6cfc9dd1bfa523593a637f01277e66060f768ba9705cf4309873"
     ],
     [
      "corti",
-     "a0f2f76360300d830cbc1851f7460923bdb2c4db2939cf3def4f135c7f56c5a6"
+     "70baee6528ce769508007fb2ede6a88384c5255d3983c67c895bb29218f8a898"
     ],
     [
      "fable",
-     "4a4acdd646bbaa2785d6bdcd66de969c02ccc687c9afc34064e2d9d0b3dc8c93"
+     "6db924e0a10de784a6fc501f54a1909c65dbf05e0d3a2fa6d1913ae4c9cc5514"
     ],
     [
      "revision",
-     "9436025908574d0e062d54bc450521b378f013a55f4530fab1457a234b9c3d67"
+     "57d9b103213beca06af051eebbf54a96ab4a198fe6d5eba86c2982efb0b1a91f"
     ]
    ]
   }
@@ -960,7 +951,7 @@
      "topic_value": ""
     }
    ],
-   "service_date": "2026-10-21"
+   "service_date": null
   },
   {
    "code": "45380",
@@ -1019,7 +1010,7 @@
      "topic_value": ""
     }
    ],
-   "service_date": "2026-10-21"
+   "service_date": null
   }
  ],
  "reconciliation": [
@@ -1046,8 +1037,8 @@
     }
    },
    "reference_check": {
-    "state": "passed",
-    "detail": "Present in the CMS fee schedule file: passed. NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified."
+    "state": "not_verified",
+    "detail": "Present in the CMS fee schedule file: not verified; Units within the practitioner MUE: not verified; Endoscopic family combination: not verified. NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified."
    },
    "approved": false
   },
@@ -1064,7 +1055,7 @@
     "astra": {
      "position": "proposed",
      "detail": "Astra proposed this code with evidence located in the document.",
-     "quote": "A 3 mm polyp in the rectum was biopsied with cold forceps."
+     "quote": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps."
     },
     "fable": {
      "position": "not_proposed",
@@ -1073,8 +1064,8 @@
     }
    },
    "reference_check": {
-    "state": "passed",
-    "detail": "Present in the CMS fee schedule file: passed. NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified."
+    "state": "not_verified",
+    "detail": "Present in the CMS fee schedule file: not verified; Units within the practitioner MUE: not verified; Endoscopic family combination: not verified. NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified."
    },
    "approved": false
   },

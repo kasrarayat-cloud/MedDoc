@@ -40,7 +40,10 @@ HARNESS_KEYS = {'participants', 'phase', 'reference_validation', 'clarification'
 PERMISSION_KEYS = {'can_review', 'is_owner', 'can_confirm'}
 REFERENCE_VALIDATION_KEYS = {'state', 'detail', 'codes_checked', 'passages', 'sources', 'not_connected'}
 # 'failed': the assessment's retrieval failed, said with its note as the detail (refutation r1 parity-1)
-REFERENCE_VALIDATION_STATES = {'waiting', 'done', 'failed', 'not_run'}
+# 'not_verified': no installed CMS file applied to the service date (refutation round 2, truth-3), as the harness@2
+# fixtures now serve it - their document's two dates of service disagree, so none is established (refutation round 3,
+# falsegreen-11: the fixtures' rows are the engine's)
+REFERENCE_VALIDATION_STATES = {'waiting', 'done', 'failed', 'not_run', 'not_verified'}
 RETRIEVAL_ITEM_KEYS = {'kind', 'source_key', 'release', 'label', 'value', 'page', 'section', 'text'}
 PROVIDER_RUN_KEYS = {'id', 'provider', 'mode', 'state', 'http_status', 'latency_ms', 'usage', 'usage_basis',
                      'request_sha256', 'response_sha256', 'reused_from', 'error', 'reconciled', 'created_at', 'purpose',
@@ -373,7 +376,10 @@ class FixtureTests(SimpleTestCase):
                 reference = doc['harness']['reference_validation']
                 self.assertEqual(set(reference), REFERENCE_VALIDATION_KEYS)
                 self.assertIn(reference['state'], REFERENCE_VALIDATION_STATES)
-                self.assertEqual(reference['detail'] != '', reference['state'] == 'failed', reference)
+                # moved by refutation round 3 (falsegreen-11): 'not_verified' says why too (truth-3), as these
+                # fixtures now serve it
+                self.assertEqual(reference['detail'] != '', reference['state'] in ('failed', 'not_verified'),
+                                 reference)
                 rows = {row['name']: row for row in doc['harness']['participants']}
                 self.assertEqual(list(rows), PARTICIPANTS)
                 self.assertEqual(rows['corti']['peer'], {})
@@ -429,13 +435,15 @@ class FixtureTests(SimpleTestCase):
         final = docs['encounter-harness2-final.json']
         # moved by refutation round 3 (HARNESS.md 12.10): this release serves every candidate unchecked; the dormant
         # confirmation path's verified flags, which this pin held for the final fixture, are pinned on its own fixture
+        # and by falsegreen-11: the questions are the engine's - 45385's extent, 45380's status and extent, the date -
+        # where the biopsy the readers leave in doubt has no status candidate that the dormant path verifies
         self.assertEqual([(c['fact'], [x['verified'] for x in c['candidates']]) for c in final['clarifications']],
                          [('extent', [False, False]), ('performed_status', [False, False, False]),
-                          ('service_date', [False])])
+                          ('extent', [False, False]), ('service_date', [False])])
         dormant = docs['encounter-harness2-dormant.json']
         self.assertEqual([(c['fact'], [x['verified'] for x in c['candidates']]) for c in dormant['clarifications']],
-                         [('extent', [True, False]), ('performed_status', [True, False, False]),
-                          ('service_date', [True])])
+                         [('extent', [True, False]), ('performed_status', [False, False, False]),
+                          ('extent', [True, False]), ('service_date', [True])])
         # the same located passages either way: what the dormant path claimed about them is all that differs
 
         def passages(doc):
@@ -447,9 +455,12 @@ class FixtureTests(SimpleTestCase):
         self.assertEqual((confirmation['fact'], confirmation['value'], confirmation['located_by'],
                           confirmation['confirmed_by']), ('extent', 'cecum', ['astra', 'fable'], 'Synthetic Reviewer'))
         snare = next(p for p in confirmed['assessment']['proposals'] if p['code'] == '45385')
+        # moved by refutation round 3 (falsegreen-11): the engine's re-assessment reads the confirmed extent, and 45385
+        # is still held on the encounter's own question, its date of service; a confirmation approves nothing
         self.assertEqual((snare['confirmed'], snare['status'], snare['decision_state']),
-                         ([confirmation['id']], 'ready', 'undecided'))  # a confirmation approves nothing
-        self.assertNotIn('extent', [c['fact'] for c in confirmed['clarifications']])
+                         ([confirmation['id']], 'needs_clarification', 'undecided'))
+        self.assertEqual([c['fact'] for c in confirmed['clarifications'] if c['proposal_id'] == snare['id']], [])
+        self.assertIn('service_date', [c['fact'] for c in confirmed['clarifications']])
 
     def test_harness2_trace_fixture_carries_the_api_contract(self):
         trace, final = _fixture(HARNESS2_TRACE), _fixture('encounter-harness2-final.json')

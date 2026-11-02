@@ -17,31 +17,44 @@ from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from studio import candidates, jobs, models, review
-from studio.gi import services as gi_services
-from studio.participants import prompt
 from studio.participants.anthropic_fable import FableParticipant
 from studio.participants.openai_astra import AstraParticipant
+from studio.gi import context as gi_context
 from studio.providers.base import canonical_body
-from studio.types import ClarificationSpec, ExtractionResult, sha256_json, to_jsonable
+from studio.providers.replay import ReplayProvider
+from studio.types import ExtractionResult, PageSpan, sha256_json, to_jsonable
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
 from tests.test_harness2_pipeline import TWO_EXTENTS
 from tests.test_harness2_pipeline import ColonCase as PipelineColonCase
 from tests.test_harness2_pipeline import Harness2Case as PipelineCase
 from tests.test_harness_api import DESCRIPTOR_LIKE, UNLISTED_ONE
-from tests.test_pipeline_api import drain
-from tests.test_participants_support import NOTE, PAGES, astra_with, fable_with, fixture_reading
+from tests.test_pipeline_api import corti_like_response, drain
+from tests.test_participants_support import astra_with, fable_with, fixture_reading
 
 BOTH = dict(ASTRA_MODE='replay', FABLE_MODE='replay')
 MODELS = {'astra': 'gpt-6-astra', 'fable': 'claude-fable-5-1'}
 ENDPOINTS = {'astra': 'https://api.openai.com/v1/responses', 'fable': 'https://api.anthropic.com/v1/messages'}
 ADAPTERS = {'astra': AstraParticipant, 'fable': FableParticipant}
+# The case's document (refutation round 3, falsegreen-11). The participants' fixture note documents its extent, its
+# date and both acts plainly, so CPT Studio's readers hold nothing on it: the questions this case asked, 45380's
+# performed-status hold with its support and its candidates among them, had been written by hand, rows the readers never
+# produce for that note. This one is that note with what the readers do ask about - two documented dates of service that
+# disagree, landmarks photographed but no extent reached, and a biopsy left in doubt - and every row the case pins is
+# the engine's own (Harness2Case.result). Page 2 starts at its findings.
 DATE_QUOTE = 'Date of service: 2026-10-21'
-CECUM_QUOTE = 'The colonoscope was advanced to the cecum.'
+LANDMARK_QUOTE = 'Landmarks photographed: appendiceal orifice and ileocecal valve.'
 SNARE_QUOTE = ('A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\n'
                'pathology.')
-RECTUM_QUOTE = 'A 3 mm polyp in the rectum was biopsied with cold forceps.'
-PREP_QUOTE = 'Bowel preparation was good.'
+RECTUM_QUOTE = 'A 3 mm polyp in the rectum was possibly biopsied with cold forceps.'
+UNLOCATED_QUOTE = 'A submucosal injection was given.'  # quoted by Astra's peer-review code; in no document
+PAGE_ONE = ('SYNTHETIC TEST DOCUMENT - not a real patient. Written for CPT Studio harness@2 tests.\n'
+            'GI Procedure Report\n' + DATE_QUOTE + '\nProcedure date: 2026-10-22\nProcedure: Colonoscopy.\n'
+            'Indication: Average-risk screening.\nTechnique: ' + LANDMARK_QUOTE + ' Bowel preparation was good.\n')
+NOTE = (PAGE_ONE + 'Findings: ' + SNARE_QUOTE + ' ' + RECTUM_QUOTE + '\nImpression: Two polyps.\n'
+        'Plan: Await pathology. Repeat colonoscopy in 7 years.\n')
+PAGES = (PageSpan(page=1, start=0, end=len(PAGE_ONE)), PageSpan(page=2, start=len(PAGE_ONE), end=len(NOTE)))
+SNARE = 'was removed with a cold snare'  # the passage Corti's selection of 45385 cites
 FACT_REF = 'fact:cms-pfs-rvu26d:45385:mult_proc'
 PASSAGE_REF = 'ncci-2026-ch6-c-1'
 # The two tools' stored results in the layout CPT Studio's executor writes them (studio.reference.tools), which the
@@ -66,18 +79,36 @@ def sha(data: bytes) -> str:
 
 
 def first_reading(name):
-    """The fixture reading (tests/fixtures/participants) with references used: one its run retrieves, one not."""
+    """The fixture reading (tests/fixtures/participants), quoting this case's NOTE, with references used: one its run
+    retrieves, one not."""
     data = fixture_reading()
+    data['services'][0]['evidence'] = [LANDMARK_QUOTE, ' '.join(SNARE_QUOTE.split())]
+    data['codes'][1]['evidence'] = [RECTUM_QUOTE]
     data['references_used'] = ([{'ref': FACT_REF, 'use': 'The endoscopic base of the snare removal.'},
                                 {'ref': PASSAGE_REF, 'use': 'A rule this run never retrieved.'}]
                                if name == 'astra' else [])
     return data
 
 
+def questions_of(assessment):
+    """{fact: question} of ``assessment``'s questions, the first proposal's of each fact - extent is 45385's (sel:0),
+    performed_status 45380's (sel:1), service_date the encounter's - and {(fact, proposal key): question} of all of
+    them under 'by_key'."""
+    every = list(assessment.clarifications.select_related('proposal'))
+    by_key = {(c.fact, c.proposal.key if c.proposal_id else ''): c for c in every}
+    out = {}
+    for (fact, key), question in sorted(by_key.items(), key=lambda item: (item[0][0], item[0][1])):
+        out.setdefault(fact, question)
+    return {**out, 'by_key': by_key}
+
+
 class Harness2Case(TestCase):
-    """One encounter carried through harness@2 as the pipeline records it: Corti's run; Astra's and Fable's frozen first
-    readings (Astra's with a tool call); assess #1 with three open questions; both peer reviews (Astra's with a tool
-    call), built from assess #1's questions; and assess #2, the final assessment."""
+    """One encounter carried through harness@2 as the pipeline records it: the document's context as its reader reads
+    it; Corti's run, read by Corti's own normalizer; Astra's and Fable's frozen first readings (Astra's with a tool
+    call); assess #1, the engine's, with its open questions; both peer reviews (Astra's with a tool call), built from
+    assess #1 by the pipeline's own peer material; and assess #2, the engine's, the final assessment. Refutation round
+    3, falsegreen-11: the assessments were hand-built and asked what the readers never ask of their note; every row the
+    case pins is now what the assess stage's own engine makes of the case's stored runs (result)."""
 
     def setUp(self):
         self.ws = f.workspace()
@@ -85,11 +116,7 @@ class Harness2Case(TestCase):
         self.reviewer = f.member(self.ws, f.user('reviewer2b'))
         self.viewer = f.member(self.ws, f.user('viewer2b'), role=models.Membership.VIEWER)
         self.encounter = f.encounter(self.ws, self.reviewer, title='Synthetic colonoscopy for harness@2')
-        self.revision = f.pasted_revision(self.encounter, self.reviewer, NOTE, extract=False)
-        f.record(self.revision, ExtractionResult(status='ok', method='paste', text=NOTE, pages=PAGES))
-        self.revision.refresh_from_db()
-        self.context = pf.context(self.encounter, self.revision)
-        self.corti = pf.provider_run(self.encounter, self.revision)
+        self.document()
         self.now = timezone.now()
         self.adapters = {name: ADAPTERS[name]('/nonexistent/never-read.env') for name in ADAPTERS}
         self.runs, self.readings, self.requests = {}, {}, {}
@@ -109,20 +136,41 @@ class Harness2Case(TestCase):
         for name in ADAPTERS:
             self.peer_review(name)
         self.final = self.persist([self.entry(name, peer=True) for name in ADAPTERS])
-        self.questions = {c.fact: c for c in self.final.clarifications.all()}
+        self.questions = questions_of(self.final)
 
     # --- the rows -----------------------------------------------------------------------------------------------------
+
+    def document(self):
+        """The revision as the extract stage records a paste; its context as the analyze stage records it (the
+        document's facts, read by the context reader: two dates of service that disagree, so no service date); and
+        Corti's run as a replayed Corti answer that selects 45385 on the snare passage, read by Corti's own normalizer.
+        """
+        self.revision = f.pasted_revision(self.encounter, self.reviewer, NOTE, extract=False)
+        f.record(self.revision, ExtractionResult(status='ok', method='paste', text=NOTE, pages=PAGES))
+        self.revision.refresh_from_db()
+        self.context = jobs._record_context(self.encounter, self.revision, gi_context.extract_context(NOTE))
+        self.encounter.current_context = self.context
+        self.encounter.save(update_fields=['current_context', 'updated_at'])
+        request = ReplayProvider('/nonexistent/never-read').build_request(NOTE, jobs.context_service_date(self.context))
+        data = corti_like_response(NOTE, [('45385', SNARE)])
+        self.corti = models.ProviderRun.objects.create(
+            encounter=self.encounter, revision=self.revision, provider=request.provider,
+            adapter_version=request.adapter_version, request_sha256=request.canonical_sha256,
+            request_body=request.body, contexts=list(request.contexts), state=models.ProviderRun.SUCCEEDED, sent=True,
+            http_status=200, response_bytes=data, response_sha256=sha(data), usage={'creditsConsumed': 0.0281},
+            usage_basis='provider_reported_credits_not_usd', started_at=timezone.now(), finished_at=timezone.now())
 
     def first_reading(self, name):
         return first_reading(name)
 
-    def make_run(self, name, request, data, *, purpose):
+    def make_run(self, name, request, data, *, purpose, assessment=None):
         return models.ProviderRun.objects.create(
             encounter=self.encounter, revision=self.revision, provider=name, adapter_version=request.adapter_version,
             request_sha256=request.canonical_sha256, request_body=request.body, contexts=list(request.contexts),
             state=models.ProviderRun.SUCCEEDED, sent=True, http_status=200, response_bytes=data,
             response_sha256=sha(data), latency_ms=12.5, usage={'input_tokens': 2000, 'output_tokens': 200},
-            usage_basis='provider_reported_tokens_summed_over_exchanges', purpose=purpose, scope={'mode': 'replay'},
+            usage_basis='provider_reported_tokens_summed_over_exchanges', purpose=purpose,
+            scope={'mode': 'replay', **({'assessment': str(assessment.pk)} if assessment is not None else {})},
             endpoint=ENDPOINTS[name], requested_model=MODELS[name], returned_model=MODELS[name],
             response_id=f'resp_{name}_{purpose}', provider_request_id=f'req_{name}_{purpose}', started_at=self.now,
             finished_at=self.now)
@@ -143,35 +191,34 @@ class Harness2Case(TestCase):
                                                result_sha256=sha(canonical_body(result)), refs=refs,
                                                executed_at=self.now)
 
-    def result(self):
-        extent = pf.clarification('extent', family='gi.colonoscopy', proposal_key='sel:0',
-                                  question='Colonoscopy: confirm the furthest extent reached.',
-                                  reason='The extent reached is not documented; the Colonoscopy profile requires it.')
-        status = pf.clarification('performed_status', family='gi.colonoscopy', proposal_key='sel:1',
-                                  question='Colonoscopy: confirm whether 45380 was performed at this encounter.',
-                                  reason='Whether the biopsy was performed at this encounter is in doubt.')
-        date_question = ClarificationSpec(scope='encounter', fact='service_date',
-                                          question='Confirm the date of service.',
-                                          reason='The date of service is in question.')
-        snare = replace(pf.proposal('sel:0', '45385', ['was removed with a cold snare'], text=NOTE,
-                                    status='needs_clarification', clarifications=(extent,)),
-                        support={'origin': 'primary', 'proposed_by': ['corti', 'astra', 'fable'],
-                                 'phases': {'astra': 'independent', 'fable': 'independent'},
-                                 'identity': sha(b'synthetic identity of 45385')})
-        biopsy = replace(pf.proposal('sel:1', '45380', [RECTUM_QUOTE], text=NOTE, status='needs_clarification',
-                                     clarifications=(status,),
-                                     rationale='Proposed by Astra (independent participant) and Fable after peer '
-                                               'review; Corti did not propose this code.'),
-                         support={'origin': 'participant', 'proposed_by': ['astra', 'fable'],
-                                  'phases': {'astra': 'independent', 'fable': 'peer_review'}, 'confirmed': [],
-                                  'identity': sha(b'synthetic identity of 45380'),
-                                  # the documented service the readers decided its hold on (refutation round 2,
-                                  # EV2-1: a status is read there, on the act its code accounts for)
-                                  'service': 'S1', 'reason': 'readings_disagree'})
-        # each decidable proposal records the identity a confirmation of its question is bound to (HARNESS.md 12.5),
-        # beside the documented-service reading the assessment recorded
-        return replace(pf.result(snare, biopsy, clarifications=(date_question,)),
-                       services=to_jsonable(gi_services.build(NOTE, service_date=None, pages=PAGES)))
+    def inputs(self, phase):
+        """The participants' inputs the assess stage reads, by the pipeline's own readers of the stored runs: each
+        frozen first reading (jobs._first_input) and, in phase 2, its peer review (jobs._with_peer)."""
+        out = []
+        for name in ADAPTERS if phase else ():  # phase 0: no participant configured (I1)
+            item, record = jobs._first_input(self.encounter, name, self.runs[name])
+            if phase == 2:
+                item, record = jobs._with_peer(self.encounter, item, record, self.peer_runs[name])
+            out.append(item)
+        return tuple(out)
+
+    def result(self, phase=2, confirmed=()):
+        """The assessment the assess stage's own engine makes of the case's stored rows (jobs._assess_child, as
+        stage_assess calls it, with the reference lookup it prefetches): Corti's run read by its normalizer, the
+        context's facts and service date, the participants' inputs of ``phase`` and the ``confirmed`` findings
+        (jobs.confirmed_findings). The routing it reads is recorded as the stage records it (self.routing_run)."""
+        provider_status, normalized = jobs._provider_inputs(self.corti)
+        inputs = self.inputs(phase)
+        proposed = {code.code for item in inputs if item.reading is not None for code in item.reading.codes}
+        proposed |= {code.code for item in inputs if item.peer is not None for code in item.peer.additional_codes}
+        service_date = jobs.context_service_date(self.context)
+        reference = jobs.prefetched_lookup(tuple(sorted(set(jobs.selected_codes(normalized)) | proposed)))
+        data, result = jobs._assess_child(
+            self.revision.text, service_date, tuple(PageSpan(**page) for page in self.revision.pages),
+            jobs.context_facts(self.context), normalized, reference, provider_status, self.revision.extraction_status,
+            tuple(self.revision.messages), None, None, inputs, tuple(confirmed))
+        self.routing_run = jobs._record_routing(self.revision, data, service_date)
+        return result
 
     def entry(self, name, *, peer=False):
         """An Assessment.participants entry in the 12.3 shape: harness@1's keys, the frozen record, and on assess #2 the
@@ -189,54 +236,54 @@ class Harness2Case(TestCase):
                        peer_sha256=sha256_json(peer_review), peer_unverified_quotes=peer_review.unverified_quotes)
         return out
 
-    def persist(self, entries, result=None):
+    def persist(self, entries, result=None, routing_run=None):
+        """Persist an assessment of the case's runs with ``entries``: ``result``, or the engine's of the phase the
+        entries record - 2 when any carries its peer review, 0 when none records a configured participant (Corti alone:
+        the engine is given no participant, I1), 1 otherwise. A test's variation of an entry (a peer review recorded
+        refused, a reading's sha256) varies the record beside the result, never the result. ``routing_run``: a routing
+        record of the test's own, for an assessment review._same_assessment would otherwise take for the current one."""
         self.encounter.refresh_from_db()
+        if result is None:
+            configured = [entry for entry in entries if entry.get('state') != 'not_configured']
+            result = self.result(0 if not configured else 2 if any('peer_state' in e for e in entries) else 1)
         return review.persist_assessment(encounter=self.encounter, revision=self.revision, context=self.context,
-                                         routing_run=pf.routing(self.revision), provider_run=self.corti,
-                                         result=result or self.result(), participants=entries, retrieval=[])
-
-    def cpt_studio(self):
-        held = [{'key': p.key, 'code': p.code, 'status': p.status,
-                 'reasons': [c['detail'] for c in p.checks if c['status'] != 'pass']}
-                for p in self.first.proposals.filter(status='needs_clarification')]
-        return {'open_questions': [{'question_id': str(c.pk), 'scope': c.scope, 'fact': c.fact, 'family': c.family,
-                                    'proposal_key': c.proposal.key if c.proposal_id else '', 'question': c.question,
-                                    'reason': c.reason} for c in self.first.clarifications.order_by('created_at')],
-                'held': held, 'excluded': []}
+                                         routing_run=routing_run or self.routing_run, provider_run=self.corti,
+                                         result=result, participants=entries, retrieval=[])
 
     def peer_answer(self, name):
-        asked = {c.fact: str(c.pk) for c in self.first.clarifications.all()}
+        """The peer answers, to assess #1's questions by (fact, proposal key) - sel:0 is 45385, sel:1 45380."""
+        asked = {(c.fact, c.proposal.key if c.proposal_id else ''): str(c.pk)
+                 for c in self.first.clarifications.select_related('proposal')}
         if name == 'fable':
             # the participant's own wording, which CPT Studio restates as the landmark it names ('cecum')
-            return {'question_answers': [{'question_id': asked['extent'], 'settled': True,
+            return {'question_answers': [{'question_id': asked['extent', 'sel:0'], 'settled': True,
                                           'value': 'Cecum, appendiceal orifice seen',
-                                          'evidence': [CECUM_QUOTE]}],
+                                          'evidence': [LANDMARK_QUOTE]}],
                     'code_positions': [], 'additional_codes': [], 'references_used': []}
         return {'question_answers': [
-                    {'question_id': asked['extent'], 'settled': True, 'value': 'cecum', 'evidence': [CECUM_QUOTE]},
-                    {'question_id': asked['service_date'], 'settled': True, 'value': '2026-10-21',
+                    {'question_id': asked['extent', 'sel:0'], 'settled': True, 'value': 'cecum',
+                     'evidence': [LANDMARK_QUOTE]},
+                    {'question_id': asked['service_date', ''], 'settled': True, 'value': '2026-10-21',
                      'evidence': [DATE_QUOTE]},
-                    {'question_id': asked['performed_status'], 'settled': True, 'value': 'performed',
+                    {'question_id': asked['performed_status', 'sel:1'], 'settled': True, 'value': 'performed',
                      'evidence': [RECTUM_QUOTE]}],
                 'code_positions': [{'code': '45380', 'position': 'supports', 'reason': 'Participant wording.',
                                     'evidence': [RECTUM_QUOTE]}],
                 'additional_codes': [{'code': '45381', 'modifiers': [], 'units': 1, 'service_ids': ['s1'],
-                                      'basis': 'Participant wording.', 'evidence': [PREP_QUOTE],
+                                      'basis': 'Participant wording.', 'evidence': [UNLOCATED_QUOTE],
                                       'confidence': 'low'}],
                 'references_used': [{'ref': PASSAGE_REF, 'use': 'The NCCI endoscopy rule.'},
                                     {'ref': FACT_REF, 'use': 'Retrieved only by its first reading.'}]}
 
     def peer_review(self, name):
-        other = 'fable' if name == 'astra' else 'astra'
-        cpt_studio = self.cpt_studio()
-        peers = {'corti': {'codes': [{'code': '45385', 'modifiers': [], 'units': 1,
-                                      'evidence': ['was removed with a cold snare']}]},
-                 other: prompt.reading_answer(self.readings[other])}
-        frozen = self.frozen + [['cpt_studio', sha256_json(cpt_studio)]]
-        request = self.adapters[name].build_peer_request(NOTE, PAGES, 'paste', self.readings[name], peers, cpt_studio,
-                                                         frozen)
+        """``name``'s peer review of assess #1, its request built from the pipeline's own peer material
+        (jobs._peer_material: its own frozen reading, Corti's exact passages, the other model's reading as shown and CPT
+        Studio's reading after assess #1), its run made for assess #1 as a peer stage records it."""
+        own, peers, cpt_studio, frozen = jobs._peer_material(self.revision, self.first, name,
+                                                             jobs._records(self.first))
+        request = self.adapters[name].build_peer_request(NOTE, PAGES, 'paste', own, peers, cpt_studio, frozen)
         data = (astra_with if name == 'astra' else fable_with)(self.peer_answer(name))
-        run = self.make_run(name, request, data, purpose=models.ProviderRun.PEER_REVIEW)
+        run = self.make_run(name, request, data, purpose=models.ProviderRun.PEER_REVIEW, assessment=self.first)
         calls = [('cms_policy_passages', {'topic': 'ncci_endoscopy_rules', 'codes': ['45385']}, PASSAGES_RESULT,
                   [PASSAGE_REF])]
         self.exchanges(run, request.body, data, calls if name == 'astra' else [])
@@ -298,13 +345,20 @@ class CandidateTests(Harness2Case):
         self.assertEqual((date_candidate['value'], date_candidate['verified'], date_candidate['spans'][0]['text']),
                          ('2026-10-21', True, DATE_QUOTE))
         status = self.candidates_of('performed_status')
-        # refutation round 2, EV2-1: a status is verified only on a sentence the readers read as 45380's own biopsy
-        # done - the rectum biopsy - never on the cecum or the snare sentence its participants also quoted
+        # refutation round 2, EV2-1: a status is verified only on a sentence the readers read as 45380's own biopsy done
+        # - never on the landmark or the snare sentence its participants also quoted. Moved by refutation round 3
+        # (falsegreen-11): the readers leave this note's biopsy in doubt, so no status candidate verifies: the rectum
+        # sentence the peer review quotes is the doubt itself, where the hand-built hold had verified it
         self.assertEqual([(c['value'], c['verified'], c['phase'], c['spans'][0]['text']) for c in status],
-                         [('performed', True, 'peer_review', RECTUM_QUOTE),
-                          ('performed', False, 'independent', CECUM_QUOTE),
-                          ('performed', False, 'independent', SNARE_QUOTE)])
-        self.assertEqual([c['why'] for c in status[1:]], ['The passage does not name the forceps biopsy.'] * 2)
+                         [('performed', False, 'independent', LANDMARK_QUOTE),
+                          ('performed', False, 'independent', SNARE_QUOTE),
+                          ('performed', False, 'peer_review', RECTUM_QUOTE)])
+        self.assertEqual([c['why'] for c in status], ['The passage does not name the forceps biopsy.'] * 2
+                         + ['The passage leaves the forceps biopsy in doubt.'])
+        # the engine asks 45380's extent too, and its candidates are 45385's: the same landmark passage
+        biopsy_extent = review.assessment_candidates(self.final)[str(self.questions['by_key']['extent', 'sel:1'].pk)]
+        self.assertEqual([(c['value'], c['verified'], c['spans'][0]['text']) for c in biopsy_extent],
+                         [('cecum', True, LANDMARK_QUOTE), ('cecum', False, SNARE_QUOTE)])
 
     def test_none_before_the_final_assessment_nor_for_a_corti_only_one(self):
         self.assertEqual(review.assessment_candidates(self.first), {})
@@ -331,7 +385,11 @@ class CandidateTests(Harness2Case):
     def test_a_frozen_reading_that_no_longer_matches_its_recorded_sha256_is_not_used(self):
         entries = [self.entry(name, peer=True) for name in ADAPTERS]
         entries[1]['reading_sha256'] = '0' * 64
-        changed = self.persist(entries)
+        # moved by refutation round 3 (falsegreen-11): the routing record is the engine's, so identical rows would be
+        # taken for the final assessment (review._same_assessment never compares a reading's sha256): a routing record
+        # of its own
+        changed = self.persist(entries, routing_run=pf.routing(self.revision))
+        self.assertNotEqual(changed, self.final)
         with self.assertLogs('studio.review', level='WARNING'):
             readings, reviews = review.frozen_inputs(changed)
         self.assertEqual(([r.name for r in readings], [name for name, _, _ in reviews]), (['astra'], ['astra']))
@@ -369,14 +427,14 @@ class ConfirmationRefusalTests(Harness2Case):
         self.assertRefused(response, 404, 'not part of this document')
 
     def test_a_question_of_an_earlier_assessment(self):
-        earlier = self.first.clarifications.get(fact='extent')
+        earlier = self.first.clarifications.get(fact='extent', proposal__key='sel:0')  # 45380 asks its extent too
         self.assertEqual(earlier.state, models.Clarification.OPEN)  # re-raised by assess #2, still open on assess #1
         self.assertRefused(self.confirm('extent', question=earlier), 409, 'earlier assessment')
 
     def test_before_the_final_assessment(self):
         phase_one = self.persist([self.entry(name) for name in ADAPTERS])  # an assess #1 whose peer stages follow
         self.assertFalse(review.is_final(phase_one))
-        question = phase_one.clarifications.get(fact='extent')
+        question = phase_one.clarifications.get(fact='extent', proposal__key='sel:0')
         self.assertRefused(self.confirm('extent', question=question), 409, 'peer reviews of this document have not')
 
     def test_a_question_that_is_not_open(self):
@@ -446,7 +504,7 @@ class ConfirmationTests(Harness2Case):
             (question.pk, self.revision.pk, 'proposal', 'extent', 'gi.colonoscopy', 'sel:0', 'cecum',
              candidate['spans'], ['astra', 'fable'], candidate['runs'], self.reviewer.pk,
              candidates.attestation('cecum')))
-        self.assertEqual(NOTE[candidate['spans'][0]['start']:candidate['spans'][0]['end']], CECUM_QUOTE)
+        self.assertEqual(NOTE[candidate['spans'][0]['start']:candidate['spans'][0]['end']], LANDMARK_QUOTE)
         data = response.json()
         self.assertEqual((data['id'], data['effect'], data['value'], data['confirmed_by'], data['clarification_id']),
                          (str(confirmation.pk), 'reassessment', 'cecum', self.reviewer.label(), str(question.pk)))
@@ -487,14 +545,23 @@ class ConfirmationTests(Harness2Case):
         self.assertEqual((finding.proposal_code, finding.proposal_identity),
                          (question.proposal.code, question.proposal.support['identity']))
 
-    def test_an_owner_may_confirm_a_status(self):
+    def test_an_owner_may_confirm_and_a_status_the_readers_leave_in_doubt_offers_nothing_to_confirm(self):
+        # moved by refutation round 3 (falsegreen-11): the readers leave this note's biopsy in doubt, so no status
+        # candidate verifies and none is confirmed (refused, 409); the owner confirms 45380's other open question, its
+        # extent
+        status = self.candidates_of('performed_status')
+        self.assertFalse(any(c['verified'] for c in status))
+        doubt = next(c for c in status if c['spans'][0]['text'] == RECTUM_QUOTE)
+        self.assertEqual(self.confirm('performed_status', doubt, user=self.owner).status_code, 409)
+        question = self.questions['by_key']['extent', 'sel:1']
+        candidate = next(c for c in review.assessment_candidates(self.final)[str(question.pk)] if c['verified'])
         with mock.patch('studio.jobs.reassess_after_confirmation'):
-            response = self.confirm('performed_status', self.verified('performed_status', RECTUM_QUOTE),
-                                    user=self.owner)
+            response = self.confirm('extent', candidate, user=self.owner, question=question)
         self.assertEqual(response.status_code, 201, response.content)
         confirmation = models.FindingConfirmation.objects.get()
-        self.assertEqual((confirmation.fact, confirmation.value, confirmation.located_by, confirmation.proposal_key),
-                         ('performed_status', 'performed', ['astra'], 'sel:1'))
+        self.assertEqual((confirmation.fact, confirmation.value, confirmation.located_by, confirmation.proposal_key,
+                          confirmation.confirmed_by_id),
+                         ('extent', 'cecum', ['astra', 'fable'], 'sel:1', self.owner.pk))
 
     def test_a_service_date_enters_as_the_member_s_date_through_the_context_path(self):
         candidate = self.verified('service_date')
@@ -547,10 +614,13 @@ class DetailTests(Harness2Case):
         data = self.detail()
         rows = self.rows(data)
         astra, fable, corti = rows['astra'], rows['fable'], rows['corti']
+        # moved by refutation round 3 (falsegreen-11): Astra's peer-review code quotes a sentence in no document (45381
+        # is listed apart, as the engine lists a code with no located quote), which its row counts
         self.assertEqual(astra['peer'], {'state': 'done', 'run_id': str(self.peer_runs['astra'].pk),
-                                         'codes_added': ['45381'], 'unverified_quotes': 0,
+                                         'codes_added': ['45381'], 'unverified_quotes': 1,
                                          'detail': 'Answered in peer review, after its first reading was frozen; the '
-                                                   'review was used.'})
+                                                   'review was used. 1 of its quotes was not found in the document, '
+                                                   'so it is never used as evidence.'})
         self.assertEqual((fable['peer']['state'], fable['peer']['codes_added']), ('done', []))
         self.assertEqual((corti['peer'], corti['references'], corti['peer_references']),
                          ({}, {'retrieved': [], 'used': []}, {'retrieved': [], 'used': []}))
@@ -572,18 +642,23 @@ class DetailTests(Harness2Case):
         self.assertEqual(data['harness']['reference_validation']['codes_checked'], 0)
 
     def test_open_questions_carry_their_candidates_and_their_confirmation(self):
-        clarifications = {c['fact']: c for c in self.detail()['clarifications']}
+        # moved by refutation round 3 (falsegreen-11): the engine asks 45380's extent too: the questions are told apart
+        # by id
+        served = {c['id']: c for c in self.detail()['clarifications']}
+        clarifications = {fact: served[str(self.questions[fact].pk)]
+                          for fact in ('extent', 'service_date', 'performed_status')}
         self.assertEqual({fact: len(c['candidates']) for fact, c in clarifications.items()},
                          {'extent': 2, 'service_date': 1, 'performed_status': 3})
+        self.assertEqual(len(served[str(self.questions['by_key']['extent', 'sel:1'].pk)]['candidates']), 2)
         self.assertEqual(clarifications['extent']['candidates'], self.candidates_of('extent'))
         # the exact attestation is served with a verified candidate, never with an unverified one
         self.assertEqual([c['attestation'] for c in clarifications['extent']['candidates']],
                          [candidates.attestation('cecum'), ''])
-        self.assertTrue(all(c['confirmation'] is None for c in clarifications.values()))
+        self.assertTrue(all(c['confirmation'] is None for c in served.values()))
         with mock.patch('studio.jobs.reassess_after_confirmation'):
             self.assertEqual(self.confirm('extent').status_code, 201)
         data = self.detail()
-        extent = next(c for c in data['clarifications'] if c['fact'] == 'extent')
+        extent = next(c for c in data['clarifications'] if c['id'] == str(self.questions['extent'].pk))
         confirmation = models.FindingConfirmation.objects.get()
         self.assertEqual({key: extent['confirmation'][key] for key in ('id', 'value', 'fact', 'located_by',
                                                                        'confirmed_by', 'attestation')},
@@ -605,14 +680,20 @@ class DetailTests(Harness2Case):
         proposals = {p['code']: p for p in self.detail()['assessment']['proposals']}
         snare, biopsy = proposals['45385'], proposals['45380']
         self.assertEqual((snare['phases'], snare['confirmed']), ({'astra': 'independent', 'fable': 'independent'}, []))
-        self.assertEqual(biopsy['phases'], {'astra': 'independent', 'fable': 'peer_review'})
+        # moved by refutation round 3 (falsegreen-11): the engine records 45380's phases from the readings: this case's
+        # Fable proposes it in its first reading (the website fixtures' Fable first proposes it in its peer review)
+        self.assertEqual(biopsy['phases'], {'astra': 'independent', 'fable': 'independent'})
         # 11.4: a participant's own proposal keeps its origin, never Corti's
         self.assertEqual(biopsy['proposed_by'], ['astra', 'fable'])
         self.assertIn('Corti did not propose this code.', biopsy['rationale'])
         # I4: proposed, reference-checked and approved stay apart; a candidate or a confirmation approves nothing
         self.assertEqual((biopsy['decision_state'], biopsy['decision']), ('undecided', None))
+        # moved by refutation round 3 (falsegreen-11): no status candidate verifies on this note: 45380's extent is
+        # confirmed instead
+        question = self.questions['by_key']['extent', 'sel:1']
+        candidate = next(c for c in review.assessment_candidates(self.final)[str(question.pk)] if c['verified'])
         with mock.patch('studio.jobs.reassess_after_confirmation'):
-            self.assertEqual(self.confirm('performed_status', self.verified('performed_status')).status_code, 201)
+            self.assertEqual(self.confirm('extent', candidate, question=question).status_code, 201)
         biopsy = next(p for p in self.detail()['assessment']['proposals'] if p['code'] == '45380')
         self.assertEqual((biopsy['decision_state'], biopsy['status']), ('undecided', 'needs_clarification'))
 
@@ -679,8 +760,8 @@ class TraceTests(Harness2Case):
         expected['additional_codes'] = [dict(item, phase='peer_review') for item in expected['additional_codes']]
         self.assertEqual(peer_run['review'], expected)
         self.assertEqual([a['question_id'] for a in peer_run['review']['answers']],
-                         [str(self.first.clarifications.get(fact=fact).pk)
-                          for fact in ('extent', 'service_date', 'performed_status')])
+                         [str(self.first.clarifications.get(fact=fact, proposal__key=key).pk) for fact, key in
+                          (('extent', 'sel:0'), ('service_date', None), ('performed_status', 'sel:1'))])
         self.assertEqual([c['code'] for c in peer_run['review']['additional_codes']], ['45381'])
         self.assertEqual(sorted(name for name, _ in peer_run['review']['frozen_inputs']),
                          ['astra', 'corti', 'cpt_studio', 'fable', 'revision'])
