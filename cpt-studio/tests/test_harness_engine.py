@@ -15,11 +15,12 @@ from django.test import SimpleTestCase
 
 from studio.gi import context as gi_context
 from studio.gi import detect
-from studio.participants.prompt import READING_VERSION
+from studio.participants.prompt import PEER_VERSION, READING_VERSION
 from studio.reference.store import InMemoryReferenceLookup, PrefetchedReferenceLookup
-from studio.types import (EvidenceSpan, LocatedQuote, NormalizedResponse, ParticipantCode, ParticipantInput,
-                          ParticipantNotCoded, ParticipantQuestion, ParticipantReading, ParticipantService,
-                          ProviderCode, ReferenceSourceInfo, canonical_json, sha256_json)
+from studio.types import (CodePosition, EvidenceSpan, LocatedQuote, NormalizedResponse, ParticipantCode,
+                          ParticipantInput, ParticipantNotCoded, ParticipantQuestion, ParticipantReading,
+                          ParticipantService, PeerReview, ProviderCode, QuestionAnswer, ReferenceSourceInfo,
+                          canonical_json, sha256_json)
 from studio.validation import engine
 from studio.validation.engine import UNLOCATED, assess, participant_codes
 
@@ -107,6 +108,24 @@ def read(provider, codes=(), **kwargs):
     return ParticipantInput(provider, 'read', reading(provider, codes, **kwargs))
 
 
+def peer(provider, *, positions=(), additional=(), answers=(), unverified=0):
+    """A participant's phase-2 output (HARNESS.md 11.1), made after its first reading was frozen."""
+    return PeerReview(provider=provider, adapter_version=f'{provider}-peer-test@1', review_version=PEER_VERSION,
+                      requested_model=MODELS[provider], returned_model=MODELS[provider],
+                      frozen_inputs=(('own', '0' * 64),), answers=tuple(answers), positions=tuple(positions),
+                      additional_codes=tuple(additional), unverified_quotes=unverified)
+
+
+def stance(text, value, position, *quotes):
+    return CodePosition(value, position, OWN_WORDS, tuple(located(text, q) for q in quotes))
+
+
+def reviewed(provider, codes=(), review=None, **kwargs):
+    """A participant read in both phases: its frozen first reading and its peer review."""
+    return ParticipantInput(provider, 'read', reading(provider, codes, **kwargs), peer_state='read',
+                            peer=review if review is not None else peer(provider))
+
+
 def corti(*codes):
     """The proposal provider's selected codes: (code, quote) pairs, each quote exact in COLON-like texts."""
     return [ProviderCode('selected', 'cpt', value, 'UNVERIFIED PROVIDER WORDING', (quote,)) for value, quote in codes]
@@ -143,9 +162,12 @@ def decision(item):
             item.units, item.fingerprint, item.clarifications)
 
 
+RECORD = ('proposed_by', 'participants', 'phases')  # the participants' record on a proposal (outside its decision)
+
+
 def without_record(item):
     """A proposal with the participants' record taken out of its support: what it was before them."""
-    support = {k: v for k, v in item.support.items() if k not in ('proposed_by', 'participants')}
+    support = {k: v for k, v in item.support.items() if k not in RECORD}
     return replace(item, support=support)
 
 
@@ -211,8 +233,12 @@ class MergeTests(SimpleTestCase):
         self.assertEqual((added.key, added.bucket, added.status), ('sel:1', 'selected', 'ready'))
         self.assertEqual(added.support['origin'], 'participant')
         self.assertEqual(added.support['proposed_by'], ['astra'])
+        self.assertEqual(added.support['phases'], {'astra': 'independent'})
         self.assertEqual([e.text for e in added.evidence], [BIOPSY])
-        self.assertTrue(added.rationale.startswith('Selected by Astra (independent participant).'), added.rationale)
+        # HARNESS.md 11.4 (harness@1 integration owner's wording): its origin, never "Selected by"
+        self.assertTrue(added.rationale.startswith('Proposed by Astra (independent participant); Corti did not '
+                                                   'propose this code. 1 exact evidence passage.'), added.rationale)
+        self.assertNotIn('Selected by', added.rationale)
         # it is a proposal like any other: the reconciliation counts it, so the biopsy is no longer unresolved
         self.assertEqual(result.completeness['unresolved_items'], [])
         self.assertEqual(result.completeness['state'], 'complete_pending_review')
@@ -324,10 +350,12 @@ class AgreementNeverPromotesTests(SimpleTestCase):
         self.assertEqual(decision(agreed), decision(alone))
         self.assertEqual((alone.support['proposed_by'], agreed.support['proposed_by']), (['astra'], ['astra', 'fable']))
         self.assertEqual(agreed.rationale.split('. ', 1)[1], alone.rationale.split('. ', 1)[1])
+        self.assertTrue(agreed.rationale.startswith('Proposed by Astra and Fable (independent participants); Corti did '
+                                                    'not propose this code. '), agreed.rationale)
         self.assertEqual(agreed.units, 1)  # one selection: a stated unit count is recorded, never used
         self.assertIn('stated units 2', agreed.support['participants']['fable']['detail'])
-        self.assertEqual({k: v for k, v in agreed.support.items() if k not in ('proposed_by', 'participants')},
-                         {k: v for k, v in alone.support.items() if k not in ('proposed_by', 'participants')})
+        self.assertEqual({k: v for k, v in agreed.support.items() if k not in RECORD},
+                         {k: v for k, v in alone.support.items() if k not in RECORD})
 
     def test_agreement_on_a_code_the_provider_selected_changes_nothing_but_the_record(self):
         alone = run(COLON, corti(('45385', span(COLON, SNARE))))
@@ -422,13 +450,32 @@ class MissingServiceTests(SimpleTestCase):
     def test_only_a_performed_service_quoted_verbatim_of_a_kind_the_inventory_does_not_read_counts(self):
         codes = corti(('45385', span(COLON, SNARE)), ('45380', span(COLON, BIOPSY)))
         for services in ([service(COLON, 'colonoscopy', CECUM)],  # the inventory reads a performed colonoscopy
+                         [service(COLON, 'colonoscopy', CECUM, status='attempted_incomplete')],  # and this one too
                          [service(COLON, 'not_gi', CECUM)],  # outside the GI scope this release codes
                          [service(COLON, 'eus', 'an echoendoscope was passed')],  # not found verbatim
                          [service(COLON, 'eus', CECUM, status='planned')],
-                         [service(COLON, 'egd', CECUM, status='attempted_incomplete')]):
+                         [service(COLON, 'egd', CECUM, status='not_performed')],
+                         [service(COLON, 'egd', CECUM, status='unclear')]):
             result = run(COLON, codes, [read('fable', services=services)])
             self.assertEqual(result.completeness['state'], 'complete_pending_review', services)
             self.assertIsNone(encounter_check(result, 'participants.services'), services)
+
+    def test_an_attempted_incomplete_service_counts_as_missing_too(self):
+        """The harness@1 integration owner's decision (2026-11-01): a service started at this encounter and not
+        completed as intended must be accounted for as one performed must, so it makes coding incomplete as well."""
+        codes = corti(('45385', span(COLON, SNARE)), ('45380', span(COLON, BIOPSY)))
+        result = run(COLON, codes, [read('fable', services=[service(COLON, 'egd', CECUM,
+                                                                    status='attempted_incomplete')])])
+        reason = ('Fable reads an attempted, incomplete upper endoscopy that the documented-service reading does not '
+                  f'read as performed (“{CECUM}”)')
+        self.assertEqual(result.completeness['state'], 'incomplete')
+        self.assertEqual(result.completeness['reasons'], [reason])
+        entry = result.completeness['participant_services'][0]
+        self.assertEqual((entry['participant'], entry['family'], entry['status']), ('fable', 'egd', 'attempted_incomplete'))
+        warn = encounter_check(result, 'participants.services')
+        self.assertEqual(warn.status, 'warn')
+        self.assertIn(f'Fable reads an attempted, incomplete upper endoscopy (“{CECUM}”)', warn.detail)
+        self.assertEqual(tuple(without_record(p) for p in result.proposals), run(COLON, codes).proposals)
         result = run(COLON, codes, [read('fable', services=[service(COLON, 'other_gi', POLYP)])])
         self.assertEqual(result.completeness['participant_services'][0]['families'],
                          ['gi.enteroscopy', 'gi.capsule', 'gi.motility', 'gi.reflux', 'gi.anorectal',
@@ -567,14 +614,226 @@ class DeterminismTests(SimpleTestCase):
 
 
 class InputTests(SimpleTestCase):
-    def test_inputs_that_break_the_contract_are_refused(self):
-        astra = reading('astra')
-        for given in ([ParticipantInput('corti', 'failed')],
-                      [ParticipantInput('astra', 'failed'), ParticipantInput('astra', 'failed')],
-                      [ParticipantInput('astra', 'read')],
-                      [ParticipantInput('astra', 'failed', astra)],
-                      [ParticipantInput('astra', 'sideways')],
-                      [ParticipantInput('fable', 'read', astra)],
-                      [ParticipantInput('astra', 'read', replace(astra, refused=True))]):
+    def test_an_input_that_belongs_to_no_participant_is_refused(self):
+        """An input that is no ParticipantInput, or that names no harness participant, cannot be blocked alone: it is
+        the caller's contract violation, and raises (participant_codes reads inputs the same way)."""
+        for given in ([ParticipantInput('corti', 'failed')], [ParticipantInput('gpt', 'failed')], [None],
+                      [{'provider': 'astra', 'state': 'failed'}]):
             with self.assertRaises(ValueError, msg=str(given)):
                 run(COLON, corti(('45385', span(COLON, SNARE))), given)
+            with self.assertRaises(ValueError, msg=str(given)):
+                participant_codes(given)
+
+    def test_a_malformed_input_degrades_to_refused_and_blocks_only_itself(self):
+        """The harness@1 integration owner's decision (I10): a malformed input of a participant is read as 'refused',
+        with CPT Studio's own reason, instead of raising; Corti and the other participant are assessed as before."""
+        astra = reading('astra', [code(COLON, '45380', BIOPSY)])
+        fable = read('fable', [code(COLON, '45378', CECUM)])
+        bad_code = replace(astra, codes=({'code': '45380'},))
+        bad_quote = replace(astra, codes=(ParticipantCode('45380', evidence=('not a located quote',)),))
+        bad_service = replace(astra, services=(ParticipantService('S1', ['egd'], 'performed', '', '', '', ''),))
+        cases = {
+            'given twice': ([ParticipantInput('astra', 'failed'), ParticipantInput('astra', 'read', astra)],
+                            'its input was given more than once'),
+            'read with no reading': ([ParticipantInput('astra', 'read')], 'its state is read but no reading was given'),
+            'a reading beside another state': ([ParticipantInput('astra', 'failed', astra)],
+                                               'a reading was given with a state other than read'),
+            'an unknown state': ([ParticipantInput('astra', 'sideways')], 'its state is not one CPT Studio knows'),
+            "another's reading": ([ParticipantInput('astra', 'read', reading('fable'))],
+                                  "its reading is another participant's"),
+            'a refused reading': ([ParticipantInput('astra', 'read', replace(astra, refused=True))],
+                                  'its reading was refused'),
+            'not a reading': ([ParticipantInput('astra', 'read', {'codes': []})], 'its reading is malformed'),
+            'a malformed code': ([ParticipantInput('astra', 'read', bad_code)], 'its reading is malformed (its codes)'),
+            'a malformed quote': ([ParticipantInput('astra', 'read', bad_quote)], 'its reading is malformed (its codes)'),
+            'a malformed service': ([ParticipantInput('astra', 'read', bad_service)],
+                                    'its reading is malformed (its services)'),
+        }
+        alone = run(COLON, corti(('45385', span(COLON, SNARE))), [fable])
+        for name, (given, why) in cases.items():
+            result = run(COLON, corti(('45385', span(COLON, SNARE))), [*given, fable])
+            summary = encounter_check(result, 'participants.summary')
+            self.assertIn(f'Astra (OpenAI) did not read the document: it answered, and its answer was not used (CPT '
+                          f'Studio could not use its input: {why}).', summary.detail, name)
+            # Fable is read as without the broken input: its own code is a proposal of its own, as before
+            self.assertEqual(without_record(proposal(result, '45378')), without_record(proposal(alone, '45378')), name)
+            self.assertEqual(proposal(result, '45385').support['participants']['astra']['position'], 'not_run', name)
+            self.assertNotIn('45380', [p.code for p in result.proposals], name)
+            self.assertIn('45378', participant_codes([*given, fable]), name)
+            self.assertNotIn('45380', participant_codes([*given, fable]), name)
+
+    def test_a_malformed_peer_review_degrades_only_the_peer_review(self):
+        """A broken phase blocks only itself: the frozen first reading is still read, and its codes still proposed."""
+        astra = reading('astra', [code(COLON, '45380', BIOPSY)])
+        added = peer('astra', additional=[code(COLON, '45378', CECUM)])
+        for given, why in ((ParticipantInput('astra', 'read', astra, peer_state='read'),
+                            'its peer review state is read but no peer review was given'),
+                           (ParticipantInput('astra', 'read', astra, peer_state='failed', peer=added),
+                            'a peer review was given with a peer state other than read'),
+                           (ParticipantInput('astra', 'read', astra, peer_state='read', peer=replace(added, provider='fable')),
+                            "its peer review is another participant's"),
+                           (ParticipantInput('astra', 'read', astra, peer_state='read', peer=replace(added, refused=True)),
+                            'its peer review was refused'),
+                           (ParticipantInput('astra', 'read', astra, peer_state='read',
+                                             peer=replace(added, positions=('disputes',))),
+                            'its peer review is malformed (its positions)'),
+                           (ParticipantInput('astra', 'read', astra, peer_state='sideways'),
+                            'its peer review state is not one CPT Studio knows')):
+            result = run(COLON, corti(('45385', span(COLON, SNARE))), [given])
+            self.assertEqual(proposal(result, '45380').support['origin'], 'participant', why)
+            self.assertNotIn('45378', [p.code for p in result.proposals], why)
+            summary = encounter_check(result, 'participants.summary').detail
+            self.assertIn('Astra (OpenAI, gpt-6-astra) read the document.', summary, why)
+            self.assertIn(f'Its peer review was not read: it answered, and its answer was not used (CPT Studio could not '
+                          f'use its peer review: {why}).', summary, why)
+            self.assertEqual(proposal(result, '45385').support['participants']['astra']['peer']['position'], 'not_run')
+            self.assertEqual(participant_codes([given]), ('45380',), why)
+        # a peer review beside a first reading that was not read is never read (HARNESS.md 11.1)
+        result = run(COLON, corti(('45385', span(COLON, SNARE))),
+                     [ParticipantInput('astra', 'failed', reason='HTTP 529', peer_state='read', peer=added)])
+        summary = encounter_check(result, 'participants.summary').detail
+        self.assertIn('did not read the document: its request failed (HTTP 529). It takes no part in peer review: its '
+                      'first reading was not read.', summary)
+        self.assertNotIn('45378', [p.code for p in result.proposals])
+
+
+class PeerReviewTests(SimpleTestCase):
+    """HARNESS.md 11.1: what a participant says in peer review, after its first reading was frozen."""
+
+    def test_a_dispute_with_a_located_quote_warns_naming_the_phase(self):
+        alone = run(COLON, corti(('45385', span(COLON, SNARE))), [reviewed('fable')])
+        disputed = run(COLON, corti(('45385', span(COLON, SNARE))),
+                       [reviewed('fable', review=peer('fable', positions=[stance(COLON, '45385', 'disputes', POLYP)]))])
+        before, item = proposal(alone, '45385'), proposal(disputed, '45385')
+        warn = check(item, 'participants.disagree')
+        self.assertEqual(warn.status, 'warn')
+        self.assertIn(f"Fable disputes 45385 in peer review, after seeing the other reviewers' frozen conclusions "
+                      f'(“{POLYP}”). Kept for the reviewer, never voted on', warn.detail)
+        self.assertEqual((item.status, item.bucket, item.evidence), (before.status, before.bucket, before.evidence))
+        self.assertEqual(item.checks[:-1], before.checks)
+        self.assertNotEqual(item.fingerprint, before.fingerprint)  # a disagreement is part of what a decision rests on
+        peer_position = item.support['participants']['fable']['peer']
+        self.assertEqual((peer_position['position'], peer_position['quote']), ('disputes', POLYP))
+        self.assertNotIn(OWN_WORDS, canonical_json(disputed).decode('utf-8'))
+
+    def test_both_phases_in_one_warning_each_named(self):
+        result = run(COLON, corti(('45385', span(COLON, SNARE))), [
+            read('astra', advised=[not_coded(COLON, '45385', SNARE)]),
+            reviewed('fable', review=peer('fable', positions=[stance(COLON, '45385', 'disputes', POLYP)]))])
+        detail = check(proposal(result, '45385'), 'participants.disagree').detail
+        self.assertIn(f'Astra advises not to code 45385 in its independent reading: it reads its service as not '
+                      f'performed at this encounter (“{SNARE}”). Fable disputes 45385 in peer review', detail)
+
+    def test_supports_cannot_tell_and_an_unquoted_dispute_change_nothing(self):
+        """I3: a peer review's agreement never promotes; a position with no located quote is no evidence either."""
+        alone = run(COLON, corti(('45385', span(COLON, SNARE))), [reviewed('fable')])
+        for position, quotes in (('supports', (SNARE,)), ('cannot_tell', (POLYP,)), ('disputes', ('not in the text',)),
+                                 ('disputes', ())):
+            result = run(COLON, corti(('45385', span(COLON, SNARE))), [reviewed('fable', review=peer(
+                'fable', positions=[stance(COLON, '45385', position, *quotes)]))])
+            item, before = proposal(result, '45385'), proposal(alone, '45385')
+            self.assertEqual(decision(item), decision(before), position)
+            self.assertEqual(without_record(item), without_record(before), position)
+            self.assertEqual((result.clarifications, result.completeness), (alone.clarifications, alone.completeness))
+            self.assertEqual(item.support['participants']['fable']['peer']['position'], position)
+        self.assertEqual(proposal(alone, '45385').support['participants']['fable']['peer']['position'], 'no_position')
+
+    def test_an_additional_code_is_read_as_a_participant_code_and_recorded_as_after_peer_review(self):
+        first = run(COLON, corti(('45385', span(COLON, SNARE))), [read('fable', [code(COLON, '45380', BIOPSY)])])
+        later = run(COLON, corti(('45385', span(COLON, SNARE))),
+                    [reviewed('fable', review=peer('fable', additional=[code(COLON, '45380', BIOPSY)]))])
+        independent, added = proposal(first, '45380'), proposal(later, '45380')
+        self.assertEqual(decision(added), decision(independent))  # I2: the same path, the same decision
+        self.assertEqual((added.support['origin'], added.support['proposed_by'], added.support['phases']),
+                         ('participant', ['fable'], {'fable': 'peer_review'}))
+        self.assertEqual(independent.support['phases'], {'fable': 'independent'})
+        self.assertTrue(added.rationale.startswith('Proposed by Fable after peer review; Corti did not propose this '
+                                                   'code. 1 exact evidence passage.'), added.rationale)
+        self.assertNotIn('independent', added.rationale)  # never described as independent
+        detail = added.support['participants']['fable']['detail']
+        self.assertIn('Fable proposed 45380 after peer review, not in its independent reading (stated units 1', detail)
+        summary = encounter_check(later, 'participants.summary').detail
+        self.assertIn('Fable (Anthropic, claude-fable-5-1) read the document. It proposed no code. In peer review, after '
+                      'its first reading was frozen, it took 0 positions on codes (0 supports, 0 disputes, 0 cannot '
+                      'tell). It listed 1 additional code (45380), 1 quoting the document verbatim; a code first '
+                      'proposed in peer review is never counted as independent.', summary)
+        self.assertEqual(participant_codes([reviewed('fable', review=peer('fable', additional=[
+            code(COLON, '45380', BIOPSY), code(COLON, '45378', 'not in the text')]))]), ('45380',))
+
+    def test_a_code_proposed_in_both_phases_names_each_proposers_phase(self):
+        result = run(COLON, corti(('45385', span(COLON, SNARE))), [
+            read('astra', [code(COLON, '45380', BIOPSY)]),
+            reviewed('fable', review=peer('fable', additional=[code(COLON, '45380', BIOPSY)]))])
+        item = proposal(result, '45380')
+        self.assertEqual(item.support['phases'], {'astra': 'independent', 'fable': 'peer_review'})
+        self.assertTrue(item.rationale.startswith('Proposed by Astra (independent participant) and Fable after peer '
+                                                  'review; Corti did not propose this code.'), item.rationale)
+        # its own first reading's code, listed again in peer review, stays independent
+        again = run(COLON, corti(('45385', span(COLON, SNARE))), [
+            reviewed('astra', [code(COLON, '45380', BIOPSY)], peer('astra', additional=[code(COLON, '45380', BIOPSY)]))])
+        self.assertEqual(proposal(again, '45380').support['phases'], {'astra': 'independent'})
+        self.assertIn('in its independent reading and again in peer review',
+                      proposal(again, '45380').support['participants']['astra']['detail'])
+
+    def test_an_additional_code_a_decidable_proposal_carries_only_adds_to_its_record(self):
+        alone = run(COLON, corti(('45385', span(COLON, SNARE))))
+        result = run(COLON, corti(('45385', span(COLON, SNARE))),
+                     [reviewed('fable', review=peer('fable', additional=[code(COLON, '45385', SNARE)]))])
+        item = proposal(result, '45385')
+        self.assertEqual(without_record(item), proposal(alone, '45385'))
+        self.assertEqual((item.support['proposed_by'], item.support['phases']), (['corti', 'fable'], {'fable': 'peer_review'}))
+
+    def test_an_additional_code_that_is_no_proposal_is_an_alternative_saying_so(self):
+        result = run(COLON, corti(('45385', span(COLON, SNARE))), [reviewed('fable', review=peer('fable', additional=[
+            code(COLON, 'G0105', CECUM), code(COLON, '45378', 'not in the document')]))])
+        self.assertEqual([(p.key, p.code) for p in result.proposals if p.bucket == 'alternative'],
+                         [('altp:0', 'G0105'), ('altp:1', '45378')])
+        self.assertTrue(proposal(result, 'G0105').exclusion_reason.startswith(
+            'Proposed by Fable after peer review, but not added as a proposal: HCPCS Level II code'))
+        self.assertEqual(proposal(result, '45378').support['phases'], {'fable': 'peer_review'})
+
+    def test_peer_review_keeps_the_keys_of_every_first_reading_code(self):
+        """assess #1 and assess #2: a code added in peer review comes after every first reading's code, so the keys
+        a question names on the first assessment name the same proposals on the second."""
+        first = run(COLON, (), [read('astra', [code(COLON, '45385', SNARE)]), read('fable', [code(COLON, '45378', CECUM)])],
+                    provider_status='failed')
+        second = run(COLON, (), [reviewed('astra', [code(COLON, '45385', SNARE)], peer('astra', additional=[
+            code(COLON, '45380', BIOPSY)])), reviewed('fable', [code(COLON, '45378', CECUM)])], provider_status='failed')
+        self.assertEqual([(p.key, p.code) for p in first.proposals], [('sel:0', '45385'), ('sel:1', '45378')])
+        self.assertEqual([(p.key, p.code) for p in second.proposals],
+                         [('sel:0', '45385'), ('sel:1', '45378'), ('sel:2', '45380')])
+
+    def test_a_peer_review_that_did_not_run_is_said_and_blocks_only_itself(self):
+        before = run(COLON, corti(('45385', span(COLON, SNARE))), [read('fable', [code(COLON, '45380', BIOPSY)])])
+        after = run(COLON, corti(('45385', span(COLON, SNARE))), [ParticipantInput(
+            'fable', 'read', reading('fable', [code(COLON, '45380', BIOPSY)]), reason='HTTP 529', peer_state='failed')])
+        self.assertEqual(tuple(without_record(p) for p in after.proposals),
+                         tuple(without_record(p) for p in before.proposals))
+        self.assertIn('Its peer review was not read: its request failed (HTTP 529).',
+                      encounter_check(after, 'participants.summary').detail)
+        self.assertEqual(proposal(after, '45380').support['participants']['fable']['peer']['position'], 'not_run')
+        self.assertNotIn('peer', proposal(before, '45380').support['participants']['fable'])  # assess #1: no stage yet
+
+    def test_answers_are_counted_never_read_as_answers_and_own_words_never_reach_the_result(self):
+        answer = QuestionAnswer('q1', True, f'{OWN_WORDS} value', (located(COLON, CECUM),))
+        alone = run(COLON, corti(('45385', span(COLON, SNARE))), [reviewed('astra')])
+        result = run(COLON, corti(('45385', span(COLON, SNARE))),
+                     [reviewed('astra', review=peer('astra', answers=[answer], unverified=1))])
+        self.assertEqual((result.clarifications, result.proposals[0].clarifications),
+                         (alone.clarifications, alone.proposals[0].clarifications))
+        summary = encounter_check(result, 'participants.summary').detail
+        self.assertIn('It answered 1 open question; an answer is read only as the passage a reviewer confirms. 1 quote '
+                      'it gave in peer review was not found verbatim in the document and is never evidence.', summary)
+        self.assertNotIn(OWN_WORDS, canonical_json(result).decode('utf-8'))
+
+    def test_keys_and_fingerprints_are_the_same_whatever_the_order_given(self):
+        participants = [reviewed('astra', [code(COLON, '45380', BIOPSY)], peer('astra', positions=[
+                            stance(COLON, '45385', 'disputes', POLYP)], additional=[code(COLON, 'G0105', CECUM)])),
+                        reviewed('fable', [code(COLON, '45378', CECUM)], peer('fable', additional=[
+                            code(COLON, '45380', BIOPSY)]))]
+        first = run(COLON, corti(('45385', span(COLON, SNARE))), participants)
+        again = run(COLON, corti(('45385', span(COLON, SNARE))), list(reversed(participants)))
+        self.assertEqual(first, again)
+        self.assertEqual(sha256_json(first), sha256_json(again))
+        self.assertEqual([(p.key, p.code) for p in first.proposals],
+                         [('sel:0', '45385'), ('sel:1', '45380'), ('sel:2', '45378'), ('altp:0', 'G0105')])

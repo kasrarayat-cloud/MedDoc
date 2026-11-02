@@ -144,6 +144,13 @@ class PinnedParityTests(SimpleTestCase):
             self.assertEqual(sha256_json(assess(**kwargs)), PINNED[name], name)
             self.assertEqual(sha256_json(assess(**kwargs, participants=())), PINNED[name], name)
 
+    def test_no_participant_and_no_confirmation_is_byte_identical_to_the_round_4_engine(self):
+        """harness@2 (HARNESS.md 11.3): with no reviewer-confirmed finding either, nothing changes - in every call form."""
+        for name, kwargs in cases().items():
+            self.assertEqual(sha256_json(assess(**kwargs, confirmed=())), PINNED[name], name)
+            self.assertEqual(sha256_json(assess(**kwargs, participants=(), confirmed=())), PINNED[name], name)
+            self.assertEqual(sha256_json(assess(**kwargs, confirmed=[], participants=[])), PINNED[name], name)
+
     def test_the_cases_reach_the_paths_they_name(self):
         """The pins are only as good as what the cases exercise: a selected, an excluded and an alternative proposal; a
         second review's proposal; the same-day E/M rule; a conflict; every provider status; a member's date conflict."""

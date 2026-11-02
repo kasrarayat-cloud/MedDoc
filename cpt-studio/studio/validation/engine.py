@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import bisect
 import re
+from collections import Counter
 from dataclasses import dataclass, replace
 from datetime import date
 from typing import Mapping, Optional, Sequence
@@ -21,10 +22,12 @@ from studio.gi.profiles import DETECTED_FAMILIES, PROFILES, PROFILES_VERSION, Se
 from studio.participants import LABELS as PARTICIPANT_LABELS, PARTICIPANTS as PARTICIPANT_ORDER
 from studio.participants import VENDORS as PARTICIPANT_VENDORS
 from studio.reference.store import PFS, applied_sources
-from studio.types import (CONFIDENCES, CONTEXT_FACTS, PARTICIPANT_STATES, AssessmentResult, Check, ClarificationSpec,
-                          CodeReference, EvidenceSpan, Fact, FamilyFinding, LocatedQuote, NormalizedResponse, PageSpan,
-                          ParticipantInput, ProposalAssessment, ProviderCode, ReferenceLookup, ReferenceSourceInfo,
-                          RoutingResult, ServiceMention, sha256_json)
+from studio.types import (CONFIDENCES, CONTEXT_FACTS, PARTICIPANT_STATES, PEER_POSITIONS, AssessmentResult, Check,
+                          ClarificationSpec, CodePosition, CodeReference, ConfirmedFinding, EvidenceSpan, Fact,
+                          FamilyFinding, LocatedQuote, NormalizedResponse, PageSpan, ParticipantCode, ParticipantInput,
+                          ParticipantNotCoded, ParticipantReading, ParticipantService, PeerReview, ProposalAssessment,
+                          ProviderCode, QuestionAnswer, ReferenceLookup, ReferenceSourceInfo, RoutingResult,
+                          ServiceMention, Span, sha256_json)
 from studio.gi.detect import DOUBT_PREFIX, UNESTABLISHED
 from studio.validation import checks, rationale, reconcile
 
@@ -72,6 +75,10 @@ class _Evaluation:
     # The fee-schedule row a reader reads: the one the installed reading has, while a closing charge block's question leaves
     # ``reference`` empty for the gates. It decides whether the code is a procedure at all (_procedural).
     read_pfs: Optional[dict] = None
+    # HARNESS.md 11.3: the reviewer-confirmed answer that decided ``outcome`` (and ``match``) in place of the readers'
+    # hold, with the readers' own words for that hold; None when the readers decided it (_Confirmations).
+    confirmed: Optional['_Answer'] = None
+    held: str = ''
 
 
 @dataclass(frozen=True)
@@ -90,6 +97,9 @@ class _Selection:
     # 'participant': proposed by an independent participant no decidable proposal carried the code of (HARNESS.md 5);
     # proposers names them, in stage order: only those that quoted it verbatim (its evidence is their quotes alone).
     proposers: tuple[str, ...] = ()
+    # 'participant' only: the rationale's first sentence - who proposed it, in which phase, and that Corti did not
+    # (HARNESS.md 11.4), never "Selected by" (_Harness._lead)
+    lead: str = ''
 
     @property
     def profile(self) -> ServiceProfile:
@@ -134,10 +144,16 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
            normalized: Optional[NormalizedResponse], reference: ReferenceLookup, service_date: Optional[date],
            provider_status: str, extraction_status: Optional[str] = None,
            extraction_messages: Sequence[str] = (), second: Optional[NormalizedResponse] = None,
-           second_scope: Optional[dict] = None, participants: Sequence[ParticipantInput] = ()) -> AssessmentResult:
+           second_scope: Optional[dict] = None, participants: Sequence[ParticipantInput] = (),
+           confirmed: Sequence[ConfirmedFinding] = ()) -> AssessmentResult:
     """``participants``: one input per CONFIGURED independent participant (HARNESS.md 5). With none (an installation
     where Astra and Fable are disabled) nothing below reads them and the result is the one this engine made before them
-    (I1). With any, _Harness merges their codes: they never decide a status (I2) and agreement never promotes (I3)."""
+    (I1). With any, _Harness merges their codes, from both phases (HARNESS.md 11.1): they never decide a status (I2) and
+    agreement never promotes (I3).
+
+    ``confirmed``: the reviewer-confirmed findings of this revision (HARNESS.md 11.3). Each answers exactly the open
+    question it was made for, read against the assessment these same inputs make without any confirmation
+    (_Confirmations); none read, nothing below changes. Empty, the result is the one this engine made before them (I1)."""
     if provider_status not in PROVIDER_STATUSES:
         raise ValueError(f'Unknown provider status {provider_status!r}.')
     if extraction_status is not None and extraction_status not in EXTRACTION_STATUSES:
@@ -206,6 +222,14 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         proposals = _keyed(selections, encounter, harness) + participant_alternatives
     else:
         procedure_day = _encounter('', context, routing, sources, date_state, selections).procedure_day
+    confirmation = _Confirmations(confirmed, text, pages) if confirmed else None
+    if confirmation is not None:
+        # HARNESS.md 11.3: each confirmation is matched to the question these inputs ask without any, then read; the
+        # proposals keep the keys they have without them, so a question's key names the same proposal before and after
+        selections, proposals, procedure_day = confirmation.apply(
+            selections, proposals, procedure_day, harness=harness,
+            provider=response.provider if response is not None else '', context=context, routing=routing,
+            sources=sources, date_state=date_state, inventory=usable)
     if harness is not None:
         proposals = harness.recorded(proposals)
         provider = harness.provider_checks(provider, provider_status, response, proposals)
@@ -231,7 +255,9 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         coverage.append(checks.unproposed_check(*_missed(routing, selections, procedure_day,
                                                          _accounted_elsewhere(usable, included_by, routing)),
                                                 separate_em=documented_em))
-    service_questions = _service_questions(usable, proposals, context) if usable else []
+    service_questions = (_service_questions(usable, proposals, context,
+                                            confirmation.answered if confirmation is not None else ())
+                         if usable else [])
     unsupported = _unsupported(routing, selections)
     encounter_checks = [*provider, checks.extraction_check(extraction_status, extraction_messages),
                         checks.service_date_check(date_state), reconcile.inventory_check(inventory, problems),
@@ -246,6 +272,8 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     encounter_checks.append(checks.unsupported_check(unsupported))
     if harness is not None:
         encounter_checks += harness.encounter_checks(usable or inventory)
+    if confirmation is not None:
+        encounter_checks += confirmation.encounter_checks()
     clarification = checks.service_date_clarification(date_state)
     clarifications = ((clarification,) if clarification else ()) + tuple(service_questions)
     clarifications += tuple(_member_conflict_questions(context, clarifications, proposals))
@@ -273,6 +301,8 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         # documented services' inclusion line is worded from it (refutation P2RA, EUS lens 1)
         'included_by': included_by,
         'inventory_problems': list(problems)})
+    if confirmation is not None:
+        complete['confirmations'] = confirmation.record()
     return AssessmentResult(
         profiles_version=PROFILES_VERSION, engine_version=ENGINE_VERSION, proposals=proposals,
         encounter_checks=tuple(encounter_checks), clarifications=clarifications,
@@ -878,11 +908,13 @@ def _member_conflict_questions(context, asked, proposals) -> list[ClarificationS
     return out
 
 
-def _service_questions(inventory, proposals, context=None) -> list[ClarificationSpec]:
+def _service_questions(inventory, proposals, context=None, answered=()) -> list[ClarificationSpec]:
     """Every materially necessary question about a documented service, asked together and once: its missing
     documentation (a sparse visit note's setting, status and basis together) and each conflict in the record. A
-    question a proposal of the same family already asks is not asked again."""
-    asked = {(c.family, c.fact) for p in proposals for c in p.clarifications}
+    question a proposal of the same family already asks is not asked again; nor is one a reviewer-confirmed finding
+    answers (``answered``: (family, fact) pairs, _Confirmations.answered) - answering it at one scope never makes it
+    asked again at another."""
+    asked = {(c.family, c.fact) for p in proposals for c in p.clarifications} | set(answered)
     out: list[ClarificationSpec] = []
     for service in inventory.services:
         for spec in reconcile.documentation_clarifications(service, context):
@@ -2107,29 +2139,50 @@ def _global_days(procedures: Sequence[_Selection], pfs_source, sources, day) -> 
     return checks.global_days_note(entries, pfs_source.release, unavailable)
 
 
-def _keyed(selections: Sequence[_Selection], encounter: _Encounter,
-           harness: Optional['_Harness'] = None) -> tuple[ProposalAssessment, ...]:
+def _keys(selections: Sequence[_Selection]) -> list[str]:
+    """Each selection's key, in selection order: 'sel:<n>' or 'exc:<n>', counted within its bucket in provider order."""
+    counts = {'sel': 0, 'exc': 0}
+    keys = []
+    for selection in selections:
+        prefix = 'exc' if selection.excluded else 'sel'
+        keys.append(f'{prefix}:{counts[prefix]}')
+        counts[prefix] += 1
+    return keys
+
+
+def _keyed(selections: Sequence[_Selection], encounter: _Encounter, harness: Optional['_Harness'] = None,
+           keys: Optional[Sequence[str]] = None,
+           answers: Optional[Mapping[int, '_Answers']] = None) -> tuple[ProposalAssessment, ...]:
     """Selected-bucket proposals first, then excluded; keys count within each bucket in provider order. ``harness``: the
     independent participants' merge, whose contradiction checks a decidable proposal carries (HARNESS.md 5); None adds
-    nothing."""
+    nothing. ``keys`` and ``answers`` (by selection index): the keys these selections have without any reviewer-confirmed
+    finding, and the confirmed answers each proposal reads (_Confirmations.apply); None gives the keys above."""
+    keys = _keys(selections) if keys is None else keys
     selected, excluded = [], []
-    for selection in selections:
-        bucket, prefix = (excluded, 'exc') if selection.excluded else (selected, 'sel')
+    for index, selection in enumerate(selections):
+        bucket = excluded if selection.excluded else selected
         extra = harness.disagreements(selection) if harness is not None else ()
-        bucket.append(_proposal(selection, f'{prefix}:{len(bucket)}', encounter, extra))
+        bucket.append(_proposal(selection, keys[index], encounter, extra, (answers or {}).get(index)))
     return tuple(selected + excluded)
 
 
-def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] = ()) -> ProposalAssessment:
+def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] = (),
+              answers: Optional['_Answers'] = None) -> ProposalAssessment:
     """``extra``: checks added after every rule's own (an independent participant's contradiction, which never changes
-    the status); like every check, they are part of the fingerprint."""
+    the status); like every check, they are part of the fingerprint. ``answers``: the reviewer-confirmed answers to the
+    required-fact questions this proposal reads (HARNESS.md 11.3; a confirmed status is in its evaluation already)."""
     if s.evaluation is None:
         return _excluded_early(s, key, enc.provider)
     finding, outcome, ref = s.evaluation.finding, s.evaluation.outcome, s.evaluation.reference
     profile, name, day = s.profile, checks.service_name(s.profile, s.code), enc.date_state.value
     release = enc.pfs_source.release if enc.pfs_source else ''
     m, supported = s.evaluation.match, s.evaluation.support
-    status_found = checks.status_check(outcome, name) if m is None else _service_status_check(m, s.evaluation.note)
+    told = s.evaluation.confirmed  # a reviewer-confirmed status, read in place of the readers' hold
+    if told is not None:
+        status_found = checks.confirmed_status_check(told.performed, told.status, told.words, told.quoted,
+                                                     s.evaluation.held)
+    else:
+        status_found = checks.status_check(outcome, name) if m is None else _service_status_check(m, s.evaluation.note)
     found: list[Check] = [checks.scope_check(s.code_kind, s.scope_reason),
                           *checks.evidence_checks(s.evidence, s.dropped),
                           checks.routing_check(profile, finding), status_found]
@@ -2161,6 +2214,13 @@ def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] =
                                                 question=f'Is {s.code} reported separately from {", ".join(included)} '
                                                          'for this examination?'))
     states = checks.required_fact_states(profile, finding, enc.context)
+    used: list[_Answer] = []  # the reviewer-confirmed answers this proposal reads (HARNESS.md 11.3)
+    if answers is not None and answers.facts:
+        # a confirmed value stands only where the readers leave the fact missing or in conflict: never over a reading
+        states = tuple(answers.state(state) for state in states)
+        used = [answers.facts[state.name] for state in states if state.confirmed]
+    if told is not None:
+        used.insert(0, told)
     facts_check = checks.required_facts_check(profile, states)
     if facts_check:
         found.append(facts_check)
@@ -2212,11 +2272,23 @@ def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] =
         status = 'needs_clarification'
     else:
         status = 'ready'
+    if not s.excluded:
+        exclusion = ''
+    elif told is not None:
+        exclusion = checks.confirmed_exclusion(told.status, told.words, told.quoted)
+    else:
+        exclusion = _service_exclusion(m) if m is not None else checks.exclusion_reason(outcome, name)
+    context_values = _relevant_context(s.family, enc, bool(pctc))
+    support = _support_json(m, supported, s.origin)
+    if used:
+        # what a decision rests on: the confirmed facts, their values and passages (a decision made on one confirmed
+        # reading never carries to another), and in the record the confirmations read
+        context_values = {**context_values, 'confirmed': [answer.basis() for answer in used]}
+        support = {**support, 'confirmed': sorted({i for answer in used for i in answer.ids})}
     return ProposalAssessment(
         key=key, bucket='excluded' if s.excluded else 'selected', code=s.code, code_kind=s.code_kind,
         family=s.family, profile_version=profile.version, status=status,
-        exclusion_reason=(_service_exclusion(m) if m is not None else checks.exclusion_reason(outcome, name))
-        if s.excluded else '', reinstatable=s.excluded,
+        exclusion_reason=exclusion, reinstatable=s.excluded,
         provider_display=s.display, evidence=s.evidence,
         rationale=rationale.selected_rationale(provider=(f'{enc.provider} in a second review limited to the '
                                                          'unresolved documented service'
@@ -2226,11 +2298,14 @@ def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] =
                                                units=s.units, evidence_count=len(s.evidence),
                                                profile=profile, detected=finding is not None, outcome=outcome,
                                                facts=_documented_facts(finding, states, m),
-                                               entered=_entered_facts(states)),
+                                               entered=_entered_facts(states),
+                                               lead=s.lead if s.origin == 'participant' else '',
+                                               status_words=told.words if told is not None else '',
+                                               confirmed=tuple(answer.sentence() for answer in used
+                                                               if answer is not told)),
         checks=tuple(found), modifier_considerations=tuple(considerations), units=s.units,
-        fingerprint=_fingerprint(s.code, s.family, profile.version, s.evidence, found,
-                                 _relevant_context(s.family, enc, bool(pctc)), s.units, status),
-        clarifications=tuple(clarifications), support=_support_json(m, supported, s.origin))
+        fingerprint=_fingerprint(s.code, s.family, profile.version, s.evidence, found, context_values, s.units, status),
+        clarifications=tuple(clarifications), support=support)
 
 
 def _service_status_check(m: reconcile.Match, note: str = '') -> Check:
@@ -2605,9 +2680,11 @@ def _summary(proposals: Sequence[ProposalAssessment], provider_status: str, extr
             'service_date': date_state.value.isoformat() if date_state.value else None}
 
 
-# --- the independent participants (HARNESS.md 5) ---------------------------------------------------------------------
+# --- the independent participants (HARNESS.md 5, 11) -----------------------------------------------------------------
 
 PRIMARY = 'corti'  # the proposal provider among the proposers: the API names the three corti, astra and fable
+# The phases a participant proposes a code in (HARNESS.md 11.1), as ProviderRun.purpose names its runs.
+INDEPENDENT, PEER_REVIEW = 'independent', 'peer_review'
 # The participants' service families (studio.types.PARTICIPANT_FAMILIES) as CPT Studio's own (studio.gi.profiles). A
 # service a participant reads as performed is one the documented-service reading does not read when the inventory reads
 # no performed service of any family it maps to. 'other_gi' maps to every profiled family outside the six the
@@ -2623,6 +2700,9 @@ PARTICIPANT_FAMILY_MAP = {
 PARTICIPANT_SERVICE_LABELS = {'office_em': 'office / outpatient visit', 'egd': 'upper endoscopy',
                               'colonoscopy': 'colonoscopy', 'flexible_sigmoidoscopy': 'flexible sigmoidoscopy',
                               'eus': 'endoscopic ultrasound', 'ercp': 'ERCP', 'other_gi': 'other GI service'}
+# A participant's service at this encounter that coding must account for (harness@1 integration owner, 2026-11-01): one
+# performed, and one started and not completed as intended.
+MISSING_STATUSES = ('performed', 'attempted_incomplete')
 NOT_PERFORMED_HERE = 'not_performed_at_this_encounter'
 NOT_CODED_WORDS = {NOT_PERFORMED_HERE: 'it reads the service as not performed at this encounter',
                    'included_in_another_code': 'it reads the service as included in another code',
@@ -2639,6 +2719,8 @@ PARTICIPANT_STATE_WORDS = {
     'not_configured': 'it is not configured on this installation',
     'not_run': 'it has not run for this revision',
 }
+PEER_POSITION_WORDS = {'supports': 'supports', 'disputes': 'disputes',
+                       'cannot_tell': 'cannot tell whether the document supports'}
 UNLOCATED = ('none of its quotes was found verbatim in the document text, and a quote that is not found is never '
              'evidence')
 LISTED_IN_SUMMARY = 8  # codes a participant's summary sentence names; the rest are counted
@@ -2646,14 +2728,22 @@ MODIFIER_SHAPE = re.compile(r'[A-Z0-9]{2}', re.A)  # a modifier as a participant
 OPEN_QUESTION = 'open question'  # the words review.coding_completeness drops a completeness reason for
 
 
+def _listable(code) -> bool:
+    return isinstance(code, str) and 0 < len(code) <= MAX_LISTED_CODE
+
+
 def participant_codes(participants: Sequence[ParticipantInput]) -> tuple[str, ...]:
     """The codes an assessment with ``participants`` may look up beside the proposal provider's (the assess stage
-    prefetches the union for the bounded child, which has no database): every listable code a used reading proposes
-    with at least one located quote. A superset of what _Harness.merge reads; never a code it would miss."""
-    return tuple(sorted({item.code for p in participants if p.state == 'read' and p.reading is not None
-                         and not p.reading.refused for item in p.reading.codes
-                         if isinstance(item.code, str) and 0 < len(item.code) <= MAX_LISTED_CODE
-                         and any(q.spans for q in item.evidence)}))
+    prefetches the union for the bounded child, which has no database): every listable code a used reading, or a used
+    peer review's additional codes, proposes with at least one located quote. A superset of what _Harness.merge reads;
+    never a code it would miss. Inputs read as _Harness reads them (_usable_inputs): a malformed one proposes nothing."""
+    found = set()
+    for p in _usable_inputs(participants):
+        entries = list(p.reading.codes) if p.state == 'read' else []
+        if p.state == 'read' and p.peer_state == 'read':
+            entries += list(p.peer.additional_codes)
+        found |= {item.code for item in entries if _listable(item.code) and any(q.spans for q in item.evidence)}
+    return tuple(sorted(found))
 
 
 def _participant_names(names: Sequence[str]) -> str:
@@ -2674,77 +2764,212 @@ def _incomplete(reasons: Sequence[str]) -> dict:
             'statement': 'Coding for this encounter is incomplete: ' + '; '.join(reasons) + '.'}
 
 
+# --- what CPT Studio reads of a participant's input (I10: one broken participant blocks only itself) ---
+
+def _quotes_ok(quotes) -> bool:
+    return isinstance(quotes, (tuple, list)) and all(
+        isinstance(q, LocatedQuote) and isinstance(q.spans, (tuple, list))
+        and all(isinstance(span, EvidenceSpan) for span in q.spans) for q in quotes)
+
+
+def _items_ok(items, kind) -> bool:
+    return isinstance(items, (tuple, list)) and all(isinstance(item, kind) and _quotes_ok(item.evidence)
+                                                    for item in items)
+
+
+def _codes_ok(items) -> bool:
+    return _items_ok(items, ParticipantCode) and all(isinstance(item.modifiers, (tuple, list)) for item in items)
+
+
+def _malformed_reading(reading: ParticipantReading) -> str:
+    """What of a reading CPT Studio cannot read, in its own words ('' when nothing): every part the merge reads must be
+    of its declared type, so that no participant's input can stop the assessment of the others."""
+    if not _codes_ok(reading.codes):
+        return 'its codes'
+    if not _items_ok(reading.not_coded, ParticipantNotCoded) or not all(isinstance(item.reason, str)
+                                                                        for item in reading.not_coded):
+        return 'its not-coded items'
+    if not _items_ok(reading.services, ParticipantService) or not all(
+            isinstance(s.family, str) and isinstance(s.status, str) for s in reading.services):
+        return 'its services'
+    if not isinstance(reading.questions, (tuple, list)) or not isinstance(reading.extraction_issues, (tuple, list)):
+        return 'its questions or extraction issues'
+    if type(reading.unverified_quotes) is not int or not isinstance(reading.requested_model, str):
+        return 'its counts or model'
+    return ''
+
+
+def _malformed_peer(peer: PeerReview) -> str:
+    """What of a peer review CPT Studio cannot read ('' when nothing), as _malformed_reading."""
+    if not _items_ok(peer.positions, CodePosition) or not all(isinstance(x.position, str) for x in peer.positions):
+        return 'its positions'
+    if not _codes_ok(peer.additional_codes):
+        return 'its additional codes'
+    if not _items_ok(peer.answers, QuestionAnswer):
+        return 'its answers'
+    if type(peer.unverified_quotes) is not int:
+        return 'its count of unverified quotes'
+    return ''
+
+
+def _first_problem(p: ParticipantInput) -> str:
+    """Why CPT Studio cannot read a participant's frozen first reading as given ('' when it can)."""
+    if p.state not in PARTICIPANT_STATES:
+        return 'its state is not one CPT Studio knows'
+    if p.state == 'read' and p.reading is None:
+        return 'its state is read but no reading was given'
+    if p.state != 'read' and p.reading is not None:
+        return 'a reading was given with a state other than read'
+    if p.reading is not None:
+        if not isinstance(p.reading, ParticipantReading):
+            return 'its reading is malformed'
+        if p.reading.provider != p.provider:
+            return "its reading is another participant's"
+        if p.reading.refused:
+            return 'its reading was refused'
+        what = _malformed_reading(p.reading)
+        if what:
+            return f'its reading is malformed ({what})'
+    return ''
+
+
+def _peer_problem(p: ParticipantInput) -> str:
+    """Why CPT Studio cannot read a participant's peer review as given ('' when it can, or when there is none)."""
+    if p.peer_state not in ('',) + PARTICIPANT_STATES:
+        return 'its peer review state is not one CPT Studio knows'
+    if p.state != 'read' and (p.peer_state == 'read' or p.peer is not None):
+        return 'a peer review was given although its first reading was not read'
+    if p.peer_state == 'read' and p.peer is None:
+        return 'its peer review state is read but no peer review was given'
+    if p.peer_state != 'read' and p.peer is not None:
+        return 'a peer review was given with a peer state other than read'
+    if p.peer is not None:
+        if not isinstance(p.peer, PeerReview):
+            return 'its peer review is malformed'
+        if p.peer.provider != p.provider:
+            return "its peer review is another participant's"
+        if p.peer.refused:
+            return 'its peer review was refused'
+        what = _malformed_peer(p.peer)
+        if what:
+            return f'its peer review is malformed ({what})'
+    return ''
+
+
+def _refused_input(provider: str, why: str, peer_state: str = '') -> ParticipantInput:
+    return ParticipantInput(provider, 'refused', None, f'CPT Studio could not use its input: {why}', peer_state, None)
+
+
+def _usable(p: ParticipantInput) -> ParticipantInput:
+    """``p`` as CPT Studio reads it: unchanged when well formed, else the phase that is not degraded to 'refused' with
+    CPT Studio's own reason (harness@1 integration owner, 2026-11-01: never a raise, so it blocks only itself). A peer
+    review is read only beside a first reading that is (HARNESS.md 11.1)."""
+    why = _first_problem(p)
+    if why:
+        given = p.peer_state != '' or p.peer is not None
+        return _refused_input(p.provider, why, 'refused' if given else '')
+    why = _peer_problem(p)
+    if not why:
+        return p
+    if p.state != 'read':
+        return replace(p, peer_state='refused', peer=None)  # the reason stays its first phase's
+    return replace(p, peer_state='refused', peer=None, reason=f'CPT Studio could not use its peer review: {why}')
+
+
+def _usable_inputs(participants: Sequence[ParticipantInput]) -> tuple[ParticipantInput, ...]:
+    """The configured participants' inputs as CPT Studio reads them, in stage order (_usable); a participant given more
+    than once is read as refused. An input that is no ParticipantInput, or that names no harness participant, belongs to
+    no participant that could be blocked alone: it is a contract violation of the caller and raises."""
+    order = {name: index for index, name in enumerate(PARTICIPANT_ORDER)}
+    given: dict[str, list] = {}
+    for p in participants:
+        if not isinstance(p, ParticipantInput):
+            raise ValueError(f'A participant input must be a ParticipantInput, not {type(p).__name__}.')
+        if not isinstance(p.provider, str) or p.provider not in order:
+            raise ValueError(f'Unknown participant {p.provider!r}.')
+        given.setdefault(p.provider, []).append(p)
+    return tuple(_usable(entries[0]) if len(entries) == 1
+                 else _refused_input(name, 'its input was given more than once')
+                 for name, entries in sorted(given.items(), key=lambda item: order[item[0]]))
+
+
 @dataclass(frozen=True)
 class _Said:
     """One participant's entry about one code, with its quotes' spans as CPT Studio verified them: ``good`` are exact
-    slices of the revision text (each once, with its page), ``bad`` every span that is not (never evidence)."""
-    entry: object  # ParticipantCode or ParticipantNotCoded
+    slices of the revision text (each once, with its page), ``bad`` every span that is not (never evidence). ``phase``:
+    the participant's first reading ('independent') or its peer review ('peer_review', HARNESS.md 11.1)."""
+    entry: object  # ParticipantCode, ParticipantNotCoded or CodePosition
     good: tuple[EvidenceSpan, ...]
     bad: tuple[EvidenceSpan, ...] = ()
+    phase: str = INDEPENDENT
 
 
 class _Harness:
-    """The independent participants' merge (HARNESS.md 5), made once per assessment from the inputs of the configured
-    participants, in stage order. Only what CPT Studio itself verified is used: a quote is evidence only where its span
-    is an exact slice of the revision text, checked here again and never assumed (I7), and nothing a participant wrote
-    in its own words reaches the result - only its codes, its enumerated reasons and the document's own passages.
+    """The independent participants' merge (HARNESS.md 5, 11), made once per assessment from the inputs of the
+    configured participants, in stage order (_usable_inputs: a malformed input is read as refused, never raised on).
+    Only what CPT Studio itself verified is used: a quote is evidence only where its span is an exact slice of the
+    revision text, checked here again and never assumed (I7), and nothing a participant wrote in its own words reaches
+    the result - only its codes, its enumerated reasons and positions, and the document's own passages.
 
     - A code a decidable proposal carries (the proposal provider's or the bounded second review's: one a reviewer can
       decide, as _second_review reads it) stays that proposal, changed only by the record of who proposed it
-      (support['proposed_by'], from 'corti', and support['participants'], each participant's position).
+      (support['proposed_by'], from 'corti'; support['phases'], each participant's phase; support['participants'],
+      each participant's position in both phases).
     - Any other code is read by the proposal provider's own path (_select, then _proposal), once, from the quotes of
       every participant that quoted it verbatim, as one selection of one unit (I2). In scope with exact evidence it is a
-      proposal of its own (support['origin'] 'participant'); otherwise an alternative saying why ('altp:<n>'). A
-      participant's stated units, modifiers and confidence are recorded in its position and never used.
+      proposal of its own (support['origin'] 'participant'), whose rationale says who proposed it, in which phase, and
+      that Corti did not (11.4); otherwise an alternative saying why ('altp:<n>'). A participant's stated units,
+      modifiers and confidence are recorded in its position and never used.
+    - Peer review (11.1): a code a peer review adds is read exactly as a first reading's code, after every first
+      reading's code (so they keep their keys), and is recorded as proposed after peer review, never as independent.
     - Agreement never promotes (I3): a second proposer adds its quotes to the code's evidence and its name to the
       record; with the same quotes it changes nothing else - not the bucket, status, checks, units or fingerprint (only
-      the rationale's first sentence, which names the proposers).
+      the rationale's first sentence, which names the proposers). A peer review's 'supports' changes nothing at all.
     - A participant that advises not to code a code because its service was not performed at this encounter, quoting
-      the document, adds a warn to each decidable proposal of that code (participants.disagree); the status stays the
-      readers' own.
-    - A service a participant reads as performed, quoting the document, of a kind of which the documented-service
-      reading reads no performed service, makes coding completeness incomplete (participants.services).
-    - Its questions never become clarifications: participants.summary counts them, as notes."""
+      the document, or that disputes it in peer review, quoting the document, adds a warn to each decidable proposal of
+      that code (participants.disagree, naming the phase); the status stays the readers' own.
+    - A service a participant reads as performed, or as started and not completed, quoting the document, of a kind of
+      which the documented-service reading reads no performed service, makes coding completeness incomplete
+      (participants.services).
+    - Its questions and its peer-review answers never become clarifications or answers: participants.summary counts
+      them, as notes; an answer is read only as the passage a reviewer confirms (_Confirmations)."""
 
     def __init__(self, participants: Sequence[ParticipantInput], text: str, pages):
-        order = {name: index for index, name in enumerate(PARTICIPANT_ORDER)}
-        seen: set[str] = set()
-        for p in participants:
-            if not isinstance(p, ParticipantInput):
-                raise ValueError(f'A participant input must be a ParticipantInput, not {type(p).__name__}.')
-            if p.provider not in order:
-                raise ValueError(f'Unknown participant {p.provider!r}.')
-            if p.provider in seen:
-                raise ValueError(f'Participant {p.provider!r} is given twice.')
-            seen.add(p.provider)
-            if p.state not in PARTICIPANT_STATES:
-                raise ValueError(f'Unknown participant state {p.state!r}.')
-            if (p.state == 'read') != (p.reading is not None):
-                raise ValueError(f'Participant {p.provider!r}: a reading is given exactly when its state is read.')
-            if p.reading is not None and (p.reading.provider != p.provider or p.reading.refused):
-                raise ValueError(f'Participant {p.provider!r}: its reading is another participant\'s or was refused.')
-        self.inputs = tuple(sorted(participants, key=lambda p: order[p.provider]))
+        self.inputs = _usable_inputs(participants)
         self.text, self.pages = text, pages
         self.readings = {p.provider: p.reading for p in self.inputs if p.state == 'read'}
+        self.peers = {p.provider: p.peer for p in self.inputs if p.state == 'read' and p.peer_state == 'read'}
         self.answered = bool(self.readings)
-        # code -> participant -> its entries, in first appearance (stage order, then each reading's own order)
+        # code -> participant -> its entries, in first appearance (each first reading in stage order, then each peer
+        # review in stage order, each in its own order)
         self.codes: dict[str, dict[str, list[_Said]]] = {}
         self.advised: dict[str, dict[str, list[_Said]]] = {}
+        self.stances: dict[str, dict[str, list[_Said]]] = {}  # code -> participant -> its peer-review positions
         self.unlisted: dict[str, int] = {}
+        self.peer_unlisted: dict[str, int] = {}
         for name, reading in self.readings.items():
             for item in reading.codes:
-                if not (isinstance(item.code, str) and 0 < len(item.code) <= MAX_LISTED_CODE):
+                if not _listable(item.code):
                     self.unlisted[name] = self.unlisted.get(name, 0) + 1
                     continue
                 self.codes.setdefault(item.code, {}).setdefault(name, []).append(self._said(item))
             for item in reading.not_coded:
-                if isinstance(item.code, str) and 0 < len(item.code) <= MAX_LISTED_CODE:
+                if _listable(item.code):
                     self.advised.setdefault(item.code, {}).setdefault(name, []).append(self._said(item))
+        for name, peer in self.peers.items():
+            for item in peer.additional_codes:
+                if not _listable(item.code):
+                    self.peer_unlisted[name] = self.peer_unlisted.get(name, 0) + 1
+                    continue
+                self.codes.setdefault(item.code, {}).setdefault(name, []).append(self._said(item, PEER_REVIEW))
+            for item in peer.positions:
+                if _listable(item.code):
+                    self.stances.setdefault(item.code, {}).setdefault(name, []).append(self._said(item, PEER_REVIEW))
         self._missing: Optional[list[dict]] = None
 
-    def _said(self, entry) -> _Said:
+    def _said(self, entry, phase: str = INDEPENDENT) -> _Said:
         good, bad = self._partition(entry.evidence)
-        return _Said(entry, good, bad)
+        return _Said(entry, good, bad, phase)
 
     def _partition(self, quotes: Sequence[LocatedQuote]) -> tuple[tuple[EvidenceSpan, ...], tuple[EvidenceSpan, ...]]:
         spans = [span for quote in quotes for span in quote.spans]
@@ -2755,7 +2980,31 @@ class _Harness:
 
     def proposers(self, code: str) -> tuple[str, ...]:
         """The participants that proposed ``code`` quoting the document verbatim, in stage order."""
-        return tuple(name for name, said in self.codes.get(code, {}).items() if any(s.good for s in said))
+        by = self.codes.get(code, {})
+        return tuple(name for name in PARTICIPANT_ORDER if any(s.good for s in by.get(name, ())))
+
+    def phase(self, code: str, name: str) -> str:
+        """The phase in which ``name`` first proposed ``code``: its first reading, else its peer review."""
+        return INDEPENDENT if any(s.phase == INDEPENDENT for s in self.codes[code][name]) else PEER_REVIEW
+
+    def _who(self, code: str, names: Sequence[str]) -> str:
+        """'Astra (independent participant)', 'Fable after peer review', 'Astra (independent participant) and Fable
+        after peer review': a code first proposed in peer review is never described as independent (11.1)."""
+        first = [name for name in names if self.phase(code, name) == INDEPENDENT]
+        later = [name for name in names if self.phase(code, name) == PEER_REVIEW]
+        return ' and '.join(([_participant_names(first)] if first else [])
+                            + ([f'{checks._join([PARTICIPANT_LABELS[name] for name in later])} after peer review']
+                               if later else []))
+
+    def _lead(self, code: str, proposers: Sequence[str], selections: Sequence[_Selection]) -> str:
+        """The rationale's first sentence of a participant's own proposal (HARNESS.md 11.4): who proposed it, and that
+        Corti did not - or, where Corti selected the code with no passage matching the text exactly, that its selection
+        stands apart; never "Selected by"."""
+        if any(s.code == code and s.origin == 'primary' for s in selections):
+            return (f'Proposed by {self._who(code, proposers)}; Corti also selected this code, but with no passage '
+                    'matching the document text exactly, so its selection is listed apart, excluded, and does not '
+                    'carry this proposal.')
+        return f'Proposed by {self._who(code, proposers)}; Corti did not propose this code.'
 
     def _good(self, code: str, names: Sequence[str]) -> tuple[EvidenceSpan, ...]:
         """The exact spans ``names`` quoted for ``code``, each once, in the order of the document: the same quotes give
@@ -2791,10 +3040,11 @@ class _Harness:
                 group = [ProviderCode('selected', 'participant', code, '', self._evidence(code, proposers))]
                 candidate = _select(group, self.text, self.pages, routing, reference, day, inventory, dated=dated)
                 if candidate.evaluation is not None:
-                    added.append(replace(candidate, origin='participant', proposers=proposers))
+                    added.append(replace(candidate, origin='participant', proposers=proposers,
+                                         lead=self._lead(code, proposers, selections)))
                     continue
                 why = candidate.scope_reason or NO_EVIDENCE
-            listed.append(self._alternative(len(listed), code, tuple(by), why))
+            listed.append(self._alternative(len(listed), code, tuple(n for n in PARTICIPANT_ORDER if n in by), why))
         return list(selections) + added, tuple(listed)
 
     def _alternative(self, index: int, code: str, names: tuple[str, ...], why: str) -> ProposalAssessment:
@@ -2804,7 +3054,7 @@ class _Harness:
         family = family_for_code(code)
         found = (checks.scope_check(code_kind, scope_reason),)
         profile_version = PROFILES[family].version
-        who, why = _participant_names(names), why.rstrip('.')
+        who, why = self._who(code, names), why.rstrip('.')
         return ProposalAssessment(
             key=f'altp:{index}', bucket='alternative', code=code, code_kind=code_kind, family=family,
             profile_version=profile_version, status='informational',
@@ -2818,29 +3068,45 @@ class _Harness:
 
     def disagreements(self, s: _Selection) -> tuple[Check, ...]:
         """The participants.disagree warn of a decidable proposal: each participant that advises not to code its code
-        because its service was not performed at this encounter, quoting the document."""
+        because its service was not performed at this encounter, quoting the document, and each that disputes it in
+        peer review, quoting the document (11.1). A 'supports' or 'cannot tell' position adds nothing (I3)."""
         if s.evaluation is None:
             return ()
-        items = []
-        for name, said in self.advised.get(s.code, {}).items():
-            quoted = next((x for x in said if x.entry.reason == NOT_PERFORMED_HERE and x.good), None)
+        advised, disputed = [], []
+        for name in PARTICIPANT_ORDER:
+            quoted = next((x for x in self.advised.get(s.code, {}).get(name, ())
+                           if x.entry.reason == NOT_PERFORMED_HERE and x.good), None)
             if quoted is not None:
-                items.append((PARTICIPANT_LABELS[name], quoted.good[0].text))
-        return (checks.participants_disagree_check(s.code, items),) if items else ()
+                advised.append((PARTICIPANT_LABELS[name], quoted.good[0].text))
+            quoted = next((x for x in self.stances.get(s.code, {}).get(name, ())
+                           if x.entry.position == 'disputes' and x.good), None)
+            if quoted is not None:
+                disputed.append((PARTICIPANT_LABELS[name], quoted.good[0].text))
+        return (checks.participants_disagree_check(s.code, advised, disputed),) if advised or disputed else ()
 
     # --- the record ---------------------------------------------------------------------------------------------------
 
     def recorded(self, proposals: Sequence[ProposalAssessment]) -> tuple[ProposalAssessment, ...]:
-        """Every proposal with who proposed it (support['proposed_by']) and each participant's position on its code
-        (support['participants']). Outside the fingerprint: who proposed a code never changes its decision."""
-        return tuple(replace(p, support={**(p.support or {}), 'proposed_by': self._proposed_by(p),
-                                         'participants': self.positions(p.code)}) for p in proposals)
+        """Every proposal with who proposed it (support['proposed_by']), the phase each participant among them first
+        proposed it in (support['phases']: 'independent' or 'peer_review'; only where a participant gave the code) and
+        each participant's position on its code in both phases (support['participants']). Outside the fingerprint: who
+        proposed a code never changes its decision."""
+        out = []
+        for p in proposals:
+            by = self._proposed_by(p)
+            support = {**(p.support or {}), 'proposed_by': by, 'participants': self.positions(p.code)}
+            phases = {name: self.phase(p.code, name) for name in by if name in self.codes.get(p.code, {})}
+            if phases:
+                support['phases'] = phases
+            out.append(replace(p, support=support))
+        return tuple(out)
 
     def _proposed_by(self, p: ProposalAssessment) -> list[str]:
         origin = (p.support or {}).get('origin', 'primary')
         if p.bucket == 'alternative':
             # an alternative is proposed by no one; a participant's lists every participant that gave the code
-            return list(self.codes.get(p.code, {})) if origin == 'participant' else []
+            by = self.codes.get(p.code, {})
+            return [name for name in PARTICIPANT_ORDER if name in by] if origin == 'participant' else []
         if origin == 'participant':
             return list(self.proposers(p.code))
         if p.bucket == 'selected' or p.reinstatable:  # decidable: the participants' proposals were merged into it
@@ -2849,37 +3115,67 @@ class _Harness:
 
     def positions(self, code: str) -> dict:
         """{participant: {'position', 'detail', 'quote'}} for every configured participant: 'proposed', 'not_proposed',
-        'advised_not_to_code' or 'not_run'. The quote is a passage of the document it quoted, found verbatim."""
+        'advised_not_to_code' or 'not_run' - from both phases, each 'proposed' saying in which; and, once its peer
+        review stage exists for it, 'peer': its peer-review position ('supports', 'disputes', 'cannot_tell',
+        'no_position' or 'not_run'). The quote is a passage of the document it quoted, found verbatim."""
         out = {}
         for p in self.inputs:
             label = PARTICIPANT_LABELS[p.provider]
-            if p.provider not in self.readings:
-                out[p.provider] = {'position': 'not_run', 'detail': self._state_sentence(p), 'quote': ''}
-                continue
             said = self.codes.get(code, {}).get(p.provider, [])
             advised = self.advised.get(code, {}).get(p.provider, [])
-            if said:
+            if p.provider not in self.readings:
+                entry = {'position': 'not_run', 'detail': self._state_sentence(p), 'quote': ''}
+            elif said:
                 good = list({(span.start, span.end): span for x in said for span in x.good}.values())
+                phases = {x.phase for x in said}
                 detail = f'{label} proposed {code}' + (f' {len(said)} times' if len(said) > 1 else '')
+                if phases == {PEER_REVIEW}:
+                    detail += ' after peer review, not in its independent reading'
+                elif PEER_REVIEW in phases:
+                    detail += ', in its independent reading and again in peer review'
                 detail += f' ({self._stated([x.entry for x in said])})'
                 detail += (f', quoting the document verbatim in {checks.plural(len(good), "passage")}.' if good
                            else '; none of its quotes was found verbatim in the document, so it is not counted as a '
                                 'proposer.')
                 if advised:
                     detail += f' It also lists {code} as not to code: {_reason_words(advised[0].entry.reason)}.'
-                out[p.provider] = {'position': 'proposed', 'detail': detail,
-                                   'quote': checks.excerpt(good[0].text) if good else ''}
+                entry = {'position': 'proposed', 'detail': detail,
+                         'quote': checks.excerpt(good[0].text) if good else ''}
             elif advised:
                 first = next((x for x in advised if x.entry.reason == NOT_PERFORMED_HERE and x.good),
                              next((x for x in advised if x.good), advised[0]))
-                out[p.provider] = {'position': 'advised_not_to_code',
-                                   'detail': f'{label} advises not to code {code}: '
-                                             f'{_reason_words(first.entry.reason)}.',
-                                   'quote': checks.excerpt(first.good[0].text) if first.good else ''}
+                entry = {'position': 'advised_not_to_code',
+                         'detail': f'{label} advises not to code {code}: {_reason_words(first.entry.reason)}.',
+                         'quote': checks.excerpt(first.good[0].text) if first.good else ''}
             else:
-                out[p.provider] = {'position': 'not_proposed', 'detail': f'{label} did not propose {code}.',
-                                   'quote': ''}
+                entry = {'position': 'not_proposed', 'detail': f'{label} did not propose {code}.', 'quote': ''}
+            if p.peer_state:
+                entry['peer'] = self._peer_position(p, code)
+            out[p.provider] = entry
         return out
+
+    def _peer_position(self, p: ParticipantInput, code: str) -> dict:
+        label = PARTICIPANT_LABELS[p.provider]
+        if p.provider not in self.peers:
+            return {'position': 'not_run', 'detail': self._peer_sentence(p), 'quote': ''}
+        stances = self.stances.get(code, {}).get(p.provider, [])
+        known = [x for x in stances if x.entry.position in PEER_POSITIONS]
+        chosen = (next((x for x in known if x.entry.position == 'disputes' and x.good), None)
+                  or next((x for x in known if x.entry.position == 'disputes'), None)
+                  or next((x for x in known if x.entry.position == 'supports'), None)
+                  or next((x for x in known if x.entry.position == 'cannot_tell'), None))
+        if chosen is None:
+            return {'position': 'no_position', 'detail': f'{label} took no position on {code} in peer review.',
+                    'quote': ''}
+        position = chosen.entry.position
+        detail = f'In peer review, {label} {PEER_POSITION_WORDS[position]} {code}' + (
+            ', quoting the document verbatim.' if chosen.good
+            else '; none of its quotes was found verbatim in the document' + (
+                ', so its dispute adds no warning.' if position == 'disputes' else '.'))
+        if len(stances) > 1:
+            detail += f' It stated {checks.plural(len(stances) - 1, "other position")} on {code}.'
+        quote = checks.excerpt(chosen.good[0].text) if chosen.good else ''
+        return {'position': position, 'detail': detail, 'quote': quote}
 
     @staticmethod
     def _stated(entries) -> str:
@@ -2902,6 +3198,46 @@ class _Harness:
         return (f'{PARTICIPANT_LABELS[p.provider]} ({PARTICIPANT_VENDORS[p.provider]}) did not read the document: '
                 f'{PARTICIPANT_STATE_WORDS[p.state]}' + (f' ({reason})' if reason else '') + '.')
 
+    def _peer_sentence(self, p: ParticipantInput) -> str:
+        """Its peer review in words: '' before its peer-review stage exists for it (assess #1). ``reason`` speaks for
+        the peer review only beside a first reading that was read (it speaks for the first reading otherwise)."""
+        if not p.peer_state:
+            return ''
+        if p.state != 'read':
+            return 'It takes no part in peer review: its first reading was not read.'
+        if p.peer_state != 'read':
+            reason = checks.excerpt(str(p.reason or '')).rstrip('.')
+            return (f'Its peer review was not read: {PARTICIPANT_STATE_WORDS[p.peer_state]}'
+                    + (f' ({reason})' if reason else '') + '.')
+        peer = self.peers[p.provider]
+        counts = Counter(x.position for x in peer.positions if x.position in PEER_POSITIONS)
+        other = len(peer.positions) - sum(counts.values())
+        parts = [f'In peer review, after its first reading was frozen, it took '
+                 f'{checks.plural(len(peer.positions), "position")} on codes ({counts["supports"]} supports, '
+                 f'{counts["disputes"]} disputes, {counts["cannot_tell"]} cannot tell'
+                 + (f', {other} other not shown' if other else '') + ').']
+        added = [code for code, by in self.codes.items() if any(x.phase == PEER_REVIEW for x in by.get(p.provider, ()))]
+        if added:
+            quoted = sum(1 for code in added
+                         if any(x.good for x in self.codes[code][p.provider] if x.phase == PEER_REVIEW))
+            more = len(added) - LISTED_IN_SUMMARY
+            named = ', '.join(added[:LISTED_IN_SUMMARY]) + (f' and {more} more' if more > 0 else '')
+            parts.append(f'It listed {checks.plural(len(added), "additional code")} ({named}), {quoted} quoting the '
+                         'document verbatim; a code first proposed in peer review is never counted as independent.')
+        else:
+            parts.append('It listed no additional code.')
+        if self.peer_unlisted.get(p.provider):
+            parts.append(checks.unlisted_codes(self.peer_unlisted[p.provider], MAX_LISTED_CODE, 'In peer review it'))
+        if peer.answers:
+            parts.append(f'It answered {checks.plural(len(peer.answers), "open question")}; an answer is read only as '
+                         'the passage a reviewer confirms.')
+        if peer.unverified_quotes:
+            one = peer.unverified_quotes == 1
+            parts.append(f'{checks.plural(peer.unverified_quotes, "quote")} it gave in peer review '
+                         f'{"was" if one else "were"} not found verbatim in the document and {"is" if one else "are"} '
+                         'never evidence.')
+        return ' '.join(parts)
+
     def provider_checks(self, provider: list, provider_status: str, response: Optional[NormalizedResponse],
                         proposals: Sequence[ProposalAssessment]) -> list:
         """The proposal provider's checks, with its status reworded where it proposed nothing and a participant's code
@@ -2921,19 +3257,20 @@ class _Harness:
         missing = self.missing(inventory)
         if missing:
             out.append(checks.participants_services_check([(PARTICIPANT_LABELS[m['participant']], m['label'],
-                                                            m['quote']) for m in missing]))
+                                                            m['quote'], m['status']) for m in missing]))
         return out
 
     def _summary_sentence(self, p: ParticipantInput) -> str:
         reading = self.readings.get(p.provider)
         if reading is None:
-            return self._state_sentence(p)
+            return ' '.join(part for part in (self._state_sentence(p), self._peer_sentence(p)) if part)
         label = PARTICIPANT_LABELS[p.provider]
         model = f', {reading.requested_model}' if reading.requested_model else ''
         parts = [f'{label} ({PARTICIPANT_VENDORS[p.provider]}{model}) read the document.']
-        codes = [code for code, by in self.codes.items() if p.provider in by]
+        codes = [code for code, by in self.codes.items() if any(x.phase == INDEPENDENT for x in by.get(p.provider, ()))]
         if codes:
-            quoted = sum(1 for code in codes if any(x.good for x in self.codes[code][p.provider]))
+            quoted = sum(1 for code in codes
+                         if any(x.good for x in self.codes[code][p.provider] if x.phase == INDEPENDENT))
             more = len(codes) - LISTED_IN_SUMMARY
             named = ', '.join(codes[:LISTED_IN_SUMMARY]) + (f' and {more} more' if more > 0 else '')
             parts.append(f'It proposed {checks.plural(len(codes), "code")} ({named}), {quoted} quoting the document '
@@ -2952,18 +3289,22 @@ class _Harness:
                          'clarification.')
         if reading.extraction_issues:
             parts.append(f'It reported {checks.plural(len(reading.extraction_issues), "extraction issue")}.')
+        peer = self._peer_sentence(p)
+        if peer:
+            parts.append(peer)
         return ' '.join(parts)
 
     def missing(self, inventory) -> list[dict]:
-        """The services a participant reads as performed, quoting the document verbatim, of a kind of which
-        ``inventory`` reads no performed service: one per participant and family, the first quote of its first."""
+        """The services a participant reads as performed, or as started and not completed (MISSING_STATUSES), quoting
+        the document verbatim, of a kind of which ``inventory`` reads no performed service: one per participant and
+        family, the first quote of its first."""
         if self._missing is None:
             done = {s.family for s in inventory.services if s.status in checks.POSITIVE}
             out, seen = [], set()
             for name, reading in self.readings.items():
                 for service in reading.services:
                     families = PARTICIPANT_FAMILY_MAP.get(service.family, ())
-                    if service.status != 'performed' or not families or done.intersection(families) \
+                    if service.status not in MISSING_STATUSES or not families or done.intersection(families) \
                             or (name, service.family) in seen:
                         continue
                     good, _ = self._partition(service.evidence)
@@ -2971,12 +3312,14 @@ class _Harness:
                         continue
                     seen.add((name, service.family))
                     label = PARTICIPANT_SERVICE_LABELS[service.family]
-                    reason = (f'{PARTICIPANT_LABELS[name]} reads a performed {label} that the documented-service '
-                              'reading does not read as performed')
+                    what = (f'a performed {label}' if service.status == 'performed'
+                            else f'an attempted, incomplete {label}')
+                    reason = (f'{PARTICIPANT_LABELS[name]} reads {what} that the documented-service reading does not '
+                              'read as performed')
                     quoted = f'{reason} ({reconcile.quote(good[0])})'
                     out.append({'participant': name, 'family': service.family, 'families': list(families),
-                                'label': label, 'quote': good[0].text, 'start': good[0].start, 'end': good[0].end,
-                                'page': good[0].page,
+                                'label': label, 'status': service.status, 'quote': good[0].text,
+                                'start': good[0].start, 'end': good[0].end, 'page': good[0].page,
                                 # review.coding_completeness drops every reason that holds "open question" (it
                                 # recounts the open questions): a quote that holds it is kept in the entry and the
                                 # check, never in the reason, so the reason cannot be dropped with the count
@@ -2992,3 +3335,300 @@ class _Harness:
         if missing:
             complete.update(_incomplete(list(complete['reasons']) + [m['reason'] for m in missing]))
             complete['participant_services'] = missing
+
+
+# --- reviewer-confirmed findings (HARNESS.md 11.3) -------------------------------------------------------------------
+# A participant's located passage, accepted by an owner or reviewer with an attestation, answers the open question the
+# readers' hold raised. It is read as documented by that passage, said to be confirmed (never as a reading of CPT
+# Studio's own), answers only its own question, and approves nothing: approval stays a separate decision.
+
+STATUS_FACT = 'performed_status'  # a proposal's status in doubt: performed or not, on the cited passage
+# The required facts the readers take from the document (routing's): the extent reached, the structure examined, the
+# cannulation outcome, the E/M basis. The service date and the other encounter-context facts never come this way: they
+# enter through the encounter context as a member's value, where every date and conflict safeguard applies.
+CONFIRMABLE_FACTS = tuple(sorted({fact for profile in PROFILES.values() for fact in profile.required_facts
+                                  if fact not in CONTEXT_FACTS}))
+# A confirmed status's value: 'performed', or how the passage documents the service as not performed at this encounter
+# (the reading status the status path then words: a plain 'not performed' is a denial).
+NOT_PERFORMED_VALUES = {'not_performed': 'negated', 'negated': 'negated', 'cancelled': 'cancelled',
+                        'planned': 'planned', 'historical': 'historical'}
+LOCATORS = {PRIMARY: 'Corti', **PARTICIPANT_LABELS}  # the participants whose quote a confirmed passage can be
+NOT_OPEN = ('it answers no question this assessment asks (the question is not open here, or its proposal is held for '
+            'another reason or not at all)')
+DISAGREEING = 'confirmations of the same question disagree, so none of them is read and the question stays open'
+CONTEXT_ONLY = ('the service date and the other encounter-context facts enter through the encounter context as a '
+                "member's value, never by a confirmation")
+
+
+def _status_value(value: str) -> str:
+    return re.sub(r'[\s-]+', '_', value.strip().lower())
+
+
+def _confirmation_order(c: ConfirmedFinding) -> tuple:
+    """The order confirmations are read and listed in, whatever order they are given in (every field, so that even two
+    confirmations sharing an id are read the same way each time)."""
+    return tuple(str(getattr(c, name)) for name in ('scope', 'family', 'proposal_key', 'fact', 'confirmation_id',
+                                                    'value', 'confirmed_by', 'located_by', 'evidence'))
+
+
+@dataclass(frozen=True)
+class _Answer:
+    """The reviewer-confirmed answer to one open question: one confirmation, or several that agree on its value."""
+    scope: str  # service | proposal
+    family: str
+    key: str  # the proposal's key; '' for a service question
+    code: str  # the proposal's code; '' for a service question
+    fact: str
+    value: str  # as confirmed, whitespace collapsed
+    spans: tuple[EvidenceSpan, ...]  # their passages: exact slices of the revision text, each once, in document order
+    ids: tuple[str, ...]
+    words: str  # "confirmed from Fable's located passage by <reviewer>" (each confirmation's)
+
+    @property
+    def performed(self) -> bool:
+        return _status_value(self.value) == 'performed'
+
+    @property
+    def status(self) -> str:
+        """A confirmed status as a reading's status: 'performed', or the not-performed one its value names."""
+        value = _status_value(self.value)
+        return 'performed' if value == 'performed' else NOT_PERFORMED_VALUES.get(value, '')
+
+    @property
+    def quoted(self) -> str:
+        return checks.quoted_passages([span.text for span in self.spans])
+
+    def basis(self) -> list:
+        """What a decision on the proposal rests on: the fact, its value and its passages (never who confirmed it)."""
+        return [self.fact, self.status if self.fact == STATUS_FACT else self.value,
+                [[span.start, span.end] for span in self.spans]]
+
+    def sentence(self) -> str:
+        return f'{checks.fact_label(self.fact)} = {checks.excerpt(self.value)}, {self.words} ({self.quoted})'
+
+    def target(self) -> str:
+        if self.scope == 'proposal':
+            return f'{self.code} ({self.key})'
+        return f'the documented {PROFILES[self.family].label}'
+
+    def item(self) -> str:
+        """The answer as the confirmations.applied check lists it."""
+        if self.fact == STATUS_FACT:
+            what = ('performed on the date of service' if self.performed
+                    else f'not performed on the date of service (documented as {self.status})')
+            return f'{self.target()}: {what}, {self.words} ({self.quoted})'
+        return (f'{checks.fact_label(self.fact)} of {self.target()} = {checks.excerpt(self.value)}, {self.words} '
+                f'({self.quoted})')
+
+
+@dataclass(frozen=True)
+class _Answers:
+    """The confirmed answers to the required-fact questions one proposal reads, by fact: its own questions' and its
+    family's service questions'."""
+    facts: Mapping[str, _Answer]
+
+    def state(self, state: checks.FactState) -> checks.FactState:
+        """``state`` with its confirmed value, where the readers leave the fact missing or in conflict; otherwise as it
+        is - a confirmation never replaces a value the readers read."""
+        answer = self.facts.get(state.name)
+        if answer is None or not state.problem:
+            return state
+        fact = Fact(state.name, answer.value, 'document', tuple(Span(sp.start, sp.end, sp.text) for sp in answer.spans),
+                    answer.words)
+        return checks.FactState(state.name, fact, '', confirmed=f'{answer.words} ({answer.quoted})')
+
+
+def _confirmed(s: _Selection, answer: _Answer, held: str) -> _Selection:
+    """``s`` with its status decided by the reviewer-confirmed ``answer`` on its cited passage, through the status path:
+    performed, or not performed with the status the passage documents - then excluded, reinstatable as every status
+    exclusion is. ``held``: the readers' own words for the hold it answers, kept beside it."""
+    ev = s.evaluation
+    first = answer.spans[0]
+    state = 'performed' if answer.performed else 'not_performed'
+    reading = checks.Reading(answer.status, (f'{checks.CONFIRMED_CUE}{answer.words}',), 'confirmed', first.text,
+                             first.start, first.end)
+    outcome = checks.StatusOutcome(state, reading, reason='confirmed')
+    detail = checks.confirmed_status_detail(answer.performed, answer.status, answer.words, answer.quoted)
+    match, support = ev.match, ev.support
+    if match is not None:
+        match = replace(match, state=state, reason='confirmed', question='', detail=detail)
+        if support is not None:
+            support = replace(support, status='not_applicable',
+                              detail=f'Not checked against the documented service: {detail}')
+    return replace(s, evaluation=replace(ev, outcome=outcome, match=match, support=support, note='', confirmed=answer,
+                                         held=held))
+
+
+class _Confirmations:
+    """The reviewer-confirmed findings an assessment reads (HARNESS.md 11.3).
+
+    Each is checked on its own, and one not read is listed with why (confirmations.ignored, a warn), never dropped
+    unseen: its scope, fact and family must be ones a confirmation answers (STATUS_FACT at a proposal, or a required
+    fact the readers take from the document, CONFIRMABLE_FACTS); it must name its value, the participants that located
+    its passage and the reviewer; and every one of its passages must be an exact slice of the revision text.
+
+    It is then matched to the open question it was made for, in the assessment these same inputs make WITHOUT any
+    confirmation: (proposal key, family, fact) for a proposal's question, (family, fact) for a service question. One that
+    answers no such question answers nothing; confirmations of one question that disagree are all left unread. So a
+    confirmation never touches another question, and none depends on which others are read.
+
+    Read, it answers its question and nothing else (apply): a status is decided as performed or not performed on its
+    passage (_confirmed), through the status path; a required fact takes its confirmed value, with its passages as the
+    evidence, for that proposal - for every proposal of the family, from a service question - where the readers leave it
+    missing or in conflict. Every check, rationale and support record that uses it says so ("confirmed from Fable's
+    located passage by <reviewer>") and support['confirmed'] lists the confirmations. Everything else - the same-day
+    rules, the base inclusion, the references, every other question - applies as usual, so a confirmed code can still be
+    held for another reason; and it approves nothing. The proposals keep the keys they have without confirmations, so
+    the key a question names stays the proposal's whatever confirmations are read."""
+
+    def __init__(self, confirmed: Sequence[ConfirmedFinding], text: str, pages):
+        for c in confirmed:
+            if not isinstance(c, ConfirmedFinding):
+                raise ValueError(f'A confirmed finding must be a ConfirmedFinding, not {type(c).__name__}.')
+        self.candidates: list[tuple[ConfirmedFinding, tuple[EvidenceSpan, ...]]] = []
+        self.ignored: list[tuple[ConfirmedFinding, str]] = []
+        self.applied: list[_Answer] = []
+        self.answered: frozenset = frozenset()  # (family, fact) of every question an applied answer answers
+        for c in sorted(confirmed, key=_confirmation_order):
+            why = self._malformed(c)
+            if not why:
+                kept, dropped = checks.exact_evidence(c.evidence, text, pages)
+                if dropped or not kept:
+                    why = "its passage is not an exact slice of this revision's text"
+            if why:
+                self.ignored.append((c, why))
+            else:
+                self.candidates.append((c, kept))
+
+    @staticmethod
+    def _malformed(c: ConfirmedFinding) -> str:
+        for name in ('scope', 'fact', 'family', 'proposal_key', 'value', 'confirmed_by', 'confirmation_id'):
+            if not isinstance(getattr(c, name), str):
+                return f'its {name.replace("_", " ")} is not text'
+        if not c.confirmation_id.strip():
+            return 'it has no confirmation id'
+        if c.scope == 'encounter' or c.fact in CONTEXT_FACTS:
+            return CONTEXT_ONLY
+        if c.scope not in ('service', 'proposal'):
+            return 'its scope is neither a service nor a proposal question'
+        if c.fact == STATUS_FACT and c.scope != 'proposal':
+            return 'whether a code was performed is a question about a proposal'
+        if c.fact != STATUS_FACT and c.fact not in CONFIRMABLE_FACTS:
+            return ('a confirmation answers whether a code was performed or a required fact the readers take from the '
+                    f'document ({checks._join([checks.fact_label(f) for f in CONFIRMABLE_FACTS])}), not this question')
+        if c.family not in PROFILES:
+            return 'it names no service family CPT Studio knows'
+        if c.scope == 'proposal' and not c.proposal_key:
+            return 'it names no proposal'
+        if c.scope == 'service' and c.proposal_key:
+            return 'a service question names no proposal'
+        if not c.value.strip():
+            return 'it confirms no value'
+        if c.fact == STATUS_FACT and _status_value(c.value) not in ('performed', *NOT_PERFORMED_VALUES):
+            return ('its value is neither performed nor a status documenting the service as not performed at this '
+                    f'encounter ({", ".join(NOT_PERFORMED_VALUES)})')
+        if not isinstance(c.located_by, (tuple, list)) or not c.located_by \
+                or not all(isinstance(name, str) and name in LOCATORS for name in c.located_by):
+            return 'it names no participant CPT Studio knows as the one that located its passage'
+        if not c.confirmed_by.strip():
+            return 'it names no reviewer'
+        if not isinstance(c.evidence, (tuple, list)) or not c.evidence \
+                or not all(isinstance(span, EvidenceSpan) for span in c.evidence):
+            return 'it cites no passage'
+        return ''
+
+    @staticmethod
+    def _words(confirmations: Sequence[ConfirmedFinding]) -> str:
+        """The words "confirmed from Fable's located passage by <reviewer>", each confirmation's, joined."""
+        phrases = []
+        for c in confirmations:
+            owners = [f"{LOCATORS[name]}'s" for name in sorted(set(c.located_by), key=list(LOCATORS).index)]
+            phrases.append(f'{checks._join(owners)} located passage by {checks.excerpt(c.confirmed_by)}')
+        return 'confirmed from ' + '; and from '.join(dict.fromkeys(phrases))
+
+    def apply(self, selections: list, proposals: tuple, procedure_day: bool, *, harness, provider: str, context,
+              routing: RoutingResult, sources, date_state, inventory) -> tuple[list, tuple, bool]:
+        """(selections, proposals, procedure day) with the confirmed answers read. ``proposals``: the assessment's
+        proposals without any - one per selection (_keyed), then the alternatives, which no confirmation touches."""
+        count = len(selections)
+        keyed, tail = tuple(proposals[:count]), tuple(proposals[count:])
+        keys = _keys(selections)
+        index = {key: i for i, key in enumerate(keys)}
+        held = {p.key: p for p in keyed}
+        asked = {(p.key, q.family, q.fact) for p in keyed for q in p.clarifications}
+        services = {(q.family, q.fact) for q in (_service_questions(inventory, proposals, context)
+                                                 if inventory is not None else ()) if q.scope == 'service'}
+        groups: dict[tuple, list] = {}
+        for c, spans in self.candidates:
+            asks = ((c.proposal_key, c.family, c.fact) in asked if c.scope == 'proposal'
+                    else (c.family, c.fact) in services)
+            if asks:
+                groups.setdefault((c.scope, c.family, c.proposal_key, c.fact), []).append((c, spans))
+            else:
+                self.ignored.append((c, NOT_OPEN))
+        status: dict[int, _Answer] = {}
+        own: dict[int, dict[str, _Answer]] = {}
+        family_wide: dict[str, dict[str, _Answer]] = {}
+        for (scope, family, key, fact), items in groups.items():
+            if fact == STATUS_FACT:  # performed, or the not-performed status it documents ('not_performed' a denial)
+                same = {NOT_PERFORMED_VALUES.get(_status_value(c.value), 'performed') for c, _ in items}
+            else:
+                same = {' '.join(c.value.split()).casefold() for c, _ in items}
+            if len(same) > 1:
+                self.ignored += [(c, DISAGREEING) for c, _ in items]
+                continue
+            spans = {(sp.start, sp.end): sp for _, kept in items for sp in kept}
+            answer = _Answer(scope, family, key, selections[index[key]].code if scope == 'proposal' else '', fact,
+                             ' '.join(items[0][0].value.split()), tuple(spans[k] for k in sorted(spans)),
+                             tuple(sorted(dict.fromkeys(c.confirmation_id for c, _ in items))),
+                             self._words([c for c, _ in items]))
+            self.applied.append(answer)
+            if fact == STATUS_FACT:
+                status[index[key]] = answer
+            elif scope == 'proposal':
+                own.setdefault(index[key], {})[fact] = answer
+            else:
+                family_wide.setdefault(family, {})[fact] = answer
+        self.ignored.sort(key=lambda item: _confirmation_order(item[0]))
+        self.answered = frozenset((answer.family, answer.fact) for answer in self.applied)
+        if not self.applied:
+            return selections, proposals, procedure_day
+        current = list(selections)
+        for i, answer in status.items():
+            before = next((c.detail for c in held[keys[i]].checks if c.id == 'service.status'), '')
+            current[i] = _confirmed(selections[i], answer, before)
+        encounter = _encounter(provider, context, routing, sources, date_state, current)
+        answers = {}
+        for i, s in enumerate(current):
+            facts = {**family_wide.get(s.family, {}), **own.get(i, {})}
+            if facts:
+                answers[i] = _Answers(facts)
+        return current, _keyed(current, encounter, harness, keys, answers) + tail, encounter.procedure_day
+
+    def encounter_checks(self) -> list[Check]:
+        out = []
+        if self.applied:
+            out.append(checks.confirmations_applied_check([answer.item() for answer in self.applied]))
+        if self.ignored:
+            out.append(checks.confirmations_ignored_check([self._ignored_item(c, why) for c, why in self.ignored]))
+        return out
+
+    @staticmethod
+    def _ignored_item(c: ConfirmedFinding, why: str) -> str:
+        fact = c.fact if isinstance(c.fact, str) else ''
+        what = 'whether it was performed' if fact == STATUS_FACT else checks.excerpt(checks.fact_label(fact) or 'a fact')
+        family = c.family if isinstance(c.family, str) else ''
+        key = c.proposal_key if isinstance(c.proposal_key, str) else ''
+        target = (f'proposal {checks.excerpt(key)}' if c.scope == 'proposal' and key
+                  else f'the documented {PROFILES[family].label}' if family in PROFILES else 'an unnamed service')
+        return f'the confirmation of {what} for {target}: {why}'
+
+    def record(self) -> dict:
+        """What the assessment read (completeness['confirmations']): each answer with its confirmations' ids, and each
+        confirmation not read with why."""
+        return {'applied': [{'ids': list(a.ids), 'scope': a.scope, 'family': a.family, 'proposal_key': a.key,
+                             'code': a.code, 'fact': a.fact, 'value': a.value,
+                             'spans': [{'start': sp.start, 'end': sp.end, 'text': sp.text, 'page': sp.page}
+                                       for sp in a.spans]} for a in self.applied],
+                'ignored': [{'id': c.confirmation_id if isinstance(c.confirmation_id, str) else '', 'why': why}
+                            for c, why in self.ignored]}
