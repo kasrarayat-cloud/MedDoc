@@ -4,10 +4,9 @@ and both reports - and no surface that turns CPT Studio's own reading of a parti
 
 - d8-2 (D10): the reports printed a peer answer as CPT Studio's reading of the participant's free text
   (candidates.canonical_value), so 'Cannulation of the bile duct was not successful.' was printed "successful", beside
-  the participant's own passage 'Biliary cannulation was unsuccessful.'. They now print only the participant's claim -
-  that the document settles the question, or that its answer is read as not settling it - with the passages it
-  located, and no value; no release-default path reads a participant's value with a candidate reader (pinned here by
-  making every one of them raise).
+  the participant's own passage 'Biliary cannulation was unsuccessful.'. They now print each answer only by whether it
+  is read as settling the question, with the passages it located, and no value; no release-default path reads a
+  participant's value with a candidate reader (pinned here by making every one of them raise).
 - truth-1, truth-2, truth-3 (D12): "proposed" is said only of an entry with a located quote. A participant-origin
   alternative names as its proposers only the participants whose entries located the code (support['proposed_by'],
   support['phases']); one that gave the code with no quote found verbatim is recorded apart as having listed it
@@ -469,6 +468,27 @@ class AlternativeAccountTests(Surfaces, R2WordingCase):
         self.assertIn('    Additional code 45385 · units 1 — repeated in peer review; first proposed in its independent '
                       'reading', txt)
         self.assertIn('    Additional code 45378 · units 1 — proposed after peer review, never independent', txt)
+
+
+@override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
+class CortiOnlyListedByTests(Surfaces, R2WordingCase):
+    """Corti only (I1): no participant's alternative exists, so listed_by is [] on every proposal and every trace
+    reconciliation row, no participant row counts a code, and a report's snapshot carries no listed_by at all - a
+    Corti-only report is harness@1's exactly (API.md)."""
+
+    def test_corti_only_serves_no_lister_and_its_reports_carry_none(self):
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        self.assertEqual(self.kinds(encounter_id), ['extract', 'analyze', 'predict', 'assess'])
+        detail = self.detail(encounter_id)
+        self.assertEqual(detail['harness']['phase'], 0)
+        self.assertTrue(detail['assessment']['proposals'])
+        self.assertEqual({json.dumps(p['listed_by']) for p in detail['assessment']['proposals']}, {'[]'})
+        self.assertEqual([row['unlisted_codes'] for row in detail['harness']['participants']], [0, 0, 0])
+        self.assertEqual({json.dumps(row['listed_by']) for row in self.trace(encounter_id)['reconciliation']}, {'[]'})
+        snap = reports.snapshot(self.encounter(encounter_id), 'draft')
+        self.assertTrue(snap['proposals'])
+        self.assertFalse([item for item in snap['proposals'] if 'listed_by' in item])
 
 
 class AlternativeEngineTests(SimpleTestCase):
