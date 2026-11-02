@@ -68,7 +68,9 @@ const PARTICIPANT_STATES = {
 };
 // A participant's peer review (harness.participants[].peer, HARNESS.md 11.1, 12.6), as PARTICIPANT_STATES words a first
 // reading: the row's look, its label, the plain sentence and the words the API's own sentence must contain for the
-// plain one to be left out. not_run is the page's own, where the API serves no peer review and none will be made.
+// plain one to be left out. not_run is the page's own, where the API serves no peer review: it says only what is true
+// of the assessment shown - the revision can hold peer-review runs that assessment did not read (refutation round 2,
+// truth-9: it read "No peer review is recorded for this revision" beside them).
 const PEER_STATES = {
   waiting: [STAGE_LOOKS.queued, 'Waiting', 'Waiting: the peer reviews start once every first reading is frozen and the first assessment is made.'],
   running: [STAGE_LOOKS.running, 'In progress', 'Reviewing its peers\' frozen conclusions now.'],
@@ -80,7 +82,7 @@ const PEER_STATES = {
   not_sent: [['muted', 'info'], 'Not run', 'No peer review was sent.'],
   blocked: [['pending', 'clock'], 'Blocked', 'Not sent: an unknown outcome must be reconciled before anything is sent again.', 'reconcile'],
   not_configured: [['muted', 'info'], 'Not configured', 'Not configured on this installation.', 'not configured'],
-  not_run: [['muted', 'info'], 'Not run', 'No peer review is recorded for this revision.'],
+  not_run: [['muted', 'info'], 'Not run', 'No peer review was read by this assessment.'],
 };
 // Why a participant whose first reading was not used takes no part in peer review (HARNESS.md 11.1).
 const PEER_NOT_RUN = 'Not run: only a participant whose own first reading was used takes part in peer review, so this one never sees its peers\' conclusions.';
@@ -132,9 +134,11 @@ const VERIFIED_CHECKS = {
 };
 // Free text a participant wrote (a basis, a description, a quote it could not locate) that reads like a CPT descriptor -
 // the AMA's plural marks ("polyp(s)"), "; with", "single or multiple", "when performed", "(separate procedure)", "list
-// separately" - is withheld, never shown (HARNESS.md I9): no licensed descriptor is connected, and a model can write one.
-// The document's own text and the retrieved CMS passages are shown as they are.
-const DESCRIPTOR_LIKE = /\((?:s|es|ies)\)|;\s*(?:with|without|diagnostic|including|each|single|multiple|first|initial)\b|\bsingle or multiple\b|\bwhen performed\b|\(separate procedure\)|\blist separately\b/i;
+// separately"; the office E/M long descriptor's frame ("visit for the ... of a new patient", "medically appropriate
+// history", "minutes must be met or exceeded"); and an abbreviated short descriptor's "W/", "W/O", "SINGLE/MULTIPLE"
+// (refutation round 2, IR2-4) - is withheld, never shown (HARNESS.md I9): no licensed descriptor is connected, and a
+// model can write one. The document's own text and the retrieved CMS passages are shown as they are.
+const DESCRIPTOR_LIKE = /\((?:s|es|ies)\)|;\s*(?:with|without|diagnostic|including|each|single|multiple|first|initial)\b|\bsingle or multiple\b|\bwhen performed\b|\(separate procedure\)|\blist separately\b|\bvisit for the\b[^.;]{0,80}?\bof an? (?:new|established) patient\b|\bmedically appropriate history\b|\bminutes must be met or exceeded\b|\bsingle\/multiple\b|\bw\/(?:o\b|[a-z])/i;
 const DESCRIPTOR_WITHHELD = 'Withheld: this text reads like a CPT descriptor, which CPT Studio never shows.';
 const CHECK_LABELS = { pass: 'Pass', warn: 'Warning', fail: 'Fail', not_verified: 'Not verified', not_applicable: 'Not applicable', info: 'Information' };
 const CHECK_LOOKS = { pass: ['', 'circle-check'], info: ['muted', 'info'], not_applicable: ['muted', 'info'], warn: ['pending', 'info'], fail: ['pending', 'close'], not_verified: ['pending', 'clock'] };
@@ -916,10 +920,15 @@ function candidateAnswers(clarification, doc) {
   return `<div class="candidate-answers" data-question="${escapeHtml(id)}"${confirmation ? ` data-confirmation="${escapeHtml(textValue(confirmation.id))}"` : ''}>${confirmation ? confirmedAnswer(confirmation, exact) : ''}${list}<p class="harness-note">${escapeHtml(CANDIDATE_NOTE)}</p></div>`;
 }
 
+// A code's CMS reference check (HARNESS.md I4: PTP is always "not verified"), stating the PTP limit exactly once: the
+// API's detail ends with its own sentence saying the NCCI procedure-to-procedure edits are not connected (review.
+// PTP_NOT_CONNECTED), so the page's parenthetical is added only where the detail does not say it (refutation round 2,
+// FG2-5: every real card stated it twice).
 function referenceCheckText(check) {
   const said = lookup(REFERENCE_CHECK_LABELS, check?.state, 'not verified');
   const detail = typeof check?.detail === 'string' && check.detail.trim() ? ` — ${check.detail.trim()}` : '';
-  return `${said}${detail} (NCCI procedure-to-procedure edits not verified: not connected)`;
+  const stated = /procedure-to-procedure edits are not connected/i.test(detail);
+  return `${said}${detail}${stated ? '' : ' (NCCI procedure-to-procedure edits not verified: not connected)'}`;
 }
 
 function decisionWords(proposal) {
@@ -945,15 +954,28 @@ function codeStatusLines(proposal) {
   return `<ul class="code-status-lines" aria-label="Status of this code">${lines.map(([name, value]) => `<li><b>${escapeHtml(name)}:</b> ${escapeHtml(value)}</li>`).join('')}</ul>`;
 }
 
+// How Corti stands to a code it is not a proposer of (proposal.corti_relation, HARNESS.md 11.4), in the engine's own
+// words: "Corti did not propose this code" only when Corti has no entry for the code at all (refutation round 2,
+// truth-6: it was said whenever Corti was not a proposer, beside Corti's own excluded selection of the code).
+const CORTI_RELATIONS = {
+  selected_without_exact_passage: 'Corti also selected this code, with no exact passage; it is listed apart, excluded.',
+  selected_apart: 'Corti also selected this code; its selection is listed apart.',
+  candidate: 'Corti listed this code only as a candidate, not selected; see Alternatives.',
+  second_review: 'Corti\'s second review also listed this code, as an alternative; see Alternatives.',
+  none: 'Corti did not propose this code.',
+};
+
 // Who proposed a code, each participant with the phase it first proposed it in where the API serves one (HARNESS.md
-// 11.1: after peer review is never called independent); a code Corti did not propose says so (11.4).
+// 11.1: after peer review is never called independent), then how Corti stands to a code it did not propose (11.4) -
+// nothing about Corti where the API serves no relation, since the record would have to support it.
 function proposerText(proposal, proposers) {
   const phases = proposalPhases(proposal);
   const named = proposers.map(name => {
     const phase = Object.hasOwn(phases, name) ? lookup(PROPOSED_PHASES, phases[name], '') : '';
     return `${lookup(PARTICIPANT_LABELS, name, name)}${phase ? ` (${phase})` : ''}`;
   }).join(', ');
-  return proposers.includes('corti') ? named : `${named}; Corti did not propose this code.`;
+  const corti = proposers.includes('corti') ? '' : lookup(CORTI_RELATIONS, proposal.corti_relation, '');
+  return corti ? `${named}; ${corti}` : named;
 }
 
 // The reviewer-confirmed findings this code's checks read (proposal.confirmed, HARNESS.md 11.3): each a fact a reviewer
@@ -974,12 +996,14 @@ function confirmedFacts(proposal, doc) {
   return `<div class="confirmed-fact">${icon('shield')}<span><strong>Confirmed finding, not a decision</strong>${lines.map(line => `<br>${escapeHtml(line)}`).join('')}</span></div>`;
 }
 
+// A participant's position on a code, with the passage it quoted: the API's quote is its first LOCATED quote, an exact
+// slice of the revision (jobs._first_located, I7), so it is the document's own text and is shown as it is, as the trace
+// shows a located quote (refutation round 2, IR2-4: a passage was withheld for the plural mark the document wrote).
 function positionText(name, position) {
   const detail = participantText(position?.detail);
   const quote = typeof position?.quote === 'string' ? position.quote.trim() : '';
   const said = `${lookup(PARTICIPANT_LABELS, name, name)} ${lookup(POSITION_WORDS, position?.position, 'took a position that was not recorded')}${detail ? `: ${detail}` : ''}`;
-  if (!quote) return sentence(said);
-  return DESCRIPTOR_LIKE.test(quote) ? `${said} — its quote is withheld: it reads like a CPT descriptor.` : `${said} — “${quote}”`;
+  return quote ? `${said} — “${quote}”` : sentence(said);
 }
 
 // What Astra and Fable each said about this code (participant_positions; {} when none is configured): proposed it, did
@@ -1514,18 +1538,23 @@ function referencesNote(references) {
 // A participant's row: its state as the API reports it, with the API's own sentence - after the plain one when it gives
 // none, or when the state must be said plainly (not configured, not used, unknown, blocked, failed) and its sentence
 // does not say so - and what it proposed, how many of its quotes the document does not contain, whether its answer was
-// reused, and the model asked for and the one that answered.
+// reused, and the model asked for and the one that answered. A reading that proposed codes the engine cannot list
+// (unlisted_codes; the API's sentence counts them) is said to have proposed none that can be listed, never none at all
+// (refutation round 2, truth-11).
 function participantRow(participant) {
   const name = typeof participant.name === 'string' ? participant.name : '';
   const [look, label, plain, required] = lookup(PARTICIPANT_STATES, participant.state, [['pending', 'info'], 'State not recorded', 'The state of this participant was not recorded.', 'not recorded']);
   const said = typeof participant.detail === 'string' ? participant.detail.trim() : '';
   const lines = !said ? [plain] : required && !said.toLowerCase().includes(required) ? [plain, said] : [said];
   const codes = (Array.isArray(participant.codes) ? participant.codes : []).filter(code => typeof code === 'string' && code);
+  const unlisted = Number.isInteger(participant.unlisted_codes) && participant.unlisted_codes > 0;
   const unverified = Number.isInteger(participant.unverified_quotes) && participant.unverified_quotes > 0 ? participant.unverified_quotes : 0;
   const model = textValue(participant.model);
   const returned = textValue(participant.returned_model);
+  const proposed = codes.length ? `${unlisted ? 'Codes it proposed that can be listed' : 'Codes it proposed'}: ${codes.join(', ')}.`
+    : unlisted ? 'It proposed no code that can be listed.' : 'It proposed no code.';
   const notes = [
-    participant.state === 'done' ? (codes.length ? `Codes it proposed: ${codes.join(', ')}.` : 'It proposed no code.') : '',
+    participant.state === 'done' ? proposed : '',
     unverified ? `${plural(unverified, 'quote it gave was', 'quotes it gave were')} not found in the document text, so never used as evidence.` : '',
     participant.reused === true ? 'Reused the stored answer to an identical request; nothing new was sent.' : '',
     model && returned ? `Model requested: ${model}; answered by ${returned}.` : model ? `Model: ${model}.` : '',
@@ -1551,7 +1580,9 @@ function peerFallback(doc, participant) {
 
 // A model participant's peer review (HARNESS.md 11.1, 12.6): its state as the API serves it (peer.state, with its
 // sentence), or the page's own reading where it serves none; the codes it proposed after peer review, never
-// independent; its unfound quotes; and what that run's own tool calls retrieved and what it says it used.
+// independent - codes_added holds only those it first proposed there, and the API's sentence names any it listed again
+// that its first reading proposed (refutation round 2, truth-8); its unfound quotes; and what that run's own tool calls
+// retrieved and what it says it used.
 function peerRow(doc, participant) {
   const name = textValue(participant.name);
   const peer = participant.peer && typeof participant.peer === 'object' && !Array.isArray(participant.peer) ? participant.peer : {};
@@ -1562,7 +1593,7 @@ function peerRow(doc, participant) {
   const codes = strings(peer.codes_added);
   const unverified = Number.isInteger(peer.unverified_quotes) && peer.unverified_quotes > 0 ? peer.unverified_quotes : 0;
   const notes = [
-    codes.length ? `Codes it proposed after peer review, never independent: ${codes.join(', ')}.` : shown === 'done' ? 'It proposed no code after peer review.' : '',
+    codes.length ? `Codes it proposed after peer review, never independent: ${codes.join(', ')}.` : shown === 'done' ? 'It first proposed no code in peer review that can be listed.' : '',
     unverified ? `${plural(unverified, 'quote it gave was', 'quotes it gave were')} not found in the document text, so never used as evidence.` : '',
     referencesNote(participant.peer_references),
   ];
@@ -1617,11 +1648,12 @@ function finalRow(doc) {
   return harnessRow('final', stateName, [look, incomplete ? `${label} · coding incomplete` : label, tone], 'Final status', [said], [phaseNote(doc)]);
 }
 
-// Which assessment the review reads (harness.phase, HARNESS.md 12.3); '' for a payload without one, or Corti only.
+// Which assessment the review reads (harness.phase, HARNESS.md 12.3); '' for a payload without one, or Corti only. A
+// phase-1 assessment read no peer review, whatever runs the revision holds; each peer row says why (truth-9).
 function phaseNote(doc) {
   if (!harness2(doc)) return '';
   if (doc.harness.phase === 2) return 'Assessed after peer review: both phases reconciled from source evidence and rules, never by counting agreement.';
-  return doc.pipeline?.busy ? 'The peer reviews and the second assessment follow the first assessment.' : 'Assessed from the frozen first readings; no peer review is recorded for this revision.';
+  return doc.pipeline?.busy ? 'The peer reviews and the second assessment follow the first assessment.' : 'Assessed from the frozen first readings; no peer review was read by this assessment.';
 }
 
 // The Review participants card (HARNESS.md 7) heads the review column in every state, processing included: Corti, Astra,
@@ -1833,7 +1865,11 @@ function traceReview(review) {
   const problems = strings(review.problems).map(problem => `<li>${escapeHtml(problem)}</li>`);
   const answers = objects(review.answers).map(answer => `<li><b>${escapeHtml(`Question ${textValue(answer.question_id) || 'not named'}`)}</b><br>${escapeHtml(answer.settled === true ? `Answer: ${participantText(answer.value) || 'no value given'}` : 'It says the document does not settle it.')}${traceQuotes(answer.evidence)}</li>`);
   const positions = objects(review.positions).map(item => `<li><b>${escapeHtml(`${textValue(item.code) || 'No code'} · ${lookup(PEER_POSITIONS, item.position, textValue(item.position) || 'position not recorded')}`)}</b>${participantText(item.reason) ? `<br>${escapeHtml(`Why: ${participantText(item.reason)}`)}` : ''}${traceQuotes(item.evidence)}</li>`);
-  const added = objects(review.additional_codes).map(code => traceCode(code, 'proposed after peer review, never independent'));
+  // each additional code by the phase its participant first proposed it in, where the trace serves it (truth-8): a code
+  // its first reading proposed is repeated, never "never independent"; one served without a phase reads as before
+  const addedWords = code => (!Object.hasOwn(code, 'phase') || code.phase === 'peer_review' ? 'proposed after peer review, never independent'
+    : code.phase === 'independent' ? 'repeated in peer review; first proposed in its independent reading' : 'listed in peer review');
+  const added = objects(review.additional_codes).map(code => traceCode(code, addedWords(code)));
   const group = (title, items, empty) => `${groupLabel(`${title} · ${items.length}`)}${items.length ? `<ul class="trace-list">${items.join('')}</ul>` : `<p class="harness-note">${escapeHtml(empty)}</p>`}`;
   return `<div class="trace-reading">${fields}${groupLabel('Frozen inputs it was shown')}${frozen.length ? traceFields(frozen) : '<p class="harness-note">None recorded.</p>'}${problems.length ? `${groupLabel('Problems')}<ul class="trace-list">${problems.join('')}</ul>` : ''}${group('Answers to the open questions', answers, 'No answer.')}${group('Positions on codes', positions, 'No position.')}${group('Codes proposed after peer review', added, 'No code proposed.')}${group('References it says it used', traceReferencesUsed(review.references_used), 'None cited.')}</div>`;
 }

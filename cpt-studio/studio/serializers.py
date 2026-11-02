@@ -292,6 +292,9 @@ def _proposal_json(proposal, current, assessment, membership, clarification_ids)
         # Who proposed it, what the CMS reference checks found, and (above) a member's decision: three statuses, never
         # one (I4). Participants' positions are shown beside it and decide nothing (I2, I3).
         'proposed_by': review.proposed_by(proposal),
+        # how Corti stands to the code where it is not among the proposers (HARNESS.md 11.4; refutation round 2,
+        # truth-6): the page says "Corti did not propose this code" only when Corti has no entry for it at all
+        'corti_relation': review.corti_relation(proposal),
         'participant_positions': review.participant_positions(proposal, assessment.participants),
         'reference_check': review.reference_check(proposal),
         'retrieval': review.proposal_retrieval(proposal, assessment.retrieval),
@@ -556,10 +559,12 @@ def _record_detail(record, run):
     return detail
 
 
-def _row(name, label, vendor, model, state, detail, run, codes=(), unverified=0):
+def _row(name, label, vendor, model, state, detail, run, codes=(), unverified=0, unlisted=0):
+    # ``unlisted``: how many codes the reading proposed that the engine cannot list, never served (I9): the page says
+    # which codes can be listed, never that a participant proposed none (refutation round 2, truth-11)
     return {'name': name, 'label': label, 'vendor': vendor, 'model': model, 'state': state, 'detail': detail,
             'run_id': str(run.pk) if run is not None else None,
-            'reused': bool(run is not None and run.reused_from_id), 'codes': list(codes),
+            'reused': bool(run is not None and run.reused_from_id), 'codes': list(codes), 'unlisted_codes': unlisted,
             'unverified_quotes': unverified, 'usage': dict(run.usage or {}) if run is not None else {},
             'usage_basis': run.usage_basis if run is not None else '', 'estimated_cost_usd': review.estimated_cost(run),
             'returned_model': run.returned_model if run is not None else ''}
@@ -628,7 +633,7 @@ def _participant_row(encounter, assessment, jobs, name, configured):
         if unlisted:
             detail = f'{detail} {review.unlisted_words(unlisted)}'
         return _row(name, label, vendor, model, RECORD_STATES.get(record.get('state'), 'unknown'), detail, run,
-                    codes, int(record.get('unverified_quotes') or 0))
+                    codes, int(record.get('unverified_quotes') or 0), unlisted)
     if newest is not None:
         held = newest.state == models.ProviderRun.NOT_SENT and (newest.scope or {}).get('held')
         return _row(name, label, vendor, model, 'blocked' if held else RUN_STATES.get(newest.state, 'unknown'),
@@ -760,20 +765,58 @@ def _peer_progress(jobs, name):
     return None
 
 
-def _codes_added(peer_review):
-    """The CPT codes a peer review proposed after peer review (its additional codes), each once, in order."""
+def _codes_added(peer_review, assessment, name, record):
+    """(added, repeated): the CPT codes a peer review listed as additional codes, each once, in order, split by the
+    phase participant ``name`` first proposed each in (peer_code_phases): ``added``, those first proposed in its peer
+    review - the codes it proposed after peer review, never independent (HARNESS.md 11.1) - and ``repeated``, those its
+    independent reading first proposed, which it listed again."""
     if peer_review is None or peer_review.refused:
-        return []
-    codes = [item.code for item in peer_review.additional_codes
-             if isinstance(item.code, str) and CODE_SHAPE.fullmatch(item.code)]
-    return list(dict.fromkeys(codes))
+        return [], []
+    listed = list(dict.fromkeys(item.code for item in peer_review.additional_codes
+                                if isinstance(item.code, str) and CODE_SHAPE.fullmatch(item.code)))
+    phases = peer_code_phases(assessment, name, record, listed)
+    return ([code for code in listed if phases[code] == models.ProviderRun.PEER_REVIEW],
+            [code for code in listed if phases[code] == models.ProviderRun.INDEPENDENT])
 
 
-def _peer_detail(record):
-    """A participant's peer review (its assess #2 entry) in one plain sentence."""
+def peer_code_phases(assessment, name, record, codes):
+    """{code: 'independent' | 'peer_review'} for ``codes``, additional codes participant ``name``'s peer review listed:
+    the phase the engine records ``name`` first proposed each in on ``assessment`` (support['phases'] of its proposals
+    of that code; 'independent' wherever any records it so), or - for a code no proposal records ``name`` on, which is
+    one none of its quotes for the code located, so not counted among a proposal's proposers - the engine's own reading
+    of such entries (engine._Harness.phase, read from all of them): 'independent' when its frozen first reading, as
+    ``record`` (its Assessment.participants entry) recorded it, lists the code, else 'peer_review'. HARNESS.md 11.1: a
+    code first proposed in phase 2 is marked proposed after peer review, never as independent - and a code its first
+    reading proposed is never marked so (refutation round 2, truth-8: a peer review that listed its own first reading's
+    code again was said to have proposed it "after peer review, never independent"). One reading of that phase, for
+    every place that words a peer review's additional codes."""
+    wanted = list(dict.fromkeys(code for code in codes if isinstance(code, str)))
+    recorded = {}
+    for proposal in assessment.proposals.filter(code__in=wanted) if assessment is not None and wanted else ():
+        phase = _phases(proposal.support).get(name)
+        if phase:
+            recorded.setdefault(proposal.code, set()).add(phase)
+    listed = {item.get('code') for item in (record or {}).get('codes') or [] if isinstance(item, dict)}
+    independent, later = models.ProviderRun.INDEPENDENT, models.ProviderRun.PEER_REVIEW
+    return {code: independent if independent in recorded.get(code, ()) or (not recorded.get(code) and code in listed)
+            else later for code in wanted}
+
+
+def _join(items):
+    """'A', 'A and B', 'A, B and C'."""
+    return items[0] if len(items) == 1 else f'{", ".join(items[:-1])} and {items[-1]}'
+
+
+def _peer_detail(record, repeated=()):
+    """A participant's peer review (its assess #2 entry) in one plain sentence; ``repeated``: the codes it listed again
+    that its independent reading first proposed (peer_code_phases), said as such - they are never codes it proposed
+    after peer review."""
     state = record.get('peer_state')
     if state == 'read':
         detail = 'Answered in peer review, after its first reading was frozen; the review was used.'
+        if repeated:
+            detail += (f' It listed {_join(list(repeated))} again in peer review; it first proposed '
+                       f'{"it" if len(repeated) == 1 else "them"} in its independent reading.')
         count = int(record.get('peer_unverified_quotes') or 0)
         if count:
             detail += (f' {count} of its quotes {"was" if count == 1 else "were"} not found in the document, so '
@@ -784,11 +827,32 @@ def _peer_detail(record):
     return 'Peer review: ' + words + '.' + (RECONCILE_FIRST if state in ('unknown', 'blocked') else '')
 
 
+# Why a final assessment of phase 1 read no peer review, by the pipeline's own rule (jobs.owed_peer_stages; HARNESS.md
+# 12.7, the final assessment): none is owed while a member date conflict holds it, nor for a participant not configured
+# now. The reports' PEER REVIEW says the same (refutation round 2, truth-9: the page read "No peer review is recorded
+# for this revision" beside the revision's own peer-review runs).
+PEER_HELD = ('Peer review: none is read by this assessment: the service date entered as encounter metadata conflicts '
+             'with the document, and no peer review is sent while that question is open.')
+PEER_NOT_CONFIGURED = 'Peer review: none follows this assessment: {label} is not configured on this installation now.'
+PEER_NONE_READ = 'Peer review: none is read by this assessment.'
+
+
+def _no_peer_review(assessment, name):
+    """Why the final phase-1 ``assessment`` read no peer review of ``name``, whose first reading it read."""
+    if review.peer_review_held(assessment):
+        return PEER_HELD
+    if name not in participants.configured():
+        return PEER_NOT_CONFIGURED.format(label=participants.LABELS[name])
+    return PEER_NONE_READ
+
+
 def _harness2(row, assessment, jobs):
     """The harness@2 fields of one participant row (HARNESS.md 12.6): ``peer`` - its peer review's state, sentence,
     run, the codes it added and its unverified quotes ({} before phase 2, for Corti, or for a participant not
     configured) - and the references its phase-1 run (``references``) and its peer-review run (``peer_references``)
-    retrieved and used, never merged with each other or with the reconciliation's (reference_validation)."""
+    retrieved and used, never merged with each other or with the reconciliation's (reference_validation). A final
+    assessment of phase 1 serves, for each participant whose first reading it read, ``not_sent`` with why it read no
+    peer review (_no_peer_review); an assess #1 whose peer stages are owed still serves none."""
     out = {'peer': {}, 'references': dict(NO_REFERENCES), 'peer_references': dict(NO_REFERENCES)}
     name = row['name']
     if name not in participants.PARTICIPANTS:
@@ -806,12 +870,18 @@ def _harness2(row, assessment, jobs):
         peer_review = None
         if peer_run is not None and record.get('peer_state') == 'read':
             peer_review = review.recorded_peer_review(assessment, record)  # the review assess #2 read, or None
-        out['peer'] = {'state': RECORD_STATES.get(record.get('peer_state'), 'unknown'), 'detail': _peer_detail(record),
-                       'run_id': str(peer_run.pk) if peer_run is not None else None,
-                       'codes_added': _codes_added(peer_review),
+        # codes_added: only those first proposed in its peer review (11.1); a repeated one is said in the detail
+        added, repeated = _codes_added(peer_review, assessment, name, record)
+        out['peer'] = {'state': RECORD_STATES.get(record.get('peer_state'), 'unknown'),
+                       'detail': _peer_detail(record, repeated),
+                       'run_id': str(peer_run.pk) if peer_run is not None else None, 'codes_added': added,
                        'unverified_quotes': int(record.get('peer_unverified_quotes') or 0)}
         if peer_run is not None:
             out['peer_references'] = review.participant_references(peer_run, peer_review)
+    elif (record is not None and record.get('state') == 'read' and review.assessment_phase(assessment) == 1
+          and review.is_final(assessment)):
+        out['peer'] = {'state': RECORD_STATES['not_sent'], 'detail': _no_peer_review(assessment, name), 'run_id': None,
+                       'codes_added': [], 'unverified_quotes': 0}
     return out
 
 

@@ -32,8 +32,8 @@ DETAIL_KEYS = {'id', 'title', 'state', 'state_label', 'created_at', 'created_by'
 # so a fixture taken from the real API was rejected, and no frontend test could see a key the API serves).
 PARTICIPANTS = ['corti', 'astra', 'fable']
 PARTICIPANT_KEYS = {'name', 'label', 'vendor', 'model', 'state', 'detail', 'run_id', 'reused', 'codes',
-                    'unverified_quotes', 'usage', 'usage_basis', 'estimated_cost_usd', 'returned_model', 'peer',
-                    'references', 'peer_references'}
+                    'unlisted_codes', 'unverified_quotes', 'usage', 'usage_basis', 'estimated_cost_usd',
+                    'returned_model', 'peer', 'references', 'peer_references'}
 PARTICIPANT_STATES = {'not_configured', 'waiting', 'running', 'done', 'refused', 'failed', 'unknown', 'not_sent', 'blocked',
                       'stopped'}
 HARNESS_KEYS = {'participants', 'phase', 'reference_validation', 'clarification', 'final'}
@@ -58,10 +58,13 @@ RECONCILIATION_ROW_KEYS = {'code', 'family', 'bucket', 'status', 'proposed_by', 
 # The harness fixtures (tests/fixtures/api) were written at b4655e634, before these keys existed. What each shape still
 # lacks is stated here rather than accepted silently, until the website package regenerates the fixtures from the
 # serializer's output: a regenerated fixture fails these tests until its entry is emptied (refutation r1 FG-5).
+# Refutation round 2 (FG2-5) found it still open: regenerated, they become harness@2 payloads, and the tests that draw
+# them as payloads served before harness@2 must then build those payloads themselves - left for after the round-2 merge
+# (R2-WORDING's report). The participants row's unlisted_codes (truth-11) is the latest key they lack.
 FIXTURE_LACKS = {
     'permissions': {'can_confirm'},
     'harness': {'phase'},
-    'participant': {'peer', 'references', 'peer_references'},
+    'participant': {'peer', 'references', 'peer_references', 'unlisted_codes'},
     'trace': {'assessments'},
     'trace_run': {'sent', 'mode', 'run_identity', 'authorization_ref', 'requested_by', 'reconciled', 'review',
                   'exchanges'},

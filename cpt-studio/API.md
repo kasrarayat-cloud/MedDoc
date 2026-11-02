@@ -84,7 +84,7 @@ Fields: `file` (PDF/DOCX/TXT) **or** `text` (pasted note); `title` (optional);
     "participants": [
       {"name": "corti", "label": "Corti", "vendor": "Corti", "model": "", "state": "done",
        "detail": "Answered; its codes were checked.", "run_id": "uuid", "reused": false, "codes": ["45385"],
-       "unverified_quotes": 0, "usage": {"creditsConsumed": 0.0281}, "usage_basis": "provider_reported_credits_not_usd",
+       "unlisted_codes": 0, "unverified_quotes": 0, "usage": {"creditsConsumed": 0.0281}, "usage_basis": "provider_reported_credits_not_usd",
        "estimated_cost_usd": null, "returned_model": ""},
       {"name": "astra", "label": "Astra", "vendor": "OpenAI", "model": "gpt-6-astra", "state": "refused",
        "detail": "Answered; the reading was not used: the response was cut off at the output limit.", "run_id": "uuid",
@@ -200,7 +200,9 @@ stopped with an unexpected error before it recorded an outcome included - makes 
 member reconciles it (`POST reconcile` takes any participant's run). `codes` are the codes that participant proposed
 (Corti's: its selected codes), each once - a participant's only when the engine lists it (1 to 10 characters): a longer
 "code" may carry wording, a CPT descriptor say, so it is never served, and the row's `detail` ends with the engine's own
-sentence ("It returned 1 code that cannot be listed: ... It is not shown and never truncated.");
+sentence ("It returned 1 code that cannot be listed: ... It is not shown and never truncated."); `unlisted_codes`
+counts those (0 on Corti's row and wherever none was returned), so the page says the reading proposed no code "that can
+be listed", never that it proposed none (refutation round 2, truth-11);
 `usage` is as the vendor reported it, with its `usage_basis`; `estimated_cost_usd` is a string estimated from published
 rates, not reconciled to an invoice, to four decimals (`"0.0270"`, rounded half up), and null for Corti (credits, not
 USD), for a run that reported no usage (a reuse), and where the installed pricing module cannot price the usage. A tool
@@ -286,7 +288,8 @@ whose API takes no model identifier), which the Activity tab names. The Activity
                      "located_by": ["astra", "fable"], "runs": ["uuid"], "confirmed_by": "label",
                      "confirmed_by_kind": "human", "attestation": "I read this passage ...", "created_at": "...",
                      "revision_number": 1, "current_effect": {"state": "read", "detail": "read by this assessment"}}],
-  "assessment": {"proposals": [{"...": "as above", "phases": {"fable": "peer_review"}, "confirmed": ["uuid"]}]}
+  "assessment": {"proposals": [{"...": "as above", "phases": {"fable": "peer_review"}, "confirmed": ["uuid"],
+                                "corti_relation": "none"}]}
 }
 ```
 
@@ -297,7 +300,19 @@ Fable row gains `peer`: `{}` before phase 2 (and on Corti's row and a row not co
 `stopped` while the current chain has not finished that participant's peer stage (`astra_peer`, then `fable_peer`);
 once assess #2 is recorded, its `state` in the row vocabulary (`done`, `refused`, `failed`, `unknown`, `not_sent`,
 `blocked`, `not_configured`) with a `detail` sentence, its `run_id`, the codes the review proposed after peer review
-(`codes_added`, never independent) and its unverified quotes. The three kinds of references are never merged (11.2):
+(`codes_added`, never independent) and its unverified quotes. `codes_added` lists only the additional codes the
+participant first proposed in its peer review - the phase the engine records on the assessment's proposals of the code
+(`phases`), or, for a code no proposal records it on, whether its frozen first reading listed the code
+(`serializers.peer_code_phases`); an additional code its first reading proposed is named in the `detail` instead ("It
+listed 45385 again in peer review; it first proposed it in its independent reading."), never as proposed after peer
+review (refutation round 2, truth-8). A final assessment of phase 1 - one that owes no peer
+stage because a member date conflict holds it, or because the participant is not configured now - serves, for each
+participant whose first reading it read, `not_sent` with why it read none ("Peer review: none is read by this
+assessment: the service date entered as encounter metadata conflicts with the document, and no peer review is sent
+while that question is open." or "Peer review: none follows this assessment: Astra is not configured on this
+installation now."), `run_id` null, whatever peer-review runs the revision holds from an earlier chain (refutation round
+2, truth-9); an assess #1 whose peer stages are owed still serves `{}`, and the page then says only that this assessment
+read no peer review. The three kinds of references are never merged (11.2):
 `references` are those of the row's first-reading run and `peer_references` those of its peer-review run - in each,
 `retrieved` lists every ref that run's own tool calls returned (a `fact:<source>:<code>:<field>` ref or a passage key,
 with the source, release and effective window its tool result stated - read by the CMS tool executor's own reader of a
@@ -369,7 +384,17 @@ is, and the confirm endpoint refuses (409) a question whose proposal records non
 Each proposal gains `phases` (from its support record: the phase each participant first proposed the code in; a code
 first proposed in peer review is `peer_review`, never independent) and `confirmed` (the ids of the confirmations its
 checks read). Its `rationale` and `proposed_by` keep the origin (11.4: "Proposed by Fable; Corti did not propose this
-code."). A candidate, a confirmation and a peer position never decide a status or approve anything: `decision_state`
+code."). Every proposal carries `corti_relation` (refutation round 2, truth-6), how Corti stands to its code, read from
+the assessment's own proposals of that code (Corti's are those of origin primary or second_review): `proposer` (Corti
+is among `proposed_by`); `selected_without_exact_passage` (Corti's response selected the code and that selection is
+excluded because none of its passages matches the document text exactly: listed apart, carrying no proposal);
+`selected_apart` (Corti selected it and that selection is another entry, excluded for another reason); `candidate`
+(Corti's response listed it only as a candidate or an alternative, not selected); `second_review` (only Corti's bounded
+second review listed it, as an alternative); `none` (Corti has no entry for the code). The page says "Corti did not
+propose this code." only for `none`, words the others as the engine's rationale does ("Corti also selected this code,
+with no exact passage; it is listed apart, excluded."; "Corti listed this code only as a candidate, not selected; see
+Alternatives."), and says nothing of Corti for a proposal served without the field. A candidate, a confirmation and a
+peer position never decide a status or approve anything: `decision_state`
 stays a member's decision (I2-I4). `pipeline.stages` includes the peer stages (`astra_peer`, `fable_peer`); a
 replayed peer-review run reads `mode` `replay`. The Activity tab reads "Finding confirmed from a participant's located
 passage (not a decision)" for a confirmation, with its `fact` and `effect`.

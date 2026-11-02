@@ -1152,8 +1152,14 @@ def _peer_section(snap):
                          f'{POSITION_WORDS.get(position["position"], "no position CPT Studio reads")}')
             lines += _peer_evidence(position['evidence'])
         for added in entry['additional_codes']:
-            lines.append(f'    Additional code {added["code"] or UNREAD_CODE} · units {added["units"]} — proposed '
-                         'after peer review, never independent')
+            # by the phase its participant first proposed it in (serializers.peer_code_phases; refutation round 2,
+            # truth-8): a code its first reading proposed is repeated, never "never independent"; an entry that does
+            # not name its phase reads as before
+            phase = added.get('phase', ProviderRun.PEER_REVIEW)
+            said = ('proposed after peer review, never independent' if phase == ProviderRun.PEER_REVIEW else
+                    'repeated in peer review; first proposed in its independent reading'
+                    if phase == ProviderRun.INDEPENDENT else 'listed in peer review')
+            lines.append(f'    Additional code {added["code"] or UNREAD_CODE} · units {added["units"]} — {said}')
             lines += _peer_evidence(added['evidence'])
         if entry['unverified_quotes']:
             lines.append(f'    Unverified quotes: {entry["unverified_quotes"]} (not found in the document; never used '
@@ -1589,8 +1595,11 @@ def _harness2_rows(snap):
                          'status': str(position['position']) if position['position'] in POSITION_WORDS else '',
                          'evidence': _csv_spans(position['evidence'])})
         for added in entry['additional_codes']:
+            phase = added.get('phase', ProviderRun.PEER_REVIEW)  # as the TXT words it (truth-8)
+            status = ('proposed_after_peer_review' if phase == ProviderRun.PEER_REVIEW else 'repeated_in_peer_review'
+                      if phase == ProviderRun.INDEPENDENT else 'listed_in_peer_review')
             rows.append({**peer, 'item_list': 'peer_additional_code', 'code': added['code'], 'units': added['units'],
-                         'status': 'proposed_after_peer_review', 'evidence': _csv_spans(added['evidence'])})
+                         'status': status, 'evidence': _csv_spans(added['evidence'])})
     for run in snap.get('participant_references') or []:
         source = {**base, 'proposed_by': run['name'], 'proposal_origin': run['phase']}
         # a reuse's references are the tool calls of the retained run it reuses (refutation round 2, truth-13)

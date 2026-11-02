@@ -39,6 +39,7 @@
     "codes": [
      "45385"
     ],
+    "unlisted_codes": 0,
     "unverified_quotes": 0,
     "usage": {
      "creditsConsumed": 0.0281
@@ -69,6 +70,7 @@
      "45385",
      "45380"
     ],
+    "unlisted_codes": 0,
     "unverified_quotes": 0,
     "usage": {
      "input_tokens": 2000,
@@ -149,6 +151,7 @@
     "codes": [
      "45385"
     ],
+    "unlisted_codes": 0,
     "unverified_quotes": 0,
     "usage": {
      "input_tokens": 2000,
@@ -468,8 +471,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "ef29a23b3031a722bbd7ff8789ea482a7bd20cced4366d6c3efc4fb533c4161d",
-   "response_sha256": "d2911b5519c5023a9427a3710ebbd29641a30154e634f251a93b44578885554b",
+   "request_sha256": "400d386e4b7c0127a473005c10d386c55742822d1859aca446ddc886ffa319bc",
+   "response_sha256": "ef8da92d062b6f337ae6b676e54fcbfadaf929d34ea2dcae9be7cbc3766ee708",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -491,8 +494,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "50e6986c0720e9316b3f778cc256c747add71efb66b736c3eae356d20142fdfd",
-   "response_sha256": "9a62382ddc20bf83e8465b7dc8dec7f6756b905ba250ca392b9cee176a71377f",
+   "request_sha256": "417de66bb0e60171dc3ae0d72566bcbcd55ec479d0f72d23768a9da8257d3935",
+   "response_sha256": "11cdbfe9cfea07fe5ba3b1ef9d41ccecb4dfe56e7a53feb32284c14bdc9afa65",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -630,6 +633,7 @@
      "astra",
      "fable"
     ],
+    "corti_relation": "proposer",
     "participant_positions": {
      "astra": {
       "position": "proposed",
@@ -805,6 +809,7 @@
      "astra",
      "fable"
     ],
+    "corti_relation": "none",
     "participant_positions": {
      "astra": {
       "position": "proposed",
@@ -911,6 +916,7 @@
     "proposed_by": [
      "astra"
     ],
+    "corti_relation": "none",
     "participant_positions": {
      "astra": {
       "position": "not_proposed",
@@ -1040,9 +1046,16 @@
        "page": 1
       }
      ],
-     "verified": true,
-     "why": "",
-     "attestation": "I read this passage in the source document; it documents performed for this encounter."
+     "sentences": [
+      {
+       "start": 196,
+       "end": 249,
+       "text": "Technique: The colonoscope was advanced to the cecum."
+      }
+     ],
+     "verified": false,
+     "why": "CPT Studio's readers cannot tell which act this passage documents.",
+     "attestation": ""
     },
     {
      "id": "e84124b506417d84",
@@ -1070,9 +1083,16 @@
        "page": 2
       }
      ],
-     "verified": true,
-     "why": "",
-     "attestation": "I read this passage in the source document; it documents performed for this encounter."
+     "sentences": [
+      {
+       "start": 343,
+       "end": 455,
+       "text": "Findings: A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology."
+      }
+     ],
+     "verified": false,
+     "why": "CPT Studio's readers cannot tell which act this passage documents.",
+     "attestation": ""
     },
     {
      "id": "665833a192f25ebe",
@@ -1097,9 +1117,16 @@
        "page": 2
       }
      ],
-     "verified": true,
-     "why": "",
-     "attestation": "I read this passage in the source document; it documents performed for this encounter."
+     "sentences": [
+      {
+       "start": 456,
+       "end": 514,
+       "text": "A 3 mm polyp in the rectum was biopsied with cold forceps."
+      }
+     ],
+     "verified": false,
+     "why": "CPT Studio's readers cannot tell which act this passage documents.",
+     "attestation": ""
     }
    ],
    "confirmation": null
@@ -1139,6 +1166,13 @@
        "end": 135,
        "text": "Date of service: 2026-10-21",
        "page": 1
+      }
+     ],
+     "sentences": [
+      {
+       "start": 108,
+       "end": 135,
+       "text": "Date of service: 2026-10-21"
       }
      ],
      "verified": true,

@@ -39,6 +39,7 @@
     "codes": [
      "45385"
     ],
+    "unlisted_codes": 0,
     "unverified_quotes": 0,
     "usage": {
      "creditsConsumed": 0.0281
@@ -69,6 +70,7 @@
      "45385",
      "45380"
     ],
+    "unlisted_codes": 0,
     "unverified_quotes": 0,
     "usage": {
      "input_tokens": 2000,
@@ -149,6 +151,7 @@
     "codes": [
      "45385"
     ],
+    "unlisted_codes": 0,
     "unverified_quotes": 0,
     "usage": {
      "input_tokens": 2000,
@@ -462,8 +465,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "57da04312911946a539790d1a92ad5e59bbea0ab93422c891881f6357635b6f1",
-   "response_sha256": "2c782268d400e5553285f7b20e9605b6b32f0af3249894afa19aa59133c1e27c",
+   "request_sha256": "1961719ccde7006454d27d831d57b37d34af26132593a8666544bf04d59b93eb",
+   "response_sha256": "0604fbaa73afdd882990556679c62cae2604b836ee092e77c5afe58ef96ab07c",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -485,8 +488,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "5b48c59e170b915a7577ae1287897c853f2747e23f0a00545b7b40e9aa3a055d",
-   "response_sha256": "8baad239208bd077eb2bad6e31ee5fcd5961e16ddca053d6178d21ae538549d7",
+   "request_sha256": "2e3e7799b293db549b16c87dedcc729fa3d62b2b68785c7eac86637a77db4812",
+   "response_sha256": "bf62b59fe3e0177123e5868f685d130bc03c4c64c42f27c2d703ab08e8aea31a",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -622,6 +625,7 @@
      "astra",
      "fable"
     ],
+    "corti_relation": "proposer",
     "participant_positions": {
      "astra": {
       "position": "proposed",
@@ -795,6 +799,7 @@
      "astra",
      "fable"
     ],
+    "corti_relation": "none",
     "participant_positions": {
      "astra": {
       "position": "proposed",
@@ -901,6 +906,7 @@
     "proposed_by": [
      "astra"
     ],
+    "corti_relation": "none",
     "participant_positions": {
      "astra": {
       "position": "not_proposed",
@@ -1025,6 +1031,13 @@
        "page": 1
       }
      ],
+     "sentences": [
+      {
+       "start": 196,
+       "end": 249,
+       "text": "Technique: The colonoscope was advanced to the cecum."
+      }
+     ],
      "verified": true,
      "why": "",
      "attestation": "I read this passage in the source document; it documents cecum for this encounter."
@@ -1053,6 +1066,13 @@
        "end": 455,
        "text": "A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology.",
        "page": 2
+      }
+     ],
+     "sentences": [
+      {
+       "start": 343,
+       "end": 455,
+       "text": "Findings: A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology."
       }
      ],
      "verified": false,
@@ -1098,9 +1118,16 @@
        "page": 1
       }
      ],
-     "verified": true,
-     "why": "",
-     "attestation": "I read this passage in the source document; it documents performed for this encounter."
+     "sentences": [
+      {
+       "start": 196,
+       "end": 249,
+       "text": "Technique: The colonoscope was advanced to the cecum."
+      }
+     ],
+     "verified": false,
+     "why": "CPT Studio's readers cannot tell which act this passage documents.",
+     "attestation": ""
     },
     {
      "id": "8506dba1d7d670a3",
@@ -1128,9 +1155,16 @@
        "page": 2
       }
      ],
-     "verified": true,
-     "why": "",
-     "attestation": "I read this passage in the source document; it documents performed for this encounter."
+     "sentences": [
+      {
+       "start": 343,
+       "end": 455,
+       "text": "Findings: A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology."
+      }
+     ],
+     "verified": false,
+     "why": "CPT Studio's readers cannot tell which act this passage documents.",
+     "attestation": ""
     },
     {
      "id": "49d6edbf6075364b",
@@ -1155,9 +1189,16 @@
        "page": 2
       }
      ],
-     "verified": true,
-     "why": "",
-     "attestation": "I read this passage in the source document; it documents performed for this encounter."
+     "sentences": [
+      {
+       "start": 456,
+       "end": 514,
+       "text": "A 3 mm polyp in the rectum was biopsied with cold forceps."
+      }
+     ],
+     "verified": false,
+     "why": "CPT Studio's readers cannot tell which act this passage documents.",
+     "attestation": ""
     }
    ],
    "confirmation": null
@@ -1197,6 +1238,13 @@
        "end": 135,
        "text": "Date of service: 2026-10-21",
        "page": 1
+      }
+     ],
+     "sentences": [
+      {
+       "start": 108,
+       "end": 135,
+       "text": "Date of service: 2026-10-21"
       }
      ],
      "verified": true,

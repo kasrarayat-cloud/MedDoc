@@ -1205,6 +1205,44 @@ def proposed_by(proposal):
     return ([CORTI] if corti else []) + [name for name in participants.PARTICIPANTS if name in named]
 
 
+# How Corti stands to a proposal's code (corti_relation), in the order a Corti entry of the code is looked for.
+CORTI_RELATIONS = ('proposer', 'selected_without_exact_passage', 'selected_apart', 'candidate', 'second_review', 'none')
+
+
+def corti_relation(proposal):
+    """How Corti stands to ``proposal``'s code on its assessment, so that "Corti did not propose this code" is said
+    only when Corti has no entry for the code at all (HARNESS.md 11.4; refutation round 2, truth-6: a participant's own
+    proposal said so beside Corti's own excluded selection of the same code):
+      'proposer'                        Corti is among its proposers (proposed_by);
+      'selected_without_exact_passage'  Corti's response selected the code, and that selection is excluded because none
+                                        of its passages matches the document text exactly (the engine's NO_EVIDENCE),
+                                        so it is listed apart and carries no proposal;
+      'selected_apart'                  Corti's response selected it, and that selection is another entry: excluded for
+                                        another reason (or, which the engine never records, a proposal of its own);
+      'candidate'                       Corti's response listed it only as a candidate or an alternative, not selected;
+      'second_review'                   only Corti's bounded second review listed it, as an alternative (selected and
+                                        not added, or a candidate: its record does not say which);
+      'none'                            Corti has no entry for the code on this assessment.
+    Read from the assessment's own proposals of the same code; Corti's are those of origin primary or second_review,
+    as proposed_by reads them."""
+    from .validation.engine import NO_EVIDENCE  # local import: only the engine's exclusion reason is needed here
+
+    if CORTI in proposed_by(proposal):
+        return 'proposer'
+    entries = [other for other in Proposal.objects.filter(assessment_id=proposal.assessment_id, code=proposal.code)
+               .exclude(pk=proposal.pk) if ((other.support or {}).get('origin') or 'primary') in ('primary',
+                                                                                                  'second_review')]
+    primary = [other for other in entries if ((other.support or {}).get('origin') or 'primary') == 'primary']
+    selected = [other for other in primary if other.bucket != Proposal.ALTERNATIVE]
+    if any(other.bucket == Proposal.EXCLUDED and other.exclusion_reason == NO_EVIDENCE for other in selected):
+        return 'selected_without_exact_passage'
+    if selected:
+        return 'selected_apart'
+    if primary:
+        return 'candidate'
+    return 'second_review' if entries else 'none'
+
+
 def participant_positions(proposal, records):
     """{name: {position, detail, quote}} for each harness participant the assessment had configured
     (Assessment.participants; {} when none was): its position in the reading the entry records - the frozen first

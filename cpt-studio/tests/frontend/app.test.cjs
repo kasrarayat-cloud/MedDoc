@@ -1325,12 +1325,13 @@ test('no descriptor-like text is rendered: not the provider\'s display, not a pa
   const ready = fixture(HARNESS_READY);
   const proposals = ready.assessment.proposals.map((proposal, index) => ({ ...proposal, provider_display: `${DESCRIPTOR} ${index}`,
     participant_positions: { astra: { position: 'advised_not_to_code', detail: DESCRIPTOR, quote: '' },
-      fable: { position: 'advised_not_to_code', detail: 'not performed at this encounter', quote: `${DESCRIPTOR}.` } } }));
+      fable: { position: 'advised_not_to_code', detail: `not performed at this encounter ${DESCRIPTOR}`, quote: '' } } }));
   const doc = { ...ready, assessment: { ...ready.assessment, proposals } };
   const pages = ['codes', 'checks', 'timeline'].map(tab => render(doc, tab)).join('\n');
   assert.equal(pages.includes('lesion(s)') || pages.includes(app.escapeHtml(DESCRIPTOR)), false);
   assert.ok(pages.includes(`Astra advised not to code it: ${app.escapeHtml(app.DESCRIPTOR_WITHHELD)}`));
-  assert.ok(pages.includes('Fable advised not to code it: not performed at this encounter — its quote is withheld: it reads like a CPT descriptor.'));
+  // a position's quote is the document's own located passage (shown as it is, R2-WORDING IR2-4); its detail is not
+  assert.ok(pages.includes(`Fable advised not to code it: ${app.escapeHtml(app.DESCRIPTOR_WITHHELD)}`));
   assert.equal(count(pages, '<h3>Description withheld</h3>'), 2);
   // the trace: every free-text field of a reading, and an unlocated quote
   const trace = fixture(HARNESS_TRACE);
@@ -1606,7 +1607,7 @@ test('the Review participants card shows each participant\'s first reading, then
   }
   assert.ok(none({ state: 'done' }, { ...ready, pipeline: { ...ready.pipeline, busy: true } }).includes('<span class="status gray">Waiting</span>'));
   const failedStage = { ...ready, harness: { ...ready.harness, phase: 1 }, pipeline: { ...ready.pipeline, stages: [...ready.pipeline.stages.slice(0, 6), { kind: 'astra_peer', state: 'failed', error: 'HTTP 529 (synthetic).', finished_at: null }] } };
-  assert.ok(none({ state: 'done' }, failedStage).includes('<p>No peer review is recorded for this revision. Its peer-review stage: Failed — HTTP 529 (synthetic).</p>'));
+  assert.ok(none({ state: 'done' }, failedStage).includes('<p>No peer review was read by this assessment. Its peer-review stage: Failed — HTTP 529 (synthetic).</p>'));
   // a state the page does not know is never drawn as one it knows
   const odd = peerRowOf(render(withPeer(ready, 'astra', { state: 'exploded', detail: '' })), 'astra');
   assert.ok(odd.includes('State not recorded') && odd.includes('data-peer-state="exploded"'));
@@ -1799,7 +1800,7 @@ test('a code card says who proposed it in which phase, 11.4\'s sentence, the con
   const peerOnly = { ...final, assessment: { ...final.assessment, proposals: final.assessment.proposals.map(p => (p.code === '45380' ? { ...p, phases: { astra: 'peer_review', fable: 'peer_review' } } : p)) } };
   const later = codeCardOf(render(peerOnly), '45380');
   assert.ok(later.includes('<span class="small-badge">Proposed after peer review</span>') && !later.includes('independent reading'));
-  assert.ok(app.codeStatusLines({ proposed_by: ['fable'], reference_check: { state: 'passed' } }).includes('<li><b>Proposed by:</b> Fable; Corti did not propose this code.</li>'));
+  assert.ok(app.codeStatusLines({ proposed_by: ['fable'], corti_relation: 'none', reference_check: { state: 'passed' } }).includes('<li><b>Proposed by:</b> Fable; Corti did not propose this code.</li>'));
   assert.ok(html.includes('<strong>45381 · Colonoscopy · proposed after peer review</strong>'), 'the alternative a peer review proposed');
   // the first readings' positions are named as such
   assert.ok(biopsy.includes('<div class="evidence-label">What the participants said in their first readings</div>'));
@@ -2165,4 +2166,142 @@ test('R2-TRUTH truth-13: a reuse\'s references are said to be the retained run\'
   assert.ok(traced.includes(`<li><b>fact:cms-pfs-rvu26d:45385:mult_proc — retrieved by the tool calls of the retained run this run reuses (${UUID})</b>`), traced);
   assert.ok(traced.includes(`<li><b>ncci-2026-ch6-c-1 — cited, not retrieved by the retained run this run reuses (${UUID})</b>`), traced);
   assert.equal(traced.includes('retrieved by its own tool calls in this run'), false);
+});
+
+// refutation round 2, R2-WORDING
+// How the page names proposers, phases and participant text: every sentence true of the record the API serves.
+
+test('R2-WORDING truth-6: a card says "Corti did not propose this code" only when Corti has no entry for it', () => {
+  const final = fixture(H2_FINAL);
+  const biopsy = final.assessment.proposals.find(p => p.code === '45380');
+  assert.equal(biopsy.corti_relation, 'none', 'the serializer serves the relation');
+  const line = relation => app.codeStatusLines({ ...biopsy, corti_relation: relation });
+  const named = '<li><b>Proposed by:</b> Astra (independent reading), Fable (after peer review)';
+  const said = {
+    none: '; Corti did not propose this code.',
+    selected_without_exact_passage: '; Corti also selected this code, with no exact passage; it is listed apart, excluded.',
+    selected_apart: '; Corti also selected this code; its selection is listed apart.',
+    candidate: '; Corti listed this code only as a candidate, not selected; see Alternatives.',
+    second_review: '; Corti&#x27;s second review also listed this code, as an alternative; see Alternatives.',
+  };
+  for (const [relation, words] of Object.entries(said)) assert.ok(line(relation).includes(`${named}${words}</li>`), relation);
+  // a relation the page does not know, or none served, says nothing of Corti that the record would have to support
+  for (const relation of [undefined, '', 'proposer', 'exploded', 3]) {
+    assert.ok(line(relation).includes(`${named}</li>`), String(relation));
+    assert.equal(line(relation).includes('Corti'), false, String(relation));
+  }
+  // Corti among the proposers: named first, and no sentence about it
+  assert.ok(app.codeStatusLines({ proposed_by: ['corti', 'astra'], corti_relation: 'none', reference_check: { state: 'passed' } })
+    .includes('<li><b>Proposed by:</b> Corti, Astra</li>'));
+});
+
+test('R2-WORDING truth-11: a participant row never says it proposed no code beside codes it cannot list', () => {
+  const final = fixture(H2_FINAL);
+  const fable = final.harness.participants.find(row => row.name === 'fable');
+  assert.equal(fable.unlisted_codes, 0, 'the serializer serves the count');
+  const row = fields => harnessRow(render(withParticipant(final, 'fable', fields)), 'fable');
+  assert.ok(row({ codes: [], unlisted_codes: 1 }).includes('<small class="check-source">It proposed no code that can be listed.</small>'));
+  assert.equal(row({ codes: [], unlisted_codes: 1 }).includes('It proposed no code.<'), false);
+  assert.ok(row({ codes: ['45385'], unlisted_codes: 2 }).includes('<small class="check-source">Codes it proposed that can be listed: 45385.</small>'));
+  // none it cannot list (or no count served): as before
+  for (const unlisted_codes of [0, undefined, -1, '1', 1.5]) {
+    assert.ok(row({ codes: [], unlisted_codes }).includes('<small class="check-source">It proposed no code.</small>'), String(unlisted_codes));
+    assert.ok(row({ codes: ['45385'], unlisted_codes }).includes('<small class="check-source">Codes it proposed: 45385.</small>'), String(unlisted_codes));
+  }
+  // only a reading that was used lists codes at all
+  assert.equal(row({ state: 'refused', codes: [], unlisted_codes: 1 }).includes('It proposed'), false);
+});
+
+test('R2-WORDING truth-9: a phase-1 assessment\'s peer rows and final row say it read no peer review, never that none is recorded', () => {
+  const final = fixture(H2_FINAL);
+  const phase1 = { ...final, harness: { ...final.harness, phase: 1 } };
+  assert.equal(app.PEER_STATES.not_run[2], 'No peer review was read by this assessment.');
+  // the API's own reason for a final phase-1 assessment (a member date conflict holds it) is the row's sentence
+  const held = 'Peer review: none is read by this assessment: the service date entered as encounter metadata conflicts with the document, and no peer review is sent while that question is open.';
+  const row = peerRowOf(render(withPeer(phase1, 'astra', { state: 'not_sent', detail: held, run_id: null, codes_added: [], unverified_quotes: 0 })), 'astra');
+  assert.ok(row.includes(`<p>${app.escapeHtml(held)}</p>`) && row.includes('data-peer-state="not_sent"'), row);
+  assert.equal(count(row, '<p>'), 1, 'said once');
+  // where the API serves none: the page says only what is true of the assessment shown, with its stage's outcome
+  const stages = [...final.pipeline.stages.slice(0, 6), { kind: 'astra_peer', state: 'succeeded', error: '', finished_at: null }];
+  const none = peerRowOf(render(withPeer({ ...phase1, pipeline: { ...phase1.pipeline, stages } }, 'astra', {}, { state: 'done' })), 'astra');
+  assert.ok(none.includes('<p>No peer review was read by this assessment. Its peer-review stage: Done.</p>'), none);
+  for (const html of [row, none, render(phase1)]) assert.equal(/recorded for this revision/.test(html), false);
+  assert.ok(harnessRow(render(phase1), 'final').includes('Assessed from the frozen first readings; no peer review was read by this assessment.'));
+  assert.ok(harnessRow(render({ ...phase1, pipeline: { ...phase1.pipeline, busy: true } }), 'final').includes('The peer reviews and the second assessment follow the first assessment.'));
+});
+
+test('R2-WORDING truth-8: a peer review\'s additional code is called never independent only where it was first proposed there', () => {
+  const final = fixture(H2_FINAL);
+  // codes_added holds only the codes first proposed in peer review; the API's sentence names a repeated one
+  const repeated = 'Answered in peer review, after its first reading was frozen; the review was used. It listed 45385 again in peer review; it first proposed it in its independent reading.';
+  const row = peerRowOf(render(withPeer(final, 'astra', { state: 'done', detail: repeated, run_id: null, codes_added: [], unverified_quotes: 0 })), 'astra');
+  assert.ok(row.includes(`<p>${app.escapeHtml(repeated)}</p>`), row);
+  assert.ok(row.includes('<small class="check-source">It first proposed no code in peer review that can be listed.</small>'), row);
+  assert.equal(/never independent: 45385|proposed no code after peer review/.test(row), false, row);
+  assert.ok(peerRowOf(render(final), 'fable').includes('Codes it proposed after peer review, never independent: 45380.'));
+  // the owner's trace words each additional code by the phase served with it; one served without reads as before
+  const trace = fixture(H2_TRACE);
+  const astra = trace.participants.find(item => item.name === 'astra');
+  const peer = astra.runs.find(run => run.purpose === 'peer_review');
+  const base = peer.review.additional_codes[0];
+  const shown = phase => app.traceView({ ...trace, participants: [{ ...astra, runs: [{ ...peer, review: { ...peer.review,
+    additional_codes: [phase === undefined ? base : { ...base, phase }] } }] }] }, trace.encounter.id);
+  const head = '<li><b>45381 · units 1 · confidence low · services s1 · ';
+  assert.ok(shown('independent').includes(`${head}repeated in peer review; first proposed in its independent reading</b>`));
+  assert.equal(shown('independent').includes('never independent'), false);
+  for (const phase of ['peer_review', undefined]) assert.ok(shown(phase).includes(`${head}proposed after peer review, never independent</b>`), String(phase));
+  for (const phase of ['', 'exploded', null]) assert.ok(shown(phase).includes(`${head}listed in peer review</b>`), String(phase));
+});
+
+test('R2-WORDING IR2-4: participant text shaped like an E/M or an abbreviated descriptor is withheld; a located quote is the document\'s own text', () => {
+  // (a) placeholder shapes only, never licensed text: the office E/M long-descriptor frame and a short descriptor
+  const shapes = [
+    'Office or other outpatient visit for the SYNTHETIC-PLACEHOLDER of an established patient, which requires a medically appropriate history and/or examination and PLACEHOLDER level of medical decision making.',
+    'Outpatient visit for the PLACEHOLDER of a new patient.',
+    'When using total time on the date of the encounter for code selection, PLACEHOLDER minutes must be met or exceeded.',
+    'which requires a medically appropriate history',
+    'SYNTHETIC-PLACEHOLDER COLSC FLX W/BIOPSY SINGLE/MULTIPLE',
+    'SYNTHETIC-PLACEHOLDER EGD W/O PLACEHOLDER',
+    'placeholder single/multiple',
+  ];
+  for (const text of shapes) {
+    assert.ok(app.DESCRIPTOR_LIKE.test(text), text);
+    assert.equal(app.participantText(text), app.DESCRIPTOR_WITHHELD, text);
+  }
+  // CPT Studio's own wording, and plain clinical prose, are not caught
+  for (const text of ['Basis for the visit level (total time or medical decision making)', 'it states a total time in minutes or a level of medical decision making',
+    'Established patient', 'The polyp was removed w/ a cold snare.', 'Total time on the date of the encounter was 24 minutes.', 'A follow-up visit for the patient is planned.']) {
+    assert.equal(app.DESCRIPTOR_LIKE.test(text), false, text);
+  }
+  // a reference's use with the E/M frame is withheld on every code card that lists it
+  const final = fixture(H2_FINAL);
+  const cited = { ...final, harness: { ...final.harness, participants: final.harness.participants.map(row => (row.name === 'astra'
+    ? { ...row, references: { ...row.references, used: [...row.references.used, { ref: 'status-A', use: shapes[0], retrieved: false }] } } : row)) } };
+  for (const code of ['45385', '45380']) {
+    const card = codeCardOf(render(cited), code);
+    assert.equal(card.includes('medically appropriate history'), false, code);
+    assert.ok(card.includes(`Its use: “${app.escapeHtml(app.DESCRIPTOR_WITHHELD)}”`), code);
+  }
+  // (b) a position's quote is its first located quote, an exact slice of the document: shown as the document's text
+  const quote = 'Polyp(s) in the sigmoid colon were removed with a hot snare.';
+  const html = app.participantPositions({ code: '45385', participant_positions: { fable: { position: 'proposed', detail: 'Fable proposed this code with evidence located in the document.', quote } } });
+  assert.ok(html.includes(`<p class="harness-note">Fable proposed it: Fable proposed this code with evidence located in the document. — “${app.escapeHtml(quote)}”</p>`), html);
+  assert.equal(html.includes('withheld'), false);
+});
+
+test('R2-WORDING FG2-5: a code card the serializer\'s fixture draws states the PTP limit exactly once', () => {
+  const final = fixture(H2_FINAL);
+  const html = render(final);
+  const cards = final.assessment.proposals.filter(p => p.bucket === 'selected');
+  assert.ok(cards.length >= 2);
+  for (const proposal of cards) {
+    assert.ok(proposal.reference_check.detail.endsWith('NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified.'), proposal.code);
+    const line = /<li><b>CMS reference checks:<\/b> ([^<]*)<\/li>/.exec(codeCardOf(html, proposal.code))[1];
+    assert.equal(count(line, 'procedure-to-procedure'), 1, line);
+  }
+  // a check served without that sentence (or with none) still says it, once
+  for (const check of [{ state: 'passed', detail: 'Present in the CMS fee schedule file: passed.' }, { state: 'not_verified' }, null]) {
+    const line = app.codeStatusLines({ proposed_by: ['corti'], reference_check: check });
+    assert.equal(count(line, 'procedure-to-procedure'), 1, JSON.stringify(check));
+  }
 });
