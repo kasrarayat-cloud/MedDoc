@@ -1894,3 +1894,33 @@ test('older payloads draw exactly as they did before harness@2: every review tab
   const trace = fixture(HARNESS_TRACE);
   assert.equal(sha(app.traceView(trace, trace.encounter.id)), '40ec4c58e45d6275e9714bb44ec02ebb83e28611d68b7d8671a04bdefbb2f5de');
 });
+
+test('a Corti-only encounter served with harness@2\'s empty fields draws exactly as the same payload without them (I1)', () => {
+  // the additions the API serves when no model participant is configured (API.md: phase 0, {} and [] everywhere)
+  for (const name of [HARNESS_READY, HARNESS_DEGRADED, 'encounter-processing.json', 'encounter-ready.json']) {
+    const doc = fixture(name);
+    const empty = { retrieved: [], used: [] };
+    const served = { ...doc, permissions: { ...doc.permissions, can_confirm: doc.permissions?.can_review === true },
+      ...(doc.harness ? { harness: { ...doc.harness, phase: 0, participants: doc.harness.participants.map(row => ({ ...row, peer: {}, references: empty, peer_references: empty })) } } : {}),
+      clarifications: (doc.clarifications || []).map(item => ({ ...item, candidates: [], confirmation: null })), confirmations: [],
+      assessment: doc.assessment && { ...doc.assessment, proposals: doc.assessment.proposals.map(p => ({ ...p, phases: {}, confirmed: [] })) } };
+    for (const tab of ['codes', 'checks', 'timeline']) assert.equal(render(served, tab), render(doc, tab), `${name} ${tab}`);
+  }
+});
+
+test('a reference or a tool a participant names itself is withheld where it reads like a CPT descriptor', () => {
+  const final = fixture(H2_FINAL);
+  const cited = { ...final, harness: { ...final.harness, participants: final.harness.participants.map(row => (row.name === 'astra'
+    ? { ...row, references: { ...row.references, used: [...row.references.used, { ref: DESCRIPTOR, use: 'Its reason.', retrieved: false }] } } : row)) } };
+  const card = codeCardOf(render(cited), '45385');
+  assert.equal(card.includes('lesion(s)'), false);
+  assert.ok(card.includes(`<li><b>Astra · first reading:</b> ${app.escapeHtml(app.DESCRIPTOR_WITHHELD)} — cited, not retrieved`), card);
+  const trace = fixture(H2_TRACE);
+  const astra = trace.participants[1];
+  const [first] = astra.runs;
+  const named = { ...first, reading: { ...first.reading, references_used: [{ ref: DESCRIPTOR, use: '', retrieved: false }] },
+    exchanges: [{ ...first.exchanges[0], tool_calls: [{ ...first.exchanges[0].tool_calls[0], tool: DESCRIPTOR }] }] };
+  const html = app.traceView({ ...trace, participants: [{ ...astra, runs: [named] }] }, trace.encounter.id);
+  assert.equal(html.includes('lesion(s)'), false);
+  assert.ok(html.includes(`<li><b>${app.escapeHtml(app.DESCRIPTOR_WITHHELD)} — cited, not retrieved</b></li>`) && html.includes(`<li><b>${app.escapeHtml(app.DESCRIPTOR_WITHHELD)} (call_1_1)</b>`));
+});

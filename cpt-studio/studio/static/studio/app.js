@@ -966,8 +966,10 @@ function referenceLists(proposal, doc) {
       }
       for (const item of objects(refs.used).filter(entry => refConcerns(entry.ref, proposal.code))) {
         const checked = item.retrieved === true ? 'retrieved by its own tool calls in this run' : 'cited, not retrieved: its own tool calls in this run never returned it';
+        // a cited reference is the participant's own text (a ref it was never given reads as written): withheld where it
+        // reads like a CPT descriptor
         const use = participantText(item.use);
-        used.push(`<li><b>${escapeHtml(who)}:</b> ${escapeHtml(`${textValue(item.ref)} — ${checked}`)}${use ? `<small class="check-source">${escapeHtml(`Its use: “${use}”`)}</small>` : ''}</li>`);
+        used.push(`<li><b>${escapeHtml(who)}:</b> ${escapeHtml(`${participantText(item.ref) || 'a reference not named'} — ${checked}`)}${use ? `<small class="check-source">${escapeHtml(`Its use: “${use}”`)}</small>` : ''}</li>`);
       }
     }
   }
@@ -1736,7 +1738,7 @@ function traceCode(code, after = '') {
 function traceReferencesUsed(items) {
   return objects(items).map(item => {
     const use = participantText(item.use);
-    return `<li><b>${escapeHtml(`${textValue(item.ref) || 'Reference not named'} — ${item.retrieved === true ? 'retrieved by its own tool calls in this run' : 'cited, not retrieved'}`)}</b>${use ? `<br>${escapeHtml(`Its use: ${use}`)}` : ''}</li>`;
+    return `<li><b>${escapeHtml(`${participantText(item.ref) || 'Reference not named'} — ${item.retrieved === true ? 'retrieved by its own tool calls in this run' : 'cited, not retrieved'}`)}</b>${use ? `<br>${escapeHtml(`Its use: ${use}`)}` : ''}</li>`;
   });
 }
 
@@ -1783,7 +1785,8 @@ function traceExchanges(run) {
     const calls = objects(exchange.tool_calls).map(call => {
       const written = JSON.stringify(call.arguments ?? null);
       const where = [textValue(call.result_sha256) ? `result sha256 ${call.result_sha256}` : 'no result sha256 recorded', formatTimestamp(call.executed_at) ? `executed ${formatTimestamp(call.executed_at)}` : ''].filter(Boolean).join(' · ');
-      return `<li><b>${escapeHtml(`${textValue(call.tool) || 'Tool not named'}${textValue(call.call_id) ? ` (${call.call_id})` : ''}`)}</b><br>${escapeHtml(`Arguments: ${DESCRIPTOR_LIKE.test(written) ? DESCRIPTOR_WITHHELD : written}`)}<br>${escapeHtml(`Refs returned: ${strings(call.refs).join(', ') || 'none'}`)}<small class="check-source">${escapeHtml(where)}</small></li>`;
+      // the tool as the participant named it: a model can name one CPT Studio does not have
+      return `<li><b>${escapeHtml(`${participantText(call.tool) || 'Tool not named'}${textValue(call.call_id) ? ` (${call.call_id})` : ''}`)}</b><br>${escapeHtml(`Arguments: ${DESCRIPTOR_LIKE.test(written) ? DESCRIPTOR_WITHHELD : written}`)}<br>${escapeHtml(`Refs returned: ${strings(call.refs).join(', ') || 'none'}`)}<small class="check-source">${escapeHtml(where)}</small></li>`;
     });
     return `<div class="trace-exchange">${fields}${calls.length ? `<ul class="trace-list">${calls.join('')}</ul>` : '<p class="harness-note">No tool call in this exchange.</p>'}</div>`;
   });
