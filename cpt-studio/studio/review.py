@@ -1764,10 +1764,11 @@ def on_current_context(assessment):
 # - a candidate's value is CPT Studio's own inference from a reading (an E/M basis its own reader read in the passage,
 # which also chose the passages shown; a service's status or extent paired with every quote of that service) - so while
 # confirmations are not offered no candidate is served at all (assessment_candidates), and located_passages and its
-# fixed why are removed. A participant's own answers stay in its peer review, as its own words.
-CONFIRMATIONS_NOT_OFFERED = ('This release offers no reviewer confirmation of a candidate answer, so nothing was '
-                             'recorded; a question is answered with an addendum, or a date of service in the encounter '
-                             'context.')
+# fixed why are removed. A participant's own answers stay in its peer review, as its own words. And the refusal says
+# only what happened (d7-3): "a question is answered with an addendum, or a date of service in the encounter context"
+# was false for a documented conflict or an included base code, which an addendum leaves open, and for a member's
+# setting, which only the encounter context corrects - no sentence names a way a question is settled.
+CONFIRMATIONS_NOT_OFFERED = 'This release offers no reviewer confirmation, so nothing was recorded.'
 
 
 def confirmations_offered():

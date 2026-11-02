@@ -1219,7 +1219,9 @@ test('the reference validation, clarification and final status rows say what the
   assert.ok(unread.includes('No question was asked: the proposals were not checked for this revision.'));
   assert.equal(unread.includes('Waiting'), false);
   const asked = harnessRow(render({ ...ready, harness: { ...ready.harness, clarification: { open: 2 } } }), 'clarification');
-  assert.ok(asked.includes('<span class="status amber">2 open</span>') && asked.includes('2 questions need an answer before the reviewed report'));
+  // moved by refutation round 4 (d7-3, HARNESS.md 12.10 as amended): the row says what each open question holds by the
+  // readiness rules; where the questions served do not account for the API's count (none is served here) only the count
+  assert.ok(asked.includes('<span class="status amber">2 open</span>') && asked.includes('<p>2 questions are open.</p>'), asked);
   assert.ok(asked.includes('A participant&#x27;s own questions never hold the reviewed report.'));
   // final: the list's own label and tone, approval kept apart from agreement
   const final = harnessRow(html, 'final');
@@ -1654,7 +1656,11 @@ test('each open question lists its candidate answers: the value, the passage quo
   assert.ok(html.indexOf(`data-question="${clarificationOf(doc, 'service_date').id}"`) < html.indexOf('<article class="code-card"'));
   assert.ok(codeCardOf(html, '45385').includes(`data-question="${extent.id}"`) && codeCardOf(html, '45380').includes(`data-question="${clarificationOf(doc, 'performed_status').id}"`));
   // the clarification row says a verified candidate can answer a question; the first assessment's questions have none
-  assert.ok(harnessRow(html, 'clarification').includes('each is answered with an addendum (a date of service also in the encounter context), or by a reviewer confirming a verified candidate answer.'));
+  // (moved by refutation round 4, d7-3: the row names no way a question is settled on the dormant path either, and says
+  // what each open question holds by the readiness rules)
+  const confirmRow = harnessRow(html, 'clarification');
+  assert.ok(confirmRow.includes('<p>One question about the encounter is open; it holds the reviewed report.</p><p>3 questions about codes are open; each holds its code, which can still be rejected.</p>'), confirmRow);
+  assert.equal(/addendum|confirming|verified/i.test(confirmRow), false, confirmRow);
   const peer = render(fixture(H2_PEER));
   assert.equal(peer.includes('candidate-answers') || peer.includes('confirm-finding'), false);
   // a passage that is not at its position in the current revision is flagged, never passed off as found or confirmable
@@ -2386,10 +2392,11 @@ test('R3-CONF D7: each candidate is drawn as the participants\' located passage 
   for (const item of doc.clarifications) assert.equal(r3Block(html, item.id), '', item.fact);
   assert.equal(html.includes('candidate-answers') || html.includes('Their answer') || html.includes('located passages'), false);
   assert.equal(/readers read|consistency check|exact slice of the document/i.test(r3Text(html)), false);
-  // nowhere on the page: no Confirm action, and the clarification row offers only an addendum
+  // nowhere on the page: no Confirm action, and the clarification row offers only an addendum (moved by refutation round
+  // 4, d7-3: it names no way a question is settled, an addendum included, and says what each open question holds)
   assert.equal(html.includes('confirm-finding') || html.includes('<span class="status green">Verified</span>'), false);
   const row = harnessRow(html, 'clarification');
-  assert.ok(row.includes('each is answered with an addendum (a date of service also in the encounter context).') && !row.includes('confirming'), row);
+  assert.ok(row.includes('<p>One question about the encounter is open; it holds the reviewed report.</p>') && !/addendum|confirming/.test(row), row);
   // the questions still sit where they did: the date with the encounter, the others on their codes' cards (moved by
   // refutation round 4: by the addendum action each carries, as no candidate block is drawn)
   const date = clarificationOf(doc, 'service_date');
@@ -2561,4 +2568,30 @@ test('R4-CONF D8: a payload served to a member who may not confirm draws no cand
   for (const served of [{ ...item, confirmation }, { ...item, candidates: [claimed] }, { id: XSS, candidates: [{ ...claimed, id: XSS, value: XSS }], confirmation: null }]) {
     assert.equal(app.candidateAnswers(served, viewer), '');
   }
+});
+
+test('R4-CONF d7-3: the Clarification row says what each open question holds, by the readiness rules, and names no way it is settled', () => {
+  const doc = fixture(H2_FINAL);
+  const row = harnessRow(render(doc), 'clarification');
+  assert.ok(row.includes('<span class="status amber">4 open</span>'), row);
+  assert.deepEqual(r4Lines(row), ['One question about the encounter is open; it holds the reviewed report.',
+    '3 questions about codes are open; each holds its code, which can still be rejected.']);
+  assert.ok(row.includes('A participant&#x27;s own questions never hold the reviewed report.'));
+  for (const words of ['addendum', 'encounter context', 'answered', 'confirm', 'needs an answer', 'verified']) assert.equal(textOf(row).toLowerCase().includes(words), false, words);
+  // the dormant path's row says the same of the same questions: no confirmation is named as a way to settle one either
+  assert.deepEqual(r4Lines(harnessRow(render(fixture(H2_DORMANT)), 'clarification')), r4Lines(row));
+  // each kind alone and together, one and several; a count the page cannot tell apart claims nothing it cannot see
+  const encounter = { scope: 'encounter', proposal_id: null, fact: 'service_date' };
+  const code = { scope: 'proposal', proposal_id: 'e2b00000-0000-4000-8000-0000000000ff', fact: 'extent' };
+  const service = { scope: 'service', proposal_id: null, fact: 'extent' };
+  const asked = (items, open = items.length) => r4Lines(harnessRow(render({ ...doc, harness: { ...doc.harness, clarification: { open } },
+    clarifications: items.map((item, index) => ({ ...item, id: `e2b00000-0000-4000-8000-0000000001${String(index).padStart(2, '0')}`, family: '', question: 'Synthetic question?', reason: '', state: 'open', candidates: [], confirmation: null })) }), 'clarification'));
+  assert.deepEqual(asked([code]), ['One question about a code is open; it holds that code, which can still be rejected.']);
+  assert.deepEqual(asked([encounter, encounter]), ['2 questions about the encounter are open; each holds the reviewed report.']);
+  assert.deepEqual(asked([service]), ['One question about a documented service no code carries is open; it holds neither a code nor the reviewed report.']);
+  assert.deepEqual(asked([service, code, service]), ['One question about a code is open; it holds that code, which can still be rejected.',
+    '2 questions about documented services no code carries are open; none holds a code or the reviewed report.']);
+  assert.deepEqual(asked([], 2), ['2 questions are open.']);
+  assert.deepEqual(asked([{ ...service, scope: 'another scope' }]), ['One question is open.']);
+  assert.deepEqual(asked([encounter, code], 3), ['3 questions are open.']);
 });

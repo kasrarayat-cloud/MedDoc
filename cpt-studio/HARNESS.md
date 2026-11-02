@@ -1174,6 +1174,22 @@ seen. Tests: `tests/test_harness2_r4_conf.py` and the `// refutation round 4, R4
 `tests/frontend/app.test.cjs`; round 3's pins (`tests/test_harness2_r3_conf.py`, `tests/test_frontend.py`, the `R3-CONF`
 block, `ops/verification/test_verify_browser.cjs`) are moved to what is now served, each saying so.
 
+**Amended after refutation round 4 (d7-3): no sentence names a way a question is settled.** "A question is answered with
+an addendum, or a date of service in the encounter context" (the refusal, the located-passage note, and the
+Clarification row's "each is answered with an addendum (a date of service also in the encounter context)") is false for
+a documented conflict - both cannulation outcomes documented, a biopsy taken beside "No biopsies were taken" - and for
+an included base code, each of which the next revision asked again after an addendum in the round's measurements, and
+for a member's setting that conflicts with the document, which only the encounter context corrects. The refusal now says
+only what happened: "This release offers no reviewer confirmation, so nothing was recorded."
+(`review.CONFIRMATIONS_NOT_OFFERED`, also `review.confirm_finding`'s and `jobs.reassess_after_confirmation`'s, and the
+dev preview server's). The Clarification row says what the readiness rules make true (`review.readiness`,
+`review._review_state`): an open question about the encounter holds the reviewed report; one about a code holds that
+code - it cannot be approved while the question is open - which can still be rejected, and rejecting it lifts that
+code's hold on the reviewed report; one about a documented service no code carries holds neither. Where the questions
+served do not account for the API's count, the row says only the count. The dormant path's row no longer adds "or by a
+reviewer confirming a verified candidate answer" either. The superseded sentences above are kept so the change can be
+seen.
+
 **What stays, dormant, behind the setting.** The candidates' checks (`studio.candidates`, `reconcile.status_stated`),
 the engine's `_Confirmations`, `jobs.reassess_after_confirmation` and its key, a peer request's D4 confirmation reasons
 (`jobs.PEER_CONFIRMED_REASON`, `_peer_reasons`), the confirm endpoint's checks after the refusal, the reports' CONFIRMED

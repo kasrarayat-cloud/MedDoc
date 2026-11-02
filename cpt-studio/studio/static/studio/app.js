@@ -1651,7 +1651,13 @@ function referenceRow(reference) {
 }
 
 // Questions are asked only by CPT Studio's own readers, where the documentation leaves open something that changes the
-// coding; a participant's own questions never hold the reviewed report (HARNESS.md 5).
+// coding; a participant's own questions never hold the reviewed report (HARNESS.md 5). The row says what an open
+// question holds by the readiness rules (review.readiness, review._review_state; refutation round 4, d7-3, HARNESS.md
+// 12.10 as amended), and names no way it is settled - an addendum does not settle a documented conflict or an included
+// base code, and a member's own value is corrected in the encounter context: one about the encounter holds the reviewed
+// report; one about a code holds that code (it cannot be approved while the question is open), which can still be
+// rejected; one about a documented service no code carries holds neither. Where the questions served do not account for
+// the API's count, it says only the count.
 function clarificationRow(doc) {
   const served = doc.harness?.clarification?.open;
   const open = Number.isInteger(served) && served >= 0 ? served : openClarifications(doc).length;
@@ -1660,9 +1666,18 @@ function clarificationRow(doc) {
   // stopped, the outcome is unknown), and nothing asks a question until one is.
   if (!doc.assessment && doc.pipeline?.busy) return harnessRow('clarification', 'waiting', [STAGE_LOOKS.queued, 'Waiting'], 'Clarification', ['Known once the proposals are checked: a question is asked only where the documentation leaves open something that changes the coding.']);
   if (!doc.assessment) return harnessRow('clarification', 'not_run', [['muted', 'info'], 'Not asked'], 'Clarification', ['No question was asked: the proposals were not checked for this revision.']);
-  // harness@2: a question with a verified candidate can also be answered by a reviewer's confirmation (HARNESS.md 11.3)
-  const confirmable = openClarifications(doc).some(item => objects(item.candidates).some(candidate => candidate.verified === true));
-  if (open > 0) return harnessRow('clarification', 'open', [['pending', 'help'], `${open} open`], 'Clarification', [`${open === 1 ? 'One question needs' : `${open} questions need`} an answer before the reviewed report; each is answered with an addendum (a date of service also in the encounter context)${confirmable ? ', or by a reviewer confirming a verified candidate answer' : ''}.`], [note]);
+  if (open > 0) {
+    const asked = openClarifications(doc);
+    const encounter = asked.filter(item => item.scope === 'encounter' && !item.proposal_id).length;
+    const codes = asked.filter(item => item.proposal_id).length;
+    const services = asked.filter(item => item.scope === 'service' && !item.proposal_id).length;
+    const lines = encounter + codes + services !== open ? [`${open === 1 ? 'One question is' : `${open} questions are`} open.`] : [
+      encounter === 1 ? 'One question about the encounter is open; it holds the reviewed report.' : encounter ? `${encounter} questions about the encounter are open; each holds the reviewed report.` : '',
+      codes === 1 ? 'One question about a code is open; it holds that code, which can still be rejected.' : codes ? `${codes} questions about codes are open; each holds its code, which can still be rejected.` : '',
+      services === 1 ? 'One question about a documented service no code carries is open; it holds neither a code nor the reviewed report.' : services ? `${services} questions about documented services no code carries are open; none holds a code or the reviewed report.` : '',
+    ];
+    return harnessRow('clarification', 'open', [['pending', 'help'], `${open} open`], 'Clarification', lines, [note]);
+  }
   return harnessRow('clarification', 'none', [STAGE_LOOKS.succeeded, 'None open'], 'Clarification', ['No question is open for this revision.'], [note]);
 }
 

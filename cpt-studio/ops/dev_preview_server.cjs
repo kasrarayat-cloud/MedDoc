@@ -205,9 +205,9 @@ async function handleApi(req, res, url) {
 // release offers no confirmation, so a fixture that does not allow one (permissions.can_confirm) is refused as the server
 // refuses it (409, review.CONFIRMATIONS_NOT_OFFERED), before anything else is read. A fixture of the dormant path that does
 // allow one: an open question of the document not confirmed yet, one of its VERIFIED candidates, and the attestation
-// exactly the candidate's served one. The confirmation is then shown on the question; nothing is approved.
-const CONFIRMATIONS_NOT_OFFERED = 'This release offers no reviewer confirmation of a candidate answer, so nothing was '
-  + 'recorded; a question is answered with an addendum, or a date of service in the encounter context.';
+// exactly the candidate's served one. The confirmation is then shown on the question; nothing is approved. The refusal
+// says only what happened, and names no way a question is settled (refutation round 4, d7-3).
+const CONFIRMATIONS_NOT_OFFERED = 'This release offers no reviewer confirmation, so nothing was recorded.';
 function confirmFinding(req, res, id, questionId, body) {
   const doc = encounterFor(id, false);
   if (!doc) return apiError(res, 404, 'Not found.');
