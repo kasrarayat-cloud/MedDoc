@@ -1524,12 +1524,15 @@ def _cpt_studio_reading(first):
     """CPT Studio's rule-based reading after assess #1 (HARNESS.md 12.4): its open clarifications, as the questions a
     peer answers by id, and its held and excluded proposals, each with the details of its checks that did not pass. The
     peer instructions label it as a reading that may be wrong. Each question is described by review.question_identity,
-    the one function the API's candidates match a peer answer back to the final assessment's question by (12.5)."""
+    the one function the API's candidates match a peer answer back to the final assessment's question by (12.5), and
+    named by its stable id (_question_ids)."""
+    items = list(first.clarifications.filter(state=models.Clarification.OPEN).select_related('proposal')
+                 .order_by('created_at', 'pk'))
+    named = _question_ids(first, items)
     questions = []
-    for item in (first.clarifications.filter(state=models.Clarification.OPEN).select_related('proposal')
-                 .order_by('created_at', 'pk')):
+    for item in items:
         scope, family, fact, proposal_key, _ = review.question_identity(item)
-        questions.append({'question_id': str(item.pk), 'scope': scope, 'fact': fact, 'family': family,
+        questions.append({'question_id': named[item.pk], 'scope': scope, 'fact': fact, 'family': family,
                           'proposal_key': proposal_key, 'question': item.question, 'reason': item.reason})
 
     def proposals(status):
@@ -1539,6 +1542,28 @@ def _cpt_studio_reading(first):
                 for p in first.proposals.filter(status=status).order_by('position')]
     return {'open_questions': questions, 'held': proposals(models.Proposal.NEEDS_CLARIFICATION),
             'excluded': proposals(models.Proposal.STATUS_EXCLUDED)}
+
+
+def _question_ids(first, items):
+    """{clarification pk: the id a peer request names it by} for ``items``, open questions of assess #1 ``first``
+    (pipeline Q2: assess #1's own row ids changed with every new assess #1, so an identical question made a new, paid
+    peer request each time). A question is named by the first clarification of the revision that asks the same thing -
+    the same review.question_identity - so the same question has the same id however many assessments ask it, and the
+    identical peer request is reused, never resent. That id is a clarification of this encounter and revision, which is
+    how the review package resolves an answer's id (review.peer_answers, the reports) before it matches the question
+    through that same identity. Fail closed: a question whose identity two open questions here share keeps its own
+    id."""
+    identities = {item.pk: review.question_identity(item) for item in items}
+    seen = list(identities.values())
+    unique = {identity for identity in seen if seen.count(identity) == 1}
+    earliest = {}
+    for row in (models.Clarification.objects.filter(encounter_id=first.encounter_id,
+                                                    assessment__revision_id=first.revision_id)
+                .select_related('proposal').order_by('created_at', 'pk')):
+        identity = review.question_identity(row)
+        if identity in unique:
+            earliest.setdefault(identity, row.pk)
+    return {pk: str(earliest.get(identity, pk) if identity in unique else pk) for pk, identity in identities.items()}
 
 
 def _first_located(quotes):

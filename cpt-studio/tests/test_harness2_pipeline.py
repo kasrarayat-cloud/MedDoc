@@ -18,7 +18,7 @@ from unittest import mock
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
-from studio import audit, jobs, models
+from studio import audit, jobs, models, review
 from studio.participants import anthropic_fable, loop, openai_astra, prompt
 from studio.participants.http import describe
 from studio.participants.replay import ReplayParticipant
@@ -938,6 +938,42 @@ class PeerRequestTests(ColonCase):
         self.assertEqual(self.proposal(final, 'sel:1').status, 'needs_clarification')  # another question: untouched
 
 
+class StableQuestionTests(ColonCase):
+    """Pipeline Q2 (cost; refutation round 1's plan): a peer request names each open question by an id that is stable
+    for the revision - the first clarification of the revision that asks the same thing, through the one identity
+    function (review.question_identity) - never by the row of the assess #1 that happens to ask it. So a new assess #1
+    asking the same questions makes the identical peer request, whose retained answer is reused, never resent; and the
+    review package still matches each answer to the final assessment's question through that same function."""
+
+    def test_an_identical_question_asked_again_is_reused_never_resent(self):
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        sent = (self.sent('astra', 'peer'), self.sent('fable', 'peer'))
+        self.assertEqual(sent, (1, 1))
+        response = self.post(f'/api/encounters/{encounter_id}/context', {'billing_context': 'professional'})
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+        first, _, again, final = self.assessments(encounter_id)
+        self.assertEqual([jobs.assessment_phase(a) for a in (again, final)], [1, 2])
+        # the new assess #1 raised rows of its own that ask the same two questions ...
+        asked = {c.pk for c in again.clarifications.all()}
+        self.assertEqual(len(asked), 2)
+        for name in ('astra', 'fable'):
+            runs = self.runs_of(encounter_id, name, 'peer_review')
+            self.assertEqual([(r.sent, r.reused_from_id) for r in runs], [(True, None), (False, runs[0].pk)])
+            self.assertEqual(runs[1].request_sha256, runs[0].request_sha256)  # ... and the identical request
+            shown = [q['question_id'] for q in open_questions(name, runs[1].request_body)]
+            self.assertEqual(shown, [str(c.pk) for c in first.clarifications.order_by('created_at', 'pk')])
+            self.assertFalse(set(shown) & {str(pk) for pk in asked})
+        self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), sent)  # nothing was sent again
+        # the review package matches the reused answer to the final assessment's own question, as before
+        readings, reviews = review.frozen_inputs(final)
+        questions = list(final.clarifications.filter(state=models.Clarification.OPEN).select_related('proposal'))
+        matched = review.peer_answers(final, questions, reviews)
+        self.assertEqual([(q.proposal.key, q.fact) for q in questions if matched[q.pk]], [('sel:0', 'extent')])
+        self.assertTrue(review.assessment_candidates(final))
+
+
 # --- the re-assessment after a confirmation (HARNESS.md 12.1, 12.5) ---------------------------------------------------
 
 class ReassessTests(ColonCase):
@@ -1367,18 +1403,24 @@ class PeerRunLookupTests(Harness2Case):
 
 
 class UpgradeChainTests(ColonCase):
-    def test_the_upgrade_s_chain_carries_its_mark_to_the_peer_stages(self):
-        encounter_id = self.create(TWO_EXTENTS)
-        drain()
-        sent = (len(self.corti.requests), self.sent('astra', 'first'), self.sent('fable', 'first'),
-                self.sent('astra', 'peer'), self.sent('fable', 'peer'))
+    def upgrade(self, encounter_id):
         encounter = self.encounter(encounter_id)
         jobs.enqueue(models.Job.PREDICT, encounter=encounter, revision=encounter.current_revision,
                      context=encounter.current_context, key=jobs._upgrade_predict_key(encounter.current_context),
                      requested_by=self.reviewer)
         drain()
+
+    def test_the_upgrade_s_chain_carries_its_mark_to_the_peer_stages(self):
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        # a reviewer's confirmation answers sel:0's question, so the next assess #1 asks only sel:1's: a new peer
+        # request
+        self.confirm(encounter_id, self.encounter(encounter_id).current_assessment, 'sel:0')
+        sent = (len(self.corti.requests), self.sent('astra', 'first'), self.sent('fable', 'first'),
+                self.sent('astra', 'peer'), self.sent('fable', 'peer'))
+        self.upgrade(encounter_id)
         chain = self.jobs_of(encounter_id)[-5:]
-        # every first answer is retained and reused; the new assess #1 asks new questions, so the peer request is new
+        # every first answer is retained and reused; the new assess #1's peer request is new, so it stops there
         self.assertEqual([(j.kind, j.state) for j in chain], [('predict', 'succeeded'), ('astra', 'succeeded'),
                                                               ('fable', 'succeeded'), ('assess', 'succeeded'),
                                                               ('astra_peer', 'cancelled')])
@@ -1389,6 +1431,23 @@ class UpgradeChainTests(ColonCase):
         self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
         drain()
         self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (sent[3] + 1, sent[4] + 1))
+
+    def test_an_upgrade_s_chain_asking_the_same_questions_reuses_the_peer_reviews_and_sends_nothing(self):
+        # pipeline Q2: the questions keep their ids, so the upgrade's peer requests are the earlier ones - reused,
+        # with nothing to stop for, as its phase-1 stages reuse their answers
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        sent = (len(self.corti.requests), self.sent('astra', 'first'), self.sent('fable', 'first'),
+                self.sent('astra', 'peer'), self.sent('fable', 'peer'))
+        self.upgrade(encounter_id)
+        chain = self.jobs_of(encounter_id)[-7:]
+        self.assertEqual([(j.kind, j.state) for j in chain],
+                         [(kind, 'succeeded') for kind in ('predict', 'astra', 'fable', 'assess', 'astra_peer',
+                                                           'fable_peer', 'assess')])
+        self.assertEqual([j.result.get('state') for j in chain if j.kind in models.Job.PEER_KINDS],
+                         ['reused', 'reused'])
+        self.assertEqual((len(self.corti.requests), self.sent('astra', 'first'), self.sent('fable', 'first'),
+                          self.sent('astra', 'peer'), self.sent('fable', 'peer')), sent)
 
 
 # --- I1: no model participant configured ------------------------------------------------------------------------------
