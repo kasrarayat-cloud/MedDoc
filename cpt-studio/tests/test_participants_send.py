@@ -9,11 +9,15 @@ import base64
 import copy
 import hashlib
 import json
+import re
 import socket
 import ssl
+import threading
+import time
 from unittest import mock
 
 import requests
+from django.test import SimpleTestCase
 from requests.adapters import HTTPAdapter
 from urllib3.exceptions import ConnectTimeoutError, MaxRetryError, NewConnectionError, ProtocolError, ReadTimeoutError
 
@@ -597,3 +601,87 @@ class SessionTests(OfflineTestCase):
         self.assertEqual(self.network_attempts, ['requests.Session', 'requests.Session', 'socket.getaddrinfo',
                                                  'socket.create_connection', 'socket.connect'])
         self.network_attempts.clear()
+
+
+class TrickleTests(SimpleTestCase):
+    """HTTP-TRICKLE (found by the part B integration agent): a response that trickles in - a byte at a time, each well
+    inside the read timeout - never holds an exchange past its deadline: every read is bounded by the time it has left,
+    the status line and headers as much as the body. Demonstrated against a loopback server this test starts
+    (127.0.0.1, an ephemeral port), through the real default session; nothing else is reached."""
+
+    def serve(self, head, trickled, every=0.25):
+        """A one-connection loopback server: it reads the request, sends ``head`` at once, then ``trickled`` one byte
+        every ``every`` seconds - until it is done, the client goes away or the test ends - and then closes."""
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.bind(('127.0.0.1', 0))
+        listener.listen(1)
+        listener.settimeout(10)
+        self.addCleanup(listener.close)
+        stop = threading.Event()
+
+        def run():
+            try:
+                conn, _ = listener.accept()
+            except OSError:
+                return
+            with conn:
+                conn.settimeout(10)
+                data = b''
+                while b'\r\n\r\n' not in data:
+                    data += conn.recv(65536)
+                head_part, _, rest = data.partition(b'\r\n\r\n')
+                length = int(re.search(rb'(?i)content-length: *([0-9]+)', head_part).group(1))
+                while len(rest) < length:
+                    rest += conn.recv(65536)
+                try:
+                    conn.sendall(head)
+                    for byte in trickled:
+                        if stop.wait(every):
+                            return
+                        conn.sendall(bytes([byte]))
+                except OSError:
+                    return  # the client went away
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join, 10)
+        self.addCleanup(stop.set)
+        return f'http://127.0.0.1:{listener.getsockname()[1]}/v1/responses'
+
+    def post(self, url, deadline_s=1.0):
+        started = time.monotonic()
+        exchange = participants_http.post(
+            openai_astra.VENDOR, participants_http.default_session, url, b'{}', {'Content-Type': 'application/json'},
+            deadline=time.monotonic() + deadline_s, connect_timeout=1, read_timeout=0.75,
+            max_response_bytes=1024 * 1024, requested_model=openai_astra.MODEL)
+        return exchange, time.monotonic() - started
+
+    BODY = json.dumps({'id': 'resp_synthetic_trickle', 'model': 'gpt-6-astra', 'padding': 'x' * 30}).encode()
+
+    def assertCutOffAtTheDeadline(self, exchange, elapsed):
+        self.assertLess(elapsed, 2.5)  # the deadline is 1 s; the trickle alone takes about 20 s
+        self.assertEqual((exchange.outcome, exchange.sent, exchange.response_bytes), ('unknown', True, None))
+        self.assertIn('no complete response was read (the deadline passed while the response was being read)',
+                      exchange.error)
+
+    def test_a_body_that_trickles_is_cut_off_at_the_deadline(self):
+        head = b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n' % len(self.BODY)
+        self.assertCutOffAtTheDeadline(*self.post(self.serve(head, self.BODY)))
+
+    def test_headers_that_trickle_are_cut_off_at_the_deadline(self):
+        url = self.serve(b'HTTP/1.1 200 OK\r\n',
+                         b'X-Synthetic-Padding: ' + b'a' * 60 + b'\r\nContent-Length: 0\r\n\r\n')
+        with self.assertLogs('urllib3.connection', level='WARNING') as logged:  # cut inside a header line
+            self.assertCutOffAtTheDeadline(*self.post(url))
+        self.assertIn('Failed to parse headers', logged.output[0])
+
+    def test_a_body_read_until_close_and_cut_off_is_never_taken_for_a_whole_answer(self):
+        # no length: the body ends when the connection does, so the deadline's cut must never read as the end of it
+        head = b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n'
+        self.assertCutOffAtTheDeadline(*self.post(self.serve(head, self.BODY)))
+
+    def test_an_answer_that_arrives_in_time_is_kept_exactly(self):  # control: nothing is cut that arrives in time
+        head = b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n' % len(self.BODY)
+        exchange, elapsed = self.post(self.serve(head, self.BODY, every=0), deadline_s=5.0)
+        self.assertLess(elapsed, 2.5)
+        self.assertEqual((exchange.outcome, exchange.http_status, exchange.response_bytes, exchange.response_id),
+                         ('succeeded', 200, self.BODY, 'resp_synthetic_trickle'))
