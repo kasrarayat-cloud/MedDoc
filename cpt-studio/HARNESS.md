@@ -882,15 +882,16 @@ and 12.1-12.6 differ, this list describes the code; the earlier text is kept so 
     that met an ended database session let Django open another one (`transaction.atomic` closes a connection whose
     rollback fails, then reconnects), which never took the installation-wide lock, and the loop sent its next exchange
     while any other session could take the lock and send (the installer's access check, a second worker). The check the
-    loop asks before it goes on after an exchange (`loop._halt`) now also asks, after the member's Stop and last, so
-    nothing touches the database between it and the next send, whether this database session holds the lock
-    (`jobs._holds_provider_lock`, from PostgreSQL's `pg_locks`). When it does not, nothing more is sent: the run is
-    recorded failed and sent with the exchanges sent so far and CPT Studio's own sentence
-    (`jobs.LOOP_LOCK_LOST_MESSAGE`), never as a member's Stop, and the stage ends as a failed participant's does (I10;
-    the next stage takes the lock afresh). A check that fails on the ended session itself stops the loop as before, and
-    the stale sweep settles the run. What no check closes: the lock belongs to a session, so a session that ends while
-    an exchange is in flight, or between the check and the next send (or between the lock and the first send), ends
-    the lock while that exchange may still reach the vendor.
+    loop asks before it goes on after an exchange (`loop._halt`: before it answers the tool calls, and again right
+    before the next exchange is sent) now also asks, after the member's Stop, whether this database session holds the
+    lock (`jobs._holds_provider_lock`, from PostgreSQL's `pg_locks`); that question is the last thing read from the
+    database before each later exchange is sent. When it does not, nothing more is sent: the run is recorded failed and
+    sent with the exchanges sent so far and CPT Studio's own sentence (`jobs.LOOP_LOCK_LOST_MESSAGE`), never as a
+    member's Stop, and the stage ends as a failed participant's does (I10; the next stage takes the lock afresh). A
+    check that fails on the ended session itself stops the loop as before, and the stale sweep settles the run. What no
+    check closes: the lock belongs to a session, so a session that ends while an exchange is in flight, or between the
+    check and the next send (or between the lock and the first send), ends the lock while that exchange may still reach
+    the vendor.
   - **Known limit (refutation round 3, sends-2).** A worker that dies after the loop's final answer was recorded as it
     ended and before the run's outcome was (`jobs._finish_loop`; a window of milliseconds) leaves a run the stale sweep
     settles as unknown, "The worker stopped while the request was in flight.", beside that recorded answer; when the

@@ -1024,15 +1024,16 @@ def _send_loop(provider, request, run, original_bytes, execute_tool, should_stop
     refutation round 2, sends-r2-4: they were written only once the whole loop had ended, so a worker that died
     mid-loop - SIGKILL, an OOM kill, a host reset - left nothing of exchanges that had been answered and paid for).
 
-    The check the loop asks before it goes on after an exchange also asks, after the member's Stop and last of all, so
-    nothing touches the database between it and the next send, whether this database session still holds the provider
-    lock _send took (_holds_provider_lock; refutation round 3, sends-1, I8). An exchange's record that met an ended
-    session let Django open another one, which never took the lock, and the loop sent its next exchange while any other
-    session could take the lock and send. Once the session that holds the lock is gone, the loop ends there and nothing
-    more is sent: the run has no final answer and is failed and sent with the exchanges sent so far, in CPT Studio's own
-    sentence (LOOP_LOCK_LOST_MESSAGE) - never as a member's Stop, so the stage ends as a failed participant's does
-    (I10). A check that fails on the ended session itself stops the loop as before (loop._halt), and the stale sweep
-    settles the run."""
+    The check the loop asks before it goes on after an exchange (before it answers the tool calls, and again right
+    before the next exchange is sent) also asks, after the member's Stop, whether this database session still holds
+    the provider lock _send took (_holds_provider_lock; refutation round 3, sends-1, I8): the last thing read from
+    the database before each later exchange is sent. An exchange's record that met an ended session let Django open
+    another one, which never took the lock, and the loop sent its next exchange while any other session could take
+    the lock and send. Once the session that holds the lock is gone, the loop ends there and nothing more is sent:
+    the run has no final answer and is failed and sent with the exchanges sent so far, in CPT Studio's own sentence
+    (LOOP_LOCK_LOST_MESSAGE) - never as a member's Stop, so the stage ends as a failed participant's does (I10). A
+    check that fails on the ended session itself stops the loop as before (loop._halt), and the stale sweep settles
+    the run."""
     lost = []
 
     def checked():
