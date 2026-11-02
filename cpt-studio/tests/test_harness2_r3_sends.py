@@ -69,13 +69,16 @@ def served(encounter, run):
 
 # --- sends-1: nothing more is sent once the session that holds the provider lock has ended ----------------------------
 
-def lock_free_elsewhere(other):
-    """Whether another database session can take the installation-wide provider lock now (what jobs._send and the
-    access check's _single_flight ask); released again at once."""
-    if other.try_lock():
-        other.unlock()
-        return True
-    return False
+def lock_free_elsewhere(other, wait=0.0):
+    """Whether another database session can take the installation-wide provider lock (what jobs._send and the access
+    check's _single_flight ask) now, or within ``wait`` seconds; released again at once."""
+    deadline = time.monotonic() + wait
+    while not other.try_lock():
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.05)
+    other.unlock()
+    return True
 
 
 def end_session_by_socket():
@@ -188,7 +191,7 @@ class LockedSessionTests(OfflineMixin, TransactionTestCase):
         job.refresh_from_db()
         self.assertEqual((job.state, job.error, job.result['state']), ('succeeded', '', 'failed'))
         self.assertEqual(self.kinds(encounter_id)[-1], 'fable')
-        self.assertTrue(lock_free_elsewhere(self.other))
+        self.assertTrue(lock_free_elsewhere(self.other, wait=5.0))  # the ended session's backend has exited
 
     def test_a_session_ended_while_the_tool_call_was_answered_sends_nothing_more(self):
         seen, encounter_id, job = self.loop(end_after_tools=end_session_by_socket)
