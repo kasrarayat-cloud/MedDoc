@@ -17,6 +17,7 @@ from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from studio import candidates, jobs, models, review
+from studio.gi import services as gi_services
 from studio.participants import prompt
 from studio.participants.anthropic_fable import FableParticipant
 from studio.participants.openai_astra import AstraParticipant
@@ -163,9 +164,14 @@ class Harness2Case(TestCase):
                                                'review; Corti did not propose this code.'),
                          support={'origin': 'participant', 'proposed_by': ['astra', 'fable'],
                                   'phases': {'astra': 'independent', 'fable': 'peer_review'}, 'confirmed': [],
-                                  'identity': sha(b'synthetic identity of 45380')})
-        # each decidable proposal records the identity a confirmation of its question is bound to (HARNESS.md 12.5)
-        return pf.result(snare, biopsy, clarifications=(date_question,))
+                                  'identity': sha(b'synthetic identity of 45380'),
+                                  # the documented service the readers decided its hold on (refutation round 2,
+                                  # EV2-1: a status is read there, on the act its code accounts for)
+                                  'service': 'S1', 'reason': 'readings_disagree'})
+        # each decidable proposal records the identity a confirmation of its question is bound to (HARNESS.md 12.5),
+        # beside the documented-service reading the assessment recorded
+        return replace(pf.result(snare, biopsy, clarifications=(date_question,)),
+                       services=to_jsonable(gi_services.build(NOTE, service_date=None, pages=PAGES)))
 
     def entry(self, name, *, peer=False):
         """An Assessment.participants entry in the 12.3 shape: harness@1's keys, the frozen record, and on assess #2 the
@@ -289,9 +295,13 @@ class CandidateTests(Harness2Case):
         self.assertEqual((date_candidate['value'], date_candidate['verified'], date_candidate['spans'][0]['text']),
                          ('2026-10-21', True, DATE_QUOTE))
         status = self.candidates_of('performed_status')
-        self.assertEqual([(c['value'], c['verified'], c['phase']) for c in status],
-                         [('performed', True, 'independent'), ('performed', True, 'independent'),
-                          ('performed', True, 'peer_review')])
+        # refutation round 2, EV2-1: a status is verified only on a sentence the readers read as 45380's own biopsy
+        # done - the rectum biopsy - never on the cecum or the snare sentence its participants also quoted
+        self.assertEqual([(c['value'], c['verified'], c['phase'], c['spans'][0]['text']) for c in status],
+                         [('performed', True, 'peer_review', RECTUM_QUOTE),
+                          ('performed', False, 'independent', CECUM_QUOTE),
+                          ('performed', False, 'independent', SNARE_QUOTE)])
+        self.assertEqual([c['why'] for c in status[1:]], ['The passage does not name the forceps biopsy.'] * 2)
 
     def test_none_before_the_final_assessment_nor_for_a_corti_only_one(self):
         self.assertEqual(review.assessment_candidates(self.first), {})
@@ -652,8 +662,10 @@ class TraceTests(Harness2Case):
                           {'ref': PASSAGE_REF, 'use': 'A rule this run never retrieved.', 'retrieved': False}])
         self.assertIsNone(first['review'])
         self.assertIsNone(peer_run['reading'])
-        self.assertEqual(peer_run['review'],
-                         json.loads(json.dumps(to_jsonable(review.stored_peer_review(self.peer_runs['astra'])[0]))))
+        expected = json.loads(json.dumps(to_jsonable(review.stored_peer_review(self.peer_runs['astra'])[0])))
+        # each additional code with the phase its participant first proposed it in (R2-WORDING truth-8)
+        expected['additional_codes'] = [dict(item, phase='peer_review') for item in expected['additional_codes']]
+        self.assertEqual(peer_run['review'], expected)
         self.assertEqual([a['question_id'] for a in peer_run['review']['answers']],
                          [str(self.first.clarifications.get(fact=fact).pk)
                           for fact in ('extent', 'service_date', 'performed_status')])

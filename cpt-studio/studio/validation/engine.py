@@ -206,12 +206,15 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
                 second, second_scope or {}, selections, text, pages, routing, reference, date_state.value, usable,
                 procedure_day=primary_day)
         if harness is not None:
-            # the codes the proposal provider only listed (a candidate, an alternative): a participant's own
-            # proposal of one says so, never that Corti did not propose it (refutation round 2, truth-7)
+            # the codes the proposal provider only listed (a candidate, an alternative), and the codes its bounded
+            # second review listed as an alternative (alt2): a participant's own proposal of one says so, never that
+            # Corti did not propose it (refutation round 2, truth-7; review.corti_relation reads the same entries)
             listed = tuple(c.code for c in listable if c.role != 'selected')
+            second_listed = tuple(item.code for item in second_alternatives)
             selections, participant_alternatives = harness.merge(selections, routing, reference, read_day, usable,
                                                                  dated=date_state.value is not None,
-                                                                 corti_listed=listed)
+                                                                 corti_listed=listed,
+                                                                 corti_second_listed=second_listed)
         encounter = _encounter(response.provider, context, routing, sources, date_state, selections)
         procedure_day = encounter.procedure_day
         alternatives = (c for c in listable if c.role != 'selected')
@@ -3043,18 +3046,23 @@ class _Harness:
                                if later else []))
 
     def _lead(self, code: str, proposers: Sequence[str], selections: Sequence[_Selection],
-              listed: Sequence[str] = ()) -> str:
+              listed: Sequence[str] = (), second_listed: Sequence[str] = ()) -> str:
         """The rationale's first sentence of a participant's own proposal (HARNESS.md 11.4): who proposed it, and what
         Corti did with the code - selected it with no exact passage (its selection listed apart, excluded), listed it
-        only as a candidate or an alternative (``listed``), or nothing at all; never "Selected by". "Corti did not
-        propose this code." is said only where Corti has no entry for the code (refutation round 2, truth-7: a Corti
-        candidate of the same code was its alternative while this sentence denied it; the page's words are the same)."""
+        only as a candidate or an alternative (``listed``), listed it in its bounded second review as an alternative
+        (``second_listed``: alt2, a code that review selected and that was not added, or a candidate of it), or nothing
+        at all; never "Selected by". "Corti did not propose this code." is said only where Corti has no entry for the
+        code (refutation round 2, truth-7: a Corti candidate of the same code was its alternative while this sentence
+        denied it; the page's words, review.corti_relation and app.js CORTI_RELATIONS, are the same)."""
         who = self._who(code, proposers)
         if any(s.code == code and s.origin == 'primary' for s in selections):
             return (f'Proposed by {who}; Corti also selected this code, with no exact passage; it is listed apart, '
                     'excluded.')
         if code in listed:
             return f'Proposed by {who}; Corti listed this code only as a candidate, not selected; see Alternatives.'
+        if code in second_listed:
+            return (f"Proposed by {who}; Corti's second review also listed this code, as an alternative; see "
+                    'Alternatives.')
         return f'Proposed by {who}; Corti did not propose this code.'
 
     def _good(self, code: str, names: Sequence[str]) -> tuple[EvidenceSpan, ...]:
@@ -3075,10 +3083,12 @@ class _Harness:
 
     def merge(self, selections: list, routing: RoutingResult, reference: ReferenceLookup, day: Optional[date],
               inventory, *, dated: bool,
-              corti_listed: Sequence[str] = ()) -> tuple[list, tuple[ProposalAssessment, ...]]:
+              corti_listed: Sequence[str] = (),
+              corti_second_listed: Sequence[str] = ()) -> tuple[list, tuple[ProposalAssessment, ...]]:
         """(``selections`` with the participants' own proposals after them, the participants' alternatives).
         ``corti_listed``: the codes the proposal provider listed without selecting them (its candidates and
-        alternatives), which a participant's own proposal of one names (_lead)."""
+        alternatives), and ``corti_second_listed`` the codes its bounded second review listed as an alternative, which a
+        participant's own proposal of one names (_lead)."""
         have = {s.code for s in selections if s.evaluation is not None}  # decidable, as _second_review reads it
         added, listed = [], []
         for code, by in self.codes.items():
@@ -3095,7 +3105,8 @@ class _Harness:
                 candidate = _select(group, self.text, self.pages, routing, reference, day, inventory, dated=dated)
                 if candidate.evaluation is not None:
                     added.append(replace(candidate, origin='participant', proposers=proposers,
-                                         lead=self._lead(code, proposers, selections, corti_listed)))
+                                         lead=self._lead(code, proposers, selections, corti_listed,
+                                                         corti_second_listed)))
                     continue
                 why = candidate.scope_reason or NO_EVIDENCE
             listed.append(self._alternative(len(listed), code, tuple(n for n in PARTICIPANT_ORDER if n in by), why))

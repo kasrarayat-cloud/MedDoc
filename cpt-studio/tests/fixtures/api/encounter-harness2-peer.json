@@ -689,6 +689,8 @@
      "phases": {
       "astra": "independent"
      },
+     "reason": "readings_disagree",
+     "service": "S1",
      "identity": "d3c64787f44e618099907192f0ad3b1c7b36f7c2cf3e8e99b860e4830f3e2f5d",
      "proposed_by": [
       "astra"
@@ -810,17 +812,197 @@
    "alternatives": 0
   },
   "services": {
+   "version": "gi-services@2",
+   "problems": [],
    "services": [
     {
      "id": "S1",
-     "acts": [],
+     "acts": [
+      {
+       "id": "S1-A1",
+       "cues": [
+        "performed: an act predicate"
+       ],
+       "kind": "snare",
+       "role": "physician",
+       "detail": "6 mm",
+       "lesion": "S1-L1",
+       "region": "colon",
+       "status": "performed",
+       "anatomy": [
+        "ascending colon"
+       ],
+       "service": "S1",
+       "evidence": [
+        {
+         "end": 455,
+         "text": "Findings: A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology.",
+         "start": 343
+        }
+       ],
+       "technique": "cold snare"
+      },
+      {
+       "id": "S1-A2",
+       "cues": [
+        "performed: an act predicate"
+       ],
+       "kind": "biopsy",
+       "role": "physician",
+       "detail": "3 mm",
+       "lesion": "S1-L2",
+       "region": "rectum",
+       "status": "performed",
+       "anatomy": [
+        "rectum"
+       ],
+       "service": "S1",
+       "evidence": [
+        {
+         "end": 514,
+         "text": "A 3 mm polyp in the rectum was biopsied with cold forceps.",
+         "start": 456
+        }
+       ],
+       "technique": "cold forceps"
+      },
+      {
+       "id": "S1-A4",
+       "cues": [
+        "performed: an act predicate"
+       ],
+       "kind": "snare",
+       "role": "physician",
+       "detail": "",
+       "lesion": "",
+       "region": "",
+       "status": "performed",
+       "anatomy": [],
+       "service": "S1",
+       "evidence": [
+        {
+         "end": 579,
+         "text": "one removed by cold snare, one biopsied.",
+         "start": 539
+        }
+       ],
+       "technique": "cold snare"
+      },
+      {
+       "id": "S1-A5",
+       "cues": [
+        "performed: an act predicate"
+       ],
+       "kind": "biopsy",
+       "role": "physician",
+       "detail": "",
+       "lesion": "",
+       "region": "",
+       "status": "performed",
+       "anatomy": [],
+       "service": "S1",
+       "evidence": [
+        {
+         "end": 579,
+         "text": "one removed by cold snare, one biopsied.",
+         "start": 539
+        }
+       ],
+       "technique": "cold snare"
+      }
+     ],
+     "cues": [
+      "uncertain: no performance statement",
+      "performed: listed on the procedure line"
+     ],
      "kind": "colonoscopy",
+     "role": "physician",
      "extent": "",
      "family": "gi.colonoscopy",
+     "intent": "screening",
      "status": "performed",
-     "completion": "complete"
+     "lesions": [
+      {
+       "id": "S1-L1",
+       "noun": "polyp",
+       "size": "6 mm",
+       "region": "colon",
+       "anatomy": "ascending colon",
+       "service": "S1",
+       "evidence": [
+        {
+         "end": 455,
+         "text": "Findings: A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology.",
+         "start": 343
+        }
+       ],
+       "specimen": "",
+       "morphology": "sessile",
+       "disposition": "removed"
+      },
+      {
+       "id": "S1-L2",
+       "noun": "polyp",
+       "size": "3 mm",
+       "region": "rectum",
+       "anatomy": "rectum",
+       "service": "S1",
+       "evidence": [
+        {
+         "end": 514,
+         "text": "A 3 mm polyp in the rectum was biopsied with cold forceps.",
+         "start": 456
+        }
+       ],
+       "specimen": "",
+       "morphology": "",
+       "disposition": "sampled"
+      }
+     ],
+     "setting": "",
+     "evidence": [
+      {
+       "end": 159,
+       "text": "Procedure: Colonoscopy.",
+       "start": 136
+      },
+      {
+       "end": 249,
+       "text": "Technique: The colonoscope was advanced to the cecum.",
+       "start": 196
+      }
+     ],
+     "clinician": "",
+     "scope_end": 579,
+     "completion": "complete",
+     "included_in": "",
+     "scope_start": 136,
+     "separate_em": false,
+     "uncertainty": [],
+     "service_date": "",
+     "routing_status": "",
+     "completion_evidence": [
+      {
+       "end": 249,
+       "text": "Technique: The colonoscope was advanced to the cecum.",
+       "start": 196
+      },
+      {
+       "end": 273,
+       "text": "The appendiceal orifice",
+       "start": 250
+      },
+      {
+       "end": 314,
+       "text": "the ileocecal valve were\nidentified.",
+       "start": 278
+      }
+     ]
     }
-   ]
+   ],
+   "conflicts": [],
+   "attributions": [],
+   "sedation_by_endoscopist": ""
   },
   "completeness": {
    "covered": {

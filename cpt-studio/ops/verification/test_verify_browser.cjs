@@ -2499,7 +2499,7 @@ test('summarize records the phase, the peer reviews, the candidates and the conf
     [['corti', undefined, undefined], ['astra', 'done', ['45381']], ['fable', 'done', ['45380']]]);
   assert.deepEqual(summary.harness.participants[1].references, { retrieved: 1, used: 2, cited_not_retrieved: 1 });
   assert.deepEqual(summary.clarifications.map(c => [c.fact, c.candidates.map(x => [x.value, x.verified]), c.confirmation]),
-    [['performed_status', [['performed', true], ['performed', true], ['performed', true]], null], ['service_date', [['2026-10-21', true]], null]]);
+    [['performed_status', [['performed', true], ['performed', false], ['performed', false]], null], ['service_date', [['2026-10-21', true]], null]]);
   assert.deepEqual(summary.confirmations.map(c => [c.fact, c.value, c.located_by, c.confirmed_by]), [['extent', 'cecum', ['astra', 'fable'], 'Synthetic Reviewer']]);
   const text = JSON.stringify(summary);
   for (const passage of ['The colonoscope was advanced to the cecum.', 'Date of service: 2026-10-21', 'I read this passage', 'The endoscopic base']) {

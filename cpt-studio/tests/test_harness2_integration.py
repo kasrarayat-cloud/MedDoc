@@ -126,26 +126,32 @@ class ConfirmationEndToEndTests(ColonCase):
         self.assertEqual(self.encounter(encounter_id).current_assessment, final)
         response = confirm(self, encounter_id, question, candidate)
         self.assertEqual(response.status_code, 409, response.content)
-        self.assertEqual(response.json()['error'], jobs.REASSESS_NONE)
+        # refutation round 2, truth-10: refused first, saying what is so (the assessment is an earlier context's)
+        self.assertEqual(response.json()['error'], review.CONTEXT_CHANGED)
         self.assertFalse(models.FindingConfirmation.objects.exists())
         self.assertFalse(models.AuditEvent.objects.filter(event='finding.confirmed').exists())
 
 
 # --- a confirmation is bound to the proposal it was made for (HARNESS.md 12.5; refutation round 1, EV-1) ---------------
 
-# Each act is left in doubt by its own sentence, and a specimen log documents each. Corti selects nothing; Astra's first
-# reading lists 45385 with a quote that is not in the text and 45380 with a located one, and its peer review locates
-# 45385: assess #1 selects 45380 alone (sel:0), and assess #2 selects 45385 ahead of it (sel:0, then 45380 at sel:1).
+# Each act is left in doubt by its own sentence - the codes cite those hedges - and another sentence states each act
+# done, so the two readers disagree and each code is held on its status (refutation round 2, EV2-1: a status is
+# confirmed only on a sentence the readers read as the code's own act done; the specimen lines name neither act).
+# Corti selects nothing; Astra's first reading lists 45385 with a quote that is not in the text and 45380 with a located
+# one, and its peer review locates 45385: assess #1 selects 45380 alone (sel:0), and assess #2 selects 45385 ahead of it
+# (sel:0, then 45380 at sel:1).
 JAR_1 = 'Specimen log: jar 1, sigmoid polyp, hot snare.'
+DONE_SNARE = 'The sigmoid polyp was removed with a hot snare.'
 DOUBTS = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\n'
           'Place of service: Ambulatory surgery center\nProcedure: Colonoscopy\n'
           'The colonoscope was advanced to the cecum and the examination was completed.\n'
           'It is unclear whether biopsies of the ascending colon lesion were taken.\n'
           'It is unclear whether the sigmoid polyp was removed with a hot snare.\n'
-          + JAR_1 + '\nSpecimen log: jar 2, ascending colon lesion, cold forceps.\n')
+          + JAR_1 + '\nSpecimen log: jar 2, ascending colon lesion, cold forceps.\n'
+          'Cold forceps biopsies of the ascending colon lesion were taken.\n' + DONE_SNARE + '\n')
 ASTRA_DOUBTS = reading(codes=[('45385', 'hot snare polypectomy of the sigmoid polyp'),
                               ('45380', 'biopsies of the ascending colon lesion were taken')],
-                       services=[('c1', 'colonoscopy', 'performed', JAR_1)])
+                       services=[('c1', 'colonoscopy', 'performed', DONE_SNARE)])
 
 
 class ConfirmationBindingTests(Harness2Case):
@@ -171,8 +177,8 @@ class ConfirmationBindingTests(Harness2Case):
         question = final.clarifications.get(proposal__key='sel:0', fact='performed_status',
                                             state=models.Clarification.OPEN)
         candidate = next(c for c in served_candidates(self, encounter_id, question) if c['verified']
-                         and c['spans'][0]['text'] == JAR_1)
-        response = confirm(self, encounter_id, question, candidate)  # 45385's snare removal, on the jar 1 passage
+                         and c['spans'][0]['text'] == DONE_SNARE)
+        response = confirm(self, encounter_id, question, candidate)  # 45385's snare removal, on the passage stating it
         self.assertEqual(response.status_code, 201, response.content)
         confirmation = models.FindingConfirmation.objects.get()
         drain()
@@ -189,7 +195,7 @@ class ConfirmationBindingTests(Harness2Case):
         biopsy = first.proposals.get(key='sel:0')
         self.assertEqual((biopsy.code, biopsy.status), ('45380', 'needs_clarification'))
         self.assertNotIn('confirmed', biopsy.support)
-        self.assertNotIn(JAR_1, json.dumps([biopsy.rationale, biopsy.checks]))
+        self.assertNotIn(DONE_SNARE, json.dumps([biopsy.rationale, biopsy.checks]))
         ignored = next(c for c in first.encounter_checks if c['id'] == 'confirmations.ignored')
         self.assertIn('proposal sel:0 (45385)', ignored['detail'])
         # assess #2 selects 45385 again, read from the same passages: the confirmation answers it there

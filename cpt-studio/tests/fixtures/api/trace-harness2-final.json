@@ -316,8 +316,8 @@
      },
      "usage_basis": "provider_reported_tokens_summed_over_exchanges",
      "estimated_cost_usd": "0.0300",
-     "request_sha256": "1961719ccde7006454d27d831d57b37d34af26132593a8666544bf04d59b93eb",
-     "response_sha256": "0604fbaa73afdd882990556679c62cae2604b836ee092e77c5afe58ef96ab07c",
+     "request_sha256": "263bd8770dc057c9fbf008786f02975473341428c2ce6407d53a0e2ddbd761f9",
+     "response_sha256": "231710fcfa717e0affd7beeab5412814c65a2a8d6723f1abfc7ac982141e04e2",
      "response_bytes": 1745,
      "created_at": "2026-11-01T09:00:28Z",
      "finished_at": "2026-11-01T09:00:17Z",
@@ -342,7 +342,7 @@
        ],
        [
         "cpt_studio",
-        "f27aa4ea83c63b6b7bcc26db383fb673d393ad0de155fa556aa3888ad16d5f16"
+        "a24b271b2f7009ad0724f00accb953fb8f310a2b752ef9d1bc75dd5cfc710dd9"
        ],
        [
         "fable",
@@ -466,7 +466,8 @@
           "reason": ""
          }
         ],
-        "confidence": "low"
+        "confidence": "low",
+        "phase": "peer_review"
        }
       ],
       "references_used": [
@@ -495,7 +496,7 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "1961719ccde7006454d27d831d57b37d34af26132593a8666544bf04d59b93eb",
+       "request_sha256": "263bd8770dc057c9fbf008786f02975473341428c2ce6407d53a0e2ddbd761f9",
        "response_sha256": "54f05296d87ae9002112779b5f58493e5f292c84afba2573b534591cfe468c46",
        "provider_request_id": "req_astra_1",
        "response_id": "resp_astra_1",
@@ -527,8 +528,8 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "1961719ccde7006454d27d831d57b37d34af26132593a8666544bf04d59b93eb",
-       "response_sha256": "0604fbaa73afdd882990556679c62cae2604b836ee092e77c5afe58ef96ab07c",
+       "request_sha256": "263bd8770dc057c9fbf008786f02975473341428c2ce6407d53a0e2ddbd761f9",
+       "response_sha256": "231710fcfa717e0affd7beeab5412814c65a2a8d6723f1abfc7ac982141e04e2",
        "provider_request_id": "req_astra_2",
        "response_id": "resp_astra_2",
        "error": "",
@@ -732,8 +733,8 @@
      },
      "usage_basis": "provider_reported_tokens_summed_over_exchanges",
      "estimated_cost_usd": null,
-     "request_sha256": "2e3e7799b293db549b16c87dedcc729fa3d62b2b68785c7eac86637a77db4812",
-     "response_sha256": "bf62b59fe3e0177123e5868f685d130bc03c4c64c42f27c2d703ab08e8aea31a",
+     "request_sha256": "af1442e749ef99d049ba27a91ce240bfb79cac6e66481868b46b6cf03d8137db",
+     "response_sha256": "f0d88a5c1dee104a9f37f2344c0016ec7fdbcceabc54b596cad29bf21d6f8a58",
      "response_bytes": 1052,
      "created_at": "2026-11-01T09:00:29Z",
      "finished_at": "2026-11-01T09:00:17Z",
@@ -758,7 +759,7 @@
        ],
        [
         "cpt_studio",
-        "f27aa4ea83c63b6b7bcc26db383fb673d393ad0de155fa556aa3888ad16d5f16"
+        "a24b271b2f7009ad0724f00accb953fb8f310a2b752ef9d1bc75dd5cfc710dd9"
        ],
        [
         "fable",
@@ -818,7 +819,8 @@
           "reason": ""
          }
         ],
-        "confidence": "medium"
+        "confidence": "medium",
+        "phase": "peer_review"
        }
       ],
       "references_used": [],
@@ -836,8 +838,8 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "2e3e7799b293db549b16c87dedcc729fa3d62b2b68785c7eac86637a77db4812",
-       "response_sha256": "bf62b59fe3e0177123e5868f685d130bc03c4c64c42f27c2d703ab08e8aea31a",
+       "request_sha256": "af1442e749ef99d049ba27a91ce240bfb79cac6e66481868b46b6cf03d8137db",
+       "response_sha256": "f0d88a5c1dee104a9f37f2344c0016ec7fdbcceabc54b596cad29bf21d6f8a58",
        "provider_request_id": "req_fable_1",
        "response_id": "resp_fable_1",
        "error": "",

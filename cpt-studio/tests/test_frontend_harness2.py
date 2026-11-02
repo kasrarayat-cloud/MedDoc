@@ -12,7 +12,8 @@ from django.test import override_settings
 from django.utils import timezone
 
 from studio import jobs, models, review, serializers
-from studio.types import ClarificationSpec, ExtractionResult, sha256_json
+from studio.gi import services as gi_services
+from studio.types import ClarificationSpec, ExtractionResult, sha256_json, to_jsonable
 from studio.validation import checks as validation_checks
 from tests import test_harness2_api as h2
 from tests.support import factories as f
@@ -234,7 +235,10 @@ class Harness2FixtureTests(h2.Harness2Case):
                                      clarifications=(status,),
                                      rationale=f'Proposed by {who}; Corti did not propose this code.'),
                          support={'origin': 'participant', 'proposed_by': proposers, 'phases': phases,
-                                  'identity': h2.sha(b'synthetic identity of 45380')})
+                                  'identity': h2.sha(b'synthetic identity of 45380'),
+                                  # the documented service the readers decided its hold on (refutation round 2,
+                                  # EV2-1: a status is read there, on the act its code accounts for)
+                                  'service': 'S1', 'reason': 'readings_disagree'})
         proposals = [snare, biopsy]
         if phase == 2:
             proposals.append(replace(
@@ -246,9 +250,9 @@ class Harness2FixtureTests(h2.Harness2Case):
                 support={'origin': 'participant', 'proposed_by': ['astra'], 'phases': {'astra': 'peer_review'}}))
         result = pf.result(*proposals, clarifications=(date_question,),
                            **({'encounter_checks': checks} if checks is not None else {}))
-        # the documented-service reading: one colonoscopy whose extent the readers did not establish (the question)
-        services = {'services': [{'id': 'S1', 'family': 'gi.colonoscopy', 'kind': 'colonoscopy', 'status': 'performed',
-                                  'completion': 'complete', 'extent': '', 'acts': []}]}
+        # the documented-service reading the readers make of the note (one colonoscopy, its snare removal and biopsy
+        # performed), which a status candidate is read against (refutation round 2, EV2-1)
+        services = to_jsonable(gi_services.build(h2.NOTE, service_date=None, pages=h2.PAGES))
         return replace(result, services=services, completeness={'covered': {'S1': ['45385', '45380']}})
 
     def confirm_extent(self):

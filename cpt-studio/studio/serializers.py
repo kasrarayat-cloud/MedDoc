@@ -1018,10 +1018,13 @@ def _checked_against(run, used):
     return [dict(item, reused_from=str(run.reused_from_id)) if isinstance(item, dict) else item for item in used]
 
 
-def _trace_review(run):
+def _trace_review(run, assessment=None):
     """A peer-review run's PeerReview (HARNESS.md 11.1) as JSON - its answers, positions, additional codes, references
     used (each checked against that run's own tool results), the frozen inputs it was shown, its problems - read as the
-    adapter version that recorded it; None for any other run and a run with no answer."""
+    adapter version that recorded it; None for any other run and a run with no answer. Each additional code carries
+    ``phase``, the phase its participant first proposed it in (peer_code_phases), where ``assessment`` - the current
+    one - read this review, and '' otherwise (refutation round 2, truth-8: a code its first reading proposed was called
+    "proposed after peer review, never independent")."""
     if (run.provider not in participants.PARTICIPANTS or run.purpose != models.ProviderRun.PEER_REVIEW
             or run.state != models.ProviderRun.SUCCEEDED):
         return None
@@ -1030,8 +1033,14 @@ def _trace_review(run):
         return {'refused': True, 'problems': [problem], 'unverified_quotes': 0, 'frozen_inputs': [], 'answers': [],
                 'positions': [], 'additional_codes': [], 'references_used': []}
     data = to_jsonable(peer_review)
+    record = review.model_records(assessment).get(run.provider) if assessment is not None else None
+    read = record is not None and record.get('peer_state') == 'read' and record.get('peer_run') == str(run.pk)
+    shaped = [item.code if isinstance(item.code, str) and CODE_SHAPE.fullmatch(item.code) else ''
+              for item in peer_review.additional_codes]
+    phases = peer_code_phases(assessment, run.provider, record, [code for code in shaped if code]) if read else {}
     return {**data, 'positions': [_code_entry(item) for item in data['positions']],
-            'additional_codes': [_code_entry(item) for item in data['additional_codes']],
+            'additional_codes': [{**_code_entry(item), 'phase': phases.get(code, '')}
+                                 for item, code in zip(data['additional_codes'], shaped)],
             'references_used': _checked_against(run, data['references_used'])}
 
 
@@ -1049,7 +1058,7 @@ def _trace_exchanges(run):
             for exchange in run.exchanges.order_by('turn')]
 
 
-def _trace_run(run):
+def _trace_run(run, assessment=None):
     """One run as HARNESS.md 6 records it: what was called and what answered, its identities (the run identity is the
     client request id a participant's vendor was given), usage and cost, the hashes, and who asked for it."""
     return {'id': str(run.pk), 'state': run.state, 'sent': run.sent, 'mode': review.run_mode(run),
@@ -1064,7 +1073,7 @@ def _trace_run(run):
             'finished_at': _iso(run.finished_at), 'error': run.error,
             'reused_from': str(run.reused_from_id) if run.reused_from_id else None,
             'reconciled': run.reconciled_at is not None, 'reading': _trace_reading(run),
-            'review': _trace_review(run), 'exchanges': _trace_exchanges(run)}
+            'review': _trace_review(run, assessment), 'exchanges': _trace_exchanges(run)}
 
 
 def trace_json(encounter):
@@ -1091,7 +1100,7 @@ def trace_json(encounter):
         'revision': {'id': str(revision.pk), 'number': revision.number, 'text_sha256': revision.text_sha256}
         if revision is not None else None,
         'participants': [{'name': name, 'label': label, 'vendor': vendor, 'model': model,
-                          'runs': [_trace_run(run) for run in runs if review.participant_of(run) == name]}
+                          'runs': [_trace_run(run, assessment) for run in runs if review.participant_of(run) == name]}
                          for name, label, vendor, model in review.HARNESS_PARTICIPANTS],
         'assessments': [_trace_assessment(item, encounter) for item in (
             encounter.assessments.filter(revision=revision).order_by('created_at', 'pk') if revision else ())],

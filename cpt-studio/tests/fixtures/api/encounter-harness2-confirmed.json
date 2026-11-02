@@ -471,8 +471,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "400d386e4b7c0127a473005c10d386c55742822d1859aca446ddc886ffa319bc",
-   "response_sha256": "ef8da92d062b6f337ae6b676e54fcbfadaf929d34ea2dcae9be7cbc3766ee708",
+   "request_sha256": "e70efa230a08dabae5cf70c4b7da667bab9e7263a5987881ae9303c3b89950a0",
+   "response_sha256": "c1f6f965b0296628ae829ecebe6645ff01497cbcfc72cc08f893f8bc8144c8a1",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -494,8 +494,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "417de66bb0e60171dc3ae0d72566bcbcd55ec479d0f72d23768a9da8257d3935",
-   "response_sha256": "11cdbfe9cfea07fe5ba3b1ef9d41ccecb4dfe56e7a53feb32284c14bdc9afa65",
+   "request_sha256": "98817c151c8b9e3cb943f8211734cc00b41400e61ee8d6127dcb426b0513b99b",
+   "response_sha256": "d4605edd7e75dabde4a08d8e741c5cb2983618d1212cce5476fcca349a868aa2",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -789,6 +789,8 @@
       "astra": "independent",
       "fable": "peer_review"
      },
+     "reason": "readings_disagree",
+     "service": "S1",
      "identity": "d3c64787f44e618099907192f0ad3b1c7b36f7c2cf3e8e99b860e4830f3e2f5d",
      "proposed_by": [
       "astra",
@@ -987,17 +989,197 @@
    "alternatives": 1
   },
   "services": {
+   "version": "gi-services@2",
+   "problems": [],
    "services": [
     {
      "id": "S1",
-     "acts": [],
+     "acts": [
+      {
+       "id": "S1-A1",
+       "cues": [
+        "performed: an act predicate"
+       ],
+       "kind": "snare",
+       "role": "physician",
+       "detail": "6 mm",
+       "lesion": "S1-L1",
+       "region": "colon",
+       "status": "performed",
+       "anatomy": [
+        "ascending colon"
+       ],
+       "service": "S1",
+       "evidence": [
+        {
+         "end": 455,
+         "text": "Findings: A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology.",
+         "start": 343
+        }
+       ],
+       "technique": "cold snare"
+      },
+      {
+       "id": "S1-A2",
+       "cues": [
+        "performed: an act predicate"
+       ],
+       "kind": "biopsy",
+       "role": "physician",
+       "detail": "3 mm",
+       "lesion": "S1-L2",
+       "region": "rectum",
+       "status": "performed",
+       "anatomy": [
+        "rectum"
+       ],
+       "service": "S1",
+       "evidence": [
+        {
+         "end": 514,
+         "text": "A 3 mm polyp in the rectum was biopsied with cold forceps.",
+         "start": 456
+        }
+       ],
+       "technique": "cold forceps"
+      },
+      {
+       "id": "S1-A4",
+       "cues": [
+        "performed: an act predicate"
+       ],
+       "kind": "snare",
+       "role": "physician",
+       "detail": "",
+       "lesion": "",
+       "region": "",
+       "status": "performed",
+       "anatomy": [],
+       "service": "S1",
+       "evidence": [
+        {
+         "end": 579,
+         "text": "one removed by cold snare, one biopsied.",
+         "start": 539
+        }
+       ],
+       "technique": "cold snare"
+      },
+      {
+       "id": "S1-A5",
+       "cues": [
+        "performed: an act predicate"
+       ],
+       "kind": "biopsy",
+       "role": "physician",
+       "detail": "",
+       "lesion": "",
+       "region": "",
+       "status": "performed",
+       "anatomy": [],
+       "service": "S1",
+       "evidence": [
+        {
+         "end": 579,
+         "text": "one removed by cold snare, one biopsied.",
+         "start": 539
+        }
+       ],
+       "technique": "cold snare"
+      }
+     ],
+     "cues": [
+      "uncertain: no performance statement",
+      "performed: listed on the procedure line"
+     ],
      "kind": "colonoscopy",
+     "role": "physician",
      "extent": "",
      "family": "gi.colonoscopy",
+     "intent": "screening",
      "status": "performed",
-     "completion": "complete"
+     "lesions": [
+      {
+       "id": "S1-L1",
+       "noun": "polyp",
+       "size": "6 mm",
+       "region": "colon",
+       "anatomy": "ascending colon",
+       "service": "S1",
+       "evidence": [
+        {
+         "end": 455,
+         "text": "Findings: A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology.",
+         "start": 343
+        }
+       ],
+       "specimen": "",
+       "morphology": "sessile",
+       "disposition": "removed"
+      },
+      {
+       "id": "S1-L2",
+       "noun": "polyp",
+       "size": "3 mm",
+       "region": "rectum",
+       "anatomy": "rectum",
+       "service": "S1",
+       "evidence": [
+        {
+         "end": 514,
+         "text": "A 3 mm polyp in the rectum was biopsied with cold forceps.",
+         "start": 456
+        }
+       ],
+       "specimen": "",
+       "morphology": "",
+       "disposition": "sampled"
+      }
+     ],
+     "setting": "",
+     "evidence": [
+      {
+       "end": 159,
+       "text": "Procedure: Colonoscopy.",
+       "start": 136
+      },
+      {
+       "end": 249,
+       "text": "Technique: The colonoscope was advanced to the cecum.",
+       "start": 196
+      }
+     ],
+     "clinician": "",
+     "scope_end": 579,
+     "completion": "complete",
+     "included_in": "",
+     "scope_start": 136,
+     "separate_em": false,
+     "uncertainty": [],
+     "service_date": "",
+     "routing_status": "",
+     "completion_evidence": [
+      {
+       "end": 249,
+       "text": "Technique: The colonoscope was advanced to the cecum.",
+       "start": 196
+      },
+      {
+       "end": 273,
+       "text": "The appendiceal orifice",
+       "start": 250
+      },
+      {
+       "end": 314,
+       "text": "the ileocecal valve were\nidentified.",
+       "start": 278
+      }
+     ]
     }
-   ]
+   ],
+   "conflicts": [],
+   "attributions": [],
+   "sedation_by_endoscopist": ""
   },
   "completeness": {
    "covered": {
@@ -1020,6 +1202,40 @@
    "reason": "Whether the biopsy was performed at this encounter is in doubt.",
    "state": "open",
    "candidates": [
+    {
+     "id": "665833a192f25ebe",
+     "clarification_id": "e2c00000-0000-4000-8000-00000000000c",
+     "fact": "performed_status",
+     "value": "performed",
+     "located_by": [
+      "astra"
+     ],
+     "phase": "peer_review",
+     "phases": {
+      "astra": "peer_review"
+     },
+     "runs": [
+      "e2c00000-0000-4000-8000-000000000004"
+     ],
+     "spans": [
+      {
+       "start": 456,
+       "end": 514,
+       "text": "A 3 mm polyp in the rectum was biopsied with cold forceps.",
+       "page": 2
+      }
+     ],
+     "sentences": [
+      {
+       "start": 456,
+       "end": 514,
+       "text": "A 3 mm polyp in the rectum was biopsied with cold forceps."
+      }
+     ],
+     "verified": true,
+     "why": "",
+     "attestation": "I read this passage in the source document; it documents performed for this encounter."
+    },
     {
      "id": "45b1339b6740897f",
      "clarification_id": "e2c00000-0000-4000-8000-00000000000c",
@@ -1054,7 +1270,7 @@
       }
      ],
      "verified": false,
-     "why": "CPT Studio's readers cannot tell which act this passage documents.",
+     "why": "The passage does not name the forceps biopsy.",
      "attestation": ""
     },
     {
@@ -1091,41 +1307,7 @@
       }
      ],
      "verified": false,
-     "why": "CPT Studio's readers cannot tell which act this passage documents.",
-     "attestation": ""
-    },
-    {
-     "id": "665833a192f25ebe",
-     "clarification_id": "e2c00000-0000-4000-8000-00000000000c",
-     "fact": "performed_status",
-     "value": "performed",
-     "located_by": [
-      "astra"
-     ],
-     "phase": "peer_review",
-     "phases": {
-      "astra": "peer_review"
-     },
-     "runs": [
-      "e2c00000-0000-4000-8000-000000000004"
-     ],
-     "spans": [
-      {
-       "start": 456,
-       "end": 514,
-       "text": "A 3 mm polyp in the rectum was biopsied with cold forceps.",
-       "page": 2
-      }
-     ],
-     "sentences": [
-      {
-       "start": 456,
-       "end": 514,
-       "text": "A 3 mm polyp in the rectum was biopsied with cold forceps."
-      }
-     ],
-     "verified": false,
-     "why": "CPT Studio's readers cannot tell which act this passage documents.",
+     "why": "The passage does not name the forceps biopsy.",
      "attestation": ""
     }
    ],

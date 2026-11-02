@@ -1625,7 +1625,7 @@ test('each open question lists its candidate answers: the value, the passage quo
     extent.candidates.map(candidate => [candidate.id, String(candidate.verified)]));
   assert.ok(block.includes('<div class="evidence-label">Candidate answers from the participants&#x27; located passages · 2</div>'));
   const [verified, unverified] = extent.candidates;
-  assert.ok(block.includes(`<span class="participant-head"><strong>cecum</strong><span class="status green">Verified</span></span><p class="candidate-quote">“The colonoscope was advanced to the cecum.” (page 1)</p><small class="check-source">Located by Astra and Fable in their independent first readings.</small>`), block);
+  assert.ok(block.includes(`<span class="participant-head"><strong>cecum</strong><span class="status green">Verified</span></span><p class="candidate-quote">“The colonoscope was advanced to the cecum.” (page 1) — a part of the sentence “Technique: The colonoscope was advanced to the cecum.”</p><small class="check-source">Located by Astra and Fable in their independent first readings.</small>`), block);
   assert.ok(block.includes('<small class="check-source">Verified: its passage is an exact slice of the document, in no history, plan or indication section, and it names that landmark, which CPT Studio&#x27;s readers read neither as not reached nor as qualified (a negation, an attempt or a doubt). It is still only a candidate: read the passage before confirming it.</small>'));
   assert.ok(block.includes('<span class="status amber">Not verified</span>'));
   assert.ok(block.includes(`<small class="check-source">Not verified, so it cannot be confirmed: ${app.escapeHtml(unverified.why)}</small>`));
@@ -1633,7 +1633,7 @@ test('each open question lists its candidate answers: the value, the passage quo
   assert.ok(block.includes(`data-confirm="${verified.id}"`) && !block.includes(`data-confirm="${unverified.id}"`));
   // a passage keeps its line breaks and page; one located after peer review says so
   const status = questionOf(html, clarificationOf(doc, 'performed_status').id);
-  assert.ok(status.includes('<p class="candidate-quote">“A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology.” (page 2)</p>'));
+  assert.ok(status.includes('<p class="candidate-quote">“A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology.” (page 2) — a part of the sentence “Findings: A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology.”</p>'));
   assert.ok(status.includes('<small class="check-source">Located by Astra in peer review.</small>'));
   // what a status check established (refutation round 2, EV2-1): the readers read the code's own act, never the section
   // alone
@@ -1670,7 +1670,8 @@ test('a verified candidate\'s Confirm action shows its served attestation exactl
       assert.ok(html.includes(control), `${clarification.fact} ${candidate.id}`);
     }
   }
-  assert.equal(count(html, 'data-action="confirm-finding"'), 5);
+  // refutation round 2, EV2-1: of the status candidates only the rectum biopsy's passage states 45380's act
+  assert.equal(count(html, 'data-action="confirm-finding"'), 3);
   // the served sentence is shown as served, never rebuilt from the value
   const extent = clarificationOf(doc, 'extent');
   const served = { ...doc, clarifications: doc.clarifications.map(item => (item.id === extent.id ? { ...item, candidates: [{ ...item.candidates[0], attestation: 'A sentence the server serves.' }] } : item)) };

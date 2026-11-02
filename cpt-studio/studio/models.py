@@ -280,7 +280,8 @@ class Assessment(ImmutableModel):
     completeness = models.JSONField(default=dict)  # coding completeness, unresolved and bundled items (reconcile.py)
     # HARNESS.md 6: one entry per harness participant (state, run, models, refusal reason, unverified quotes) and the
     # reference retrieval traces. Both are recorded beside the engine's result, outside its sha256, so an assessment with
-    # no participant configured is the engine's result exactly (I1); _same_assessment compares them as well.
+    # no participant configured is the engine's result exactly (I1). Neither decides whether an identical re-assessment
+    # is the recorded one: _same_assessment reads only the participant runs the entries name (HARNESS.md 9, I1).
     participants = models.JSONField(default=list)
     retrieval = models.JSONField(default=list)
     sha256 = models.CharField(max_length=64)

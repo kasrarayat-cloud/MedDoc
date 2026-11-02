@@ -98,8 +98,9 @@ FINAL = Turn()
 
 @dataclass(frozen=True)
 class ToolCallRecord:
-    """A tool call as CPT Studio executed it (models.ToolCall): ``result`` is exactly what the participant was given
-    (its canonical JSON is what ``result_sha256`` hashes) and ``refs`` every reference that result returned."""
+    """A tool call as CPT Studio executed it (models.ToolCall): ``result`` is what CPT Studio answered, given to the
+    participant only when the next exchange was sent (its canonical JSON is what ``result_sha256`` hashes), and ``refs``
+    every reference that result returned."""
     call_id: str
     tool: str  # the tool's name; '' when the name asked for is not a string of 1 to 40 characters
     arguments: object

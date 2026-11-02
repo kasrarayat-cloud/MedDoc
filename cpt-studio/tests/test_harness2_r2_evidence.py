@@ -609,15 +609,16 @@ class ContextChangedTests(ColonCase):
 
 # --- truth-7 (the shared wording): the engine never says Corti did not propose a code Corti listed --------------------
 
-def lead_run(text, corti, participants):
-    """``corti``: (role, code, quote) of the proposal provider's answer; ``participants``: participant inputs."""
+def lead_run(text, corti, participants, **second):
+    """``corti``: (role, code, quote) of the proposal provider's answer; ``participants``: participant inputs;
+    ``second``: a bounded second review (second=, second_scope=), if any."""
     def located(quote):
         return (span(text, quote),) if quote in text else (EvidenceSpan(0, 0, len(quote), quote, False),)
     codes = tuple(ProviderCode(role, 'cpt', value, 'UNVERIFIED PROVIDER WORDING', located(quote))
                   for role, value, quote in corti)
     return assess(text=text, pages=(), context=gi_context.extract_context(text), routing=detect.route(text, DAY),
                   normalized=NormalizedResponse('corti', 'test@1', codes), reference=REFERENCE, service_date=DAY,
-                  provider_status='succeeded', participants=participants)
+                  provider_status='succeeded', participants=participants, **second)
 
 
 class CortiLeadTests(SimpleTestCase):
@@ -650,6 +651,25 @@ class CortiLeadTests(SimpleTestCase):
         rationale, _ = self.lead((('selected', '45385', SNARE_QUOTE),))
         self.assertTrue(rationale.startswith('Proposed by Astra (independent participant); Corti did not propose this '
                                              'code.'), rationale)
+
+    def test_a_code_only_corti_s_second_review_listed_is_said_so(self):
+        # Corti's bounded second review lists 45380 only as a candidate (alt2:0) and Astra proposes it from the biopsy
+        # passage: the lead says the second review listed it - the page's corti_relation 'second_review' - never that
+        # Corti did not propose it (R2-WORDING's NEEDS 2 on truth-7)
+        text = self.TEXT
+        second = NormalizedResponse('corti', 'test@1', (ProviderCode('candidate', 'cpt', '45380', '',
+                                                                     (span(text, BIOPSY_QUOTE),)),))
+        scope = {'start': text.index('Procedure: Colonoscopy'), 'end': len(text), 'items': ['the flat lesion biopsy']}
+        result = lead_run(text, (('selected', '45385', SNARE_QUOTE),), self.participant('45380', BIOPSY_QUOTE),
+                          second=second, second_scope=scope)
+        self.assertEqual([(p.key, p.code) for p in result.proposals if p.support.get('origin') == 'second_review'],
+                         [('alt2:0', '45380')])
+        added = next(p for p in result.proposals if p.code == '45380' and p.bucket != 'alternative'
+                     and p.support.get('origin') == 'participant')
+        self.assertTrue(added.rationale.startswith("Proposed by Astra (independent participant); Corti's second review "
+                                                   'also listed this code, as an alternative; see Alternatives.'),
+                        added.rationale)
+        self.assertNotIn('Corti did not propose this code', added.rationale)
 
 
 # --- FG2-1: a confirmation's identity binds its context too (HARNESS.md 12.5, 12.7) ----------------------------------

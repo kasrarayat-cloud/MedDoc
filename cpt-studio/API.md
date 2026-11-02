@@ -280,6 +280,8 @@ whose API takes no model identifier), which the Activity tab names. The Activity
                       "located_by": ["astra", "fable"], "phase": "independent",
                       "phases": {"astra": "independent", "fable": "peer_review"}, "runs": ["uuid", "uuid"],
                       "spans": [{"start": 207, "end": 249, "text": "The colonoscope was advanced to the cecum.", "page": 1}],
+                      "sentences": [{"start": 196, "end": 249,
+                                     "text": "Technique: The colonoscope was advanced to the cecum."}],
                       "verified": true, "why": "",
                       "attestation": "I read this passage in the source document; it documents cecum for this encounter."}],
       "confirmation": null}],
@@ -331,7 +333,9 @@ what the assessments read.
 
 Each clarification gains `candidates` and `confirmation`. Only an OPEN question of the final assessment has candidates
 (an assess #1 whose peer stages follow has none, and neither has a Corti-only encounter, nor any encounter while no
-model participant is configured, when no assessment would read a confirmation). The final assessment is the pipeline's
+model participant is configured, when no assessment would read a confirmation), and only while that assessment was
+made on the encounter's current revision and context (refutation round 2, truth-10: after a member's context change
+no re-assessment would read a confirmation of it, so none is offered). The final assessment is the pipeline's
 own: assess #2 and its re-assessments, or an assess #1 that owes no peer stage - no participant's first reading was
 read, or a member date conflict holds the encounter, while which nothing is sent: the answers the frozen
 phase-1 readings and the peer answers of the runs that assessment read offer for it (HARNESS.md 12.5) - the service
@@ -340,9 +344,16 @@ another fact. `value` is in CPT Studio's own words (a `YYYY-MM-DD` date; `perfor
 `planned`, `historical`; routing's landmark or EUS structure label; `successful` or `failed`; `time`, `mdm`,
 `time+mdm`), never the participant's wording, and `''` when the participant's value cannot be stated so. `spans` are
 exact slices of `revision.text` (offsets as everywhere) with their page. A candidate is `verified` only when its quote
-was located verbatim, at most 8 spans, none across a page break, and the fact's consistency check passes (the passage
-states that date; names that landmark or structure; states that cannulation outcome; is not in a history, plan or
-indication section; states a total time in minutes or an MDM level); otherwise `why` says which check failed.
+was located verbatim, at most 8 spans, none across a page break and none in a history, plan or indication section,
+and the fact's consistency check passes (refutation round 2, HARNESS.md 12.5): the passage states that date, never as
+a date of birth; names that landmark or structure, which CPT Studio's readers read neither as not reached or not seen
+nor as qualified by a negation, an attempt or a doubt; states that cannulation outcome; states a total time in minutes
+or an MDM level; for a status, CPT Studio's readers - the documented-service inventory the assessment recorded - read
+the passage's whole sentence as stating exactly that status for the act the proposal's code accounts for (or, for a
+base code, an E/M or another family's profile, its service). Otherwise `why` says which check failed ("The passage
+does not name the snare removal.", "The passage leaves the forceps biopsy in doubt."). `sentences` gives, for each span
+in its order, `{start, end, text}` of the readers' whole sentence it lies in, so the page shows a span that is a slice
+of a longer sentence with that sentence.
 Agreement never verifies: identical (value, spans) from several participants merge into one candidate naming all of
 them (`located_by`, `runs`), and `phase` is `independent` when any located it in its frozen first reading,
 `peer_review` only when all did so after peer review (`phases` names each). `id` is stable for the same rows.
@@ -408,7 +419,9 @@ reviewer only (403); a question of another document or workspace is 404; a `cand
 hex, or an attestation that is not a JSON string, is 400; under the encounter's row lock the question must be open on
 the current revision's final assessment and not confirmed yet, nothing may be queued or running, and the candidate
 must be one of that question's VERIFIED candidates, recomputed by the server (409 with why: an earlier assessment's
-question, peer reviews not finished, not open, confirmed already, processing, not one of its candidates, not verified);
+question, an assessment of an earlier context - "The encounter context changed after this assessment; resume
+processing and confirm on its new assessment." -, peer reviews not finished, not open, confirmed already, processing,
+not one of its candidates, not verified);
 the attestation must be exactly the sentence above with the candidate's `value` (400 otherwise, naming the sentence).
 The immutable confirmation (the question, the revision, scope, fact, family, proposal key, value, the exact spans, the
 participants that located it, their runs, the reviewer and the attestation) and an audit event `finding.confirmed`
@@ -448,9 +461,12 @@ outside the caller's workspaces.
 harness@2 adds to each run `exchanges` - each HTTP exchange of a participant's tool loop (`turn`, `state`,
 `http_status`, `latency_ms`, `usage`, `request_sha256`, `response_sha256`, `provider_request_id`, `response_id`,
 `error`) with its `tool_calls` (`call_id`, `tool`, `arguments`, `refs`, `result_sha256`, `executed_at`; [] for Corti's
-runs) - and `review`, a peer-review run's PeerReview as JSON (its answers, positions, additional codes, references used
-checked against its own tool calls, the frozen inputs it was shown and its problems; null for every other run, whose
-`reading` it is instead). `reading.references_used` checks each reference against that run's own tool results; for a
+runs). `arguments` is what the participant wrote, `null` when they were missing or null (refutation round 2,
+sends-r2-1), and each exchange is recorded as it ends, so a run still sending, or swept to unknown, can list exchanges
+(sends-r2-4). Then `review`, a peer-review run's PeerReview as JSON (its answers, positions, additional codes, references
+used checked against its own tool calls, the frozen inputs it was shown and its problems; null for every other run, whose
+`reading` it is instead). Each of its `additional_codes` carries `phase`, the phase its participant first proposed the
+code in (`independent` or `peer_review`), where the current assessment read that review, and `''` otherwise (truth-8). `reading.references_used` checks each reference against that run's own tool results; for a
 run that reused a retained answer (`reused_from`), against the retained run's, and each of its references used then
 carries `reused_from` too (refutation round 2, truth-13). The
 trace also lists `assessments`: each assessment of the current revision, oldest first, with `current`, its `phase`,

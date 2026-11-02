@@ -78,7 +78,7 @@ PEER_STATES = {'waiting', 'running', 'stopped', 'done', 'refused', 'failed', 'un
                'not_configured'}
 RETRIEVED_KEYS = {'ref', 'kind', 'source_key', 'release', 'effective_start', 'effective_end', 'tool'}
 CANDIDATE_KEYS = {'id', 'clarification_id', 'fact', 'value', 'located_by', 'phase', 'phases', 'runs', 'spans',
-                  'verified', 'why', 'attestation'}
+                  'sentences', 'verified', 'why', 'attestation'}
 CONFIRMATION_KEYS = {'id', 'clarification_id', 'scope', 'fact', 'family', 'proposal_key', 'value', 'spans',
                      'located_by', 'runs', 'confirmed_by', 'confirmed_by_kind', 'attestation', 'created_at',
                      'revision_number', 'current_effect'}
@@ -413,7 +413,7 @@ class FixtureTests(SimpleTestCase):
         self.assertEqual((peer['astra']['state'], peer['fable']['state']), ('running', 'waiting'))
         final = docs['encounter-harness2-final.json']
         self.assertEqual([(c['fact'], [x['verified'] for x in c['candidates']]) for c in final['clarifications']],
-                         [('extent', [True, False]), ('performed_status', [True, True, True]),
+                         [('extent', [True, False]), ('performed_status', [True, False, False]),
                           ('service_date', [True])])
         confirmed = docs['encounter-harness2-confirmed.json']
         [confirmation] = confirmed['confirmations']

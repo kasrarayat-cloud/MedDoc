@@ -24,7 +24,7 @@ from .gi.context import charge_date_problem, is_member_conflict
 from .gi.profiles import PROFILES
 from .models import Clarification, Decision, Encounter, Membership, Proposal, ProviderRun, ReportArtifact
 from .participants.reading import CODE as CODE_SHAPE
-from .serializers import failure_note, retrieval_failed
+from .serializers import failure_note, peer_code_phases, retrieval_failed
 from .types import CONTEXT_FACTS, sha256_json
 from .validation.checks import fact_label
 
@@ -525,12 +525,12 @@ def _peer_reviews(assessment, phase):
                 problem = review.stored_peer_review(peer_run)[1]
                 entry.update(state='unreadable', reason=problem or 'Its stored answer no longer reads as recorded.')
             else:
-                entry.update(_peer_items(assessment, peer_review, text, index))
+                entry.update(_peer_items(assessment, peer_review, text, index, name, record))
         out.append(entry)
     return {'recorded': True, 'owed': owed, 'participants': out}
 
 
-def _peer_items(assessment, peer_review, text, index):
+def _peer_items(assessment, peer_review, text, index, name='', record=None):
     named = {review._uuid(answer.question_id) for answer in peer_review.answers} - {None}
     asked = {str(item.pk): item for item in Clarification.objects.select_related('proposal').filter(
         pk__in=named, encounter_id=assessment.encounter_id, assessment__revision_id=assessment.revision_id)}
@@ -545,9 +545,13 @@ def _peer_items(assessment, peer_review, text, index):
                         'evidence': _located(answer.evidence, text, index)})
     positions = [{'code': item.code if CODE_SHAPE.fullmatch(str(item.code)) else '', 'position': item.position,
                   'evidence': _located(item.evidence, text, index)} for item in peer_review.positions]
-    added = [{'code': item.code if CODE_SHAPE.fullmatch(str(item.code)) else '',
-              'units': item.units if type(item.units) is int else 0, 'evidence': _located(item.evidence, text, index)}
-             for item in peer_review.additional_codes]
+    # each additional code with the phase its participant first proposed it in (serializers.peer_code_phases;
+    # refutation round 2, truth-8): '' for a code CPT Studio does not read
+    shaped = [item.code if CODE_SHAPE.fullmatch(str(item.code)) else '' for item in peer_review.additional_codes]
+    phases = peer_code_phases(assessment, name, record, [code for code in shaped if code])
+    added = [{'code': code, 'units': item.units if type(item.units) is int else 0,
+              'evidence': _located(item.evidence, text, index), 'phase': phases.get(code, '')}
+             for item, code in zip(peer_review.additional_codes, shaped)]
     return {'frozen': [[str(name), str(value)] for name, value in peer_review.frozen_inputs], 'answers': answers,
             'positions': positions, 'additional_codes': added}
 
