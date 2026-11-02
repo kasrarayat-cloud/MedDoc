@@ -13,6 +13,9 @@ run a dead worker left sending is settled (HARNESS.md 2, 11.2 and 12.7 "Recordin
   as never sent.
 - sends-4: a replayed exchange reached nothing (the replay records sent False and calls no endpoint), so it never marks
   a run sent, in the sweep or in the undo.
+- sends-2, recorded as a known limit (HARNESS.md 12.7): a worker that dies after the loop's final answer was recorded
+  and before the run's outcome was leaves a run the sweep settles as unknown beside that answer, and a reconciliation
+  sends the identical request again. Pinned so the recorded limit, and its cost, stay true until it is repaired.
 
 falsegreen-5 (the sweep's rule for a recorded failed or unknown exchange) is pinned in tests.test_harness2_r2_peer
 RecordedAsItEndsTests. Synthetic data only; nothing is sent. Corti is the harness@1 suite's in-process fake; Astra and
@@ -38,8 +41,8 @@ from tests.test_harness2_pipeline import (ASTRA_READING, EMPTY_PEER, FABLE_READI
                                           answered, asks, facts_call, install_reference_store)
 from tests.test_harness_pipeline import BOTH, ScriptedCorti, _WorkerDied
 from tests.test_participants_support import OfflineMixin
-from tests.test_pipeline_api import _OtherSession
-from tests.test_repairs_pipeline import LIVE
+from tests.test_pipeline_api import _OtherSession, drain
+from tests.test_repairs_pipeline import LIVE, RECONCILE_NOTE
 from tests.test_repairs_r1_m import install, run_app_script
 
 IN_FLIGHT = 'The worker stopped while the request was in flight.'
@@ -313,3 +316,35 @@ class SettledAsSentTests(Harness2Case):
         self.close(since)
         run.refresh_from_db()
         self.assertEqual((run.state, run.sent, run.error), ('unknown', False, IN_FLIGHT))
+
+
+# --- sends-2: recorded as a known limit (HARNESS.md 12.7) -------------------------------------------------------------
+
+class FinalAnswerSweptTests(Harness2Case):
+    """sends-2, a known limit recorded in HARNESS.md 12.7 with its cost: a worker that dies after the loop's final
+    answer was recorded as it ended and before the run's outcome was recorded (_finish_loop) leaves a run the stale
+    sweep settles as unknown, in flight, beside that answer; the encounter waits for a member's reconciliation, which
+    sends the identical request again. Pinned so the recorded limit stays true; a repair moves this test with 12.7."""
+
+    def test_known_limit_a_final_answer_recorded_before_the_outcome_is_swept_unknown_and_sent_again(self):
+        encounter_id = self.create()
+        job = self.run_until('astra')
+        with mock.patch('studio.jobs._finish_loop', side_effect=_WorkerDied()), self.assertRaises(_WorkerDied):
+            jobs.run_job(job)
+        (run,) = self.runs_of(encounter_id, 'astra', 'independent')
+        self.assertEqual(recorded(run), [(1, 'succeeded', 200), (2, 'succeeded', 200)])
+        final = run.exchanges.get(turn=2)
+        self.assertEqual((bytes(final.response_bytes), final.tool_calls.count()), (answered('astra', ASTRA_READING), 0))
+        aged(job)
+        jobs.mark_stale()
+        run.refresh_from_db()
+        self.assertEqual((run.state, run.sent, run.error), ('unknown', True, IN_FLIGHT))
+        drain()
+        self.assertEqual((self.encounter(encounter_id).state, self.sent('fable', 'first')), ('provider_unknown', 0))
+        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+                             {'provider_run_id': str(run.pk), 'note': RECONCILE_NOTE})
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+        loops = self.adapters['astra'].loops_of('first')
+        self.assertEqual(([len(item['bodies']) for item in loops], len({item['request'] for item in loops})),
+                         ([2, 2], 1))  # the identical request, sent and paid for again
