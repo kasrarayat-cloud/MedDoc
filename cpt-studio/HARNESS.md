@@ -1396,7 +1396,11 @@ diff. Two session decisions, each narrowing what CPT Studio claims or shows:
   says a peer answer "is recorded and decides nothing by itself" (12.10).
 - **truth-2 (amends 12.11 truth-2):** a first reading's code with no quote found in the document is "not proposed" there
   whether or not peer review then proposed it - in the card's positions (`review.participant_positions`), the
-  participant row's "Codes it proposed" (`review.listed_codes`), the engine's `support['participants']` position and its
+  participant row's "Codes it proposed" (`review.listed_codes`), the engine's `support['participants']` position
+  (superseded, round 5, falsegreen-5: that position speaks of both phases, so it is 'not_proposed' only where no entry
+  of either phase located a quote; where peer review then proposed the code with a located quote it is 'proposed', and
+  its detail says the first reading listed the code with no quote found verbatim there and peer review proposed it;
+  the card's positions speak of the first reading alone) and its
   participants.summary ("It listed N codes (...) with no quote found verbatim in the document, so it did not propose
   them."); "It proposed it after peer review." follows only where it did. (The participant row and the engine's two
   sentences were applied at integration from R4-TRUTH's notes; three pins moved with them.)

@@ -678,3 +678,141 @@ class UnlistedCountEngineTests(SimpleTestCase):
         self.assertIn(engine.participant_unlisted_codes(3, 'It'), summary)
         self.assertIn(engine.participant_unlisted_codes(2, 'In peer review it'), summary)
 
+
+# --- falsegreen-1: the HCPCS half of a code's shape, against values that open in it and carry more --------------------
+
+HCPCS_LED = ('G0121;LES', 'G0121;SYNTH-LESION(S) BY SNARE', 'G0121 ', 'G0121-59')
+
+
+class HcpcsShapeTests(SimpleTestCase):
+    """falsegreen-1: code_shaped's CPT half was pinned against '45385-59', '45385;' and '45385 '; its HCPCS half only
+    against 'g0121' and 'G012', so HCPCS.match in place of fullmatch passed every test, and 'G0121;LES' became a
+    participant's alternative (I9) while a 30-character value failed the assess stage (I10)."""
+
+    def test_a_value_that_opens_in_an_hcpcs_code_s_shape_and_carries_more_is_no_code(self):
+        for value in HCPCS_LED:
+            with self.subTest(value=value):
+                self.assertFalse(peer.code_shaped(value))
+                self.assertFalse(engine.participant_listable(value))
+                self.assertEqual(peer.shown_code(value), length(value))
+        self.assertTrue(peer.code_shaped('G0121'))  # control: the code alone
+
+    def test_the_engine_counts_it_and_lists_nothing_of_it(self):
+        colon = he.COLON
+        for value in HCPCS_LED:
+            with self.subTest(value=value):
+                astra = he.read('astra', [he.code(colon, '45385', he.SNARE), he.code(colon, value, he.BIOPSY)])
+                result = he.run(colon, he.corti(('45385', he.span(colon, he.SNARE))), [astra])
+                self.assertEqual([(p.code, p.bucket) for p in result.proposals], [('45385', 'selected')])
+                self.assertEqual(engine.participant_codes([astra]), ('45385',))
+                self.assertIn(engine.participant_unlisted_codes(1, 'It'),
+                              he.encounter_check(result, 'participants.summary').detail)
+
+
+class HcpcsLedPipelineTests(Surfaces, R2WordingCase):
+    """falsegreen-1 through the pipeline: the value is counted, never listed or shown, and the longest - which a
+    Proposal cannot hold - never fails the assess stage."""
+
+    def check(self, value):
+        self.adapters['astra'].first = [hp.answered('astra', hp.reading(codes=[('45385', SNARE), (value, BIOPSY)]))]
+        self.adapters['fable'].first = [hp.answered('fable', hp.reading(codes=[('45385', SNARE)]))]
+        for name in ('astra', 'fable'):
+            self.adapters[name].peer = [hp.answered(name, hp.EMPTY_PEER, number=2)]
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        self.assertEqual({job.state for job in self.jobs_of(encounter_id)}, {models.Job.SUCCEEDED})
+        self.assertIn(value, [item.code for item in jobs.participant_reading(
+            self.runs_of(encounter_id, 'astra', 'independent')[0])[0].codes])  # the reading keeps it as given
+        detail = self.detail(encounter_id)
+        self.assertEqual(sorted((p['code'], p['bucket']) for p in detail['assessment']['proposals']),
+                         [('45380', 'selected'), ('45385', 'selected')])
+        astra = self.rows(detail)['astra']
+        self.assertEqual((astra['codes'], astra['unlisted_codes']), (['45385'], 1))
+        for where, text in (('detail', json.dumps(detail)), ('trace', json.dumps(self.trace(encounter_id))),
+                            ('txt', self.download(encounter_id))):
+            self.assertNotIn(value, text, where)
+
+    def test_a_short_hcpcs_led_value_is_counted_and_never_shown(self):
+        self.check('G0121;LES')  # 9 characters: within the proposal provider's 1-10 rule
+
+    def test_a_long_hcpcs_led_value_never_fails_the_assess_stage(self):
+        self.check('G0121;SYNTH-LESION(S) BY SNARE')  # 30 characters: no Proposal could hold it
+
+
+# --- falsegreen-2: Corti's own rule beside D9's -------------------------------------------------------------------------
+
+class CortiShortUnshapedTests(Surfaces, R2WordingCase):
+    """falsegreen-2: Corti's unlisted count is the engine's own rule for the proposal provider (engine._listable: 1 to 10
+    characters, I1), never D9's participant rule. Every round-4 pin used values both rules agree on, so a count by
+    participant_listable passed them all, and Corti's row said 'W/LES(S)' (8 characters) could not be listed beside its
+    own code list naming it."""
+
+    def test_a_corti_code_of_ten_characters_or_fewer_in_no_code_s_shape_is_listed_and_not_counted(self):
+        def edit(answer, text):
+            answer['codes'].append(_corti_item(LES, text, BIOPSY))
+        with self.corti_answer(edit):
+            encounter_id = self.create(TWO_EXTENTS)
+            drain()
+        detail = self.detail(encounter_id)
+        corti = self.rows(detail)['corti']
+        self.assertEqual((corti['detail'], corti['codes'], corti['unlisted_codes']),
+                         ('Answered; its codes were checked.', ['45380', '45385', LES], 0))
+        self.assertFalse([c for c in detail['assessment']['encounter_checks'] if c['id'] == 'provider.unlisted'])
+        self.assertIn((LES, 'excluded'), [(p['code'], p['bucket']) for p in detail['assessment']['proposals']])
+        self.assertEqual(serializers.corti_unlisted_counts(self.encounter(encounter_id).current_assessment), (0, 0))
+        lines = _block(_section(self.download(encounter_id), 'REVIEW PARTICIPANTS'), '  - Corti · ')
+        self.assertEqual(lines[0], '  - Corti · Corti · answered; its codes were checked')
+        self.assertFalse([line for line in lines if line.startswith('    Not listed: ')])
+
+
+# --- falsegreen-4: the unread-position sentences, written out ---------------------------------------------------------
+
+UNREAD_CODE_ASTRA = ("Astra gave this code in an entry CPT Studio does not read: a participant's code is read only in the "
+                     "shape of a CPT or HCPCS code, and this code is not in one.")
+UNREAD_PEER_ASTRA = ("In peer review, Astra took a position on this code, which CPT Studio does not read: a participant's "
+                     "code is read only in the shape of a CPT or HCPCS code, and this code is not in one.")
+
+
+class UnreadPositionSentenceTests(SimpleTestCase):
+    """falsegreen-4: every pin compared the support with engine.UNREAD_*.format(label='Astra') - the constants under
+    test - so restoring "did not propose this code" there passed them all."""
+
+    def test_the_sentences_on_corti_s_code_of_a_value_a_participant_gave_unread(self):
+        colon = he.COLON
+        corti = he.corti(('45385', he.span(colon, he.SNARE)), (LES, he.span(colon, he.BIOPSY)))
+        astra = he.read('astra', [he.code(colon, '45385', he.SNARE), he.code(colon, LES, he.BIOPSY)])
+        fable = he.read('fable', [he.code(colon, '45385', he.SNARE)])
+        result = he.run(colon, corti, [astra, fable])
+        self.assertEqual(he.proposal(result, LES).support['participants']['astra'],
+                         {'position': 'not_proposed', 'quote': '', 'detail': UNREAD_CODE_ASTRA})
+        stance = he.peer('astra', positions=[he.stance(colon, LES, 'disputes', he.BIOPSY)])
+        reviewed = he.run(colon, corti, [he.reviewed('astra', [he.code(colon, '45385', he.SNARE)], stance), fable])
+        self.assertEqual(he.proposal(reviewed, LES).support['participants']['astra']['peer'],
+                         {'position': 'no_position', 'quote': '', 'detail': UNREAD_PEER_ASTRA})
+
+
+# --- falsegreen-5: the engine's position of a first reading's unlocated code that peer review proposed ---------------
+
+class FirstReadingThenPeerReviewTests(Surfaces, R2WordingCase):
+    """falsegreen-5: round 4's variant A - Astra's frozen first reading lists 45385 with a quote no document holds, and
+    its peer review proposes 45385 on the snare passage. HARNESS.md 12.12 recorded the engine's support position as
+    'not_proposed' there; the engine says 'proposed', of both phases, and no test read it. The card's
+    participant_positions speaks of the first reading alone."""
+
+    def test_the_engine_s_position_is_of_both_phases_and_the_card_s_of_the_first_reading(self):
+        self.adapters['astra'].first = [hp.answered('astra', hp.reading(
+            codes=[('45385', UNLOCATED), ('45380', BIOPSY)], services=[('c1', 'colonoscopy', 'performed', SNARE)]))]
+        self.adapters['astra'].peer = [hp.answered('astra', hp.peer_answer(codes=[('45385', SNARE)]), number=2)]
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        [snare] = self.proposals(self.detail(encounter_id), '45385', bucket='selected')
+        self.assertEqual((snare['proposed_by'], snare['phases']),
+                         (['corti', 'astra', 'fable'], {'astra': 'peer_review', 'fable': 'independent'}))
+        position_ = snare['support']['participants']['astra']
+        self.assertEqual({key: position_[key] for key in ('position', 'detail', 'quote')}, {
+            'position': 'proposed', 'quote': SNARE,
+            'detail': 'Astra proposed 45385 2 times, listed in its independent reading with no quote found verbatim '
+                      'there, and proposed after peer review (stated units 1, 1; modifiers none; confidence high), '
+                      'quoting the document verbatim in 1 passage.'})
+        self.assertEqual(snare['participant_positions']['astra'],
+                         {'position': 'not_proposed', 'quote': '', 'detail': LISTED + LATER})
