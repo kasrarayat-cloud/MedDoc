@@ -329,9 +329,10 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   their sha256, and how many recorded assessments carry the old note.
   Assessments and reports already made record what was shown and are never
   rewritten; every assessment made afterwards carries the corrected note, so a
-  re-assessment records a new assessment whose list of changes names
-  'reference sources' (decisions carry: no proposal fingerprint includes a
-  note). It never touches `PassageSource`, whose notes quote each CMS file's own
+  re-assessment records a new assessment rather than keeping the current one.
+  Decisions carry to it (no proposal fingerprint includes a note); a decision
+  that does not carry for another reason names 'reference sources' among the
+  changes. It never touches `PassageSource`, whose notes quote each CMS file's own
   notices. With no row left holding the old text it changes nothing and says
   so: rerun it freely. Until it has run, an assessment the new pair makes still
   carries the old note: to have none, run it right after `app` (with

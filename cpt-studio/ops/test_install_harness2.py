@@ -94,7 +94,7 @@ class LicenseNoteTextTests(unittest.TestCase):
         self.assertIn(note, (install.LICENSE_NOTE_OLD, install.LICENSE_NOTE_NEW))
 
 
-# --- arguments and the phase table ---------------------------------------------------------------------------------------
+# --- arguments and the phase table ------------------------------------------------------------------------------------
 
 class LicenseNoteArgumentTests(unittest.TestCase):
     BASE = ['--revision', REVISION, '--receipts', '/tmp/receipts', '--phase', 'license-note']
@@ -111,7 +111,7 @@ class LicenseNoteArgumentTests(unittest.TestCase):
             self.assertEqual(caught.exception.code, 2)
 
 
-# --- the phase, with its surroundings replaced ----------------------------------------------------------------------------
+# --- the phase, with its surroundings replaced ------------------------------------------------------------------------
 
 def counts_answer(**overrides):
     answer = {'rows': 3, 'before': {'old': 2, 'new': 0, 'other': 1}, 'after': {'old': 0, 'new': 2, 'other': 1},
@@ -264,7 +264,7 @@ class LicenseNotePhaseTests(TemporaryDirectoryTest):
         self.assertEqual((record['details']['old_note'], record['details']['new_note']), (OLD_NOTE, NEW_NOTE))
 
 
-# --- the peer reviews on an undo ---------------------------------------------------------------------------------------
+# --- the peer reviews on an undo --------------------------------------------------------------------------------------
 
 class PeerStagesOnUndoTests(TemporaryDirectoryTest):
     """harness@2's stage kinds astra_peer and fable_peer (Job.PEER_KINDS) are closed, as astra and fable are, by every
@@ -372,7 +372,7 @@ class PeerStagesOnUndoTests(TemporaryDirectoryTest):
                          {install.SERVICES['web']: 'web-id', install.SERVICES['worker']: 'worker-id'})
 
 
-# --- migration 0008 in the image phase's receipt -------------------------------------------------------------------------
+# --- migration 0008 in the image phase's receipt ----------------------------------------------------------------------
 
 class MigrationReceiptTests(TemporaryDirectoryTest):
     def archive(self):
@@ -395,7 +395,8 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
 
     def test_the_image_phase_accepts_0008_and_its_receipt_says_why(self):
         image = {'Id': IMAGE, 'Size': 1,
-                 'Config': {'User': f'{install.APP_UID}:{install.APP_UID}', 'Env': [f'CPT_STUDIO_RELEASE_SHA={REVISION}'],
+                 'Config': {'User': f'{install.APP_UID}:{install.APP_UID}',
+                            'Env': [f'CPT_STUDIO_RELEASE_SHA={REVISION}'],
                             'Labels': {install.LABEL: '1', install.ROLE_LABEL: 'app-image',
                                        install.REVISION_LABEL: REVISION}}}
         built = []
@@ -453,10 +454,17 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
                                           'insert is refused'])
 
 
-# --- the in-image scripts on a real database ------------------------------------------------------------------------------
+# --- the in-image scripts on a real database --------------------------------------------------------------------------
 
-LIVE_DB_PORT = str(install.DB_PORT)  # the live database's port, also the settings' default: never connected to here
+LIVE_DB_PORT = install.DB_PORT  # the live database's port, also the settings' default: never connected to here
 _DATABASE = {}
+
+
+def port_number(value):
+    try:
+        return int(str(value).strip())
+    except ValueError:
+        return None
 
 
 def database_problem() -> str:
@@ -466,8 +474,9 @@ def database_problem() -> str:
     missing = [name for name in needed if not os.environ.get(name)]
     if missing:
         return 'no disposable database is configured (' + ', '.join(missing) + ' not set)'
-    if os.environ['CPT_STUDIO_DB_PORT'] == LIVE_DB_PORT:
-        return f'CPT_STUDIO_DB_PORT names the live database ({LIVE_DB_PORT}); refused'
+    port = port_number(os.environ['CPT_STUDIO_DB_PORT'])
+    if port is None or port == LIVE_DB_PORT:
+        return f'CPT_STUDIO_DB_PORT is not a disposable database\'s port (the live one is {LIVE_DB_PORT}); refused'
     if os.environ.get('CPT_STUDIO_PROVIDER_MODE', 'disabled') != 'disabled':
         return 'these tests run with CPT_STUDIO_PROVIDER_MODE=disabled only'
     if os.environ.get('DJANGO_SETTINGS_MODULE', 'cptstudio.settings') != 'cptstudio.settings':
@@ -490,8 +499,8 @@ def database():
         django.setup()
         from django.conf import settings
         from django.db import connection
-        if str(settings.DATABASES['default']['PORT']) == LIVE_DB_PORT:
-            raise unittest.SkipTest('the settings name the live database; refused')
+        if port_number(settings.DATABASES['default']['PORT']) in (None, LIVE_DB_PORT):
+            raise unittest.SkipTest('the settings name the live database, or no port; refused')
         test = dict(connection.settings_dict.get('TEST') or {})
         test['NAME'] = f"test_cptstudio_{os.environ.get('CPT_STUDIO_TEST_DB_SUFFIX') or 'default'}_installer"
         connection.settings_dict['TEST'] = test
@@ -516,6 +525,22 @@ def run_in_image(body, params):
     answers = [line for line in lines if line.startswith(install.APP_SCRIPT_ANSWER)]
     assert len(answers) == 1, lines
     return json.loads(answers[0][len(install.APP_SCRIPT_ANSWER):])
+
+
+class DatabaseGuardTests(unittest.TestCase):
+    def test_the_live_database_is_never_used_and_an_unset_one_is_a_skip(self):
+        base = {'CPT_STUDIO_SECRET_KEY': 'synthetic-key', 'CPT_STUDIO_DB_PASSWORD': 'synthetic-password',
+                'CPT_STUDIO_DB_HOST': '127.0.0.1', 'CPT_STUDIO_PROVIDER_MODE': 'disabled'}
+        for port in ('55451', ' 55451', '055451', 'live', ''):
+            with self.subTest(port=port), mock.patch.dict(os.environ, {**base, 'CPT_STUDIO_DB_PORT': port}, clear=True):
+                self.assertTrue(database_problem())
+        with mock.patch.dict(os.environ, base, clear=True):
+            self.assertIn('CPT_STUDIO_DB_PORT not set', database_problem())
+        with mock.patch.dict(os.environ, {**base, 'CPT_STUDIO_DB_PORT': '55461', 'CPT_STUDIO_PROVIDER_MODE': 'live'},
+                             clear=True):
+            self.assertIn('disabled only', database_problem())
+        with mock.patch.dict(os.environ, {**base, 'CPT_STUDIO_DB_PORT': '55461'}, clear=True):
+            self.assertIn(database_problem(), ('', 'Django is not installed here'))
 
 
 class DatabaseTest(unittest.TestCase):
@@ -564,7 +589,8 @@ class LicenseNoteOnTheDatabaseTests(DatabaseTest):
     def source(self, key, note, **fields):
         from studio import models
         values = dict(key=key, kind='cms-pfs', publisher='Centers for Medicare & Medicaid Services (CMS)',
-                      title=f'Synthetic source {key}', release='SYN1', url='https://www.cms.gov/files/zip/synthetic.zip',
+                      title=f'Synthetic source {key}', release='SYN1',
+                      url='https://www.cms.gov/files/zip/synthetic.zip',
                       sha256=hashlib.sha256(key.encode()).hexdigest(),
                       retrieved_at=dt.datetime(2026, 10, 23, 20, 59, tzinfo=dt.timezone.utc),
                       effective_start=dt.date(2026, 10, 1), effective_end=dt.date(2026, 12, 31), license_note=note,
@@ -701,7 +727,8 @@ class PeerStagesOnTheDatabaseTests(DatabaseTest):
         queued, running, stopped = self.scenario()
         kinds = sorted([*install.COMMON_STAGE_KINDS, 'astra', 'fable', 'review2'])
         answer = self.close(kinds)
-        self.assertEqual((answer['closed'], answer['kinds'], answer['encounters']), (3, ['astra_peer', 'fable_peer'], 3))
+        self.assertEqual((answer['closed'], answer['kinds'], answer['encounters']),
+                         (3, ['astra_peer', 'fable_peer'], 3))
         failed = (models.Job.FAILED, self.NOTE)
         self.assertEqual(self.stages([queued, running, stopped]), {
             (queued.pk, 'astra'): (models.Job.QUEUED, ''), (queued.pk, 'fable'): (models.Job.QUEUED, ''),
