@@ -4,6 +4,7 @@ proposers, participant positions, reference check and retrieval, the Activity wo
 Synthetic data only; no network. Pipeline-driven cases use the fakes of tests.test_harness_pipeline; the field cases
 persist hand-built assessments through review.persist_assessment.
 """
+import json
 import sys
 import types
 from dataclasses import replace
@@ -21,6 +22,12 @@ from tests.test_pipeline_api import drain
 from tests.test_repairs_pipeline import LIVE
 
 PTP = 'NCCI procedure-to-procedure edits are not connected'
+# A synthetic stand-in for wording a participant might write into a field CPT Studio reads as a code or an id (never AMA
+# text): a reading keeps a code that is not five characters as given (refutation r1 IND-1).
+DESCRIPTOR_LIKE = ('45385 SYNTHETIC-PLACEHOLDER; with removal of lesion(s) by PLACEHOLDER technique, single or '
+                   'multiple')
+UNLISTED_ONE = ('It returned 1 code that cannot be listed: empty, or longer than 10 characters (a CPT code has five). '
+                'It is not shown and never truncated.')
 
 
 def record(name, state, *, run=None, codes=(), not_coded=(), reason='', unverified=0, model=''):
@@ -376,6 +383,26 @@ class HarnessBlockTests(HarnessCase):
         self.assertEqual((row['peer']['state'], row['peer']['run_id']), ('not_sent', None))
         self.assertTrue(row['peer']['detail'].startswith('Peer review: '), row['peer']['detail'])
         self.assertIn(jobs.PEER_FIRST_NOT_READ.rstrip('.'), row['peer']['detail'])
+
+    def test_a_participant_code_the_engine_cannot_list_is_never_served(self):
+        # refutation r1 IND-1: the assessment's record copies every code the reading kept, a descriptor-like one
+        # included; the row lists only the codes the engine lists (engine._listable) and says how many it does not
+        self.adapters['astra'].codes = [(DESCRIPTOR_LIKE, TIME_QUOTE), ('99213', TIME_QUOTE)]
+        encounter_id = self.create()
+        drain()
+        stored = self.encounter(encounter_id).current_assessment.participants
+        self.assertIn(DESCRIPTOR_LIKE, [item['code'] for record in stored if record['name'] == 'astra'
+                                        for item in record['codes']])
+        response = self.client.get(f'/api/encounters/{encounter_id}')
+        self.assertEqual(response.status_code, 200, response.content)
+        data = response.json()
+        data['assessment'].pop('summary')  # this suite's engine wrapper notes there what it was given
+        self.assertNotIn(DESCRIPTOR_LIKE, json.dumps(data))
+        astra = {row['name']: row for row in data['harness']['participants']}['astra']
+        self.assertEqual((astra['state'], astra['codes']), ('done', ['99213']))
+        self.assertTrue(astra['detail'].endswith(UNLISTED_ONE), astra['detail'])
+        # a row whose codes are all listable says nothing more
+        self.assertNotIn('cannot be listed', self.rows(encounter_id)['fable']['detail'])
 
     def test_a_refused_reading_row(self):
         self.adapters['fable'].returned_model = 'claude-other-model'

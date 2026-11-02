@@ -198,10 +198,15 @@ installation reads `not_configured` unless an assessment read its answer. A part
 the encounter `state` is never `provider_failed` for it, and an unknown outcome of any participant - an adapter that
 stopped with an unexpected error before it recorded an outcome included - makes the encounter `provider_unknown` until a
 member reconciles it (`POST reconcile` takes any participant's run). `codes` are the codes that participant proposed
-(Corti's: its selected codes);
+(Corti's: its selected codes), each once - a participant's only when the engine lists it (1 to 10 characters): a longer
+"code" may carry wording, a CPT descriptor say, so it is never served, and the row's `detail` ends with the engine's own
+sentence ("It returned 1 code that cannot be listed: ... It is not shown and never truncated.");
 `usage` is as the vendor reported it, with its `usage_basis`; `estimated_cost_usd` is a string estimated from published
-rates, not reconciled to an invoice, and null for Corti (credits, not USD) and for a run that reported no usage (a
-reuse). `reused` is true when a retained answer to the identical request was reused and nothing was sent.
+rates, not reconciled to an invoice, to four decimals (`"0.0270"`, rounded half up), and null for Corti (credits, not
+USD), for a run that reported no usage (a reuse), and where the installed pricing module cannot price the usage. A tool
+loop is priced exchange by exchange (Astra's long-context rate is a property of one request), and has no estimate when
+its recorded exchanges do not add up to its usage. `reused` is true when a retained answer to the identical request was
+reused and nothing was sent.
 
 `harness.reference_validation.state` is `waiting` while processing, `done` when retrieval ran for the current
 assessment and its traces cover every code a proposal can be decided on, and `not_run` otherwise (no assessment, one
@@ -371,6 +376,11 @@ included). `response_bytes` is the size of the raw response kept. `reading` is a
 reading, read again from the stored bytes as the adapter version that recorded it - each quote with the spans it was
 found at, or with the reason it was not (an unverified quote, never evidence) - and null for Corti's runs and for a run
 with no answer; a stored answer that no longer matches its sha256 reads `{"refused": true, "problems": ["..."], ...}`.
+A code, modifier or service id a participant wrote (a reading's codes, not-coded items, services and questions, a peer
+review's additional codes and positions) is served as given only when it is a short token (at most 20 characters, no
+whitespace); any other is named by its length, as the reader's own problems name it: `"a value of 106 characters (not
+shown)"` (I9: such a field may carry a CPT descriptor). Free text (a basis, a question, a description) is served for the
+page, which withholds what reads like a descriptor.
 `retrieval` is the current assessment's retrieval traces as recorded. `reconciliation` keeps proposed (`proposed_by`,
 `positions`), reference-checked (`reference_check`) and approved (`approved`: the member's current decision is an
 approval) apart.

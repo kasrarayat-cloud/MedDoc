@@ -24,6 +24,7 @@ from studio.providers.base import canonical_body
 from studio.types import ClarificationSpec, ExtractionResult, sha256_json, to_jsonable
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
+from tests.test_harness_api import DESCRIPTOR_LIKE, UNLISTED_ONE
 from tests.test_participants_support import NOTE, PAGES, astra_with, fable_with, fixture_reading
 
 BOTH = dict(ASTRA_MODE='replay', FABLE_MODE='replay')
@@ -89,7 +90,7 @@ class Harness2Case(TestCase):
         self.runs, self.readings, self.requests = {}, {}, {}
         for name in ADAPTERS:
             request = self.adapters[name].build_request(NOTE, PAGES, 'paste', None)
-            data = (astra_with if name == 'astra' else fable_with)(first_reading(name))
+            data = (astra_with if name == 'astra' else fable_with)(self.first_reading(name))
             run = self.make_run(name, request, data, purpose=models.ProviderRun.INDEPENDENT)
             calls = [('cms_code_facts', {'codes': ['45385'], 'date_of_service': ''}, FACTS_RESULT, [FACT_REF])]
             self.exchanges(run, request.body, data, calls if name == 'astra' else [])
@@ -106,6 +107,9 @@ class Harness2Case(TestCase):
         self.questions = {c.fact: c for c in self.final.clarifications.all()}
 
     # --- the rows -----------------------------------------------------------------------------------------------------
+
+    def first_reading(self, name):
+        return first_reading(name)
 
     def make_run(self, name, request, data, *, purpose):
         return models.ProviderRun.objects.create(
@@ -630,3 +634,78 @@ class TraceTests(Harness2Case):
                          [(str(self.first.pk), 1, False, False), (str(self.final.pk), 2, True, True)])
         self.assertEqual(assessments[0]['frozen'], self.frozen)
         self.assertEqual(assessments[1]['frozen'], self.frozen)
+
+
+NOT_SHOWN = f'a value of {len(DESCRIPTOR_LIKE)} characters (not shown)'
+
+
+@override_settings(**BOTH)
+class DescriptorLikeTextTests(Harness2Case):
+    """A participant can write any text into a field CPT Studio reads as a code or an id: the reading schemas leave them
+    plain strings, and the readers keep a code that is not five characters as given. Such text is served nowhere (I9;
+    refutation r1 IND-1): a participant row lists only the codes the engine lists, saying how many it does not, and the
+    owner's trace names each longer code, modifier or service id by its length, as the reader's own problems do."""
+
+    def first_reading(self, name):
+        data = super().first_reading(name)
+        if name == 'astra':
+            data['codes'][0]['code'] = DESCRIPTOR_LIKE
+            data['codes'][1].update(modifiers=['59', DESCRIPTOR_LIKE], service_ids=['s1', DESCRIPTOR_LIKE])
+            data['services'].append(dict(data['services'][0], id=DESCRIPTOR_LIKE))
+            data['not_coded'] = [{'service_ids': [DESCRIPTOR_LIKE], 'code': DESCRIPTOR_LIKE, 'reason': 'other',
+                                  'evidence': []}]
+            data['clarifications'] = [{'question': 'Synthetic question.', 'why': 'Synthetic reason.',
+                                       'service_ids': [DESCRIPTOR_LIKE], 'evidence': []}]
+        return data
+
+    def peer_answer(self, name):
+        data = super().peer_answer(name)
+        if name == 'astra':
+            data['code_positions'].append({'code': DESCRIPTOR_LIKE, 'position': 'disputes',
+                                           'reason': 'Synthetic reason.', 'evidence': []})
+            data['additional_codes'].append({'code': DESCRIPTOR_LIKE, 'modifiers': [DESCRIPTOR_LIKE], 'units': 1,
+                                             'service_ids': [DESCRIPTOR_LIKE], 'basis': 'Synthetic basis.',
+                                             'evidence': [], 'confidence': 'low'})
+        return data
+
+    def test_the_readings_keep_it_as_given(self):
+        self.assertEqual(self.readings['astra'].codes[0].code, DESCRIPTOR_LIKE)
+        self.assertIn(DESCRIPTOR_LIKE, [item['code'] for item in self.final.participants[0]['codes']])
+
+    def test_a_participant_row_lists_only_the_codes_the_engine_lists_for_every_role(self):
+        for user in (self.reviewer, self.viewer, self.owner):
+            with self.subTest(user=user.username):
+                response = self.client_for(user).get(f'/api/encounters/{self.encounter.pk}')
+                self.assertEqual(response.status_code, 200, response.content)
+                self.assertNotIn(DESCRIPTOR_LIKE, response.content.decode('utf-8'))
+                astra = next(row for row in response.json()['harness']['participants'] if row['name'] == 'astra')
+                self.assertEqual(astra['codes'], ['45380'])
+                self.assertTrue(astra['detail'].endswith(UNLISTED_ONE), astra['detail'])
+
+    def test_the_owner_s_trace_names_each_long_code_like_value_by_its_length(self):
+        response = self.client_for(self.owner).get(f'/api/encounters/{self.encounter.pk}/trace')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertNotIn(DESCRIPTOR_LIKE, response.content.decode('utf-8'))
+        first, peer_run = next(p for p in response.json()['participants'] if p['name'] == 'astra')['runs']
+        reading = first['reading']
+        self.assertEqual([item['code'] for item in reading['codes']], [NOT_SHOWN, '45380'])
+        self.assertEqual((reading['codes'][1]['modifiers'], reading['codes'][1]['service_ids']),
+                         (['59', NOT_SHOWN], ['s1', NOT_SHOWN]))
+        self.assertEqual([service['id'] for service in reading['services']], ['s1', NOT_SHOWN])
+        self.assertEqual([(item['code'], item['service_ids']) for item in reading['not_coded']],
+                         [(NOT_SHOWN, [NOT_SHOWN])])
+        self.assertEqual([item['service_ids'] for item in reading['questions']], [[NOT_SHOWN]])
+        added = peer_run['review']['additional_codes']
+        self.assertEqual([(item['code'], item['modifiers'], item['service_ids']) for item in added],
+                         [('45381', [], ['s1']), (NOT_SHOWN, [NOT_SHOWN], [NOT_SHOWN])])
+        self.assertEqual([item['code'] for item in peer_run['review']['positions']], ['45380', NOT_SHOWN])
+        # the reader's own problems already name it by its length
+        self.assertIn(f'codes[0] (a value of {len(DESCRIPTOR_LIKE)} characters) is not a five-character CPT code; it '
+                      'is kept as given.', reading['problems'])
+
+    def test_neither_report_carries_it(self):
+        from studio import reports
+
+        snap = reports.snapshot(self.encounter, 'draft')
+        for content in (reports.render_txt(snap), reports.render_csv(snap)):
+            self.assertNotIn(DESCRIPTOR_LIKE, content.decode('utf-8'))

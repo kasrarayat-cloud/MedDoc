@@ -1112,6 +1112,31 @@ def record_words(record):
     return f'{words}: {reason}'
 
 
+def listed_codes(record):
+    """(codes, unlisted) of a participant's Assessment.participants entry: the codes it proposed that may be listed by
+    name, each once, in order - the engine's own rule (engine._listable: 1 to MAX_LISTED_CODE characters), as its
+    participants.summary lists them - and how many it proposed that cannot be. A longer 'code' may carry wording, a CPT
+    descriptor say, so it is counted and never shown, never truncated (I9; refutation r1 IND-1: the participants row
+    served whatever text a participant wrote as a code). Read when serving, so records already stored are covered."""
+    from .validation import engine  # local import: only the engine's rule is needed here
+
+    codes, unlisted = [], 0
+    for item in record.get('codes') or []:
+        code = item.get('code') if isinstance(item, dict) else None
+        if not engine._listable(code):
+            unlisted += 1
+        elif code not in codes:
+            codes.append(code)
+    return codes, unlisted
+
+
+def unlisted_words(count):
+    """The engine's own sentence for codes a participant returned that cannot be listed ('' for none)."""
+    from .validation import checks, engine  # local import: only the engine's wording is needed here
+
+    return checks.unlisted_codes(count, engine.MAX_LISTED_CODE, 'It') if count else ''
+
+
 def proposed_by(proposal):
     """Who proposed the code, in harness order (I4: a proposal, never an approval): Corti for its own proposals and
     alternatives (origin primary or second_review), and each participant the engine named in support['proposed_by'] -
