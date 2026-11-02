@@ -435,9 +435,19 @@ def _participants(assessment):
             name, label, vendor, runs.get(record.get('run')), review.RECORD_WORDS.get(state, str(state)),
             review.record_reason(record), record.get('unverified_quotes'), refused=state == 'refused')
         if 'exchanges' in record:  # harness@2 (HARNESS.md 12.3): the run was a tool loop
+            run = runs.get(record.get('run'))
             entry.update(exchanges=_count(record.get('exchanges')), tool_calls=_count(record.get('tool_calls')),
-                         unpriced_exchanges=[[turn, state] for turn, state in
-                                             review.unpriced_exchanges(runs.get(record.get('run')))])
+                         unpriced_exchanges=[[turn, state] for turn, state in review.unpriced_exchanges(run)])
+            if run is not None and run.reused_from_id:
+                # a reuse sent nothing: the entry counts the exchanges and tool calls of the loop that answered for it,
+                # the retained run's (jobs.loop_run), so they are said to be that run's, and the reuse's own - none - are
+                # its own (refutation round 3, truth-4: "Exchanges: 2 · tool calls: 1" was printed as the reuse's)
+                from .models import ToolCall  # local import: only this count needs it
+
+                entry.update(retained={'run': str(run.reused_from_id), 'exchanges': entry['exchanges'],
+                                       'tool_calls': entry['tool_calls']},
+                             exchanges=run.exchanges.count(),
+                             tool_calls=ToolCall.objects.filter(exchange__run=run).count())
         out.append(entry)
     return out
 
@@ -1056,7 +1066,13 @@ def _participants_section(snap):
         usage = json.dumps(entry['usage'], sort_keys=True, ensure_ascii=False) if entry['usage'] else 'none reported'
         lines.append(f'    Usage: {usage}' + (f' ({entry["usage_basis"]})' if entry['usage_basis'] else ''))
         if 'exchanges' in entry:  # harness@2: its first reading was a tool loop
-            lines.append(f'    Exchanges: {entry["exchanges"]} · tool calls: {entry["tool_calls"]}')
+            line = f'    Exchanges: {entry["exchanges"]} · tool calls: {entry["tool_calls"]}'
+            retained = entry.get('retained')
+            if isinstance(retained, dict):  # a reuse: the loop that answered for it is the retained run's
+                made, calls = _count(retained.get('exchanges')), _count(retained.get('tool_calls'))
+                line += (f' (this run reuses the retained answer of run {retained.get("run")}, which made {made} '
+                         f'exchange{"" if made == 1 else "s"} and {calls} tool call{"" if calls == 1 else "s"})')
+            lines.append(line)
         if entry['name'] == review.CORTI:
             lines.append('    Estimated cost: not estimated (Corti reports usage in credits, not USD)')
         elif entry['estimated_cost_usd'] is not None:

@@ -698,7 +698,10 @@ no first reading was read, a member date conflict holds the encounter, or no par
 and a PARTICIPANT REFERENCES section (by
 participant and phase, what that run's own tool calls retrieved and what it says it used, "cited, not retrieved" where
 its own run never returned it) - apart from REFERENCE RETRIEVAL, which stays the reconciliation's. REVIEW PARTICIPANTS
-gives a tool loop's exchanges and tool calls, and PROVIDER USAGE lists a peer-review run as a "peer review". No
+gives a tool loop's exchanges and tool calls - for a run that reused a retained answer, its own (none) and then those of
+the retained run, named as that run's ("Exchanges: 0 · tool calls: 0 (this run reuses the retained answer of run
+<id>, which made 2 exchanges and 1 tool call)"; refutation round 3, truth-4: the retained run's were printed as the
+reuse's own) - and PROVIDER USAGE lists a peer-review run as a "peer review". No
 participant's own wording is printed: questions are CPT Studio's, values CPT Studio's words, passages the revision's
 own slices, codes and references only in their shapes. The CSV keeps its columns and adds rows that are not proposals,
 after the encounter rows: `confirmed_finding` (fact in `status`, value in `exclusion_reason`, passages in `evidence`,

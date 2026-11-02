@@ -317,3 +317,37 @@ class CortiOnlyUnlistedTests(CortiUnlistedMixin, R2WordingCase):
     def test_the_chain_is_i1_s(self):
         encounter_id, _ = self.run_with((LONG, SNARE))
         self.assertEqual(self.kinds(encounter_id), ['extract', 'analyze', 'predict', 'assess'])
+
+
+# --- truth-4: a reuse's REVIEW PARTICIPANTS never credits it with the retained run's exchanges ---------------------
+
+class ReuseExchangesTests(hp.Harness2Case):
+    """The second encounter of the same synthetic note reuses Astra's retained answer: its run sent nothing and holds
+    no exchange, while its Assessment.participants entry counts the exchanges and tool calls of the loop that answered
+    for it (jobs.loop_run: the retained run's). The TXT printed "Exchanges: 2 · tool calls: 1" as this run's, beside
+    PARTICIPANT REFERENCES' "this run made none" and the trace's 0 exchanges (refutation round 3, truth-4)."""
+
+    def astra_lines(self, encounter_id):
+        return _block(_section(_txt(self.encounter(encounter_id)), 'REVIEW PARTICIPANTS'), '  - Astra · ')
+
+    def test_a_reuse_says_whose_exchanges_and_tool_calls_these_are(self):
+        first = self.create()
+        drain()
+        second = self.create()
+        drain()
+        (retained,) = self.runs_of(first, 'astra', 'independent')
+        (reuse,) = self.runs_of(second, 'astra', 'independent')
+        self.assertEqual((reuse.reused_from_id, reuse.sent, reuse.exchanges.count()), (retained.pk, False, 0))
+        self.assertEqual((retained.exchanges.count(), models.ToolCall.objects.filter(exchange__run=retained).count()),
+                         (2, 1))
+        lines = self.astra_lines(second)
+        self.assertIn(f'    Exchanges: 0 · tool calls: 0 (this run reuses the retained answer of run {retained.pk}, '
+                      'which made 2 exchanges and 1 tool call)', lines)
+        self.assertNotIn('    Exchanges: 2 · tool calls: 1', lines)
+        # control: the retained run's own entry is as before
+        self.assertIn('    Exchanges: 2 · tool calls: 1', self.astra_lines(first))
+        # and the owner's trace agrees: the reuse holds no exchange of its own
+        trace = _owner(self, 'owner_r3truth4').get(f'/api/encounters/{second}/trace').json()
+        (traced,) = [item for participant in trace['participants'] for item in participant['runs']
+                     if item['id'] == str(reuse.pk)]
+        self.assertEqual((traced['exchanges'], traced['reused_from']), ([], str(retained.pk)))
