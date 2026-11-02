@@ -219,6 +219,17 @@ class StopTimeoutTests(unittest.TestCase):
         self.assertEqual(install.STOP_SECONDS['web'], 30)  # the web sends nothing: unchanged
         self.assertGreater(loop, settings_value('PARTICIPANT_EXCHANGE_READ_TIMEOUT_SECONDS'))
 
+    def test_each_participant_stage_ends_before_the_sweep_and_the_stop_outlasts_it(self):
+        # HARNESS.md 12.1: a phase-1 or peer stage's deadline covers the loop plus its own bookkeeping, below the
+        # stale-stage sweep's bound, and the worker's stop timeout is above it
+        loop, stale = settings_value('PARTICIPANT_LOOP_DEADLINE_SECONDS'), settings_value('STALE_RUNNING_SECONDS')
+        deadlines = settings_value('JOB_DEADLINE_SECONDS')
+        for kind in ('astra', 'fable', 'astra_peer', 'fable_peer'):
+            with self.subTest(kind=kind):
+                self.assertGreater(deadlines[kind], loop)
+                self.assertLess(deadlines[kind], stale)
+                self.assertGreater(install.STOP_SECONDS['worker'], deadlines[kind])
+
     def test_parking_and_removing_wait_for_the_whole_stop_timeout(self):
         calls = []
 

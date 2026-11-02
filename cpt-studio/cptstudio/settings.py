@@ -185,8 +185,14 @@ PARTICIPANT_MAX_TOOL_RESULT_BYTES = 256 * 1024  # one tool result, as returned t
 # The assess stage routes the document again (validation's span readings read that routing's analysis) and then
 # validates, so it has the analyze stage's time and memory and as much again for the validation: a document the analyze
 # stage read within its limits is never sent and then left unassessed for repeating that work (round 7 bounded:1).
+# A participant's stage - its first reading's or its peer review's - is one tool loop (HARNESS.md 12.1): its deadline
+# covers the loop's 540 s (PARTICIPANT_LOOP_DEADLINE_SECONDS) and the 15 s kept for recording its outcome
+# (jobs.LOOP_RECORDING_SECONDS), with 25 s for the stage's own work before the loop - a stage that has used more
+# reserves and sends nothing and is queued again (jobs._check_loop_time) - and it ends 20 s before
+# STALE_RUNNING_SECONDS (600), where the stale-stage sweep takes a stage for dead, so a live stage is never swept. The
+# worker's stop timeout (ops/install.py, 600 s) outlasts it.
 JOB_DEADLINE_SECONDS = {'extract': 300, 'analyze': 60, 'predict': 180, 'assess': 120, 'review2': 180,
-                        'astra': 600, 'fable': 600, 'astra_peer': 600, 'fable_peer': 600}
+                        'astra': 580, 'fable': 580, 'astra_peer': 580, 'fable_peer': 580}
 # Routing and context extraction run in a forked child under these (studio/bounded.py): the stage's deadline
 # above, this growth of address space past what the worker already uses, and a shorter wall clock when a
 # member's context change runs the extraction inside a web request.

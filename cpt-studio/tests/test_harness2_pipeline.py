@@ -462,6 +462,27 @@ class PhaseOneLoopTests(Harness2Case):
             budget = min(settings.JOB_DEADLINE_SECONDS[kind], settings.STALE_RUNNING_SECONDS)
             self.assertLessEqual(settings.PARTICIPANT_LOOP_DEADLINE_SECONDS + jobs.LOOP_RECORDING_SECONDS, budget)
 
+    def test_each_participant_stage_covers_its_loop_and_recording_and_ends_before_the_sweep(self):
+        # HARNESS.md 12.1: below STALE_RUNNING_SECONDS, never at it, so a live stage is never swept as dead
+        from types import SimpleNamespace
+
+        from django.conf import settings
+        loop_s, recording = settings.PARTICIPANT_LOOP_DEADLINE_SECONDS, jobs.LOOP_RECORDING_SECONDS
+        for kind in models.Job.PARTICIPANT_KINDS + models.Job.PEER_KINDS:
+            with self.subTest(kind=kind):
+                deadline = settings.JOB_DEADLINE_SECONDS[kind]
+                self.assertLessEqual(loop_s + recording, deadline)
+                self.assertLess(deadline, settings.STALE_RUNNING_SECONDS)
+                # a stage may start its loop while the loop and its recording still fit its deadline, and not a second
+                # later: it is queued again instead, having reserved and sent nothing
+                latest = deadline - loop_s - recording
+                now = timezone.now()
+                with mock.patch('studio.jobs.timezone.now', return_value=now):
+                    jobs._check_loop_time(SimpleNamespace(kind=kind, started_at=now - timedelta(seconds=latest)))
+                    with self.assertRaisesMessage(jobs.Requeue, jobs.LOOP_LATE_MESSAGE):
+                        jobs._check_loop_time(SimpleNamespace(kind=kind,
+                                                              started_at=now - timedelta(seconds=latest + 1)))
+
     def test_a_reuse_records_no_exchange_and_reads_with_the_runs_it_reuses(self):
         first = self.create()
         drain()
