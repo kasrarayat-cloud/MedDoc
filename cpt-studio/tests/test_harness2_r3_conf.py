@@ -396,9 +396,9 @@ class CaseFidelityTests(h2.Harness2Case):
         self.assertEqual(made.sha256, self.first.sha256)
 
     def test_the_final_assessment_is_the_engine_s_for_the_stored_runs(self):
-        """assess #2 as stage_assess reads it: each participant's newest finished first-reading run and the peer run made
-        for assess #1 (jobs._peer_run: its scope names that assessment), read by the pipeline's readers, Corti's run
-        read by its normalizer, the context the analyze stage records - through the stage's own engine child."""
+        """assess #2 as stage_assess reads it: each participant's newest finished first-reading run and the peer run
+        made for assess #1 (jobs._peer_run: its scope names that assessment), read by the pipeline's readers, Corti's
+        run read by its normalizer, the context the analyze stage records - through the stage's own engine child."""
         inputs = []
         for name in h2.ADAPTERS:
             item, record = jobs._first_input(self.encounter, name, jobs._participant_run(self.revision, name))

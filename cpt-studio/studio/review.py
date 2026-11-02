@@ -1746,7 +1746,8 @@ def on_current_context(assessment):
 # what it states. The checks, the engine's _Confirmations and the re-assessment stay, dormant, behind the setting.
 CONFIRMATIONS_NOT_OFFERED = ('This release offers no reviewer confirmation of a candidate answer, so nothing was '
                              'recorded; a question is answered with an addendum.')
-UNCHECKED_WHY = "CPT Studio does not check what a participant's passage states, and this release offers no confirmation."
+UNCHECKED_WHY = ("CPT Studio does not check what a participant's passage states, and this release offers no "
+                 'confirmation.')
 
 
 def confirmations_offered():

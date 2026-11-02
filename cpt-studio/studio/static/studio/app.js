@@ -120,11 +120,12 @@ const PEER_POSITIONS = { supports: 'supports it', disputes: 'disputes it', canno
 const ASSESSMENT_PHASES = { 0: 'No model participant: Corti only', 1: 'Phase 1: the frozen first readings', 2: 'Phase 2: after peer review' };
 const FINDING_FACTS = { service_date: 'Date of service', performed_status: 'Performed at this encounter', extent: 'Extent reached', target: 'Structure examined', cannulation: 'Cannulation outcome', em_basis: 'Basis for the visit level (total time or medical decision making)' };
 const CANDIDATE_NOTE = 'A candidate answers nothing until a reviewer confirms it. Agreement between participants never verifies or confirms one, and a confirmation approves no code.';
-// Refutation round 3 (HARNESS.md 12.10, the session's D7): this release offers no reviewer confirmation, so where the API
-// does not allow the member to confirm (permissions.can_confirm not true, as it never is in this release) a question's
-// candidates are shown as what they are - the participants' located passages, each with the answer it gave in CPT
-// Studio's words - with no Verified or Not verified badge, no sentence about what CPT Studio's readers read in them, and
-// no Confirm control (locatedPassage). The rendering below for a served can_confirm true is the dormant path's, kept.
+// Refutation round 3 (HARNESS.md 12.10, the session's D7): this release offers no reviewer confirmation, so where the
+// API does not allow the member to confirm (permissions.can_confirm not true, as it never is in this release) a
+// question's candidates are shown as what they are - the participants' located passages, each with the answer it gave
+// in CPT Studio's words - with no Verified or Not verified badge, no sentence about what CPT Studio's readers read in
+// them, and no Confirm control (locatedPassage). The rendering below for a served can_confirm true is the dormant
+// path's, kept.
 const LOCATED_LABEL = 'The participants\' located passages';
 const LOCATED_NOTE = 'These are the passages the participants located for this question, each with the answer it gave in CPT Studio\'s words. CPT Studio does not check what a participant\'s passage states, and this release offers no confirmation: a question is answered with an addendum.';
 // What a verified candidate's consistency check established, by fact (HARNESS.md 12.5, as refutation round 2 left it):
