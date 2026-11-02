@@ -508,6 +508,35 @@ class PhaseOneLoopTests(Harness2Case):
         self.assertEqual(self.encounter(second).state, 'ready_for_review')
 
 
+class SingleExchangeRunTests(Harness2Case):
+    """Refutation round 1, sends-2: before part B, harness@2's adapter version sent its body through the single-exchange
+    send(), so a stored run of that version can hold an answer that still asks for tool calls, with no exchange
+    recorded. Such a run is not a tool loop's answer: the identical request is never answered by reusing it."""
+
+    def test_a_stored_single_exchange_run_is_never_reused_for_a_loop_s_request(self):
+        encounter_id = self.create()
+        job = self.run_until('astra')
+        revision, adapter = self.encounter(encounter_id).current_revision, self.adapters['astra']
+        request = adapter.build_request(revision.text, jobs._participant_pages(revision), 'paste', None)
+        data = asks('astra', facts_call('call_single_1', ['99213']))
+        now = timezone.now()
+        single = models.ProviderRun.objects.create(
+            encounter_id=encounter_id, revision=revision, provider='astra', adapter_version=adapter.adapter_version,
+            request_sha256=request.canonical_sha256, request_body=request.body, contexts=list(request.contexts),
+            state=models.ProviderRun.SUCCEEDED, sent=True, http_status=200, response_bytes=data,
+            response_sha256=hashlib.sha256(data).hexdigest(), purpose='independent', scope={'mode': 'replay'},
+            started_at=now, finished_at=now)
+        self.assertEqual(single.exchanges.count(), 0)
+        jobs.run_job(job)
+        drain()
+        latest = self.runs_of(encounter_id, 'astra', 'independent')[-1]
+        self.assertNotEqual(latest, single)
+        self.assertEqual((latest.sent, latest.reused_from_id, latest.exchanges.count()), (True, None, 2))
+        self.assertEqual(self.sent('astra', 'first'), 1)  # the loop ran for the request
+        record = self.records(self.encounter(encounter_id).current_assessment)['astra']
+        self.assertEqual((record['state'], record['run']), ('read', str(latest.pk)))
+
+
 # --- what assess #1 and assess #2 record (HARNESS.md 12.3) ------------------------------------------------------------
 
 class RecordsTests(Harness2Case):

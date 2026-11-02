@@ -1134,8 +1134,14 @@ def _participant_done(job, run, outcome=None):
 
 def _retained_answer(encounter, participant, request, purpose):
     """The workspace's retained answer to the identical participant request (provider, adapter version, request sha256,
-    purpose) recorded in the same mode - the original SUCCEEDED run, not a reuse of one; None when there is none."""
+    purpose) recorded in the same mode - the original SUCCEEDED run, not a reuse of one, whose tool loop recorded its
+    exchanges; None when there is none. A run with no exchange is no loop's answer (refutation round 1, sends-2): before
+    part B, this adapter version sent its body through the single-exchange send(), whose stored answer can still ask for
+    tool calls, so reused it would stand in for the loop the identical request is owed."""
+    from django.db.models import Exists, OuterRef
+
     return models.ProviderRun.objects.filter(
+        Exists(models.ProviderExchange.objects.filter(run=OuterRef('pk'))),
         encounter__workspace=encounter.workspace, provider=participant.name,
         adapter_version=participant.adapter_version, request_sha256=request.canonical_sha256,
         state=models.ProviderRun.SUCCEEDED, reused_from__isnull=True, purpose=purpose,
