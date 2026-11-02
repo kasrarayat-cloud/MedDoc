@@ -80,7 +80,7 @@ def build_request(name: str, adapter_version: str, text: str, pages: Sequence[Pa
     return http.finished_request(name, adapter_version, make_body(framed, document), text, max_bytes=max_bytes)
 
 
-NOT_SHOWN = ' (not shown)'  # what follows a value a peer request names only by its length (serializers._token's words)
+NOT_SHOWN = ' (not shown)'  # what follows a value named only by its length (as the owner's trace shows one too)
 LESION_FIELDS = ('site', 'size', 'morphology', 'action', 'specimen')
 # The strict shapes in which a value another model - or Corti - wrote is shown to the other vendor as given (HARNESS.md
 # 12.4 as amended after refutation round 3, peer-1). Each is ASCII and whole: fullmatch, no case folding.

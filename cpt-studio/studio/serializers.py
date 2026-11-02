@@ -4,6 +4,7 @@ from django.conf import settings
 from . import models, participants, review
 from .gi.context import charge_date_problem, is_member_conflict
 from .gi.profiles import PROFILES, profile
+from .participants import peer as participant_peer
 from .participants import reading as participant_reading
 from .participants.reading import CODE as CODE_SHAPE
 from .providers.base import ProviderUnavailable
@@ -1026,33 +1027,30 @@ def encounter_detail(encounter, membership):
 
 # --- the administrative trace (HARNESS.md 7; owner only, api.trace) ---------------------------------------------------
 
-def _token(value):
-    """A code, modifier or service id a participant wrote, as the trace serves it: as given when the reader names it as
-    a short token (participants.reading._token: at most 20 characters, no whitespace), otherwise only by its length, in
-    the reader's own words - longer text in such a field may carry a CPT descriptor, which is never displayed (I9;
-    refutation r1 IND-1: the trace served it verbatim, and the page shows these fields as given)."""
-    if not isinstance(value, str):
-        return value
-    named = participant_reading._token(value)
-    return value if named == repr(value) else f'{named} (not shown)'
+def _ids(values, ids):
+    """A list of service ids a participant wrote, each as ``ids`` (one participants.peer.ShownIds per served reading)
+    serves it; anything that is not a list is returned as it is."""
+    return [ids(value) for value in values] if isinstance(values, list) else values
 
 
-def _tokens(values):
-    return [_token(value) for value in values] if isinstance(values, list) else values
-
-
-def _code_entry(item):
-    """A code a participant proposed, advised not to code or took a position on, with its code-like fields (code,
-    modifiers, service ids) as _token serves them; its free text is left for the page, which withholds what reads like
-    a descriptor."""
+def _code_entry(item, ids):
+    """A code a participant proposed, advised not to code or took a position on, with its code-like fields in the
+    strict shapes a peer request shows them in (HARNESS.md 12.4 after refutation round 3, peer-1; I9): the code only in
+    a code's shape (participants.peer.shown_code), each modifier only as two capital letters or digits (shown_modifier),
+    each service id only as letters and digits of at most 8 characters, any other under one name of CPT Studio's own for
+    the whole reading (``ids``); otherwise only by its length. The 20-character token rule the trace used before passed
+    descriptor-like text such as 'SYNTH;WITH-POLYP(S)' verbatim (refutation round 3, R3-PEER's display note). Its free
+    text is left for the page, which withholds what reads like a descriptor."""
     if not isinstance(item, dict):
         return item
     out = dict(item)
     if 'code' in out:
-        out['code'] = _token(out['code'])
-    for key in ('modifiers', 'service_ids'):
-        if key in out:
-            out[key] = _tokens(out[key])
+        out['code'] = participant_peer.shown_code(out['code'])
+    if 'modifiers' in out:
+        out['modifiers'] = ([participant_peer.shown_modifier(value) for value in out['modifiers']]
+                            if isinstance(out['modifiers'], list) else out['modifiers'])
+    if 'service_ids' in out:
+        out['service_ids'] = _ids(out['service_ids'], ids)
     return out
 
 
@@ -1070,12 +1068,13 @@ def _trace_reading(run):
                 'services': [], 'codes': [], 'not_coded': [], 'questions': [], 'extraction_issues': [],
                 'references_used': []}
     data = to_jsonable(reading)
+    ids = participant_peer.ShownIds()  # one for the whole reading: services first, then what refers to them
     return {'refused': data['refused'], 'problems': data['problems'], 'unverified_quotes': data['unverified_quotes'],
             'date_of_service': {'value': data['date_of_service'], 'evidence': data['date_evidence']},
-            'services': [dict(service, id=_token(service.get('id'))) for service in data['services']],
-            'codes': [_code_entry(item) for item in data['codes']],
-            'not_coded': [_code_entry(item) for item in data['not_coded']],
-            'questions': [dict(item, service_ids=_tokens(item.get('service_ids'))) for item in data['questions']],
+            'services': [dict(service, id=ids(service.get('id'))) for service in data['services']],
+            'codes': [_code_entry(item, ids) for item in data['codes']],
+            'not_coded': [_code_entry(item, ids) for item in data['not_coded']],
+            'questions': [dict(item, service_ids=_ids(item.get('service_ids'), ids)) for item in data['questions']],
             'extraction_issues': data['extraction_issues'],
             'references_used': _checked_against(run, data['references_used'])}
 
@@ -1110,8 +1109,9 @@ def _trace_review(run, assessment=None):
     shaped = [item.code if isinstance(item.code, str) and CODE_SHAPE.fullmatch(item.code) else ''
               for item in peer_review.additional_codes]
     phases = peer_code_phases(assessment, run.provider, record, [code for code in shaped if code]) if read else {}
-    return {**data, 'positions': [_code_entry(item) for item in data['positions']],
-            'additional_codes': [{**_code_entry(item), 'phase': phases.get(code, '')}
+    ids = participant_peer.ShownIds()
+    return {**data, 'positions': [_code_entry(item, ids) for item in data['positions']],
+            'additional_codes': [{**_code_entry(item, ids), 'phase': phases.get(code, '')}
                                  for item, code in zip(data['additional_codes'], shaped)],
             'references_used': _checked_against(run, data['references_used'])}
 

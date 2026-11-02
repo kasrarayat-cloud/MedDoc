@@ -827,15 +827,19 @@ class DescriptorLikeTextTests(Harness2Case):
         first, peer_run = next(p for p in response.json()['participants'] if p['name'] == 'astra')['runs']
         reading = first['reading']
         self.assertEqual([item['code'] for item in reading['codes']], [NOT_SHOWN, '45380'])
+        # a withheld service id keeps one name of CPT Studio's own wherever the reading mentions it (refutation round 3:
+        # the trace shows code-like fields in the strict shapes a peer request does, participants.peer.ShownIds - this
+        # pin moved from the bare length to that name)
+        withheld_id = f'id 1: {NOT_SHOWN}'
         self.assertEqual((reading['codes'][1]['modifiers'], reading['codes'][1]['service_ids']),
-                         (['59', NOT_SHOWN], ['s1', NOT_SHOWN]))
-        self.assertEqual([service['id'] for service in reading['services']], ['s1', NOT_SHOWN])
+                         (['59', NOT_SHOWN], ['s1', withheld_id]))
+        self.assertEqual([service['id'] for service in reading['services']], ['s1', withheld_id])
         self.assertEqual([(item['code'], item['service_ids']) for item in reading['not_coded']],
-                         [(NOT_SHOWN, [NOT_SHOWN])])
-        self.assertEqual([item['service_ids'] for item in reading['questions']], [[NOT_SHOWN]])
+                         [(NOT_SHOWN, [withheld_id])])
+        self.assertEqual([item['service_ids'] for item in reading['questions']], [[withheld_id]])
         added = peer_run['review']['additional_codes']
         self.assertEqual([(item['code'], item['modifiers'], item['service_ids']) for item in added],
-                         [('45381', [], ['s1']), (NOT_SHOWN, [NOT_SHOWN], [NOT_SHOWN])])
+                         [('45381', [], ['s1']), (NOT_SHOWN, [NOT_SHOWN], [withheld_id])])
         self.assertEqual([item['code'] for item in peer_run['review']['positions']], ['45380', NOT_SHOWN])
         # the reader's own problems already name it by its length
         self.assertIn(f'codes[0] (a value of {len(DESCRIPTOR_LIKE)} characters) is not a five-character CPT code; it '

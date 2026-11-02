@@ -543,8 +543,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "d3e05e8efeeeffaa11bc739937f3c075218e856b1d5538be08f332f80e45f1e1",
-   "response_sha256": "d07a7beb84adef8844ee62727e09deb27426350a84261fe6698c418dc6063c53",
+   "request_sha256": "f949a49bf4d7852a680c576c67ba74443cea453d0c3102ad88a88956b99e86a2",
+   "response_sha256": "46caba3f2b457a0f89b5ce301eb3c630ac77c7d9eafe9b5a58ecf4c099218621",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -566,8 +566,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "a17adbf28a0340aa5f4a4d280be24bb935fcafb54d903e99dc4cf6ef4fbc4ffb",
-   "response_sha256": "0fd1a21af2640cf7d429800a30037dbf96edee225981494322e73208ab741fbd",
+   "request_sha256": "9fde68cefa573ff678064595e9af0b469a8c98f7badfe86789049d85cb35d736",
+   "response_sha256": "1b2d18f4f9f0226df84581704cf1ee3e5e58f60a8565263215a23ac574669319",
    "reused_from": null,
    "error": "",
    "reconciled": false,

@@ -279,6 +279,33 @@ class PeerRequestTests(PeerMaterialCase):
                              ['45385', '45380', length(CORTI_TOKEN), length(CORTI_LISTED)])
             self.assertEqual(hits(json.dumps([corti, sections[CPT_STUDIO]], ensure_ascii=False)), [])
 
+    def test_the_owner_s_trace_shows_another_model_s_values_in_the_same_strict_shapes(self):
+        # The owner's trace shows each participant's codes, modifiers and ids in the strict shapes a peer request shows
+        # them in (I9: no CPT descriptor text is displayed either; refutation round 3, R3-PEER's display note, applied
+        # at integration in serializers._code_entry): the 20-character token rule the trace used before served
+        # ASTRA_CODE, ASTRA_MOD and ASTRA_SID as written.
+        from django.test import Client
+
+        from studio import models
+        from tests.support import factories as f
+
+        owner = f.member(self.ws, f.user('owner'), role=models.Membership.OWNER)
+        encounter_id, _, _, _ = self.run_chain()
+        client = Client()
+        client.force_login(owner)
+        trace = client.get(f'/api/encounters/{encounter_id}/trace').json()
+        astra = next(item for item in trace['participants'] if item['name'] == 'astra')
+        reading = next(run['reading'] for run in astra['runs'] if run['reading'])
+        shown = json.dumps(reading, ensure_ascii=False)
+        for token in [ASTRA_CODE, ASTRA_MOD, ASTRA_SID, LESION_SID, NOT_CODED_TOKEN, *SPLIT]:
+            self.assertNotIn(json.dumps(token, ensure_ascii=False), shown, token)
+        self.assertEqual([item['id'] for item in reading['services']],
+                         [named(1, ASTRA_SID), 'c1', named(2, LESION_SID)])
+        self.assertEqual([(item['code'], item['service_ids']) for item in reading['codes']],
+                         [('45385', [named(1, ASTRA_SID)]), (length(ASTRA_CODE), [named(1, ASTRA_SID)]),
+                          ('45380', ['c1', named(2, LESION_SID)])])
+        self.assertEqual(reading['codes'][0]['modifiers'], [length(ASTRA_MOD), 'XS', *[length(item) for item in SPLIT]])
+
     def test_cpt_studio_s_excluded_code_is_named_by_its_length_with_its_reason(self):
         _, _, excluded, runs = self.run_chain()
         reasons = [check['detail'] for check in excluded.checks if check['status'] != 'pass']
