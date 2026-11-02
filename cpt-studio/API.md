@@ -141,7 +141,7 @@ Fields: `file` (PDF/DOCX/TXT) **or** `text` (pasted note); `title` (optional);
       "clarification_ids": [],
       "decision": null, "decision_state": "undecided",
       "allowed_actions": ["approve", "reject"],
-      "proposed_by": ["corti", "astra"],
+      "proposed_by": ["corti", "astra"], "listed_by": [],
       "participant_positions": {"astra": {"position": "proposed", "detail": "Astra proposed this code with evidence located in the document.", "quote": "..."},
                                 "fable": {"position": "advised_not_to_code", "detail": "Fable advised not to code it: not performed at this encounter.", "quote": "..."}},
       "reference_check": {"state": "passed", "detail": "Present in the CMS fee schedule file: passed; ... NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified."},
@@ -541,7 +541,8 @@ outside the caller's workspaces.
                   "services": [...], "codes": [...], "not_coded": [...], "questions": [...], "extraction_issues": [...]}}]}],
   "retrieval": [{"code": "45385", "service_date": "2026-10-21", "facts": [...], "passages": [...], "lookups": [...], "notes": [...]}],
   "reconciliation": [{"code": "45385", "family": "gi.colonoscopy", "bucket": "selected", "status": "ready",
-                      "proposed_by": ["corti", "astra"], "positions": {...}, "reference_check": {...}, "approved": false}]
+                      "proposed_by": ["corti", "astra"], "listed_by": [], "positions": {...}, "reference_check": {...},
+                      "approved": false}]
 }
 ```
 
