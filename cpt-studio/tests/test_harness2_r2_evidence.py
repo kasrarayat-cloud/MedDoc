@@ -13,6 +13,8 @@
   offered as the date of service - each through the same pipeline and endpoint, ending with nothing confirmed.
 - truth-10 (the plan's D3): an assessment of an earlier context is offered no candidate and takes no confirmation; the
   endpoint refuses first, saying why, and so does the re-assessment.
+- truth-7 (the shared wording): the first sentence of a participant's own proposal never says Corti did not propose a
+  code Corti listed only as a candidate, or selected with no exact passage.
 
 Synthetic data only; nothing is sent. Corti is the harness@1 suite's in-process fake; Astra and Fable are the real
 replay adapters on the real tool loop (tests.test_harness2_pipeline), and CPT Studio's real CMS tool executor answers
@@ -597,3 +599,48 @@ class ContextChangedTests(ColonCase):
             jobs.reassess_after_confirmation(encounter, self.reviewer)
         self.assertNotEqual(jobs.REASSESS_CONTEXT, jobs.REASSESS_NONE)
         self.assertEqual(jobs.REASSESS_NONE, 'The current revision has no final assessment to make again.')
+
+
+# --- truth-7 (the shared wording): the engine never says Corti did not propose a code Corti listed --------------------
+
+def lead_run(text, corti, participants):
+    """``corti``: (role, code, quote) of the proposal provider's answer; ``participants``: participant inputs."""
+    def located(quote):
+        return (span(text, quote),) if quote in text else (EvidenceSpan(0, 0, len(quote), quote, False),)
+    codes = tuple(ProviderCode(role, 'cpt', value, 'UNVERIFIED PROVIDER WORDING', located(quote))
+                  for role, value, quote in corti)
+    return assess(text=text, pages=(), context=gi_context.extract_context(text), routing=detect.route(text, DAY),
+                  normalized=NormalizedResponse('corti', 'test@1', codes), reference=REFERENCE, service_date=DAY,
+                  provider_status='succeeded', participants=participants)
+
+
+class CortiLeadTests(SimpleTestCase):
+    TEXT = COLON_HEAD + 'Procedure: Colonoscopy\n' + CECUM + '\n' + POLYP + '\n' + FLAT + '\n'
+
+    def participant(self, value, quote):
+        from tests.test_harness_engine import code as participant_code, read
+        return [read('astra', [participant_code(self.TEXT, value, quote)])]
+
+    def lead(self, corti):
+        result = lead_run(self.TEXT, corti, self.participant('45380', BIOPSY_QUOTE))
+        added = next(p for p in result.proposals if p.code == '45380' and p.bucket != 'alternative'
+                     and p.support.get('origin') == 'participant')
+        return added.rationale, result
+
+    def test_a_code_corti_listed_only_as_a_candidate_is_said_so(self):
+        rationale, result = self.lead((('selected', '45385', SNARE_QUOTE), ('candidate', '45380', BIOPSY_QUOTE)))
+        self.assertTrue(rationale.startswith('Proposed by Astra (independent participant); Corti listed this code only '
+                                             'as a candidate, not selected; see Alternatives.'), rationale)
+        self.assertNotIn('Corti did not propose this code', rationale)
+        self.assertEqual([(p.key, p.code) for p in result.proposals if p.bucket == 'alternative'], [('alt:0', '45380')])
+
+    def test_a_code_corti_selected_with_no_exact_passage_is_said_so(self):
+        rationale, result = self.lead((('selected', '45385', SNARE_QUOTE),
+                                       ('selected', '45380', 'a passage the document does not hold')))
+        self.assertTrue(rationale.startswith('Proposed by Astra (independent participant); Corti also selected this '
+                                             'code, with no exact passage; it is listed apart, excluded.'), rationale)
+
+    def test_corti_did_not_propose_a_code_only_where_it_has_no_entry_for_it(self):
+        rationale, _ = self.lead((('selected', '45385', SNARE_QUOTE),))
+        self.assertTrue(rationale.startswith('Proposed by Astra (independent participant); Corti did not propose this '
+                                             'code.'), rationale)
