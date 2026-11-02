@@ -21,6 +21,7 @@ from datetime import date, timedelta
 
 from django.conf import settings
 from django.db import connection, transaction
+from django.db.models import JSONField, Value
 from django.utils import timezone
 
 from . import audit, bounded, models, participants, review
@@ -32,13 +33,14 @@ from .providers.corti import CortiProvider, build_coding_request
 from .providers.replay import ReplayProvider
 from .providers.base import ProviderUnavailable
 from .participants import loop as participant_loop
-from .participants import prompt as participant_prompt
+from .participants import peer as participant_peer
 from .reference import passages as reference_passages
 from .reference import tools as reference_tools
 from .reference.store import prefetched_lookup, selected_codes
 from .storage import ALLOWED_SUFFIXES, OriginalCorrupted, read_original
 from .types import (ConfirmedFinding, EvidenceSpan, Fact, NormalizedResponse, PageSpan, ParticipantInput, ProviderCode,
                     ProviderRequest, RawExchange, RoutingResult, from_jsonable, sha256_json, to_jsonable)
+from .validation import checks as validation_checks
 from .validation.engine import assess as run_assessment
 
 log = logging.getLogger(__name__)
@@ -994,13 +996,16 @@ def _check_loop_time(job):
 def _send_loop(provider, request, run, original_bytes, execute_tool, should_stop):
     """The participant's one tool loop (HARNESS.md 11.2): a loop.LoopOutcome. An adapter answers every run with one; one
     that raised instead, or answered with anything else, may have sent the request, so the outcome is unknown, with no
-    exchange recorded, and blocks every further send until a member reconciles it - never a run left 'sending' that
-    nothing blocks on and no member can reconcile (I8). ``should_stop``: the member's Stop, observed before every later
-    exchange (sends-3)."""
+    exchange recorded but those recorded as they ended, and blocks every further send until a member reconciles it -
+    never a run left 'sending' that nothing blocks on and no member can reconcile (I8). ``should_stop``: the member's
+    Stop, observed before every later exchange (sends-3). Each exchange is recorded as it ends (_record_exchange,
+    refutation round 2, sends-r2-4: they were written only once the whole loop had ended, so a worker that died
+    mid-loop - SIGKILL, an OOM kill, a host reset - left nothing of exchanges that had been answered and paid for)."""
     try:
-        outcome = provider.send_loop(request, deadline_s=settings.PARTICIPANT_LOOP_DEADLINE_SECONDS,
-                                     client_request_id=str(run.run_identity), original_bytes=original_bytes,
-                                     execute_tool=execute_tool, should_stop=should_stop)
+        with participant_loop.recording(lambda record: _record_exchange(run, record)):
+            outcome = provider.send_loop(request, deadline_s=settings.PARTICIPANT_LOOP_DEADLINE_SECONDS,
+                                         client_request_id=str(run.run_identity), original_bytes=original_bytes,
+                                         execute_tool=execute_tool, should_stop=should_stop)
         if (not isinstance(outcome, participant_loop.LoopOutcome) or not isinstance(outcome.final, RawExchange)
                 or outcome.final.outcome not in LOOP_OUTCOMES or not isinstance(outcome.exchanges, tuple)
                 or not all(isinstance(item, participant_loop.ExchangeRecord) for item in outcome.exchanges)):
@@ -1014,14 +1019,16 @@ def _send_loop(provider, request, run, original_bytes, execute_tool, should_stop
 
 
 def _finish_loop(run, outcome):
-    """The run's outcome and every exchange and tool call of its loop, exactly as the LoopOutcome carries them, in one
-    transaction (HARNESS.md 12.1): the run's own fields from the loop's final RawExchange (its first request is already
-    the run's request; its final response is the last exchange's). When they cannot all be recorded, the run is recorded
-    as unknown - an exchange may have reached the vendor - unless the loop provably sent nothing."""
+    """The run's outcome and every exchange and tool call of its loop not yet recorded as it ended (_record_exchange),
+    exactly as the LoopOutcome carries them, in one transaction (HARNESS.md 12.1): the run's own fields from the loop's
+    final RawExchange (its first request is already the run's request; its final response is the last exchange's). When
+    they cannot all be recorded, the run is recorded as unknown - an exchange may have reached the vendor - unless the
+    loop provably sent nothing."""
     try:
         with transaction.atomic():
             _finish_run(run, outcome.final)
-            _record_exchanges(run, outcome.exchanges)
+            recorded = set(run.exchanges.values_list('turn', flat=True))
+            _record_exchanges(run, [record for record in outcome.exchanges if record.turn not in recorded])
     except Exception as exc:  # noqa: BLE001 - logged; the run records why, never the internals
         log.exception('the loop outcome of participant run %s could not be recorded', run.pk)
         label = participants.LABELS.get(run.provider, run.provider)
@@ -1033,8 +1040,22 @@ def _finish_loop(run, outcome):
                    else UNRECORDED_MESSAGE.format(label=label))))
 
 
+def _record_exchange(run, record):
+    """One exchange of ``run``'s tool loop and its tool calls, recorded as the exchange ends - its answer read and its
+    tool calls answered, before the next exchange is sent - in a transaction of its own, committed at once (refutation
+    round 2, sends-r2-4). One that cannot be recorded is logged and recorded with the run's outcome (_finish_loop)."""
+    try:
+        with transaction.atomic():
+            _record_exchanges(run, (record,))
+    except Exception:  # noqa: BLE001 - logged; the loop goes on, and _finish_loop records what is still missing
+        log.exception('exchange %s of participant run %s could not be recorded as it ended', record.turn, run.pk)
+
+
 def _record_exchanges(run, exchanges):
-    """One ProviderExchange per loop exchange (turn 1..n) and one ToolCall per tool call it answered."""
+    """One ProviderExchange per loop exchange (turn 1..n) and one ToolCall per tool call it answered. A tool call whose
+    arguments were missing or null (None: the loop answered it with CPT Studio's own sentence) is recorded with JSON
+    null arguments - never SQL NULL, which the column refuses, so the record failed and the whole run, its answer
+    included, was recorded unknown with nothing of it kept (refutation round 2, sends-r2-1)."""
     for record in exchanges:
         data = record.response_bytes or b''
         exchange = models.ProviderExchange.objects.create(
@@ -1045,7 +1066,8 @@ def _record_exchanges(run, exchanges):
             provider_request_id=(record.provider_request_id or '')[:120], response_id=(record.response_id or '')[:140],
             error=record.error or '', started_at=record.started_at, finished_at=record.finished_at)
         models.ToolCall.objects.bulk_create([models.ToolCall(
-            exchange=exchange, call_id=call.call_id, tool=call.tool, arguments=call.arguments, result=call.result,
+            exchange=exchange, call_id=call.call_id, tool=call.tool,
+            arguments=Value(None, JSONField()) if call.arguments is None else call.arguments, result=call.result,
             result_sha256=call.result_sha256, refs=list(call.refs), executed_at=call.executed_at or timezone.now())
             for call in record.tool_calls])
 
@@ -1428,19 +1450,21 @@ def _peer_material(revision, first, name, records):
     """(own, peers, cpt_studio, frozen) of participant ``name``'s peer request (HARNESS.md 12.4), from assess #1
     ``first`` and the runs it read: its own frozen reading, re-read from its phase-1 run with that run's reader and
     refs; Corti's selected codes with the exact passages of the document their evidence quotes (_corti_conclusions);
-    the other model's frozen reading, when it has one, in the reading schema's shape; CPT Studio's rule-based reading
-    after assess #1 (_cpt_studio_reading); and assess #1's frozen list with that reading's sha256 added. A frozen
-    reading that no longer reads back as assess #1 recorded it refuses the request (_PeerUnbuilt): the record shows
-    exactly what was shown. Of assess #1's frozen list, only what this request shows is listed (refutation round 1,
-    IND-5): a Corti answer or another model's reading that is not shown - not read, or refused - is not listed under
-    "shown above"; the peer builder refuses any other list (peer.check_frozen)."""
+    the other model's frozen reading, when it has one, in the reading schema's shape with none of that model's own
+    wording (peer.shown_reading: refutation round 2, IR2-3); CPT Studio's rule-based reading after assess #1, which
+    names no person and no value a member entered (_cpt_studio_reading: IR2-1, IR2-2); and assess #1's frozen list with
+    that reading's sha256 added. A frozen reading that no longer reads back as assess #1 recorded it refuses the request
+    (_PeerUnbuilt): the record shows exactly what was shown. Of assess #1's frozen list, only what this request shows
+    is listed (refutation round 1, IND-5): a Corti answer or another model's reading that is not shown - not read, or
+    refused - is not listed under "shown above"; the peer builder refuses any other list (peer.check_frozen). The
+    other model's entry still names its frozen reading (its reading_sha256), from which what is shown is made."""
     peers = {}
     corti = _corti_conclusions(first.provider_run)
     if corti is not None:
         peers['corti'] = corti
     for other in participants.PARTICIPANTS:
         if other != name and (records.get(other) or {}).get('state') == 'read':
-            peers[other] = participant_prompt.reading_answer(_frozen_reading(revision, other, records))
+            peers[other] = participant_peer.shown_reading(_frozen_reading(revision, other, records))
     cpt_studio = _cpt_studio_reading(first)
     shown = {name, *peers, 'revision'}
     frozen = [list(pair) for pair in (records.get(name) or {}).get('frozen') or []
@@ -1503,8 +1527,10 @@ def _corti_conclusions(run):
     """Corti's frozen conclusions as a peer is shown them (HARNESS.md 12.4): its selected codes in its own order, each
     once, with the units it selected it in (as the engine counts them), no modifiers (its API states none) and the
     passages of the document its evidence quotes exactly - never its display text, and never a passage of the date line
-    CPT Studio adds to its request, which is no document text. None when its answer was not read: no run, a run that did
-    not succeed, or a response refused whole."""
+    CPT Studio adds to its request, which is no document text. A code that is not a short token is named only by its
+    length (peer.shown_token; refutation round 2, IR2-3: Corti's adapter keeps any string as a code, which the engine
+    never lists and a peer request relayed to the other vendors). None when its answer was not read: no run, a run that
+    did not succeed, or a response refused whole."""
     if run is None or run.state != models.ProviderRun.SUCCEEDED:
         return None
     _, normalized = _provider_inputs(run)
@@ -1514,10 +1540,20 @@ def _corti_conclusions(run):
     for code in normalized.codes:
         if code.role == 'selected' and isinstance(code.code, str):
             selected.setdefault(code.code, []).append(code)
-    return {'codes': [{'code': code, 'modifiers': [], 'units': len(items),
+    return {'codes': [{'code': participant_peer.shown_token(code), 'modifiers': [], 'units': len(items),
                        'evidence': list(dict.fromkeys(span.text for item in items for span in item.evidence
                                                       if span.context_index == 0 and span.exact))}
                       for code, items in selected.items()]}
+
+
+# What a peer request shows of CPT Studio's reading carries no person and no value a member entered (refutation round 2,
+# IR2-1, IR2-2; the session lead's D4). The page and the reports keep their own wording: this is what a model is shown.
+PEER_CONFIRMED_REASON = ("This code's reading rests in part on a reviewer's confirmation of a participant's located "
+                         "passage, not on CPT Studio's own readers, so its reasons are not shown here.")
+PEER_MEMBER_CONFLICT = ('Encounter metadata a workspace member entered differs from what the document gives; both are '
+                        'kept and neither is used until they agree. The value entered is not shown here.')
+PEER_MEMBER_DATE = 'the date of service a workspace member entered'
+_MEMBER_CONFLICT_PREFIX = gi_context.USER_CONFLICT_NOTE.split('{', 1)[0]  # how every member conflict's note opens
 
 
 def _cpt_studio_reading(first):
@@ -1525,7 +1561,12 @@ def _cpt_studio_reading(first):
     peer answers by id, and its held and excluded proposals, each with the details of its checks that did not pass. The
     peer instructions label it as a reading that may be wrong. Each question is described by review.question_identity,
     the one function the API's candidates match a peer answer back to the final assessment's question by (12.5), and
-    named by its stable id (_question_ids)."""
+    named by its stable id (_question_ids).
+
+    It names no person and no value a member entered (refutation round 2, IR2-1, IR2-2; HARNESS.md 12.4 as amended): a
+    proposal whose reading rests on a reviewer's confirmation is shown with one fixed sentence in place of its reasons
+    (_peer_reasons), and every reason and question is shown without a member's value (_peer_text)."""
+    member_date = _member_date(first)
     items = list(first.clarifications.filter(state=models.Clarification.OPEN).select_related('proposal')
                  .order_by('created_at', 'pk'))
     named = _question_ids(first, items)
@@ -1533,15 +1574,56 @@ def _cpt_studio_reading(first):
     for item in items:
         scope, family, fact, proposal_key, _ = review.question_identity(item)
         questions.append({'question_id': named[item.pk], 'scope': scope, 'fact': fact, 'family': family,
-                          'proposal_key': proposal_key, 'question': item.question, 'reason': item.reason})
+                          'proposal_key': proposal_key, 'question': _peer_text(item.question, member_date),
+                          'reason': _peer_text(item.reason, member_date)})
 
     def proposals(status):
-        return [{'key': p.key, 'code': p.code, 'status': p.status,
-                 'reasons': [str(check.get('detail') or '') for check in p.checks or []
-                             if isinstance(check, dict) and check.get('status') != 'pass']}
+        return [{'key': p.key, 'code': p.code, 'status': p.status, 'reasons': _peer_reasons(p, member_date)}
                 for p in first.proposals.filter(status=status).order_by('position')]
     return {'open_questions': questions, 'held': proposals(models.Proposal.NEEDS_CLARIFICATION),
             'excluded': proposals(models.Proposal.STATUS_EXCLUDED)}
+
+
+def _peer_reasons(proposal, member_date):
+    """A held or excluded proposal's reasons as a peer request shows them: the details of its checks that did not pass,
+    without a member's value (_peer_text) - or, when its reading rests on a reviewer's confirmation, the one fixed
+    sentence PEER_CONFIRMED_REASON in their place. Such a proposal's checks word the confirmation "confirmed from
+    <participant>'s located passage by <reviewer>", whichever of them carries it, so none of them is shown: a member's
+    identity, and a reviewer's attested conclusion filed as CPT Studio's own reading, reached both vendors (IR2-1). It
+    rests on one when support['confirmed'] lists a confirmation it read, or - fail closed - when any of its checks,
+    passed or not, is a confirmation's (checks.CONFIRMATION_SOURCE) or words one (checks.CONFIRMED_HEADING)."""
+    found = [check for check in proposal.checks or [] if isinstance(check, dict)]
+    support = proposal.support if isinstance(proposal.support, dict) else {}
+    if support.get('confirmed') or any(check.get('source') == validation_checks.CONFIRMATION_SOURCE
+                                       or validation_checks.CONFIRMED_HEADING in str(check.get('detail') or '')
+                                       for check in found):
+        return [PEER_CONFIRMED_REASON]
+    return [_peer_text(str(check.get('detail') or ''), member_date) for check in found if check.get('status') != 'pass']
+
+
+def _peer_text(text, member_date):
+    """``text`` (a check's detail, a question or its reason) as a peer request shows it: no value a workspace member
+    entered (refutation round 2, IR2-2; HARNESS.md 3: no member-entered date, setting or billing context is sent). The
+    facts.required clause listing what a member entered (checks.MEMBER_ENTERED) is left out - it closes the detail,
+    which then holds only CPT Studio's own reading; a member conflict's note (context.USER_CONFLICT_NOTE and the notes
+    sharing its opening words) is replaced, from those words on, by PEER_MEMBER_CONFLICT, which leaves the value out;
+    and a service date a member entered (``member_date``) is named PEER_MEMBER_DATE. So a save that changes only a
+    member's value, and nothing CPT Studio reads, makes the identical peer request, which is reused."""
+    clause = text.find(validation_checks.MEMBER_ENTERED)
+    if clause != -1:
+        text = text[:clause].rstrip()
+    conflict = text.find(_MEMBER_CONFLICT_PREFIX)
+    if conflict != -1:
+        text = text[:conflict] + PEER_MEMBER_CONFLICT
+    return text.replace(member_date, PEER_MEMBER_DATE) if member_date else text
+
+
+def _member_date(first):
+    """The service date a workspace member entered as encounter metadata that assess #1 ``first`` read (its context's
+    service_date fact of origin 'user'), or '' when the date it read is the document's, or there is none."""
+    fact = ((first.context.facts or {}) if first.context_id else {}).get('service_date')
+    value = fact.get('value') if isinstance(fact, dict) and fact.get('origin') == 'user' else None
+    return value if isinstance(value, str) else ''
 
 
 def _question_ids(first, items):
@@ -2328,7 +2410,10 @@ def mark_stale():
                 run.state, run.error, run.finished_at = (models.ProviderRun.UNKNOWN,
                                                          'The worker stopped while the request was in flight.',
                                                          timezone.now())
-                run.save(update_fields=['state', 'error', 'finished_at'])
+                # a participant's loop records each exchange as it ends: one of them that may have reached the vendor
+                # means the run was sent (refutation round 2, sends-r2-4; Corti's runs record no exchange)
+                run.sent = run.sent or run.exchanges.exclude(state=models.ProviderRun.NOT_SENT).exists()
+                run.save(update_fields=['state', 'error', 'finished_at', 'sent'])
             for run in reserved:
                 run.state, run.error, run.finished_at = (models.ProviderRun.NOT_SENT,
                                                          'The worker stopped before sending.', timezone.now())

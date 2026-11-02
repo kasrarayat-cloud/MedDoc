@@ -5,8 +5,11 @@ clamped to the remaining deadline, the deadline checked after every 64 KiB chunk
 exact raw bytes and their sha256 kept for a 200 and a non-200 alike. An outcome is 'not_sent' only while the request
 provably has not left: an invalid deadline, a request that fails its own verification, an original file that does not
 match the request, credentials that cannot be used, the deadline passing before the POST, or a connection that was
-never established. Once the request may have reached the vendor, a missing or incomplete response is 'unknown' (sent),
-never a failure that invites a resend; a non-200 is 'failed' with its body kept; a 200 is 'succeeded'.
+never established - on the default session, one whose TCP connect or TLS handshake never completed (refused, cut by the
+connect timeout or the deadline, or a certificate the check refuses), since a watched connection is handed to the
+exchange's watch before any byte of the request is written (refutation round 2, sends-r2-2). Once the request may have
+reached the vendor, a missing or incomplete response is 'unknown' (sent), never a failure that invites a resend; a
+non-200 is 'failed' with its body kept; a 200 is 'succeeded'.
 
 Every read is bounded by the time the exchange has left (HTTP-TRICKLE, found by the part B integration agent): a read
 timeout bounds each wait for a byte, never the whole read, so a response trickling in a byte at a time - its status
@@ -84,16 +87,39 @@ class _Watch:
     is blocked on it returns at once. The timer starts with the first socket and is cancelled and joined when the
     exchange ends (disarm), so no socket is touched after it. A socket handed over once the deadline has passed - the
     connection took the time that was left - is shut down and refused before the request is written (``unsent``):
-    nothing left, so the outcome is not_sent, never an unknown outcome a member must reconcile."""
+    nothing left, so the outcome is not_sent, never an unknown outcome a member must reconcile.
+
+    It also counts the watched connections the exchange began (``connecting``, before the TCP connect) and the sockets
+    handed over: a connection that began and never handed its socket over failed in its TCP connect or its TLS
+    handshake - refused, cut by the connect timeout (clamped to the time left) or by the deadline, or refused by the
+    certificate check - before any byte of the request was written (``never_connected``; refutation round 2,
+    sends-r2-2: such a failure surfaced as a read timeout or an SSL error and was taken for one after the request may
+    have left)."""
 
     def __init__(self, deadline: float):
         self.deadline = deadline
         self.fired = False
         self.unsent = False
+        self.began = 0  # watched connections the exchange began
+        self.handed = 0  # sockets a watched connection handed over, once connected
         self._sockets = []
         self._timer = None
         self._done = False
         self._lock = threading.Lock()
+
+    def connecting(self) -> None:
+        """A watched connection begins (its TCP connect, then for https its TLS handshake): counted, so a connection
+        that never hands its socket over is known never to have been established."""
+        with self._lock:
+            self.began += 1
+
+    @property
+    def never_connected(self) -> bool:
+        """Whether a watched connection began and none was ever handed over: its TCP connect or TLS handshake never
+        completed, so no byte of the request was written. False for a session whose connections are not watched (it
+        begins none), whose failures keep the rules for a request that may have left."""
+        with self._lock:
+            return self.began > 0 and self.handed == 0
 
     def watch(self, sock) -> None:
         """Watch a connection's socket; a watched connection calls it once connected, before the request is written."""
@@ -104,6 +130,7 @@ class _Watch:
                 self.fired = self.unsent = True
                 _shutdown(sock)
                 raise ConnectionAbortedError('the deadline passed before the request was sent')
+            self.handed += 1
             self._sockets.append(sock)
             if self._timer is None:
                 self._timer = threading.Timer(max(0.0, self.deadline - monotonic()), self._fire)
@@ -149,8 +176,10 @@ def _shutdown(sock) -> None:
 def _watched(connection_class):
     class Watched(connection_class):
         def connect(self) -> None:
-            super().connect()
             watch = _WATCH.get()
+            if watch is not None:
+                watch.connecting()
+            super().connect()
             if watch is not None:
                 watch.watch(self.sock)
     Watched.__name__ = Watched.__qualname__ = f'Watched{connection_class.__name__}'
@@ -344,6 +373,12 @@ def post(vendor: Vendor, session_factory: Callable[[], requests.Session], url: s
             except Exception as exc:
                 if watch.disarm() and watch.unsent:
                     return not_sent('The deadline passed before the request was sent; nothing was sent.',
+                                    requested_model)
+                if watch.never_connected:  # asked before the rules for a request that may have left: none was written
+                    if monotonic() >= deadline:  # the clamped connect timeout: the connection took the time left
+                        return not_sent('The deadline passed before the request was sent; nothing was sent.',
+                                        requested_model)
+                    return not_sent(f'{vendor.label} could not be reached ({type(exc).__name__}); nothing was sent.',
                                     requested_model)
                 if watch.fired:
                     return _unknown(vendor, _BodyError(DEADLINE_READING), started, url, requested_model)

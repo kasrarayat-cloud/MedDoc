@@ -636,6 +636,34 @@ model participant configured the record is today's ("not configured") and there 
   own name, `corti` only when Corti's answer is shown, the other model only when its reading is shown, `revision` and
   `cpt_studio` - and the peer builder refuses any other list, and any sha256 it can compute from what it shows that
   differs (`peer.check_frozen`).
+- **Amended after refutation round 2 (IR2-1, IR2-2, IR2-3; the session lead's D4): a peer request carries no person,
+  no member-entered value and no other model's free text.** What the bullets above say is shown is shown so
+  (`jobs._peer_material`). The page and the reports keep their own wording: this is what a model is shown.
+  - The other model's frozen reading is `peer.shown_reading(reading)`, no longer `prompt.reading_answer(reading)`
+    verbatim: the reading schema's shape, with its codes, modifiers and ids as given only when each is a short token
+    (`participants.reading._token`: at most 20 characters, no whitespace), otherwise "a value of N characters (not
+    shown)" (`serializers._token`'s words); the quotes CPT Studio located in the revision text, as the model quoted them
+    (the document's own text); a reference's ref as given when that model's own tool results returned it (CPT Studio's
+    own identifier), any other ref as a token; its enumerated values, units, pages and date of service as recorded;
+    and every other text it wrote - a basis, a description, the anatomy, extent and technique, a lesion's fields, the
+    provider role, a question and why it is asked, an extraction issue, a reference's use, a quote not located - only
+    by its length, in the same words. Its
+    entry in `frozen` still names its frozen reading as assess #1 recorded it (`reading_sha256`), from which what is
+    shown is made - never a sha256 of the shown form. The participant's own frozen reading is still shown to it as
+    `reading_answer`.
+  - A Corti code that is not a short token is named by its length the same way (`peer.shown_token`).
+  - `cpt_studio`: a held or excluded proposal whose reading rests on a reviewer's confirmation - `support['confirmed']`
+    lists one, or, fail closed, any of its checks is a confirmation's (`checks.CONFIRMATION_SOURCE`) or words one
+    (`checks.CONFIRMED_HEADING`) - is shown with its key, code and status and one fixed sentence in place of its
+    reasons (`jobs.PEER_CONFIRMED_REASON`), which names no one: its checks word the confirmation "confirmed from
+    <participant>'s located passage by <reviewer>", and a reviewer's attested conclusion is never shown as CPT Studio's
+    own reading (11.3). A reason never carries the facts.required clause naming what a member entered
+    (`checks.MEMBER_ENTERED`); a question's or a reason's member-conflict note (`context.USER_CONFLICT_NOTE` and the
+    notes sharing its opening words) is replaced, from those words on, by `jobs.PEER_MEMBER_CONFLICT`, which leaves the
+    member's value out; and a service date a member entered is named "the date of service a workspace member entered"
+    (`jobs._peer_text`). So a save that changes only a member's value, where no question or reason of CPT Studio's own
+    changes with it, makes the identical peer request, which is reused (section 2: a context change reuses the
+    participants' requests).
 
 ### 12.5 Candidates and confirmations (11.3)
 
@@ -832,6 +860,24 @@ and 12.1-12.6 differ, this list describes the code; the earlier text is kept so 
 - **Cost (refutation round 1, FG-3, sends-4).** `estimated_cost_usd` is pricing's `estimated_usd` to four decimals,
   rounded half up. A tool loop is priced per exchange (`pricing.estimate_loop`), never its summed usage as one request,
   and has no estimate when its exchanges do not add up to its usage.
+- **Recording a participant's exchanges (refutation round 2, sends-r2-1, sends-r2-2, sends-r2-4; the session lead's
+  D5: every exchange is recorded truthfully).**
+  - Each exchange of a participant's tool loop and its tool calls are recorded as that exchange ends - its answer read
+    and its tool calls answered, before the next exchange is sent - each in a transaction of its own, committed at once
+    (`loop.recording`, `jobs._record_exchange`); the run's outcome then records any exchange still missing
+    (`jobs._finish_loop`). Before, the loop was written only once it had ended, so a worker that died mid-loop (up to
+    540 s and 4 exchanges) left nothing of exchanges that had been answered and paid for.
+  - The stale sweep settles a run left sending as unknown, as before, and as sent when an exchange of it that may have
+    reached the vendor (any but `not_sent`) is recorded; Corti's runs record no exchange, so theirs are as before.
+  - A tool call whose arguments are missing or null is recorded with JSON null arguments (`jobs._record_exchanges`).
+    SQL NULL, which the column refuses, broke the record, and the whole run - its final answer included - was recorded
+    unknown with nothing of it kept, holding the other participant (I8, I10).
+  - A watched connection whose TCP connect or TLS handshake never completed - refused, cut by the connect timeout or the
+    deadline, a certificate the check refuses - wrote no byte of the request, so it is `not_sent`
+    (`participants.http._Watch.never_connected`: a watched connection began and none handed its socket over), asked
+    before the rules for a request that may have left, which stay `unknown` (section 8's "a connection that was never
+    established"; urllib3 surfaces such a handshake as a read timeout or an SSL error). Corti's identical older rule
+    (`providers/corti.py`) is pinned by I1 and is not changed in this round: open.
 - **Open, recorded here so it is not lost:** refutation round 1's findings (23, all reproduced) and the integration's
   own (a confirmation bound to a proposal key rather than its code - repaired, 12.5's binding; the HTTP read deadline
   checked only between chunks; decisions invalidated when an intermediate assess #1 re-runs without the peer-added

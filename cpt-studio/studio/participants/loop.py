@@ -30,6 +30,11 @@ returns anything but (dict, list of str), and a result that is not JSON PostgreS
 {"error": <CPT Studio's own sentence>}; a result over the size limit becomes {"error": "the result is too large; ask for
 fewer codes"}, never a truncated one. An error result carries no refs: none of them reached the participant.
 
+Each exchange is handed, as it ends - its answer read and its tool calls answered - to the callback a caller set with
+``recording`` (the pipeline records it then, in its own transaction, so a worker that dies mid-loop leaves the exchanges
+before it recorded; refutation round 2, sends-r2-4). A callback that raises changes nothing in the loop: every exchange
+is still in the LoopOutcome.
+
 The loop's final RawExchange is its last exchange's - status, response, latency and ids (vendor request id, response
 id, returned model) - with these run-level exceptions: ``usage`` is summed over the exchanges (summed_usage; one exchange
 keeps its own, with its own basis); ``sent`` says whether any exchange may have reached the vendor and ``endpoint`` is
@@ -38,10 +43,12 @@ sent; and ``error`` says why the loop ended. Each exchange keeps its own latency
 """
 from __future__ import annotations
 
+import contextvars
 import copy
 import hashlib
 import json
 import re
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from time import monotonic
@@ -143,6 +150,32 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+_ON_EXCHANGE: contextvars.ContextVar = contextvars.ContextVar('studio.participants.loop.on_exchange', default=None)
+
+
+@contextmanager
+def recording(on_exchange: Callable[[ExchangeRecord], None]):
+    """While this block runs, every loop run hands ``on_exchange`` each ExchangeRecord as that exchange ends (its answer
+    read and its tool calls answered), before the next exchange is sent - whatever adapter runs the loop, as http's
+    watch reaches every connection of an exchange. The pipeline records each exchange so (jobs._send_loop)."""
+    token = _ON_EXCHANGE.set(on_exchange)
+    try:
+        yield
+    finally:
+        _ON_EXCHANGE.reset(token)
+
+
+def _hand(on_exchange, record: ExchangeRecord) -> None:
+    """``record`` to the recording callback, if one is set; one that raises changes nothing in the loop (the caller
+    records every exchange of the LoopOutcome again when the loop ends)."""
+    if on_exchange is None:
+        return
+    try:
+        on_exchange(record)
+    except Exception:  # noqa: BLE001 - the caller's own record; the loop's outcome never depends on it
+        pass
+
+
 def run(adapter, request: ProviderRequest, *, post: Callable[[int, dict, float], RawExchange],
         parse_turn: Callable[[bytes], Turn], follow_up: Callable[[dict, Turn, tuple], dict],
         execute_tool, deadline_s, longest_s: float, max_exchanges: int, max_tool_result_bytes: int,
@@ -169,6 +202,7 @@ def run(adapter, request: ProviderRequest, *, post: Callable[[int, dict, float],
         return _refused(client_error, model)
     records, raws, stopped = [], [], False
     body, sha256, number = request.body, request.canonical_sha256, 0
+    on_exchange = _ON_EXCHANGE.get()
     while True:
         number += 1
         started = _now()
@@ -205,6 +239,7 @@ def run(adapter, request: ProviderRequest, *, post: Callable[[int, dict, float],
             error=raw.error, tool_calls=tuple(record for record, _ in answered), started_at=started,
             finished_at=finished))
         raws.append(raw)
+        _hand(on_exchange, records[-1])  # recorded as it ends, before anything more is sent
         if end is None:
             try:
                 following = follow_up(body, turn, tuple((record.call_id, output) for record, output in answered))

@@ -19,7 +19,7 @@ from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from studio import audit, jobs, models, review
-from studio.participants import anthropic_fable, loop, openai_astra, prompt
+from studio.participants import anthropic_fable, loop, openai_astra, peer, prompt
 from studio.participants.http import describe
 from studio.participants.replay import ReplayParticipant
 from studio.providers.base import canonical_body
@@ -832,7 +832,8 @@ class PeerRequestTests(ColonCase):
                 self.assertEqual(sections['corti (another coding system):'],
                                  {'codes': [{'code': '45385', 'modifiers': [], 'units': 1, 'evidence': [SNARE]},
                                             {'code': '45380', 'modifiers': [], 'units': 1, 'evidence': [BIOPSY]}]})
-                self.assertEqual(sections[f'{other} (another model):'], prompt.reading_answer(readings[other]))
+                # the other model's reading with none of its own wording (12.4 as amended, refutation round 2, IR2-3)
+                self.assertEqual(sections[f'{other} (another model):'], peer.shown_reading(readings[other]))
                 self.assertEqual(sections[CPT_STUDIO], cpt_studio)
                 frozen = records[name]['frozen'] + [['cpt_studio', sha256_json(cpt_studio)]]
                 self.assertEqual(prompt.peer_document_inputs(document),
