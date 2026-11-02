@@ -2186,8 +2186,10 @@ test('R2-WORDING truth-6: a card says "Corti did not propose this code" only whe
     none: '; Corti did not propose this code.',
     selected_without_exact_passage: '; Corti also selected this code, with no exact passage; it is listed apart, excluded.',
     selected_apart: '; Corti also selected this code; its selection is listed apart.',
-    candidate: '; Corti listed this code only as a candidate, not selected; see Alternatives.',
-    second_review: '; Corti&#x27;s second review also listed this code, as an alternative; see Alternatives.',
+    // candidate and second_review moved by refutation round 3, R3-TRUTH truth-5: words that name no one role, true of a
+    // candidate and of an alternative (the record gives the engine none)
+    candidate: '; Corti listed this code as a candidate or an alternative, not selected; see Alternatives.',
+    second_review: '; Corti&#x27;s second review also listed this code without adding it as a proposal; see Alternatives.',
   };
   for (const [relation, words] of Object.entries(said)) assert.ok(line(relation).includes(`${named}${words}</li>`), relation);
   // a relation the page does not know, or none served, says nothing of Corti that the record would have to support

@@ -415,12 +415,17 @@ code."). Every proposal carries `corti_relation` (refutation round 2, truth-6), 
 the assessment's own proposals of that code (Corti's are those of origin primary or second_review): `proposer` (Corti
 is among `proposed_by`); `selected_without_exact_passage` (Corti's response selected the code and that selection is
 excluded because none of its passages matches the document text exactly: listed apart, carrying no proposal);
-`selected_apart` (Corti selected it and that selection is another entry, excluded for another reason); `candidate`
-(Corti's response listed it only as a candidate or an alternative, not selected); `second_review` (only Corti's bounded
-second review listed it, as an alternative); `none` (Corti has no entry for the code). The page says "Corti did not
-propose this code." only for `none`, words the others as the engine's rationale does ("Corti also selected this code,
-with no exact passage; it is listed apart, excluded."; "Corti listed this code only as a candidate, not selected; see
-Alternatives."), and says nothing of Corti for a proposal served without the field. A candidate, a confirmation and a
+`selected_apart` (Corti selected it and that selection is another entry, excluded for another reason: out of scope,
+beside a participant's own entry of the code, which is then an alternative); `candidate` (Corti's response listed it
+without selecting it: a candidate, or an alternative to a code it selected - the token names no role); `second_review`
+(only Corti's bounded second review listed it, without adding it as a proposal: a code it selected and did not add, or
+a candidate or an alternative of it); `none` (Corti has no entry for the code). The page says "Corti did not propose
+this code." only for `none`, words the others as the engine's rationale does ("Corti also selected this code, with no
+exact passage; it is listed apart, excluded."; "Corti listed this code as a candidate or an alternative, not selected;
+see Alternatives."; "Corti's second review also listed this code without adding it as a proposal; see Alternatives.":
+the engine is told which codes Corti listed, not the role, so neither names one, and the code's Alternatives row says
+which - refutation round 3, truth-5: an alternative to another code was said to be listed "only as a candidate"), and
+says nothing of Corti for a proposal served without the field. A candidate, a confirmation and a
 peer position never decide a status or approve anything: `decision_state`
 stays a member's decision (I2-I4). `pipeline.stages` includes the peer stages (`astra_peer`, `fable_peer`); a
 replayed peer-review run reads `mode` `replay`. The Activity tab reads "Finding confirmed from a participant's located

@@ -960,12 +960,15 @@ function codeStatusLines(proposal) {
 
 // How Corti stands to a code it is not a proposer of (proposal.corti_relation, HARNESS.md 11.4), in the engine's own
 // words: "Corti did not propose this code" only when Corti has no entry for the code at all (refutation round 2,
-// truth-6: it was said whenever Corti was not a proposer, beside Corti's own excluded selection of the code).
+// truth-6: it was said whenever Corti was not a proposer, beside Corti's own excluded selection of the code). A code
+// Corti listed without selecting it, or its second review listed without adding it, is said to be listed, in words
+// that name no one role - the record gives the engine none - and its Alternatives row says which (refutation round 3,
+// truth-5: an alternative to another code was said to be listed "only as a candidate").
 const CORTI_RELATIONS = {
   selected_without_exact_passage: 'Corti also selected this code, with no exact passage; it is listed apart, excluded.',
   selected_apart: 'Corti also selected this code; its selection is listed apart.',
-  candidate: 'Corti listed this code only as a candidate, not selected; see Alternatives.',
-  second_review: 'Corti\'s second review also listed this code, as an alternative; see Alternatives.',
+  candidate: 'Corti listed this code as a candidate or an alternative, not selected; see Alternatives.',
+  second_review: 'Corti\'s second review also listed this code without adding it as a proposal; see Alternatives.',
   none: 'Corti did not propose this code.',
 };
 

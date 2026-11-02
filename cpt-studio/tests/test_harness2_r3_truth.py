@@ -351,3 +351,57 @@ class ReuseExchangesTests(hp.Harness2Case):
         (traced,) = [item for participant in trace['participants'] for item in participant['runs']
                      if item['id'] == str(reuse.pk)]
         self.assertEqual((traced['exchanges'], traced['reused_from']), ([], str(retained.pk)))
+
+
+# --- truth-5: a code Corti listed without selecting it is never called only a candidate -----------------------------
+
+LISTED = 'Corti listed this code as a candidate or an alternative, not selected; see Alternatives.'
+
+
+class CortiListedTests(R2WordingCase):
+    """Corti selects 45385 and nests 45380 under it as an alternative; Astra proposes 45380 from the biopsy passage. The
+    card, the rationale and corti_relation called 45380 "listed only as a candidate", while the Alternatives row it
+    points to says "alternative to 45385" (refutation round 3, truth-5). The engine reads only that Corti listed the
+    code without selecting it, so the engine's rationale, the API's relation and the page say that, in one sentence
+    true of a candidate and of an alternative, and the Alternatives row says which."""
+
+    def listed(self, edit):
+        self.corti.selections = [('45385', SNARE)]
+        with self.corti_answer(edit):
+            encounter_id = self.create(TWO_EXTENTS)
+            drain()
+        detail = self.detail(encounter_id)
+        [own] = self.proposals(detail, '45380', bucket='selected')
+        [alternative] = self.proposals(detail, '45380', bucket='alternative')
+        self.assertEqual((self.origin(own), own['proposed_by'], self.origin(alternative)),
+                         ('participant', ['astra'], 'primary'))
+        line = browser(f'statusLine(cardOf(page(), {json.dumps(own["id"])}), "Proposed by")', detail)
+        self.assertEqual(own['corti_relation'], 'candidate')
+        self.assertEqual(line, f'Astra (independent reading); {LISTED}')
+        self.assertTrue(own['rationale'].startswith(f'Proposed by Astra (independent participant); {LISTED}'),
+                        own['rationale'])
+        for said in (line, own['rationale']):
+            self.assertNotIn('only as a candidate', said)
+        return alternative
+
+    def test_an_alternative_nested_under_a_selected_code(self):
+        def nested(answer, text):
+            start = text.index(BIOPSY)
+            for item in answer['codes']:
+                if item['code'] == '45385':
+                    item['alternatives'] = [{'system': 'cpt', 'code': '45380', 'display': hp.CORTI_DISPLAY,
+                                             'evidences': [{'contextIndex': 0, 'start': start,
+                                                            'end': start + len(BIOPSY), 'text': BIOPSY}]}]
+        alternative = self.listed(nested)
+        self.assertTrue(alternative['exclusion_reason'].startswith('Provider alternative to 45385; not selected.'),
+                        alternative['exclusion_reason'])
+
+    def test_a_candidate(self):
+        def candidate(answer, text):
+            start = text.index(BIOPSY)
+            answer['candidates'] = [{'system': 'cpt', 'code': '45380', 'display': hp.CORTI_DISPLAY,
+                                     'evidences': [{'contextIndex': 0, 'start': start, 'end': start + len(BIOPSY),
+                                                    'text': BIOPSY}], 'alternatives': []}]
+        alternative = self.listed(candidate)
+        self.assertTrue(alternative['exclusion_reason'].startswith('Provider candidate; not selected.'),
+                        alternative['exclusion_reason'])

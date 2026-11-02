@@ -1218,13 +1218,20 @@ def corti_relation(proposal):
                                         of its passages matches the document text exactly (the engine's NO_EVIDENCE),
                                         so it is listed apart and carries no proposal;
       'selected_apart'                  Corti's response selected it, and that selection is another entry: excluded for
-                                        another reason (or, which the engine never records, a proposal of its own);
-      'candidate'                       Corti's response listed it only as a candidate or an alternative, not selected;
-      'second_review'                   only Corti's bounded second review listed it, as an alternative (selected and
-                                        not added, or a candidate: its record does not say which);
+                                        another reason - out of scope, beside a participant's own entry of the code,
+                                        which is then an alternative (or, which the engine never records, a proposal of
+                                        its own);
+      'candidate'                       Corti's response listed it without selecting it: as a candidate, or as an
+                                        alternative to a code it selected (the token names no role; the code's
+                                        Alternatives row says which);
+      'second_review'                   only Corti's bounded second review listed it, without adding it as a proposal
+                                        (a code it selected and did not add, or a candidate or an alternative of it:
+                                        its record does not say which);
       'none'                            Corti has no entry for the code on this assessment.
     Read from the assessment's own proposals of the same code; Corti's are those of origin primary or second_review,
-    as proposed_by reads them."""
+    as proposed_by reads them. The page and the engine's rationale (_Harness._lead) word 'candidate' and
+    'second_review' in one sentence each that names no role (refutation round 3, truth-5: an alternative to 45385 was
+    said to be listed "only as a candidate")."""
     from .validation.engine import NO_EVIDENCE  # local import: only the engine's exclusion reason is needed here
 
     if CORTI in proposed_by(proposal):
