@@ -95,6 +95,7 @@ class SettingTests(SimpleTestCase):
                 self.assertNotIn('OFFER_CONFIRMATIONS', path.read_bytes().decode('utf-8', 'replace'))
 
     def test_only_the_literal_true_turns_on_the_dormant_path(self):
+        self.assertIs(review.confirmations_offered(), False)  # the release default is not it
         for value in ('True', 'true', '1', 1, 'yes', [True], None, object()):
             with self.subTest(value=value), override_settings(STUDIO_OFFER_CONFIRMATIONS=value):
                 self.assertIs(review.confirmations_offered(), False)
