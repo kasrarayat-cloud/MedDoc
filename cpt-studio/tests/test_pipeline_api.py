@@ -261,3 +261,82 @@ class PipelineApiTests(TestCase):
 class SnapshotHashTests(TestCase):
     def test_sha256_json_is_order_independent(self):
         self.assertEqual(sha256_json({'a': 1, 'b': [1, 2]}), sha256_json({'b': [1, 2], 'a': 1}))
+
+
+class _OtherSession:
+    """A second database session, as another worker's or the access check's: it takes and releases the installation-wide
+    provider lock (jobs.PROVIDER_LOCK_KEY) on its own connection."""
+
+    def __init__(self, test):
+        from django.db import connections
+
+        self.connection = connections.create_connection('default')
+        test.addCleanup(self.connection.close)
+
+    def try_lock(self):
+        with self.connection.cursor() as cursor:
+            cursor.execute('SELECT pg_try_advisory_lock(%s)', [jobs.PROVIDER_LOCK_KEY])
+            return cursor.fetchone()[0]
+
+    def unlock(self):
+        with self.connection.cursor() as cursor:
+            cursor.execute('SELECT pg_advisory_unlock(%s)', [jobs.PROVIDER_LOCK_KEY])
+            return cursor.fetchone()[0]
+
+
+@override_settings(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
+class ProviderLockTests(TestCase):
+    """Refutation round 1, FG-4 (I8; HARNESS.md 2: every provider send takes the one installation-wide advisory lock):
+    no test held the lock from another session, so removing it from jobs._send stayed green."""
+
+    def setUp(self):
+        self.ws = f.workspace()
+        self.reviewer = f.member(self.ws, f.user('reviewer'))
+        self.client = Client(enforce_csrf_checks=False)
+        self.client.force_login(self.reviewer)
+        self.provider = FakeProvider(selections=[('99213', 'Total time on the date of the encounter was 24 minutes.')])
+        for target, kwargs in (('studio.jobs.get_provider', {'return_value': self.provider}),
+                               ('studio.jobs.time.sleep', {})):  # a requeued stage waits a second: not here
+            patcher = mock.patch(target, **kwargs)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.other = _OtherSession(self)
+
+    def create(self):
+        response = self.client.post('/api/encounters', {'text': OFFICE_NOTE, 'synthetic_attestation': 'yes'})
+        self.assertEqual(response.status_code, 201, response.content)
+        return response.json()['id']
+
+    def test_a_predict_waits_while_another_session_holds_the_provider_lock(self):
+        encounter_id = self.create()
+        self.assertTrue(self.other.try_lock())
+        try:
+            for _ in range(3):
+                job = jobs.run_job(jobs.claim_next())  # extract, analyze, then the predict, which waits
+            job.refresh_from_db()
+            self.assertEqual((job.kind, job.state, job.result, job.started_at),
+                             ('predict', 'queued', {'requeued': 'another provider request is in flight'}, None))
+            self.assertEqual((self.provider.sent, models.ProviderRun.objects.filter(encounter_id=encounter_id).count()),
+                             ([], 0))  # nothing reserved, nothing sent
+        finally:
+            self.assertTrue(self.other.unlock())
+        drain()
+        self.assertEqual(len(self.provider.sent), 1)
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'ready_for_review')
+
+    def test_the_lock_is_held_while_the_provider_sends_and_released_after(self):
+        held = []
+        send = self.provider.send
+
+        def checked(request, *, deadline_s):
+            acquired = self.other.try_lock()  # from the other session, while the worker's send is in flight
+            if acquired:
+                self.other.unlock()
+            held.append(not acquired)
+            return send(request, deadline_s=deadline_s)
+        self.provider.send = checked
+        self.create()
+        drain()
+        self.assertEqual(held, [True])
+        self.assertTrue(self.other.try_lock())  # released once the send's outcome was recorded
+        self.assertTrue(self.other.unlock())

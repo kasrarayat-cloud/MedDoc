@@ -881,6 +881,32 @@ class UnknownOutcomeTests(HarnessCase):
 
 
 @override_settings(**LIVE, **BOTH)
+class ProviderLockTests(HarnessCase):
+    """Refutation round 1, FG-4 (I8): a participant's send takes the same installation-wide advisory lock as Corti's; a
+    stage that finds it held by another session reserves and sends nothing, and goes back to the queue."""
+
+    def test_a_participant_stage_waits_while_another_session_holds_the_provider_lock(self):
+        from tests.test_pipeline_api import _OtherSession
+
+        other = _OtherSession(self)
+        encounter_id = self.create()
+        for _ in range(3):
+            jobs.run_job(jobs.claim_next())  # extract, analyze, predict: Astra's stage is queued
+        self.assertTrue(other.try_lock())
+        try:
+            with mock.patch('studio.jobs.time.sleep'):
+                job = jobs.run_job(jobs.claim_next())
+            job.refresh_from_db()
+            self.assertEqual((job.kind, job.state, job.result),
+                             ('astra', 'queued', {'requeued': 'another provider request is in flight'}))
+            self.assertEqual((self.adapters['astra'].sent, self.runs_of(encounter_id, 'astra')), ([], []))
+        finally:
+            self.assertTrue(other.unlock())
+        drain()
+        self.assertEqual((len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)), (1, 1))
+
+
+@override_settings(**LIVE, **BOTH)
 class NotSentAttemptTests(HarnessCase):
     """Refutation round 1, sends-1 (I8; ARCHITECTURE 5.4): an attempt that went through the send doors and was recorded
     not sent stands. A chain re-run by another run's reconciliation or by a context change never attempts that identical
