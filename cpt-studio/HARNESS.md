@@ -1129,12 +1129,12 @@ member loses anything they can do today, and the completion criteria of 11.5 nee
 - `settings.STUDIO_OFFER_CONFIRMATIONS = False`: a code-level literal, read from no environment variable or installer
   file, so no variable, file or member action turns it on; only a test's `override_settings` does
   (`review.confirmations_offered`, on only for the literal `True`).
-- The confirm endpoint refuses (409) every request after the session (401) and the encounter's workspace scoping
-  (404) and before it reads the body, the member's role, the question or the candidate, with one sentence,
+- The confirm endpoint refuses (409) every request after the session (401) and the encounter's workspace scoping (404)
+  and before it reads the body, the member's role, the question or the candidate, with one sentence,
   `review.CONFIRMATIONS_NOT_OFFERED`: "This release offers no reviewer confirmation of a candidate answer, so nothing
-  was recorded; a question is answered with an addendum." `review.confirm_finding` and
-  `jobs.reassess_after_confirmation` refuse first with the same sentence. Nothing is recorded: no
-  `FindingConfirmation`, audit row, job, context or provider request.
+  was recorded; a question is answered with an addendum, or a date of service in the encounter context."
+  `review.confirm_finding` and `jobs.reassess_after_confirmation` refuse first with the same sentence. Nothing is
+  recorded: no `FindingConfirmation`, audit row, job, context or provider request.
 - `jobs.confirmed_findings` hands the engine none and reads no row: a `FindingConfirmation` that exists anyway (one a
   test writes) is never applied, so no assessment, re-assessment or peer request reads one; the assessment is the one
   its inputs make with no confirmation. Peer-2 (a confirmation reaching a later chain's peer requests as CPT Studio's
@@ -1146,12 +1146,13 @@ member loses anything they can do today, and the completion criteria of 11.5 nee
   offers no confirmation."), its `attestation` ''. A source that cites no passage, or one not located as exact slices of
   the text, is not served. `permissions.can_confirm` is false for every member.
 - The page draws each as the participants' located passage - "Their answer: <value>", the passage with its whole
-  sentence, who located it in which phase - under "The participants' located passages", with no Verified or Not
-  verified badge, no sentence about what CPT Studio's readers read in it (not the served `why` either) and no Confirm
-  control, and its note says so: "These are the passages the participants located for this question, each with the
-  answer it gave in CPT Studio's words. CPT Studio does not check what a participant's passage states, and this release
-  offers no confirmation: a question is answered with an addendum." It draws them so wherever `permissions.can_confirm`
-  is not true; the rendering for a served `can_confirm` true is the dormant path's, unchanged.
+  sentence, who located it in which phase - under "The participants' located passages", with no Verified or Not verified
+  badge, no sentence about what CPT Studio's readers read in it (not the served `why` either) and no Confirm control,
+  and its note says so: "These are the passages the participants located for this question, each with the answer it gave
+  in CPT Studio's words. CPT Studio does not check what a participant's passage states, and this release offers no
+  confirmation: a question is answered with an addendum, or a date of service in the encounter context." It draws them
+  so wherever `permissions.can_confirm` is not true; the rendering for a served `can_confirm` true is the dormant
+  path's, unchanged.
 
 **What stays, dormant, behind the setting.** The candidates' checks (`studio.candidates`, `reconcile.status_stated`),
 the engine's `_Confirmations`, `jobs.reassess_after_confirmation` and its key, a peer request's D4 confirmation reasons

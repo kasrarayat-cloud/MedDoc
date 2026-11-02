@@ -207,7 +207,7 @@ async function handleApi(req, res, url) {
 // allow one: an open question of the document not confirmed yet, one of its VERIFIED candidates, and the attestation
 // exactly the candidate's served one. The confirmation is then shown on the question; nothing is approved.
 const CONFIRMATIONS_NOT_OFFERED = 'This release offers no reviewer confirmation of a candidate answer, so nothing was '
-  + 'recorded; a question is answered with an addendum.';
+  + 'recorded; a question is answered with an addendum, or a date of service in the encounter context.';
 function confirmFinding(req, res, id, questionId, body) {
   const doc = encounterFor(id, false);
   if (!doc) return apiError(res, 404, 'Not found.');

@@ -446,12 +446,12 @@ passage (not a decision)" for a confirmation, with its `fact` and `effect`.
 
 ## POST /api/encounters/{id}/clarifications/{clarification_id}/confirm
 
-**In this release every request is refused (refutation round 3, D7; HARNESS.md 12.10).** After the session (401) and
-the encounter's workspace scoping (404 outside the caller's workspaces), before the body, the member's role, the
-question or the candidate is read: `409 {"error": "This release offers no reviewer confirmation of a candidate answer,
-so nothing was recorded; a question is answered with an addendum.", "details": {}}`. Nothing is recorded: no
-confirmation, audit event, context, job or provider request. What follows describes the dormant path behind
-`STUDIO_OFFER_CONFIRMATIONS`, kept as written.
+**In this release every request is refused (refutation round 3, D7; HARNESS.md 12.10).** After the session (401) and the
+encounter's workspace scoping (404 outside the caller's workspaces), before the body, the member's role, the question or
+the candidate is read: `409 {"error": "This release offers no reviewer confirmation of a candidate answer, so nothing
+was recorded; a question is answered with an addendum, or a date of service in the encounter context.", "details": {}}`.
+Nothing is recorded: no confirmation, audit event, context, job or provider request. What follows describes the dormant
+path behind `STUDIO_OFFER_CONFIRMATIONS`, kept as written.
 
 `{"candidate_id": "16 hex", "attestation": "I read this passage in the source document; it documents <value> for this
 encounter."}` → `201 {confirmation, "effect": "context" | "reassessment"}` (the confirmation as in `confirmations`).

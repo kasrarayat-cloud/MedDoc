@@ -131,7 +131,7 @@ const CANDIDATE_NOTE = 'A candidate answers nothing until a reviewer confirms it
 // them, and no Confirm control (locatedPassage). The rendering below for a served can_confirm true is the dormant
 // path's, kept.
 const LOCATED_LABEL = 'The participants\' located passages';
-const LOCATED_NOTE = 'These are the passages the participants located for this question, each with the answer it gave in CPT Studio\'s words. CPT Studio does not check what a participant\'s passage states, and this release offers no confirmation: a question is answered with an addendum.';
+const LOCATED_NOTE = 'These are the passages the participants located for this question, each with the answer it gave in CPT Studio\'s words. CPT Studio does not check what a participant\'s passage states, and this release offers no confirmation: a question is answered with an addendum, or a date of service in the encounter context.';
 // What a verified candidate's consistency check established, by fact (HARNESS.md 12.5, as refutation round 2 left it):
 // every fact's passage lies in no history, plan or indication section (VERIFIED_SECTIONS), and a status is read by CPT
 // Studio's readers on the act the code accounts for, in the passage's whole sentence (EV2-1, EV2-2, EV2-3, truth-1).
@@ -1682,7 +1682,7 @@ function clarificationRow(doc) {
   if (!doc.assessment) return harnessRow('clarification', 'not_run', [['muted', 'info'], 'Not asked'], 'Clarification', ['No question was asked: the proposals were not checked for this revision.']);
   // harness@2: a question with a verified candidate can also be answered by a reviewer's confirmation (HARNESS.md 11.3)
   const confirmable = openClarifications(doc).some(item => objects(item.candidates).some(candidate => candidate.verified === true));
-  if (open > 0) return harnessRow('clarification', 'open', [['pending', 'help'], `${open} open`], 'Clarification', [`${open === 1 ? 'One question needs' : `${open} questions need`} an answer before the reviewed report; each is answered with an addendum${confirmable ? ', or by a reviewer confirming a verified candidate answer' : ''}.`], [note]);
+  if (open > 0) return harnessRow('clarification', 'open', [['pending', 'help'], `${open} open`], 'Clarification', [`${open === 1 ? 'One question needs' : `${open} questions need`} an answer before the reviewed report; each is answered with an addendum (a date of service also in the encounter context)${confirmable ? ', or by a reviewer confirming a verified candidate answer' : ''}.`], [note]);
   return harnessRow('clarification', 'none', [STAGE_LOOKS.succeeded, 'None open'], 'Clarification', ['No question is open for this revision.'], [note]);
 }
 

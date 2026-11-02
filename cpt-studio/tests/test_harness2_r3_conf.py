@@ -55,8 +55,9 @@ SETTINGS_FILE = ROOT / 'cptstudio' / 'settings.py'
 INSTALLATION_FILES = (ROOT / 'ops' / 'install.py', *sorted(p for p in (ROOT / 'deploy').rglob('*') if p.is_file()))
 # The one fixed sentence the endpoint, review.confirm_finding and the re-assessment refuse with, and the one why every
 # candidate carries - written out here, so a change to either is a change to this pin.
+# (moved at integration: a date of service is also answered in the encounter context, so the sentence says so)
 NOT_OFFERED = ('This release offers no reviewer confirmation of a candidate answer, so nothing was recorded; a '
-               'question is answered with an addendum.')
+               'question is answered with an addendum, or a date of service in the encounter context.')
 UNCHECKED = "CPT Studio does not check what a participant's passage states, and this release offers no confirmation."
 DORMANT = dict(STUDIO_OFFER_CONFIRMATIONS=True)  # the dormant confirmation path, as its own tests run it
 COUNTED = (models.FindingConfirmation, models.AuditEvent, models.Job, models.ProviderRun, models.ProviderExchange,

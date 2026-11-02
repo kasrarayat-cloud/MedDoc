@@ -1654,7 +1654,7 @@ test('each open question lists its candidate answers: the value, the passage quo
   assert.ok(html.indexOf(`data-question="${clarificationOf(doc, 'service_date').id}"`) < html.indexOf('<article class="code-card"'));
   assert.ok(codeCardOf(html, '45385').includes(`data-question="${extent.id}"`) && codeCardOf(html, '45380').includes(`data-question="${clarificationOf(doc, 'performed_status').id}"`));
   // the clarification row says a verified candidate can answer a question; the first assessment's questions have none
-  assert.ok(harnessRow(html, 'clarification').includes('each is answered with an addendum, or by a reviewer confirming a verified candidate answer.'));
+  assert.ok(harnessRow(html, 'clarification').includes('each is answered with an addendum (a date of service also in the encounter context), or by a reviewer confirming a verified candidate answer.'));
   const peer = render(fixture(H2_PEER));
   assert.equal(peer.includes('candidate-answers') || peer.includes('confirm-finding'), false);
   // a passage that is not at its position in the current revision is flagged, never passed off as found or confirmable
@@ -2354,7 +2354,7 @@ test('R2-WORDING FG2-5: a code card the serializer\'s fixture draws states the P
 // pinned above, on its own fixture (H2_DORMANT), and stays as it was.
 
 const R3_UNCHECKED = 'CPT Studio does not check what a participant\'s passage states, and this release offers no confirmation.';
-const R3_LOCATED_NOTE = 'These are the passages the participants located for this question, each with the answer it gave in CPT Studio\'s words. CPT Studio does not check what a participant\'s passage states, and this release offers no confirmation: a question is answered with an addendum.';
+const R3_LOCATED_NOTE = 'These are the passages the participants located for this question, each with the answer it gave in CPT Studio\'s words. CPT Studio does not check what a participant\'s passage states, and this release offers no confirmation: a question is answered with an addendum, or a date of service in the encounter context.';
 
 // A question's candidate block as the page draws it, through its note; and the text a reader sees of it (no markup).
 function r3Block(html, id) {
@@ -2408,7 +2408,7 @@ test('R3-CONF D7: each candidate is drawn as the participants\' located passage 
   // nowhere on the page: no Confirm action, and the clarification row offers only an addendum
   assert.equal(html.includes('confirm-finding') || html.includes('<span class="status green">Verified</span>'), false);
   const row = harnessRow(html, 'clarification');
-  assert.ok(row.includes('each is answered with an addendum.') && !row.includes('confirming'), row);
+  assert.ok(row.includes('each is answered with an addendum (a date of service also in the encounter context).') && !row.includes('confirming'), row);
   // the questions still sit where they did: the date with the encounter, the others on their codes' cards
   const date = clarificationOf(doc, 'service_date');
   assert.ok(html.indexOf(`data-question="${date.id}"`) < html.indexOf('<article class="code-card"'));
