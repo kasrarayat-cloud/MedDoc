@@ -199,7 +199,12 @@ the encounter `state` is never `provider_failed` for it, and an unknown outcome 
 stopped with an unexpected error before it recorded an outcome included - makes the encounter `provider_unknown` until a
 member reconciles it (`POST reconcile` takes any participant's run). `codes` are the codes that participant proposed
 (Corti's: its selected codes), each once - a participant's only when the engine lists it (1 to 10 characters): a longer
-"code" may carry wording, a CPT descriptor say, so it is never served, and the row's `detail` ends with the engine's own
+"code" may carry wording, a CPT descriptor say, so it is never served (superseded, round 5, shapes-3: 1 to 10
+characters is the rule of Corti's row alone, `engine._listable`, I1; a participant's code is listed only in a CPT or
+HCPCS code's shape, `engine.participant_listable`, and only with a quote found verbatim in the document,
+`review.listed_codes` - one in no code's shape may carry wording, so it is never served and is counted below, and one
+in a code's shape none of whose quotes was found is neither listed nor counted: participants.summary says it was listed
+with no quote found verbatim in the document, so not proposed), and the row's `detail` ends with the engine's own
 sentence ("It returned 1 code that cannot be listed: ... It is not shown and never truncated."); `unlisted_codes`
 counts those (0 wherever none was returned) - a participant's as the engine counts them, every entry of its frozen
 reading that the engine does not read, re-read when serving (the number its participants.summary states), and `null`,
