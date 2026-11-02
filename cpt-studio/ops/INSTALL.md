@@ -15,7 +15,7 @@ run the next. Nothing here was executed by the session that wrote it.
 | image | `cpt-studio:<sha12>`, built from `git archive <revision> cpt-studio/`, label `org.opencontainers.image.revision=<revision>` |
 | database | container `cpt-studio-db` (postgres 17.11, pinned by digest), uid 70, all capabilities dropped, `127.0.0.1:55451`, volume `cpt-studio-pg` |
 | web | container `cpt-studio-web`, gunicorn, read-only root, uid 10150, `127.0.0.1:9150` → 8000 |
-| worker | container `cpt-studio-worker`, read-only root, stop timeout 360 s, the only holder of the Corti credentials (live mode only) and of each harness participant's (that participant live only) |
+| worker | container `cpt-studio-worker`, read-only root, stop timeout 600 s (above a participant phase's 540 s tool-loop deadline, and the stale-stage sweep's 600 s bound), the only holder of the Corti credentials (live mode only) and of each harness participant's (that participant live only) |
 | network | `cpt-studio-net` (bridge). Web and worker reach the database as `cpt-studio-db:5432` |
 | files | volume `cpt-studio-files` at `/var/lib/cpt-studio` (originals, reference copies) |
 | secrets | `/etc/cpt-studio/` root 0700: `app.env`, `db.env` (root 0600), `corti-credentials.env` (10150:10150 0400), `initial-credentials.json` (root 0600) |
@@ -58,11 +58,12 @@ directory. Exit 0 = done; 1 = refused or failed (the receipt says which and why)
 | 5 | `app` | `--provider-mode live --authorization-ref docs/foundation/rulings/2026-10-23-cpt-studio-gi.md` (or `--provider-mode disabled`); optional `--astra-mode live`, `--fable-mode live` (each `disabled` when not given; live needs `--authorization-ref`) and `--access-check` | migrations; web and worker containers; with `--access-check`, one real request per live participant |
 | 6 | `reference` | `--pfs-zip <abs> --pfs-retrieved-at <ISO> --mue-zip <abs> --mue-retrieved-at <ISO>` | reference copies in the files volume; two `ReferenceSource` imports |
 | 7 | `passages` | — | each committed `studio/reference/data/` file imported (`PassageSource`, `ReferencePassage`); idempotent |
-| 8 | `provision` | `--owner-username <name>` (optional `--agent-username`, display names, `--reset-passwords`) | GI workspace, owner and agent accounts; credentials files |
-| 9 | `http-vhost` | — | `quillmd-cpt` (HTTP stage) + symlink; nginx reload |
-| 10 | `cert` | — | lineage `cpt.quillmd.com` |
-| 11 | `https-vhost` | — | `quillmd-cpt` replaced by the HTTPS stage; nginx reload |
-| 12 | `verify` | — | nothing |
+| 8 | `license-note` | — | CPT Studio's own licence note on each imported reference source (`ReferenceSource.license_note`): exactly the old text replaced by the corrected one, nothing else; idempotent |
+| 9 | `provision` | `--owner-username <name>` (optional `--agent-username`, display names, `--reset-passwords`) | GI workspace, owner and agent accounts; credentials files |
+| 10 | `http-vhost` | — | `quillmd-cpt` (HTTP stage) + symlink; nginx reload |
+| 11 | `cert` | — | lineage `cpt.quillmd.com` |
+| 12 | `https-vhost` | — | `quillmd-cpt` replaced by the HTTPS stage; nginx reload |
+| 13 | `verify` | — | nothing |
 
 `rollback-app` removes the web and worker containers; it keeps the database,
 volumes, images and secrets, and needs the database to be running. First, with
@@ -75,11 +76,14 @@ run (queued, running, or cancelled as its encounter's latest stage) whichever
 pair created it, settles the provider runs they left unsettled (as **app**
 below does on a failure), reads again, and only then removes the pair. The next
 worker is the parked pair's when one is left (its kinds read from its image);
-otherwise one that runs extract, analyze, predict and assess only. Either way
-the harness participants' stages (kinds `astra` and `fable`) are closed: no
-revision before the harness (80df1831d168 and older) has a stage for them, so
-they are closed like a second review's, as failed, with the installer's message
-naming the revision (no web offers a Resume for them). If the stages
+otherwise one that runs extract, analyze, predict and assess only. A harness
+stage is closed like a second review's whenever that worker has no stage for
+it, as failed, with the installer's message naming the revision (no web offers
+a Resume for it): the participants' `astra` and `fable`, which no revision
+before the harness (80df1831d168 and older) runs, and harness@2's peer reviews
+`astra_peer` and `fable_peer` (HARNESS.md 11.1), which no revision before
+harness@2 runs; a next worker that runs some of them (read from its image)
+keeps those, and the rest are still closed. If the stages
 cannot be closed, or the second read names a record (a request in flight when
 the worker stopped is then an unknown outcome), the pair is left stopped, not
 removed: start it, clear the records, rerun.
@@ -139,11 +143,19 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   or table, a constraint on an existing table, `RunPython`, other SQL, a form the
   check does not read, a file in the migrations directory that is not a
   migration) is refused. The receipt records each checked migration and why it
-  passed. 0006 and 0007 pass: 0007 adds `endpoint`, `requested_model`,
+  passed. 0006, 0007 and 0008 pass: 0007 adds `endpoint`, `requested_model`,
   `returned_model` and `response_id` to `studio_providerrun` and `participants`
   and `retrieval` to `studio_assessment`, each NOT NULL and each given a
   database default by the same migration's SQL, and creates `PassageSource` and
-  `ReferencePassage`, tables no older revision reads. So the previous pair keeps
+  `ReferencePassage`, tables no older revision reads. 0008 (harness@2) only
+  creates tables no older revision reads - `ProviderExchange` (each HTTP
+  exchange of a participant's tool loop), `ToolCall` (the tool traces) and
+  `FindingConfirmation` (reviewer-confirmed answers) - and puts its two unique
+  constraints on two of them; it adds no column to an existing table. Their
+  foreign keys point at existing rows (provider runs, clarifications,
+  encounters, revisions, users), which no revision deletes (057a7d39 and
+  80df1831d168 delete no row), so a row of theirs never refuses an older
+  pair's write. So the previous pair keeps
   inserting valid rows between `migrate` and the swap, and a restored or older
   pair runs on the migrated schema. The phase then builds, and requires the
   revision label, user 10150, the baked release, English OCR data, a working
@@ -291,6 +303,40 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   passage to retrieve, and an assessment the new pair makes meanwhile is
   recorded without one: to have none, run it right after `app`, or let the
   queue drain first.
+- **license-note** (after `app`) corrects the note CPT Studio itself writes on
+  every CMS reference source it imports (`ReferenceSource.license_note`, from
+  `studio.reference.importers.LICENSE_NOTE`), on the rows `reference` imported
+  in this install or an earlier one. The owner, 2026-11-01
+  (HARNESS.md 11.6): CPT Studio's own wording must not imply a licensing
+  exemption. The rows imported before the importer changed read "CPT codes are
+  copyright the American Medical Association; descriptors are not imported or
+  displayed. Used for internal synthetic evaluation only; commercial CPT use
+  requires an AMA license."; each becomes "CPT codes are copyright the American
+  Medical Association; descriptors are not imported or displayed. CPT Studio
+  holds no AMA licence; whether its use of CPT content needs one is an open
+  owner decision." It refuses unless `manage migrate --check` passes with this
+  revision's image (run `app` first), then runs in a one-shot of that image, as
+  `passages` runs its importer. There it refuses, changing nothing, unless the
+  image's importer writes exactly the corrected note (its next import would
+  otherwise write another text than the rows hold). Then, in one transaction
+  that holds the table against writers (readers are not blocked), every row
+  whose note is exactly the old text gets exactly the new one. A row with any
+  other note - even one differing by a space - is left as it is, and no other
+  column or row changes: the rows are read before and after, and any other
+  difference rolls the transaction back. The receipt records the number of
+  rows, the counts of old, corrected and other notes before and after, the
+  keys of the rows corrected and of those holding another note, both texts and
+  their sha256, and how many recorded assessments carry the old note.
+  Assessments and reports already made record what was shown and are never
+  rewritten; every assessment made afterwards carries the corrected note, so a
+  re-assessment records a new assessment rather than keeping the current one.
+  Decisions carry to it (no proposal fingerprint includes a note); a decision
+  that does not carry for another reason names 'reference sources' among the
+  changes. It never touches `PassageSource`, whose notes quote each CMS file's own
+  notices. With no row left holding the old text it changes nothing and says
+  so: rerun it freely. Until it has run, an assessment the new pair makes still
+  carries the old note: to have none, run it right after `app` (with
+  `passages`), or let the queue drain first.
 - **provision** writes both credentials files only after the accounts exist
   with the generated passwords; an account that already existed (password
   unchanged) aborts and discards them unless `--reset-passwords` was given.
@@ -314,8 +360,9 @@ this installer's) and reloads nginx; the certificate lineage is kept.
 ## Reinstalling a new revision
 
 Commit a declaration naming the new revision, then run `preflight`, `image`,
-`app`, `passages`, `verify`. `secrets`, `db`, `reference`, `passages` and
-`provision` are idempotent or refuse rather than repeat. A harness participant
+`app`, `passages`, `license-note`, `verify`. `secrets`, `db`, `reference`,
+`passages`, `license-note` and `provision` are idempotent or refuse rather than
+repeat. A harness participant
 credentials source placed since the last `secrets` is copied by running
 `secrets` again (the three-file set reads `present`) before `app`. If `deploy/nginx/` changed between the revisions,
 `verify` reports the vhost as different: republish with `rollback-vhost`,
@@ -397,7 +444,9 @@ before the harness, 80df1831d168 included, on the last two:
   put back for it, so it is named, never handed over.
 - a stage of a kind it has no stage for (the second review; the harness
   participants' `astra` and `fable`, which no revision before the harness
-  runs), queued, running, or stopped as the latest: its worker ends on it.
+  runs; harness@2's peer reviews `astra_peer` and `fable_peer`, which no
+  revision before harness@2 runs), queued, running, or stopped as the latest:
+  its worker ends on it.
 
 `rollback-app` closes the last as failed, and refuses, naming the encounters,
 while any of the first seven exists. They are cleared on this revision's web:
@@ -439,15 +488,20 @@ rule, which this revision holds); and where it reads the document's date
 otherwise than this revision does, its next metadata save requests its own
 reading (a first request, sent; one that failed or was not sent before is named
 above). The harness participants' runs (provider `astra` or `fable`, purpose
-`independent`) are no run of 80df1831d168's own (its run in use is a primary
-run); 057a7d39 takes the newest finished run of any kind as its run in use, so a
-participant run can be it: its metadata save then re-predicts, reusing Corti's
-retained answer to an unchanged request (nothing is sent), and a failed request
-it would send again is **outcome**, named above. An unknown outcome of a
-participant run is **unknown**. The runs' endpoint, models and response id, the
-assessment's participants and retrieval, and the passage tables are columns and
-tables no older revision reads (migration 0007 gives each column a database
-default). Encounter list states stay as this revision last derived them until an
+`independent`, or harness@2's `peer_review`) are no run of 80df1831d168's own
+(its run in use is a primary run); 057a7d39 takes the newest finished run of
+any kind as its run in use, so a participant run can be it: its metadata save
+then re-predicts, reusing Corti's retained answer to an unchanged request
+(nothing is sent), and a failed request it would send again is **outcome**,
+named above. An unknown outcome of a participant run is **unknown**. The runs'
+endpoint, models and response id, the assessment's participants and retrieval,
+the passage tables, and harness@2's exchanges, tool calls and finding
+confirmations (migration 0008's tables) are columns and tables no older
+revision reads (migration 0007 gives each column a database default). The
+licence note `license-note` corrected is a text an older revision shows as it
+is; a source an older revision imports afterwards gets its own importer's note,
+which this revision's `license-note` corrects once this revision is installed
+again. Encounter list states stay as this revision last derived them until an
 action on each encounter recomputes them - except a state this revision labels
 from more than the state. An older revision labels a stored state by its name
 alone, and never recomputes one: a response refused whole is `provider_failed`
@@ -520,6 +574,13 @@ recomputes every state.
 
 ## Local build and tests (no host change)
 
+The installer tests need no Docker. Those of the in-image scripts in
+`test_install_harness2.py` (the licence-note correction, the close of
+peer-review stages) also run on a disposable PostgreSQL when the
+`CPT_STUDIO_*` variables name one, as CI sets them (never the live port
+55451): they create `test_cptstudio_<suffix>_installer` and drop it again.
+Without one they are skipped, and say so.
+
 ```bash
 cd cpt-studio
 python3 -B -m unittest discover -s ops -p 'test_*.py' -v      # installer tests, no Docker
@@ -557,7 +618,12 @@ verified inside the image under that setting.
   values under 8 characters (they would match by chance), nor a value
   transformed (encoded, or partly printed). It reads only the checked
   participant's file.
-- The worker's stop timeout (360 s) covers a participant send (deadline 330 s),
-  not every whole stage: a stage still running when the 360 s pass is killed
+- The worker's stop timeout (600 s) covers a participant phase's whole tool
+  loop (deadline 540 s: at most four exchanges; one send's deadline is 330 s)
+  and equals the stale-stage sweep's bound (`STALE_RUNNING_SECONDS`, 600 s),
+  not every whole stage: a stage still running when the 600 s pass is killed
   with the worker and settled as any stage cut short (the stale-stage sweep, or
-  an undo's close).
+  an undo's close). Parking or removing a worker that is inside a loop waits up
+  to that long, so a stop in `app` or `rollback-app` can take up to ten
+  minutes: let the queue drain (or Stop the encounters) first to avoid the
+  wait.
