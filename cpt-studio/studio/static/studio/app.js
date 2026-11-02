@@ -488,12 +488,44 @@ function locatedBy(candidate) {
 }
 
 // Whether a participant's reference concerns ``code``: a fact ref names its code (fact:<source>:<code>:<field>); a
-// policy passage names none, so it concerns every code.
-function refConcerns(ref, code) {
+// policy passage names none, so it concerns every code. Only a ref CPT Studio's own tool results returned is read so
+// (``own``): one a participant cites that its run's tool calls never returned is its own text, read for no code, so it
+// is listed with every code, as a policy passage is (refutation round 4, shapes-3: a cited "fact:" ref was placed by its
+// own text).
+function refConcerns(ref, code, own = true) {
   const text = textValue(ref);
-  if (!text.startsWith('fact:')) return Boolean(text);
+  if (!own || !text.startsWith('fact:')) return Boolean(text);
   const parts = text.split(':');
   return parts.length >= 4 && parts[parts.length - 2] === code;
+}
+
+// A value a participant wrote into a reference, a tool call's tool or its arguments is shown only in the shape it may
+// take (HARNESS.md 12.4 as amended after refutation round 4, the session's D9; participants.peer): the API serves each
+// so already, and the page shows nothing else - a value served in no such shape is named by its length here too
+// ('colonoscopy-flexible-with-biopsy-single-or-multiple', a descriptor written with hyphens, passed DESCRIPTOR_LIKE).
+const SHORT_ID = /^[A-Za-z0-9]{1,8}$/;
+const REF_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;  // CPT Studio's own reference key (reports.REF_SHAPE)
+const WITHHELD_WORDS = /^a value of [0-9][0-9,]* characters? \(not shown\)$/;  // participants.peer.withheld's words
+
+// A value a participant wrote, named only by its length, in CPT Studio's words (participants.peer.withheld).
+function byLength(text) {
+  const size = [...text].length;
+  return `a value of ${size.toLocaleString('en-US')} character${size === 1 ? '' : 's'} (not shown)`;
+}
+
+// ``value`` as given when it is text in ``shape`` (or CPT Studio's own "a value of N characters (not shown)"), any
+// other text by its length, and a value that is not text by the length of its JSON; '' stays ''.
+function inShape(value, shape) {
+  if (typeof value !== 'string') return byLength(JSON.stringify(value === undefined ? null : value));
+  return !value || shape.test(value) || WITHHELD_WORDS.test(value) ? value : byLength(value);
+}
+
+// A reference a participant says it used (references.used[], references_used[]): as given only when its own run's tool
+// calls returned it (``retrieved``: CPT Studio's own key), otherwise only as a short id of letters and digits, or by its
+// length.
+function shownReference(item) {
+  const ref = item && typeof item.ref === 'string' ? item.ref : '';
+  return item?.retrieved === true && REF_KEY.test(ref) ? ref : inShape(ref, SHORT_ID);
 }
 
 // The documented text the reader kept as the evidence of a service date it could not use (an unread date form, another
@@ -1091,14 +1123,14 @@ function referenceLists(proposal, doc) {
         const passage = textValue(item.ref).startsWith('fact:') ? '' : ' (a policy passage, not tied to one code)';
         retrieved.push(`<li><b>${escapeHtml(who)}:</b> ${escapeHtml(`${textValue(item.ref)}${passage}`)}<small class="check-source">${escapeHtml([textValue(item.tool), textValue(item.source_key), textValue(item.release), window].filter(Boolean).join(' · '))}</small></li>`);
       }
-      for (const item of objects(refs.used).filter(entry => refConcerns(entry.ref, proposal.code))) {
+      for (const item of objects(refs.used).filter(entry => refConcerns(entry.ref, proposal.code, entry.retrieved === true))) {
         const checked = reused
           ? (item.retrieved === true ? 'retrieved by the tool calls of the retained run this run reuses' : 'cited, not retrieved: the tool calls of the retained run this run reuses never returned it')
           : (item.retrieved === true ? 'retrieved by its own tool calls in this run' : 'cited, not retrieved: its own tool calls in this run never returned it');
-        // a cited reference is the participant's own text (a ref it was never given reads as written): withheld where
-        // it reads like a CPT descriptor
+        // a cited reference is the participant's own text: shown only as a short id, otherwise by its length
+        // (shownReference); its use is free text, withheld where it reads like a CPT descriptor
         const use = participantText(item.use);
-        used.push(`<li><b>${escapeHtml(who)}:</b> ${escapeHtml(`${participantText(item.ref) || 'a reference not named'} — ${checked}`)}${use ? `<small class="check-source">${escapeHtml(`Its use: “${use}”`)}</small>` : ''}</li>`);
+        used.push(`<li><b>${escapeHtml(who)}:</b> ${escapeHtml(`${participantText(shownReference(item)) || 'a reference not named'} — ${checked}`)}${use ? `<small class="check-source">${escapeHtml(`Its use: “${use}”`)}</small>` : ''}</li>`);
       }
     }
   }
@@ -1898,7 +1930,7 @@ function traceReferencesUsed(items) {
     const checked = textValue(item.reused_from)
       ? (item.retrieved === true ? `retrieved by the tool calls of the retained run this run reuses (${item.reused_from})` : `cited, not retrieved by the retained run this run reuses (${item.reused_from})`)
       : (item.retrieved === true ? 'retrieved by its own tool calls in this run' : 'cited, not retrieved');
-    return `<li><b>${escapeHtml(`${participantText(item.ref) || 'Reference not named'} — ${checked}`)}</b>${use ? `<br>${escapeHtml(`Its use: ${use}`)}` : ''}</li>`;
+    return `<li><b>${escapeHtml(`${participantText(shownReference(item)) || 'Reference not named'} — ${checked}`)}</b>${use ? `<br>${escapeHtml(`Its use: ${use}`)}` : ''}</li>`;
   });
 }
 

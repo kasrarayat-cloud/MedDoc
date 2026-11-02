@@ -1828,8 +1828,11 @@ test('a code card says who proposed it in which phase, 11.4\'s sentence, the con
   assert.ok(at.every(index => index > 0) && at[0] < at[1] && at[1] < at[2], JSON.stringify(at));
   const snare = codeCardOf(html, '45385');
   assert.ok(snare.includes('<li><b>Astra · first reading:</b> fact:cms-pfs-rvu26d:45385:mult_proc<small class="check-source">cms_code_facts · cms-pfs-rvu26d · RVU26D · effective 1 Oct 2026 – 31 Dec 2026</small></li>'));
-  assert.ok(snare.includes('<li><b>Astra · first reading:</b> ncci-2026-ch6-c-1 — cited, not retrieved: its own tool calls in this run never returned it<small class="check-source">Its use: “A rule this run never retrieved.”</small></li>'));
-  assert.ok(snare.includes('<li><b>Astra · peer review:</b> fact:cms-pfs-rvu26d:45385:mult_proc — cited, not retrieved: its own tool calls in this run never returned it'), 'one phase\'s retrieval never counts for another\'s');
+  // moved by refutation round 4 (R4-SHAPES, shapes-3): a reference its run's own tool calls never returned is the
+  // participant's own text, which the API serves and the page shows only as a short id or by its length - here the
+  // passage key (17 characters) and the fact ref (35) - so it is listed with every code, as a policy passage is
+  assert.ok(snare.includes('<li><b>Astra · first reading:</b> a value of 17 characters (not shown) — cited, not retrieved: its own tool calls in this run never returned it<small class="check-source">Its use: “A rule this run never retrieved.”</small></li>'));
+  assert.ok(snare.includes('<li><b>Astra · peer review:</b> a value of 35 characters (not shown) — cited, not retrieved: its own tool calls in this run never returned it'), 'one phase\'s retrieval never counts for another\'s');
   assert.ok(snare.includes('<li><b>Astra · peer review:</b> ncci-2026-ch6-c-1 — retrieved by its own tool calls in this run'));
   // a fact names its code: 45385's fact is not on 45380's card; a policy passage names none
   assert.equal(biopsy.includes('fact:cms-pfs-rvu26d:45385'), false);
@@ -1887,10 +1890,11 @@ test('the trace shows each run\'s exchanges and tool calls, each peer review in 
   assert.ok(html.includes(`<li><b>Question ${peer.review.answers[0].question_id}</b><br>Answer: cecum<ul class="trace-quotes"><li>“Landmarks photographed: appendiceal orifice and ileocecal valve.” — found in the document (1 place)</li></ul></li>`));
   assert.ok(html.includes('<li><b>45380 · supports it</b><br>Why: Participant wording.'));
   assert.ok(html.includes('<li><b>45381 · units 1 · confidence low · services s1 · proposed after peer review, never independent</b><br>Basis: Participant wording.<ul class="trace-quotes"><li>“A submucosal injection was given.” — unverified (not found); never used as evidence</li></ul></li>'));
-  assert.ok(html.includes('<li><b>fact:cms-pfs-rvu26d:45385:mult_proc — cited, not retrieved</b><br>Its use: Retrieved only by its first reading.</li>'));
+  // moved by refutation round 4 (R4-SHAPES, shapes-3): a reference never retrieved is served only by its length
+  assert.ok(html.includes('<li><b>a value of 35 characters (not shown) — cited, not retrieved</b><br>Its use: Retrieved only by its first reading.</li>'));
   assert.ok(html.includes('<li><b>Question ' + trace.participants[2].runs[1].review.answers[0].question_id + '</b><br>Answer: Cecum, appendiceal orifice seen'), 'the participant\'s own words, in the trace');
   // a first reading's references used, checked against its own run
-  assert.ok(html.includes('<li><b>ncci-2026-ch6-c-1 — cited, not retrieved</b><br>Its use: A rule this run never retrieved.</li>'));
+  assert.ok(html.includes('<li><b>a value of 17 characters (not shown) — cited, not retrieved</b><br>Its use: A rule this run never retrieved.</li>'));
   // each assessment of the revision with the frozen phase-1 outputs it recorded
   const assessments = html.slice(html.indexOf('<h2>Assessments of this revision</h2>'), html.indexOf('<h2>Reference retrieval</h2>'));
   assert.ok(assessments.includes('<div class="evidence-label">Phase 1: the frozen first readings · not final</div>'));
@@ -1995,7 +1999,9 @@ test('a reference or a tool a participant names itself is withheld where it read
     ? { ...row, references: { ...row.references, used: [...row.references.used, { ref: DESCRIPTOR, use: 'Its reason.', retrieved: false }] } } : row)) } };
   const card = codeCardOf(render(cited), '45385');
   assert.equal(card.includes('lesion(s)'), false);
-  assert.ok(card.includes(`<li><b>Astra · first reading:</b> ${app.escapeHtml(app.DESCRIPTOR_WITHHELD)} — cited, not retrieved`), card);
+  // moved by refutation round 4 (R4-SHAPES, shapes-3): a reference no tool returned is named by its length whatever it
+  // reads like (DESCRIPTOR_LIKE alone missed a hyphenated descriptor)
+  assert.ok(card.includes(`<li><b>Astra · first reading:</b> a value of ${[...DESCRIPTOR].length} characters (not shown) — cited, not retrieved`), card);
   const trace = fixture(H2_TRACE);
   const astra = trace.participants[1];
   const [first] = astra.runs;
@@ -2003,7 +2009,7 @@ test('a reference or a tool a participant names itself is withheld where it read
     exchanges: [{ ...first.exchanges[0], tool_calls: [{ ...first.exchanges[0].tool_calls[0], tool: DESCRIPTOR }] }] };
   const html = app.traceView({ ...trace, participants: [{ ...astra, runs: [named] }] }, trace.encounter.id);
   assert.equal(html.includes('lesion(s)'), false);
-  assert.ok(html.includes(`<li><b>${app.escapeHtml(app.DESCRIPTOR_WITHHELD)} — cited, not retrieved</b></li>`) && html.includes(`<li><b>${app.escapeHtml(app.DESCRIPTOR_WITHHELD)} (call_1_1)</b>`));
+  assert.ok(html.includes(`<li><b>a value of ${[...DESCRIPTOR].length} characters (not shown) — cited, not retrieved</b></li>`) && html.includes(`<li><b>${app.escapeHtml(app.DESCRIPTOR_WITHHELD)} (call_1_1)</b>`));
 });
 
 test('a peer-review run is named as one in the Activity tab, on the reconciliation card and when it stopped processing', () => {
@@ -2190,9 +2196,10 @@ test('R2-TRUTH truth-13: a reuse\'s references are said to be the retained run\'
   assert.equal(row.includes('Its own tool calls retrieved'), false);
   const snare = codeCardOf(html, '45385');
   assert.ok(snare.includes('<li><b>Astra · first reading (the retained run it reuses):</b> fact:cms-pfs-rvu26d:45385:mult_proc<small class="check-source">'), snare);
-  assert.ok(snare.includes('<li><b>Astra · first reading (the retained run it reuses):</b> ncci-2026-ch6-c-1 — cited, not retrieved: the tool calls of the retained run this run reuses never returned it'), snare);
+  // moved by refutation round 4 (R4-SHAPES, shapes-3): the reference its tool calls never returned is shown by its length
+  assert.ok(snare.includes('<li><b>Astra · first reading (the retained run it reuses):</b> a value of 17 characters (not shown) — cited, not retrieved: the tool calls of the retained run this run reuses never returned it'), snare);
   assert.ok(snare.includes('<li><b>Astra · first reading (the retained run it reuses):</b> fact:cms-pfs-rvu26d:45385:mult_proc — retrieved by the tool calls of the retained run this run reuses'), snare);
-  assert.equal(snare.includes('Astra · first reading:</b> ncci-2026-ch6-c-1 — cited, not retrieved: its own tool calls in this run'), false, 'its own first reading is the reuse');
+  assert.equal(snare.includes('Astra · first reading:</b> a value of 17 characters (not shown) — cited, not retrieved: its own tool calls in this run'), false, 'its own first reading is the reuse');
   // a run's own tool calls read as before
   assert.ok(harnessRow(render(final), 'astra').includes('Its own tool calls retrieved 1 reference; it says it used 2, 1 of them cited, not retrieved.'));
   // the owner's trace: each reference used names the retained run it was checked against
@@ -2202,7 +2209,7 @@ test('R2-TRUTH truth-13: a reuse\'s references are said to be the retained run\'
   const reuse = { ...first, reused_from: UUID, exchanges: [], reading: { ...first.reading, references_used: first.reading.references_used.map(item => ({ ...item, reused_from: UUID })) } };
   const traced = app.traceView({ ...trace, participants: [{ ...astra, runs: [reuse] }] }, trace.encounter.id);
   assert.ok(traced.includes(`<li><b>fact:cms-pfs-rvu26d:45385:mult_proc — retrieved by the tool calls of the retained run this run reuses (${UUID})</b>`), traced);
-  assert.ok(traced.includes(`<li><b>ncci-2026-ch6-c-1 — cited, not retrieved by the retained run this run reuses (${UUID})</b>`), traced);
+  assert.ok(traced.includes(`<li><b>a value of 17 characters (not shown) — cited, not retrieved by the retained run this run reuses (${UUID})</b>`), traced);
   assert.equal(traced.includes('retrieved by its own tool calls in this run'), false);
 });
 
@@ -2535,4 +2542,37 @@ test('R3-TRUTH truth-6: a code card states the NCCI procedure-to-procedure limit
   // a consideration that does not state the limit is shown as the engine wrote it
   const other = 'The documented intent is screening and a therapeutic or diagnostic act was performed: payer rules for a screening examination that becomes therapeutic (for example Medicare modifier PT, commercial modifier 33) are not connected. No modifier is assigned.';
   assert.ok(cardFor({ ...harnessEra, modifier_considerations: [other] }).includes(`Modifier considerations, never assigned automatically: ${other}`));
+});
+
+// refutation round 4, R4-SHAPES
+// The session's D9: what a participant wrote into a reference, a tool call's tool or its arguments is shown on the page
+// only in the shape it may take (participants.peer; the API serves it so): a reference its own tool calls returned as
+// given, any other only as a short id of letters and digits, and anything else by its length - never as written,
+// whatever DESCRIPTOR_LIKE reads. The payloads here are the API's before this round's repair, so the page's own rule is
+// what is tested.
+const R4_REF = 'colonoscopy-flexible-with-biopsy-single-or-multiple';  // CPT 45380's descriptor, written with hyphens
+const r4Length = text => `a value of ${[...text].length.toLocaleString('en-US')} character${[...text].length === 1 ? '' : 's'} (not shown)`;
+
+test('R4-SHAPES shapes-3: a reference a participant cites and its tool calls never returned is shown only as a short id or by its length, with every code', () => {
+  assert.equal(app.DESCRIPTOR_LIKE.test(R4_REF), false, 'the descriptor rule alone misses it');
+  const final = fixture(H2_FINAL);
+  const fact = 'fact:cms-pfs-rvu26d:45385:mult_proc';
+  const used = [{ ref: R4_REF, use: 'Synthetic use.', retrieved: false }, { ref: 'rule01', use: '', retrieved: false },
+    { ref: 'fact:cms-pfs-rvu26d:45380:status', use: '', retrieved: false }, { ref: fact, use: '', retrieved: true }];
+  const doc = { ...final, harness: { ...final.harness, participants: final.harness.participants.map(row => (row.name === 'astra' ? { ...row, references: { ...row.references, used } } : row)) } };
+  const html = render(doc);
+  assert.equal(html.includes(R4_REF), false);
+  for (const code of ['45385', '45380']) {
+    const card = codeCardOf(html, code);
+    assert.ok(card.includes(`<li><b>Astra · first reading:</b> ${r4Length(R4_REF)} — cited, not retrieved: its own tool calls in this run never returned it<small class="check-source">Its use: “Synthetic use.”</small></li>`), `${code}: ${card}`);
+    assert.ok(card.includes('<li><b>Astra · first reading:</b> rule01 — cited, not retrieved'), code);
+    // a cited "fact:" ref is the participant's own text: it names no code CPT Studio reads, so it is listed with every code
+    assert.ok(card.includes(`<li><b>Astra · first reading:</b> ${r4Length('fact:cms-pfs-rvu26d:45380:status')} — cited, not retrieved`), code);
+  }
+  // one its own tool calls returned is CPT Studio's own key: as given, on its code's card
+  assert.ok(codeCardOf(html, '45385').includes(`<li><b>Astra · first reading:</b> ${fact} — retrieved by its own tool calls in this run`));
+  assert.equal(codeCardOf(html, '45380').includes(`${fact} — retrieved`), false);
+  // the API's own words for a reference it withholds read as served
+  const served = { ...doc, harness: { ...doc.harness, participants: doc.harness.participants.map(row => (row.name === 'astra' ? { ...row, references: { ...row.references, used: [{ ref: r4Length(R4_REF), use: '', retrieved: false }] } } : row)) } };
+  assert.ok(codeCardOf(render(served), '45385').includes(`<li><b>Astra · first reading:</b> ${r4Length(R4_REF)} — cited, not retrieved`));
 });

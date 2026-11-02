@@ -931,7 +931,7 @@ def _harness2(row, assessment, jobs):
         return out
     run = models.ProviderRun.objects.filter(pk=row['run_id']).first() if row['run_id'] else None
     if run is not None and run.purpose == models.ProviderRun.INDEPENDENT:
-        out['references'] = review.participant_references(run)
+        out['references'] = shown_references(review.participant_references(run))
     progress = _peer_progress(jobs, name)
     record = review.model_records(assessment).get(name) if assessment is not None else None
     if progress is not None:
@@ -949,12 +949,29 @@ def _harness2(row, assessment, jobs):
                        'run_id': str(peer_run.pk) if peer_run is not None else None, 'codes_added': added,
                        'unverified_quotes': int(record.get('peer_unverified_quotes') or 0)}
         if peer_run is not None:
-            out['peer_references'] = review.participant_references(peer_run, peer_review)
+            out['peer_references'] = shown_references(review.participant_references(peer_run, peer_review))
     elif (record is not None and record.get('state') == 'read' and review.assessment_phase(assessment) == 1
           and review.is_final(assessment)):
         out['peer'] = {'state': RECORD_STATES['not_sent'], 'detail': _no_peer_review(assessment, name), 'run_id': None,
                        'codes_added': [], 'unverified_quotes': 0}
     return out
+
+
+def shown_used(item):
+    """One reference a participant run says it used ({ref, use, retrieved, ...}), its ref as CPT Studio shows it: as
+    given only when that run's own tool results returned it (``retrieved``: CPT Studio's own identifier), otherwise only
+    as a short id of letters and digits or by its length (participants.peer.shown_reference; refutation round 4, the
+    session's D9, shapes-3: a ref no tool returned is the participant's own text, and was served as written). The rest
+    of the item is as the reader recorded it."""
+    if not isinstance(item, dict):
+        return item
+    return dict(item, ref=participant_peer.shown_reference(item.get('ref'), item.get('retrieved')))
+
+
+def shown_references(references):
+    """A run's references (review.participant_references) as the API serves them: what its own tool calls retrieved -
+    CPT Studio's own identifiers - as given, and each reference it says it used through shown_used."""
+    return {**references, 'used': [shown_used(item) for item in references.get('used') or []]}
 
 
 def harness_json(encounter, jobs):
@@ -1082,10 +1099,12 @@ def _trace_reading(run, ids=None):
 
 
 def _checked_against(run, used):
-    """A run's references used as the trace serves them: as the reader recorded them, and for a run that reused a
-    retained answer each with ``reused_from``, the retained run whose tool calls CPT Studio checked it against
-    (jobs.loop_run), so the trace never says a reuse retrieved anything by its own tool calls (refutation round 2,
-    truth-13)."""
+    """A run's references used as the trace serves them: as the reader recorded them, each ref as the API shows it
+    (shown_used: as given only when that run's own tool results returned it, otherwise only as a short id or by its
+    length; refutation round 4, shapes-3), and for a run that reused a retained answer each with ``reused_from``, the
+    retained run whose tool calls CPT Studio checked it against (jobs.loop_run), so the trace never says a reuse
+    retrieved anything by its own tool calls (refutation round 2, truth-13)."""
+    used = [shown_used(item) for item in used]
     if not run.reused_from_id:
         return used
     return [dict(item, reused_from=str(run.reused_from_id)) if isinstance(item, dict) else item for item in used]

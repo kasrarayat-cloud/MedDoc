@@ -235,6 +235,47 @@ class TraceIdsTests(ShapesCase):
         self.assertEqual(len({name: None for name in names}), 3)  # three ids, three names, never one for two
 
 
+class ReferenceShapeTests(ShapesCase):
+    """shapes-3: a reference the participant's own tool results never returned is shown only as a short id of letters
+    and digits, otherwise by its length - in the API, the trace and both reports; a retrieved one as given."""
+
+    def test_a_reference_never_retrieved_is_shown_only_as_a_short_id_or_by_its_length(self):
+        _, trace, detail, txt, rows = self.run_chain()
+        shown = [(length(REF), False), ('rule01', False), (FACT, True), (length(UNRETRIEVED_FACT), False)]
+        astra = self.rows(detail)['astra']
+        self.assertEqual([(item['ref'], item['retrieved']) for item in astra['references']['used']], shown)
+        self.assertEqual([item['use'] for item in astra['references']['used']], ['Synthetic use.'] * 4)
+        self.assertIn(FACT, [item['ref'] for item in astra['references']['retrieved']])
+        self.assertEqual([(item['ref'], item['retrieved']) for item in astra['peer_references']['used']],
+                         [(length(PASSAGE), False)])
+        first, peer_run = self.astra_runs(trace)
+        self.assertEqual([(item['ref'], item['retrieved']) for item in first['reading']['references_used']], shown)
+        self.assertEqual([(item['ref'], item['retrieved']) for item in peer_run['review']['references_used']],
+                         [(length(PASSAGE), False)])
+        for line in (f'    Used: {length(REF)} — cited, not retrieved by this run, so never shown as retrieved',
+                     '    Used: rule01 — cited, not retrieved by this run, so never shown as retrieved',
+                     f'    Used: {FACT} — retrieved by this run',
+                     f'    Used: {length(UNRETRIEVED_FACT)} — cited, not retrieved by this run, so never shown as '
+                     'retrieved',
+                     f'    Used: {length(PASSAGE)} — cited, not retrieved by this run, so never shown as retrieved'):
+            self.assertIn(line, txt.splitlines())
+        header = rows[0]
+        used = [(row[header.index('proposal_origin')], row[header.index('status')],
+                 row[header.index('exclusion_reason')]) for row in rows[1:]
+                if row[header.index('item_list')] == 'participant_reference' and row[header.index('status')] != 'retrieved'
+                and row[header.index('proposed_by')] == 'astra']
+        self.assertEqual(used, [('independent', 'cited_not_retrieved', length(REF)),
+                                ('independent', 'cited_not_retrieved', 'rule01'), ('independent', 'used', FACT),
+                                ('independent', 'cited_not_retrieved', length(UNRETRIEVED_FACT)),
+                                ('peer_review', 'cited_not_retrieved', length(PASSAGE))])
+        # (PASSAGE is CPT Studio's own key of a passage the reconciliation's retrieval holds, so it is not looked for)
+        for value in (REF, UNRETRIEVED_FACT):
+            for where, text in (('trace', json.dumps(trace, ensure_ascii=False)), ('txt', txt),
+                                ('csv', json.dumps(rows, ensure_ascii=False)),
+                                ('detail', json.dumps(detail, ensure_ascii=False))):
+                self.assertNotIn(value, text, f'{value} in {where}')
+
+
 # --- the engine, pure (tests.test_harness_engine's document and helpers) ----------------------------------------------
 
 class EngineListingTests(OfflineTestCase):
@@ -314,3 +355,13 @@ class SharedRuleTests(OfflineTestCase):
         # Corti's own listing is another rule, pinned by I1: 1 to 10 characters
         self.assertTrue(engine._listable(LES))
         self.assertEqual(engine.MAX_LISTED_CODE, 10)
+
+    def test_a_reference_is_shown_as_given_only_when_retrieved_or_a_short_id(self):
+        cases = [((FACT, True), FACT), ((PASSAGE, True), PASSAGE), (('rule01', False), 'rule01'),
+                 ((PASSAGE, False), length(PASSAGE)), ((REF, False), length(REF)),
+                 ((UNRETRIEVED_FACT, False), length(UNRETRIEVED_FACT)), (('', False), ''),
+                 ((REF, 'yes'), length(REF)), ((REF, 1), length(REF))]  # only True is retrieved
+        for (ref, retrieved), expected in cases:
+            self.assertEqual(peer.shown_reference(ref, retrieved), expected, (ref, retrieved))
+        for (ref, retrieved), expected in cases[:-2]:
+            self.assertEqual(peer.shown_ref(ReferenceUse(ref=ref, use='', retrieved=retrieved)), expected)

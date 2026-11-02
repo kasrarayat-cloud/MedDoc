@@ -16,6 +16,7 @@ from django.test import override_settings
 from django.utils import timezone
 
 from studio import jobs, models, reports, review, serializers
+from studio.participants.peer import shown_reference
 from studio.reference import tools
 from studio.types import EvidenceSpan, to_jsonable
 from tests.test_harness2_pipeline import (EMPTY_PEER, HEAD, LAND, PFS_KEY, TWO_EXTENTS, ColonCase, Harness2Case,
@@ -279,15 +280,21 @@ class OneReadingTests(Harness2Case):
         traced = {run['id']: run for participant in trace['participants'] for run in participant['runs']}
         for run in self.runs(encounter_id):
             with self.subTest(provider=run.provider, purpose=run.purpose):
+                # moved by refutation round 4 (R4-SHAPES, shapes-3): each reference used as the trace shows it - the
+                # reader's own, its ref only as a short id or by its length where that run's tool calls never returned
+                # it
                 if run.purpose == models.ProviderRun.PEER_REVIEW:
                     expected = jobs.peer_reading(run)
                     self.assertEqual(review.stored_peer_review(run), expected)
-                    self.assertEqual(traced[str(run.pk)]['review'], json.loads(json.dumps(to_jsonable(expected[0]))))
+                    read = json.loads(json.dumps(to_jsonable(expected[0])))
+                    read['references_used'] = [serializers.shown_used(item) for item in read['references_used']]
+                    self.assertEqual(traced[str(run.pk)]['review'], read)
                 else:
                     expected = jobs.participant_reading(run)
                     self.assertEqual(review.stored_reading(run), expected)
+                    read = to_jsonable(expected[0])['references_used']
                     self.assertEqual(traced[str(run.pk)]['reading']['references_used'],
-                                     to_jsonable(expected[0])['references_used'])
+                                     [serializers.shown_used(item) for item in read])
                 self.assertIsNotNone(expected[0])
 
     def test_the_frozen_sha256s_are_one_function(self):
@@ -330,8 +337,10 @@ class OneReadingTests(Harness2Case):
                     self.assertEqual(item['kind'], 'fact' if item['ref'].startswith('fact:') else 'passage')
                 # 'used' is the reader's own check, which agrees with the retrieved list
                 reading = (jobs.peer_reading(run) if purpose == 'peer_review' else jobs.participant_reading(run))[0]
-                self.assertEqual(shown['used'], [{'ref': ref.ref, 'use': ref.use, 'retrieved': ref.retrieved}
-                                                 for ref in reading.references_used])
+                # moved by refutation round 4 (R4-SHAPES, shapes-3): a ref the run's tool calls never returned is served
+                # only as a short id or by its length (participants.peer.shown_reference)
+                self.assertEqual(shown['used'], [{'ref': shown_reference(ref.ref, ref.retrieved), 'use': ref.use,
+                                                  'retrieved': ref.retrieved} for ref in reading.references_used])
                 retrieved = {item['ref'] for item in shown['retrieved']}
                 self.assertTrue(all(item['retrieved'] == (item['ref'] in retrieved) for item in shown['used']))
         # a fact the executor returned carries the installed source's own release and window
@@ -340,7 +349,8 @@ class OneReadingTests(Harness2Case):
                          (PFS_KEY, source.release, '2026-10-01', '2026-12-31'))
         # the peer review's retrieval never counts for the first reading's, nor the reverse (11.2)
         peer_used = {item['ref']: item['retrieved'] for item in rows['astra']['peer_references']['used']}
-        self.assertEqual(peer_used, {'rule-01': True, f'fact:{PFS_KEY}:99213:status': False})
+        # moved by refutation round 4 (R4-SHAPES, shapes-3): the fact ref the peer review never retrieved, by its length
+        self.assertEqual(peer_used, {'rule-01': True, 'a value of 32 characters (not shown)': False})
 
     def test_a_reused_run_is_read_with_the_refs_of_the_loop_that_answered_it_on_every_page(self):
         first_id = self.create()

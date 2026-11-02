@@ -142,14 +142,20 @@ class ShownIds:
         return self.names[value]
 
 
-def shown_ref(item: ReferenceUse):
-    """A reference another model says it used, as a peer request shows it: its ref as given when that model's own tool
-    results returned it (CPT Studio's own identifier, ``retrieved``), any other ref only when it is a short id
-    (SHORT_ID), and otherwise only by its length. A ref that is not a string is returned as it is."""
-    ref = item.ref
-    if item.retrieved or not isinstance(ref, str) or SHORT_ID.fullmatch(ref):
+def shown_reference(ref, retrieved):
+    """A reference a model says it used, as CPT Studio shows it anywhere - a peer request, the owner's trace, the API and
+    both reports (refutation round 4, the session's D9, shapes-3): its ref as given when that model's own tool results
+    returned it (``retrieved`` True: CPT Studio's own identifier), any other ref only when it is a short id (SHORT_ID),
+    and otherwise only by its length - a ref no tool returned is the model's own text: 'colonoscopy-flexible-with-biopsy-
+    single-or-multiple' was served and printed as written. A ref that is not a string is returned as it is."""
+    if retrieved is True or not isinstance(ref, str) or SHORT_ID.fullmatch(ref):
         return ref
     return withheld(ref)
+
+
+def shown_ref(item: ReferenceUse):
+    """A reference another model says it used, as a peer request shows it (shown_reference)."""
+    return shown_reference(item.ref, item.retrieved)
 
 
 def withheld(text):

@@ -24,7 +24,7 @@ from .gi.context import charge_date_problem, is_member_conflict
 from .gi.profiles import PROFILES
 from .models import Clarification, Decision, Encounter, Membership, Proposal, ProviderRun, ReportArtifact
 from .participants.reading import CODE as CODE_SHAPE
-from .serializers import failure_note, peer_code_phases, retrieval_failed
+from .serializers import failure_note, peer_code_phases, retrieval_failed, shown_used
 from .types import CONTEXT_FACTS, sha256_json
 from .validation.checks import fact_label
 
@@ -476,7 +476,11 @@ PEER_TITLE = 'PEER REVIEW'
 REFERENCES_TITLE = 'PARTICIPANT REFERENCES'
 # CSV rows that are not proposals (format @4's encounter rows, harness@2's): ops/verify_downloads.py reads them as such.
 HARNESS2_LISTS = ('confirmed_finding', 'peer_answer', 'peer_position', 'peer_additional_code', 'participant_reference')
-REF_SHAPE = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:-]{0,199}')  # a passage key or a 'fact:<source>:<code>:<field>' ref
+# A passage key or a 'fact:<source>:<code>:<field>' ref: the shape of CPT Studio's own identifiers, so it is read only of
+# a ref CPT Studio's tool results returned. A ref a participant cites that no tool returned is its own text, shown only
+# as a short id or by its length (serializers.shown_used; refutation round 4, shapes-3: this shape alone printed
+# 'colonoscopy-flexible-with-biopsy-single-or-multiple', a descriptor written with hyphens, as written).
+REF_SHAPE = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:-]{0,199}')
 FACT_TITLES = {candidates.DATE_FACT: 'Service date', candidates.STATUS_FACT: 'Performed at this encounter'}
 PHASE_WORDS = {ProviderRun.INDEPENDENT: 'independent reading', ProviderRun.PEER_REVIEW: 'peer review'}
 NO_PEER_REVIEW = 'It takes no part in peer review: its first reading was not read.'
@@ -617,9 +621,19 @@ def _participant_reference_runs(assessment):
             references = review.participant_references(run)
             out.append({'name': name, 'label': participants.LABELS[name], 'phase': phase, 'run': str(run.pk),
                         'reused_from': references.get('reused_from'), 'retrieved': references['retrieved'],
-                        'used': [{'ref': item['ref'] if REF_SHAPE.fullmatch(str(item['ref'])) else '',
-                                  'retrieved': bool(item['retrieved'])} for item in references['used']]})
+                        'used': [{'ref': _used_ref(item), 'retrieved': bool(item['retrieved'])}
+                                 for item in references['used']]})
     return out
+
+
+def _used_ref(item):
+    """A reference a participant run says it used, as both reports print it: one its own tool results returned as
+    given in the shape of CPT Studio's own identifiers (REF_SHAPE; '' otherwise, printed as UNKEYED_REF), any other
+    only as a short id or by its length (serializers.shown_used), never as the participant wrote it."""
+    if item.get('retrieved') is True:
+        return item['ref'] if REF_SHAPE.fullmatch(str(item['ref'])) else ''
+    ref = shown_used(item)['ref']
+    return ref if isinstance(ref, str) else ''
 
 
 def _history(encounter, assessment):

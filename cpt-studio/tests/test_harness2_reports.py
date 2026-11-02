@@ -19,8 +19,8 @@ from django.test import TestCase, override_settings
 
 from studio import candidates, jobs, models, reports, review, serializers
 # moved by refutation round 3 (falsegreen-11): Harness2Case's own document and quotes, whose rows are the engine's
-from tests.test_harness2_api import (BOTH, DATE_QUOTE, FACT_REF, LANDMARK_QUOTE, NOTE, PASSAGE_REF, RECTUM_QUOTE,
-                                     UNLOCATED_QUOTE, Harness2Case, questions_of)
+from tests.test_harness2_api import (BOTH, DATE_QUOTE, FACT_REF, FACT_UNRETRIEVED, LANDMARK_QUOTE, NOTE, PASSAGE_REF,
+                                     PASSAGE_UNRETRIEVED, RECTUM_QUOTE, UNLOCATED_QUOTE, Harness2Case, questions_of)
 from tests.support import pipeline_factories as pf
 
 _spec = importlib.util.spec_from_file_location('cpt_verify_downloads_harness2',
@@ -113,12 +113,14 @@ class SectionTests(Harness2Case):
             f'  - Astra · independent reading · run {self.runs["astra"].pk}',
             f'    Retrieved: {FACT_REF} (fact · cms-pfs-rvu26d, release RVU26D, effective 2026-10-01 to 2026-12-31)',
             f'    Used: {FACT_REF} — retrieved by this run',
-            f'    Used: {PASSAGE_REF} — cited, not retrieved by this run, so never shown as retrieved',
+            # moved by refutation round 4 (R4-SHAPES, shapes-3): a ref its run's own tool calls never returned is
+            # printed only by its length
+            f'    Used: {PASSAGE_UNRETRIEVED} — cited, not retrieved by this run, so never shown as retrieved',
             f'  - Astra · peer review · run {self.peer_runs["astra"].pk}',
             f'    Retrieved: {PASSAGE_REF} (passage · cms-ncci-policy-manual-2026, release Revision 2026, effective '
             '2026-01-01 to 2026-12-31)',
             f'    Used: {PASSAGE_REF} — retrieved by this run',
-            f'    Used: {FACT_REF} — cited, not retrieved by this run, so never shown as retrieved',
+            f'    Used: {FACT_UNRETRIEVED} — cited, not retrieved by this run, so never shown as retrieved',
             f'  - Fable · independent reading · run {self.runs["fable"].pk}', '    Retrieved: none', '    Used: none',
             f'  - Fable · peer review · run {self.peer_runs["fable"].pk}', '    Retrieved: none', '    Used: none'])
         # the reconciliation's retrieval is its own section and names none of the participants' references
@@ -233,10 +235,11 @@ class CsvTests(Harness2Case):
                          ('45381', '1', 'proposed_after_peer_review', 'peer_review'))
         references = sorted((r['proposed_by'], r['proposal_origin'], r['status'], r['exclusion_reason'])
                             for r in by_list['participant_reference'])
-        self.assertEqual(references, [('astra', 'independent', 'cited_not_retrieved', PASSAGE_REF),
+        # moved by refutation round 4 (R4-SHAPES, shapes-3): a ref no tool of its run returned, only by its length
+        self.assertEqual(references, [('astra', 'independent', 'cited_not_retrieved', PASSAGE_UNRETRIEVED),
                                       ('astra', 'independent', 'retrieved', FACT_REF),
                                       ('astra', 'independent', 'used', FACT_REF),
-                                      ('astra', 'peer_review', 'cited_not_retrieved', FACT_REF),
+                                      ('astra', 'peer_review', 'cited_not_retrieved', FACT_UNRETRIEVED),
                                       ('astra', 'peer_review', 'retrieved', PASSAGE_REF),
                                       ('astra', 'peer_review', 'used', PASSAGE_REF)])
         harness2 = [row for lists in reports.HARNESS2_LISTS for row in by_list.get(lists, [])]

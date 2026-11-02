@@ -491,8 +491,9 @@ class ReusedRunReferenceTests(Harness2Case):
         self.assertEqual(head, f'  - Astra · independent reading · run {reuse.pk} · reuses the retained answer of run '
                                f'{retained.pk}, whose tool calls these are; this run made none')
         self.assertIn('    Used: fact:cms-pfs-rvu26d:99213:status — retrieved by the retained run it reuses', used)
-        self.assertIn('    Used: rule-01 — cited, not retrieved by the retained run it reuses, so never shown as '
-                      'retrieved', used)
+        # moved by refutation round 4 (R4-SHAPES, shapes-3): 'rule-01', never retrieved, is printed only by its length
+        self.assertIn('    Used: a value of 7 characters (not shown) — cited, not retrieved by the retained run it '
+                      'reuses, so never shown as retrieved', used)
         self.assertEqual(self.csv_checks(first), {f'run={retained.pk}'})
         self.assertEqual(self.csv_checks(second), {f'run={reuse.pk};reused_from={retained.pk}'})
         # the API: the same references, and the run whose tool calls they are
