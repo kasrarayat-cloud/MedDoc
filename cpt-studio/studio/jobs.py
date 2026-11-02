@@ -1867,3 +1867,10 @@ def change_context(encounter, user, values):
             _queue_predict(encounter, revision, context, key=f'predict:{context.pk}', requested_by=user)
         review.refresh_state(encounter)
     return context
+
+
+def reassess_after_confirmation(encounter, user):
+    """One assess after a reviewer's confirmation (HARNESS.md 12.5): it reads exactly what the final assessment read plus
+    every confirmation of the revision, and sends nothing. The interface the confirmation endpoint calls; harness@2 part
+    B's pipeline package builds it."""
+    raise NotImplementedError('reassess_after_confirmation is built by harness@2 part B (HARNESS.md 12.5).')

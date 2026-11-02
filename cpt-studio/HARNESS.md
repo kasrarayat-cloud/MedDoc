@@ -429,3 +429,162 @@ The doctor-facing demonstration is never called ready while any required depende
 - CPT Studio's own wording must not imply an exemption. Any text such as "used for internal synthetic evaluation only"
   is a statement of current use, never a claim of permission.
 - The remaining licensing requirements are prepared for the owner in `docs/cpt-harness/licensing-requirements-20261101.md`.
+
+## 12. harness@2 part B: the build contract (records, stages, confirmation, API)
+
+Section 11 says what harness@2 does; this section fixes the interfaces the remaining packages build to (pipeline, review
+and API, website). Where it and section 11 differ, section 11 governs and this section is the defect.
+
+### 12.1 Stages and keys
+
+```
+predict -> astra -> fable -> assess #1 -> astra_peer -> fable_peer -> assess #2
+```
+
+- **No model participant configured:** exactly today's chain and keys (I1). No phase 2, no second assess, and nothing
+  below runs.
+- **Phase 1** (job kinds `astra`, `fable`; purpose `independent`): each participant's run is ONE tool loop
+  (`send_loop`, 11.2) under the provider lock, with CPT Studio's CMS tool executor (12.2). The run records its exchanges
+  (`ProviderExchange`, one per HTTP exchange, turn 1..n) and their tool calls (`ToolCall`). The run's own request and
+  response fields hold its first request and its final response (`ProviderExchange`'s docstring). The reading is read
+  with `refs_retrieved` = the refs of that run's own tool calls.
+- **assess #1** is queued by the last phase-1 stage exactly as today (`_assess_key(base, revision)`, `':p:'` digest of
+  the phase-1 runs). It records the frozen phase-1 outputs in `Assessment.participants` (12.3). When at least one model
+  participant's phase-1 state is `read`, assess #1 queues the first owed peer stage; otherwise it is the final
+  assessment.
+- **Peer stages** (job kinds `astra_peer`, `fable_peer`; purpose `peer_review`), in that order, each only when:
+  - its own phase-1 reading for the revision is `read` (a participant whose first assessment failed never gets a first
+    look that has already seen its peers);
+  - every configured participant's phase-1 run for the revision is terminal;
+  - the assessment it reads is the newest assessment of the revision and was made from those phase-1 runs (otherwise
+    the stage records `not_run` with why and queues nothing more; the newer chain owns the revision).
+  A peer stage builds `build_peer_request(text, pages, kind, own, peers, cpt_studio, frozen)` (12.4), passes every send
+  door phase 1 passes (reuse, unknown-outcome block, failed-request door, live gate, Stop, single flight), runs one tool
+  loop and reads `read_peer(request, response_bytes, refs_retrieved)`. Its key is
+  `<kind>:<12 hex of sha256(assess #1 id)>` (plus a Resume's suffix as today), so one assess #1 makes one peer chain.
+- **assess #2** is queued by the last owed peer stage with key `<assess #1 base>:q:<12 hex of sha256(phase-1 run ids,
+  peer run ids)>`. It reads the same phase-1 runs as assess #1, the peer runs, and the revision's confirmations (12.5),
+  and is the final assessment.
+- **Re-assessment after a confirmation** (12.5): `jobs.reassess_after_confirmation(encounter, user)` queues one assess
+  with key `<the current final assessment's key>:c:<12 hex of sha256(sorted confirmation ids)>`. It reads exactly what
+  the final assessment read plus every confirmation of the revision. Nothing is sent.
+- **Stale sweep, Stop, Resume, reconcile:** the peer kinds are sending stages like `astra`/`fable`. Reconcile queues
+  predict as today; identical requests are reused, so only a participant whose outcome was unknown (or that it blocked)
+  is sent again, and phase 2 then runs for the new phase-1 set.
+- **Worker deadlines:** a phase-1 or peer job's deadline covers `PARTICIPANT_LOOP_DEADLINE_SECONDS` (540 s) plus its
+  own bookkeeping, below `STALE_RUNNING_SECONDS` (600 s); the installer's stop timeout (600 s) is above both.
+
+### 12.2 The CMS tool executor (`studio/reference/tools.py`)
+
+`executor(workspace, *, service_date_hint=None) -> Callable[[str, dict], tuple[dict, list[str]]]`, used as
+`execute_tool(name, arguments) -> (result, refs)`:
+
+- `cms_code_facts(codes, date_of_service)`: for each code (at most 32 per call, deduplicated, each `^[0-9]{4}[0-9A-Z]$`),
+  the PFS indicators (status, global days, multiple procedure, endoscopic base, PC/TC) and the practitioner MUE (value,
+  MAI and its label, rationale) from the installed reference store for that date (`""`: every release held), each with
+  its `source_key`, `release`, `effective_start`/`effective_end` and the source file's `sha256`. A code no source covers
+  says so in CPT Studio's own sentence. Refs: `fact:<source_key>:<code>:<field>` for every fact returned.
+- `cms_policy_passages(topic, codes)`: the passages of `topic` (`prompt.POLICY_TOPICS`) from the pinned passage data
+  (`studio.reference.passages`), each verbatim with `passage_key`, source key, release, effective window, page or
+  section and sha256. Refs: each `passage_key` returned.
+- Never a descriptor; never a network call; deterministic for the same store and arguments. An unknown tool, a bad
+  argument or a store error is CPT Studio's own error sentence (the loop already turns a raised executor into one).
+- Results are JSON-serializable and at most `PARTICIPANT_MAX_TOOL_RESULT_BYTES` when serialized (the loop refuses a
+  larger one with its own sentence; the executor never truncates).
+
+### 12.3 What the assessments record (`Assessment.participants`, outside the result)
+
+Each configured participant's entry keeps its harness@1 keys (`name`, `state`, `run`, adapter version, models,
+`unverified_quotes`, `reason`) and gains:
+
+- `reading_sha256`: the sha256 of the participant's normalized phase-1 reading in canonical JSON
+  (`review.sha256_json(to_jsonable(reading))`), `''` when there is no reading;
+- `exchanges`: the phase-1 run's exchange count; `tool_calls`: its tool-call count;
+- `frozen`: on assess #1 and #2 only, the list `[[input name, sha256], ...]` of every frozen phase-1 output: `corti`
+  (the Corti run's `response_sha256`), each model participant with a reading (`reading_sha256`), and `revision` (the
+  revision's `text_sha256`); identical in every entry of one assessment;
+- on assess #2 (and its re-assessments) only: `peer_state` (one of `PARTICIPANT_STATES`), `peer_run`,
+  `peer_reason`, `peer_sha256` (canonical JSON of the `PeerReview`), `peer_unverified_quotes`.
+
+The `phase` of an assessment is read from these entries: `1` when no entry has `peer_state`, `2` otherwise; with no
+model participant configured the record is today's ("not configured") and there is no phase (I1).
+
+### 12.4 What a peer request shows
+
+- `own`: the participant's frozen `ParticipantReading` (from its phase-1 run's bytes, re-read with the run's own reader).
+- `peers`: `{'corti': {'codes': [{'code', 'modifiers', 'units', 'evidence': [passage text, ...]}]}}` from Corti's
+  selected codes with their evidence passages as normalized (never `display` or `provider_display`), and the other model
+  participant's frozen reading as `prompt.reading_answer(reading)` when it has one.
+- `cpt_studio`: from assess #1: `open_questions` = its open clarifications as
+  `{question_id: <clarification id>, scope, fact, family, proposal_key, question, reason}`; `held` and `excluded` =
+  its proposals in those states as `{key, code, status, reasons: [non-pass check details]}`; labelled as a reading that
+  may be wrong (the prompt does this).
+- `frozen`: assess #1's `frozen` list plus `['cpt_studio', sha256 of canonical JSON of the cpt_studio dict]`.
+
+### 12.5 Candidates and confirmations (11.3)
+
+**Candidates** (`studio/candidates.py`, pure; used by the API and the confirmation endpoint): for each OPEN clarification
+of the final assessment, from the frozen phase-1 readings and the peer answers of the runs that assessment read:
+
+| clarification fact | phase-1 source | phase-2 source |
+|---|---|---|
+| `service_date` (encounter scope) | `date_of_service` + `date_evidence` | `QuestionAnswer.value` for its id |
+| `extent` | each service of the family: `extent` + its evidence | the same |
+| `target` | each service of the family: `anatomy` + its evidence | the same |
+| `cannulation` | none | the same |
+| `performed_status` | each service of the family / proposal: `status` + its evidence | the same |
+| `em_basis` | services of family `office_em`: evidence stating time or level | the same |
+| any other fact (`base_included`, `separate_em`, ...) | none: never a candidate | none |
+
+The facts are the engine's: `engine.CONFIRMABLE_FACTS` (`cannulation`, `em_basis`, `extent`, `target`), `engine.STATUS_FACT`
+(`performed_status`), and the service date, which enters only through the context.
+
+Each candidate: `{id, clarification_id, fact, value, located_by: [names], phase: independent|peer_review, runs: [ids],
+spans: [{start, end, text, page}], verified: bool, why: str}`. `id` = 16 hex of sha256 over (clarification id, fact,
+value, sorted spans, sorted located_by). Identical (fact, value, spans) from several participants merge into one
+candidate naming all of them. A candidate is `verified` only when:
+- each span is an exact slice of the revision text (I7), at most 8, none crossing a `[Page N]` line; and
+- the deterministic consistency check for its fact passes: **date** the passage states that calendar date (in a form
+  `gi.dates` reads); **extent** the passage names the landmark the value names; **status** the passage is not in a
+  history, plan or indication section (the routing sections reader); **E/M basis** the passage states a time in
+  minutes or an E/M level. Two facts section 11.3 does not name get the nearest check (a design choice recorded here):
+  **target** the passage names the structure the value names; **cannulation** the passage states a cannulation
+  outcome.
+Otherwise `verified` is false and `why` says which check failed. Agreement between participants never verifies.
+
+**Confirmation** `POST /api/encounters/<id>/clarifications/<clarification_id>/confirm` with
+`{candidate_id, attestation}`:
+- owner or reviewer only (403 otherwise); the clarification must be open on the current final assessment and the
+  candidate one of its VERIFIED candidates, recomputed server-side (409 otherwise, with why); one confirmation per
+  clarification (409 for a second);
+- `attestation` must equal exactly `I read this passage in the source document; it documents <value> for this
+  encounter.` with the candidate's value (400 otherwise);
+- creates the immutable `FindingConfirmation` (clarification, revision, scope - `encounter` for the service date,
+  else `service` or `proposal` -, fact, family, proposal key, value, spans, located_by, runs, confirmed_by,
+  attestation) and an audit event `finding.confirmed`, under the encounter row lock;
+- **date of service:** then `change_context(encounter, user, {'service_date': value})`, so the date enters as the
+  member's date through the existing path (every date safeguard and I8 apply); the context's audit row names the
+  confirmation. The engine never reads a date confirmation;
+- **every other fact:** `jobs.reassess_after_confirmation(encounter, user)`; the engine reads the confirmation through
+  `assess(confirmed=...)` and labels it "confirmed from <participant>'s located passage by <reviewer>";
+- nothing is approved; a new revision invalidates every confirmation (the assess stage reads only the current
+  revision's).
+
+### 12.6 API additions (encounter detail and trace)
+
+- `harness.participants[]` (astra, fable) gain `peer: {state, detail, run_id, codes_added: [...],
+  unverified_quotes}` (`{}` before phase 2 or when not configured) and `references: {retrieved: [{ref, kind, source_key,
+  release, effective_start, effective_end}], used: [{ref, use, retrieved}]}` from the phase-1 run (and `peer_references`
+  from the peer run); `cited_not_retrieved` is `used` with `retrieved: false`.
+- `harness.phase`: `0` (no model participant), `1` or `2`; `harness.reference_validation` stays the reconciliation's
+  retrieval only (11.2: the three kinds of references are never merged).
+- each clarification gains `candidates: [...]` (12.5) and `confirmation: {id, value, fact, located_by, confirmed_by,
+  attestation, created_at, spans}|null`; `permissions.can_confirm` = can_review.
+- each proposal gains `phases: {name: independent|peer_review}` and `confirmed: [confirmation ids]` (from support);
+  its rationale and `proposed_by` keep 11.4's wording ("Proposed by Fable; Corti did not propose this code.").
+- the trace gains, per run, `exchanges: [{turn, state, http_status, latency_ms, usage, request_sha256, response_sha256,
+  provider_request_id, response_id, tool_calls: [{call_id, tool, arguments, refs, result_sha256, executed_at}]}]`, peer
+  runs with their `review` (the `PeerReview` as JSON), and each assessment's `frozen` list.
+- reports (TXT and CSV): a PEER REVIEW section (answers, positions, additional codes marked "proposed after peer
+  review"), a CONFIRMED FINDINGS section (fact, value, passage, located by, confirmed by, attestation, time), and the
+  participants' retrieved and used references kept apart from REFERENCE RETRIEVAL.
