@@ -215,3 +215,61 @@ class CortiOnlyRetrievalFailureWordingTests(RetrievalFailureWordingMixin, ColonC
         encounter_id = self.run_tampered()
         self.assertEqual(self.kinds(encounter_id), ['extract', 'analyze', 'predict', 'assess'])  # I1's chain
         self.assertSaysWhatFailed(encounter_id)
+
+
+# --- truth-5: one reading of what the current assessment made of a confirmation, for the page and the reports --------
+
+class ConfirmationEffectTests(ColonCase):
+    """review.confirmation_effect states what the current assessment made of each reviewer-confirmed finding - read,
+    or not read with why - and the API's confirmations (current_effect) and the reports' CONFIRMED FINDINGS ("Effect:")
+    both state it. The round's s12: the extent of 45385 confirmed and read, then a member's conflicting date makes an
+    assessment that lists it in confirmations.ignored (refutation round 2, truth-5: the page still said "The
+    assessment reads it as documented by this passage")."""
+
+    def detail(self, encounter_id):
+        return self.client.get(f'/api/encounters/{encounter_id}').json()
+
+    def verified_extent(self, encounter_id):
+        detail = self.detail(encounter_id)
+        proposals = {item['id']: item for item in detail['assessment']['proposals']}
+        for question in detail['clarifications']:
+            proposal = proposals.get(question['proposal_id'] or '')
+            if question['fact'] == 'extent' and proposal and proposal['key'] == 'sel:0' and question['state'] == 'open':
+                return question, next(item for item in question['candidates'] if item['verified'])
+        raise AssertionError('no verified extent candidate for sel:0')
+
+    def report_effects(self, encounter_id):
+        text = reports.render_txt(reports.snapshot(self.encounter(encounter_id), 'draft')).decode('utf-8')
+        lines = text.split('\nCONFIRMED FINDINGS\n', 1)[1].split('\n\n', 1)[0].splitlines()
+        return [line[len('    Effect: '):] for line in lines if line.startswith('    Effect: ')]
+
+    def test_what_the_current_assessment_made_of_a_confirmation_is_stated_once_for_the_page_and_the_reports(self):
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        question, candidate = self.verified_extent(encounter_id)
+        response = self.post(f'/api/encounters/{encounter_id}/clarifications/{question["id"]}/confirm',
+                             {'candidate_id': candidate['id'], 'attestation': candidate['attestation']})
+        self.assertEqual((response.status_code, response.json()['effect']), (201, 'reassessment'))
+        made_before = {'state': 'not_read', 'detail': 'not read by this assessment, which was made before it'}
+        self.assertEqual(response.json()['current_effect'], made_before)  # the assessment it was made on
+        drain()
+        read = {'state': 'read', 'detail': 'read by this assessment'}
+        (served,) = self.detail(encounter_id)['confirmations']
+        self.assertEqual((served['current_effect'], self.report_effects(encounter_id)), (read, [read['detail']]))
+        self.assertEqual(self.encounter(encounter_id).current_assessment.proposals.get(key='sel:0').status, 'ready')
+        # a member's date that conflicts with the document's: the next assessment does not read it, and says why
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context',
+                                   {'service_date': '2026-10-20'}).status_code, 201)
+        drain()
+        final = self.encounter(encounter_id).current_assessment
+        (ignored,) = final.completeness['confirmations']['ignored']
+        self.assertEqual(ignored['id'], served['id'])
+        expected = {'state': 'not_read', 'detail': f'not read by this assessment: {ignored["why"]}'}
+        detail = self.detail(encounter_id)
+        (served,) = detail['confirmations']
+        self.assertEqual((served['current_effect'], self.report_effects(encounter_id)), (expected, [expected['detail']]))
+        checks = {check['id']: check for check in detail['assessment']['encounter_checks']}
+        self.assertEqual(checks['confirmations.ignored']['status'], 'warn')
+        self.assertNotIn('confirmations.applied', checks)
+        self.assertEqual(final.proposals.get(key='sel:0').status, 'needs_clarification')
+        self.assertFalse(models.Decision.objects.exists())  # I4: a confirmation is no decision

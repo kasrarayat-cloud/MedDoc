@@ -553,30 +553,14 @@ def _peer_items(assessment, peer_review, text, index):
 def _confirmed_findings(assessment):
     """Every reviewer-confirmed finding of the revision (FindingConfirmation, 11.3), oldest first: the fact, value and
     passage, who located it, who confirmed it with which attestation and when, and what became of it - a service date
-    enters through the encounter context; any other fact is read by an assessment (completeness['confirmations'])."""
-    record = (assessment.completeness or {}).get('confirmations') if isinstance(assessment.completeness, dict) else {}
-    record = record if isinstance(record, dict) else {}
-    applied = {str(i) for item in record.get('applied') or [] if isinstance(item, dict) for i in item.get('ids') or []}
-    ignored = {str(item.get('id')): str(item.get('why') or '') for item in record.get('ignored') or []
-               if isinstance(item, dict)}
-    member_date = (assessment.context.user_values or {}).get('service_date')
+    enters through the encounter context; any other fact is read by an assessment (completeness['confirmations']) - in
+    the words of review.confirmation_effect, the one reading the API's confirmations state too (refutation round 2,
+    truth-5)."""
     text = assessment.revision.text
     out = []
     for item in review.revision_confirmations(assessment.revision):
         spans = [span for span in item.spans or [] if isinstance(span, dict) and _matches(span, text)]
-        if item.fact == candidates.DATE_FACT:
-            effect = ("entered as the member's service date through the encounter context; this assessment's context "
-                      'carries it' if member_date == item.value else
-                      "entered as the member's service date through the encounter context; this assessment's context "
-                      'does not carry it (made before it, or with another member date)')
-        elif str(item.pk) in applied:
-            effect = 'read by this assessment'
-        elif str(item.pk) in ignored:
-            effect = f'not read by this assessment: {ignored[str(item.pk)]}'
-        elif assessment.created_at < item.created_at:
-            effect = 'not read by this assessment, which was made before it'
-        else:
-            effect = 'not read by this assessment, which records no reading of it'
+        effect = review.confirmation_effect(item, assessment)['detail']
         question = item.clarification
         out.append({'id': str(item.pk), 'clarification_id': str(item.clarification_id), 'scope': item.scope,
                     'fact': item.fact, 'family': item.family, 'proposal_key': item.proposal_key,

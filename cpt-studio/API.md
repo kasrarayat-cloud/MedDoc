@@ -281,7 +281,7 @@ whose API takes no model identifier), which the Activity tab names. The Activity
                      "family": "gi.colonoscopy", "proposal_key": "sel:0", "value": "cecum", "spans": [...],
                      "located_by": ["astra", "fable"], "runs": ["uuid"], "confirmed_by": "label",
                      "confirmed_by_kind": "human", "attestation": "I read this passage ...", "created_at": "...",
-                     "revision_number": 1}],
+                     "revision_number": 1, "current_effect": {"state": "read", "detail": "read by this assessment"}}],
   "assessment": {"proposals": [{"...": "as above", "phases": {"fable": "peer_review"}, "confirmed": ["uuid"]}]}
 }
 ```
@@ -327,6 +327,35 @@ page sends it as served, as it sends a decision's acknowledgement from `GET /api
 `confirmation` is the question's FindingConfirmation, or null. `confirmations` lists every confirmation of the current
 revision, oldest first, also after its question has gone (a re-assessment that read it raises it no more).
 `permissions.can_confirm` is `can_review`.
+
+Each confirmation's `current_effect` is what the current assessment made of it, in the words the reports' CONFIRMED
+FINDINGS print as "Effect:" - one reading, `review.confirmation_effect` (refutation round 2, truth-5: the page said
+every confirmation of a fact other than the date was read): `{"state": "read" | "not_read", "detail": "..."}`. A
+service date is `read` when the assessment's context carries it ("entered as the member's service date through the
+encounter context; this assessment's context carries it"; otherwise "... does not carry it (made before it, or with
+another member date)"). Any other fact is `read` ("read by this assessment") when the assessment's record lists it
+among those it read (`assessment.completeness.confirmations.applied`) or a proposal's checks read it (`confirmed`),
+and otherwise `not_read`, with why: "not read by this assessment: <the reason it recorded>" (`ignored`), "not read by
+this assessment, which was made before it", or "not read by this assessment, which records no reading of it"; with no
+assessment of its revision current, "not read: no assessment of its revision is current". The confirm endpoint's
+response carries it too: the assessment it was made on was made before it.
+
+`assessment.completeness.confirmations`, on an assessment that read the revision's confirmations (a model participant
+configured, and any confirmation recorded), is the engine's own record of them: `applied` - each answer it read, `{ids,
+scope, family, proposal_key, code, fact, value, spans}` - and `ignored` - each confirmation it did not read, `{id,
+why}`, why in CPT Studio's own words: it does not name the proposal it was made for (its code and the identity of its
+reading: unbound); the proposal it was made for is not in this assessment (moved) or is in it more than once; its
+passage is shorter than any quote CPT Studio locates (fewer than 8 non-space characters); CPT Studio cannot place its
+value on its readers' own scale (an extent's landmark, a cannulation's outcome); it answers no question this assessment
+asks; confirmations of the same question disagree; or it is malformed (its passage no exact slice of this revision's
+text, no value, no locating participant, no reviewer). The encounter checks say the same: `confirmations.applied`
+(`info`) lists what was read, and `confirmations.ignored` (`warn`) what was not, with why. A proposal's question is bound
+to the proposal it was made for through `support.identity`: recorded on every decidable proposal while a model
+participant is configured (with none, the record is harness@1's), it is the sha256 of the proposal's own reading - its
+code, family, profile version, cited passages, units and the context values its decision depends on: its fingerprint
+without its checks and status, which the other proposals and the confirmations move (HARNESS.md 12.5, refutation round
+1, EV-1). The engine reads a confirmation only for the one proposal with that code and identity, wherever its key now
+is, and the confirm endpoint refuses (409) a question whose proposal records none.
 
 Each proposal gains `phases` (from its support record: the phase each participant first proposed the code in; a code
 first proposed in peer review is `peer_review`, never independent) and `confirmed` (the ids of the confirmations its

@@ -1329,6 +1329,8 @@ function emptySelectionCopy(assessment, doc) {
 // Every reviewer-confirmed finding of the current revision (doc.confirmations, HARNESS.md 11.3), after its question has
 // gone too: the fact and value, the passage, who located it and who confirmed it, the attestation and when. A date of
 // service enters as the member's date through the encounter context. None is a decision: '' when none is served.
+// Refutation round 2, truth-5: what the current assessment made of it is the API's (current_effect, the words the
+// reports print as "Effect:"), never assumed - a confirmation it does not read is never said to be read.
 function confirmedFindings(doc) {
   const confirmations = objects(doc.confirmations);
   if (!confirmations.length) return '';
@@ -1336,8 +1338,14 @@ function confirmedFindings(doc) {
   const items = confirmations.map(confirmation => {
     const fact = lookup(FINDING_FACTS, confirmation.fact, textValue(confirmation.fact).replace(/_/g, ' ') || 'Fact');
     const when = [formatTimestamp(confirmation.created_at), Number.isInteger(confirmation.revision_number) ? `revision ${confirmation.revision_number}` : '', confirmation.confirmed_by_kind === 'agent' ? 'agent-executed synthetic review — not clinical approval' : ''].filter(Boolean).join(' · ');
-    const lines = [...quotedSpans(confirmation.spans, exact), `Attestation recorded: ${textValue(confirmation.attestation) || 'none recorded'}`,
-      confirmation.fact === 'service_date' ? 'It entered as the member\'s date of service, through the encounter context.' : 'The assessment reads it as documented by this passage; it decides no code.'];
+    const effect = confirmation.current_effect && typeof confirmation.current_effect === 'object' && !Array.isArray(confirmation.current_effect) ? confirmation.current_effect : {};
+    const detail = textValue(effect.detail).trim();
+    const effectLine = confirmation.fact === 'service_date'
+      ? ['It entered as the member\'s date of service, through the encounter context.', effect.state === 'not_read' && detail ? sentence(`Effect: ${detail}`) : ''].filter(Boolean).join(' ')
+      : effect.state === 'read' ? 'The assessment reads it as documented by this passage; it decides no code.'
+        : effect.state === 'not_read' ? `${sentence(`Effect: ${detail || 'not read by this assessment'}`)} It decides no code.`
+          : 'Whether this assessment reads it is not recorded here; the Checks tab lists each confirmation it read or did not read. It decides no code.';
+    const lines = [...quotedSpans(confirmation.spans, exact), `Attestation recorded: ${textValue(confirmation.attestation) || 'none recorded'}`, effectLine];
     return checkItem('', 'shield', `${fact}: ${textValue(confirmation.value) || 'no value recorded'}`, [confirmedFrom(confirmation), when].filter(Boolean).join(' · '), lines.map(line => `<p>${escapeHtml(line)}</p>`).join(''));
   }).join('');
   return `${sectionHeading('Confirmed findings (not decisions)', confirmations.length)}<div class="check-list-card confirmed-findings">${items}</div>`;

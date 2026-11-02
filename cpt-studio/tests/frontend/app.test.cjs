@@ -2031,3 +2031,26 @@ test('R2-TRUTH truth-4: a failed retrieval says what failed and that each code\'
   const snare = codeCardOf(html, '45385');
   assert.ok(snare.includes('<li><b>CMS reference checks:</b> passed') && snare.includes(`<p class="harness-note">${app.escapeHtml(app.RETRIEVAL_FAILED)}</p>`), snare);
 });
+
+test('R2-TRUTH truth-5: the confirmed findings say what the current assessment made of each confirmation, as the API states it', () => {
+  const doc = fixture(H2_CONFIRMED);
+  const [confirmation] = doc.confirmations;
+  const why = 'the proposal it was made for is not in this assessment (no proposal of its code reads the same passages under the same context), so it answers nothing here; it is never read for the proposal that holds its key now';
+  const section = current_effect => app.confirmedFindings({ ...doc, confirmations: [{ ...confirmation, current_effect }] });
+  const ignored = section({ state: 'not_read', detail: `not read by this assessment: ${why}` });
+  assert.ok(ignored.includes(`<p>${app.escapeHtml(`Effect: not read by this assessment: ${why}.`)} It decides no code.</p>`), ignored);
+  assert.equal(ignored.includes('reads it as documented'), false, 'a confirmation it does not read is never said to be read');
+  const before = section({ state: 'not_read', detail: 'not read by this assessment, which was made before it' });
+  assert.ok(before.includes('<p>Effect: not read by this assessment, which was made before it. It decides no code.</p>'), before);
+  // read: as before; nothing served: never assumed either way
+  assert.ok(section({ state: 'read', detail: 'read by this assessment' }).includes('<p>The assessment reads it as documented by this passage; it decides no code.</p>'));
+  for (const unserved of [undefined, null, 'read', []]) {
+    const html = section(unserved);
+    assert.ok(html.includes('Whether this assessment reads it is not recorded here') && !html.includes('reads it as documented'), String(unserved));
+  }
+  // a date of service: it entered through the context; a context that no longer carries it says so
+  const date = { ...confirmation, fact: 'service_date', value: '2026-10-21', spans: [],
+    current_effect: { state: 'not_read', detail: 'entered as the member\'s service date through the encounter context; this assessment\'s context does not carry it (made before it, or with another member date)' } };
+  const dated = app.confirmedFindings({ ...doc, confirmations: [date] });
+  assert.ok(dated.includes('It entered as the member&#x27;s date of service, through the encounter context. Effect: entered as the member&#x27;s service date through the encounter context; this assessment&#x27;s context does not carry it (made before it, or with another member date).'), dated);
+});

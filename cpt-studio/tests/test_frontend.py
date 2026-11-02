@@ -78,7 +78,7 @@ CANDIDATE_KEYS = {'id', 'clarification_id', 'fact', 'value', 'located_by', 'phas
                   'verified', 'why', 'attestation'}
 CONFIRMATION_KEYS = {'id', 'clarification_id', 'scope', 'fact', 'family', 'proposal_key', 'value', 'spans',
                      'located_by', 'runs', 'confirmed_by', 'confirmed_by_kind', 'attestation', 'created_at',
-                     'revision_number'}
+                     'revision_number', 'current_effect'}
 EXCHANGE_KEYS = {'turn', 'state', 'http_status', 'latency_ms', 'usage', 'request_sha256', 'response_sha256',
                  'provider_request_id', 'response_id', 'error', 'tool_calls'}
 TOOL_CALL_KEYS = {'call_id', 'tool', 'arguments', 'refs', 'result_sha256', 'executed_at'}

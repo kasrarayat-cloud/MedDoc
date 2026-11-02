@@ -462,8 +462,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "db581a1a6a12def4a868b3637b0938bc8179b879bba4481fa791e590c4eb09ba",
-   "response_sha256": "80295298eaa4b04a08a25c585122cdd07f87a9a3475c546a59ff4128b8bc1755",
+   "request_sha256": "57da04312911946a539790d1a92ad5e59bbea0ab93422c891881f6357635b6f1",
+   "response_sha256": "2c782268d400e5553285f7b20e9605b6b32f0af3249894afa19aa59133c1e27c",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -485,8 +485,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "898d41dd2cb7c73480ae8bc582a5df33112970272f0d97aacb6c0b1cb3bc1288",
-   "response_sha256": "898e1988331ac803e4b4406c0b852de9374834ef099f4d828497912630e65c48",
+   "request_sha256": "5b48c59e170b915a7577ae1287897c853f2747e23f0a00545b7b40e9aa3a055d",
+   "response_sha256": "8baad239208bd077eb2bad6e31ee5fcd5961e16ddca053d6178d21ae538549d7",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -803,7 +803,7 @@
      },
      "fable": {
       "position": "not_proposed",
-      "detail": "Fable did not propose this code.",
+      "detail": "Fable did not propose this code in its first reading. It proposed it after peer review.",
       "quote": ""
      }
     },
@@ -904,7 +904,7 @@
     "participant_positions": {
      "astra": {
       "position": "not_proposed",
-      "detail": "Astra did not propose this code.",
+      "detail": "Astra did not propose this code in its first reading. It proposed it after peer review.",
       "quote": ""
      },
      "fable": {

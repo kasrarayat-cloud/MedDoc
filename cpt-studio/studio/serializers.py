@@ -371,10 +371,20 @@ def _provider_run_json(run):
             'requested_model': run.requested_model, 'returned_model': run.returned_model}
 
 
+def _confirmation_assessment(confirmation):
+    """The assessment a confirmation's effect is stated for: its encounter's current assessment - the one the page
+    shows - when that assessment is of the confirmation's revision; None otherwise."""
+    encounter = confirmation.encounter
+    assessment = encounter.current_assessment if encounter.current_assessment_id else None
+    return assessment if assessment is not None and assessment.revision_id == confirmation.revision_id else None
+
+
 def confirmation_json(confirmation):
     """A FindingConfirmation (HARNESS.md 11.3, 12.6): the fact a reviewer confirmed from a participant's located
     passage, with that passage, who located it, who confirmed it and the attestation recorded - a confirmed fact,
-    never a decision on a code."""
+    never a decision on a code - and ``current_effect``, what the current assessment made of it, in the words the
+    reports' CONFIRMED FINDINGS use (review.confirmation_effect: read, or not read with why; refutation round 2,
+    truth-5: the page said every confirmation of a fact other than the date was read)."""
     reviewer = confirmation.confirmed_by
     return {'id': str(confirmation.pk), 'clarification_id': str(confirmation.clarification_id),
             'scope': confirmation.scope, 'fact': confirmation.fact, 'family': confirmation.family,
@@ -382,7 +392,8 @@ def confirmation_json(confirmation):
             'spans': list(confirmation.spans or []), 'located_by': list(confirmation.located_by or []),
             'runs': list(confirmation.runs or []), 'confirmed_by': reviewer.label(),
             'confirmed_by_kind': reviewer.actor_kind, 'attestation': confirmation.attestation,
-            'created_at': _iso(confirmation.created_at), 'revision_number': confirmation.revision.number}
+            'created_at': _iso(confirmation.created_at), 'revision_number': confirmation.revision.number,
+            'current_effect': review.confirmation_effect(confirmation, _confirmation_assessment(confirmation))}
 
 
 def _report_json(report):

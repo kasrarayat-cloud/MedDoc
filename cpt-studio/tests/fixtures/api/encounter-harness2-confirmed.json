@@ -468,8 +468,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "5aaa7c3700fdd32b914748a5948383fcecda2ad038f026c47589425fdd454594",
-   "response_sha256": "ee12c454bcbfd11e83faf4206f3d9fce6521bbec4421dbec1236cbc5d8c31d97",
+   "request_sha256": "ef29a23b3031a722bbd7ff8789ea482a7bd20cced4366d6c3efc4fb533c4161d",
+   "response_sha256": "d2911b5519c5023a9427a3710ebbd29641a30154e634f251a93b44578885554b",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -491,8 +491,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "fb6435fb289278ce0b8e6ff4bc46b1d4d9f89f2ea8c3704c687ad685370ba6c1",
-   "response_sha256": "f24bd20e7dd953ded86a864f750e97f8e3e1a6b2307eb6266be8df9d5ab0df9e",
+   "request_sha256": "50e6986c0720e9316b3f778cc256c747add71efb66b736c3eae356d20142fdfd",
+   "response_sha256": "9a62382ddc20bf83e8465b7dc8dec7f6756b905ba250ca392b9cee176a71377f",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -813,7 +813,7 @@
      },
      "fable": {
       "position": "not_proposed",
-      "detail": "Fable did not propose this code.",
+      "detail": "Fable did not propose this code in its first reading. It proposed it after peer review.",
       "quote": ""
      }
     },
@@ -914,7 +914,7 @@
     "participant_positions": {
      "astra": {
       "position": "not_proposed",
-      "detail": "Astra did not propose this code.",
+      "detail": "Astra did not propose this code in its first reading. It proposed it after peer review.",
       "quote": ""
      },
      "fable": {
@@ -1180,7 +1180,11 @@
    "confirmed_by_kind": "human",
    "attestation": "I read this passage in the source document; it documents cecum for this encounter.",
    "created_at": "2026-11-01T09:00:53Z",
-   "revision_number": 1
+   "revision_number": 1,
+   "current_effect": {
+    "state": "read",
+    "detail": "read by this assessment"
+   }
   }
  ],
  "decisions": {
