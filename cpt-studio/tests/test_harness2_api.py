@@ -182,7 +182,9 @@ class Harness2Case(TestCase):
     def peer_answer(self, name):
         asked = {c.fact: str(c.pk) for c in self.first.clarifications.all()}
         if name == 'fable':
-            return {'question_answers': [{'question_id': asked['extent'], 'settled': True, 'value': 'Cecum',
+            # the participant's own wording, which CPT Studio restates as the landmark it names ('cecum')
+            return {'question_answers': [{'question_id': asked['extent'], 'settled': True,
+                                          'value': 'Cecum, appendiceal orifice seen',
                                           'evidence': [CECUM_QUOTE]}],
                     'code_positions': [], 'additional_codes': [], 'references_used': []}
         return {'question_answers': [

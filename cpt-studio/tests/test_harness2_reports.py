@@ -39,7 +39,8 @@ HARNESS1_TITLES = ('CODING COMPLETENESS', 'ENCOUNTER, SOURCE AND REVISION', 'ENC
 HARNESS2_TITLES = (HARNESS1_TITLES[:12] + ('CONFIRMED FINDINGS',) + HARNESS1_TITLES[12:14]
                    + ('PEER REVIEW', 'PARTICIPANT REFERENCES') + HARNESS1_TITLES[14:])
 WORDING = ('Participant wording.', 'Retrieved only by its first reading.', 'The NCCI endoscopy rule.',
-           'The endoscopic base of the snare removal.', 'A rule this run never retrieved.')
+           'The endoscopic base of the snare removal.', 'A rule this run never retrieved.',
+           'appendiceal orifice seen')
 
 
 def section(text, title):
@@ -90,7 +91,10 @@ class SectionTests(Harness2Case):
             f'      {at(RECTUM_QUOTE, 2)}',
             '    Additional code 45381 · units 1 — proposed after peer review, never independent'])
         self.assertEqual(lines[12], f'      {at(PREP_QUOTE, 1)}')
-        self.assertIn('  - Fable · answered in peer review; the review was used', lines)
+        fable = lines.index('  - Fable · answered in peer review; the review was used')
+        # its answer is stated in CPT Studio's words (the landmark its value names), never its own
+        self.assertEqual(lines[fable + 3:fable + 5], [
+            f'    Answer to "{first["extent"].question}" (extent reached): cecum', f'      {at(CECUM_QUOTE, 1)}'])
         text = self.txt()
         for words in WORDING:  # a participant's own wording never reaches a report
             self.assertNotIn(words, text)
