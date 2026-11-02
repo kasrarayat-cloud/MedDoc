@@ -1536,6 +1536,46 @@ def participant_references(run, review=None):
                        for item in review.references_used]
     return out
 
+CONFIRMATION_READ, CONFIRMATION_NOT_READ = 'read', 'not_read'
+
+
+def confirmation_effect(confirmation, assessment):
+    """{'state': 'read' | 'not_read', 'detail': words}: what ``assessment`` made of the reviewer's FindingConfirmation
+    ``confirmation`` (HARNESS.md 11.3, 12.5, 12.7) - the one reading the reports' CONFIRMED FINDINGS ("Effect: <words>")
+    and the API's confirmations (current_effect) both state (refutation round 2, truth-5: the page said every
+    confirmation of a fact other than the date was read by the assessment, beside the Checks tab's "1 confirmation not
+    read"). A service date enters as the member's date through the encounter context, so it is read when this
+    assessment's context carries it; any other fact is read when the assessment's own record lists it among those it
+    read (completeness['confirmations']['applied'], engine._Confirmations.record) or a proposal's checks read it
+    (support['confirmed'], which the code cards show), and otherwise not read, with why: the reason the engine recorded
+    for not reading it (['ignored']), that the assessment was made before it, or that it records no reading of it.
+    ``assessment`` None: no assessment of its revision is current. Read-only; a confirmation is a confirmed fact, never
+    a decision (I3, I4)."""
+    if assessment is None:
+        return {'state': CONFIRMATION_NOT_READ, 'detail': 'not read: no assessment of its revision is current'}
+    if confirmation.fact == candidates.DATE_FACT:
+        carried = (assessment.context.user_values or {}).get('service_date') == confirmation.value
+        return {'state': CONFIRMATION_READ if carried else CONFIRMATION_NOT_READ,
+                'detail': ("entered as the member's service date through the encounter context; this assessment's "
+                           'context ' + ('carries it' if carried else
+                                         'does not carry it (made before it, or with another member date)'))}
+    record = (assessment.completeness or {}).get('confirmations') if isinstance(assessment.completeness, dict) else {}
+    record = record if isinstance(record, dict) else {}
+    key = str(confirmation.pk)
+    applied = {str(i) for item in record.get('applied') or [] if isinstance(item, dict) for i in item.get('ids') or []}
+    for support in assessment.proposals.values_list('support', flat=True):
+        read = (support or {}).get('confirmed') if isinstance(support, dict) else None
+        applied |= {item for item in read if isinstance(item, str)} if isinstance(read, list) else set()
+    ignored = {str(item.get('id')): str(item.get('why') or '') for item in record.get('ignored') or []
+               if isinstance(item, dict)}
+    if key in applied:
+        return {'state': CONFIRMATION_READ, 'detail': 'read by this assessment'}
+    if key in ignored:
+        return {'state': CONFIRMATION_NOT_READ, 'detail': f'not read by this assessment: {ignored[key]}'}
+    if assessment.created_at < confirmation.created_at:
+        return {'state': CONFIRMATION_NOT_READ, 'detail': 'not read by this assessment, which was made before it'}
+    return {'state': CONFIRMATION_NOT_READ, 'detail': 'not read by this assessment, which records no reading of it'}
+
 
 def frozen_inputs(assessment):
     """(readings, peer reviews): the frozen phase-1 readings (candidates.FrozenReading) and the peer reviews ((name, run
@@ -1622,47 +1662,6 @@ def revision_confirmations(revision):
         return []
     return list(FindingConfirmation.objects.filter(revision=revision).select_related(
         'confirmed_by', 'revision', 'clarification', 'clarification__proposal').order_by('created_at', 'pk'))
-
-
-CONFIRMATION_READ, CONFIRMATION_NOT_READ = 'read', 'not_read'
-
-
-def confirmation_effect(confirmation, assessment):
-    """{'state': 'read' | 'not_read', 'detail': words}: what ``assessment`` made of the reviewer's FindingConfirmation
-    ``confirmation`` (HARNESS.md 11.3, 12.5, 12.7) - the one reading the reports' CONFIRMED FINDINGS ("Effect: <words>")
-    and the API's confirmations (current_effect) both state (refutation round 2, truth-5: the page said every
-    confirmation of a fact other than the date was read by the assessment, beside the Checks tab's "1 confirmation not
-    read"). A service date enters as the member's date through the encounter context, so it is read when this
-    assessment's context carries it; any other fact is read when the assessment's own record lists it among those it
-    read (completeness['confirmations']['applied'], engine._Confirmations.record) or a proposal's checks read it
-    (support['confirmed'], which the code cards show), and otherwise not read, with why: the reason the engine recorded
-    for not reading it (['ignored']), that the assessment was made before it, or that it records no reading of it.
-    ``assessment`` None: no assessment of its revision is current. Read-only; a confirmation is a confirmed fact, never
-    a decision (I3, I4)."""
-    if assessment is None:
-        return {'state': CONFIRMATION_NOT_READ, 'detail': 'not read: no assessment of its revision is current'}
-    if confirmation.fact == candidates.DATE_FACT:
-        carried = (assessment.context.user_values or {}).get('service_date') == confirmation.value
-        return {'state': CONFIRMATION_READ if carried else CONFIRMATION_NOT_READ,
-                'detail': ("entered as the member's service date through the encounter context; this assessment's "
-                           'context ' + ('carries it' if carried else
-                                         'does not carry it (made before it, or with another member date)'))}
-    record = (assessment.completeness or {}).get('confirmations') if isinstance(assessment.completeness, dict) else {}
-    record = record if isinstance(record, dict) else {}
-    key = str(confirmation.pk)
-    applied = {str(i) for item in record.get('applied') or [] if isinstance(item, dict) for i in item.get('ids') or []}
-    for support in assessment.proposals.values_list('support', flat=True):
-        read = (support or {}).get('confirmed') if isinstance(support, dict) else None
-        applied |= {item for item in read if isinstance(item, str)} if isinstance(read, list) else set()
-    ignored = {str(item.get('id')): str(item.get('why') or '') for item in record.get('ignored') or []
-               if isinstance(item, dict)}
-    if key in applied:
-        return {'state': CONFIRMATION_READ, 'detail': 'read by this assessment'}
-    if key in ignored:
-        return {'state': CONFIRMATION_NOT_READ, 'detail': f'not read by this assessment: {ignored[key]}'}
-    if assessment.created_at < confirmation.created_at:
-        return {'state': CONFIRMATION_NOT_READ, 'detail': 'not read by this assessment, which was made before it'}
-    return {'state': CONFIRMATION_NOT_READ, 'detail': 'not read by this assessment, which records no reading of it'}
 
 
 def confirm_finding(*, encounter, clarification_id, candidate_id, attestation, user, membership):
