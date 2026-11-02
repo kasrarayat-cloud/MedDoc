@@ -1927,3 +1927,18 @@ test('a reference or a tool a participant names itself is withheld where it read
   assert.equal(html.includes('lesion(s)'), false);
   assert.ok(html.includes(`<li><b>${app.escapeHtml(app.DESCRIPTOR_WITHHELD)} — cited, not retrieved</b></li>`) && html.includes(`<li><b>${app.escapeHtml(app.DESCRIPTOR_WITHHELD)} (call_1_1)</b>`));
 });
+
+test('a peer-review run is named as one in the Activity tab, on the reconciliation card and when it stopped processing', () => {
+  const final = fixture(H2_FINAL);
+  const timeline = render(final, 'timeline');
+  assert.equal(count(timeline, '<strong>Astra · REPLAY — recorded response, not live output · Peer review · Succeeded</strong>'), 1);
+  assert.equal(count(timeline, '<strong>Astra · REPLAY — recorded response, not live output · Independent review · Succeeded</strong>'), 1);
+  // an unknown outcome of a peer review blocks every send, and the card says whose and which
+  const peerRun = final.provider_runs.find(run => run.purpose === 'peer_review' && run.provider === 'fable');
+  const unknown = { ...final, state: 'provider_unknown', provider_runs: final.provider_runs.map(run => (run.id === peerRun.id ? { ...run, state: 'unknown', error: 'Read timed out (synthetic).' } : run)) };
+  assert.ok(render(unknown).includes('<strong>Unreconciled request</strong><br>Fable (Anthropic Claude Fable 5.1) · Peer review · 1 Nov 2026, 09:00 UTC · Read timed out (synthetic).'));
+  // a peer stage the system cancelled is named when processing did not finish
+  const stages = [...final.pipeline.stages.slice(0, 6), { kind: 'astra_peer', state: 'cancelled', error: 'The worker stopped before this stage finished (synthetic).', finished_at: null }];
+  const stopped = { ...final, state: 'stopped', pipeline: { ...final.pipeline, stopped_by_member: false, can_resume: true, stages } };
+  assert.ok(render(stopped).includes('<p>Peer review: Astra (OpenAI GPT-6 Astra): The worker stopped before this stage finished (synthetic).</p>'));
+});
