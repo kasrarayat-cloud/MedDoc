@@ -105,6 +105,16 @@ const PEER_POSITIONS = { supports: 'supports it', disputes: 'disputes it', canno
 const ASSESSMENT_PHASES = { 0: 'No model participant: Corti only', 1: 'Phase 1: the frozen first readings', 2: 'Phase 2: after peer review' };
 const FINDING_FACTS = { service_date: 'Date of service', performed_status: 'Performed at this encounter', extent: 'Extent reached', target: 'Structure examined', cannulation: 'Cannulation outcome', em_basis: 'Basis for the visit level (total time or medical decision making)' };
 const CANDIDATE_NOTE = 'A candidate answers nothing until a reviewer confirms it. Agreement between participants never verifies or confirms one, and a confirmation approves no code.';
+// What a verified candidate's consistency check established, by fact (HARNESS.md 12.5) - and, for a status, what it did
+// not: the check reads the passage's section, never whether it names the code's own act.
+const VERIFIED_CHECKS = {
+  service_date: 'it states that calendar date',
+  extent: 'it names that landmark',
+  target: 'it names that structure',
+  cannulation: 'it states that cannulation outcome',
+  performed_status: 'it lies in no history, plan or indication section (the check does not read whether it names this code\'s own act)',
+  em_basis: 'it states a total time in minutes or a level of medical decision making',
+};
 // Free text a participant wrote (a basis, a description, a quote it could not locate) that reads like a CPT descriptor -
 // the AMA's plural marks ("polyp(s)"), "; with", "single or multiple", "when performed", "(separate procedure)", "list
 // separately" - is withheld, never shown (HARNESS.md I9): no licensed descriptor is connected, and a model can write one.
@@ -846,7 +856,8 @@ function candidateAnswer(candidate, clarificationId, confirmable, exact) {
   const spans = objects(candidate.spans);
   const quotes = quotedSpans(spans, exact);
   const value = textValue(candidate.value).trim();
-  const why = verified ? 'Verified: its passage is an exact slice of the document and passes the consistency check for this fact. It is still only a candidate.'
+  const checked = lookup(VERIFIED_CHECKS, candidate.fact, 'it passes the consistency check for this fact');
+  const why = verified ? `Verified: its passage is an exact slice of the document and ${checked}. It is still only a candidate: read the passage before confirming it.`
     : `Not verified, so it cannot be confirmed: ${textValue(candidate.why).trim() || 'no reason was recorded.'}`;
   const action = confirmable && verified && spans.length > 0 && spans.every(exact) && textValue(candidate.attestation) ? confirmControl(candidate, clarificationId) : '';
   return `<li class="candidate-answer" data-candidate="${escapeHtml(textValue(candidate.id))}" data-verified="${verified}"><span class="participant-head"><strong>${escapeHtml(value || 'No value CPT Studio can state')}</strong>${verified ? badge('green', 'Verified') : badge('amber', 'Not verified')}</span>${(quotes.length ? quotes : ['No passage is cited.']).map(quote => `<p class="candidate-quote">${escapeHtml(quote)}</p>`).join('')}<small class="check-source">${escapeHtml(locatedBy(candidate))}</small><small class="check-source">${escapeHtml(why)}</small>${action}</li>`;

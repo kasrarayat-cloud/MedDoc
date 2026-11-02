@@ -1580,6 +1580,7 @@ test('each open question lists its candidate answers: the value, the passage quo
   assert.ok(block.includes('<div class="evidence-label">Candidate answers from the participants&#x27; located passages · 2</div>'));
   const [verified, unverified] = extent.candidates;
   assert.ok(block.includes(`<span class="participant-head"><strong>cecum</strong><span class="status green">Verified</span></span><p class="candidate-quote">“The colonoscope was advanced to the cecum.” (page 1)</p><small class="check-source">Located by Astra and Fable in their independent first readings.</small>`), block);
+  assert.ok(block.includes('<small class="check-source">Verified: its passage is an exact slice of the document and it names that landmark. It is still only a candidate: read the passage before confirming it.</small>'));
   assert.ok(block.includes('<span class="status amber">Not verified</span>'));
   assert.ok(block.includes(`<small class="check-source">Not verified, so it cannot be confirmed: ${app.escapeHtml(unverified.why)}</small>`));
   assert.equal(count(block, 'data-action="confirm-finding"'), 1, 'only the verified candidate can be confirmed');
@@ -1588,6 +1589,8 @@ test('each open question lists its candidate answers: the value, the passage quo
   const status = questionOf(html, clarificationOf(doc, 'performed_status').id);
   assert.ok(status.includes('<p class="candidate-quote">“A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology.” (page 2)</p>'));
   assert.ok(status.includes('<small class="check-source">Located by Astra in peer review.</small>'));
+  // what a status check established, and what it did not: the passage need not name this code's own act
+  assert.equal(count(status, 'it lies in no history, plan or indication section (the check does not read whether it names this code&#x27;s own act)'), 3);
   // the date question is the encounter's own card; the others sit with their codes
   assert.ok(html.indexOf(`data-question="${clarificationOf(doc, 'service_date').id}"`) < html.indexOf('<article class="code-card"'));
   assert.ok(codeCardOf(html, '45385').includes(`data-question="${extent.id}"`) && codeCardOf(html, '45380').includes(`data-question="${clarificationOf(doc, 'performed_status').id}"`));
