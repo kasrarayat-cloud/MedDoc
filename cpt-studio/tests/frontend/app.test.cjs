@@ -1925,14 +1925,17 @@ test('every participant- or document-written harness@2 value the page draws is e
 test('older payloads draw exactly as they did before harness@2: every review tab and the harness@1 trace', () => {
   // sha256 of what the app.js of harness@2 part A drew (the base this package builds on) for each payload served before
   // harness@2. A deliberate change to an older payload's page updates its digest here, with the reason in the commit.
+  // Refutation round 3, R3-TRUTH truth-6: the codes tab of the two harness@1 payloads moved (from 6f31d8b0... and
+  // 2365f766...) - each card's status line states the NCCI procedure-to-procedure limit, so its "Not verified" note no
+  // longer names the edits again; nothing else on those pages changed.
   const crypto = require('node:crypto');
   const sha = text => crypto.createHash('sha256').update(text, 'utf8').digest('hex');
   const BASE = {
     'encounter-adversarial.json': ['c1c6968adb5e69c275a469e4ba16e17259d0b46a2d011d2bbf40a7e267e3cad8', '4d23591a4ed51cb05f5cbf3a51c71c72f196c08c5d4b218220491cbf95cff20f', '8054c9b72f4eac6939be2bdb1154d0b43109533de080493537b110631d86d7ca'],
     'encounter-clarification.json': ['d26a56230607d07bea0abbc08f940a8ed17dcf882e76924bbe88492fc4b8936e', '550b184b8e67c4129f6bc5be16802d02d89bdf806e10d85a816c5a91a233607f', '786ca5d90bf962a397091523e34cb6ee8bc831a486c7a883ee05f1dc59ed97f7'],
     'encounter-extraction-failed.json': ['dec9f487032d382e09d7e9892acc210888d1074ea9a4d72d48e38891fbe909f3', 'dec9f487032d382e09d7e9892acc210888d1074ea9a4d72d48e38891fbe909f3', 'dec9f487032d382e09d7e9892acc210888d1074ea9a4d72d48e38891fbe909f3'],
-    'encounter-harness-degraded.json': ['6f31d8b0c1de0dc67235cb3605d517368032548b926022d85551c4b52e9cf79f', 'ebe5e7a4ef1ffdf16e134a10868996da2bd2aa4687deadd8dc683ab93923b2bb', '193c71f5bb476cec76e30ebc57b7b4609555f17efcaff9bf04e091085ccfe48b'],
-    'encounter-harness-ready.json': ['2365f76677a896e042b0f938c1b4a27c2c333d771d8fc1d5c300f7b90b3513a7', '2690efc65889389b8cf26b91fd85e9d8e9f381a647b4aa1a019fbd1eb549fdf9', 'c105f3237d5c889dfbc0ecbffadd6786dc5f267df09b1cc4a04bea4c6cca4df9'],
+    'encounter-harness-degraded.json': ['ae7de29d01dbe4a01943cffed5557159e3cb3735419ef6076a8355f289e687f8', 'ebe5e7a4ef1ffdf16e134a10868996da2bd2aa4687deadd8dc683ab93923b2bb', '193c71f5bb476cec76e30ebc57b7b4609555f17efcaff9bf04e091085ccfe48b'],
+    'encounter-harness-ready.json': ['35de470acaf9f7d40aeeef5e4e1305b7126a91356261eb88f82f612204d8d396', '2690efc65889389b8cf26b91fd85e9d8e9f381a647b4aa1a019fbd1eb549fdf9', 'c105f3237d5c889dfbc0ecbffadd6786dc5f267df09b1cc4a04bea4c6cca4df9'],
     'encounter-processing.json': ['f117e044458c55d0e50c5b896de82d6be036bedea258f804767872b990ff0666', 'f117e044458c55d0e50c5b896de82d6be036bedea258f804767872b990ff0666', 'f117e044458c55d0e50c5b896de82d6be036bedea258f804767872b990ff0666'],
     'encounter-provider-unknown.json': ['b7710405a9bc62f0136928b4b6f7d3d89ad7ef2fcc2797ac8ed194c13b69b6e8', 'b7710405a9bc62f0136928b4b6f7d3d89ad7ef2fcc2797ac8ed194c13b69b6e8', 'b7710405a9bc62f0136928b4b6f7d3d89ad7ef2fcc2797ac8ed194c13b69b6e8'],
     'encounter-ready.json': ['fa983aa9544d162a3697d8ad6aab958828787a922ef9ceefd5bce4ac278f39f1', '0f4fde31a4556cb5863f9d2ff873a578e3f99ba03ebe3edd217853af49f3fdae', '71120acb2819c38cbfbe9dd8c1cca32eea38d43d2ed67b7b083d736bda27a995'],
@@ -2311,4 +2314,95 @@ test('R2-WORDING FG2-5: a code card the serializer\'s fixture draws states the P
     const line = app.codeStatusLines({ proposed_by: ['corti'], reference_check: check });
     assert.equal(count(line, 'procedure-to-procedure'), 1, JSON.stringify(check));
   }
+});
+
+// refutation round 3, R3-TRUTH
+// What the page says must be true of the record (tests/test_harness2_r3_truth.py drives each through the real pipeline):
+// a failed retrieval's sentences, a first reading's code it never located, Corti's codes that cannot be listed, a code
+// Corti listed without selecting it, and the NCCI procedure-to-procedure limit stated once per code card.
+
+test('R3-TRUTH truth-1: the sentences said of every failed retrieval claim neither that the checks read the CMS facts nor that none did', () => {
+  for (const said of [app.REFERENCE_STATES.failed[2], app.RETRIEVAL_FAILED]) {
+    assert.ok(said.startsWith('Reference validation failed'), said);
+    assert.equal(/read the (CMS )?facts|could not record which|no code was checked|no proposal was checked/i.test(said), false, said);
+  }
+  assert.equal(app.REFERENCE_STATES.failed[3], 'failed');
+  // where no CMS reference file applied, the API's own sentence says no code was checked: the row shows it whole, and
+  // every card says its checks stand as its status line shows them - never that they read the CMS facts
+  const ready = fixture(HARNESS_READY);
+  const note = 'Reference validation failed: CPT Studio\'s retrieval for this assessment\'s codes failed (ValueError, logged), so no CMS reference fact or passage is listed here. No code was checked against the CMS reference files: no service date is established for this encounter, so no dated CMS reference file applies. Retrieval only informs the reviewer and decides no status, so the assessment stands as made.';
+  const failed = { ...ready.harness.reference_validation, state: 'failed', detail: note, codes_checked: 0, passages: 0, sources: [] };
+  const doc = { ...ready, harness: { ...ready.harness, reference_validation: failed },
+    assessment: { ...ready.assessment, proposals: ready.assessment.proposals.map(proposal => ({ ...proposal, retrieval: [] })) } };
+  const html = render(doc);
+  const row = harnessRow(html, 'reference_validation');
+  assert.ok(row.includes(`<p>${app.escapeHtml(note)}</p>`) && count(row, '<p>') === 1, row);
+  for (const proposal of doc.assessment.proposals.filter(item => item.bucket === 'selected')) {
+    const card = codeCardOf(html, proposal.code);
+    assert.ok(card.includes(`<p class="harness-note">${app.escapeHtml(app.RETRIEVAL_FAILED)}</p>`), proposal.code);
+    assert.equal(/read the (CMS )?facts/.test(textOf(card)), false, proposal.code);
+  }
+});
+
+test('R3-TRUTH truth-2: a first reading that listed a code it never located is said not to have proposed it, and never "again"', () => {
+  const detail = 'Astra listed this code in its first reading, but none of its quotes was found in the document, so that reading did not propose it. It proposed it after peer review.';
+  const html = app.participantPositions({ code: '45385', participant_positions: { astra: { position: 'not_proposed', detail, quote: '' } } }, 'What the participants said in their first readings');
+  assert.ok(html.includes(`<p class="harness-note">${app.escapeHtml(`Astra did not propose it: ${detail}`)}</p>`), html);
+  assert.equal(/Astra proposed it|proposed it again/.test(html), false, html);
+});
+
+test('R3-TRUTH truth-3: Corti\'s row says it proposed no code that can be listed beside codes it selected that cannot be', () => {
+  const ready = fixture(HARNESS_READY);
+  const count1 = 'It returned 1 code that cannot be listed: empty, or longer than 10 characters (a CPT code has five). It is not shown and never truncated.';
+  const none = harnessRow(render(withParticipant(ready, 'corti', { state: 'done', codes: [], unlisted_codes: 1,
+    detail: `Answered; none of its codes can be listed, so none was checked. ${count1}` })), 'corti');
+  assert.ok(none.includes(app.escapeHtml(`Answered; none of its codes can be listed, so none was checked. ${count1}`)), none);
+  assert.ok(none.includes('It proposed no code that can be listed.'), none);
+  for (const said of ['It proposed no code.', 'its codes were checked']) assert.equal(none.includes(said), false, said);
+  const some = harnessRow(render(withParticipant(ready, 'corti', { state: 'done', codes: ['45380'], unlisted_codes: 1,
+    detail: `Answered; its codes that can be listed were checked. ${count1}` })), 'corti');
+  assert.ok(some.includes('Codes it proposed that can be listed: 45380.'), some);
+  // control: a row whose every code can be listed reads as before
+  const all = harnessRow(render(withParticipant(ready, 'corti', { state: 'done', codes: ['45380', '45385'], unlisted_codes: 0,
+    detail: 'Answered; its codes were checked.' })), 'corti');
+  assert.ok(all.includes('Codes it proposed: 45380, 45385.') && !all.includes('that can be listed'), all);
+});
+
+test('R3-TRUTH truth-5: a code Corti listed without selecting it is said to be listed - never only as a candidate, or as an alternative', () => {
+  const line = relation => app.codeStatusLines({ proposed_by: ['astra'], phases: { astra: 'independent' }, corti_relation: relation, reference_check: { state: 'passed' } });
+  const named = '<li><b>Proposed by:</b> Astra (independent reading); ';
+  assert.ok(line('candidate').includes(`${named}Corti listed this code as a candidate or an alternative, not selected; see Alternatives.</li>`), line('candidate'));
+  assert.ok(line('second_review').includes(`${named}Corti&#x27;s second review also listed this code without adding it as a proposal; see Alternatives.</li>`), line('second_review'));
+  for (const relation of ['candidate', 'second_review']) assert.equal(/only as a candidate|, as an alternative|did not propose/.test(line(relation)), false, relation);
+});
+
+test('R3-TRUTH truth-6: a code card states the NCCI procedure-to-procedure limit once, across its status line, its "Not verified" note and its modifier considerations', () => {
+  // the engine's separate-lesions consideration, as it writes it (studio/validation/engine.py _service_considerations)
+  const consideration = 'Separate lesions are documented: this code\'s act is on 9 mm pedunculated polyp in the sigmoid colon, and another act is on 12 mm flat lesion in the ascending colon. If an NCCI procedure-to-procedure edit pairs the two codes, a distinct-lesion modifier (59 or XS) may apply. NCCI edits are not connected; no modifier is assigned.';
+  const membership = { id: 'cpt.membership', label: 'CPT code-set membership for the service date', status: 'not_verified', detail: 'No licensed CPT edition is connected.' };
+  const ptp = { id: 'ncci.ptp', label: 'NCCI procedure-to-procedure edits', status: 'not_verified', detail: 'NCCI procedure-to-procedure edits are not connected (CMS serves them only behind an AMA point-and-click agreement).' };
+  const ready = fixture(HARNESS_READY);
+  const base = ready.assessment.proposals.find(proposal => proposal.code === '45385');
+  const harnessEra = { ...base, checks: [membership, ptp], modifier_considerations: [consideration], retrieval: [],
+    reference_check: { state: 'passed', detail: 'Present in the CMS fee schedule file: passed. NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified.' } };
+  const { proposed_by: _by, reference_check: _check, ...older } = harnessEra;  // a proposal served before the harness
+  const cardFor = proposal => textOf(codeCardOf(render({ ...ready, assessment: { ...ready.assessment, proposals: [proposal] } }), '45385'));
+  const statements = text => (text.match(/NCCI (procedure-to-procedure )?edits (are )?not (connected|verified)/g) || []).length
+    + (/Not verified: [^\n]*?NCCI procedure-to-procedure edits\./.test(text) ? 1 : 0);
+  const cases = [
+    ['the status line states it', harnessEra, 'Not verified: CPT code-set membership for the service date.', 'No modifier is assigned.'],
+    ['the "Not verified" note states it', older, 'Not verified: CPT code-set membership for the service date; NCCI procedure-to-procedure edits.', 'No modifier is assigned.'],
+    ['only the modifier considerations state it', { ...older, checks: [membership] }, 'Not verified: CPT code-set membership for the service date.', 'NCCI edits are not connected; no modifier is assigned.'],
+  ];
+  for (const [name, proposal, noted, ending] of cases) {
+    const text = cardFor(proposal);
+    assert.equal(statements(text), 1, `${name}: ${text}`);
+    assert.ok(text.includes(noted), `${name}: ${text}`);
+    assert.ok(text.includes(`If an NCCI procedure-to-procedure edit pairs the two codes, a distinct-lesion modifier (59 or XS) may apply. ${ending}`), `${name}: ${text}`);
+  }
+  // a "Not verified" note that would name only the edits is left out where the status line states them
+  assert.equal(cardFor({ ...harnessEra, checks: [ptp] }).includes('Not verified:'), false);
+  // a consideration that does not state the limit is shown as the engine wrote it
+  const other = 'The documented intent is screening and a therapeutic or diagnostic act was performed: payer rules for a screening examination that becomes therapeutic (for example Medicare modifier PT, commercial modifier 33) are not connected. No modifier is assigned.';
+  assert.ok(cardFor({ ...harnessEra, modifier_considerations: [other] }).includes(`Modifier considerations, never assigned automatically: ${other}`));
 });

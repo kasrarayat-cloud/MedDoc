@@ -795,20 +795,40 @@ function decisionLine(proposal) {
   return `<div class="review-insight">${icon('shield')}<div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p>${decision.note ? `<p>${escapeHtml(`Note: ${decision.note}`)}</p>` : ''}</div></div>`;
 }
 
+// A code card states the NCCI procedure-to-procedure limit once (HARNESS.md I4: PTP is always "not verified"): in its
+// status line wherever that is shown (codeStatusLines: the API's reference_check detail says it, or the page's own
+// parenthetical does); else in its "Not verified" note, from its ncci.ptp check; else in its modifier considerations.
+// Each later place leaves it out (refutation round 3, truth-6: every real card stated it in all three).
+function ptpInStatusLine(proposal) {
+  return Array.isArray(proposal.proposed_by) || Boolean(proposal.reference_check && typeof proposal.reference_check === 'object');
+}
+
+function ptpInNotVerified(proposal) {
+  return !ptpInStatusLine(proposal) && (Array.isArray(proposal.checks) ? proposal.checks : []).some(check => check?.status === 'not_verified' && check.id === 'ncci.ptp');
+}
+
 function referenceNote(proposal) {
   const checks = Array.isArray(proposal.checks) ? proposal.checks : [];
   const lines = [];
   if (proposal.status === 'excluded' && proposal.exclusion_reason) lines.push(`Excluded: ${proposal.exclusion_reason}`);
   if (proposal.supported === false) lines.push(`${proposal.family_label || 'This service'} is not covered by a profiled GI service family in this release — review required.`);
   for (const check of checks) if (check.status === 'fail' || check.status === 'warn') lines.push(`${lookup(CHECK_LABELS, check.status, '')} · ${check.label}: ${check.detail}`);
-  const notVerified = checks.filter(check => check.status === 'not_verified').map(check => check.label);
+  // the ncci.ptp check is listed only where the status line does not state the limit (ptpInStatusLine)
+  const stated = ptpInStatusLine(proposal);
+  const notVerified = checks.filter(check => check.status === 'not_verified' && !(stated && check.id === 'ncci.ptp')).map(check => check.label);
   if (notVerified.length) lines.push(`Not verified: ${notVerified.join('; ')}.`);
   return lines.length ? `<div class="reference-note">${icon('info')}<span>${lines.map(escapeHtml).join('<br>')}</span></div>` : '';
 }
 
+// The engine's separate-lesions consideration ends by stating the limit again; where the card states it above (its
+// status line, or its "Not verified" note) the line keeps the consideration and says only that no modifier is assigned.
+const MODIFIER_PTP = 'NCCI edits are not connected; no modifier is assigned.';
+
 function modifierNote(proposal) {
   const items = Array.isArray(proposal.modifier_considerations) ? proposal.modifier_considerations : [];
-  return items.length ? `<div class="reference-note">${icon('info')}<span>${escapeHtml(`Modifier considerations, never assigned automatically: ${items.join(' ')}`)}</span></div>` : '';
+  const stated = ptpInStatusLine(proposal) || ptpInNotVerified(proposal);
+  const shown = items.map(item => (stated && typeof item === 'string' && item.endsWith(MODIFIER_PTP) ? `${item.slice(0, -MODIFIER_PTP.length)}No modifier is assigned.` : item));
+  return shown.length ? `<div class="reference-note">${icon('info')}<span>${escapeHtml(`Modifier considerations, never assigned automatically: ${shown.join(' ')}`)}</span></div>` : '';
 }
 
 function evidenceChips(proposal, layout) {

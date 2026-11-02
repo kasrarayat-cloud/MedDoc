@@ -405,3 +405,51 @@ class CortiListedTests(R2WordingCase):
         alternative = self.listed(candidate)
         self.assertTrue(alternative['exclusion_reason'].startswith('Provider candidate; not selected.'),
                         alternative['exclusion_reason'])
+
+
+# --- truth-6: a code card states the NCCI procedure-to-procedure limit once ----------------------------------------
+
+# A statement of the limit: "NCCI procedure-to-procedure edits are not connected", "NCCI edits are not connected", "NCCI
+# procedure-to-procedure edits not verified", or the edits named in a "Not verified:" list. "If an NCCI
+# procedure-to-procedure edit pairs the two codes" is a consideration, not a statement of the limit.
+LIMIT = re.compile(r'NCCI (?:procedure-to-procedure )?edits (?:are )?not (?:connected|verified)')
+# The engine's services.base_included detail (I1-pinned engine output): it restates the limit where that check warns,
+# on its warning line and in its question's details - recorded as a residual, counted apart.
+BASE_INCLUDED = 'internal profile rule; NCCI procedure-to-procedure edits are not connected'
+
+
+def _statements(line):
+    if line.startswith('Not verified: '):
+        return int('NCCI procedure-to-procedure edits' in line)
+    return len(LIMIT.findall(line))
+
+
+class PtpOncePerCardTests(R2WordingCase):
+    """Every real code card of the colon chain stated the limit in its status line, again in "Not verified: ...; NCCI
+    procedure-to-procedure edits." and, where separate lesions are documented, again in its modifier considerations
+    ("NCCI edits are not connected; no modifier is assigned."), while round 2's test counted the status line alone
+    (refutation round 3, truth-6). The status line, the "Not verified" note and the modifier line now state it once."""
+
+    def test_the_status_line_the_not_verified_note_and_the_modifier_line_state_it_once(self):
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        detail = self.detail(encounter_id)
+        cards = browser('cards(page()).map(card => visible(card).split("\\n"))', detail)
+        self.assertEqual(len(cards), 3)
+        modifier_lines = 0
+        for lines in cards:
+            status = [line for line in lines if line.startswith('CMS reference checks: ')]
+            noted = [line for line in lines if line.startswith('Not verified: ')]
+            modifiers = [line for line in lines if line.startswith('Modifier considerations, never assigned')]
+            self.assertEqual(len(status), 1, lines)
+            self.assertEqual(sum(_statements(line) for line in status + noted + modifiers), 1, status + noted + modifiers)
+            self.assertEqual(_statements(status[0]), 1, status)  # the status line is where it is stated (I4)
+            for line in modifiers:
+                modifier_lines += 1
+                # the consideration itself stands, and no modifier is assigned
+                self.assertIn('If an NCCI procedure-to-procedure edit pairs the two codes', line)
+                self.assertTrue(line.endswith('No modifier is assigned.'), line)
+            # the whole card: once, and once more for each line of the services.base_included residual
+            residual = sum(BASE_INCLUDED in line for line in lines)
+            self.assertEqual(sum(_statements(line) for line in lines), 1 + residual, lines)
+        self.assertEqual(modifier_lines, 2)  # 45385 and 45380: separate lesions are documented
