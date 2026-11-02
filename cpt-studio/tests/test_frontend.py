@@ -58,6 +58,9 @@ RECONCILIATION_ROW_KEYS = {'code', 'family', 'bucket', 'status', 'proposed_by', 
 # The harness fixtures (tests/fixtures/api) were written at b4655e634, before these keys existed. What each shape still
 # lacks is stated here rather than accepted silently, until the website package regenerates the fixtures from the
 # serializer's output: a regenerated fixture fails these tests until its entry is emptied (refutation r1 FG-5).
+# Refutation round 2 (FG2-5) found it still open: regenerated, they become harness@2 payloads, and the tests that draw
+# them as payloads served before harness@2 must then build those payloads themselves - left for after the round-2 merge
+# (R2-WORDING's report). The participants row's unlisted_codes (truth-11) is the latest key they lack.
 FIXTURE_LACKS = {
     'permissions': {'can_confirm'},
     'harness': {'phase'},
