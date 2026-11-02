@@ -214,12 +214,15 @@ test('fact values never invent a value for missing or conflicting facts', () => 
   assert.equal(app.metaFact({ value: 'x', origin: 'conflict' }, {}, 'Setting'), 'Setting conflict');
 });
 
-// gi2 'present': a payload that carries no queue_reasons (served before the field existed, as the fixtures are) keeps
-// the queue of the three states that always waited on a member.
+// gi2 'present': a payload that carries no queue_reasons (served before the field existed, as the older fixtures are)
+// keeps the queue of the three states that always waited on a member. The harness@2 rows are the serializer's own
+// (tests/test_frontend.py) and carry queue_reasons, so they are left out here.
 test('without queue_reasons the queue lists the clarification, review and reconciliation states', () => {
   assert.deepEqual([...app.QUEUE_STATES].sort(), ['needs_clarification', 'provider_unknown', 'ready_for_review']);
-  const { encounters } = fixture('encounters.json');
-  assert.ok(encounters.every(item => !('queue_reasons' in item)));
+  const all = fixture('encounters.json').encounters;
+  const encounters = all.filter(item => !('queue_reasons' in item));
+  assert.deepEqual(all.filter(item => 'queue_reasons' in item).map(item => item.id.slice(0, 3)), ['e2c', 'e2b', 'e2a']);
+  assert.equal(encounters.length, 10);
   const body = app.listBody('queue', encounters);
   const expected = encounters.filter(item => app.QUEUE_STATES.has(item.state)).length;
   assert.equal(count(body, 'class="document-row"'), expected);
