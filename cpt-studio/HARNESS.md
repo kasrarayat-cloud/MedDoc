@@ -664,8 +664,8 @@ target and E/M-basis checks above stay as their first steps).** Every passage, w
 or indication section (`reconcile.held_section`), as the status check's always was. **Date:** a mention the context
 reader takes as a date of birth (`context._is_birth`, rule N2) is never a date of service. **Extent** and **target:**
 around each mention of the landmark or structure, in its clause of the passage's whole sentence (`services.clauses`),
-routing's cue that it was not reached, entered, seen or visualized (`cues.NOT_REACHED_BEFORE`, `NOT_REACHED_AFTER`), or a
-negation, an attempt or a doubt (the `_QUALIFIED` rule a value is read by) that is not about something else - a
+routing's cue that it was not reached, entered, seen or visualized (`cues.NOT_REACHED_BEFORE`, `NOT_REACHED_AFTER`), or
+a negation, an attempt or a doubt (the `_QUALIFIED` rule a value is read by) that is not about something else - a
 complication, a difficulty, another care step or a finding denied, a measurement's "about" (`candidates._qualified`) -
 leaves it unverified: "The passage states the cecum as not reached or not seen.", "The passage qualifies the cecum (a
 negation, an attempt or a doubt).".
