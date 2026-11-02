@@ -334,7 +334,7 @@ class AlternativeAccountTests(Surfaces, R2WordingCase):
         txt = self.download(encounter_id)
         self.assertEqual(_block(_section(txt, reports.ALTERNATIVES_TITLE), '  - 45378 · '),
                          [f'  - 45378 · Colonoscopy — listed by Astra {LISTED_WORDS}, never selectable: {reason}',
-                          f'     Proposed by: none; listed by Astra {LISTED_WORDS}'])
+                          f'     Proposed by: no participant; listed by Astra {LISTED_WORDS}'])
         rows = [row for row in csv_rows(self.download(encounter_id, fmt='csv')) if row['code'] == '45378']
         self.assertEqual([(row['item_list'], row['proposal_origin'], row['proposed_by'], row['exclusion_reason'])
                           for row in rows], [('alternative', 'participant', '', reason)])
@@ -343,7 +343,7 @@ class AlternativeAccountTests(Surfaces, R2WordingCase):
         (row,) = [item for item in trace['reconciliation'] if item['code'] == '45378']
         self.assertEqual((row['proposed_by'], row['listed_by']), ([], ['astra']))
         trace_page = self.trace_lines(trace)
-        self.assertIn(f'Proposed by: none; listed by Astra {LISTED_WORDS}', trace_page)
+        self.assertIn(f'Proposed by: no participant; listed by Astra {LISTED_WORDS}', trace_page)
         for where, text in (('page', '\n'.join(page)), ('txt', txt), ('trace', '\n'.join(trace_page))):
             self.assertNotIn('Proposed by: not recorded', text, where)
 
@@ -378,6 +378,29 @@ class AlternativeAccountTests(Surfaces, R2WordingCase):
         # control: the located alternative of one participant reads as before (Fable's 45378 after peer review is a
         # proposal of its own; Astra's G0121 is worded as round 4 worded a located alternative)
         self.assertEqual(self.proposals(detail, '45378')[0]['proposed_by'], ['fable'])
+
+    def test_a_participant_s_listing_beside_corti_s_own_row_of_the_code_says_no_participant_proposed_it(self):
+        # Corti selects G0105 (excluded for scope); Astra lists G0105 with a quote no document holds: its alternative
+        # has no proposer, and the same report names Corti as the proposer of Corti's own row - so the participant's
+        # row says "no participant", never "none"
+        self.corti.selections = [('45385', SNARE), ('45380', BIOPSY), ('G0105', SNARE)]
+        self.adapters['astra'].first = [hp.answered('astra', hp.reading(
+            codes=[('45385', SNARE), ('45380', BIOPSY), ('G0105', UNLOCATED_DIAG)],
+            services=[('c1', 'colonoscopy', 'performed', SNARE)]))]
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        detail = self.detail(encounter_id)
+        rows = sorted((p['bucket'], p['proposed_by'], p['listed_by']) for p in self.proposals(detail, 'G0105'))
+        self.assertEqual(rows, [('alternative', [], ['astra']), ('excluded', ['corti'], [])])
+        txt = self.download(encounter_id)
+        reason = (f'Listed by Astra {LISTED_WORDS}, and not added as a proposal: {HCPCS_WHY}. Alternatives cannot be '
+                  'approved.')
+        self.assertEqual(_block(_section(txt, reports.ALTERNATIVES_TITLE), '  - G0105 · '), [
+            f'  - G0105 · Service outside the GI profiles — listed by Astra {LISTED_WORDS}, never selectable: {reason}',
+            f'     Proposed by: no participant; listed by Astra {LISTED_WORDS}'])
+        excluded = _block(_section(txt, 'EXCLUDED CANDIDATES'), '  - G0105 · ')
+        self.assertIn('     Proposed by: Corti', excluded)
+        self.assertNotIn('Proposed by: none', txt)
 
     def test_a_peer_review_s_unlocated_additional_code_is_listed_never_proposed_after_peer_review(self):
         # truth-3: Fable's peer review adds 45378 with a quote no document holds
@@ -416,7 +439,7 @@ class AlternativeAccountTests(Surfaces, R2WordingCase):
         trace_page = self.trace_lines(trace)
         self.assertTrue([line for line in trace_page if line.startswith('45378 · units 1 · confidence high · listed '
                                                                         'in peer review')], trace_page)
-        self.assertIn(f'Proposed by: none; listed by Fable {LISTED_WORDS}', trace_page)
+        self.assertIn(f'Proposed by: no participant; listed by Fable {LISTED_WORDS}', trace_page)
         self.assertFalse([line for line in trace_page if 'proposed it after peer review' in line.lower()
                           or 'never independent' in line])
 

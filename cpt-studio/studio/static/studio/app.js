@@ -1029,7 +1029,7 @@ function codeStatusLines(proposal) {
   if (!proposers && !check) return '';
   const listed = listedText(proposal.listed_by);
   const lines = [
-    ['Proposed by', proposers?.length ? proposerText(proposal, proposers) : listed ? `none; ${listed}` : 'not recorded'],
+    ['Proposed by', proposers?.length ? proposerText(proposal, proposers) : listed ? `no participant; ${listed}` : 'not recorded'],
     ['CMS reference checks', referenceCheckText(check)],
     ['Reviewer decision', decisionWords(proposal)],
   ];
@@ -1067,7 +1067,8 @@ function proposerText(proposal, proposers) {
 // The participants the API serves as having only listed a participant's alternative's code (listed_by: no quote of
 // theirs was found verbatim in the document, so they did not propose it; refutation round 5, the session's D12), named
 // apart from its proposers - "listed by Fable with no quote found verbatim in the document, so not proposed", and "by
-// Fable" after it where others proposed the code - never as one of them; '' when it serves none.
+// Fable" after it where others proposed the code - never as one of them, and with no proposer as "no participant",
+// never "none" (Corti may have a row of its own for the code); '' when it serves none.
 function listedText(listedBy, apart = false) {
   const names = joinWords(strings(listedBy).map(name => lookup(PARTICIPANT_LABELS, name, name)));
   return names ? `listed by ${names} with no quote found verbatim in the document, so not proposed${apart ? ` by ${names}` : ''}` : '';
@@ -2121,7 +2122,7 @@ function traceReconciliation(rows) {
     const proposers = strings(row.proposed_by).map(name => lookup(PARTICIPANT_LABELS, name, name));
     // a participant that only listed the code is named apart, never as a proposer (refutation round 5, D12)
     const listed = listedText(row.listed_by, proposers.length > 0);
-    const proposed = proposers.length ? [proposers.join(', '), listed].filter(Boolean).join('; ') : listed ? `none; ${listed}` : 'not recorded';
+    const proposed = proposers.length ? [proposers.join(', '), listed].filter(Boolean).join('; ') : listed ? `no participant; ${listed}` : 'not recorded';
     const positions = row.positions && typeof row.positions === 'object' && !Array.isArray(row.positions) ? Object.keys(row.positions).map(name => {
       const value = row.positions[name];
       return value && typeof value === 'object' ? positionText(name, value) : `${lookup(PARTICIPANT_LABELS, name, name)} ${lookup(POSITION_WORDS, value, 'took a position that was not recorded')}`;

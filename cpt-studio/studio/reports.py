@@ -837,13 +837,15 @@ def _join_labels(labels):
 
 def _proposers(item):
     """Who proposed the code, by label ('Corti, Astra'), and apart from them the participants that only listed it
-    ('none; listed by Astra with no quote found verbatim in the document, so not proposed': refutation round 5, the
-    session's D12 - "Astra" was printed as the proposer of a code its reading only listed); 'not recorded' for a
+    ('no participant; listed by Astra with no quote found verbatim in the document, so not proposed': refutation round
+    5, the session's D12 - "Astra" was printed as the proposer of a code its reading only listed; "no participant",
+    never "none": Corti may have a row of its own for the code, a selection excluded for scope); 'not recorded' for a
     proposal that names neither."""
     named = ', '.join(_labels(item.get('proposed_by')))
     listed = _listed_words(item)
     if listed:
-        return f'{named}; {listed} by {_join_labels(_labels(item.get("listed_by")))}' if named else f'none; {listed}'
+        return (f'{named}; {listed} by {_join_labels(_labels(item.get("listed_by")))}' if named
+                else f'no participant; {listed}')
     return named or 'not recorded'
 
 

@@ -2721,8 +2721,8 @@ const R5_LISTED = 'with no quote found verbatim in the document, so not proposed
 
 test('R5-ACCOUNT truth-1: a code status line names a participant that only listed the code apart from its proposers', () => {
   const status = proposal => app.codeStatusLines({ reference_check: { state: 'not_verified' }, ...proposal });
-  assert.ok(status({ proposed_by: [], listed_by: ['astra'] }).includes(`<li><b>Proposed by:</b> none; listed by Astra ${R5_LISTED}</li>`));
-  assert.ok(status({ proposed_by: [], listed_by: ['astra', 'fable'] }).includes(`<li><b>Proposed by:</b> none; listed by Astra and Fable ${R5_LISTED}</li>`));
+  assert.ok(status({ proposed_by: [], listed_by: ['astra'] }).includes(`<li><b>Proposed by:</b> no participant; listed by Astra ${R5_LISTED}</li>`));
+  assert.ok(status({ proposed_by: [], listed_by: ['astra', 'fable'] }).includes(`<li><b>Proposed by:</b> no participant; listed by Astra and Fable ${R5_LISTED}</li>`));
   const both = status({ proposed_by: ['astra'], listed_by: ['fable'], phases: { astra: 'independent' }, corti_relation: 'none' });
   assert.ok(both.includes(`<li><b>Proposed by:</b> Astra (independent reading); listed by Fable ${R5_LISTED} by Fable; Corti did not propose this code.</li>`), both);
   // a payload served without listed_by, or with none, reads as before
@@ -2737,7 +2737,7 @@ test('R5-ACCOUNT truth-1, truth-3: the trace\'s reconciliation names a participa
   const row = { code: '45378', family: 'gi.colonoscopy', bucket: 'alternative', status: 'informational', positions: {}, reference_check: { state: 'not_verified' }, approved: false };
   const lines = rows => app.traceView({ ...trace, reconciliation: rows }, trace.encounter.id);
   const listed = lines([{ ...row, proposed_by: [], listed_by: ['fable'] }]);
-  assert.ok(listed.includes(`<p>Proposed by: none; listed by Fable ${R5_LISTED}</p>`), listed);
+  assert.ok(listed.includes(`<p>Proposed by: no participant; listed by Fable ${R5_LISTED}</p>`), listed);
   assert.equal(listed.includes('Proposed by: not recorded'), false);
   const both = lines([{ ...row, proposed_by: ['astra'], listed_by: ['fable'] }]);
   assert.ok(both.includes(`<p>Proposed by: Astra; listed by Fable ${R5_LISTED} by Fable</p>`), both);
