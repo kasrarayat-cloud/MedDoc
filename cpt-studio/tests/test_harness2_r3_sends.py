@@ -106,6 +106,8 @@ class LockedSessionTests(OfflineMixin, TransactionTestCase):
 
     def setUp(self):
         super().setUp()
+        # whatever a test leaves of the worker's session, the flush after it and the next test start on a fresh one
+        self.addCleanup(connection.close)
         self.ws = f.workspace()
         self.reviewer = f.member(self.ws, f.user('reviewer'))
         self.client = Client(enforce_csrf_checks=False)
