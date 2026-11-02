@@ -24,6 +24,7 @@ from .gi.context import charge_date_problem, is_member_conflict
 from .gi.profiles import PROFILES
 from .models import Clarification, Decision, Encounter, Membership, Proposal, ProviderRun, ReportArtifact
 from .participants.reading import CODE as CODE_SHAPE
+from .serializers import failure_note, retrieval_failed
 from .types import CONTEXT_FACTS, sha256_json
 from .validation.checks import fact_label
 
@@ -1220,11 +1221,26 @@ def _passage_lines(passage):
             f'        "{_indent(passage.get("text") or "", "        ")}"']
 
 
+RETRIEVAL_FAILED_WORDS = 'Reference validation failed: '
+
+
+def _failure_line(entry):
+    """A failed retrieval's one line (refutation round 1, parity-1): 'Reference validation failed: ' and the entry's
+    note (serializers.failure_note: CPT Studio's own sentence, which already opens with those words), never a code
+    entry with no code."""
+    note = failure_note(entry)
+    return note if note.startswith(RETRIEVAL_FAILED_WORDS) else RETRIEVAL_FAILED_WORDS + note
+
+
 def _retrieval_section(snap):
     """The reference retrieval traces (HARNESS.md 5): per code, the CMS facts the checks' lookup read and the verbatim
-    CMS passages retrieved for them, with source key, release and page or section; then what is not connected."""
+    CMS passages retrieved for them, with source key, release and page or section; then what is not connected. A
+    retrieval that failed (serializers.retrieval_failed) is one line saying reference validation failed, with why."""
     lines = []
     for entry in snap.get('retrieval') or []:
+        if retrieval_failed(entry):
+            lines.append(f'  - {_indent(_failure_line(entry), CONTINUATION)}')
+            continue
         lines.append(f'  - {entry.get("code", "")} · service date {entry.get("service_date") or "unknown"}')
         lines += [_fact_line(fact) for fact in review.retrieved(entry, 'facts')]
         lines += [line for passage in review.retrieved(entry, 'passages') for line in _passage_lines(passage)]

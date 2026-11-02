@@ -14,7 +14,7 @@ from unittest import mock
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
-from studio import jobs, models, review
+from studio import jobs, models, review, serializers
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
 from tests.test_harness_pipeline import BOTH, TIME_QUOTE, HarnessCase, fake_passages
@@ -225,6 +225,51 @@ class ReferenceValidationTests(FieldCase):
         self.persist(pf.standard_result(), participants=[jobs.not_configured_record('astra'),
                                                          jobs.not_configured_record('fable')])
         self.assertEqual(self.detail()['harness']['reference_validation']['state'], 'not_run')
+        self.assertEqual(self.detail()['harness']['reference_validation']['detail'], '')  # said only of 'failed'
+
+    # refutation round 1, parity-1: a retrieval that raised is recorded as one entry marked failed
+    # (jobs.retrieval_failure); the page says reference validation failed, never 'not_run' or 'done'
+
+    NOT_CONNECTED = ['NCCI procedure-to-procedure edits (AMA licence agreement not accepted)',
+                     'AMA CPT descriptors and guidelines (no licence)', 'Payer policies']
+
+    def test_failed_when_the_retrieval_failed_with_its_note_as_the_detail(self):
+        failure = jobs.retrieval_failure(date(2026, 10, 21), 'RuntimeError')
+        self.persist(pf.result(pf.proposal('sel:0', '43239', [pf.EGD_PASSAGE]),
+                               pf.proposal('exc:0', '45378', [pf.PLAN_PASSAGE], bucket='excluded')),
+                     participants=[jobs.not_configured_record('astra'), jobs.not_configured_record('fable')],
+                     retrieval=[failure])
+        (note,) = failure['notes']
+        self.assertTrue(note.startswith('Reference validation failed: '), note)
+        # the failed entry is no code checked: nothing counted, no source, and the detail is the entry's own note
+        self.assertEqual(self.detail()['harness']['reference_validation'],
+                         {'state': 'failed', 'detail': note, 'codes_checked': 0, 'passages': 0, 'sources': [],
+                          'not_connected': self.NOT_CONNECTED})
+
+    def test_failed_whenever_any_entry_failed_beside_a_trace_and_a_failure_with_no_note_says_so(self):
+        trace = {'code': '43239', 'service_date': '2026-10-21', 'facts': [],
+                 'passages': [{'source_key': 'cms-ncci-manual-test', 'release': 'Revision 1/1/2026',
+                               'section': 'Chapter VI §C', 'page': '12', 'text': 'Synthetic.'}],
+                 'lookups': [], 'notes': []}
+        unnoted = {**jobs.retrieval_failure(None, 'ValueError'), 'notes': ['', 3]}
+        self.persist(pf.result(pf.proposal('sel:0', '43239', [pf.EGD_PASSAGE])),
+                     participants=[jobs.not_configured_record('astra'), jobs.not_configured_record('fable')],
+                     retrieval=[trace, unnoted])
+        block = self.detail()['harness']['reference_validation']
+        # every decidable code is traced, which alone would read 'done': one failed entry makes it 'failed'
+        self.assertEqual((block['state'], block['detail'], block['codes_checked'], block['passages']),
+                         ('failed', serializers.REFERENCE_FAILED, 1, 1))
+        self.assertTrue(serializers.REFERENCE_FAILED.startswith('Reference validation failed: '))
+
+    def test_waiting_while_processing_even_after_a_failed_retrieval(self):
+        # a stage in flight makes a new assessment, whose retrieval has not run yet
+        self.persist(pf.result(pf.proposal('sel:0', '43239', [pf.EGD_PASSAGE])),
+                     participants=[jobs.not_configured_record('astra'), jobs.not_configured_record('fable')],
+                     retrieval=[jobs.retrieval_failure(date(2026, 10, 21), 'RuntimeError')])
+        enc = self.s.encounter
+        pf.job(enc, enc.current_revision, models.Job.ASSESS, models.Job.QUEUED, context=enc.current_context)
+        block = self.detail()['harness']['reference_validation']
+        self.assertEqual((block['state'], block['detail']), ('waiting', ''))
 
 
 class EstimatedCostTests(FieldCase):
@@ -479,6 +524,50 @@ class FrontendContractTests(HarnessCase):
         # the provider runs never carried them, so its "Model requested" line never rendered from the real API)
         astra = next(run for run in detail['provider_runs'] if run['provider'] == 'astra')
         self.assertEqual((astra['requested_model'], astra['returned_model']), ('gpt-6-astra', 'gpt-6-astra'))
+
+
+class FailedRetrievalTests(HarnessCase):
+    """A retrieval that raises (refutation round 1, parity-1) through the real pipeline: the assessment stands as made,
+    and the harness block says reference validation failed with the note the assessment recorded - never 'not_run' or
+    'done' - with Corti only (I1) and with both participants after peer review; the owner's trace serves the one failed
+    entry as recorded, and no code's retrieval reads it as its own."""
+
+    def failing(self):
+        owner = f.member(self.ws, f.user('owner'), role=models.Membership.OWNER)
+        with mock.patch('studio.jobs.reference_passages.retrieve', side_effect=RuntimeError('synthetic defect')), \
+                self.assertLogs('studio.jobs', level='ERROR'):
+            encounter_id = self.create()
+            drain()
+        client = Client()
+        client.force_login(owner)
+        detail = client.get(f'/api/encounters/{encounter_id}').json()
+        trace = client.get(f'/api/encounters/{encounter_id}/trace').json()
+        return self.encounter(encounter_id), detail, trace
+
+    def assertShownFailed(self, encounter, detail, trace):
+        assessment = encounter.current_assessment
+        self.assertEqual(assessment.retrieval, [jobs.retrieval_failure(date(2026, 10, 20), 'RuntimeError')])
+        (note,) = assessment.retrieval[0]['notes']
+        self.assertEqual(detail['harness']['reference_validation'],
+                         {'state': 'failed', 'detail': note, 'codes_checked': 0, 'passages': 0, 'sources': [],
+                          'not_connected': ReferenceValidationTests.NOT_CONNECTED})
+        self.assertNotIn('synthetic defect', json.dumps(detail))  # the exception's text is logged, never served
+        self.assertEqual(trace['retrieval'], assessment.retrieval)
+        self.assertTrue(detail['assessment']['proposals'])
+        for proposal in detail['assessment']['proposals']:
+            self.assertEqual(proposal['retrieval'], [], proposal['code'])
+
+    @override_settings(**LIVE)
+    def test_corti_only(self):
+        encounter, detail, trace = self.failing()
+        self.assertShownFailed(encounter, detail, trace)
+        self.assertEqual((detail['harness']['phase'], encounter.state), (0, 'ready_for_review'))
+
+    @override_settings(**LIVE, **BOTH)
+    def test_both_participants_after_peer_review(self):
+        encounter, detail, trace = self.failing()
+        self.assertShownFailed(encounter, detail, trace)
+        self.assertEqual((detail['harness']['phase'], encounter.state), (2, 'ready_for_review'))
 
 
 @override_settings(**LIVE, **BOTH)

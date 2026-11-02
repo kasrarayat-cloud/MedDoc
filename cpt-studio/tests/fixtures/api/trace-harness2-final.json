@@ -316,8 +316,8 @@
      },
      "usage_basis": "provider_reported_tokens_summed_over_exchanges",
      "estimated_cost_usd": "0.0300",
-     "request_sha256": "56bbee0cfb7cb9d5ae412f801af5f2e899130e6c5cd46f68e8103a8f2598d690",
-     "response_sha256": "47133fd870070e218c905960c29cba59198ff91c04f11bf6c7380d0967376f87",
+     "request_sha256": "06c473db18974c7ccded53a9a2f49766e98125d3f546882f53c6e83a22e12a8b",
+     "response_sha256": "24524e14fa4e8613c1ee3b208533bde8beed198ac966e7a09486e026f0db025c",
      "response_bytes": 1745,
      "created_at": "2026-11-01T09:00:28Z",
      "finished_at": "2026-11-01T09:00:17Z",
@@ -342,7 +342,7 @@
        ],
        [
         "cpt_studio",
-        "7fdd7ba060244677862f00a83bc66cce941d86776b5c9bccc55aea22f332f04b"
+        "f9fd52867cfc528b62b3789bde080b73cb1b41ae161c5debc23f9603dbb68cab"
        ],
        [
         "fable",
@@ -495,7 +495,7 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "56bbee0cfb7cb9d5ae412f801af5f2e899130e6c5cd46f68e8103a8f2598d690",
+       "request_sha256": "06c473db18974c7ccded53a9a2f49766e98125d3f546882f53c6e83a22e12a8b",
        "response_sha256": "54f05296d87ae9002112779b5f58493e5f292c84afba2573b534591cfe468c46",
        "provider_request_id": "req_astra_1",
        "response_id": "resp_astra_1",
@@ -527,8 +527,8 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "56bbee0cfb7cb9d5ae412f801af5f2e899130e6c5cd46f68e8103a8f2598d690",
-       "response_sha256": "47133fd870070e218c905960c29cba59198ff91c04f11bf6c7380d0967376f87",
+       "request_sha256": "06c473db18974c7ccded53a9a2f49766e98125d3f546882f53c6e83a22e12a8b",
+       "response_sha256": "24524e14fa4e8613c1ee3b208533bde8beed198ac966e7a09486e026f0db025c",
        "provider_request_id": "req_astra_2",
        "response_id": "resp_astra_2",
        "error": "",
@@ -732,8 +732,8 @@
      },
      "usage_basis": "provider_reported_tokens_summed_over_exchanges",
      "estimated_cost_usd": null,
-     "request_sha256": "12f0d2902c80bbd6bff7fa5dfc1b3dc89d934631c0929dec7f13c528e896d171",
-     "response_sha256": "aa738e0136fb24fd685be6ccf1f69b8dda321c4164e3f7d18a41c5c780f5db48",
+     "request_sha256": "02db4f7ab9a2af16300b2b90b1fb2cee7e178639d2cfcfb76b21680c2d8c311b",
+     "response_sha256": "091a691b4490807094dce3f4ed02ea7cdbdb93aa382ac8d6af22b833957e1b31",
      "response_bytes": 1052,
      "created_at": "2026-11-01T09:00:29Z",
      "finished_at": "2026-11-01T09:00:17Z",
@@ -758,7 +758,7 @@
        ],
        [
         "cpt_studio",
-        "7fdd7ba060244677862f00a83bc66cce941d86776b5c9bccc55aea22f332f04b"
+        "f9fd52867cfc528b62b3789bde080b73cb1b41ae161c5debc23f9603dbb68cab"
        ],
        [
         "fable",
@@ -836,8 +836,8 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "12f0d2902c80bbd6bff7fa5dfc1b3dc89d934631c0929dec7f13c528e896d171",
-       "response_sha256": "aa738e0136fb24fd685be6ccf1f69b8dda321c4164e3f7d18a41c5c780f5db48",
+       "request_sha256": "02db4f7ab9a2af16300b2b90b1fb2cee7e178639d2cfcfb76b21680c2d8c311b",
+       "response_sha256": "091a691b4490807094dce3f4ed02ea7cdbdb93aa382ac8d6af22b833957e1b31",
        "provider_request_id": "req_fable_1",
        "response_id": "resp_fable_1",
        "error": "",

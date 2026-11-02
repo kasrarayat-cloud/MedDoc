@@ -1137,6 +1137,51 @@ test('every participant state has its label and plain sentence; the API\'s own s
   assert.ok(odd.includes('State not recorded') && odd.includes('data-state="exploded"'));
 });
 
+// The note jobs.retrieval_failure records for a retrieval that raised (refutation round 1, parity-1), as served.
+const RETRIEVAL_NOTE = 'Reference validation failed: CPT Studio could not retrieve the CMS facts and passages for this assessment\'s codes (RuntimeError, logged), so none is recorded here and no proposal was checked against them. Retrieval only informs the reviewer and decides no status, so the assessment stands as made.';
+
+test('a failed retrieval is shown as failed - in the reference row, on each code card and in the owner\'s trace - never as not run or done', () => {
+  const ready = fixture(HARNESS_READY);
+  const failed = { ...ready.harness.reference_validation, state: 'failed', detail: RETRIEVAL_NOTE, codes_checked: 0, passages: 0, sources: [] };
+  const doc = { ...ready, harness: { ...ready.harness, reference_validation: failed },
+    assessment: { ...ready.assessment, proposals: ready.assessment.proposals.map(proposal => ({ ...proposal, retrieval: [] })) } };
+  const html = render(doc);
+  const [[tone], label, plain, required] = app.REFERENCE_STATES.failed;
+  assert.equal(required, 'failed');
+  const row = harnessRow(html, 'reference_validation');
+  assert.ok(row.startsWith(`<div class="check-item ${tone}" data-participant="reference_validation" data-state="failed">`), row);
+  assert.ok(row.includes(`<span class="status amber">${label}</span>`), row);
+  assert.ok(row.includes(`<p>${app.escapeHtml(RETRIEVAL_NOTE)}</p>`), row);
+  assert.equal(count(row, '<p>'), 1, 'said once: the API\'s own sentence says it failed');
+  for (const other of ['Not run', 'Done', app.REFERENCE_STATES.not_run[2], 'checked against the CMS reference files;']) assert.equal(row.includes(other), false, other);
+  assert.ok(row.includes('Not connected: NCCI procedure-to-procedure edits'), 'what is not connected is still listed');
+  // a detail that does not say it failed follows the plain sentence; none at all (or a payload without it) is the plain one
+  const said = detail => harnessRow(render({ ...doc, harness: { ...doc.harness, reference_validation: { ...failed, detail } } }), 'reference_validation');
+  assert.ok(said('Synthetic reason.').includes(`<p>${app.escapeHtml(plain)}</p><p>Synthetic reason.</p>`), said('Synthetic reason.'));
+  for (const detail of ['', '  ', undefined, null]) {
+    const bare = said(detail);
+    assert.ok(bare.includes(`<p>${app.escapeHtml(plain)}</p>`) && count(bare, '<p>') === 1 && bare.includes('data-state="failed"'), String(detail));
+  }
+  // a state other than failed never shows the detail, so a stray one cannot say failed for it
+  const done = harnessRow(render({ ...ready, harness: { ...ready.harness, reference_validation: { ...ready.harness.reference_validation, detail: RETRIEVAL_NOTE } } }), 'reference_validation');
+  assert.ok(done.includes('data-state="done"') && !done.includes('Reference validation failed'), done);
+  // each code card says the retrieval failed, never that its own lookup found nothing
+  for (const proposal of doc.assessment.proposals) {
+    const card = codeCardOf(html, proposal.code);
+    assert.ok(card.includes(`<p class="harness-note">${app.escapeHtml(app.RETRIEVAL_FAILED)}</p>`), proposal.code);
+    assert.equal(card.includes('No CMS reference fact or passage was retrieved for this code.'), false, proposal.code);
+  }
+  assert.ok(app.retrievalSection({ retrieval: [] }, false, true).includes(app.escapeHtml(app.RETRIEVAL_FAILED)));
+  // the owner's trace: the one failed entry (no code) is shown as failed with its note, never as a code with nothing found
+  const trace = fixture(HARNESS_TRACE);
+  const entry = { code: '', service_date: '2026-10-21', facts: [], passages: [], lookups: [], notes: [RETRIEVAL_NOTE], failed: true };
+  const traced = app.traceView({ ...trace, retrieval: [entry] }, trace.encounter.id);
+  assert.ok(traced.includes(`<div class="check-list-card"><div class="evidence-label">Reference validation failed</div><p class="harness-note">${app.escapeHtml(RETRIEVAL_NOTE)}</p></div>`), traced);
+  for (const other of ['No fact was found for this code.', 'Code · service date', 'No retrieval trace is recorded']) assert.equal(traced.includes(other), false, other);
+  const unnoted = app.traceView({ ...trace, retrieval: [{ ...entry, notes: [] }] }, trace.encounter.id);
+  assert.ok(unnoted.includes(`<div class="evidence-label">Reference validation failed</div><p class="harness-note">${app.escapeHtml(plain)}</p>`), unnoted);
+});
+
 test('a participant row says what it proposed, its unfound quotes, a reused answer and the model asked for and the one that answered', () => {
   const ready = fixture(HARNESS_READY);
   const html = render(ready);
