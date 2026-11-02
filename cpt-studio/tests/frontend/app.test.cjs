@@ -2049,3 +2049,26 @@ test('R2-WORDING truth-9: a phase-1 assessment\'s peer rows and final row say it
   assert.ok(harnessRow(render(phase1), 'final').includes('Assessed from the frozen first readings; no peer review was read by this assessment.'));
   assert.ok(harnessRow(render({ ...phase1, pipeline: { ...phase1.pipeline, busy: true } }), 'final').includes('The peer reviews and the second assessment follow the first assessment.'));
 });
+
+test('R2-WORDING truth-8: a peer review\'s additional code is called never independent only where it was first proposed there', () => {
+  const final = fixture(H2_FINAL);
+  // codes_added holds only the codes first proposed in peer review; the API's sentence names a repeated one
+  const repeated = 'Answered in peer review, after its first reading was frozen; the review was used. It listed 45385 again in peer review; it first proposed it in its independent reading.';
+  const row = peerRowOf(render(withPeer(final, 'astra', { state: 'done', detail: repeated, run_id: null, codes_added: [], unverified_quotes: 0 })), 'astra');
+  assert.ok(row.includes(`<p>${app.escapeHtml(repeated)}</p>`), row);
+  assert.ok(row.includes('<small class="check-source">It first proposed no code in peer review that can be listed.</small>'), row);
+  assert.equal(/never independent: 45385|proposed no code after peer review/.test(row), false, row);
+  assert.ok(peerRowOf(render(final), 'fable').includes('Codes it proposed after peer review, never independent: 45380.'));
+  // the owner's trace words each additional code by the phase served with it; one served without reads as before
+  const trace = fixture(H2_TRACE);
+  const astra = trace.participants.find(item => item.name === 'astra');
+  const peer = astra.runs.find(run => run.purpose === 'peer_review');
+  const base = peer.review.additional_codes[0];
+  const shown = phase => app.traceView({ ...trace, participants: [{ ...astra, runs: [{ ...peer, review: { ...peer.review,
+    additional_codes: [phase === undefined ? base : { ...base, phase }] } }] }] }, trace.encounter.id);
+  const head = '<li><b>45381 · units 1 · confidence low · services s1 · ';
+  assert.ok(shown('independent').includes(`${head}repeated in peer review; first proposed in its independent reading</b>`));
+  assert.equal(shown('independent').includes('never independent'), false);
+  for (const phase of ['peer_review', undefined]) assert.ok(shown(phase).includes(`${head}proposed after peer review, never independent</b>`), String(phase));
+  for (const phase of ['', 'exploded', null]) assert.ok(shown(phase).includes(`${head}listed in peer review</b>`), String(phase));
+});

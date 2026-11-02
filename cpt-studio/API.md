@@ -282,7 +282,12 @@ Fable row gains `peer`: `{}` before phase 2 (and on Corti's row and a row not co
 `stopped` while the current chain has not finished that participant's peer stage (`astra_peer`, then `fable_peer`);
 once assess #2 is recorded, its `state` in the row vocabulary (`done`, `refused`, `failed`, `unknown`, `not_sent`,
 `blocked`, `not_configured`) with a `detail` sentence, its `run_id`, the codes the review proposed after peer review
-(`codes_added`, never independent) and its unverified quotes. A final assessment of phase 1 - one that owes no peer
+(`codes_added`, never independent) and its unverified quotes. `codes_added` lists only the additional codes the
+participant first proposed in its peer review - the phase the engine records on the assessment's proposals of the code
+(`phases`), or, for a code no proposal records it on, whether its frozen first reading listed the code
+(`serializers.peer_code_phases`); an additional code its first reading proposed is named in the `detail` instead ("It
+listed 45385 again in peer review; it first proposed it in its independent reading."), never as proposed after peer
+review (refutation round 2, truth-8). A final assessment of phase 1 - one that owes no peer
 stage because a member date conflict holds it, or because the participant is not configured now - serves, for each
 participant whose first reading it read, `not_sent` with why it read none ("Peer review: none is read by this
 assessment: the service date entered as encounter metadata conflicts with the document, and no peer review is sent

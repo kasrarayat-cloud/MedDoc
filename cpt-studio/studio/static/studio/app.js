@@ -1529,7 +1529,9 @@ function peerFallback(doc, participant) {
 
 // A model participant's peer review (HARNESS.md 11.1, 12.6): its state as the API serves it (peer.state, with its
 // sentence), or the page's own reading where it serves none; the codes it proposed after peer review, never
-// independent; its unfound quotes; and what that run's own tool calls retrieved and what it says it used.
+// independent - codes_added holds only those it first proposed there, and the API's sentence names any it listed again
+// that its first reading proposed (refutation round 2, truth-8); its unfound quotes; and what that run's own tool calls
+// retrieved and what it says it used.
 function peerRow(doc, participant) {
   const name = textValue(participant.name);
   const peer = participant.peer && typeof participant.peer === 'object' && !Array.isArray(participant.peer) ? participant.peer : {};
@@ -1540,7 +1542,7 @@ function peerRow(doc, participant) {
   const codes = strings(peer.codes_added);
   const unverified = Number.isInteger(peer.unverified_quotes) && peer.unverified_quotes > 0 ? peer.unverified_quotes : 0;
   const notes = [
-    codes.length ? `Codes it proposed after peer review, never independent: ${codes.join(', ')}.` : shown === 'done' ? 'It proposed no code after peer review.' : '',
+    codes.length ? `Codes it proposed after peer review, never independent: ${codes.join(', ')}.` : shown === 'done' ? 'It first proposed no code in peer review that can be listed.' : '',
     unverified ? `${plural(unverified, 'quote it gave was', 'quotes it gave were')} not found in the document text, so never used as evidence.` : '',
     referencesNote(participant.peer_references),
   ];
@@ -1806,7 +1808,11 @@ function traceReview(review) {
   const problems = strings(review.problems).map(problem => `<li>${escapeHtml(problem)}</li>`);
   const answers = objects(review.answers).map(answer => `<li><b>${escapeHtml(`Question ${textValue(answer.question_id) || 'not named'}`)}</b><br>${escapeHtml(answer.settled === true ? `Answer: ${participantText(answer.value) || 'no value given'}` : 'It says the document does not settle it.')}${traceQuotes(answer.evidence)}</li>`);
   const positions = objects(review.positions).map(item => `<li><b>${escapeHtml(`${textValue(item.code) || 'No code'} · ${lookup(PEER_POSITIONS, item.position, textValue(item.position) || 'position not recorded')}`)}</b>${participantText(item.reason) ? `<br>${escapeHtml(`Why: ${participantText(item.reason)}`)}` : ''}${traceQuotes(item.evidence)}</li>`);
-  const added = objects(review.additional_codes).map(code => traceCode(code, 'proposed after peer review, never independent'));
+  // each additional code by the phase its participant first proposed it in, where the trace serves it (truth-8): a code
+  // its first reading proposed is repeated, never "never independent"; one served without a phase reads as before
+  const addedWords = code => (!Object.hasOwn(code, 'phase') || code.phase === 'peer_review' ? 'proposed after peer review, never independent'
+    : code.phase === 'independent' ? 'repeated in peer review; first proposed in its independent reading' : 'listed in peer review');
+  const added = objects(review.additional_codes).map(code => traceCode(code, addedWords(code)));
   const group = (title, items, empty) => `${groupLabel(`${title} · ${items.length}`)}${items.length ? `<ul class="trace-list">${items.join('')}</ul>` : `<p class="harness-note">${escapeHtml(empty)}</p>`}`;
   return `<div class="trace-reading">${fields}${groupLabel('Frozen inputs it was shown')}${frozen.length ? traceFields(frozen) : '<p class="harness-note">None recorded.</p>'}${problems.length ? `${groupLabel('Problems')}<ul class="trace-list">${problems.join('')}</ul>` : ''}${group('Answers to the open questions', answers, 'No answer.')}${group('Positions on codes', positions, 'No position.')}${group('Codes proposed after peer review', added, 'No code proposed.')}${group('References it says it used', traceReferencesUsed(review.references_used), 'None cited.')}</div>`;
 }

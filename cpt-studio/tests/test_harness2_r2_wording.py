@@ -284,3 +284,72 @@ class PhaseOneFinalRowsTests(h2.Harness2Case):
         for row in rows:
             self.assertIn('No peer review was read by this assessment.', row)
             self.assertNotIn(NOT_RECORDED, row)
+
+
+# --- truth-8: "proposed after peer review, never independent" only for a code first proposed there ---------------------
+
+REPEATED = 'It listed 45385 again in peer review; it first proposed it in its independent reading.'
+
+
+class PeerRepeatedCodeTests(R2WordingCase):
+    """truth-8 (HARNESS.md 11.1): Astra's peer review listed 45385 again - its own frozen first reading's code, located
+    with the same quote - and the peer row read "Codes it proposed after peer review, never independent: 45385." beside
+    the 45385 card's "Astra (independent reading)", while the engine recorded 45385's phase for Astra as independent.
+    The TXT and the CSV said the same. A peer review's additional code is now called first proposed after peer review
+    only where the engine records it so (serializers.peer_code_phases); a repeated one is said to be repeated."""
+
+    def setUp(self):
+        super().setUp()
+        self.adapters['astra'].peer = [hp.answered('astra', hp.peer_answer(codes=[('45385', SNARE)]), number=2)]
+        self.encounter_id = self.create(TWO_EXTENTS)
+        drain()
+
+    def test_the_peer_row_never_calls_a_repeated_code_never_independent(self):
+        detail = self.detail(self.encounter_id)
+        rows = browser('["astra", "fable"].map(name => rowOf(page(), "data-peer", name))', detail)
+        self.assertNotIn('never independent: 45385', rows[0])
+        self.assertIn(REPEATED, rows[0])
+        self.assertIn('It first proposed no code in peer review that can be listed.', rows[0])
+        # control: Fable's 45378, first proposed in its peer review, keeps the label
+        self.assertIn('Codes it proposed after peer review, never independent: 45378.', rows[1])
+        served = {row['name']: row['peer'] for row in detail['harness']['participants']}
+        self.assertEqual((served['astra']['codes_added'], served['fable']['codes_added']), ([], ['45378']))
+        self.assertTrue(served['astra']['detail'].endswith(REPEATED), served['astra']['detail'])
+        [snare] = self.proposals(detail, '45385')
+        self.assertEqual(snare['phases']['astra'], 'independent')  # the engine's record the row now follows
+
+    def test_the_phase_of_each_additional_code_is_the_engine_s_record(self):
+        from studio import serializers
+
+        assessment = self.encounter(self.encounter_id).current_assessment
+        records = self.records(assessment)
+        # recorded by the engine: Astra's repeated 45385 (independent) and Fable's 45378 (after peer review)
+        self.assertEqual(serializers.peer_code_phases(assessment, 'astra', records['astra'], ['45385']),
+                         {'45385': 'independent'})
+        self.assertEqual(serializers.peer_code_phases(assessment, 'fable', records['fable'], ['45378']),
+                         {'45378': 'peer_review'})
+        # a code no proposal records the participant on: its frozen first reading decides, as the engine reads it
+        listed = {**records['astra'], 'codes': [*records['astra']['codes'], {'code': '45399', 'quote': ''}]}
+        self.assertEqual(serializers.peer_code_phases(assessment, 'astra', listed, ['45399', '45398']),
+                         {'45399': 'independent', '45398': 'peer_review'})
+
+    def test_the_reports_word_each_additional_code_by_its_phase(self):
+        from studio import reports, serializers
+
+        assessment = self.encounter(self.encounter_id).current_assessment
+        records = self.records(assessment)
+        snap = reports.snapshot(self.encounter(self.encounter_id), 'draft')
+        for entry in snap['peer_review']['participants']:
+            phases = serializers.peer_code_phases(assessment, entry['name'], records[entry['name']],
+                                                  [added['code'] for added in entry['additional_codes']])
+            for added in entry['additional_codes']:
+                added.setdefault('phase', phases[added['code']])
+        text = reports.render_txt(snap).decode('utf-8')
+        self.assertIn('Additional code 45385 · units 1 — repeated in peer review; first proposed in its independent '
+                      'reading', text)
+        self.assertNotIn('Additional code 45385 · units 1 — proposed after peer review', text)
+        self.assertIn('Additional code 45378 · units 1 — proposed after peer review, never independent', text)
+        rows = [row for row in reports.render_csv(snap).decode('utf-8').splitlines() if '"peer_additional_code"' in row]
+        self.assertEqual(len(rows), 2)
+        self.assertIn('"repeated_in_peer_review"', next(row for row in rows if '"45385"' in row))
+        self.assertIn('"proposed_after_peer_review"', next(row for row in rows if '"45378"' in row))

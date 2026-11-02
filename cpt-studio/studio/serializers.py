@@ -719,20 +719,58 @@ def _peer_progress(jobs, name):
     return None
 
 
-def _codes_added(peer_review):
-    """The CPT codes a peer review proposed after peer review (its additional codes), each once, in order."""
+def _codes_added(peer_review, assessment, name, record):
+    """(added, repeated): the CPT codes a peer review listed as additional codes, each once, in order, split by the
+    phase participant ``name`` first proposed each in (peer_code_phases): ``added``, those first proposed in its peer
+    review - the codes it proposed after peer review, never independent (HARNESS.md 11.1) - and ``repeated``, those its
+    independent reading first proposed, which it listed again."""
     if peer_review is None or peer_review.refused:
-        return []
-    codes = [item.code for item in peer_review.additional_codes
-             if isinstance(item.code, str) and CODE_SHAPE.fullmatch(item.code)]
-    return list(dict.fromkeys(codes))
+        return [], []
+    listed = list(dict.fromkeys(item.code for item in peer_review.additional_codes
+                                if isinstance(item.code, str) and CODE_SHAPE.fullmatch(item.code)))
+    phases = peer_code_phases(assessment, name, record, listed)
+    return ([code for code in listed if phases[code] == models.ProviderRun.PEER_REVIEW],
+            [code for code in listed if phases[code] == models.ProviderRun.INDEPENDENT])
 
 
-def _peer_detail(record):
-    """A participant's peer review (its assess #2 entry) in one plain sentence."""
+def peer_code_phases(assessment, name, record, codes):
+    """{code: 'independent' | 'peer_review'} for ``codes``, additional codes participant ``name``'s peer review listed:
+    the phase the engine records ``name`` first proposed each in on ``assessment`` (support['phases'] of its proposals
+    of that code; 'independent' wherever any records it so), or - for a code no proposal records ``name`` on, which is
+    one none of its quotes for the code located, so not counted among a proposal's proposers - the engine's own reading
+    of such entries (engine._Harness.phase, read from all of them): 'independent' when its frozen first reading, as
+    ``record`` (its Assessment.participants entry) recorded it, lists the code, else 'peer_review'. HARNESS.md 11.1: a
+    code first proposed in phase 2 is marked proposed after peer review, never as independent - and a code its first
+    reading proposed is never marked so (refutation round 2, truth-8: a peer review that listed its own first reading's
+    code again was said to have proposed it "after peer review, never independent"). One reading of that phase, for
+    every place that words a peer review's additional codes."""
+    wanted = list(dict.fromkeys(code for code in codes if isinstance(code, str)))
+    recorded = {}
+    for proposal in assessment.proposals.filter(code__in=wanted) if assessment is not None and wanted else ():
+        phase = _phases(proposal.support).get(name)
+        if phase:
+            recorded.setdefault(proposal.code, set()).add(phase)
+    listed = {item.get('code') for item in (record or {}).get('codes') or [] if isinstance(item, dict)}
+    independent, later = models.ProviderRun.INDEPENDENT, models.ProviderRun.PEER_REVIEW
+    return {code: independent if independent in recorded.get(code, ()) or (not recorded.get(code) and code in listed)
+            else later for code in wanted}
+
+
+def _join(items):
+    """'A', 'A and B', 'A, B and C'."""
+    return items[0] if len(items) == 1 else f'{", ".join(items[:-1])} and {items[-1]}'
+
+
+def _peer_detail(record, repeated=()):
+    """A participant's peer review (its assess #2 entry) in one plain sentence; ``repeated``: the codes it listed again
+    that its independent reading first proposed (peer_code_phases), said as such - they are never codes it proposed
+    after peer review."""
     state = record.get('peer_state')
     if state == 'read':
         detail = 'Answered in peer review, after its first reading was frozen; the review was used.'
+        if repeated:
+            detail += (f' It listed {_join(list(repeated))} again in peer review; it first proposed '
+                       f'{"it" if len(repeated) == 1 else "them"} in its independent reading.')
         count = int(record.get('peer_unverified_quotes') or 0)
         if count:
             detail += (f' {count} of its quotes {"was" if count == 1 else "were"} not found in the document, so '
@@ -786,9 +824,11 @@ def _harness2(row, assessment, jobs):
         peer_review = None
         if peer_run is not None and record.get('peer_state') == 'read':
             peer_review = review.recorded_peer_review(assessment, record)  # the review assess #2 read, or None
-        out['peer'] = {'state': RECORD_STATES.get(record.get('peer_state'), 'unknown'), 'detail': _peer_detail(record),
-                       'run_id': str(peer_run.pk) if peer_run is not None else None,
-                       'codes_added': _codes_added(peer_review),
+        # codes_added: only those first proposed in its peer review (11.1); a repeated one is said in the detail
+        added, repeated = _codes_added(peer_review, assessment, name, record)
+        out['peer'] = {'state': RECORD_STATES.get(record.get('peer_state'), 'unknown'),
+                       'detail': _peer_detail(record, repeated),
+                       'run_id': str(peer_run.pk) if peer_run is not None else None, 'codes_added': added,
                        'unverified_quotes': int(record.get('peer_unverified_quotes') or 0)}
         if peer_run is not None:
             out['peer_references'] = review.participant_references(peer_run, peer_review)
