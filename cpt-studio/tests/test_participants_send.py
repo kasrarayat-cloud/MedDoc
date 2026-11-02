@@ -558,7 +558,8 @@ class FableSendTests(_SendContract, OfflineTestCase):
                 sent = json.loads(session.calls[0]['data'])
                 self.assertEqual(set(sent), {'model', 'max_tokens', 'system', 'messages', 'output_config', 'tools',
                                              'tool_choice'})
-                for field in ('thinking', 'temperature', 'top_p', 'top_k', 'fallbacks'):
+                self.assertEqual(sent['output_config'], {'effort': 'medium'})  # no format (HARNESS.md 12.8)
+                for field in ('thinking', 'temperature', 'top_p', 'top_k', 'fallbacks', 'format'):
                     self.assertNotIn(f'"{field}"', session.calls[0]['data'].decode())
 
     def test_the_client_request_id_is_not_sent(self):

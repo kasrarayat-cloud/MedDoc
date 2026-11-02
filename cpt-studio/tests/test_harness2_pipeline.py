@@ -138,7 +138,10 @@ def unknown(note='Read timed out after the request was sent (synthetic).'):
 
 
 def is_peer(body):
-    return (body.get('instructions') if 'instructions' in body else body.get('system')) == prompt.PEER_INSTRUCTIONS
+    """A peer-review request: its instructions are PEER_INSTRUCTIONS (Astra's exactly; Fable's followed by the peer
+    schema since anthropic-messages@cptstudio-harness-3, HARNESS.md 12.8)."""
+    instructions = body.get('instructions') if 'instructions' in body else body.get('system')
+    return isinstance(instructions, str) and instructions.startswith(prompt.PEER_INSTRUCTIONS)
 
 
 def peer_document(name, body):

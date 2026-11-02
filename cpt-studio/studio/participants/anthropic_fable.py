@@ -1,13 +1,20 @@
-"""Fable: Anthropic Claude Fable 5.1 on the Messages API (HARNESS.md 1, 3, 4, 8, 11).
+"""Fable: Anthropic Claude Fable 5.1 on the Messages API (HARNESS.md 1, 3, 4, 8, 11, 12.8).
 
 The request is POST https://api.anthropic.com/v1/messages with x-api-key, anthropic-version 2026-10-21 and
-anthropic-workspace-id when one is configured. Its body asks claude-fable-5-1 for one JSON object in the reading schema
-(output_config.format), at medium effort, within 16,000 output tokens. The revision's framed text is the only user
+anthropic-workspace-id when one is configured. Its body asks claude-fable-5-1 for one JSON object in the reading schema,
+at medium effort (output_config.effort), within 16,000 output tokens. The revision's framed text is the only user
 content; for a PDF its original goes before it as a base64 document block. Nothing else is sent (I5).
 
+harness-3 (HARNESS.md 12.8): the body carries no output_config.format. Anthropic refuses the reading schema as a
+structured output in a request that also offers the reference tools, strict or not ("The compiled grammar is too
+large"), so nothing at Anthropic constrains the answer: the system prompt is the instructions, unchanged, followed by
+prompt.schema_instruction - the schema itself, as one line of canonical JSON, and one instruction: exactly one JSON
+object matching it and nothing else (system_prompt). CPT Studio's own validation, which never trusted the vendor's, is
+the only check of the answer's shape.
+
 Never sent, because the API or the owner forbids them: thinking (always on for this model; a value is a 400),
-temperature, top_p and top_k (400 on this API version), fallbacks (the owner forbids silent model substitution; I6) and
-any beta header.
+temperature, top_p and top_k (400 on this API version), fallbacks (the owner forbids silent model substitution; I6), any
+beta header, and since harness-3 an output format (Anthropic's grammar limit, HARNESS.md 12.8).
 
 harness@2 (HARNESS.md 11.2): the body also offers CPT Studio's two reference tools (strict, tool_choice auto; a forced
 tool_choice is a 400 on this model). A run is a tool loop (send_loop, loop.py): an answer asks for tools when it is a
@@ -15,17 +22,22 @@ message from claude-fable-5-1 itself, with no fallback, that stopped for tool_us
 The next request's messages are the previous messages - never edited - then an assistant turn whose content is that
 answer's content array exactly as returned (thinking blocks with their signatures unchanged), then a user turn of one
 tool_result per call carrying the result as a JSON string. The peer review (build_peer_request) is the same shape with
-PEER_INSTRUCTIONS as the system prompt, the peer schema and two text blocks, the framed text and prompt.peer_document; no
-original file is attached.
+PEER_INSTRUCTIONS followed by the peer schema's instruction as the system prompt, and two text blocks, the framed text
+and prompt.peer_document; no original file is attached.
 
 An answer is read only when it is a message from claude-fable-5-1 itself (I6), no server-side fallback took part
 (a fallback content block, or a fallback entry in usage.iterations), and it stopped at end_turn. A max_tokens stop is
 refused as truncated; a refusal stop is refused with its stop_details category; a tool_use stop is not a final answer.
-Its text blocks, joined in order, are the reading (reading.py) or the peer review (peer.py); thinking blocks carry no
-answer and are not read.
+Its text blocks, joined in order, are the answer; thinking blocks carry no answer and are not read. A harness-3 answer
+is used only when that text, its surrounding whitespace stripped, is exactly one JSON object, alone or alone in a single
+```json (or ```) fence (reading.sole_object); anything else refuses it whole with CPT Studio's own sentence. The object
+is then the reading (reading.py) or the peer review (peer.py), read exactly as before: strict JSON, CPT Studio's own
+schema validation, the bounds and the located quotes. Nothing is repaired or coerced.
 
-ADAPTER_VERSION_1 names the harness@1 request shape (no tools). Its stored runs are still read, exactly as before; a
-request of that version is never sent.
+Every earlier version's stored runs are still read, each exactly as before, and a request of an earlier version is
+never sent (providers.base.verified_body refuses another version): ADAPTER_VERSION_2 names the harness@2 request (the
+reading schema as output_config.format, beside the tools; its answer's text is read as JSON as it stands, so a fence is
+refused there as it always was), ADAPTER_VERSION_1 the harness@1 request (no tools, no peer review).
 """
 from __future__ import annotations
 
@@ -42,9 +54,10 @@ from studio.providers.base import ProviderUnavailable, valid_deadline, verified_
 from studio.types import PageSpan, ParticipantReading, PeerReview, ProviderRequest, RawExchange
 
 NAME = 'fable'
-ADAPTER_VERSION = 'anthropic-messages@cptstudio-harness-2'  # @2: tools in the request, a run is a tool loop
+ADAPTER_VERSION = 'anthropic-messages@cptstudio-harness-3'  # @3: no output format; the schema is in the system prompt
+ADAPTER_VERSION_2 = 'anthropic-messages@cptstudio-harness-2'  # stored harness@2 runs: read as before, never sent
 ADAPTER_VERSION_1 = 'anthropic-messages@cptstudio-harness-1'  # stored harness@1 runs: read as before, never sent
-READ_VERSIONS = (ADAPTER_VERSION, ADAPTER_VERSION_1)
+READ_VERSIONS = (ADAPTER_VERSION, ADAPTER_VERSION_2, ADAPTER_VERSION_1)
 MODEL = 'claude-fable-5-1'
 ENDPOINT = 'https://api.anthropic.com/v1/messages'
 API_VERSION = '2026-10-21'
@@ -64,13 +77,19 @@ def tools() -> list:
              'input_schema': copy.deepcopy(tool['parameters']), 'strict': True} for tool in prompt.TOOLS]
 
 
-def _body(system: str, content: list, schema: dict) -> dict:
+def system_prompt(instructions: str, schema: dict) -> str:
+    """harness-3's system prompt: ``instructions`` exactly as Astra is given them, then the schema its answer must match
+    (prompt.schema_instruction), because nothing at Anthropic constrains the answer (HARNESS.md 12.8)."""
+    return instructions + prompt.schema_instruction(schema)
+
+
+def _body(instructions: str, content: list, schema: dict) -> dict:
     return {
         'model': MODEL,
         'max_tokens': MAX_TOKENS,
-        'system': system,
+        'system': system_prompt(instructions, schema),
         'messages': [{'role': 'user', 'content': content}],
-        'output_config': {'format': {'type': 'json_schema', 'schema': copy.deepcopy(schema)}, 'effort': EFFORT},
+        'output_config': {'effort': EFFORT},  # harness-3: no format (Anthropic's grammar limit, HARNESS.md 12.8)
         'tools': tools(),
         'tool_choice': {'type': 'auto'},
     }
@@ -233,17 +252,18 @@ def follow_up(body: dict, turn: loop.Turn, outputs: tuple) -> dict:
 # --- reading a stored answer -------------------------------------------------------------------------------------------
 
 def read_response(request: ProviderRequest, response_bytes, refs_retrieved=frozenset()) -> ParticipantReading:
-    """The reading in a stored Messages API answer. Read only as the adapter version that recorded it (a harness@1 run
-    exactly as before); refused whole when another model or a fallback answered, the answer was cut off, refused or
-    stopped for tool_use, or the reading breaks its schema or bounds - and then none of it, its codes included, is read.
-    ``refs_retrieved``: the refs this run's own tool calls returned (references_used is checked against them)."""
+    """The reading in a stored Messages API answer. Read only as the adapter version that recorded it (a harness@2 or
+    harness@1 run exactly as before); refused whole when another model or a fallback answered, the answer was cut off,
+    refused or stopped for tool_use, a harness-3 answer is not exactly one JSON object (reading.sole_object), or the
+    reading breaks its schema or bounds - and then none of it, its codes included, is read. ``refs_retrieved``: the refs
+    this run's own tool calls returned (references_used is checked against them)."""
     refs = reading.retrieved_refs(refs_retrieved)
     version = request.adapter_version
     if request.provider != NAME or version not in READ_VERSIONS:
         return reading.refusal(NAME, ADAPTER_VERSION, MODEL, '',
                                f'it was recorded for {request.provider!r} with adapter {version!r}, '
                                f'not {NAME!r} with {ADAPTER_VERSION!r}')
-    text, returned, why = _answer(response_bytes)
+    text, returned, why = _answer_text(response_bytes, version)
     if why:
         return reading.refusal(NAME, version, MODEL, returned, why)
     return reading.read(text, _source(request), provider=NAME, adapter_version=version, requested_model=MODEL,
@@ -251,22 +271,23 @@ def read_response(request: ProviderRequest, response_bytes, refs_retrieved=froze
 
 
 def read_peer(request: ProviderRequest, response_bytes, refs_retrieved=frozenset()) -> PeerReview:
-    """The peer review in a stored answer to a peer-review request (peer.py): refused whole for every reason a reading
-    is, and when the request is not a peer review this adapter version builds. The frozen inputs and the question ids
-    are read from the request's own body."""
+    """The peer review in a stored answer to a peer-review request (peer.py), read as the adapter version that recorded
+    it (a harness@2 run exactly as before): refused whole for every reason a reading is, and when the request is not a
+    peer review that version builds. The frozen inputs and the question ids are read from the request's own body."""
     refs = reading.retrieved_refs(refs_retrieved)
-    if (request.provider, request.adapter_version) != (NAME, ADAPTER_VERSION):
+    version = request.adapter_version
+    if request.provider != NAME or version not in PEER_READ_VERSIONS:
         return peer.refusal(NAME, ADAPTER_VERSION, MODEL, '',
-                            f'it was recorded for {request.provider!r} with adapter {request.adapter_version!r}, '
+                            f'it was recorded for {request.provider!r} with adapter {version!r}, '
                             f'not {NAME!r} with {ADAPTER_VERSION!r}')
-    listed = peer.request_inputs(request, _peer_document)
+    listed = peer.request_inputs(request, lambda body: _peer_document(body, version))
     if isinstance(listed, str):
-        return peer.refusal(NAME, ADAPTER_VERSION, MODEL, '', listed)
+        return peer.refusal(NAME, version, MODEL, '', listed)
     question_ids, frozen = listed
-    text, returned, why = _answer(response_bytes)
+    text, returned, why = _answer_text(response_bytes, version)
     if why:
-        return peer.refusal(NAME, ADAPTER_VERSION, MODEL, returned, why, frozen)
-    return peer.read(text, _source(request), provider=NAME, adapter_version=ADAPTER_VERSION, requested_model=MODEL,
+        return peer.refusal(NAME, version, MODEL, returned, why, frozen)
+    return peer.read(text, _source(request), provider=NAME, adapter_version=version, requested_model=MODEL,
                      returned_model=returned, question_ids=question_ids, frozen_inputs=frozen, refs_retrieved=refs)
 
 
@@ -275,12 +296,22 @@ def _source(request: ProviderRequest):
     return contexts[0] if isinstance(contexts, (tuple, list)) and contexts else None
 
 
-def _peer_document(body) -> Optional[str]:
-    """The peer document of a peer-review body this adapter builds, or None for any other body."""
-    if not isinstance(body, dict) or set(body) != BODY_KEYS or body['model'] != MODEL \
-            or body['system'] != prompt.PEER_INSTRUCTIONS:
+# What a peer-review body of each version that has one carries besides its messages: (system, output_config).
+_PEER_SHAPES = {
+    ADAPTER_VERSION: (system_prompt(prompt.PEER_INSTRUCTIONS, prompt.PEER_SCHEMA), {'effort': EFFORT}),
+    ADAPTER_VERSION_2: (prompt.PEER_INSTRUCTIONS,
+                        {'format': {'type': 'json_schema', 'schema': prompt.PEER_SCHEMA}, 'effort': EFFORT}),
+}
+PEER_READ_VERSIONS = tuple(_PEER_SHAPES)  # harness@1 had no peer review
+
+
+def _peer_document(body, version: str = ADAPTER_VERSION) -> Optional[str]:
+    """The peer document of a peer-review body this adapter builds at ``version`` (harness-3's by default; harness@2's
+    exactly as before), or None for any other body."""
+    system, output_config = _PEER_SHAPES[version]
+    if not isinstance(body, dict) or set(body) != BODY_KEYS or body['model'] != MODEL or body['system'] != system:
         return None
-    if body['output_config'] != {'format': {'type': 'json_schema', 'schema': prompt.PEER_SCHEMA}, 'effort': EFFORT}:
+    if body['output_config'] != output_config:
         return None
     (message,) = body['messages']
     content = message['content']
@@ -288,6 +319,16 @@ def _peer_document(body) -> Optional[str]:
             'text', 'text']:
         return None
     return content[1]['text']
+
+
+def _answer_text(response_bytes, version: str) -> tuple[str, str, str]:
+    """_answer, then - for a harness-3 answer, which nothing at Anthropic constrained - the one JSON object it must be
+    (reading.sole_object, the one implementation both phases use; HARNESS.md 12.8). An earlier version's answer is
+    _answer's exactly, as it always was."""
+    text, returned, why = _answer(response_bytes)
+    if not why and version == ADAPTER_VERSION:
+        text, why = reading.sole_object(text)
+    return text, returned, why
 
 
 def _answer(response_bytes) -> tuple[str, str, str]:

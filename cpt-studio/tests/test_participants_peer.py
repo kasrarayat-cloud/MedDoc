@@ -1,12 +1,15 @@
-"""The peer review (HARNESS.md 11.1; I5 for phase 1, I6, I7): build_peer_request's exact body for Astra and Fable - the
-participant's own frozen reading, the frozen peer conclusions and CPT Studio's labelled rule-based reading with the
-question ids and the frozen inputs' sha256, no original file and nothing else of CPT Studio's - the shapes it refuses;
-and read_peer: a good review, the refused, truncated, other-model and fallback answers, schema breaches, bounds, question
-ids the request did not list, and the references checked against the run's own tool results. Offline and synthetic
+"""The peer review (HARNESS.md 11.1, 12.8; I5 for phase 1, I6, I7): build_peer_request's exact body for Astra and
+Fable - the participant's own frozen reading, the frozen peer conclusions and CPT Studio's labelled rule-based reading
+with the question ids and the frozen inputs' sha256, no original file and nothing else of CPT Studio's - the shapes it
+refuses; and read_peer: a good review, the refused, truncated, other-model and fallback answers, schema breaches,
+bounds, question ids the request did not list, and the references checked against the run's own tool results. Fable's
+harness-3 peer review carries no output format and its answer is read only when it is exactly one JSON object (alone or
+alone in one json code fence); its stored harness@2 peer reviews are read exactly as before. Offline and synthetic
 (test_participants_support)."""
 from __future__ import annotations
 
 import copy
+import dataclasses
 import hashlib
 import json
 
@@ -18,8 +21,8 @@ from studio.providers.base import ProviderUnavailable, canonical_body, request_s
 from studio.types import PageSpan, ParticipantReading, ProviderRequest, from_jsonable, sha256_json, to_jsonable
 
 from tests.test_participants_support import (NOTE, ORIGINAL, PAGE_BREAK, PAGES, OfflineTestCase, astra_envelope,
-                                             astra_with, changed, fable_envelope, fable_with, fixture_bytes,
-                                             fixture_reading)
+                                             astra_with, changed, fable_envelope, fable_harness_2, fable_with,
+                                             fixture_bytes, fixture_reading)
 
 CORTI = {'selected': [{'code': '45385', 'evidence': ['was removed with a cold snare']}]}
 CORTI_SHA256 = hashlib.sha256(b'synthetic corti response bytes').hexdigest()
@@ -180,8 +183,12 @@ class _PeerContract:
         labels = {'gpt-6-astra', 'claude-fable-5-1', 'user', 'input_text', 'json_schema', 'gi_encounter_peer_review',
                   'medium', 'text', 'auto', 'reasoning.encrypted_content'}
         body = copy.deepcopy(self.request.body)
-        holder = body['text']['format'] if self.module is openai_astra else body['output_config']['format']
-        self.assertEqual(holder.pop('schema'), prompt.PEER_SCHEMA)
+        if self.module is openai_astra:
+            self.assertEqual(body['text']['format'].pop('schema'), prompt.PEER_SCHEMA)
+            instructions = prompt.PEER_INSTRUCTIONS
+        else:  # no format: the peer schema is fixed text in Fable's system prompt (HARNESS.md 12.8)
+            self.assertEqual(body['output_config'], {'effort': 'medium'})
+            instructions = prompt.PEER_INSTRUCTIONS + prompt.schema_instruction(prompt.PEER_SCHEMA)
         self.assertEqual(body.pop('tools'), self.module.tools())
         strings, pending = [], [body]
         while pending:
@@ -192,7 +199,7 @@ class _PeerContract:
                 pending.extend(node)
             elif isinstance(node, str):
                 strings.append(node)
-        self.assertEqual(set(strings) - labels, {prompt.PEER_INSTRUCTIONS, framed_peer(), self.document()})
+        self.assertEqual(set(strings) - labels, {instructions, framed_peer(), self.document()})
         lines = self.document().split('\n')
         sections = [json.loads(line) for line in lines if line.startswith(('{', '['))]
         self.assertEqual(sections, [prompt.reading_answer(self.own), *(self.peers[name] for name in sorted(self.peers)),
@@ -392,7 +399,6 @@ class _PeerContract:
             'a position the schema does not allow': (peer_answer(code_positions=[dict(position, position='maybe')]),
                                                      'code_positions[0].position is not one of the values'),
             'positions that are not a list': (peer_answer(code_positions={}), 'code_positions is not a list'),
-            'not an object': ([], 'the peer review is not an object'),
         }
         for label, (value, expect) in cases.items():
             with self.subTest(label):
@@ -402,6 +408,10 @@ class _PeerContract:
                 self.assertIn(f'The peer review was not used: the answer breaks the peer-review schema: {expect}',
                               review.problems[0])
                 self.assertEqual(review.frozen_inputs, tuple(sorted(self.frozen)))  # what was shown stays on record
+        review = self.read(self.answer([]))  # an answer that is not an object at all
+        self.assertTrue(review.refused)
+        self.assertEqual(review.problems, (f'The peer review was not used: {self.not_an_object}.',))
+        self.assertEqual(review.frozen_inputs, tuple(sorted(self.frozen)))
         review = self.read(self.answer('{"question_answers": [], "question_answers": []}'))
         self.assertIn('repeats a JSON object key', review.problems[0])
 
@@ -482,6 +492,7 @@ class AstraPeerTests(_PeerContract, OfflineTestCase):
     other_class = FableParticipant
     fixture = 'astra-colonoscopy.response.json'
     other_fixture = 'fable-colonoscopy.response.json'
+    not_an_object = 'the answer breaks the peer-review schema: the peer review is not an object'
 
     @staticmethod
     def content(request):
@@ -538,6 +549,7 @@ class FablePeerTests(_PeerContract, OfflineTestCase):
     other_class = AstraParticipant
     fixture = 'fable-colonoscopy.response.json'
     other_fixture = 'astra-colonoscopy.response.json'
+    not_an_object = reading.NOT_ONE_OBJECT  # harness-3: an array is not exactly one JSON object (HARNESS.md 12.8)
 
     @staticmethod
     def content(request):
@@ -547,13 +559,91 @@ class FablePeerTests(_PeerContract, OfflineTestCase):
         return {
             'model': 'claude-fable-5-1',
             'max_tokens': 16000,
-            'system': prompt.PEER_INSTRUCTIONS,
+            'system': prompt.PEER_INSTRUCTIONS + prompt.schema_instruction(prompt.PEER_SCHEMA),
             'messages': [{'role': 'user', 'content': [{'type': 'text', 'text': framed},
                                                       {'type': 'text', 'text': document}]}],
-            'output_config': {'format': {'type': 'json_schema', 'schema': prompt.PEER_SCHEMA}, 'effort': 'medium'},
+            'output_config': {'effort': 'medium'},  # no format: Anthropic's grammar limit (HARNESS.md 12.8)
             'tools': anthropic_fable.tools(),
             'tool_choice': {'type': 'auto'},
         }
+
+    # --- harness-3: an answer nothing at Anthropic constrained (HARNESS.md 12.8) --------------------------------------
+
+    def test_an_answer_alone_in_a_single_fence_is_read_as_the_bare_one(self):
+        bare = self.read(self.answer(GOOD), refs={'ncci-2026-ch6-c-1'})
+        self.assertEqual((bare.refused, bare.problems, bare.adapter_version),
+                         (False, (), 'anthropic-messages@cptstudio-harness-3'))
+        for text in (f'```json\n{json.dumps(GOOD)}\n```', f'```\n{json.dumps(GOOD, indent=2)}\n```',
+                     f'\n {json.dumps(GOOD)} \n'):
+            with self.subTest(text=text[:10]):
+                self.assertEqual(self.read(self.answer(text), refs={'ncci-2026-ch6-c-1'}), bare)
+
+    def test_anything_but_one_object_is_refused_whole_and_what_was_shown_stays_on_record(self):
+        good = json.dumps(GOOD)
+        for text in (f'SYNTHETIC-MODEL-PROSE-0002 {good}', f'{good}\nSYNTHETIC-MODEL-PROSE-0002',
+                     f'```js\n{good}\n```', f'```json\n{good}\n```\nSYNTHETIC-MODEL-PROSE-0002', good[:-30], ''):
+            with self.subTest(text=text[:12]):
+                review = self.read(self.answer(text))
+                self.assertEqual(review.problems, (f'The peer review was not used: {reading.NOT_ONE_OBJECT}.',))
+                self.assertEqual((review.answers, review.positions, review.additional_codes), ((), (), ()))
+                self.assertEqual(review.frozen_inputs, tuple(sorted(self.frozen)))
+        for text in (f'{good}\n{good}', f'```json\n{good}\n```\n```json\n{good}\n```'):  # two objects, two fences
+            with self.subTest(text=text[-12:]):
+                review = self.read(self.answer(text))
+                self.assertTrue(review.problems[0].startswith(
+                    'The peer review was not used: the answer is not valid JSON ('), review.problems)
+                self.assertNotIn('SYNTHETIC-MODEL-PROSE', review.problems[0])
+        review = self.read(self.answer(f'```json\n{json.dumps(peer_answer(summary="x"))}\n```'))
+        self.assertEqual(review.problems, ("The peer review was not used: the answer breaks the peer-review schema: "
+                                           "the peer review has a field the schema does not allow ('summary').",))
+        review = self.read(self.answer('SYNTHETIC-MODEL-PROSE-0002', stop_reason='refusal',
+                                       stop_details={'category': 'cyber'}))  # the vendor's refusal comes first (I6)
+        self.assertEqual(review.problems, ('The peer review was not used: the model refused (category cyber).',))
+
+    def harness_2_request(self):
+        """The harness@2 adapter's own peer request for fixed inputs (its body's sha256 is pinned in
+        test_participants_requests), and the harness-3 request for the same inputs."""
+        own = dataclasses.replace(self.own, adapter_version=anthropic_fable.ADAPTER_VERSION_2)
+        frozen = [('fable', sha256_json(own)), ('revision', hashlib.sha256(NOTE.encode()).hexdigest()),
+                  ('corti', CORTI_SHA256), ('astra', hashlib.sha256(b'synthetic frozen astra reading').hexdigest()),
+                  ('cpt_studio', sha256_json(CPT_STUDIO))]
+        current = self.adapter.build_peer_request(NOTE, PAGES, 'pdf', own, {'corti': CORTI, 'astra': fixture_reading()},
+                                                  CPT_STUDIO, frozen)
+        body = fable_harness_2(current.body)
+        return ProviderRequest(provider='fable', adapter_version=anthropic_fable.ADAPTER_VERSION_2, body=body,
+                               canonical_sha256=request_sha256(body), contexts=(NOTE,)), current
+
+    def test_a_stored_harness_2_peer_review_is_read_exactly_as_before(self):
+        older, current = self.harness_2_request()
+        self.assertEqual(older.canonical_sha256, 'c5c4278b192df32a27238f5362ceb01a5b9ed03112515f89549f8d023789e92f')
+        self.assertIs(registry.peer_reader('fable', anthropic_fable.ADAPTER_VERSION_2), anthropic_fable.read_peer)
+        self.assertEqual(anthropic_fable.PEER_READ_VERSIONS, ('anthropic-messages@cptstudio-harness-3',
+                                                              'anthropic-messages@cptstudio-harness-2'))
+        review = anthropic_fable.read_peer(older, self.answer(GOOD))
+        self.assertEqual((review.refused, review.adapter_version), (False, anthropic_fable.ADAPTER_VERSION_2))
+        # the harness@2 head's own review of it (9d773838c; sha256_json of the whole PeerReview)
+        self.assertEqual(sha256_json(review), 'e8c22a689bba8e7eecc041229e7c9240622b3602a9afbf0f92b646c90bde00fd')
+        self.assertEqual(dataclasses.replace(review, adapter_version=anthropic_fable.ADAPTER_VERSION),
+                         anthropic_fable.read_peer(current, self.answer(GOOD)))
+        fenced = anthropic_fable.read_peer(older, self.answer(f'```json\n{json.dumps(GOOD)}\n```'))
+        self.assertEqual(fenced.problems, ('The peer review was not used: the answer is not valid JSON (Expecting '
+                                           'value at character 0).',))  # as it always was there
+        self.assertEqual(sha256_json(fenced), 'd65e324aa8f16528d165577e4984d3148a21f36cc00e7e94ac24d086dd587db9')
+
+    def test_a_body_is_read_only_as_the_version_whose_shape_it_has(self):
+        older, current = self.harness_2_request()
+        relabelled = (dataclasses.replace(current, adapter_version=anthropic_fable.ADAPTER_VERSION_2),  # harness-3 body
+                      dataclasses.replace(older, adapter_version=anthropic_fable.ADAPTER_VERSION))  # harness@2 body
+        for request in relabelled:
+            with self.subTest(version=request.adapter_version):
+                review = anthropic_fable.read_peer(request, self.answer(GOOD))
+                self.assertEqual((review.refused, review.adapter_version, review.problems),
+                                 (True, request.adapter_version,
+                                  ('The peer review was not used: the request is not a peer review this adapter '
+                                   'builds.',)))
+        self.assertIsNone(anthropic_fable._peer_document(older.body))
+        self.assertIsNotNone(anthropic_fable._peer_document(older.body, anthropic_fable.ADAPTER_VERSION_2))
+        self.assertIsNone(anthropic_fable._peer_document(current.body, anthropic_fable.ADAPTER_VERSION_2))
 
     def answer(self, value, **fields):
         return fable_with(value, **fields)

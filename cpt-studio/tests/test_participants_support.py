@@ -9,6 +9,10 @@ The tool-loop answers (astra_tool_call, fable_tool_use) are built in code in the
 API answer whose output holds a reasoning item with its encrypted content and function_call items (call_id, name,
 arguments as a JSON string); a Messages API answer that stopped for tool_use, holding a thinking block with its
 signature and tool_use blocks (id, name, input). Their ids carry "synthetic" and none is vendor output.
+
+fable_harness_2 rebuilds, from a harness-3 Fable body, the body the harness@2 adapter built for the same input
+(HARNESS.md 12.8), so that stored harness@2 runs can be read in tests; test_participants_requests pins its output to
+the harness@2 adapter's own bodies (sha256 at 9d773838c). The adapter itself never builds or sends one.
 """
 from __future__ import annotations
 
@@ -199,6 +203,21 @@ def changed(reading: dict, **fields) -> dict:
     result = copy.deepcopy(reading)
     result.update(fields)
     return result
+
+
+def fable_harness_2(body: dict) -> dict:
+    """The harness@2 body for the input a harness-3 Fable ``body`` was built from (HARNESS.md 12.8): the instructions
+    alone as the system prompt and the schema as output_config.format; everything else the same. Tests only."""
+    from studio.participants import prompt
+
+    for instructions, schema in ((prompt.INSTRUCTIONS, prompt.SCHEMA), (prompt.PEER_INSTRUCTIONS, prompt.PEER_SCHEMA)):
+        if body['system'] == instructions + prompt.schema_instruction(schema):
+            older = copy.deepcopy(body)
+            older['system'] = instructions
+            older['output_config'] = {'format': {'type': 'json_schema', 'schema': copy.deepcopy(schema)},
+                                      'effort': body['output_config']['effort']}
+            return older
+    raise AssertionError('not a harness-3 Fable body')
 
 
 def service(index=1, **fields) -> dict:

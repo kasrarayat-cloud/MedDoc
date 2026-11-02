@@ -1,7 +1,7 @@
-"""The participant registry and replay (HARNESS.md 8, 11): which adapter a mode builds and from which settings (the
-tool loop's limits included), which reader reads a stored run (harness@2's, and harness@1's exactly as before), and
-replayed answers that send nothing, report no new usage and are read exactly as live ones. Offline and synthetic
-(test_participants_support)."""
+"""The participant registry and replay (HARNESS.md 8, 11, 12.8): which adapter a mode builds and from which settings
+(the tool loop's limits included), which reader reads a stored run (the current version's, and every earlier one's
+exactly as before: Fable's harness-3, harness@2 and harness@1), and replayed answers that send nothing, report no new
+usage and are read exactly as live ones. Offline and synthetic (test_participants_support)."""
 from __future__ import annotations
 
 import copy
@@ -24,8 +24,9 @@ from tests.test_participants_support import (CLIENT_REQUEST_ID, NOTE, ORIGINAL, 
                                              fixture_bytes, write_file)
 
 ASTRA_VERSION = 'openai-responses@cptstudio-harness-2'
-FABLE_VERSION = 'anthropic-messages@cptstudio-harness-2'
+FABLE_VERSION = 'anthropic-messages@cptstudio-harness-3'  # no output format; the schema in the system prompt (12.8)
 ASTRA_VERSION_1 = 'openai-responses@cptstudio-harness-1'
+FABLE_VERSION_2 = 'anthropic-messages@cptstudio-harness-2'
 FABLE_VERSION_1 = 'anthropic-messages@cptstudio-harness-1'
 
 
@@ -114,16 +115,34 @@ class RegistryTests(OfflineTestCase):
         self.assertIs(registry.reader('astra', ASTRA_VERSION), openai_astra.read_response)
         self.assertIs(registry.reader('fable', FABLE_VERSION), anthropic_fable.read_response)
         self.assertIs(reader_for('astra', ASTRA_VERSION), openai_astra.read_response)
-        # harness@1's stored runs keep their reader; the reader reads each as the version that recorded it
+        self.assertEqual((openai_astra.ADAPTER_VERSION, anthropic_fable.ADAPTER_VERSION),
+                         (ASTRA_VERSION, FABLE_VERSION))
+        # earlier versions' stored runs keep their reader; the reader reads each as the version that recorded it
         self.assertIs(registry.reader('astra', ASTRA_VERSION_1), openai_astra.read_response)
+        self.assertIs(registry.reader('fable', FABLE_VERSION_2), anthropic_fable.read_response)
         self.assertIs(registry.reader('fable', FABLE_VERSION_1), anthropic_fable.read_response)
         for provider, version in (('astra', FABLE_VERSION), ('fable', ASTRA_VERSION), ('astra', ASTRA_VERSION + '0'),
-                                  ('astra', FABLE_VERSION_1), ('fable', ASTRA_VERSION_1),
+                                  ('astra', FABLE_VERSION_1), ('fable', ASTRA_VERSION_1), ('astra', FABLE_VERSION_2),
                                   ('astra', 'openai-responses@cptstudio-harness-3'),
+                                  ('fable', 'anthropic-messages@cptstudio-harness-4'),
+                                  ('fable', 'anthropic-messages@cptstudio-harness-0'),
                                   ('corti', 'corti-coding-v2@cptstudio-1'), ('replay', ASTRA_VERSION),
                                   ('Astra', ASTRA_VERSION), ('astra', None), (None, None), (['astra'], ASTRA_VERSION)):
             with self.subTest(provider=provider, version=version), self.assertRaises(ProviderUnavailable):
                 registry.reader(provider, version)
+
+    def test_a_stored_peer_review_is_read_only_as_a_version_that_has_one(self):
+        from studio.participants import anthropic_fable, openai_astra, peer_reader_for
+
+        self.assertIs(registry.peer_reader('astra', ASTRA_VERSION), openai_astra.read_peer)
+        self.assertIs(registry.peer_reader('fable', FABLE_VERSION), anthropic_fable.read_peer)
+        self.assertIs(registry.peer_reader('fable', FABLE_VERSION_2), anthropic_fable.read_peer)  # read as before
+        self.assertIs(peer_reader_for('fable', FABLE_VERSION_2), anthropic_fable.read_peer)
+        for provider, version in (('fable', FABLE_VERSION_1), ('astra', ASTRA_VERSION_1), ('astra', FABLE_VERSION),
+                                  ('fable', ASTRA_VERSION), ('fable', 'anthropic-messages@cptstudio-harness-4'),
+                                  ('astra', 'openai-responses@cptstudio-harness-3'), ('fable', None)):
+            with self.subTest(provider=provider, version=version), self.assertRaises(ProviderUnavailable):
+                registry.peer_reader(provider, version)
 
     def test_importing_the_participants_never_reads_settings(self):
         script = ('import studio.participants.registry, studio.participants.replay, studio.participants.pricing\n'

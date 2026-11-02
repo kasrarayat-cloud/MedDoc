@@ -79,8 +79,11 @@ block at send time. `request_sha256` is the hash of the stored, unexpanded body.
 
 ## 4. What a participant returns (reading schema `harness-reading@1`)
 
-One JSON object, constrained by the vendor's structured-output mode. Every field is required, `additionalProperties`
-is false everywhere, and there are no nullable unions; an absent value is `""` or `[]`. Fields:
+One JSON object, constrained by the vendor's structured-output mode (amended by 12.8: Astra's only. Since adapter
+`anthropic-messages@cptstudio-harness-3` Fable's request carries no output format, because Anthropic refuses this schema
+as a structured output beside the reference tools; its system prompt gives the schema instead, nothing at Anthropic
+constrains its answer, and CPT Studio's own validation below is the only check of its shape). Every field is required,
+`additionalProperties` is false everywhere, and there are no nullable unions; an absent value is `""` or `[]`. Fields:
 
 - `date_of_service`: `{value: "YYYY-MM-DD" or "", evidence: [quote]}`
 - `services[]`: `{id, family, status, description, anatomy, extent, technique, lesions[], provider_role, evidence[]}`
@@ -96,7 +99,9 @@ is false everywhere, and there are no nullable unions; an absent value is `""` o
 
 **Normalization** (`studio/participants/reading.py`) builds a `ParticipantReading`:
 - The JSON is parsed strictly. Duplicate keys, NaN or Infinity, NUL and lone surrogates refuse the whole reading.
-- It is validated against the schema by CPT Studio itself; the vendor's enforcement is not trusted.
+- It is validated against the schema by CPT Studio itself; the vendor's enforcement is not trusted (amended by 12.8:
+  for Fable there is no vendor enforcement at all, and its answer is first read only when it is exactly one JSON
+  object, alone or alone in one json code fence).
 - Bounds refuse it: more than 64 services, codes or not-coded items, more than 32 clarifications, more than 16 quotes
   per item, or a quote over 600 characters.
 - Each quote is located in the revision text after collapsing runs of whitespace, and nothing else.
@@ -649,3 +654,63 @@ and 12.1-12.6 differ, this list describes the code; the earlier text is kept so 
   checked only between chunks; decisions invalidated when an intermediate assess #1 re-runs without the peer-added
   codes) are being repaired. The peer requests' question ids are assess #1 row ids, so an identical question asked
   again is sent again (cost).
+
+### 12.8 Fable's answer is not constrained by Anthropic (2026-11-02): the measured grammar limit
+
+**Measured.** Anthropic refused the harness@2 Fable request with HTTP 400 `invalid_request_error`, "The compiled grammar
+is too large, which would cause performance issues. Simplify your tool schemas or reduce the number of strict tools."
+The reading schema as `output_config.format` together with the two reference tools is over Anthropic's internal limit
+on the compiled grammar, whether the tools are strict or not, and even with the schema flattened. The same key and model
+answer HTTP 200 as `claude-fable-5-1` without tools. Eleven requests on 2026-11-02 to `POST /v1/messages`, model
+`claude-fable-5-1`, the owner's key (never printed), from candidate image `cpt-studio-precheck:e3c05bc007c6` (harness
+`e3c05bc0`):
+
+| when (Z) | request id | what was sent | result |
+|---|---|---|---|
+| 06:00:04 | `req_011CgdbDywZBDPP7SehwxfBs` | the access check: the reading schema as `output_config.format`, the 2 strict tools, effort medium, max_tokens 16,000 | 400, grammar too large |
+| ~06:02 | `req_011CgdbHF3EZp3yGfM8YFmfY` | the same (diagnostic: the request's shape printed) | 400, the same |
+| ~06:03 | `req_011CgdbQTcUEtX32c7znUcuA` | the same, the two tools not strict | 400, the same |
+| ~06:05 | `req_011CgdbV8SwgqgVve1e9MU4c` | the reading schema less `lesions` and `references_used`, no tools, max_tokens 64 | 200, `claude-fable-5-1` |
+| ~06:05 | `req_011CgdbVeJoWyVn99kUGH1pE` | `date_of_service` and `codes` only, no tools | 200, `claude-fable-5-1` |
+| ~06:05 | `req_011CgdbVvtCkRoGg4q49o7Rq` | `PEER_SCHEMA` alone, no tools | 200, `claude-fable-5-1` |
+| ~06:07 | `req_011CgdbXgT6BMcRyvEKYZwUG` | the full schema less `lesions`, no tools | 200 |
+| ~06:07 | `req_011CgdbY9fwpkp6QyFRwhCKp` | the full schema less `references_used`, no tools | 200 |
+| ~06:07 | `req_011CgdbYYd5bhQKKwygrwoXb` | `lesions` flattened to a top-level array (service id and its fields), no tools | 200 |
+| ~06:07 | `req_011CgdbZ5Zv38uDoVDt2MCUw` | that flattened schema with the two strict tools | 400, grammar too large |
+| ~06:08 | `req_011CgdbabZkCA9aDwm6CAcHB` | that flattened schema with the two tools not strict | 400, grammar too large |
+
+Anthropic documents internal limits on the compiled grammar beyond its explicit ones (20 strict tools, 24 optional
+parameters, 16 union-typed parameters), combined across every strict schema in a request (structured outputs, "Schema
+complexity limits"); the tools count against the grammar once a format is present. Astra's request (OpenAI Responses,
+strict structured output and the two strict function tools) answered HTTP 200 as `gpt-6-astra`: **Astra does not
+change.**
+
+**The change** (adapter `anthropic-messages@cptstudio-harness-3`, both phases):
+- **No output format.** Fable's `output_config` is `{effort: medium}` alone. The two reference tools stay, strict, with
+  `tool_choice` auto. A request with only those two small strict tools and no format is expected to compile; no test
+  here can prove that, and the access check (checklist 1.3) will.
+- **The system prompt gives the shape.** It is the instructions unchanged (`INSTRUCTIONS`; `PEER_INSTRUCTIONS` for the
+  peer review), followed by `prompt.schema_instruction`: one instruction - "Answer with exactly one JSON object that
+  matches this JSON Schema, and nothing else:" - and the schema (`SCHEMA`; `PEER_SCHEMA`) as one line of canonical JSON.
+  No constant of `prompt.py` changes and the suffix is Fable's alone, so `READING_VERSION` (the reading's schema and
+  instructions) is unchanged, and Astra's requests are byte-identical to the harness@2 head's (`9d773838c`): their
+  sha256 on the test fixtures are pinned (`tests/test_participants_requests.py`, `ASTRA_REQUEST_SHA256`).
+- **The reader takes the final message's text** (its text blocks joined in order, as before; thinking blocks are never
+  read) and uses it only when, with its surrounding whitespace stripped (only the four characters JSON itself allows),
+  it is exactly one JSON object, or exactly one JSON object alone inside a single ```` ```json ```` (or ```` ``` ````)
+  fence (`reading.sole_object`, one implementation for the reading and the peer review). Anything else - prose before
+  or after, an array, a fence naming another language, two objects, two fences, a truncated object - refuses the whole
+  reading or peer review with CPT Studio's own sentence, never quoting the model's text: the object rule's own, or, for
+  text that opens with `{` and closes with `}` but is still not exactly one object (two objects, two fences, an object
+  cut off after an inner `}`), the strict JSON reader's. Then everything that already happened happens: before the text
+  is looked at, the wrong-model, fallback and stop-reason refusals (I6); after it, strict JSON (repeated keys, NaN, NUL
+  and lone surrogates refused), CPT Studio's own schema validation, the bounds and the located quotes (I7). Nothing is
+  repaired or coerced.
+- **Fable's reading has no vendor-side schema guarantee.** CPT Studio's own validation, which never trusted the vendor's
+  (section 4), is now the only check of its shape; a reading that is not exactly one valid object is refused whole, as
+  any reading that breaks the schema always was.
+- **Earlier versions.** A stored run of every earlier version is still read, each exactly as before (harness@2 and
+  harness@1 first readings, harness@2 peer reviews: their answer's text is read as JSON as it stands, so a fence or prose
+  is refused there as it always was), and a request of an earlier version is never sent or replayed: the adapter, and
+  the replay that builds with it, refuse another version (`verified_body`). Pricing is by model and does not change.
+  Replay keys each exchange by its stored request's sha256, so it follows the new request with no change of its own.

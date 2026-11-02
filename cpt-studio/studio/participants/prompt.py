@@ -7,6 +7,11 @@ recorded it.
 
 Nothing here may carry a reading of CPT Studio's own (context, routing, inventory, proposals) or another participant's
 output (I5), and the schema holds no clinical data (vendors ask that none be put in a schema definition).
+
+Since anthropic-messages@cptstudio-harness-3 (HARNESS.md 12.8) Fable's request carries no structured-output format, so
+its system prompt is these same instructions followed by schema_instruction(schema): one instruction and the schema
+itself. That suffix is Fable's alone and is named by Fable's adapter version; it changes no constant here, so Astra's
+requests and READING_VERSION (the reading's schema and instructions) are unchanged.
 """
 from __future__ import annotations
 
@@ -217,6 +222,24 @@ PEER_SCHEMA = _object({
     'additional_codes': {'type': 'array', 'items': _CODE_ITEM},
     'references_used': {'type': 'array', 'items': _object({'ref': _string(), 'use': _string()})},
 })
+
+
+# --- an answer no structured-output mode constrains (HARNESS.md 12.8) -------------------------------------------------
+# Anthropic refuses the reading schema as a structured output in a request that also offers the reference tools (its
+# compiled grammar is too large; measured 2026-11-02), so Fable's request carries no output format and its system
+# prompt gives the schema itself. Astra keeps its strict structured output and never carries this suffix.
+SCHEMA_INSTRUCTION = 'Answer with exactly one JSON object that matches this JSON Schema, and nothing else:'
+
+
+def schema_instruction(schema: dict) -> str:
+    """The suffix of the instructions for a request whose answer no structured-output mode constrains (Fable's since
+    anthropic-messages@cptstudio-harness-3; HARNESS.md 12.8): a blank line, SCHEMA_INSTRUCTION, then ``schema`` as one
+    line of canonical JSON (keys sorted, no spaces), so the same schema always gives the same text whatever order its
+    dicts were built in. Pure. TypeError or ValueError when ``schema`` is not a dict of JSON data."""
+    if not isinstance(schema, dict):
+        raise TypeError('A schema must be a dict.')
+    encoded = json.dumps(schema, sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False)
+    return f'\n{SCHEMA_INSTRUCTION}\n{encoded}\n'
 
 
 # --- phase 2: what a peer review is shown (HARNESS.md 11.1) -----------------------------------------------------------

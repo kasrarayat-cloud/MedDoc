@@ -1,23 +1,29 @@
-"""Participant requests (HARNESS.md 3, 8, 11.2; I5, I9): the exact bodies both adapters build from a revision alone -
-since harness@2 with CPT Studio's two reference tools - the fields they must never carry, the original-file placeholder
-and its size accounting, and what refuses a request before anything is built. Offline and synthetic
-(test_participants_support)."""
+"""Participant requests (HARNESS.md 3, 8, 11.2, 12.8; I5, I9): the exact bodies both adapters build from a revision
+alone - since harness@2 with CPT Studio's two reference tools; Fable's since harness-3 with no output format and the
+schema in its system prompt - the fields they must never carry, the original-file placeholder and its size accounting,
+what refuses a request before anything is built, and Astra's requests byte for byte as they were before Fable's change.
+Offline and synthetic (test_participants_support)."""
 from __future__ import annotations
 
 import base64
 import copy
+import dataclasses
 import hashlib
 import json
 from unittest import mock
 
-from studio.participants import Participant, prompt
+from studio.management.commands import participant_access_check
+from studio.participants import Participant, anthropic_fable, openai_astra, prompt
 from studio.participants import http as participants_http
 from studio.participants.anthropic_fable import FableParticipant
 from studio.participants.openai_astra import AstraParticipant
 from studio.providers.base import ProviderUnavailable, canonical_body, request_sha256
-from studio.types import PageSpan
+from studio.types import PageSpan, sha256_json
 
-from tests.test_participants_support import NOTE, ORIGINAL, PAGE_BREAK, PAGES, PDF, OfflineTestCase
+from tests.test_participants_peer import CORTI, CORTI_SHA256, CPT_STUDIO
+from tests.test_participants_support import (FACTS_ARGUMENTS, NOTE, ORIGINAL, PAGE_BREAK, PAGES, PASSAGES_ARGUMENTS,
+                                             PDF, FakeExecutor, OfflineTestCase, astra_tool_call, canonical,
+                                             fable_harness_2, fixture_bytes, fixture_reading)
 
 FORBIDDEN_FABLE_FIELDS = ('thinking', 'temperature', 'top_p', 'top_k', 'fallbacks', 'betas', 'anthropic_beta',
                           'stop_sequences', 'metadata', 'mcp_servers', 'container')
@@ -25,6 +31,97 @@ ASTRA_TOOLS = [{'type': 'function', 'name': tool['name'], 'description': tool['d
                 'parameters': tool['parameters'], 'strict': True} for tool in prompt.TOOLS]
 FABLE_TOOLS = [{'name': tool['name'], 'description': tool['description'], 'input_schema': tool['parameters'],
                 'strict': True} for tool in prompt.TOOLS]
+FABLE_SYSTEM = prompt.INSTRUCTIONS + prompt.schema_instruction(prompt.SCHEMA)
+FABLE_PEER_SYSTEM = prompt.PEER_INSTRUCTIONS + prompt.schema_instruction(prompt.PEER_SCHEMA)
+# Fable's harness-3 system prompts, pinned: a change to either is a change to the request, so it comes with a new
+# adapter version (HARNESS.md 12.8).
+FABLE_SYSTEM_SHA256 = {'first': 'b07c140b936d2183cfe71f2be024b89ac2670fb75269658a7a79aa16032e2174',
+                       'peer': '2518d218c437e4991a58fe53375a006a50f89550a4dde1c081e5dc2bbfc623ba'}
+# Astra's requests on the test fixtures as the harness@2 head built them (9d773838c, before Fable's harness-3 change),
+# by astra_request_sha256s below: Astra does not change (HARNESS.md 12.8), so not one of these may move.
+ASTRA_REQUEST_SHA256 = {
+    'first:access-check': '1b4425d36b43ebc32f206592b97249ad108704d61c26c64eea0f1e00346e8f25',
+    'first:addendum': '6126aa75e485d0c91a9f7bae4957985fefaa3f9c8fe707d8a5b4e9f840b7b1af',
+    'first:docx': '9e90eea34b0de600c7f67929f9db13d993e58b48bf8e4a5870239e60f35162de',
+    'first:paste': '6dd3fd761a59431b04c2a3faefcc976ec1a2be555a2cf9706b578cb967ad2292',
+    'first:paste-without-pages': 'e464eea7dfb9b91152007807a7d57fa9a43a20ebef5bcd1fd596572e004cddce',
+    'first:pdf': '33c9ffa78cc347ed44a334e5f32f949448a2205f67c21b2c31eba7e24d2f2dcc',
+    'first:txt': 'bb1124e2befa62d1d73467c907f1a6c0959b3055ee72ff8e306804c516b30200',
+    'loop:exchange-2': '65cefb65b81e3711f47574c00ec2de3ed8766adf6881a6d8bc4d4d7f24a8d5c7',
+    'loop:exchange-3': '521be8c618efe5a7a223a9849a956e982f6c19d2198387931849d66654be2aec',
+    'peer:alone': '7b5ad0eb4c89821445212d0abbc306b6e2bc3e0c1cf689b999de6c17a4ddce60',
+    'peer:loop-exchange-2': 'aff0c5f03d203989466a68e65fa2c0722e7e567dcbc6926c07a94b23c87f8b7a',
+    'peer:with-peers': 'a9e1207fdddb57a10a4cbff74db08e43ca28de8def48733783bd4472a3772581',
+    'reading:astra-fixture': 'af4060d536d5fa08e4748d173675abab9ee14d8a7a4ca5844fb5df7fec2d3b92',
+}
+# The harness@2 Fable adapter's own bodies (9d773838c) for the same fixtures: fable_harness_2 must rebuild them exactly,
+# so the stored-run tests read what that adapter stored.
+FABLE_HARNESS_2_SHA256 = {
+    'first:addendum': '41262a43f9e03a04d5834ca1e36a0fe13e0bc4bd9ba10f4ae1614bba04963fc9',
+    'first:docx': '3be047efdec8e6a1ae05fb4e0d9b467899a3aafa2cd897a2312658759d086465',
+    'first:paste': 'c231de3ea5177bec2626d2c6cc708c484107f3646c76f7685635a563dcb75328',
+    'first:pdf': '866d2445650b0c4495920bdc9650aeab6cfb9ca7f8f132610d418403c5ca8066',
+    'first:txt': '886c1db5d1bc0f92e851547d316fcbe4c0c1d321faac201bacb1216b74e6be37',
+    'peer:with-peers': 'c5c4278b192df32a27238f5362ceb01a5b9ed03112515f89549f8d023789e92f',
+}
+
+
+def keys_anywhere(value) -> set:
+    """Every object key at any depth of a JSON value."""
+    found, pending = set(), [value]
+    while pending:
+        node = pending.pop()
+        if isinstance(node, dict):
+            found.update(node)
+            pending.extend(node.values())
+        elif isinstance(node, list):
+            pending.extend(node)
+    return found
+
+
+def _follow_astra(body: dict, number: int, calls) -> dict:
+    turn = openai_astra.parse_turn(astra_tool_call(*calls, number=number))
+    executor = FakeExecutor()
+    return openai_astra.follow_up(body, turn, tuple((call.call_id, canonical(executor(call.name, call.arguments)[0]))
+                                                    for call in turn.calls))
+
+
+def astra_request_sha256s() -> dict:
+    """Astra's request sha256s on the test fixtures: its first reading for every kind of document (and the access
+    check's), the later exchanges of a three-exchange loop, its peer review with and without peer conclusions and a
+    peer-review loop's second exchange - and its fixture reading's own sha256 - every input fixed, none of them made by
+    Fable's adapter."""
+    adapter = AstraParticipant('/nonexistent/never-read.env')
+    out = {}
+    for kind in ('pdf', 'docx', 'paste', 'txt', 'addendum'):
+        out[f'first:{kind}'] = adapter.build_request(NOTE, PAGES, kind, ORIGINAL if kind == 'pdf' else None
+                                                     ).canonical_sha256
+    out['first:paste-without-pages'] = adapter.build_request(NOTE, (), 'paste', None).canonical_sha256
+    out['first:access-check'] = adapter.build_request(participant_access_check.NOTE, (), 'paste', None
+                                                      ).canonical_sha256
+    body = _follow_astra(adapter.build_request(NOTE, PAGES, 'pdf', ORIGINAL).body, 1,
+                         [('call_pin_1', 'cms_code_facts', FACTS_ARGUMENTS)])
+    out['loop:exchange-2'] = request_sha256(body)
+    body = _follow_astra(body, 2, [('call_pin_2', 'cms_policy_passages', PASSAGES_ARGUMENTS),
+                                   ('call_pin_3', 'cms_code_facts', {'codes': ['45380'], 'date_of_service': ''})])
+    out['loop:exchange-3'] = request_sha256(body)
+    own = adapter.read(adapter.build_request(NOTE, PAGES, 'pdf', ORIGINAL),
+                       fixture_bytes('astra-colonoscopy.response.json'))
+    out['reading:astra-fixture'] = sha256_json(own)
+    revision = hashlib.sha256(NOTE.encode()).hexdigest()
+    frozen = [('astra', sha256_json(own)), ('revision', revision), ('corti', CORTI_SHA256),
+              ('fable', hashlib.sha256(b'synthetic frozen fable reading').hexdigest()),
+              ('cpt_studio', sha256_json(CPT_STUDIO))]
+    peer = adapter.build_peer_request(NOTE, PAGES, 'pdf', own, {'corti': CORTI, 'fable': fixture_reading()},
+                                      CPT_STUDIO, frozen)
+    out['peer:with-peers'] = peer.canonical_sha256
+    out['peer:loop-exchange-2'] = request_sha256(_follow_astra(peer.body, 1, [('call_pin_4', 'cms_code_facts',
+                                                                                FACTS_ARGUMENTS)]))
+    out['peer:alone'] = adapter.build_peer_request(
+        NOTE, PAGES, 'paste', own, {}, CPT_STUDIO,
+        [('astra', sha256_json(own)), ('revision', revision), ('cpt_studio', sha256_json(CPT_STUDIO))]
+    ).canonical_sha256
+    return out
 
 
 def framed() -> str:
@@ -88,21 +185,21 @@ class FableRequestTests(OfflineTestCase):
         self.assertEqual(request.body, {
             'model': 'claude-fable-5-1',
             'max_tokens': 16000,
-            'system': prompt.INSTRUCTIONS,
+            'system': prompt.INSTRUCTIONS + prompt.schema_instruction(prompt.SCHEMA),
             'messages': [{'role': 'user', 'content': [
                 {'type': 'document', 'source': {'type': 'base64', 'media_type': 'application/pdf',
                                                 'data': {'$original_sha256': ORIGINAL['sha256'],
                                                          '$original_bytes': ORIGINAL['bytes']}}},
                 {'type': 'text', 'text': framed()}]}],
-            'output_config': {'format': {'type': 'json_schema', 'schema': prompt.SCHEMA}, 'effort': 'medium'},
+            'output_config': {'effort': 'medium'},  # no format: Anthropic's grammar limit (HARNESS.md 12.8)
             'tools': FABLE_TOOLS,
             'tool_choice': {'type': 'auto'},
         })
         self.assertEqual((request.provider, request.adapter_version),
-                         ('fable', 'anthropic-messages@cptstudio-harness-2'))
+                         ('fable', 'anthropic-messages@cptstudio-harness-3'))
         self.assertEqual(request.contexts, (NOTE,))
 
-    def test_no_forbidden_field_is_ever_built(self):
+    def test_no_forbidden_field_is_ever_built_and_no_output_format(self):
         for kind, original in (('pdf', ORIGINAL), ('paste', None), ('docx', None)):
             request = self.fable.build_request(NOTE, PAGES, kind, original)
             encoded = canonical_body(request.body).decode()
@@ -111,8 +208,62 @@ class FableRequestTests(OfflineTestCase):
                     self.assertNotIn(f'"{field}"', encoded)
             self.assertEqual(set(request.body), {'model', 'max_tokens', 'system', 'messages', 'output_config', 'tools',
                                                  'tool_choice'})
-            self.assertEqual(set(request.body['output_config']), {'format', 'effort'})
+            self.assertEqual(request.body['output_config'], {'effort': 'medium'})
+            # no format and no json_schema anywhere in the body: the schema travels only as text (HARNESS.md 12.8)
+            self.assertFalse({'format', 'json_schema', 'schema'} & keys_anywhere(request.body))
+            self.assertNotIn('"json_schema"', encoded)
             self.assertEqual(request.body['tool_choice'], {'type': 'auto'})  # a forced tool_choice is a 400 here
+            self.assertEqual([tool['strict'] for tool in request.body['tools']], [True, True])  # the tools stay strict
+
+    def test_the_system_prompt_is_the_instructions_unchanged_then_the_schema_and_one_instruction(self):
+        """HARNESS.md 12.8: nothing at Anthropic constrains the answer, so the system prompt gives its shape - the
+        reading schema, serialized deterministically - with one instruction; the instructions before it are Astra's
+        exactly."""
+        system = self.fable.build_request(NOTE, PAGES, 'paste', None).body['system']
+        self.assertTrue(system.startswith(prompt.INSTRUCTIONS))
+        blank, instruction, encoded, end = system[len(prompt.INSTRUCTIONS):].split('\n')
+        self.assertEqual((blank, instruction, end), (
+            '', 'Answer with exactly one JSON object that matches this JSON Schema, and nothing else:', ''))
+        self.assertEqual(json.loads(encoded), prompt.SCHEMA)
+        self.assertEqual(encoded, json.dumps(prompt.SCHEMA, sort_keys=True, separators=(',', ':')))
+        self.assertEqual(system, FABLE_SYSTEM)
+        self.assertEqual(hashlib.sha256(FABLE_SYSTEM.encode()).hexdigest(), FABLE_SYSTEM_SHA256['first'])
+        self.assertEqual(hashlib.sha256(FABLE_PEER_SYSTEM.encode()).hexdigest(), FABLE_SYSTEM_SHA256['peer'])
+        self.assertEqual(anthropic_fable.system_prompt(prompt.PEER_INSTRUCTIONS, prompt.PEER_SCHEMA), FABLE_PEER_SYSTEM)
+
+    def test_the_schema_text_is_deterministic_and_the_function_pure(self):
+        def reordered(value):
+            if isinstance(value, dict):
+                return {key: reordered(value[key]) for key in reversed(list(value))}
+            return [reordered(item) for item in value] if isinstance(value, list) else value
+        schema = reordered(json.loads(json.dumps(prompt.SCHEMA)))
+        self.assertNotEqual(list(schema), list(prompt.SCHEMA))  # built in another order
+        self.assertEqual(prompt.schema_instruction(schema), prompt.schema_instruction(prompt.SCHEMA))
+        before = json.dumps(prompt.SCHEMA)
+        self.assertEqual(prompt.schema_instruction(prompt.SCHEMA), prompt.schema_instruction(prompt.SCHEMA))
+        self.assertEqual(json.dumps(prompt.SCHEMA), before)  # the constant is read, never changed
+        self.assertEqual(self.fable.build_request(NOTE, PAGES, 'paste', None).canonical_sha256,
+                         self.fable.build_request(NOTE, PAGES, 'paste', None).canonical_sha256)
+        for bad, error in (([], TypeError), ('{}', TypeError), ({'type': float('nan')}, ValueError),
+                           ({'type': object()}, TypeError)):
+            with self.subTest(bad=repr(bad)[:20]), self.assertRaises(error):
+                prompt.schema_instruction(bad)
+
+    def test_an_earlier_versions_body_is_rebuilt_exactly_for_the_stored_run_tests(self):
+        """fable_harness_2 (test support) rebuilds the harness@2 adapter's own bodies, byte for byte (9d773838c)."""
+        for kind in ('pdf', 'docx', 'paste', 'txt', 'addendum'):
+            with self.subTest(kind=kind):
+                body = self.fable.build_request(NOTE, PAGES, kind, ORIGINAL if kind == 'pdf' else None).body
+                self.assertEqual(request_sha256(fable_harness_2(body)), FABLE_HARNESS_2_SHA256[f'first:{kind}'])
+        own = self.fable.read(self.fable.build_request(NOTE, PAGES, 'pdf', ORIGINAL),
+                              fixture_bytes('fable-colonoscopy.response.json'))
+        own = dataclasses.replace(own, adapter_version=anthropic_fable.ADAPTER_VERSION_2)  # as harness@2 read it
+        frozen = [('fable', sha256_json(own)), ('revision', hashlib.sha256(NOTE.encode()).hexdigest()),
+                  ('corti', CORTI_SHA256), ('astra', hashlib.sha256(b'synthetic frozen astra reading').hexdigest()),
+                  ('cpt_studio', sha256_json(CPT_STUDIO))]
+        peer = self.fable.build_peer_request(NOTE, PAGES, 'pdf', own, {'corti': CORTI, 'astra': fixture_reading()},
+                                             CPT_STUDIO, frozen)
+        self.assertEqual(request_sha256(fable_harness_2(peer.body)), FABLE_HARNESS_2_SHA256['peer:with-peers'])
 
     def test_only_a_pdf_attaches_its_original(self):
         request = self.fable.build_request(NOTE, PAGES, 'addendum', ORIGINAL)
@@ -164,8 +315,12 @@ class SharedRequestTests(OfflineTestCase):
         for adapter in self.adapters:
             with self.subTest(adapter=adapter.name):
                 body = copy.deepcopy(adapter.build_request(NOTE, PAGES, 'pdf', ORIGINAL).body)
-                holder = body['text']['format'] if adapter.name == 'astra' else body['output_config']['format']
-                self.assertEqual(holder.pop('schema'), prompt.SCHEMA)
+                if adapter.name == 'astra':
+                    self.assertEqual(body['text']['format'].pop('schema'), prompt.SCHEMA)
+                    instructions = prompt.INSTRUCTIONS
+                else:  # no format to hold a schema: Fable's is fixed text in its system prompt (HARNESS.md 12.8)
+                    self.assertEqual(body['output_config'], {'effort': 'medium'})
+                    instructions = FABLE_SYSTEM
                 self.assertEqual(body.pop('tools'), ASTRA_TOOLS if adapter.name == 'astra' else FABLE_TOOLS)
                 strings, pending = [], [body]
                 while pending:
@@ -176,15 +331,17 @@ class SharedRequestTests(OfflineTestCase):
                         pending.extend(node)
                     elif isinstance(node, str):
                         strings.append(node)
-                self.assertEqual(set(strings) - labels, {prompt.INSTRUCTIONS, framed(), ORIGINAL['sha256']})
+                self.assertEqual(set(strings) - labels, {instructions, framed(), ORIGINAL['sha256']})
 
     def test_the_schema_and_tool_constants_are_copied_never_shared(self):
         for adapter in self.adapters:
             with self.subTest(adapter=adapter.name):
                 request = adapter.build_request(NOTE, PAGES, 'paste', None)
-                schema = (request.body['text']['format']['schema'] if adapter.name == 'astra'
-                          else request.body['output_config']['format']['schema'])
-                schema['properties']['injected'] = {'type': 'string'}
+                if adapter.name == 'astra':
+                    schema = request.body['text']['format']['schema']
+                    schema['properties']['injected'] = {'type': 'string'}
+                else:  # Fable's schema is text (HARNESS.md 12.8): there is no object to share
+                    self.assertIsInstance(request.body['system'], str)
                 self.assertNotIn('injected', prompt.SCHEMA['properties'])
                 tool = request.body['tools'][0]
                 parameters = tool['parameters'] if adapter.name == 'astra' else tool['input_schema']
@@ -259,3 +416,21 @@ class SharedRequestTests(OfflineTestCase):
                             {'max_response_bytes': True}, {'max_request_bytes': 1.5}):
                 with self.subTest(adapter=adapter_class.__name__, options=options), self.assertRaises(ValueError):
                     adapter_class(self.tmp / 'x.env', **options)
+
+
+class AstraUnchangedTests(OfflineTestCase):
+    """HARNESS.md 12.8: Fable's request changed and Astra's did not - each Astra request on the test fixtures (and its
+    fixture reading) is byte for byte what the harness@2 head built (9d773838c)."""
+
+    def test_astras_requests_are_byte_identical_to_the_harness_2_heads(self):
+        self.assertEqual(astra_request_sha256s(), ASTRA_REQUEST_SHA256)
+        self.assertEqual(openai_astra.ADAPTER_VERSION, 'openai-responses@cptstudio-harness-2')
+
+    def test_astra_keeps_its_strict_structured_output_and_never_carries_the_schema_text(self):
+        adapter = AstraParticipant(self.tmp / 'never-read.env')
+        for kind in ('pdf', 'paste'):
+            with self.subTest(kind=kind):
+                body = adapter.build_request(NOTE, PAGES, kind, ORIGINAL if kind == 'pdf' else None).body
+                self.assertEqual(body['instructions'], prompt.INSTRUCTIONS)
+                self.assertEqual(body['text']['format']['strict'], True)
+                self.assertNotIn(prompt.SCHEMA_INSTRUCTION, canonical_body(body).decode())
