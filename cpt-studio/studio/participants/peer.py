@@ -12,6 +12,12 @@ studio.types.sha256_json, the text's UTF-8 sha256 and CPT Studio's reading's sha
 input that was not shown, never shows one it does not list, and never files the own reading under another name. The
 answer is the peer-review schema (prompt.PEER_SCHEMA), and the tools are the same as in phase 1, through the same loop.
 
+What a peer is shown of another model's frozen reading (shown_reading; HARNESS.md 12.4 as amended after refutation round
+2, IR2-3) carries none of that model's own wording to the other vendor: its codes, modifiers and ids only as short
+tokens (shown_token), the quotes CPT Studio located in the revision text, a reference by its ref only when that model's
+own tool results returned it, and its enumerated values, units, pages and date; every other text it wrote only by its
+length.
+
 The answer (read) is checked as a reading is (reading.py): strict JSON, CPT Studio's own schema validation, bounds that
 refuse it whole (more than 64 question answers, 128 code positions, 64 additional codes or 64 references used, more than
 16 quotes on one item, a quote over 600 characters or any other text over 2,000), and every quote located in the revision
@@ -69,6 +75,72 @@ def build_request(name: str, adapter_version: str, text: str, pages: Sequence[Pa
         raise RuntimeError('The peer document does not read back as one.')
     check_frozen(text, own, peers, cpt_studio, listed[1])
     return http.finished_request(name, adapter_version, make_body(framed, document), text, max_bytes=max_bytes)
+
+
+NOT_SHOWN = ' (not shown)'  # what follows a value a peer request names only by its length (serializers._token's words)
+LESION_FIELDS = ('site', 'size', 'morphology', 'action', 'specimen')
+
+
+def shown_token(value):
+    """A code, modifier or id a participant - or Corti - wrote, as a peer request shows it to the other vendor: as given
+    when it is a short token (reading._token: at most 20 characters, no whitespace), otherwise only by its length, in
+    the words the owner's trace uses (serializers._token). Longer text in such a field may carry a CPT descriptor, which
+    CPT Studio never lists, displays or sends (I9; refutation round 2, IR2-3: the engine refused to list it, the trace
+    named it by its length, and a peer request relayed it verbatim). A value that is not a string is returned as it
+    is."""
+    if not isinstance(value, str):
+        return value
+    named = reading._token(value)
+    return value if named == repr(value) else f'{named}{NOT_SHOWN}'
+
+
+def withheld(text):
+    """Text another model wrote in its own words, as a peer request shows it: only by its length, never as written; ''
+    stays ''. A value that is not a string is returned as it is."""
+    if not isinstance(text, str) or not text:
+        return text
+    return f'a value of {len(text):,} character{"" if len(text) == 1 else "s"}{NOT_SHOWN}'
+
+
+def shown_reading(other: ParticipantReading) -> dict:
+    """Another model's frozen first reading as a peer request shows it (HARNESS.md 12.4, amended after refutation round
+    2, IR2-3; the session lead's D4: a peer request carries no other model's free text). The reading schema's shape, as
+    prompt.reading_answer gives it, with only what is not that model's own wording as written: its codes, modifiers and
+    ids as given when each is a short token (shown_token); every quote CPT Studio located in the revision text, as the
+    model quoted it (the document's own text); a reference by its ref only when that model's own tool results returned
+    it (CPT Studio's own identifier; any other ref as a token); and its enumerated values (family, status, reason,
+    confidence), units, pages and date of service as CPT Studio recorded them. Everything else it wrote - a basis, a
+    description, the anatomy, extent and technique, a lesion's fields, the provider role, a question and why it is
+    asked, an extraction issue, a reference's use, a quote that was not located - is shown only by its length
+    (withheld). The request's frozen list still names the reading itself (its reading_sha256), from which this is
+    made. Pure."""
+    def quotes(items) -> list:
+        return [item.quote if item.spans else withheld(item.quote) for item in items]
+
+    def tokens(values) -> list:
+        return [shown_token(value) for value in values]
+
+    return {
+        'date_of_service': {'value': other.date_of_service, 'evidence': quotes(other.date_evidence)},
+        'services': [{'id': shown_token(item.id), 'family': item.family, 'status': item.status,
+                      'description': withheld(item.description), 'anatomy': withheld(item.anatomy),
+                      'extent': withheld(item.extent), 'technique': withheld(item.technique),
+                      'lesions': [{field: withheld(getattr(lesion, field)) for field in LESION_FIELDS}
+                                  for lesion in item.lesions],
+                      'provider_role': withheld(item.provider_role), 'evidence': quotes(item.evidence)}
+                     for item in other.services],
+        'codes': [{'code': shown_token(item.code), 'modifiers': tokens(item.modifiers), 'units': item.units,
+                   'service_ids': tokens(item.service_ids), 'basis': withheld(item.basis),
+                   'evidence': quotes(item.evidence), 'confidence': item.confidence} for item in other.codes],
+        'not_coded': [{'service_ids': tokens(item.service_ids), 'code': shown_token(item.code), 'reason': item.reason,
+                       'evidence': quotes(item.evidence)} for item in other.not_coded],
+        'clarifications': [{'question': withheld(item.question), 'why': withheld(item.why),
+                            'service_ids': tokens(item.service_ids), 'evidence': quotes(item.evidence)}
+                           for item in other.questions],
+        'extraction_issues': [{'page': item.page, 'issue': withheld(item.issue)} for item in other.extraction_issues],
+        'references_used': [{'ref': item.ref if item.retrieved else shown_token(item.ref), 'use': withheld(item.use)}
+                            for item in other.references_used],
+    }
 
 
 def check_frozen(text: str, own: ParticipantReading, peers: dict, cpt_studio: dict, frozen: Sequence) -> None:

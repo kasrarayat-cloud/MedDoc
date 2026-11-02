@@ -11,6 +11,12 @@
   ports) through the real default session, with a throwaway certificate made in memory.
 - sends-r2-4: each exchange of a participant's tool loop and its tool calls are recorded as that exchange ends, so a
   worker that dies mid-loop leaves the exchanges before it recorded, and the stale sweep marks such a run sent.
+- IR2-1, IR2-2, IR2-3 (D4): a peer request carries no person, no member-entered value and no other model's free text.
+  No peer request body - as stored, and as handed to the adapter's send - holds any workspace member's label() or
+  username after a reviewer's confirmation, any encounter.user_values value after a member's save, or a code string that
+  is not a short token or free text of the other model; a save that changes only a member's value reuses both peer
+  runs. Each test first shows that the record itself (the page's and the reports' wording) still carries what the peer
+  request leaves out, so none of them passes on an input that never had it.
 
 Synthetic data only; nothing is sent. Corti is the harness@1 suite's in-process fake. Astra and Fable are the real
 replay adapters on the real tool loop with scripted answers (tests.test_harness2_pipeline), their tool calls answered by
@@ -20,6 +26,7 @@ import datetime
 import ipaddress
 import json
 import os
+import re
 import socket
 import ssl
 import tempfile
@@ -34,12 +41,17 @@ from django.utils import timezone
 
 from studio import jobs, models
 from studio.participants import http as participants_http
-from studio.participants import openai_astra
+from studio.participants import openai_astra, peer, prompt
 from studio.participants.openai_astra import AstraParticipant
-from tests.test_harness2_pipeline import (ASTRA_READING, CPT_STUDIO, FABLE_READING, HEAD, LAND, SNARE, ColonCase,
-                                          Harness2Case, answered, asks, document_sections, facts_call, peer_document)
+from studio.types import (EvidenceSpan, ExtractionIssue, LocatedQuote, ParticipantCode, ParticipantLesion,
+                          ParticipantNotCoded, ParticipantQuestion, ParticipantReading, ParticipantService,
+                          ReferenceUse, sha256_json)
+from studio.validation import checks as validation_checks
+from tests.test_harness2_pipeline import (ASTRA_READING, BIOPSY, CPT_STUDIO, EMPTY_PEER, FABLE_READING, HEAD, LAND,
+                                          SNARE, TWO_EXTENTS, ColonCase, Harness2Case, answered, asks,
+                                          document_sections, facts_call, peer_document, reading)
 from tests.test_harness_pipeline import _WorkerDied
-from tests.test_participants_support import NOTE, PAGES, openai_env, write_file
+from tests.test_participants_support import NOTE, PAGES, code, empty_reading, openai_env, service, write_file
 from tests.test_pipeline_api import drain
 
 # --- FG2-3: Corti's units and CPT Studio's excluded codes, as a peer request shows them -------------------------------
@@ -424,3 +436,403 @@ class RecordedAsItEndsTests(Harness2Case):
         run = self.runs_of(encounter_id, 'astra', 'independent')[0]
         self.assertEqual((run.state, run.sent, [e.turn for e in run.exchanges.all()]), ('succeeded', True, [1, 2]))
         self.assertEqual(calls, [[1], [2], [1]])
+
+
+# --- D4: what a peer request carries (IR2-1, IR2-2, IR2-3) ------------------------------------------------------------
+
+def stored_bodies(case, encounter_id, runs=None):
+    """Every peer run's stored request body as canonical text, with the bodies each adapter's loop handed to post()."""
+    runs = case.runs_of(encounter_id, purpose='peer_review') if runs is None else runs
+    return [json.dumps(run.request_body, ensure_ascii=False) for run in runs]
+
+
+def posted_bodies(case, name):
+    """Every body ``name``'s peer-review loops handed to post(), which a live adapter POSTs as canonical bytes."""
+    return [json.dumps(body, ensure_ascii=False) for record in case.adapters[name].loops_of('peer')
+            for body in record['bodies']]
+
+
+def cpt_section(run):
+    return document_sections(peer_document(run.provider, run.request_body))[CPT_STUDIO]
+
+
+def phase_one(case, encounter_id):
+    """The newest assess #1 of the encounter: the assessment the newest peer requests were built from."""
+    return [a for a in case.assessments(encounter_id) if jobs.assessment_phase(a) == 1][-1]
+
+
+class PeerMaterialCase(Harness2Case):
+    """Every workspace member's identity, for the assertions that no peer request carries it."""
+
+    def setUp(self):
+        super().setUp()
+        self.reviewer.display_name = 'Rowan Synthetic-Reviewer Zq'
+        self.reviewer.username = 'rowan.r2peer.synthetic@example.invalid'
+        self.reviewer.save()
+
+    def identities(self):
+        users = models.User.objects.filter(memberships__workspace=self.ws)
+        return [value for user in users for value in (user.label(), user.get_username())]
+
+    def confirm_row(self, encounter_id, question, value, passage):
+        """A reviewer's confirmation as the confirmation endpoint records it (review.confirm_finding), of ``passage``
+        located by Astra - made directly, so the test reads what any confirmation the engine reads makes of a peer
+        request, whatever the candidates offer."""
+        revision = self.encounter(encounter_id).current_revision
+        start = revision.text.index(passage)
+        return models.FindingConfirmation.objects.create(
+            encounter_id=encounter_id, revision=revision, clarification=question, scope=question.scope,
+            fact=question.fact, family=question.family,
+            proposal_key=question.proposal.key if question.proposal_id else '', value=value,
+            spans=[{'start': start, 'end': start + len(passage), 'text': passage, 'page': None}],
+            located_by=['astra'], runs=[], confirmed_by=self.reviewer,
+            attestation=f'I read this passage in the source document; it documents {value} for this encounter.')
+
+    def assertCarriesNone(self, bodies, values):
+        self.assertTrue(bodies)
+        for value in values:
+            self.assertEqual([value in body for body in bodies], [False] * len(bodies), value)
+
+
+# IR2-1: a reviewer's confirmation is read by every later assessment of the revision, assess #1 included (12.7), and
+# its wording names the reviewer: "confirmed from Astra's located passage by <reviewer>".
+
+NEGATED = 'No ascending colon biopsy was submitted to pathology.'
+DOUBTED = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\n'
+           'Place of service: Ambulatory surgery center\nProcedure: Colonoscopy\n'
+           'The colonoscope was advanced to the cecum and the examination was completed.\n'
+           'A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.\n'
+           'It is unclear whether biopsies of the ascending colon lesion were taken.\n' + NEGATED + '\n')
+TAKEN = 'Cold forceps biopsies of the ascending colon lesion were taken.'
+PERFORMED = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\n'
+             'Place of service: Ambulatory surgery center\nProcedure: Colonoscopy\n'
+             'A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.\n'
+             'It is unclear whether biopsies of the ascending colon lesion were taken.\n' + TAKEN + '\n' + LAND + '\n')
+
+
+class ReviewerIdentityTests(PeerMaterialCase):
+    """HARNESS.md 3 and 11.1 list what a peer request holds, and no workspace member's identity is among it; 11.3: a
+    reviewer's confirmation is never presented as a reading of CPT Studio's own. A later chain's assess #1 reads the
+    revision's confirmations, and the proposal it decides words them "confirmed from Astra's located passage by
+    <reviewer>" in its checks, which the peer request copied as CPT Studio's reasons: the reviewer's name, and the
+    reviewer's attested conclusion filed under CPT Studio's rule-based reading, reached OpenAI and Anthropic (IR2-1)."""
+    corti_codes = (('45385', SNARE), ('45380', 'biopsies of the ascending colon lesion were taken'))
+
+    def setUp(self):
+        super().setUp()
+        self.adapters['astra'].first = [answered('astra', reading(
+            codes=[('45385', SNARE)], services=[('c1', 'colonoscopy', 'performed', SNARE),
+                                                ('c2', 'colonoscopy', 'not_performed', NEGATED)]))]
+        self.adapters['fable'].first = [answered('fable', reading(codes=[('45385', SNARE)]))]
+        for name in ('astra', 'fable'):
+            self.adapters[name].peer = [answered(name, EMPTY_PEER, number=2)]
+
+    def confirmed_chain(self, document, value, passage, save):
+        """Chain 1 runs; a reviewer confirms 45380's performed_status as ``value`` from ``passage``; a member's save
+        starts chain 2. (encounter id, the confirmation, chain 2's assess #1, chain 2's peer runs)."""
+        encounter_id = self.create(document)
+        drain()
+        final = self.encounter(encounter_id).current_assessment
+        question = final.clarifications.get(fact='performed_status', proposal__code='45380',
+                                            state=models.Clarification.OPEN)
+        confirmation = self.confirm_row(encounter_id, question, value, passage)
+        before = len(self.runs_of(encounter_id, purpose='peer_review'))
+        self.assertCarriesNone(stored_bodies(self, encounter_id), self.identities())  # chain 1 came before it
+        response = self.post(f'/api/encounters/{encounter_id}/context', save)
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+        chain2 = self.runs_of(encounter_id, purpose='peer_review')[before:]
+        self.assertEqual([(run.provider, run.state, run.sent) for run in chain2],
+                         [('astra', 'succeeded', True), ('fable', 'succeeded', True)])
+        first = phase_one(self, encounter_id)
+        item = first.proposals.get(code='45380')
+        # the record itself words the confirmation with the reviewer's name, as the page and the reports do ...
+        self.assertEqual(item.support.get('confirmed'), [str(confirmation.pk)])
+        self.assertTrue(any(self.reviewer.label() in str(check.get('detail')) for check in item.checks))
+        return encounter_id, confirmation, first, chain2
+
+    def assertNoIdentity(self, encounter_id, chain2, code, bucket):
+        # ... and no peer request carries any member's identity, nor the confirmation's wording as CPT Studio's own
+        self.assertCarriesNone(stored_bodies(self, encounter_id, chain2), self.identities())
+        for name in ('astra', 'fable'):
+            self.assertCarriesNone(posted_bodies(self, name), self.identities())
+        for run in chain2:
+            shown = {item['code']: item for item in cpt_section(run)[bucket]}
+            self.assertEqual(shown[code]['reasons'], [jobs.PEER_CONFIRMED_REASON])
+            self.assertNotIn('located passage by', json.dumps(run.request_body, ensure_ascii=False))
+
+    def test_a_not_performed_confirmation_names_no_one_in_a_later_peer_request(self):
+        encounter_id, _, first, chain2 = self.confirmed_chain(DOUBTED, 'not performed', NEGATED,
+                                                               {'billing_context': 'professional'})
+        self.assertEqual(first.proposals.get(code='45380').status, 'excluded')
+        self.assertNoIdentity(encounter_id, chain2, '45380', 'excluded')
+
+    def test_a_performed_confirmation_of_a_code_still_held_names_no_one(self):
+        encounter_id, _, first, chain2 = self.confirmed_chain(PERFORMED, 'performed', TAKEN, {'setting': 'asc'})
+        self.assertEqual(first.proposals.get(code='45380').status, 'needs_clarification')  # held on its extent
+        self.assertNoIdentity(encounter_id, chain2, '45380', 'held')
+
+    def test_the_username_a_label_falls_back_to_is_never_carried_either(self):
+        self.reviewer.display_name = ''
+        self.reviewer.save()
+        self.assertEqual(self.reviewer.label(), 'rowan.r2peer.synthetic@example.invalid')
+        encounter_id, _, _, chain2 = self.confirmed_chain(DOUBTED, 'not performed', NEGATED,
+                                                          {'billing_context': 'facility'})
+        self.assertNoIdentity(encounter_id, chain2, '45380', 'excluded')
+
+    def test_a_proposal_that_words_a_confirmation_in_any_check_is_held_fail_closed(self):
+        # whichever check carries it: support['confirmed'], a check of the confirmation source, or its heading
+        held = [{'id': 'service.status', 'status': 'pass', 'detail': 'Performed.',
+                 'source': validation_checks.CONFIRMATION_SOURCE},
+                {'id': 'facts.required', 'status': 'warn', 'source': 'cpt-studio:x@1',
+                 'detail': f'Not documented: extent. {validation_checks.CONFIRMED_HEADING}: extent = cecum, '
+                           'confirmed from Astra\'s located passage by Rowan Synthetic-Reviewer Zq ("x").'}]
+        other = [{'id': 'a', 'status': 'warn', 'detail': 'Any.', 'source': ''}]
+        for checks, support in ((held, {}), (held[1:], {}), (other, {'confirmed': ['c']})):
+            with self.subTest(support=support, ids=[c['id'] for c in checks]):
+                proposal = models.Proposal(key='sel:0', code='45380', status='needs_clarification', checks=checks,
+                                           support=support)
+                self.assertEqual(jobs._peer_reasons(proposal, ''), [jobs.PEER_CONFIRMED_REASON])
+        control = models.Proposal(key='sel:0', code='45380', status='needs_clarification', support={},
+                                  checks=[{'id': 'a', 'status': 'warn', 'detail': 'Any.', 'source': ''},
+                                          {'id': 'b', 'status': 'pass', 'detail': 'Passed.', 'source': ''}])
+        self.assertEqual(jobs._peer_reasons(control, ''), ['Any.'])
+
+
+# IR2-2: a member's encounter metadata - a setting, a service date - and a member conflict's value.
+
+FOLLOW = 'Follow-up of chronic constipation.'
+NO_SETTING = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\n'
+              'Riverbend Digestive Health (fictional)\nDate of service: 2026-10-20\n'
+              'Patient status: Established patient, last seen 2026-03-02.\n\n'
+              'Chief complaint\n' + FOLLOW + '\n\n'
+              'Assessment and plan\nChronic idiopathic constipation, improved. Continue polyethylene glycol daily.\n')
+OFFICE = NO_SETTING.replace('Date of service: 2026-10-20\n', 'Date of service: 2026-10-20\nPlace of service: Office\n')
+NO_DATE = (HEAD + 'Colonoscopy report (fictional)\nPlace of service: Ambulatory surgery center\n'
+           'Procedure: Colonoscopy\nA 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.\n'
+           + LAND + '\n')
+MEMBER_DATE = '2019-03-04'  # before every installed release, so the reference checks would print it
+
+
+class MemberValueTests(PeerMaterialCase):
+    """HARNESS.md 3: "No title, filename, member-entered date, setting or billing context" is sent, and 2: a context
+    change reuses the participants' requests. A held proposal's facts.required detail lists what a member entered
+    (checks.MEMBER_ENTERED: "place of service = telehealth"), a member conflict's question quotes the member's value,
+    and a reference check prints a member's service date - and each reached both vendors in phase 2, every save of a
+    value making two new, paid peer sends (IR2-2)."""
+    corti_codes = (('99213', FOLLOW),)
+
+    def setUp(self):
+        super().setUp()
+        for name in ('astra', 'fable'):
+            self.adapters[name].first = [answered(name, reading(codes=[('99213', FOLLOW)]))]
+            self.adapters[name].peer = [answered(name, EMPTY_PEER, number=2)]
+
+    def saved(self, encounter_id, values):
+        before = len(self.runs_of(encounter_id, purpose='peer_review'))
+        response = self.post(f'/api/encounters/{encounter_id}/context', values)
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+        return self.runs_of(encounter_id, purpose='peer_review')[before:]
+
+    def member_values(self, encounter_id):
+        values = list(self.encounter(encounter_id).user_values.values())
+        self.assertTrue(values)
+        return values
+
+    def test_a_member_entered_setting_reaches_no_peer_request_and_a_value_only_change_reuses_them(self):
+        encounter_id = self.create(NO_SETTING)
+        drain()
+        chain2 = self.saved(encounter_id, {'setting': 'telehealth'})
+        self.assertEqual([(run.provider, run.sent) for run in chain2], [('astra', True), ('fable', True)])
+        held = phase_one(self, encounter_id).proposals.get(code='99213')
+        facts = next(check['detail'] for check in held.checks if check['id'] == 'facts.required')
+        self.assertIn(f'{validation_checks.MEMBER_ENTERED}: place of service = telehealth.', facts)  # the record's
+        self.assertCarriesNone(stored_bodies(self, encounter_id, chain2), self.member_values(encounter_id))
+        for name in ('astra', 'fable'):
+            self.assertCarriesNone(posted_bodies(self, name), [validation_checks.MEMBER_ENTERED, '= telehealth'])
+        for run in chain2:
+            (shown,) = cpt_section(run)['held']
+            self.assertIn(facts[:facts.index(validation_checks.MEMBER_ENTERED)].rstrip(), shown['reasons'])
+        # a save that changes only the member's value makes the identical peer requests: reused, nothing sent
+        posted = [len(posted_bodies(self, name)) for name in ('astra', 'fable')]
+        chain3 = self.saved(encounter_id, {'setting': 'office'})
+        self.assertEqual([(run.provider, run.sent, run.reused_from_id) for run in chain3],
+                         [('astra', False, chain2[0].pk), ('fable', False, chain2[1].pk)])
+        self.assertEqual([run.request_sha256 for run in chain3], [run.request_sha256 for run in chain2])
+        self.assertEqual([len(posted_bodies(self, name)) for name in ('astra', 'fable')], posted)
+
+    def test_a_member_conflict_s_value_reaches_no_peer_request(self):
+        encounter_id = self.create(OFFICE)
+        drain()
+        chain2 = self.saved(encounter_id, {'setting': 'telehealth'})
+        asked = phase_one(self, encounter_id).clarifications.get(fact='setting', state=models.Clarification.OPEN)
+        self.assertIn('gives telehealth', asked.reason)  # the record's own words keep both sides
+        self.assertCarriesNone(stored_bodies(self, encounter_id, chain2), self.member_values(encounter_id))
+        for name in ('astra', 'fable'):
+            self.assertCarriesNone(posted_bodies(self, name), self.member_values(encounter_id))
+        for run in chain2:
+            (question,) = [q for q in cpt_section(run)['open_questions'] if q['fact'] == 'setting']
+            self.assertEqual(question['reason'], 'The place of service is in conflict. ' + jobs.PEER_MEMBER_CONFLICT)
+            self.assertEqual(question['question'], asked.question)
+
+    def test_a_member_entered_service_date_reaches_no_peer_request(self):
+        self.corti.selections = [('45385', SNARE)]
+        for name in ('astra', 'fable'):
+            self.adapters[name].first = [answered(name, reading(codes=[('45385', SNARE)]))]
+        encounter_id = self.create(NO_DATE)
+        drain()
+        chain2 = self.saved(encounter_id, {'service_date': MEMBER_DATE})
+        held = phase_one(self, encounter_id).proposals.get(code='45385')
+        self.assertEqual(held.status, 'needs_clarification')  # held on its extent
+        printed = [check['detail'] for check in held.checks if MEMBER_DATE in check['detail']]
+        self.assertTrue(printed)  # the record's reference checks print the date
+        self.assertCarriesNone(stored_bodies(self, encounter_id, chain2), self.member_values(encounter_id))
+        for name in ('astra', 'fable'):
+            self.assertCarriesNone(posted_bodies(self, name), self.member_values(encounter_id))
+        for run in chain2:
+            (shown,) = cpt_section(run)['held']
+            for detail in printed:
+                self.assertIn(detail.replace(MEMBER_DATE, jobs.PEER_MEMBER_DATE), shown['reasons'])
+
+
+# IR2-3: the other model's reading and Corti's codes, as a peer request shows them.
+
+LONG_CODE = '45385 SYNTHETIC-PLACEHOLDER; with removal of lesion(s) by PLACEHOLDER technique'
+LONG_BASIS = 'SYNTHETIC-PLACEHOLDER colonoscopy; with biopsy, single or multiple (synthetic wording)'
+CORTI_LONG = '45380 SYNTHETIC-CORTI-PLACEHOLDER; with biopsy, single or multiple'
+PAGE_RULE = re.compile(r'\((?:s|es|ies)\)|;\s*(?:with|without|diagnostic|including|each|single|multiple|first|'
+                       r'initial)\b|\bsingle or multiple\b|\bwhen performed\b', re.I)  # app.js DESCRIPTOR_LIKE
+WORDS = {field: f'Free-text-{field} of the other model (synthetic)' for field in (
+    'description', 'anatomy', 'extent', 'technique', 'provider_role', 'site', 'size', 'morphology', 'action',
+    'specimen', 'basis', 'question', 'why', 'issue', 'use')}
+UNLOCATED = 'A quote the other model wrote that the document does not hold (synthetic).'
+CITED_REF = 'a reference the other model cited and never retrieved (synthetic)'
+NOT_CODED_LONG = '45378 SYNTHETIC-PLACEHOLDER; diagnostic, including collection of specimen(s)'
+LESION_FIELDS = ('site', 'size', 'morphology', 'action', 'specimen')  # the reading schema's (prompt.SCHEMA)
+
+
+def worded_reading():
+    """Astra's first reading with every text field it may write filled with its own words."""
+    return empty_reading(
+        date_of_service={'value': '2026-10-14', 'evidence': ['Date of service: 2026-10-14', UNLOCATED]},
+        services=[service(1, id='c1', family='colonoscopy', status='performed', evidence=[SNARE, UNLOCATED],
+                          **{key: WORDS[key] for key in ('description', 'anatomy', 'extent', 'technique',
+                                                           'provider_role')},
+                          lesions=[{key: WORDS[key] for key in LESION_FIELDS}])],
+        codes=[code('45385', service_ids=['c1'], evidence=[SNARE], basis=WORDS['basis']),
+               code(LONG_CODE, service_ids=[], evidence=[SNARE]),
+               code('45380', service_ids=[], evidence=[BIOPSY], basis=LONG_BASIS)],
+        not_coded=[{'service_ids': ['c1'], 'code': NOT_CODED_LONG, 'reason': 'other', 'evidence': [UNLOCATED]}],
+        clarifications=[{'question': WORDS['question'], 'why': WORDS['why'], 'service_ids': ['c1'],
+                         'evidence': [LAND]}],
+        extraction_issues=[{'page': 1, 'issue': WORDS['issue']}],
+        references_used=[{'ref': CITED_REF, 'use': WORDS['use']}])
+
+
+class OtherModelTests(PeerMaterialCase):
+    """I9: no CPT descriptor text sent or displayed; 11.1 and 12.7: never Corti's display text. The engine refuses to
+    list a code over 10 characters, the trace names one by its length and the page withholds descriptor-like text, yet a
+    peer request relayed the other model's reading as written (prompt.reading_answer) - a long code, a basis, every free
+    text and unlocated quote - and any code string Corti selected, to the other vendor (IR2-3)."""
+    corti_codes = (('45385', SNARE), ('45380', BIOPSY), (CORTI_LONG, BIOPSY))
+
+    def setUp(self):
+        super().setUp()
+        self.adapters['astra'].first = [answered('astra', worded_reading())]
+        self.adapters['fable'].first = [answered('fable', reading(codes=[('45385', SNARE)]))]
+        for name in ('astra', 'fable'):
+            self.adapters[name].peer = [answered(name, EMPTY_PEER, number=2)]
+
+    def test_the_other_model_s_own_wording_and_long_codes_reach_no_other_vendor(self):
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        astra = jobs.participant_reading(self.runs_of(encounter_id, 'astra', 'independent')[0])[0]
+        self.assertIn(LONG_CODE, [item.code for item in astra.codes])  # the record keeps what Astra wrote
+        fable_peer = self.runs_of(encounter_id, 'fable', 'peer_review')[0]
+        astra_peer = self.runs_of(encounter_id, 'astra', 'peer_review')[0]
+        withheld = [LONG_CODE, LONG_BASIS, CORTI_LONG, NOT_CODED_LONG, UNLOCATED, CITED_REF, *WORDS.values()]
+        self.assertCarriesNone(stored_bodies(self, encounter_id, [fable_peer]) + posted_bodies(self, 'fable'),
+                               withheld)
+        for body in stored_bodies(self, encounter_id, [fable_peer]) + posted_bodies(self, 'fable'):
+            shown = json.loads(body)
+            text = json.dumps(shown.get('messages') or shown.get('input'), ensure_ascii=False)
+            self.assertEqual(sorted({m.group(0) for m in PAGE_RULE.finditer(text)}), [])
+        # Corti's code string reaches neither vendor; Astra's own reading is its own, and it is shown to itself
+        self.assertCarriesNone(stored_bodies(self, encounter_id, [astra_peer]) + posted_bodies(self, 'astra'),
+                               [CORTI_LONG])
+        self.assertIn(json.dumps(LONG_CODE, ensure_ascii=False)[1:-1], stored_bodies(self, encounter_id,
+                                                                                     [astra_peer])[0])
+        sections = document_sections(peer_document('fable', fable_peer.request_body))
+        shown = sections['astra (another model):']
+        self.assertEqual(shown, peer.shown_reading(astra))
+        self.assertEqual([item['code'] for item in shown['codes']],
+                         ['45385', f'a value of {len(LONG_CODE)} characters (not shown)', '45380'])
+        self.assertEqual(shown['codes'][0]['evidence'], [SNARE])  # a located quote is the document's own text
+        self.assertEqual(shown['services'][0]['evidence'],
+                         [SNARE, f'a value of {len(UNLOCATED)} characters (not shown)'])
+        corti = [item['code'] for item in sections['corti (another coding system):']['codes']]
+        self.assertEqual(corti, ['45385', '45380', f'a value of {len(CORTI_LONG)} characters (not shown)'])
+        # the frozen list still names the reading itself, from which what is shown is made
+        record = self.records(self.assessments(encounter_id)[0])['astra']
+        listed = dict(prompt.peer_document_inputs(peer_document('fable', fable_peer.request_body))[1])
+        self.assertEqual(listed['astra'], record['reading_sha256'])
+        self.assertNotEqual(listed['astra'], sha256_json(shown))
+
+
+class ShownReadingTests(SimpleTestCase):
+    """peer.shown_reading, pure: the reading schema's shape, with only what is not the model's own wording, as
+    written."""
+
+    def test_only_tokens_located_quotes_retrieved_refs_and_recorded_values_are_shown_as_written(self):
+        located = LocatedQuote(quote='was removed  with a hot snare',
+                               spans=(EvidenceSpan(context_index=0, start=0, end=28, text=SNARE, exact=True),))
+        lost = LocatedQuote(quote=UNLOCATED, reason='not found')
+        reading_ = ParticipantReading(
+            provider='astra', adapter_version='synthetic@1', reading_version=prompt.READING_VERSION,
+            requested_model='gpt-6-astra', returned_model='gpt-6-astra', date_of_service='2026-10-14',
+            date_evidence=(located, lost),
+            services=(ParticipantService(id='c1', family='colonoscopy', status='performed', description='D',
+                                         anatomy='Anatomy words', extent='', technique='Hot snare',
+                                         lesions=(ParticipantLesion('Sigmoid', '9 mm', 'pedunculated', 'removed',
+                                                                    'retrieved'),),
+                                         provider_role='endoscopist', evidence=(located,)),
+                      ParticipantService(id='a service id with spaces', family='other_gi', status='unclear',
+                                         description='', anatomy='', extent='', technique='')),
+            codes=(ParticipantCode(code='45385', modifiers=('XS', 'a modifier with words'), units=2,
+                                   service_ids=('c1',), basis='Its basis.', evidence=(located, lost),
+                                   confidence='high'),),
+            not_coded=(ParticipantNotCoded(service_ids=('c1',), code='', reason='other', evidence=(lost,)),),
+            questions=(ParticipantQuestion(question='Was it?', why='Because.', service_ids=('c1',), evidence=()),),
+            extraction_issues=(ExtractionIssue(page=2, issue='Smudged.'),),
+            references_used=(ReferenceUse(ref='fact:cms-pfs-rvu26d:45385:status', use='Payable.', retrieved=True),
+                             ReferenceUse(ref='rule-01', use='Cited.', retrieved=False),
+                             ReferenceUse(ref=CITED_REF, use='', retrieved=False)))
+
+        def length(text):
+            return f'a value of {len(text)} character{"" if len(text) == 1 else "s"} (not shown)'
+        shown = peer.shown_reading(reading_)
+        self.assertEqual(set(shown), set(prompt.reading_answer(reading_)))
+        self.assertEqual(shown['date_of_service'], {'value': '2026-10-14',
+                                                    'evidence': ['was removed  with a hot snare', length(UNLOCATED)]})
+        self.assertEqual(shown['services'][0], {
+            'id': 'c1', 'family': 'colonoscopy', 'status': 'performed', 'description': length('D'),
+            'anatomy': length('Anatomy words'), 'extent': '', 'technique': length('Hot snare'),
+            'lesions': [{'site': length('Sigmoid'), 'size': length('9 mm'), 'morphology': length('pedunculated'),
+                         'action': length('removed'), 'specimen': length('retrieved')}],
+            'provider_role': length('endoscopist'), 'evidence': ['was removed  with a hot snare']})
+        self.assertEqual(shown['services'][1]['id'], 'a value of 24 characters (not shown)')  # 'a service id ...'
+        self.assertEqual(len('a service id with spaces'), 24)
+        self.assertEqual(shown['codes'], [{'code': '45385', 'modifiers': ['XS', 'a value of 21 characters (not shown)'],
+                                           'units': 2, 'service_ids': ['c1'], 'basis': length('Its basis.'),
+                                           'evidence': ['was removed  with a hot snare', length(UNLOCATED)],
+                                           'confidence': 'high'}])
+        self.assertEqual(shown['not_coded'], [{'service_ids': ['c1'], 'code': '', 'reason': 'other',
+                                               'evidence': [length(UNLOCATED)]}])
+        self.assertEqual(shown['clarifications'], [{'question': length('Was it?'), 'why': length('Because.'),
+                                                    'service_ids': ['c1'], 'evidence': []}])
+        self.assertEqual(shown['extraction_issues'], [{'page': 2, 'issue': length('Smudged.')}])
+        self.assertEqual(shown['references_used'], [
+            {'ref': 'fact:cms-pfs-rvu26d:45385:status', 'use': length('Payable.')},
+            {'ref': 'rule-01', 'use': length('Cited.')},
+            {'ref': f'a value of {len(CITED_REF)} characters (not shown)', 'use': ''}])

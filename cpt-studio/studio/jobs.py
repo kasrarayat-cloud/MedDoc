@@ -33,13 +33,14 @@ from .providers.corti import CortiProvider, build_coding_request
 from .providers.replay import ReplayProvider
 from .providers.base import ProviderUnavailable
 from .participants import loop as participant_loop
-from .participants import prompt as participant_prompt
+from .participants import peer as participant_peer
 from .reference import passages as reference_passages
 from .reference import tools as reference_tools
 from .reference.store import prefetched_lookup, selected_codes
 from .storage import ALLOWED_SUFFIXES, OriginalCorrupted, read_original
 from .types import (ConfirmedFinding, EvidenceSpan, Fact, NormalizedResponse, PageSpan, ParticipantInput, ProviderCode,
                     ProviderRequest, RawExchange, RoutingResult, from_jsonable, sha256_json, to_jsonable)
+from .validation import checks as validation_checks
 from .validation.engine import assess as run_assessment
 
 log = logging.getLogger(__name__)
@@ -1449,19 +1450,21 @@ def _peer_material(revision, first, name, records):
     """(own, peers, cpt_studio, frozen) of participant ``name``'s peer request (HARNESS.md 12.4), from assess #1
     ``first`` and the runs it read: its own frozen reading, re-read from its phase-1 run with that run's reader and
     refs; Corti's selected codes with the exact passages of the document their evidence quotes (_corti_conclusions);
-    the other model's frozen reading, when it has one, in the reading schema's shape; CPT Studio's rule-based reading
-    after assess #1 (_cpt_studio_reading); and assess #1's frozen list with that reading's sha256 added. A frozen
-    reading that no longer reads back as assess #1 recorded it refuses the request (_PeerUnbuilt): the record shows
-    exactly what was shown. Of assess #1's frozen list, only what this request shows is listed (refutation round 1,
-    IND-5): a Corti answer or another model's reading that is not shown - not read, or refused - is not listed under
-    "shown above"; the peer builder refuses any other list (peer.check_frozen)."""
+    the other model's frozen reading, when it has one, in the reading schema's shape with none of that model's own
+    wording (peer.shown_reading: refutation round 2, IR2-3); CPT Studio's rule-based reading after assess #1, which
+    names no person and no value a member entered (_cpt_studio_reading: IR2-1, IR2-2); and assess #1's frozen list with
+    that reading's sha256 added. A frozen reading that no longer reads back as assess #1 recorded it refuses the request
+    (_PeerUnbuilt): the record shows exactly what was shown. Of assess #1's frozen list, only what this request shows
+    is listed (refutation round 1, IND-5): a Corti answer or another model's reading that is not shown - not read, or
+    refused - is not listed under "shown above"; the peer builder refuses any other list (peer.check_frozen). The
+    other model's entry still names its frozen reading (its reading_sha256), from which what is shown is made."""
     peers = {}
     corti = _corti_conclusions(first.provider_run)
     if corti is not None:
         peers['corti'] = corti
     for other in participants.PARTICIPANTS:
         if other != name and (records.get(other) or {}).get('state') == 'read':
-            peers[other] = participant_prompt.reading_answer(_frozen_reading(revision, other, records))
+            peers[other] = participant_peer.shown_reading(_frozen_reading(revision, other, records))
     cpt_studio = _cpt_studio_reading(first)
     shown = {name, *peers, 'revision'}
     frozen = [list(pair) for pair in (records.get(name) or {}).get('frozen') or []
@@ -1524,8 +1527,10 @@ def _corti_conclusions(run):
     """Corti's frozen conclusions as a peer is shown them (HARNESS.md 12.4): its selected codes in its own order, each
     once, with the units it selected it in (as the engine counts them), no modifiers (its API states none) and the
     passages of the document its evidence quotes exactly - never its display text, and never a passage of the date line
-    CPT Studio adds to its request, which is no document text. None when its answer was not read: no run, a run that did
-    not succeed, or a response refused whole."""
+    CPT Studio adds to its request, which is no document text. A code that is not a short token is named only by its
+    length (peer.shown_token; refutation round 2, IR2-3: Corti's adapter keeps any string as a code, which the engine
+    never lists and a peer request relayed to the other vendors). None when its answer was not read: no run, a run that
+    did not succeed, or a response refused whole."""
     if run is None or run.state != models.ProviderRun.SUCCEEDED:
         return None
     _, normalized = _provider_inputs(run)
@@ -1535,10 +1540,20 @@ def _corti_conclusions(run):
     for code in normalized.codes:
         if code.role == 'selected' and isinstance(code.code, str):
             selected.setdefault(code.code, []).append(code)
-    return {'codes': [{'code': code, 'modifiers': [], 'units': len(items),
+    return {'codes': [{'code': participant_peer.shown_token(code), 'modifiers': [], 'units': len(items),
                        'evidence': list(dict.fromkeys(span.text for item in items for span in item.evidence
                                                       if span.context_index == 0 and span.exact))}
                       for code, items in selected.items()]}
+
+
+# What a peer request shows of CPT Studio's reading carries no person and no value a member entered (refutation round 2,
+# IR2-1, IR2-2; the session lead's D4). The page and the reports keep their own wording: this is what a model is shown.
+PEER_CONFIRMED_REASON = ("This code's reading rests in part on a reviewer's confirmation of a participant's located "
+                         "passage, not on CPT Studio's own readers, so its reasons are not shown here.")
+PEER_MEMBER_CONFLICT = ('Encounter metadata a workspace member entered differs from what the document gives; both are '
+                        'kept and neither is used until they agree. The value entered is not shown here.')
+PEER_MEMBER_DATE = 'the date of service a workspace member entered'
+_MEMBER_CONFLICT_PREFIX = gi_context.USER_CONFLICT_NOTE.split('{', 1)[0]  # how every member conflict's note opens
 
 
 def _cpt_studio_reading(first):
@@ -1546,7 +1561,12 @@ def _cpt_studio_reading(first):
     peer answers by id, and its held and excluded proposals, each with the details of its checks that did not pass. The
     peer instructions label it as a reading that may be wrong. Each question is described by review.question_identity,
     the one function the API's candidates match a peer answer back to the final assessment's question by (12.5), and
-    named by its stable id (_question_ids)."""
+    named by its stable id (_question_ids).
+
+    It names no person and no value a member entered (refutation round 2, IR2-1, IR2-2; HARNESS.md 12.4 as amended): a
+    proposal whose reading rests on a reviewer's confirmation is shown with one fixed sentence in place of its reasons
+    (_peer_reasons), and every reason and question is shown without a member's value (_peer_text)."""
+    member_date = _member_date(first)
     items = list(first.clarifications.filter(state=models.Clarification.OPEN).select_related('proposal')
                  .order_by('created_at', 'pk'))
     named = _question_ids(first, items)
@@ -1554,15 +1574,56 @@ def _cpt_studio_reading(first):
     for item in items:
         scope, family, fact, proposal_key, _ = review.question_identity(item)
         questions.append({'question_id': named[item.pk], 'scope': scope, 'fact': fact, 'family': family,
-                          'proposal_key': proposal_key, 'question': item.question, 'reason': item.reason})
+                          'proposal_key': proposal_key, 'question': _peer_text(item.question, member_date),
+                          'reason': _peer_text(item.reason, member_date)})
 
     def proposals(status):
-        return [{'key': p.key, 'code': p.code, 'status': p.status,
-                 'reasons': [str(check.get('detail') or '') for check in p.checks or []
-                             if isinstance(check, dict) and check.get('status') != 'pass']}
+        return [{'key': p.key, 'code': p.code, 'status': p.status, 'reasons': _peer_reasons(p, member_date)}
                 for p in first.proposals.filter(status=status).order_by('position')]
     return {'open_questions': questions, 'held': proposals(models.Proposal.NEEDS_CLARIFICATION),
             'excluded': proposals(models.Proposal.STATUS_EXCLUDED)}
+
+
+def _peer_reasons(proposal, member_date):
+    """A held or excluded proposal's reasons as a peer request shows them: the details of its checks that did not pass,
+    without a member's value (_peer_text) - or, when its reading rests on a reviewer's confirmation, the one fixed
+    sentence PEER_CONFIRMED_REASON in their place. Such a proposal's checks word the confirmation "confirmed from
+    <participant>'s located passage by <reviewer>", whichever of them carries it, so none of them is shown: a member's
+    identity, and a reviewer's attested conclusion filed as CPT Studio's own reading, reached both vendors (IR2-1). It
+    rests on one when support['confirmed'] lists a confirmation it read, or - fail closed - when any of its checks,
+    passed or not, is a confirmation's (checks.CONFIRMATION_SOURCE) or words one (checks.CONFIRMED_HEADING)."""
+    found = [check for check in proposal.checks or [] if isinstance(check, dict)]
+    support = proposal.support if isinstance(proposal.support, dict) else {}
+    if support.get('confirmed') or any(check.get('source') == validation_checks.CONFIRMATION_SOURCE
+                                       or validation_checks.CONFIRMED_HEADING in str(check.get('detail') or '')
+                                       for check in found):
+        return [PEER_CONFIRMED_REASON]
+    return [_peer_text(str(check.get('detail') or ''), member_date) for check in found if check.get('status') != 'pass']
+
+
+def _peer_text(text, member_date):
+    """``text`` (a check's detail, a question or its reason) as a peer request shows it: no value a workspace member
+    entered (refutation round 2, IR2-2; HARNESS.md 3: no member-entered date, setting or billing context is sent). The
+    facts.required clause listing what a member entered (checks.MEMBER_ENTERED) is left out - it closes the detail,
+    which then holds only CPT Studio's own reading; a member conflict's note (context.USER_CONFLICT_NOTE and the notes
+    sharing its opening words) is replaced, from those words on, by PEER_MEMBER_CONFLICT, which leaves the value out;
+    and a service date a member entered (``member_date``) is named PEER_MEMBER_DATE. So a save that changes only a
+    member's value, and nothing CPT Studio reads, makes the identical peer request, which is reused."""
+    clause = text.find(validation_checks.MEMBER_ENTERED)
+    if clause != -1:
+        text = text[:clause].rstrip()
+    conflict = text.find(_MEMBER_CONFLICT_PREFIX)
+    if conflict != -1:
+        text = text[:conflict] + PEER_MEMBER_CONFLICT
+    return text.replace(member_date, PEER_MEMBER_DATE) if member_date else text
+
+
+def _member_date(first):
+    """The service date a workspace member entered as encounter metadata that assess #1 ``first`` read (its context's
+    service_date fact of origin 'user'), or '' when the date it read is the document's, or there is none."""
+    fact = ((first.context.facts or {}) if first.context_id else {}).get('service_date')
+    value = fact.get('value') if isinstance(fact, dict) and fact.get('origin') == 'user' else None
+    return value if isinstance(value, str) else ''
 
 
 def _question_ids(first, items):
