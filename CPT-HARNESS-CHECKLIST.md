@@ -41,8 +41,8 @@ Item 1.3 per participant (documented / implemented / verified live):
 | participant | documented | implemented | verified live |
 |---|---|---|---|
 | Corti | YES: `POST https://api.{us\|eu}.corti.app/v2/tools/coding/`, OAuth client credentials; its API takes and returns no model identifier (`docs/cpt-harness/stage1-starting-point.md` §3) | YES: installed adapter `corti-coding-v2@cptstudio-1` | PARTIAL: 45 live sent runs 2026-10-26 to 2026-10-31, each with `X-Request-Id`; no fresh access check under the harness yet; environment and tenant not recorded per run |
-| Astra | YES: OpenAI, `gpt-6-astra`, `POST https://api.openai.com/v1/responses`, Bearer (owner-confirmed; `docs/cpt-harness/vendor-and-reference-facts-20261101.md` §1) | IN PROGRESS (adapter being built, offline tests only) | NO: blocked on D2 |
-| Fable | YES: Anthropic, `claude-fable-5-1`, `POST https://api.anthropic.com/v1/messages` (owner-confirmed; same file §2) | IN PROGRESS (adapter being built, offline tests only) | NO: blocked on D1 |
+| Astra | YES: OpenAI, `gpt-6-astra`, `POST https://api.openai.com/v1/responses`, Bearer (owner-confirmed; `docs/cpt-harness/vendor-and-reference-facts-20261101.md` §1) | YES: adapter `openai-responses@cptstudio-harness-2` (tool loop), offline tests | ACCESS PASS 2026-11-02T06:01Z (pre-install check from the candidate image, not yet the installed release): HTTP 200, returned model `gpt-6-astra` (= requested), request `req_f5872cba22da497c87d11b2b6d12a20a`, response `resp_0545e923d6b404e4016ae82723477487d19787aa274210cad8`, 1,773 in / 515 out tokens, est. $0.0435; reading read (45385, nothing refused or unverified) |
+| Fable | YES: Anthropic, `claude-fable-5-1`, `POST https://api.anthropic.com/v1/messages` (owner-confirmed; same file §2) | NEEDS REPAIR: Anthropic refuses the adapter's request shape (below) | KEY AND MODEL CONFIRMED, HARNESS REQUEST REFUSED 2026-11-02T06:00Z: the access check got HTTP 400 `invalid_request_error` "The compiled grammar is too large" (`req_011CgdbDywZBDPP7SehwxfBs`). Compile probes with the same key answered HTTP 200 as `claude-fable-5-1` (e.g. `req_011CgdbV8SwgqgVve1e9MU4c`): the reading schema as structured output fails with any tools present (strict or not); it compiles alone only once `lesions` is flattened. Repair: Fable's request carries no vendor-constrained output; CPT Studio's own strict parse and schema validation decide (as for every reading); access check again after it |
 | [x] | 1.4 Authorized CPT and reference sources and retrieval tools, with releases, effective dates and permitted uses; unavailable dependencies recorded | PASS | live `80df1831d168` | `docs/cpt-harness/stage1-starting-point.md` §4 (live read: RVU26D 19,453 rows, MUE 2026-Q4 15,212 rows, 2026-10-01 to 2026-12-31; no retrieval stage); `docs/cpt-harness/vendor-and-reference-facts-20261101.md` §3 (each source's release, URL and published terms) | — (usable: RVU26D and its documentation, MUE, NCCI Policy Manual Ch. VI, Claims Processing Manual Ch. 12; unavailable: PTP behind the AMA agreement, AMA content) |
 
 ## Stage 2: read the document correctly
@@ -215,3 +215,20 @@ requested in chat.
     EQUAL (HARD 119/123 both sides), H4 battery 0 movements, 0 new violations. Draft PR #1459 opened for CI.
   - **Next:** refutation round 1 on `ec00a5b87` (five lenses, running); harness@2 part B to the contract in
     `cpt-studio/HARNESS.md` section 12 (`99939d764`). Nothing is verified live; D1 to D5 stay open.
+
+- **2026-11-02T06:10Z Participant credentials checked, wired, and access-checked (owner directive of 2026-11-02).**
+  - **Files (05:52Z):** `/etc/cpt-studio-provider-sources/` root:root 0700 with exactly `anthropic.env` and `openai.env`,
+    each a regular root:root 0600 file within 32,000 bytes that parses under CPT Studio's rules with its required key and
+    no optional key. Checked in a no-network root container that prints booleans only (proved on fake files first).
+  - **Wired (05:59Z):** the installer's own `secrets` phase alone, from the harness revision `e3c05bc0`, under the
+    committed declaration `docs/foundation/mutations/20261102-cpt-studio-participant-credentials.md`: both copied to
+    `/etc/cpt-studio/` as 10150:10150 0400 (states `created`, key names only); the three-file set `present`; the three
+    CPT Studio containers unchanged (ids, images, start times); no value in any receipt or log (root-helper scan).
+  - **Access (06:00-06:05Z), from a separately tagged candidate image in the installer's access-check layout** (copied
+    file read-only at the worker's path, uid 10150, the installer's hardening, a throwaway network and database; output
+    kept only after a root-helper scan found no credential value): **Astra PASS** (returned model `gpt-6-astra`, row
+    1.3 above). **Fable: the key and the model work, the harness request does not**: Anthropic refuses the reading
+    schema as structured output together with the reference tools ("compiled grammar is too large"; six probes pin it,
+    request ids kept). Fable's adapter is being changed to send no vendor-constrained output; CPT Studio's own strict
+    parse and validation are unchanged. Both checks run again, formally, in the install's `app --access-check`.
+  - D3 and D4 stay open. Nothing here is a live verification of the harness (1.3 needs Fable's access too).
