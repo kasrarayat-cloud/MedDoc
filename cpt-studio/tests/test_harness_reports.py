@@ -17,8 +17,9 @@ from django.conf import settings
 from django.test import TestCase, override_settings
 
 from studio import jobs, models, reports, review, serializers
+from studio.participants.http import USAGE_BASIS  # what the adapters record: 'provider_reported_tokens'
 from tests.support import pipeline_factories as pf
-from tests.test_harness_api import fake_pricing, record
+from tests.test_harness_api import record
 from tests.test_harness_pipeline import BOTH, TIME_QUOTE, HarnessCase, fake_passages
 from tests.test_pipeline_api import drain
 from tests.test_repairs_pipeline import LIVE
@@ -28,6 +29,11 @@ _spec = importlib.util.spec_from_file_location('cpt_verify_downloads_harness',
 vd = importlib.util.module_from_spec(_spec)
 sys.modules['cpt_verify_downloads_harness'] = vd  # dataclasses resolve their module while the class is built
 _spec.loader.exec_module(vd)
+
+
+# the REVIEW PARTICIPANTS section's closing line for an assessment recorded before the harness: what the record shows,
+# never that Corti ran (refutation r1 parity-2)
+PREDATES = '  This assessment was recorded before the review participants existed: Astra and Fable were not part of it.'
 
 
 def section(text, title):
@@ -86,7 +92,7 @@ class HandBuiltReportTests(TestCase):
         model = {'astra': 'gpt-6-astra', 'fable': 'claude-fable-5-1'}[name]
         run = pf.provider_run(self.s.encounter, self.s.revision, provider=name, usage=usage)
         models.ProviderRun.objects.filter(pk=run.pk).update(
-            purpose='independent', service_date=None, scope={'mode': 'live'}, usage_basis='vendor_reported_tokens',
+            purpose='independent', service_date=None, scope={'mode': 'live'}, usage_basis=USAGE_BASIS,
             endpoint={'astra': 'https://api.openai.com/v1/responses',
                       'fable': 'https://api.anthropic.com/v1/messages'}[name],
             requested_model=model, returned_model=returned or model, provider_request_id=f'req_{name}_1',
@@ -95,8 +101,8 @@ class HandBuiltReportTests(TestCase):
         return run
 
     def txt(self, kind='draft'):
-        with mock.patch.dict(sys.modules, {'studio.participants.pricing': fake_pricing()}):
-            return reports.render_txt(reports.snapshot(self.s.encounter, kind)).decode('utf-8')
+        # the installed pricing module, never a stand-in (refutation r1 FG-3)
+        return reports.render_txt(reports.snapshot(self.s.encounter, kind)).decode('utf-8')
 
     def test_review_participants_section(self):
         lines = section(self.txt(), 'REVIEW PARTICIPANTS')
@@ -107,20 +113,27 @@ class HandBuiltReportTests(TestCase):
             '    Endpoint: https://api.openai.com/v1/responses',
             '    Models: requested gpt-6-astra · returned gpt-6-astra',
             '    Request id: req_astra_1 · response id: resp_synthetic_1',
-            '    Usage: {"input_tokens": 2000, "output_tokens": 400} (vendor_reported_tokens)',
+            '    Usage: {"input_tokens": 2000, "output_tokens": 400} (provider_reported_tokens)',
             '    Estimated cost: USD 0.0400 (estimated from published rates, not reconciled to an invoice)',
             '    Unverified quotes: 1 (not found in the document; never used as evidence)'])
         fable = lines.index('  - Fable · Anthropic · answered; the reading was not used')
         self.assertIn('    Models: requested claude-fable-5-1 · returned claude-other-model', lines[fable:])
         self.assertIn('    Refusal reason: Answered by claude-other-model, not claude-fable-5-1.', lines[fable:])
+        self.assertIn('    Estimated cost: USD 0.0150 (estimated from published rates, not reconciled to an invoice)',
+                      lines[fable:])  # 1,000 in x $10/M + 100 out x $50/M
         self.assertIn('    Estimated cost: not estimated (Corti reports usage in credits, not USD)', lines[:astra])
 
     def test_a_run_with_usage_and_no_estimate_says_not_estimated_never_no_usage(self):
-        text = reports.render_txt(reports.snapshot(self.s.encounter, 'draft')).decode('utf-8')  # no pricing module
-        lines = section(text, 'REVIEW PARTICIPANTS')
-        astra = lines.index('  - Astra · OpenAI · answered; the reading was used')
-        self.assertIn('    Estimated cost: not estimated (no published rate could be applied to the usage reported)',
-                      lines[astra:astra + 9])
+        # usage the installed pricing module cannot price (a token count that is not a whole number), and no pricing
+        # module at all: either is "not estimated", never "no usage reported"
+        models.ProviderRun.objects.filter(pk=self.astra.pk).update(usage={'input_tokens': '2000', 'output_tokens': 400})
+        for modules in ({}, {'studio.participants.pricing': None}):
+            with self.subTest(modules=modules), mock.patch.dict(sys.modules, modules):
+                text = reports.render_txt(reports.snapshot(self.s.encounter, 'draft')).decode('utf-8')
+                lines = section(text, 'REVIEW PARTICIPANTS')
+                astra = lines.index('  - Astra · OpenAI · answered; the reading was used')
+                self.assertIn('    Estimated cost: not estimated (no published rate could be applied to the usage '
+                              'reported)', lines[astra:astra + 9])
 
     def test_reference_retrieval_section(self):
         lines = section(self.txt(), 'REFERENCE RETRIEVAL')
@@ -192,8 +205,7 @@ class HandBuiltReportTests(TestCase):
         self.s.encounter.refresh_from_db()
         api = json.loads(json.dumps(serializers.encounter_detail(self.s.encounter, self.s.membership(self.s.reviewer)),
                                     default=str))
-        with mock.patch.dict(sys.modules, {'studio.participants.pricing': fake_pricing()}):
-            snap = reports.snapshot(self.s.encounter, 'reviewed')
+        snap = reports.snapshot(self.s.encounter, 'reviewed')
         failed = [f'{r.check}: {r.detail}' for r in
                   vd.check_txt('harness', 'reviewed.txt', reports.render_txt(snap).decode('utf-8'), 'reviewed', api)
                   + vd.check_csv('harness', 'reviewed.csv', reports.render_csv(snap).decode('utf-8'), 'reviewed', api)
@@ -245,10 +257,29 @@ class CortiOnlyReportTests(TestCase):
         text = reports.render_txt(reports.snapshot(s.encounter, 'draft')).decode('utf-8')
         lines = section(text, 'REVIEW PARTICIPANTS')
         self.assertIn('  - Astra · OpenAI · not recorded: this assessment predates the review participants', lines)
-        self.assertEqual(lines[-1], '  This assessment was recorded before the review participants existed: only '
-                                    'Corti was run.')
+        self.assertEqual(lines[-1], PREDATES)
         self.assertEqual(section(text, 'REFERENCE RETRIEVAL')[0],
                          '  - none retrieved: this assessment was recorded before reference retrieval existed')
+
+    def test_one_recorded_before_the_harness_never_says_corti_ran_when_it_did_not(self):
+        # refutation r1 parity-2: "only Corti was run" closed the section under "Corti · the provider was not run", and
+        # under a Corti run held with nothing sent; the closing line now says only what the record shows
+        s = pf.scenario()
+        held = pf.provider_run(s.encounter, s.revision, state=models.ProviderRun.NOT_SENT)
+        models.ProviderRun.objects.filter(pk=held.pk).update(
+            scope={'held': models.ProviderRun.HELD_MEMBER_DATE_CONFLICT})
+        held.refresh_from_db()
+        for corti, persist in (('the provider was not run', lambda: pf.assess(s.encounter, pf.standard_result(),
+                                                                              no_provider=True)),
+                               ('nothing was sent: the service date entered as encounter metadata conflicts with the '
+                                'document', lambda: pf.assess(s.encounter, pf.standard_result(), run=held))):
+            with self.subTest(corti):
+                persist()
+                lines = section(reports.render_txt(reports.snapshot(s.encounter, 'draft')).decode('utf-8'),
+                                'REVIEW PARTICIPANTS')
+                self.assertEqual(lines[0], f'  - Corti · Corti · {corti}')
+                self.assertEqual(lines[-1], PREDATES)
+                self.assertFalse(any('only Corti' in line for line in lines), lines)
 
 
 @override_settings(**LIVE, **BOTH)
@@ -288,6 +319,12 @@ class RealDownloadsTests(HarnessCase):
         self.assertTrue(any(line.startswith('  - astra · REPLAY (recorded response, not live output) · succeeded')
                             for line in usage), usage)
         self.assertTrue(TIME_QUOTE in text)
+        # each participant's first reading carries its estimated cost from the installed pricing module (HARNESS.md 6;
+        # refutation r1 sends-4): 1,200 in x $10/M + 300 out x $50/M
+        participants_section = section(text, 'REVIEW PARTICIPANTS')
+        astra = participants_section.index('  - Astra · OpenAI · answered; the reading was used')
+        self.assertIn('    Estimated cost: USD 0.0270 (estimated from published rates, not reconciled to an invoice)',
+                      participants_section[astra:astra + 10])
         # harness@2 (HARNESS.md 12.6): Astra's peer review is listed as one, also replayed, and the report has its
         # PEER REVIEW and PARTICIPANT REFERENCES sections; Fable's refused first reading took no part in peer review
         self.assertTrue(any(line.startswith('  - astra · REPLAY (recorded response, not live output) · succeeded')

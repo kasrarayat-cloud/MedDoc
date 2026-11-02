@@ -75,7 +75,7 @@
      "output_tokens": 200
     },
     "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-    "estimated_cost_usd": null,
+    "estimated_cost_usd": "0.0300",
     "returned_model": "gpt-6-astra",
     "peer": {
      "state": "done",
@@ -405,7 +405,9 @@
    "reconciled": false,
    "created_at": "2026-11-01T09:00:37Z",
    "purpose": "primary",
-   "scope_items": []
+   "scope_items": [],
+   "requested_model": "",
+   "returned_model": ""
   },
   {
    "id": "e2c00000-0000-4000-8000-000000000003",
@@ -426,7 +428,9 @@
    "reconciled": false,
    "created_at": "2026-11-01T09:00:38Z",
    "purpose": "independent",
-   "scope_items": []
+   "scope_items": [],
+   "requested_model": "gpt-6-astra",
+   "returned_model": "gpt-6-astra"
   },
   {
    "id": "e2c00000-0000-4000-8000-000000000005",
@@ -447,7 +451,9 @@
    "reconciled": false,
    "created_at": "2026-11-01T09:00:39Z",
    "purpose": "independent",
-   "scope_items": []
+   "scope_items": [],
+   "requested_model": "claude-fable-5-1",
+   "returned_model": "claude-fable-5-1"
   },
   {
    "id": "e2c00000-0000-4000-8000-000000000004",
@@ -461,14 +467,16 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "3c82c833d1ff76c9ffdcbd6ddd5fd9f9dd7ad083bb8cbb91f0c94dcbbf710964",
-   "response_sha256": "c662940923fa2586f303020d75a438018eb475b0628b2a723af90bc894405bfd",
+   "request_sha256": "f615ea0f289a6e046b5c10a9d32fa391b7d5de1e46fbb2afb9d9fc6284fdde17",
+   "response_sha256": "12f6b5c8aaeed2a6287f39b8ca0b68b008214f3c88d03b9719ad71bb1889b324",
    "reused_from": null,
    "error": "",
    "reconciled": false,
    "created_at": "2026-11-01T09:00:47Z",
    "purpose": "peer_review",
-   "scope_items": []
+   "scope_items": [],
+   "requested_model": "gpt-6-astra",
+   "returned_model": "gpt-6-astra"
   },
   {
    "id": "e2c00000-0000-4000-8000-000000000006",
@@ -482,14 +490,16 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "712b31af59c38727b3c8b2093019ad680404dd2b07a0b7066cb2541773b3c59e",
-   "response_sha256": "7f95998a03c5abccf198a1da8282207ee4b656cdb7bfa7f39fad11de82ee12d3",
+   "request_sha256": "2b404fe4e94bebe9a04ce9be6e317812fb04ccd5798ba9b7f3076b760df7c21c",
+   "response_sha256": "d2d84318bf852eb51cd5483d841e6cff39bde092b31e274af13d6b8cb39be65e",
    "reused_from": null,
    "error": "",
    "reconciled": false,
    "created_at": "2026-11-01T09:00:48Z",
    "purpose": "peer_review",
-   "scope_items": []
+   "scope_items": [],
+   "requested_model": "claude-fable-5-1",
+   "returned_model": "claude-fable-5-1"
   }
  ],
  "state_run": null,
@@ -595,6 +605,7 @@
       "astra": "independent",
       "fable": "independent"
      },
+     "identity": "51b57f6cc4dd4423ef41998fe6bc27517c36c553d225db8c941d0f926ee1d86f",
      "confirmed": [
       "e2c00000-0000-4000-8000-00000000000a"
      ],
@@ -773,6 +784,7 @@
       "astra": "independent",
       "fable": "peer_review"
      },
+     "identity": "d3c64787f44e618099907192f0ad3b1c7b36f7c2cf3e8e99b860e4830f3e2f5d",
      "proposed_by": [
       "astra",
       "fable"

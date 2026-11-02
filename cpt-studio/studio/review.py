@@ -6,7 +6,12 @@ is never resurrected. A decision is bound to the assessment, revision,
 proposal fingerprint and profile version it was made on: a new revision
 invalidates it, and a re-assessment of the same revision carries it only onto
 a proposal with the same fingerprint, code, list, status and profile version.
-Only the current assessment of the current revision can be decided on.
+Only the current assessment of the current revision can be decided on, and only
+when it is its chain's final assessment (HARNESS.md 12.1): decisions are recorded
+and carried between FINAL assessments only. An assess #1 that owes peer stages
+takes no decision and neither carries nor invalidates one; the next final
+assessment carries from the assessment that holds the encounter's current
+decisions (refutation r1, Q1).
 """
 from __future__ import annotations
 
@@ -14,7 +19,7 @@ import importlib
 import json
 import logging
 import uuid
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
@@ -23,6 +28,7 @@ from django.utils import timezone
 
 from . import audit, candidates, participants
 from .gi.context import charge_date_problem
+from .participants import loop as participant_loop
 from .models import (Assessment, Clarification, Decision, DecisionInvalidation, Encounter, FindingConfirmation, Job,
                      Proposal, ProviderRun, SourceRevision, ToolCall)
 from .types import sha256_json, to_jsonable
@@ -163,6 +169,27 @@ def _lock(encounter):
     return Encounter.objects.select_for_update().get(pk=encounter.pk)
 
 
+# A decision is recorded on its chain's final assessment only (HARNESS.md 12.1; refutation r1, Q1): an assess #1 whose
+# peer stages are owed is not the review's last word, and does not have the codes a peer review adds.
+NOT_FINAL_DECISION = ('The peer reviews of this document have not finished: a decision is recorded on its final '
+                      'assessment.')
+NOT_FINAL_BLOCKER = 'The peer reviews have not finished: decisions are recorded on the final assessment'
+
+
+def decision_holder(encounter, *, exclude=None):
+    """The assessment that holds the encounter's current decisions: the one its latest decision was recorded or carried
+    onto (sequence order, under the encounter lock), or None when nothing was ever decided. Decisions are recorded and
+    carried onto final assessments only, and persisting a final assessment carries or invalidates every current decision
+    of this one - so a later final assessment that holds none had nothing left to carry, and this one then has no
+    current decision. Read from the decisions themselves rather than by asking which earlier assessment was final:
+    whether an assess #1 owed peer stages depends on the participants configured now (jobs.owed_peer_stages)."""
+    decisions = Decision.objects.filter(encounter_id=encounter.pk)
+    if exclude is not None:
+        decisions = decisions.exclude(assessment_id=exclude.pk)
+    latest = decisions.order_by('-sequence').values_list('assessment_id', flat=True).first()
+    return Assessment.objects.get(pk=latest) if latest is not None else None
+
+
 def _is_reviewer(membership, encounter):
     return (membership is not None and membership.can_review
             and membership.workspace_id == encounter.workspace_id)
@@ -264,7 +291,7 @@ def _allowed(proposal, assessment, membership, encounter):
     if not _is_reviewer(membership, encounter) or proposal.assessment_id != assessment.pk:
         return []
     if (encounter.current_assessment_id != assessment.pk
-            or assessment.revision_id != encounter.current_revision_id):
+            or assessment.revision_id != encounter.current_revision_id or not is_final(assessment)):
         return []
     return _actions(proposal, _current_decision(proposal), assessment.revision.text,
                     _same_day_held(proposal, assessment))
@@ -288,6 +315,8 @@ def record_decision(*, encounter, proposal, action, user, membership, note='', a
             raise ValidationError('That proposal is not part of the current review.')
         if action not in ACTION_LABELS:
             raise ValidationError('Unknown review action.')
+        if not is_final(assessment):
+            raise ValidationError(NOT_FINAL_DECISION)
         if action not in _allowed(proposal, assessment, membership, locked):
             raise ValidationError(f'{ACTION_LABELS[action]} is not available for {proposal.code} right now.')
         note, acknowledgement = (note or '').strip(), (acknowledgement or '').strip()
@@ -318,8 +347,9 @@ def invalidate_for_new_revision(encounter, new_revision):
     with transaction.atomic():
         locked = _lock(encounter)
         count = 0
-        if locked.current_assessment_id is not None:
-            for decision in current_decisions(locked.current_assessment).values():
+        holder = decision_holder(locked)  # the current assessment, unless an assess #1 owing peer stages followed it
+        if holder is not None:
+            for decision in current_decisions(holder).values():
                 if decision.revision_id != new_revision.pk:
                     _invalidate(decision, revised_reason(new_revision), by_revision=new_revision)
                     count += 1
@@ -530,7 +560,8 @@ def _check_results(proposal):
 
 
 def _carry_decisions(previous, assessment, proposals, revision, context):
-    """Carry or invalidate the previous assessment's current decisions; returns (carried, invalidated)."""
+    """Carry or invalidate the current decisions of ``previous`` - the assessment that holds them, decision_holder -
+    onto the final assessment ``assessment``; returns (carried, invalidated)."""
     if previous is None:
         return 0, 0
     current = current_decisions(previous)
@@ -610,7 +641,14 @@ def persist_assessment(*, encounter, revision, context, routing_run, provider_ru
         proposals = {row.key: row for row in rows}
         raised = _create_clarifications(locked, assessment, result, proposals)
         withdrawn = _withdraw_superseded(locked, assessment, raised)
-        carried, invalidated = _carry_decisions(previous, assessment, proposals, revision, context)
+        # Decisions carry between FINAL assessments only (HARNESS.md 12.1; refutation r1, Q1). An assess #1 whose peer
+        # stages are owed neither carries nor invalidates one: it does not have the codes a peer review adds, so a code
+        # whose checks read them (an endoscopic base, say) would lose its approval there for good. The final assessment
+        # carries from the one that holds the current decisions - with Corti alone, the previous assessment, as before.
+        carried = invalidated = 0
+        if is_final(assessment):
+            carried, invalidated = _carry_decisions(decision_holder(locked, exclude=assessment), assessment, proposals,
+                                                    revision, context)
         locked.current_assessment = assessment
         locked.save(update_fields=['current_assessment', 'updated_at'])
         buckets = [item.bucket for item in result.proposals]
@@ -651,6 +689,8 @@ def _could_bill(proposal, decision):
 
 def _assessment_blockers(encounter, assessment):
     blockers = []
+    if not is_final(assessment):
+        blockers.append(NOT_FINAL_BLOCKER)
     if assessment.context_id != encounter.current_context_id:
         blockers.append('The encounter context changed; re-assessment has not finished')
     run = assessment.provider_run
@@ -1111,6 +1151,31 @@ def record_words(record):
     return f'{words}: {reason}'
 
 
+def listed_codes(record):
+    """(codes, unlisted) of a participant's Assessment.participants entry: the codes it proposed that may be listed by
+    name, each once, in order - the engine's own rule (engine._listable: 1 to MAX_LISTED_CODE characters), as its
+    participants.summary lists them - and how many it proposed that cannot be. A longer 'code' may carry wording, a CPT
+    descriptor say, so it is counted and never shown, never truncated (I9; refutation r1 IND-1: the participants row
+    served whatever text a participant wrote as a code). Read when serving, so records already stored are covered."""
+    from .validation import engine  # local import: only the engine's rule is needed here
+
+    codes, unlisted = [], 0
+    for item in record.get('codes') or []:
+        code = item.get('code') if isinstance(item, dict) else None
+        if not engine._listable(code):
+            unlisted += 1
+        elif code not in codes:
+            codes.append(code)
+    return codes, unlisted
+
+
+def unlisted_words(count):
+    """The engine's own sentence for codes a participant returned that cannot be listed ('' for none)."""
+    from .validation import checks, engine  # local import: only the engine's wording is needed here
+
+    return checks.unlisted_codes(count, engine.MAX_LISTED_CODE, 'It') if count else ''
+
+
 def proposed_by(proposal):
     """Who proposed the code, in harness order (I4: a proposal, never an approval): Corti for its own proposals and
     alternatives (origin primary or second_review), and each participant the engine named in support['proposed_by'] -
@@ -1203,22 +1268,33 @@ def proposal_retrieval(proposal, retrieval):
     return out
 
 
+USD_PLACES = Decimal('0.0001')  # an estimate is shown to four decimals (API.md: "0.0270")
+
+
 def _usd(value):
-    """An estimate as USD text with four decimals; None for no estimate."""
+    """An estimate - studio.participants.pricing's {'estimated_usd': '0.027000', 'rates': ..., 'basis': ...} - as USD
+    text with four decimals, rounded half up as pricing rounds ('0.0270'); None for no estimate, or for one that is not
+    a finite amount. (Review read the key 'usd', which pricing never returns, so no cost was ever shown: refutation r1
+    FG-3, sends-4.)"""
     if isinstance(value, dict):
-        value = value.get('usd')
+        value = value.get('estimated_usd')
     if value is None or isinstance(value, bool):
         return None
-    if isinstance(value, (Decimal, int, float)):
-        return f'{Decimal(str(value)):.4f}'
-    return str(value)
+    try:
+        amount = Decimal(str(value))
+        return f'{amount.quantize(USD_PLACES, rounding=ROUND_HALF_UP):f}' if amount.is_finite() else None
+    except (InvalidOperation, ValueError):
+        return None
 
 
 def estimated_cost(run):
     """The run's estimated cost in USD as text ('0.0412'), from studio.participants.pricing's fixed, dated rates
-    (HARNESS.md 6: estimated from published rates, not reconciled to an invoice). None for Corti (its usage is in
-    credits, not USD), for a run that reported no usage (a reuse, a request not sent), where the pricing module is not
-    installed, and where it cannot price the usage: an estimate is informational, so it never fails the page or a
+    (HARNESS.md 6: estimated from published rates, not reconciled to an invoice). A tool loop (HARNESS.md 11.2) is
+    several requests, so it is priced exchange by exchange (pricing.estimate_loop: Astra's long-context rate is a
+    property of one request), never as its usage summed over the exchanges - and only when the exchanges recorded add up
+    to the usage the run records. None for Corti (its usage is in credits, not USD), for a run that reported no usage (a
+    reuse, a request not sent), where the pricing module is not installed, where a loop's exchanges do not add up to its
+    usage, and where pricing cannot price the usage: an estimate is informational, so it never fails the page or a
     report (its error is logged)."""
     if run is None or run.provider not in participants.PARTICIPANTS or not run.usage:
         return None
@@ -1229,7 +1305,12 @@ def estimated_cost(run):
             raise
         return None
     try:
-        return _usd(pricing.estimate(run.requested_model, dict(run.usage)))
+        usages = [dict(exchange.usage or {}) for exchange in run.exchanges.order_by('turn')]
+        if run.usage_basis != participant_loop.LOOP_USAGE_BASIS and len(usages) <= 1:
+            return _usd(pricing.estimate(run.requested_model, dict(run.usage)))
+        if participant_loop.summed_usage([usage for usage in usages if usage]) != dict(run.usage):
+            return None
+        return _usd(pricing.estimate_loop(run.requested_model, usages))
     except Exception:  # noqa: BLE001 - logged; no estimate is shown rather than a failed page or report
         log.exception('the usage of run %s could not be priced', run.pk)
         return None

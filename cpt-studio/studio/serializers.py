@@ -4,6 +4,7 @@ from django.conf import settings
 from . import models, participants, review
 from .gi.context import charge_date_problem, is_member_conflict
 from .gi.profiles import PROFILES, profile
+from .participants import reading as participant_reading
 from .participants.reading import CODE as CODE_SHAPE
 from .providers.base import ProviderUnavailable
 from .types import to_jsonable
@@ -358,14 +359,16 @@ def _question_json(clarification, candidates=(), confirmation=None):
 
 
 def _provider_run_json(run):
-    # a harness participant's replayed run reads 'replay' too: its run records the mode it ran in (review.run_mode)
+    # a harness participant's replayed run reads 'replay' too: its run records the mode it ran in (review.run_mode); and
+    # the model it asked for and the one that answered, which the Activity tab names (refutation r1 FG-5: never served)
     return {'id': str(run.pk), 'provider': run.provider, 'mode': review.run_mode(run),
             'state': run.state, 'http_status': run.http_status, 'latency_ms': run.latency_ms, 'usage': run.usage,
             'usage_basis': run.usage_basis, 'request_sha256': run.request_sha256,
             'response_sha256': run.response_sha256,
             'reused_from': str(run.reused_from_id) if run.reused_from_id else None, 'error': run.error,
             'reconciled': run.reconciled_at is not None, 'created_at': _iso(run.created_at),
-            'purpose': run.purpose, 'scope_items': list((run.scope or {}).get('items', []))}
+            'purpose': run.purpose, 'scope_items': list((run.scope or {}).get('items', [])),
+            'requested_model': run.requested_model, 'returned_model': run.returned_model}
 
 
 def confirmation_json(confirmation):
@@ -609,8 +612,12 @@ def _participant_row(encounter, assessment, jobs, name, configured):
         detail = _record_detail(record, run)
         if record.get('state') == 'not_configured' and name in configured:
             detail = f'{label} was not configured when these checks ran.'
+        # only the codes the engine lists; one it cannot list is counted, never served (I9; refutation r1 IND-1)
+        codes, unlisted = review.listed_codes(record)
+        if unlisted:
+            detail = f'{detail} {review.unlisted_words(unlisted)}'
         return _row(name, label, vendor, model, RECORD_STATES.get(record.get('state'), 'unknown'), detail, run,
-                    [item.get('code') for item in record.get('codes') or []], int(record.get('unverified_quotes') or 0))
+                    codes, int(record.get('unverified_quotes') or 0))
     if newest is not None:
         held = newest.state == models.ProviderRun.NOT_SENT and (newest.scope or {}).get('held')
         return _row(name, label, vendor, model, 'blocked' if held else RUN_STATES.get(newest.state, 'unknown'),
@@ -807,6 +814,36 @@ def encounter_detail(encounter, membership):
 
 # --- the administrative trace (HARNESS.md 7; owner only, api.trace) ---------------------------------------------------
 
+def _token(value):
+    """A code, modifier or service id a participant wrote, as the trace serves it: as given when the reader names it as
+    a short token (participants.reading._token: at most 20 characters, no whitespace), otherwise only by its length, in
+    the reader's own words - longer text in such a field may carry a CPT descriptor, which is never displayed (I9;
+    refutation r1 IND-1: the trace served it verbatim, and the page shows these fields as given)."""
+    if not isinstance(value, str):
+        return value
+    named = participant_reading._token(value)
+    return value if named == repr(value) else f'{named} (not shown)'
+
+
+def _tokens(values):
+    return [_token(value) for value in values] if isinstance(values, list) else values
+
+
+def _code_entry(item):
+    """A code a participant proposed, advised not to code or took a position on, with its code-like fields (code,
+    modifiers, service ids) as _token serves them; its free text is left for the page, which withholds what reads like
+    a descriptor."""
+    if not isinstance(item, dict):
+        return item
+    out = dict(item)
+    if 'code' in out:
+        out['code'] = _token(out['code'])
+    for key in ('modifiers', 'service_ids'):
+        if key in out:
+            out[key] = _tokens(out[key])
+    return out
+
+
 def _trace_reading(run):
     """A participant's first-reading run's full normalized reading - the quotes CPT Studio could not locate included,
     and each reference it says it used with CPT Studio's check against that run's own tool results - read as the
@@ -823,9 +860,11 @@ def _trace_reading(run):
     data = to_jsonable(reading)
     return {'refused': data['refused'], 'problems': data['problems'], 'unverified_quotes': data['unverified_quotes'],
             'date_of_service': {'value': data['date_of_service'], 'evidence': data['date_evidence']},
-            'services': data['services'], 'codes': data['codes'], 'not_coded': data['not_coded'],
-            'questions': data['questions'], 'extraction_issues': data['extraction_issues'],
-            'references_used': data['references_used']}
+            'services': [dict(service, id=_token(service.get('id'))) for service in data['services']],
+            'codes': [_code_entry(item) for item in data['codes']],
+            'not_coded': [_code_entry(item) for item in data['not_coded']],
+            'questions': [dict(item, service_ids=_tokens(item.get('service_ids'))) for item in data['questions']],
+            'extraction_issues': data['extraction_issues'], 'references_used': data['references_used']}
 
 
 def _trace_review(run):
@@ -839,7 +878,9 @@ def _trace_review(run):
     if peer_review is None:
         return {'refused': True, 'problems': [problem], 'unverified_quotes': 0, 'frozen_inputs': [], 'answers': [],
                 'positions': [], 'additional_codes': [], 'references_used': []}
-    return to_jsonable(peer_review)
+    data = to_jsonable(peer_review)
+    return {**data, 'positions': [_code_entry(item) for item in data['positions']],
+            'additional_codes': [_code_entry(item) for item in data['additional_codes']]}
 
 
 def _trace_exchanges(run):

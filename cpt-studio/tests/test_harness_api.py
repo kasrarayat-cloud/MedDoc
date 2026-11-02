@@ -4,6 +4,7 @@ proposers, participant positions, reference check and retrieval, the Activity wo
 Synthetic data only; no network. Pipeline-driven cases use the fakes of tests.test_harness_pipeline; the field cases
 persist hand-built assessments through review.persist_assessment.
 """
+import json
 import sys
 import types
 from dataclasses import replace
@@ -21,22 +22,12 @@ from tests.test_pipeline_api import drain
 from tests.test_repairs_pipeline import LIVE
 
 PTP = 'NCCI procedure-to-procedure edits are not connected'
-
-
-def fake_pricing():
-    """A stand-in for studio.participants.pricing: estimate(model, usage) -> USD, at the HARNESS.md 6 rates."""
-    module = types.ModuleType('studio.participants.pricing')
-
-    def estimate(model, usage):
-        from decimal import Decimal
-
-        rates = {'gpt-6-astra': (Decimal(10), Decimal(50)), 'claude-fable-5-1': (Decimal(10), Decimal(50))}
-        if model not in rates or 'input_tokens' not in usage:
-            return None
-        rate_in, rate_out = rates[model]
-        return (rate_in * usage['input_tokens'] + rate_out * usage.get('output_tokens', 0)) / Decimal(1_000_000)
-    module.estimate = estimate
-    return module
+# A synthetic stand-in for wording a participant might write into a field CPT Studio reads as a code or an id (never AMA
+# text): a reading keeps a code that is not five characters as given (refutation r1 IND-1).
+DESCRIPTOR_LIKE = ('45385 SYNTHETIC-PLACEHOLDER; with removal of lesion(s) by PLACEHOLDER technique, single or '
+                   'multiple')
+UNLISTED_ONE = ('It returned 1 code that cannot be listed: empty, or longer than 10 characters (a CPT code has five). '
+                'It is not shown and never truncated.')
 
 
 def record(name, state, *, run=None, codes=(), not_coded=(), reason='', unverified=0, model=''):
@@ -236,6 +227,64 @@ class ReferenceValidationTests(FieldCase):
         self.assertEqual(self.detail()['harness']['reference_validation']['state'], 'not_run')
 
 
+class EstimatedCostTests(FieldCase):
+    """A participant run's estimated cost (HARNESS.md 6, 11.2) is the installed pricing module's estimate, in four
+    decimals; a tool loop is priced exchange by exchange, never its summed usage as one request (refutation r1 FG-3 and
+    sends-4: review read a key pricing never returns, so no cost was ever shown)."""
+
+    def make_run(self, name='astra', *, usage, basis='provider_reported_tokens', exchanges=()):
+        enc = self.s.encounter
+        run = pf.provider_run(enc, enc.current_revision, provider=name, usage=usage)
+        models.ProviderRun.objects.filter(pk=run.pk).update(
+            purpose='independent', usage_basis=basis,
+            requested_model={'astra': 'gpt-6-astra', 'fable': 'claude-fable-5-1'}.get(name, ''))
+        for turn, reported in enumerate(exchanges, start=1):
+            models.ProviderExchange.objects.create(run=run, turn=turn, request_body={}, request_sha256='0' * 64,
+                                                   state='succeeded', http_status=200, usage=reported)
+        run.refresh_from_db()
+        return run
+
+    def test_the_cost_is_the_installed_pricing_estimate_in_four_decimals(self):
+        from studio.participants import pricing
+
+        usage = {'input_tokens': 1200, 'output_tokens': 300}
+        self.assertEqual(pricing.estimate('gpt-6-astra', usage)['estimated_usd'], '0.027000')
+        self.assertEqual(review.estimated_cost(self.make_run(usage=usage)), '0.0270')
+        self.assertEqual(review.estimated_cost(self.make_run('fable', usage={'input_tokens': 1000,
+                                                                              'output_tokens': 100})), '0.0150')
+        # rounded half up, as pricing rounds: $0.000050 is never shown as $0.0000
+        self.assertEqual(review.estimated_cost(self.make_run(usage={'input_tokens': 5, 'output_tokens': 0})),
+                         '0.0001')
+
+    def test_a_tool_loop_is_priced_exchange_by_exchange_never_as_one_request(self):
+        from studio.participants import loop
+
+        exchanges = [{'input_tokens': 150_000, 'output_tokens': 1000}, {'input_tokens': 150_000, 'output_tokens': 1000}]
+        summed = loop.summed_usage(exchanges)
+        self.assertEqual(summed, {'input_tokens': 300_000, 'output_tokens': 2000})
+        run = self.make_run(usage=summed, basis=loop.LOOP_USAGE_BASIS, exchanges=exchanges)
+        # two requests below Astra's long-context threshold: 2 x (150,000 x $10/M + 1,000 x $50/M); as one request of
+        # 300,000 input tokens it would be priced long context, at $6.1500
+        self.assertEqual(review.estimated_cost(run), '3.1000')
+
+    def test_a_loop_whose_exchanges_do_not_add_up_to_its_usage_has_no_estimate(self):
+        from studio.participants import loop
+
+        usage = {'input_tokens': 300_000, 'output_tokens': 2000}
+        partial = self.make_run(usage=usage, basis=loop.LOOP_USAGE_BASIS,
+                                exchanges=[{'input_tokens': 150_000, 'output_tokens': 1000}])
+        missing = self.make_run(usage=usage, basis=loop.LOOP_USAGE_BASIS)
+        self.assertEqual((review.estimated_cost(partial), review.estimated_cost(missing)), (None, None))
+
+    def test_no_estimate_for_corti_for_no_usage_or_for_usage_pricing_cannot_price(self):
+        corti = pf.provider_run(self.s.encounter, self.s.encounter.current_revision)
+        self.assertIsNone(review.estimated_cost(corti))  # credits, not USD
+        self.assertIsNone(review.estimated_cost(self.make_run(usage={})))  # a reuse: no new usage
+        self.assertIsNone(review.estimated_cost(self.make_run(usage={'input_tokens': '1200', 'output_tokens': 300})))
+        with mock.patch.dict(sys.modules, {'studio.participants.pricing': None}):  # no pricing module installed
+            self.assertIsNone(review.estimated_cost(self.make_run(usage={'input_tokens': 1200, 'output_tokens': 300})))
+
+
 @override_settings(**LIVE, **BOTH)
 class HarnessBlockTests(HarnessCase):
     def detail(self, encounter_id):
@@ -247,10 +296,10 @@ class HarnessBlockTests(HarnessCase):
         return {row['name']: row for row in self.detail(encounter_id)['harness']['participants']}
 
     def test_three_rows_in_order_with_each_participant_s_outcome(self):
-        with mock.patch.dict(sys.modules, {'studio.participants.pricing': fake_pricing()}):
-            encounter_id = self.create()
-            drain()
-            harness = self.detail(encounter_id)['harness']
+        # the installed pricing module, never a stand-in (refutation r1 FG-3: a fake hid that no cost was ever shown)
+        encounter_id = self.create()
+        drain()
+        harness = self.detail(encounter_id)['harness']
         rows = harness['participants']
         self.assertEqual([(r['name'], r['label'], r['vendor'], r['model']) for r in rows],
                          [('corti', 'Corti', 'Corti', ''), ('astra', 'Astra', 'OpenAI', 'gpt-6-astra'),
@@ -261,9 +310,10 @@ class HarnessBlockTests(HarnessCase):
                          ('done', ['99213', '99214'], 1, 'gpt-6-astra'))
         self.assertIn('1 of its quotes was not found', astra['detail'])
         self.assertEqual(astra['estimated_cost_usd'], '0.0270')  # 1,200 in x $10/M + 300 out x $50/M
+        stored = self.runs_of(encounter_id, 'astra')[0]  # the row serves its run's usage and basis as recorded
         self.assertEqual((astra['usage'], astra['usage_basis'], astra['reused']),
-                         ({'input_tokens': 1200, 'output_tokens': 300}, 'vendor_reported_tokens', False))
-        self.assertEqual(astra['run_id'], str(self.runs_of(encounter_id, 'astra')[0].pk))
+                         ({'input_tokens': 1200, 'output_tokens': 300}, stored.usage_basis, False))
+        self.assertEqual(astra['run_id'], str(stored.pk))
         self.assertEqual(fable['state'], 'done')
         self.assertEqual(harness['clarification'], {'open': 0})
         self.assertEqual(harness['final'], {'state': 'ready_for_review', 'label': 'Ready for review'})
@@ -335,6 +385,26 @@ class HarnessBlockTests(HarnessCase):
         self.assertTrue(row['peer']['detail'].startswith('Peer review: '), row['peer']['detail'])
         self.assertIn(jobs.PEER_FIRST_NOT_READ.rstrip('.'), row['peer']['detail'])
 
+    def test_a_participant_code_the_engine_cannot_list_is_never_served(self):
+        # refutation r1 IND-1: the assessment's record copies every code the reading kept, a descriptor-like one
+        # included; the row lists only the codes the engine lists (engine._listable) and says how many it does not
+        self.adapters['astra'].codes = [(DESCRIPTOR_LIKE, TIME_QUOTE), ('99213', TIME_QUOTE)]
+        encounter_id = self.create()
+        drain()
+        stored = self.encounter(encounter_id).current_assessment.participants
+        self.assertIn(DESCRIPTOR_LIKE, [item['code'] for record in stored if record['name'] == 'astra'
+                                        for item in record['codes']])
+        response = self.client.get(f'/api/encounters/{encounter_id}')
+        self.assertEqual(response.status_code, 200, response.content)
+        data = response.json()
+        data['assessment'].pop('summary')  # this suite's engine wrapper notes there what it was given
+        self.assertNotIn(DESCRIPTOR_LIKE, json.dumps(data))
+        astra = {row['name']: row for row in data['harness']['participants']}['astra']
+        self.assertEqual((astra['state'], astra['codes']), ('done', ['99213']))
+        self.assertTrue(astra['detail'].endswith(UNLISTED_ONE), astra['detail'])
+        # a row whose codes are all listable says nothing more
+        self.assertNotIn('cannot be listed', self.rows(encounter_id)['fable']['detail'])
+
     def test_a_refused_reading_row(self):
         self.adapters['fable'].returned_model = 'claude-other-model'
         encounter_id = self.create()
@@ -371,6 +441,44 @@ class HarnessBlockTests(HarnessCase):
             rows = self.rows(encounter_id)
         self.assertEqual({name: row['state'] for name, row in rows.items()},
                          {'corti': 'done', 'astra': 'not_configured', 'fable': 'not_configured'})
+
+
+@override_settings(**LIVE, **BOTH)
+class FrontendContractTests(HarnessCase):
+    """The website's contract constants (tests.test_frontend) are the serializer's own keys (refutation r1 FG-5)."""
+
+    def test_the_contract_constants_are_the_keys_the_api_serves(self):
+        from tests import test_frontend as contract
+
+        owner = f.member(self.ws, f.user('owner'), role=models.Membership.OWNER)
+        client = Client()
+        client.force_login(owner)
+        with mock.patch('studio.jobs.reference_passages', fake_passages([])):
+            encounter_id = self.create()
+            drain()
+        detail = client.get(f'/api/encounters/{encounter_id}').json()
+        trace = client.get(f'/api/encounters/{encounter_id}/trace').json()
+        runs = [run for participant in trace['participants'] for run in participant['runs']]
+        readings = [run['reading'] for run in runs if run['reading'] is not None]
+        retrieval = [item for proposal in detail['assessment']['proposals'] for item in proposal['retrieval']]
+        self.assertTrue(runs and readings and retrieval and trace['reconciliation'] and detail['provider_runs'])
+        shapes = ([('harness', detail['harness'], contract.HARNESS_KEYS),
+                   ('permissions', detail['permissions'], contract.PERMISSION_KEYS),
+                   ('reference validation', detail['harness']['reference_validation'],
+                    contract.REFERENCE_VALIDATION_KEYS), ('trace', trace, contract.TRACE_KEYS)]
+                  + [('participant row', row, contract.PARTICIPANT_KEYS) for row in detail['harness']['participants']]
+                  + [('provider run', run, contract.PROVIDER_RUN_KEYS) for run in detail['provider_runs']]
+                  + [('retrieval item', item, contract.RETRIEVAL_ITEM_KEYS) for item in retrieval]
+                  + [('trace run', run, contract.TRACE_RUN_KEYS) for run in runs]
+                  + [('reading', reading, contract.READING_KEYS) for reading in readings]
+                  + [('reconciliation row', row, contract.RECONCILIATION_ROW_KEYS) for row in trace['reconciliation']])
+        for label, served, keys in shapes:
+            with self.subTest(label):
+                self.assertEqual(set(served), keys)
+        # the Activity tab names the model a participant's run asked for and the one that answered (refutation r1 FG-5:
+        # the provider runs never carried them, so its "Model requested" line never rendered from the real API)
+        astra = next(run for run in detail['provider_runs'] if run['provider'] == 'astra')
+        self.assertEqual((astra['requested_model'], astra['returned_model']), ('gpt-6-astra', 'gpt-6-astra'))
 
 
 @override_settings(**LIVE, **BOTH)
@@ -416,8 +524,7 @@ class TraceTests(HarnessCase):
 
     def test_the_trace_shows_each_run_its_reading_the_retrieval_and_the_reconciliation(self):
         recorded = []
-        with mock.patch('studio.jobs.reference_passages', fake_passages(recorded)), \
-                mock.patch.dict(sys.modules, {'studio.participants.pricing': fake_pricing()}):
+        with mock.patch('studio.jobs.reference_passages', fake_passages(recorded)):  # the installed pricing module
             encounter_id = self.create()
             drain()
             trace = self.get(self.owner, encounter_id).json()
