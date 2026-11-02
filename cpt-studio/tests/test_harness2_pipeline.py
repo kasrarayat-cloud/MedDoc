@@ -1166,6 +1166,37 @@ class SweepStopResumeTests(Harness2Case):
         self.assertEqual(jobs.assessment_phase(self.encounter(encounter_id).current_assessment), 2)
 
 
+class SecondReviewTests(Harness2Case):
+    def test_a_second_review_s_assess_runs_phase_two_and_its_assess_two_reads_the_second_review(self):
+        from tests.test_services_second_review import REPORT, TwoPassProvider, ask
+
+        corti = TwoPassProvider(first=[('45385', 'was removed with a cold snare')],
+                                later=[('45380', 'was sampled with cold biopsy forceps'),
+                                       ('45385', 'was removed with a cold snare')])
+        for name in ('astra', 'fable'):  # readings that leave the biopsy uncoded, so the second review is offered
+            self.adapters[name].first = [answered(name, reading())]
+        with mock.patch('studio.jobs.get_provider', return_value=corti):
+            encounter_id = self.create(REPORT)
+            drain()
+            self.assertEqual(ask(self.client, encounter_id).status_code, 201)
+            drain()
+        self.assertEqual(self.kinds(encounter_id)[-5:], ['review2', 'assess', 'astra_peer', 'fable_peer', 'assess'])
+        primary = self.runs_of(encounter_id, 'corti', 'primary')[0]
+        second = self.runs_of(encounter_id, 'corti', 'second_review')[0]
+        final = self.encounter(encounter_id).current_assessment
+        context = self.encounter(encounter_id).current_context
+        self.assertEqual((final.second_run_id, jobs.assessment_phase(final)), (second.pk, 2))
+        self.assertTrue(self.jobs_of(encounter_id)[-1].idempotency_key.startswith(
+            f'assess:{context.pk}:{primary.pk}:review2:{second.pk}:q:'))
+        # nothing is asked of a participant's first reading again; its peer review runs for the new assess #1
+        self.assertEqual((self.sent('astra', 'first'), self.sent('fable', 'first'), len(corti.requests)), (1, 1, 2))
+        first_again = self.assessments(encounter_id)[-2]
+        for name in ('astra', 'fable'):
+            peers = self.runs_of(encounter_id, name, 'peer_review')
+            self.assertEqual([run.scope['assessment'] for run in peers][-1], str(first_again.pk))
+            self.assertEqual(self.records(final)[name]['peer_run'], str(peers[-1].pk))
+
+
 class PeerRunLookupTests(Harness2Case):
     def test_assess_two_reads_only_the_peer_runs_made_for_its_assess_one(self):
         encounter_id = self.create()
