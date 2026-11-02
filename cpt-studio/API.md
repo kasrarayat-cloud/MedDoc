@@ -392,6 +392,16 @@ anyway is listed as recorded, and no assessment reads it (`current_effect` `not_
 code-level setting `STUDIO_OFFER_CONFIRMATIONS` (off; no environment variable or installer file changes it), kept as
 written.
 
+**Amended after refutation round 4 (the session's D8; HARNESS.md 12.10): no candidate is served.** The paragraph above
+is kept so the change can be seen. A served candidate's `value` was never a participant's answer to the question: it is
+CPT Studio's own inference from a reading - a service's status or extent paired with every quote of that service, an
+E/M basis CPT Studio's own reader read in the passage (which also chose the passages served) - and the page drew it as
+the participant's answer. Now every clarification's `candidates` is `[]` for every member while confirmations are not
+offered, and on the dormant path candidates are served only to a member who may confirm one (`permissions.can_confirm`
+true); no `why` "CPT Studio does not check what a participant's passage states, ..." is served any more. A
+participant's own answers to the open questions stay in its peer review: the owner's trace shows each in its own words,
+and the reports' PEER REVIEW lists each with its value in CPT Studio's words.
+
 Each confirmation's `current_effect` is what the current assessment made of it, in the words the reports' CONFIRMED
 FINDINGS print as "Effect:" - one reading, `review.confirmation_effect` (refutation round 2, truth-5: the page said
 every confirmation of a fact other than the date was read): `{"state": "read" | "not_read", "detail": "..."}`. A
@@ -451,7 +461,11 @@ encounter's workspace scoping (404 outside the caller's workspaces), before the 
 the candidate is read: `409 {"error": "This release offers no reviewer confirmation of a candidate answer, so nothing
 was recorded; a question is answered with an addendum, or a date of service in the encounter context.", "details": {}}`.
 Nothing is recorded: no confirmation, audit event, context, job or provider request. What follows describes the dormant
-path behind `STUDIO_OFFER_CONFIRMATIONS`, kept as written.
+path behind `STUDIO_OFFER_CONFIRMATIONS`, kept as written. **Amended after refutation round 4 (d7-3; HARNESS.md
+12.10):** the error is `"This release offers no reviewer confirmation, so nothing was recorded."` - it says only what
+happened. The sentence above named an addendum or the encounter context as the way a question is answered, which is
+false for a documented conflict or an included base code (an addendum leaves them open) and for a member's setting
+(only the context corrects it); it is kept so the change can be seen.
 
 `{"candidate_id": "16 hex", "attestation": "I read this passage in the source document; it documents <value> for this
 encounter."}` → `201 {confirmation, "effect": "context" | "reassessment"}` (the confirmation as in `confirmations`).
@@ -739,7 +753,9 @@ window in `evidence_support`, `run=<id>` in `checks`, and `run=<id>;reused_from=
 retained answer, whose tool calls they are: PARTICIPANT REFERENCES says the same of that run, "reuses the retained
 answer of run <id>, whose tool calls these are; this run made none", and of each reference it used, "retrieved by the
 retained run it reuses"); each names its participant in `proposed_by` and its phase in `proposal_origin`, and none
-carries a `decision`.
+carries a `decision`. **Amended after refutation round 4 (d7-4; HARNESS.md 12.10):** CONFIRMED FINDINGS and the
+`confirmed_finding` rows are printed only while confirmations are offered; this release offers none, so neither appears
+(the section's "None: no reviewer has confirmed a finding for this revision." implied a reviewer could).
 
 ## GET /api/encounters/{id}/original
 

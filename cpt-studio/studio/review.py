@@ -1760,11 +1760,15 @@ def on_current_context(assessment):
 # nothing; jobs.confirmed_findings hands the engine no confirmation, not even a row that exists; and a candidate is
 # served as the participant's located passage only (located_passages), never checked, so CPT Studio claims nothing about
 # what it states. The checks, the engine's _Confirmations and the re-assessment stay, dormant, behind the setting.
-CONFIRMATIONS_NOT_OFFERED = ('This release offers no reviewer confirmation of a candidate answer, so nothing was '
-                             'recorded; a question is answered with an addendum, or a date of service in the encounter '
-                             'context.')
-UNCHECKED_WHY = ("CPT Studio does not check what a participant's passage states, and this release offers no "
-                 'confirmation.')
+# Refutation round 4 (the session's D8; d7-1, d7-2, truth-1): those located passages were not the participants' answers
+# - a candidate's value is CPT Studio's own inference from a reading (an E/M basis its own reader read in the passage,
+# which also chose the passages shown; a service's status or extent paired with every quote of that service) - so while
+# confirmations are not offered no candidate is served at all (assessment_candidates), and located_passages and its
+# fixed why are removed. A participant's own answers stay in its peer review, as its own words. And the refusal says
+# only what happened (d7-3): "a question is answered with an addendum, or a date of service in the encounter context"
+# was false for a documented conflict or an included base code, which an addendum leaves open, and for a member's
+# setting, which only the encounter context corrects - no sentence names a way a question is settled.
+CONFIRMATIONS_NOT_OFFERED = 'This release offers no reviewer confirmation, so nothing was recorded.'
 
 
 def confirmations_offered():
@@ -1777,48 +1781,18 @@ def confirmations_offered():
     return getattr(settings, 'STUDIO_OFFER_CONFIRMATIONS', False) is True
 
 
-def located_passages(question, text, pages=(), readings=(), answers=()):
-    """The candidates of ``question`` as this release serves them (HARNESS.md 12.10, D7): each participant's passage
-    located for it - read by studio.candidates' own source readers from the frozen first readings and the peer answers,
-    merged as there by (value, spans), in its candidate shape and order - that is an exact slice of the current revision
-    ``text`` (I7), with its whole sentence. None of the checks that decided "verified" runs: the value is the source's
-    own restating, never held against the passage, and every candidate is verified false with UNCHECKED_WHY and no
-    attestation. A source that cites no passage, or one not located as exact slices of this text, is not served (fail
-    closed: what the page quotes as the document's text is the document's)."""
-    from .validation import reconcile  # local import: only the readers' sentence and page spans are read here
-
-    if not candidates.askable(question) or not isinstance(text, str):
-        return []
-    index, spans_of_pages = candidates._page_index(pages), reconcile.page_spans(pages)
-    sources = [source for item in sorted(readings, key=candidates._order)
-               for source in candidates._reading_sources(question, item)]
-    sources += [source for item in sorted(answers, key=candidates._order)
-                for source in candidates._answer_sources(question, item)]
-    merged = {}
-    for source in sources:
-        spans = tuple(sorted(source.quote.spans, key=lambda s: (s.start, s.end))) if source.quote is not None else ()
-        if not spans or len(spans) > candidates.MAX_SPANS or not all(candidates._exact(text, s) for s in spans):
-            continue
-        entry = merged.setdefault((source.value, tuple((s.start, s.end) for s in spans)),
-                                  {'value': source.value, 'spans': spans, 'by': {}, 'runs': [], 'why': UNCHECKED_WHY})
-        entry['by'].setdefault(source.name, set()).add(source.phase)
-        if source.run not in entry['runs']:
-            entry['runs'].append(source.run)
-    out = [candidates._candidate(question, entry, index, text, spans_of_pages) for entry in merged.values()]
-    out.sort(key=lambda c: (not c['verified'], c['spans'][0]['start'], c['value'], c['id']))
-    return out
-
-
 def assessment_candidates(assessment):
     """{clarification id: [candidate]} (studio.candidates) for each OPEN clarification of ``assessment`` when it is the
     final assessment of a chain a model participant took part in, made on the encounter's current revision and context;
     {} otherwise - a Corti-only assessment, an assess #1 whose peer stages follow, no open question, no model
     participant configured now (no assessment would read a confirmation then: the pipeline gives the engine none, I1),
     or an assessment of an earlier context (no confirmation could be read then: refutation round 2, truth-10). A status
-    is read against the documented-service inventory the assessment recorded (recorded_inventory). Refutation round 3
-    (HARNESS.md 12.10, D7): while confirmations are not offered - the release default - each candidate is a
-    participant's located passage only (located_passages): no check that decided "verified" runs, and none is
-    verified."""
+    is read against the documented-service inventory the assessment recorded (recorded_inventory). Refutation round 4
+    (HARNESS.md 12.10 as amended, the session's D8): while confirmations are not offered - the release default - {}
+    before anything is read: no candidate is served at all, since a candidate's value is CPT Studio's own inference from
+    a participant's reading, never its answer to the question (round 3's located passages showed it as one)."""
+    if not confirmations_offered():
+        return {}
     if (assessment is None or assessment_phase(assessment) == 0 or not is_final(assessment)
             or not participants.configured() or not on_current_context(assessment)):
         return {}
@@ -1828,10 +1802,6 @@ def assessment_candidates(assessment):
     readings, reviews = frozen_inputs(assessment)
     answers = peer_answers(assessment, questions, reviews) if reviews else {}
     revision = assessment.revision
-    if not confirmations_offered():
-        return {str(question.pk): located_passages(candidate_question(question), revision.text, revision.pages,
-                                                   readings, answers.get(question.pk, ()))
-                for question in questions}
     inventory = (recorded_inventory(assessment)
                  if any(question.fact == candidates.STATUS_FACT for question in questions) else None)
     return {str(question.pk): candidates.candidates(candidate_question(question), revision.text, revision.pages,

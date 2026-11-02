@@ -978,7 +978,11 @@ class StableQuestionTests(ColonCase):
         questions = list(final.clarifications.filter(state=models.Clarification.OPEN).select_related('proposal'))
         matched = review.peer_answers(final, questions, reviews)
         self.assertEqual([(q.proposal.key, q.fact) for q in questions if matched[q.pk]], [('sel:0', 'extent')])
-        self.assertTrue(review.assessment_candidates(final))
+        # moved by refutation round 4 (HARNESS.md 12.10 as amended, the session's D8): no candidate is served while
+        # confirmations are not offered; the dormant path still offers the matched answer's candidates
+        self.assertEqual(review.assessment_candidates(final), {})
+        with override_settings(STUDIO_OFFER_CONFIRMATIONS=True):
+            self.assertTrue(review.assessment_candidates(final))
 
 
 # --- the re-assessment after a confirmation (HARNESS.md 12.1, 12.5) ---------------------------------------------------

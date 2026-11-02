@@ -11,7 +11,6 @@ from django.test import override_settings
 from django.utils import timezone
 
 from studio import jobs, models, review, serializers
-from studio.types import sha256_json
 from tests import test_harness2_api as h2
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
@@ -25,12 +24,13 @@ from tests.test_frontend import FIXTURES, HARNESS2_SCENARIOS, HARNESS2_TRACE, _f
 # response bytes the real readers read, exchanges, tool calls, the assessments' participant entries and a confirmation
 # recorded through the real endpoint), never written from API.md's prose. This release offers no reviewer confirmation
 # (HARNESS.md 12.10): the peer and final fixtures and the trace are what it serves (unchecked candidates, can_confirm
-# false); encounter-harness2-dormant.json and encounter-harness2-confirmed.json are made with
-# STUDIO_OFFER_CONFIRMATIONS=True, as the dormant confirmation path serves them, for that path's rendering tests.
-# CPT_STUDIO_WRITE_FIXTURES=1 writes them again, with stable ids and times; otherwise the committed files must carry
-# exactly the keys, at every level, that the serializer emits now, so a change to the API that the website was not
-# built for fails here. Hashes over bytes that name a question (a peer request or answer) are kept as generated: the ids
-# they name were made stable after hashing.
+# false; refutation round 4: no candidate at all (D8), and the participant entries and the reconciliation's retrieval
+# the assess stage records (falsegreen-7, falsegreen-4)); encounter-harness2-dormant.json and
+# encounter-harness2-confirmed.json are made with STUDIO_OFFER_CONFIRMATIONS=True, as the dormant confirmation path
+# serves them, for that path's rendering tests. CPT_STUDIO_WRITE_FIXTURES=1 writes them again, with stable ids and
+# times; otherwise the committed files must carry exactly the keys, at every level, that the serializer emits now, so a
+# change to the API that the website was not built for fails here. Hashes over bytes that name a question (a peer
+# request or answer) are kept as generated: the ids they name were made stable after hashing.
 
 WRITE_FIXTURES = os.environ.get('CPT_STUDIO_WRITE_FIXTURES') == '1'
 UUID_TEXT = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
@@ -93,7 +93,10 @@ class Harness2FixtureTests(h2.Harness2Case):
     dormant confirmation path on - the same scenario as that path serves it, and one whose extent question a reviewer
     confirmed, with the re-assessment that read it. Every assessment is the engine's of the case's stored rows
     (Harness2Case.result; refutation round 3, falsegreen-11: they were written by hand, a hold among them that the
-    readers never produce for their note)."""
+    readers never produce for their note), and so are the participants entries and the reconciliation's retrieval
+    beside it (Harness2Case.entry and retrieval_of; refutation round 4, falsegreen-7 and falsegreen-4: this class
+    overrode entry for the codes, and its retrieval was a synthetic stand-in of dated CMS facts and a passage, which
+    the stage cannot retrieve for a document with no established service date)."""
 
     def setUp(self):  # the parent's builds one encounter; these tests build each scenario as the pipeline records it
         self.ws = f.workspace()
@@ -114,12 +117,6 @@ class Harness2FixtureTests(h2.Harness2Case):
         if name == 'fable':
             data['codes'] = [item for item in data['codes'] if item['code'] != '45380']
         return data
-
-    def entry(self, name, *, peer=False):
-        """Harness2Case's 12.3 entry, with the codes and not-coded items jobs._participant_record records: each with its
-        first located quote, as the screen states a participant's positions from them."""
-        record = jobs._participant_record(name, 'read', self.runs[name], self.readings[name], '')
-        return {**super().entry(name, peer=peer), 'codes': record['codes'], 'not_coded': record['not_coded']}
 
     def peer_answer(self, name):
         answer = super().peer_answer(name)
@@ -143,9 +140,7 @@ class Harness2FixtureTests(h2.Harness2Case):
             self.exchanges(run, request.body, data, calls if name == 'astra' else [])
             self.runs[name], self.requests[name] = run, request
             self.readings[name] = self.adapters[name].read(request, data, frozenset(review.run_refs(run)))
-        self.frozen = sorted([['astra', sha256_json(self.readings['astra'])], ['corti', self.corti.response_sha256],
-                              ['fable', sha256_json(self.readings['fable'])],
-                              ['revision', self.revision.text_sha256]])
+        self.frozen = self.frozen_list()
         self.jobs(PHASE1_JOBS)
         self.first = self.save([self.entry(name) for name in h2.ADAPTERS], self.result(1))
 
@@ -168,30 +163,9 @@ class Harness2FixtureTests(h2.Harness2Case):
         self.encounter.refresh_from_db()
         assessment = review.persist_assessment(
             encounter=self.encounter, revision=self.revision, context=self.context, routing_run=self.routing_run,
-            provider_run=self.corti, result=result, participants=entries, retrieval=self.retrieval())
+            provider_run=self.corti, result=result, participants=entries, retrieval=self.retrieval_of(result))
         review.refresh_state(self.encounter)
         return assessment
-
-    def retrieval(self):
-        """The reconciliation's own retrieval (Assessment.retrieval), never a participant's: synthetic stand-in text."""
-        def passage(key, section, page, topic, value, body):
-            text = f'SYNTHETIC FIXTURE TEXT, not CMS text: {body}'
-            return {'source_key': 'cms-ncci-policy-manual-2026-ch6', 'release': 'Revision 1/1/2026', 'passage_key': key,
-                    'section': section, 'page': page, 'topic': topic, 'topic_value': value,
-                    'sha256': h2.sha(text.encode('utf-8')), 'text': text}
-
-        def fact(code, field, value, **extra):
-            return {'source_key': 'cms-pfs-rvu26d', 'release': 'RVU26D', 'effective': ['2026-10-01', '2026-12-31'],
-                    'sha256': h2.sha(b'synthetic pfs file'), 'field': field, 'value': value, **extra}
-        rule = passage('vi-c-3', 'Chapter VI, section C: Endoscopic Services', 'VI-14', 'pfs.endo_base', '',
-                       'stands in for the rule that a surgical endoscopy includes the diagnostic endoscopy.')
-        # the service date the stage records it for: none (refutation round 3, falsegreen-11: the document's two
-        # dates of service disagree, so its context establishes none; this stand-in had named 2026-10-21)
-        return [{'code': code, 'service_date': None,
-                 'facts': [fact(code, 'status', 'A'), fact(code, 'mult_proc', '3'), fact(code, 'endo_base', '45378')],
-                 'passages': [rule], 'lookups': [f'pfs {code} 2026-10-21', 'passages pfs.endo_base'],
-                 'notes': ['NCCI procedure-to-procedure edits are not connected, so code pairs are not verified.']}
-                for code in ('45385', '45380')]
 
     def confirm_extent(self):
         """The reviewer confirms 45385's verified extent candidate through the real endpoint; the re-assessment it

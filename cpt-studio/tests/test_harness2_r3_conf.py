@@ -15,7 +15,9 @@ as the default:
   confirmation;
 - candidates are still served - the participants' located passages, exact slices of the revision with their whole
   sentences - but unchecked: no check that decided "verified" runs, every one is verified false with one fixed why and
-  no attestation, and can_confirm is false for every member;
+  no attestation, and can_confirm is false for every member (moved by refutation round 4, the session's D8: no
+  candidate is served at all - a located passage's value was CPT Studio's own inference from a reading, shown as a
+  participant's answer - and can_confirm is false for every member; tests/test_harness2_r4_conf.py);
 - a later chain's peer requests carry no confirmation wording (peer-2 is unreachable).
 
 Each test failed on the base 624754eb1 (the endpoint recorded a confirmation and queued its re-assessment, the engine
@@ -56,9 +58,10 @@ INSTALLATION_FILES = (ROOT / 'ops' / 'install.py', *sorted(p for p in (ROOT / 'd
 # The one fixed sentence the endpoint, review.confirm_finding and the re-assessment refuse with, and the one why every
 # candidate carries - written out here, so a change to either is a change to this pin.
 # (moved at integration: a date of service is also answered in the encounter context, so the sentence says so)
-NOT_OFFERED = ('This release offers no reviewer confirmation of a candidate answer, so nothing was recorded; a '
-               'question is answered with an addendum, or a date of service in the encounter context.')
-UNCHECKED = "CPT Studio does not check what a participant's passage states, and this release offers no confirmation."
+# (moved by refutation round 4, d7-3: the sentence says only what happened - an addendum does not settle a documented
+# conflict or an included base code, and a member's setting is corrected in the encounter context, so no way a question
+# is settled is named; tests/test_harness2_r4_conf.py)
+NOT_OFFERED = 'This release offers no reviewer confirmation, so nothing was recorded.'
 DORMANT = dict(STUDIO_OFFER_CONFIRMATIONS=True)  # the dormant confirmation path, as its own tests run it
 COUNTED = (models.FindingConfirmation, models.AuditEvent, models.Job, models.ProviderRun, models.ProviderExchange,
            models.ToolCall, models.EncounterContext, models.Assessment, models.Clarification, models.Decision)
@@ -81,7 +84,10 @@ class SettingTests(SimpleTestCase):
         self.assertEqual((len(named), len(assigned)), (1, 1))
         self.assertIsInstance(assigned[0].value, ast.Constant)
         self.assertIs(assigned[0].value.value, False)
-        self.assertEqual((review.CONFIRMATIONS_NOT_OFFERED, review.UNCHECKED_WHY), (NOT_OFFERED, UNCHECKED))
+        # moved by refutation round 4 (the session's D8): the one why every served candidate carried is gone with the
+        # candidates
+        self.assertEqual(review.CONFIRMATIONS_NOT_OFFERED, NOT_OFFERED)
+        self.assertFalse(hasattr(review, 'UNCHECKED_WHY'))
 
     def test_no_environment_variable_or_installation_file_turns_it_on(self):
         variables = {'CPT_STUDIO_STUDIO_OFFER_CONFIRMATIONS': '1', 'CPT_STUDIO_OFFER_CONFIRMATIONS': 'true',
@@ -228,47 +234,40 @@ class StoredRowTests(ColonCase):
             self.assertEqual([item.confirmation_id for item in jobs.confirmed_findings(revision)], [str(row.pk)])
 
 
-# --- candidates: the participants' located passages, unchecked; no member may confirm ---------------------------------
+# --- candidates: none is served; no member may confirm ----------------------------------------------------------------
+#
+# Moved by refutation round 4 (HARNESS.md 12.10 as amended, the session's D8; d7-1, d7-2, truth-1): round 3 served each
+# open question's located passages, unchecked, and the page drew each as "Their answer: <value>" - a value that was CPT
+# Studio's own inference from a participant's reading, never its answer to the question. No candidate is served now.
 
 @override_settings(**h2.BOTH)
 class CandidateTests(h2.Harness2Case):
     CHECKS = ('studio.candidates._why', 'studio.candidates._inconsistent', 'studio.candidates._qualified',
               'studio.validation.reconcile.status_stated', 'studio.review.recorded_inventory')
+    # moved by refutation round 4 (D8): the source readers round 3's located passages came from run no more either
+    READERS = ('studio.candidates._reading_sources', 'studio.candidates._answer_sources',
+               'studio.candidates._basis_stated', 'studio.review.frozen_inputs', 'studio.review.peer_answers')
 
     def test_each_open_question_s_candidates_are_located_passages_never_checked(self):
+        """Moved by refutation round 4 (D8): no open question is served a candidate, and no check and no reader of a
+        participant's reading runs for one (round 3: each was served its located passages, never checked)."""
         with ExitStack() as stack:
-            for target in self.CHECKS:
+            for target in self.CHECKS + self.READERS:
                 stack.enter_context(mock.patch(target, side_effect=AssertionError(f'{target} ran')))
             served = review.assessment_candidates(self.final)
         questions = {str(q.pk): q for q in self.final.clarifications.filter(state=models.Clarification.OPEN)}
-        self.assertEqual(set(served), set(questions))
-        self.assertTrue(all(served.values()), served)
-        for question_id, items in served.items():
-            for candidate in items:
-                with self.subTest(fact=questions[question_id].fact, value=candidate['value']):
-                    self.assertEqual((candidate['verified'], candidate['why'], candidate['attestation']),
-                                     (False, UNCHECKED, ''))
-                    self.assertEqual(candidate['id'], candidate_id(question_id, candidate))
-                    self.assertTrue(candidate['spans'])
-                    self.assertEqual(len(candidate['sentences']), len(candidate['spans']))
-                    for span, sentence in zip(candidate['spans'], candidate['sentences']):
-                        self.assertEqual(h2.NOTE[span['start']:span['end']], span['text'])
-                        self.assertEqual(h2.NOTE[sentence['start']:sentence['end']], sentence['text'])
-                        self.assertTrue(sentence['start'] <= span['start'] and span['end'] <= sentence['end'])
-        # the same located passages the dormant path offers - every one it offers with a passage, and nothing else -
-        # differing only in what the dormant path claimed about them
+        self.assertEqual(len(questions), 4)
+        self.assertEqual(served, {})
+        # the control: the dormant path offers each open question candidates from the same rows, and verifies one
         with override_settings(**DORMANT):
             dormant = review.assessment_candidates(self.final)
+        self.assertEqual(set(dormant), set(questions))
+        self.assertTrue(all(dormant.values()), dormant)
         self.assertTrue(any(c['verified'] for items in dormant.values() for c in items), 'the control verifies one')
 
-        def located(items):
-            return sorted(({k: v for k, v in c.items() if k not in ('verified', 'why', 'attestation')} for c in items
-                           if c['spans']), key=lambda c: c['id'])
-        self.assertEqual({key: located(items) for key, items in served.items()},
-                         {key: located(items) for key, items in dormant.items()})
-
     def test_no_member_may_confirm_and_the_page_is_served_the_unchecked_candidates(self):
-        expected = json.loads(json.dumps(review.assessment_candidates(self.final)))
+        """Moved by refutation round 4 (D8): no member may confirm and none is served a candidate (round 3: each was
+        served the unchecked located passages)."""
         for user, can_review in ((self.owner, True), (self.reviewer, True), (self.viewer, False)):
             with self.subTest(user=user.username):
                 response = self.client_for(user).get(f'/api/encounters/{self.encounter.pk}')
@@ -277,14 +276,17 @@ class CandidateTests(h2.Harness2Case):
                 self.assertEqual((data['permissions']['can_review'], data['permissions']['can_confirm']),
                                  (can_review, False))
                 served = {c['id']: c['candidates'] for c in data['clarifications'] if c['state'] == 'open'}
-                self.assertEqual(served, expected)
-                self.assertTrue(all(c['verified'] is False and c['why'] == UNCHECKED and c['attestation'] == ''
-                                    for items in served.values() for c in items))
-        # the control: the dormant path lets a reviewer confirm, and the viewer still may not
+                self.assertEqual(len(served), 4)
+                self.assertEqual(served, {key: [] for key in served})
+        # the control: the dormant path lets a reviewer confirm and serves the reviewer the candidates; the viewer still
+        # may not confirm, and (moved by refutation round 4, D8: candidates go only to a member who may confirm one) is
+        # served none
         with override_settings(**DORMANT):
             for user, allowed in ((self.reviewer, True), (self.viewer, False)):
                 data = self.client_for(user).get(f'/api/encounters/{self.encounter.pk}').json()
                 self.assertEqual(data['permissions']['can_confirm'], allowed)
+                self.assertEqual(all(c['candidates'] for c in data['clarifications'] if c['state'] == 'open'),
+                                 allowed)
 
 
 # --- peer-2 is unreachable: a later chain's peer requests carry no confirmation wording -------------------------------
@@ -425,7 +427,12 @@ class CaseFidelityTests(h2.Harness2Case):
 class LocatedPassageTests(SimpleTestCase):
     """review.located_passages, the candidates this release serves (HARNESS.md 12.10): a participant's passage is
     served only as exact slices of the revision text - one that cites no passage, one its quote was not located for,
-    and one whose span is not the text's are not served - and never as checked, whatever it says."""
+    and one whose span is not the text's are not served - and never as checked, whatever it says.
+
+    Moved by refutation round 4 (HARNESS.md 12.10 as amended, the session's D8): located_passages is removed, with
+    UNCHECKED_WHY - no candidate is served while confirmations are not offered (tests/test_harness2_r4_conf.py pins it
+    on the pipeline's rows), so nothing serves a located passage unchecked; falsegreen-5, its unpinned copy of the
+    candidates' merge, is moot. The dormant path's check of the same sources is the control, unchanged."""
     TEXT = ('Colonoscopy report (fictional)\nThe cecum was not reached.\n'
             'Landmarks photographed: appendiceal orifice and ileocecal valve.\n')
 
@@ -452,18 +459,18 @@ class LocatedPassageTests(SimpleTestCase):
                          LocatedQuote('A sentence in no document.', (), 'not found')),
             self.service('cecum'),  # cites no passage
             self.service('cecum, not reached', self.quote(landmarks))))]  # a value CPT Studio cannot restate
-        served = review.located_passages(question, self.TEXT, (), readings)
-        self.assertEqual([(c['value'], [s['text'] for s in c['spans']]) for c in served],
-                         [('cecum', [denied]), ('', [landmarks])])
-        for candidate in served:
-            self.assertEqual((candidate['verified'], candidate['why'], candidate['attestation']),
-                             (False, UNCHECKED, ''))
-            self.assertEqual(candidate['id'], candidate_id(question.id, candidate))
-            self.assertEqual([s['text'] for s in candidate['sentences']], [s['text'] for s in candidate['spans']])
-        # the dormant path checks the same sources: the denial is refused there, never verified
+        # moved by refutation round 4 (D8): nothing serves these sources as located passages - neither the reader that
+        # served them, unchecked, nor its fixed why exists
+        self.assertFalse(hasattr(review, 'located_passages'))
+        self.assertFalse(hasattr(review, 'UNCHECKED_WHY'))
+        # the dormant path checks the same sources: the denial is refused there, never verified (and the passage that is
+        # not the text's slice is refused as one)
         dormant = candidates.candidates(question, self.TEXT, (), readings)
+        self.assertTrue(dormant)
         self.assertFalse(any(c['verified'] for c in dormant))
+        self.assertIn('A passage is not an exact slice of the document text.', [c['why'] for c in dormant])
+        self.assertEqual([c['id'] for c in dormant], [candidate_id(question.id, c) for c in dormant])
         # a question no candidate answers is served none
         other = candidates.Question(id='q', scope='proposal', fact='base_included', family='gi.colonoscopy',
                                     proposal_key='sel:0', code='45385')
-        self.assertEqual(review.located_passages(other, self.TEXT, (), readings), [])
+        self.assertEqual(candidates.candidates(other, self.TEXT, (), readings), [])

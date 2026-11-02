@@ -1219,7 +1219,9 @@ test('the reference validation, clarification and final status rows say what the
   assert.ok(unread.includes('No question was asked: the proposals were not checked for this revision.'));
   assert.equal(unread.includes('Waiting'), false);
   const asked = harnessRow(render({ ...ready, harness: { ...ready.harness, clarification: { open: 2 } } }), 'clarification');
-  assert.ok(asked.includes('<span class="status amber">2 open</span>') && asked.includes('2 questions need an answer before the reviewed report'));
+  // moved by refutation round 4 (d7-3, HARNESS.md 12.10 as amended): the row says what each open question holds by the
+  // readiness rules; where the questions served do not account for the API's count (none is served here) only the count
+  assert.ok(asked.includes('<span class="status amber">2 open</span>') && asked.includes('<p>2 questions are open.</p>'), asked);
   assert.ok(asked.includes('A participant&#x27;s own questions never hold the reviewed report.'));
   // final: the list's own label and tone, approval kept apart from agreement
   const final = harnessRow(html, 'final');
@@ -1654,7 +1656,11 @@ test('each open question lists its candidate answers: the value, the passage quo
   assert.ok(html.indexOf(`data-question="${clarificationOf(doc, 'service_date').id}"`) < html.indexOf('<article class="code-card"'));
   assert.ok(codeCardOf(html, '45385').includes(`data-question="${extent.id}"`) && codeCardOf(html, '45380').includes(`data-question="${clarificationOf(doc, 'performed_status').id}"`));
   // the clarification row says a verified candidate can answer a question; the first assessment's questions have none
-  assert.ok(harnessRow(html, 'clarification').includes('each is answered with an addendum (a date of service also in the encounter context), or by a reviewer confirming a verified candidate answer.'));
+  // (moved by refutation round 4, d7-3: the row names no way a question is settled on the dormant path either, and says
+  // what each open question holds by the readiness rules)
+  const confirmRow = harnessRow(html, 'clarification');
+  assert.ok(confirmRow.includes('<p>One question about the encounter is open; it holds the reviewed report.</p><p>3 questions about codes are open; each holds its code, which can still be rejected.</p>'), confirmRow);
+  assert.equal(/addendum|confirming|verified/i.test(confirmRow), false, confirmRow);
   const peer = render(fixture(H2_PEER));
   assert.equal(peer.includes('candidate-answers') || peer.includes('confirm-finding'), false);
   // a passage that is not at its position in the current revision is flagged, never passed off as found or confirmable
@@ -1701,8 +1707,12 @@ test('a verified candidate\'s Confirm action shows its served attestation exactl
     const page = render(variant);
     assert.equal(page.includes('confirm-finding'), false, name);
     // moved by refutation round 3 (falsegreen-11): the engine asks 45380's extent too - eight candidates in all
-    assert.equal(count(page, 'data-candidate='), 8, `${name}: the candidates are still listed`);
+    // and moved by refutation round 4 (HARNESS.md 12.10 as amended, the session's D8): where can_confirm is not true no
+    // candidate is drawn at all (the API serves such a member none); while processing, or unattested, they still are
+    const listed = variant.permissions?.can_confirm === true ? 8 : 0;
+    assert.equal(count(page, 'data-candidate='), listed, `${name}: ${listed ? 'the candidates are still listed' : 'none is drawn'}`);
   }
+  assert.deepEqual(Object.keys(variants).filter(name => variants[name].permissions?.can_confirm === true), ['busy', 'unattested']);
 });
 
 test('confirming posts the candidate id and its served attestation once ticked, and shows the result', async () => {
@@ -1837,7 +1847,15 @@ test('a code card says who proposed it in which phase, 11.4\'s sentence, the con
   const bare = { ...final, harness: { ...final.harness, participants: final.harness.participants.map(row => ({ ...row, references: { retrieved: [], used: [] }, peer_references: { retrieved: [], used: [] } })) } };
   const nothing = codeCardOf(render(bare), '45380');
   assert.ok(nothing.includes('No participant retrieved a reference for this code.') && nothing.includes('No participant cites a reference for this code.'));
-  assert.equal(count(nothing, '<details class="reference-passage">'), 1, 'the reconciliation\'s passage stays listed');
+  // moved by refutation round 4 (falsegreen-4): the fixture's reconciliation retrieval is the assess stage's, which for
+  // this document - no service date established - retrieves no CMS fact or passage; its own list still stands apart and
+  // says so (a stand-in of dated facts and a passage was listed here, beside a Reference validation row saying none was
+  // checked). A served passage stays listed: the reconciliation's list is the one fed below
+  assert.equal(count(nothing, '<details class="reference-passage">'), 0);
+  assert.ok(nothing.includes('<div class="evidence-label">CMS reference facts and passages retrieved by the reconciliation</div><p class="harness-note">No CMS reference fact or passage was retrieved for this code.</p>'), nothing);
+  const passage = { kind: 'passage', source_key: 'cms-ncci-policy-manual-2026-ch6', release: 'Revision 1/1/2026', passage_key: 'vi-c-3', section: 'Chapter VI, section C: Endoscopic Services', page: 'VI-14', text: 'SYNTHETIC FIXTURE TEXT, not CMS text.', sha256: '0'.repeat(64) };
+  const fed = { ...bare, assessment: { ...bare.assessment, proposals: bare.assessment.proposals.map(p => (p.code === '45380' ? { ...p, retrieval: [passage] } : p)) } };
+  assert.equal(count(codeCardOf(render(fed), '45380'), '<details class="reference-passage">'), 1, 'the reconciliation\'s passage stays listed');
   // the confirmed finding the re-assessment read: a fact, never a decision
   const confirmedDoc = fixture(H2_CONFIRMED);
   const confirmedCard = codeCardOf(render(confirmedDoc), '45385');
@@ -2352,98 +2370,72 @@ test('R2-WORDING FG2-5: a code card the serializer\'s fixture draws states the P
 // page draws each as the participants' located passage, with no Verified or Not verified badge, no sentence about what CPT
 // Studio's readers read in it, and no Confirm control. The dormant path's rendering for a served can_confirm true is
 // pinned above, on its own fixture (H2_DORMANT), and stays as it was.
+// Moved by refutation round 4 (HARNESS.md 12.10 as amended, the session's D8; d7-1, d7-2, truth-1): a located passage's
+// "Their answer: <value>" was CPT Studio's own inference from a participant's reading, never its answer to the question,
+// so no candidate is served at all and the page draws none where can_confirm is not true; each pin below now holds the
+// page to that (the R4-CONF block at the end of this file pins the rest).
 
-const R3_UNCHECKED = 'CPT Studio does not check what a participant\'s passage states, and this release offers no confirmation.';
-const R3_LOCATED_NOTE = 'These are the passages the participants located for this question, each with the answer it gave in CPT Studio\'s words. CPT Studio does not check what a participant\'s passage states, and this release offers no confirmation: a question is answered with an addendum, or a date of service in the encounter context.';
-
-// A question's candidate block as the page draws it, through its note; and the text a reader sees of it (no markup).
+// A question's candidate block as the page draws it, through its note; '' when none is drawn.
 function r3Block(html, id) {
   const start = html.indexOf(`<div class="candidate-answers" data-question="${id}"`);
-  assert.ok(start >= 0, `no candidate block for question ${id}`);
+  if (start < 0) return '';
   return html.slice(start, html.indexOf('</p>', html.indexOf('<p class="harness-note">', start)) + 4);
 }
 const r3Text = html => html.replace(/<[^>]*>/g, ' ');
-const r3Exact = (text, span) => [...text].slice(span.start, span.end).join('') === span.text;
 
 test('R3-CONF D7: the final fixture serves every candidate as a located passage, unchecked, and no member may confirm', () => {
+  // moved by refutation round 4 (D8): it serves no candidate at all, and no member may confirm
   const doc = fixture(H2_FINAL);
   assert.equal(doc.permissions.can_confirm, false);
-  const served = doc.clarifications.filter(item => item.candidates.length);
-  assert.deepEqual(served.map(item => item.fact).sort(), ['extent', 'extent', 'performed_status', 'service_date']);
-  for (const item of served) {
-    for (const candidate of item.candidates) {
-      assert.deepEqual([candidate.verified, candidate.why, candidate.attestation], [false, R3_UNCHECKED, ''], candidate.id);
-      assert.ok(candidate.spans.length > 0 && candidate.spans.every(span => r3Exact(doc.revision.text, span)), candidate.id);
-      assert.equal(candidate.sentences.length, candidate.spans.length);
-      assert.ok(candidate.sentences.every((sentence, index) => r3Exact(doc.revision.text, sentence)
-        && sentence.start <= candidate.spans[index].start && candidate.spans[index].end <= sentence.end), candidate.id);
-    }
-  }
+  const open = doc.clarifications.filter(item => item.state === 'open');
+  assert.deepEqual(open.map(item => item.fact).sort(), ['extent', 'extent', 'performed_status', 'service_date']);
+  assert.deepEqual(doc.clarifications.map(item => item.candidates), doc.clarifications.map(() => []));
 });
 
 test('R3-CONF D7: each candidate is drawn as the participants\' located passage - no Verified or Not verified badge, no readers\' sentence, no Confirm control', () => {
+  // moved by refutation round 4 (D8): no question's block is drawn - no located passage, no answer attributed to a
+  // participant, no badge, no readers' sentence and no Confirm control anywhere on the page
   const doc = fixture(H2_FINAL);
   const html = render(doc);
-  const served = doc.clarifications.filter(item => item.candidates.length);
-  for (const item of served) {
-    const block = r3Block(html, item.id);
-    const text = r3Text(block);
-    assert.ok(block.includes(`<div class="evidence-label">The participants&#x27; located passages · ${item.candidates.length}</div>`), block);
-    assert.deepEqual([...block.matchAll(/data-candidate="([0-9a-f]+)"/g)].map(match => match[1]), item.candidates.map(candidate => candidate.id));
-    for (const candidate of item.candidates) {
-      assert.ok(block.includes(`<strong>${app.escapeHtml(candidate.value ? `Their answer: ${candidate.value}` : 'An answer CPT Studio cannot restate')}</strong>`), candidate.id);
-      for (const [index, span] of candidate.spans.entries()) {
-        const sentence = candidate.sentences[index];
-        const quoted = `“${app.escapeHtml(span.text)}”`;
-        assert.ok(block.includes(sentence.start === span.start && sentence.end === span.end ? quoted
-          : `${quoted} (page ${span.page}) — a part of the sentence “${app.escapeHtml(sentence.text)}”`), `${candidate.id}: ${block}`);
-      }
-    }
-    assert.equal(/verified/i.test(text), false, `no Verified or Not verified, in any case: ${text}`);
-    assert.equal(count(block, '<span class="status '), 0, 'no badge');
-    assert.equal(/readers read|consistency check|exact slice of the document/i.test(text), false, text);
-    assert.equal(block.includes('confirm-finding') || block.includes('data-attest') || text.includes('I read this passage'), false, block);
-    assert.ok(block.endsWith(`<p class="harness-note">${app.escapeHtml(R3_LOCATED_NOTE)}</p>`), block);
-  }
-  // nowhere on the page: no Confirm action, and the clarification row offers only an addendum
+  for (const item of doc.clarifications) assert.equal(r3Block(html, item.id), '', item.fact);
+  assert.equal(html.includes('candidate-answers') || html.includes('Their answer') || html.includes('located passages'), false);
+  assert.equal(/readers read|consistency check|exact slice of the document/i.test(r3Text(html)), false);
+  // nowhere on the page: no Confirm action, and the clarification row offers only an addendum (moved by refutation round
+  // 4, d7-3: it names no way a question is settled, an addendum included, and says what each open question holds)
   assert.equal(html.includes('confirm-finding') || html.includes('<span class="status green">Verified</span>'), false);
   const row = harnessRow(html, 'clarification');
-  assert.ok(row.includes('each is answered with an addendum (a date of service also in the encounter context).') && !row.includes('confirming'), row);
-  // the questions still sit where they did: the date with the encounter, the others on their codes' cards
+  assert.ok(row.includes('<p>One question about the encounter is open; it holds the reviewed report.</p>') && !/addendum|confirming/.test(row), row);
+  // the questions still sit where they did: the date with the encounter, the others on their codes' cards (moved by
+  // refutation round 4: by the addendum action each carries, as no candidate block is drawn)
   const date = clarificationOf(doc, 'service_date');
-  assert.ok(html.indexOf(`data-question="${date.id}"`) < html.indexOf('<article class="code-card"'));
-  assert.ok(codeCardOf(html, '45385').includes(`data-question="${clarificationOf(doc, 'extent').id}"`));
+  assert.ok(html.indexOf(`data-clarification="${date.id}"`) > 0 && html.indexOf(`data-clarification="${date.id}"`) < html.indexOf('<article class="code-card"'));
+  assert.ok(codeCardOf(html, '45385').includes(`data-clarification="${clarificationOf(doc, 'extent').id}"`));
 });
 
 test('R3-CONF D7: a located passage whose whole sentence cannot be shown says so without naming a confirmation; a claim the API serves is never drawn; every value is escaped', () => {
+  // moved by refutation round 4 (D8): to a member who may not confirm none of them is drawn at all - a candidate whose
+  // whole sentence cannot be shown, one served as verified with an attestation, or one carrying a hostile value
   const doc = fixture(H2_FINAL);
-  const [item] = doc.clarifications.filter(entry => entry.candidates.length);
+  const [item] = fixture(H2_DORMANT).clarifications.filter(entry => entry.candidates.length);
   const [candidate] = item.candidates;
-  const missing = app.candidateAnswers({ id: item.id, candidates: [{ ...candidate, sentences: [] }], confirmation: null }, doc);
-  const [span] = candidate.spans;
-  const whole = candidate.sentences[0].start === span.start && candidate.sentences[0].end === span.end;
-  assert.ok(missing.includes(whole ? `“${app.escapeHtml(span.text)}” (page ${span.page})</p>` : '— its whole sentence is not shown: read it in the document</p>'), missing);
-  assert.equal(missing.includes('before confirming'), false);
-  // fail closed: a candidate served as verified, with an attestation, to a member who may not confirm draws neither
+  assert.equal(app.candidateAnswers({ id: item.id, candidates: [{ ...candidate, sentences: [] }], confirmation: null }, doc), '');
   const claimed = { ...candidate, verified: true, why: '', attestation: ATTESTATION(candidate.value) };
-  const drawn = app.candidateAnswers({ id: item.id, candidates: [claimed], confirmation: null }, doc);
-  assert.equal(/verified/i.test(r3Text(drawn)) || drawn.includes('confirm-finding') || drawn.includes('I read this passage'), false, drawn);
-  // a value it draws is escaped, whoever wrote it
+  assert.equal(app.candidateAnswers({ id: item.id, candidates: [claimed], confirmation: null }, doc), '');
   const hostile = { ...candidate, id: XSS, value: XSS, located_by: [XSS, 'astra'], phases: { [XSS]: XSS, astra: XSS },
     spans: [{ start: 0, end: 5, text: XSS, page: XSS }], sentences: [{ start: 0, end: 5, text: XSS }] };
-  const page = app.candidateAnswers({ id: XSS, candidates: [hostile], confirmation: null }, doc);
-  assert.equal(page.includes('<img'), false);
-  assert.ok(count(page, XSS_ESCAPED) >= 4, page);
+  assert.equal(app.candidateAnswers({ id: XSS, candidates: [hostile], confirmation: null }, doc), '');
 });
 
 test('R3-CONF D7: a served can_confirm true still draws the dormant confirmation path\'s rendering; the same payload served false draws the located passages', () => {
+  // moved by refutation round 4 (D8): the same payload served false draws no candidate block at all
   const dormant = fixture(H2_DORMANT);
   assert.equal(dormant.permissions.can_confirm, true);
   const html = render(dormant);
   assert.ok(html.includes('<span class="status green">Verified</span>') && html.includes('data-action="confirm-finding"'));
   const release = render({ ...dormant, permissions: { ...dormant.permissions, can_confirm: false } });
   assert.equal(release.includes('Verified') || release.includes('confirm-finding') || release.includes('I read this passage'), false);
-  assert.equal(count(release, 'The participants&#x27; located passages · '), dormant.clarifications.filter(item => item.candidates.length).length);
+  assert.equal(count(release, 'candidate-answers'), 0);
+  assert.equal(count(html, 'Candidate answers from the participants&#x27; located passages · '), dormant.clarifications.filter(item => item.candidates.length).length);
 });
 
 // refutation round 3, R3-TRUTH
@@ -2535,4 +2527,100 @@ test('R3-TRUTH truth-6: a code card states the NCCI procedure-to-procedure limit
   // a consideration that does not state the limit is shown as the engine wrote it
   const other = 'The documented intent is screening and a therapeutic or diagnostic act was performed: payer rules for a screening examination that becomes therapeutic (for example Medicare modifier PT, commercial modifier 33) are not connected. No modifier is assigned.';
   assert.ok(cardFor({ ...harnessEra, modifier_considerations: [other] }).includes(`Modifier considerations, never assigned automatically: ${other}`));
+});
+
+// refutation round 4, R4-CONF
+// With confirmations off no candidate is served (HARNESS.md 12.10 as amended, the session's D8): round 3's located
+// passages showed CPT Studio's own inferences from a participant's reading as "Their answer" (d7-1, d7-2, truth-1). The
+// regenerated final fixture serves every question's candidates as [] and can_confirm false, and the page draws a
+// candidate block only for a member the API allows to confirm - the dormant path, drawn as before. The Clarification row
+// says what the readiness rules make true and names no way a question is settled (d7-3); the Checks tab says what a peer
+// answer is in either mode (d7-5); the reconciliation's retrieval is the assess stage's (falsegreen-4).
+
+// What round 3 drew for a located passage, none of which a page drawn without a confirmation offered may say.
+const R4_LOCATED = ['candidate-answers', 'data-question=', 'Their answer', 'located passages', 'located for this question', 'Located by',
+  'An answer CPT Studio cannot restate', 'confirm-finding', 'I read this passage', '<span class="status green">Verified</span>', 'Not verified, so it cannot be confirmed'];
+const r4Lines = row => [...row.matchAll(/<p>([^<]*)<\/p>/g)].map(match => textOf(match[1]));
+
+test('R4-CONF D8: the final fixture serves no question a candidate and no member may confirm; the page draws no candidate block', () => {
+  const doc = fixture(H2_FINAL);
+  assert.equal(doc.permissions.can_confirm, false);
+  const open = doc.clarifications.filter(item => item.state === 'open');
+  assert.deepEqual(open.map(item => item.fact).sort(), ['extent', 'extent', 'performed_status', 'service_date']);
+  assert.ok(doc.clarifications.every(item => Array.isArray(item.candidates) && item.candidates.length === 0 && item.confirmation === null));
+  assert.deepEqual(doc.confirmations, []);
+  const html = render(doc);
+  for (const words of R4_LOCATED) assert.equal(html.includes(words), false, words);
+  // each question is still asked where it was: the date with the encounter, the others on their codes' cards
+  const date = clarificationOf(doc, 'service_date');
+  assert.ok(html.indexOf(`data-clarification="${date.id}"`) > 0 && html.indexOf(`data-clarification="${date.id}"`) < html.indexOf('<article class="code-card"'));
+  const codes = Object.fromEntries(doc.assessment.proposals.map(proposal => [proposal.id, proposal.code]));
+  for (const item of open.filter(entry => entry.proposal_id)) assert.ok(codeCardOf(html, codes[item.proposal_id]).includes(`data-clarification="${item.id}"`), item.fact);
+});
+
+test('R4-CONF D8: a payload served to a member who may not confirm draws no candidate block, whatever it carries; can_confirm true draws the dormant path as before', () => {
+  const dormant = fixture(H2_DORMANT);
+  assert.equal(dormant.permissions.can_confirm, true);
+  const drawn = render(dormant);
+  assert.ok(drawn.includes('<span class="status green">Verified</span>') && drawn.includes('data-action="confirm-finding"'));
+  assert.equal(count(drawn, 'Candidate answers from the participants&#x27; located passages · '), dormant.clarifications.filter(item => item.candidates.length).length);
+  for (const permissions of [{ ...dormant.permissions, can_confirm: false }, { can_review: true, is_owner: true }, { ...dormant.permissions, can_confirm: 'yes' }]) {
+    const page = render({ ...dormant, permissions });
+    for (const words of [...R4_LOCATED, 'A candidate answers nothing']) assert.equal(page.includes(words), false, `${JSON.stringify(permissions)}: ${words}`);
+  }
+  // fail closed: neither a confirmation nor a candidate served as verified is drawn for such a member, nor any value
+  const viewer = { ...dormant, permissions: { ...dormant.permissions, can_confirm: false } };
+  const [item] = dormant.clarifications.filter(entry => entry.candidates.length);
+  const confirmation = fixture(H2_CONFIRMED).confirmations[0];
+  const claimed = { ...item.candidates[0], verified: true, why: '', attestation: ATTESTATION(item.candidates[0].value) };
+  for (const served of [{ ...item, confirmation }, { ...item, candidates: [claimed] }, { id: XSS, candidates: [{ ...claimed, id: XSS, value: XSS }], confirmation: null }]) {
+    assert.equal(app.candidateAnswers(served, viewer), '');
+  }
+});
+
+test('R4-CONF d7-3: the Clarification row says what each open question holds, by the readiness rules, and names no way it is settled', () => {
+  const doc = fixture(H2_FINAL);
+  const row = harnessRow(render(doc), 'clarification');
+  assert.ok(row.includes('<span class="status amber">4 open</span>'), row);
+  assert.deepEqual(r4Lines(row), ['One question about the encounter is open; it holds the reviewed report.',
+    '3 questions about codes are open; each holds its code, which can still be rejected.']);
+  assert.ok(row.includes('A participant&#x27;s own questions never hold the reviewed report.'));
+  for (const words of ['addendum', 'encounter context', 'answered', 'confirm', 'needs an answer', 'verified']) assert.equal(textOf(row).toLowerCase().includes(words), false, words);
+  // the dormant path's row says the same of the same questions: no confirmation is named as a way to settle one either
+  assert.deepEqual(r4Lines(harnessRow(render(fixture(H2_DORMANT)), 'clarification')), r4Lines(row));
+  // each kind alone and together, one and several; a count the page cannot tell apart claims nothing it cannot see
+  const encounter = { scope: 'encounter', proposal_id: null, fact: 'service_date' };
+  const code = { scope: 'proposal', proposal_id: 'e2b00000-0000-4000-8000-0000000000ff', fact: 'extent' };
+  const service = { scope: 'service', proposal_id: null, fact: 'extent' };
+  const asked = (items, open = items.length) => r4Lines(harnessRow(render({ ...doc, harness: { ...doc.harness, clarification: { open } },
+    clarifications: items.map((item, index) => ({ ...item, id: `e2b00000-0000-4000-8000-0000000001${String(index).padStart(2, '0')}`, family: '', question: 'Synthetic question?', reason: '', state: 'open', candidates: [], confirmation: null })) }), 'clarification'));
+  assert.deepEqual(asked([code]), ['One question about a code is open; it holds that code, which can still be rejected.']);
+  assert.deepEqual(asked([encounter, encounter]), ['2 questions about the encounter are open; each holds the reviewed report.']);
+  assert.deepEqual(asked([service]), ['One question about a documented service no code carries is open; it holds neither a code nor the reviewed report.']);
+  assert.deepEqual(asked([service, code, service]), ['One question about a code is open; it holds that code, which can still be rejected.',
+    '2 questions about documented services no code carries are open; none holds a code or the reviewed report.']);
+  assert.deepEqual(asked([], 2), ['2 questions are open.']);
+  assert.deepEqual(asked([{ ...service, scope: 'another scope' }]), ['One question is open.']);
+  assert.deepEqual(asked([encounter, code], 3), ['3 questions are open.']);
+});
+
+test('R4-CONF d7-5: the Checks tab says what a participant\'s peer answers are, never that a reviewer confirms one', () => {
+  const checks = textOf(render(fixture(H2_FINAL), 'checks'));
+  assert.ok(checks.includes('It answered 3 open questions; an answer is recorded and decides nothing by itself.'), checks);
+  assert.ok(checks.includes('It answered 1 open question; an answer is recorded and decides nothing by itself.'), checks);
+  assert.equal(/reviewer confirms|read only as the passage/.test(checks), false);
+});
+
+test('R4-CONF falsegreen-4: the final fixture\'s reconciliation lists no CMS fact or passage beside a Reference validation row that says none was checked', () => {
+  const doc = fixture(H2_FINAL);
+  const html = render(doc);
+  const row = harnessRow(html, 'reference_validation');
+  assert.ok(row.includes('data-state="not_verified"') && row.includes('No code was checked against the CMS reference files'), row);
+  assert.equal(row.includes('RVU26D') || row.includes('Revision 1/1/2026'), false, row);
+  for (const proposal of doc.assessment.proposals.filter(item => item.bucket === 'selected')) {
+    // the reconciliation's whole section: its label and the note that it retrieved nothing for this code
+    const card = codeCardOf(html, proposal.code);
+    assert.ok(card.includes('<div class="evidence-section reference-retrieval"><div class="evidence-label">CMS reference facts and passages retrieved by the reconciliation</div><p class="harness-note">No CMS reference fact or passage was retrieved for this code.</p></div>'), proposal.code);
+    assert.equal(count(card, '<div class="evidence-section reference-retrieval">'), 1, proposal.code);
+  }
 });

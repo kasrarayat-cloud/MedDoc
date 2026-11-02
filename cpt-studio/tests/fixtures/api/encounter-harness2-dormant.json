@@ -184,23 +184,8 @@
    "state": "not_verified",
    "detail": "No code was checked against the CMS reference files: no service date is established for this encounter, so no dated CMS reference file applies.",
    "codes_checked": 0,
-   "passages": 2,
-   "sources": [
-    {
-     "key": "cms-ncci-policy-manual-2026-ch6",
-     "title": "",
-     "release": "Revision 1/1/2026",
-     "effective_start": "",
-     "effective_end": ""
-    },
-    {
-     "key": "cms-pfs-rvu26d",
-     "title": "",
-     "release": "RVU26D",
-     "effective_start": "",
-     "effective_end": ""
-    }
-   ],
+   "passages": 0,
+   "sources": [],
    "not_connected": [
     "NCCI procedure-to-procedure edits (AMA licence agreement not accepted)",
     "AMA CPT descriptors and guidelines (no licence)",
@@ -537,8 +522,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "94a2de2ad1d1959bd7d24a773c619884c570e2be4855421f76354017a5bd518d",
-   "response_sha256": "a5f345e49a008f0c13a9d17420ffa3086f11255c153548ab8a514c377b784f13",
+   "request_sha256": "172bfa39484afd7939f02cdbb7662413fa98554afb22c5cbffc725d6f9e08a6e",
+   "response_sha256": "19a130719e5fe2061e400dd32c4d214f1d63e4735ccc4cef5011723ecb31ce91",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -560,8 +545,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "71d44e06a2451abcee0d0b6d8a53b0d7cc3e102c36dcf642f50aa4232e61019b",
-   "response_sha256": "24fdabdbbe9133459af690044b9b7aff44246e18afb564ee4db2c9c938ac85e0",
+   "request_sha256": "6bda03bdc007c46a9bb99081def16ccb3d5f67bdd61705b071d7b9c4b54cbeb5",
+   "response_sha256": "b659cb0b43ffd74cdf48dfb18635820ddbe51681cfbc27fdf5cf6e826a8062a5",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -799,48 +784,7 @@
      "state": "not_verified",
      "detail": "Present in the CMS fee schedule file: not verified; Units within the practitioner MUE: not verified; Endoscopic family combination: not verified. NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified."
     },
-    "retrieval": [
-     {
-      "kind": "fact",
-      "source_key": "cms-pfs-rvu26d",
-      "release": "RVU26D",
-      "label": "status",
-      "value": "A",
-      "page": "",
-      "section": "",
-      "text": ""
-     },
-     {
-      "kind": "fact",
-      "source_key": "cms-pfs-rvu26d",
-      "release": "RVU26D",
-      "label": "mult_proc",
-      "value": "3",
-      "page": "",
-      "section": "",
-      "text": ""
-     },
-     {
-      "kind": "fact",
-      "source_key": "cms-pfs-rvu26d",
-      "release": "RVU26D",
-      "label": "endo_base",
-      "value": "45378",
-      "page": "",
-      "section": "",
-      "text": ""
-     },
-     {
-      "kind": "passage",
-      "source_key": "cms-ncci-policy-manual-2026-ch6",
-      "release": "Revision 1/1/2026",
-      "label": "pfs.endo_base",
-      "value": "",
-      "page": "VI-14",
-      "section": "Chapter VI, section C: Endoscopic Services",
-      "text": "SYNTHETIC FIXTURE TEXT, not CMS text: stands in for the rule that a surgical endoscopy includes the diagnostic endoscopy."
-     }
-    ],
+    "retrieval": [],
     "phases": {
      "astra": "independent",
      "fable": "independent"
@@ -1067,48 +1011,7 @@
      "state": "not_verified",
      "detail": "Present in the CMS fee schedule file: not verified; Units within the practitioner MUE: not verified; Endoscopic family combination: not verified. NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified."
     },
-    "retrieval": [
-     {
-      "kind": "fact",
-      "source_key": "cms-pfs-rvu26d",
-      "release": "RVU26D",
-      "label": "status",
-      "value": "A",
-      "page": "",
-      "section": "",
-      "text": ""
-     },
-     {
-      "kind": "fact",
-      "source_key": "cms-pfs-rvu26d",
-      "release": "RVU26D",
-      "label": "mult_proc",
-      "value": "3",
-      "page": "",
-      "section": "",
-      "text": ""
-     },
-     {
-      "kind": "fact",
-      "source_key": "cms-pfs-rvu26d",
-      "release": "RVU26D",
-      "label": "endo_base",
-      "value": "45378",
-      "page": "",
-      "section": "",
-      "text": ""
-     },
-     {
-      "kind": "passage",
-      "source_key": "cms-ncci-policy-manual-2026-ch6",
-      "release": "Revision 1/1/2026",
-      "label": "pfs.endo_base",
-      "value": "",
-      "page": "VI-14",
-      "section": "Chapter VI, section C: Endoscopic Services",
-      "text": "SYNTHETIC FIXTURE TEXT, not CMS text: stands in for the rule that a surgical endoscopy includes the diagnostic endoscopy."
-     }
-    ],
+    "retrieval": [],
     "phases": {
      "astra": "independent",
      "fable": "peer_review"
@@ -1271,7 +1174,7 @@
    {
     "id": "participants.summary",
     "label": "Independent participants",
-    "detail": "Astra (OpenAI, gpt-6-astra) read the document. It proposed 2 codes (45385, 45380), 2 quoting the document verbatim. In peer review, after its first reading was frozen, it took 1 position on codes (1 supports, 0 disputes, 0 cannot tell). It listed 1 additional code (45381), 0 quoting the document verbatim; a code first proposed in peer review is never counted as independent. It answered 3 open questions; an answer is read only as the passage a reviewer confirms. 1 quote it gave in peer review was not found verbatim in the document and is never evidence. Fable (Anthropic, claude-fable-5-1) read the document. It proposed 1 code (45385), 1 quoting the document verbatim. In peer review, after its first reading was frozen, it took 0 positions on codes (0 supports, 0 disputes, 0 cannot tell). It listed 1 additional code (45380), 1 quoting the document verbatim; a code first proposed in peer review is never counted as independent. It answered 1 open question; an answer is read only as the passage a reviewer confirms. A participant never decides a status and agreement never promotes a code: each code it proposes is judged by CPT Studio's own readers, with exact evidence, by the same rules as the proposal provider's, and its questions are notes that never block.",
+    "detail": "Astra (OpenAI, gpt-6-astra) read the document. It proposed 2 codes (45385, 45380), 2 quoting the document verbatim. In peer review, after its first reading was frozen, it took 1 position on codes (1 supports, 0 disputes, 0 cannot tell). It listed 1 additional code (45381), 0 quoting the document verbatim; a code first proposed in peer review is never counted as independent. It answered 3 open questions; an answer is recorded and decides nothing by itself. 1 quote it gave in peer review was not found verbatim in the document and is never evidence. Fable (Anthropic, claude-fable-5-1) read the document. It proposed 1 code (45385), 1 quoting the document verbatim. In peer review, after its first reading was frozen, it took 0 positions on codes (0 supports, 0 disputes, 0 cannot tell). It listed 1 additional code (45380), 1 quoting the document verbatim; a code first proposed in peer review is never counted as independent. It answered 1 open question; an answer is recorded and decides nothing by itself. A participant never decides a status and agreement never promotes a code: each code it proposes is judged by CPT Studio's own readers, with exact evidence, by the same rules as the proposal provider's, and its questions are notes that never block.",
     "source": "cpt-studio:harness@1",
     "status": "info"
    }

@@ -986,16 +986,19 @@ def encounter_detail(encounter, membership):
     jobs = list(encounter.jobs.filter(revision=revision).order_by('created_at')) if revision else []
     state_run = review.state_run(encounter)
     # harness@2 (HARNESS.md 12.5): the candidates of each open question of the final assessment, and each question's
-    # confirmation; every confirmation of the current revision is listed too, after its question has gone
-    offered = review.assessment_candidates(review.live_assessment(encounter))
+    # confirmation; every confirmation of the current revision is listed too, after its question has gone. can_confirm:
+    # a reviewer, while confirmations are offered - never in this release (HARNESS.md 12.10, D7). Refutation round 4
+    # (12.10 as amended, the session's D8): candidates are served only to a member who may confirm one - so to no one in
+    # this release, where review.assessment_candidates is {} as well; the page draws them only for such a member
+    can_confirm = membership.can_review and review.confirmations_offered()
+    offered = review.assessment_candidates(review.live_assessment(encounter)) if can_confirm else {}
     confirmed = {c.clarification_id: c for c in reversed(models.FindingConfirmation.objects.filter(
         clarification__in=clarifications).select_related('confirmed_by', 'revision').order_by('created_at', 'pk'))}
     return {
         **encounter_summary(encounter),
         'created_by': encounter.created_by.label(),
-        # can_confirm: a reviewer, while confirmations are offered - never in this release (HARNESS.md 12.10, D7)
         'permissions': {'can_review': membership.can_review, 'is_owner': is_owner(membership),
-                        'can_confirm': membership.can_review and review.confirmations_offered()},
+                        'can_confirm': can_confirm},
         'harness': harness_json(encounter, jobs),
         'revision': _revision_json(revision),
         'context': {'facts': _context_facts(encounter.current_context),

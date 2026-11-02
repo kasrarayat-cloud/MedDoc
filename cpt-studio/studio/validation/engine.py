@@ -3305,8 +3305,10 @@ class _Harness:
         if self.peer_unlisted.get(p.provider):
             parts.append(checks.unlisted_codes(self.peer_unlisted[p.provider], MAX_LISTED_CODE, 'In peer review it'))
         if peer.answers:
-            parts.append(f'It answered {checks.plural(len(peer.answers), "open question")}; an answer is read only as '
-                         'the passage a reviewer confirms.')
+            # true whether or not confirmations are offered (refutation round 4, d7-5; HARNESS.md 12.10 as amended): it
+            # said an answer "is read only as the passage a reviewer confirms", in a release that offers no confirmation
+            parts.append(f'It answered {checks.plural(len(peer.answers), "open question")}; an answer is recorded and '
+                         'decides nothing by itself.')
         if peer.unverified_quotes:
             one = peer.unverified_quotes == 1
             parts.append(f'{checks.plural(peer.unverified_quotes, "quote")} it gave in peer review '

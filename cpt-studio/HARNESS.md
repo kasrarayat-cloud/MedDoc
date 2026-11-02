@@ -1154,6 +1154,42 @@ member loses anything they can do today, and the completion criteria of 11.5 nee
   so wherever `permissions.can_confirm` is not true; the rendering for a served `can_confirm` true is the dormant
   path's, unchanged.
 
+**Amended after refutation round 4 (the session's D8; d7-1, d7-2, truth-1): no candidate is served.** The located
+passages above were not the participants' answers. A candidate's value is CPT Studio's own inference from a
+participant's reading: a service's status, extent or anatomy paired with every evidence quote of that service
+(`candidates._reading_sources`), so "Their answer: performed" stood beside a photographed-landmarks sentence for a
+forceps-biopsy question neither first reading addressed (d7-2); and an E/M basis the dormant check's own reader read in
+the passage (`candidates._basis_stated`), which also chose the passages served, so "Their answer: time" stood beside
+"Total time of 45 minutes is not used to select the level" and beside an earlier visit's time in a history section
+(d7-1, truth-1). Rather than reword them again, the release serves none. While confirmations are not offered,
+`review.assessment_candidates` is `{}` before it reads anything, so every clarification's `candidates` is `[]` for every
+member. On the dormant path the API serves candidates only to a member who may confirm one (`permissions.can_confirm`),
+and the page draws a question's candidate block only for such a member (`candidateAnswers`), as the dormant path drew
+it. `review.located_passages`, `review.UNCHECKED_WHY` and the page's located-passage rendering (`locatedPassage`,
+`LOCATED_LABEL`, `LOCATED_NOTE`) are removed, so falsegreen-5 (located_passages' unpinned copy of the candidates' merge)
+is moot. A participant's own answers to the open questions stay in its peer review: the owner's trace shows each in its
+own words, and the reports' PEER REVIEW lists each with its value in CPT Studio's words. The bullets above (candidates
+served unchecked, their fixed why, the page's located passages and its note) are superseded, kept so the change can be
+seen. Tests: `tests/test_harness2_r4_conf.py` and the `// refutation round 4, R4-CONF` block of
+`tests/frontend/app.test.cjs`; round 3's pins (`tests/test_harness2_r3_conf.py`, `tests/test_frontend.py`, the `R3-CONF`
+block, `ops/verification/test_verify_browser.cjs`) are moved to what is now served, each saying so.
+
+**Amended after refutation round 4 (d7-3): no sentence names a way a question is settled.** "A question is answered with
+an addendum, or a date of service in the encounter context" (the refusal, the located-passage note, and the
+Clarification row's "each is answered with an addendum (a date of service also in the encounter context)") is false for
+a documented conflict - both cannulation outcomes documented, a biopsy taken beside "No biopsies were taken" - and for
+an included base code, each of which the next revision asked again after an addendum in the round's measurements, and
+for a member's setting that conflicts with the document, which only the encounter context corrects. The refusal now says
+only what happened: "This release offers no reviewer confirmation, so nothing was recorded."
+(`review.CONFIRMATIONS_NOT_OFFERED`, also `review.confirm_finding`'s and `jobs.reassess_after_confirmation`'s, and the
+dev preview server's). The Clarification row says what the readiness rules make true (`review.readiness`,
+`review._review_state`): an open question about the encounter holds the reviewed report; one about a code holds that
+code - it cannot be approved while the question is open - which can still be rejected, and rejecting it lifts that
+code's hold on the reviewed report; one about a documented service no code carries holds neither. Where the questions
+served do not account for the API's count, the row says only the count. The dormant path's row no longer adds "or by a
+reviewer confirming a verified candidate answer" either. The superseded sentences above are kept so the change can be
+seen.
+
 **What stays, dormant, behind the setting.** The candidates' checks (`studio.candidates`, `reconcile.status_stated`),
 the engine's `_Confirmations`, `jobs.reassess_after_confirmation` and its key, a peer request's D4 confirmation reasons
 (`jobs.PEER_CONFIRMED_REASON`, `_peer_reasons`), the confirm endpoint's checks after the refusal, the reports' CONFIRMED
@@ -1162,6 +1198,23 @@ run with `override_settings(STUDIO_OFFER_CONFIRMATIONS=True)` at class level, ea
 release default is tested as the default (`tests/test_harness2_r3_conf.py`, and the `// refutation round 3, R3-CONF`
 block of `tests/frontend/app.test.cjs`). Re-offering any confirmation re-opens all of it, the page's located-passage
 rendering included (its note states this release's scope).
+
+**Amended after refutation round 4 (d7-4): the reports' CONFIRMED FINDINGS is printed only while confirmations are
+offered.** It was not dormant: every harness@2 report printed it at the release default, "None: no reviewer has
+confirmed a finding for this revision.", which implies a reviewer could. Now `reports._harness2` adds
+`confirmed_findings` only while `review.confirmations_offered()`: at the release default the snapshot has none, the TXT
+no section and the CSV no `confirmed_finding` row; on the dormant path all three are as before. A `FindingConfirmation`
+that exists anyway (none can be recorded in this release) is still listed by the API's `confirmations` and printed by
+no report, so `ops/verify_downloads.py` would report the section missing for it (fail closed). With D8 the page's
+located-passage rendering is gone, not dormant (above).
+
+**Amended after refutation round 4 (d7-5): the engine's participants.summary names no reviewer confirmation.** It said
+of a participant's peer answers "It answered N open questions; an answer is read only as the passage a reviewer
+confirms." on every phase-2 assessment, in a release that offers no confirmation (the API, the Checks tab and the TXT
+CHECKS all carry it). It now says "an answer is recorded and decides nothing by itself.", true whether or not
+confirmations are offered: the engine reads no setting. Only the harness path writes the summary (no participant
+configured, no summary), so I1 holds; every harness@2 assessment with a peer answer gets a new sha256, and the fixtures
+are regenerated (`tests/test_harness_engine.py`'s pin moved to the new sentence).
 
 **Dormant-path findings, recorded and not repaired: to be attacked again whenever any confirmation is offered.**
 None is reachable in this release.
@@ -1193,6 +1246,20 @@ service that disagree, landmarks photographed but no extent reached, and a biops
 verifies, even on the dormant path). `tests/test_harness2_r3_conf.py` pins that the assess stage makes the case's first
 assessment, digest for digest, and that its final one is the engine's for the stored runs; the fixtures are regenerated
 from it and every pin moved to what they serve, saying so.
+
+**Amended after refutation round 4 (falsegreen-7, falsegreen-4): the rows beside the assessments are the stage's too.**
+Two were not. The case's `Assessment.participants` entries were written by hand - every code's quote `''`, so the API
+said of each participant's codes "none of its quotes was found in the document", and the frozen list sorted by name -
+while the digest the fidelity test compared could not see them. And the website fixtures' reconciliation retrieval was
+a stand-in of dated CMS facts and a passage, which the stage cannot retrieve for this document (its dates of service
+disagree, so no service date is established), beside a Reference validation row saying no code was checked (the API
+case's was `[]`). Both are now what the assess stage records: each entry is `jobs._first_input`'s record of the
+participant's phase-1 run, with `jobs._with_peer`'s on assess #2, and `jobs._frozen`'s list (`Harness2Case.entry`); the
+retrieval is `jobs._retrieval` of the persisted result with the lookup its engine read (`Harness2Case.retrieval_of`),
+for the API case and the fixtures alike; the fixtures are regenerated. `tests/test_harness2_r4_conf.py` pins that the
+real assess stage records the case's first entries and retrieval, that assess #2's entries are the stage's records, and
+that no fixture serves a reconciliation fact or passage beside a row that says none was checked; the website pin that
+rested on the stand-in's passage is moved to a passage it is served, saying so.
 
 **Checklist 4.6 is NOT DONE in this release.** What it becomes is an open owner question (a product decision with no
 ruled precedent), with two options: (i) a human-override confirmation that claims nothing CPT Studio cannot check - the

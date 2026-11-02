@@ -184,23 +184,8 @@
    "state": "not_verified",
    "detail": "No code was checked against the CMS reference files: no service date is established for this encounter, so no dated CMS reference file applies.",
    "codes_checked": 0,
-   "passages": 2,
-   "sources": [
-    {
-     "key": "cms-ncci-policy-manual-2026-ch6",
-     "title": "",
-     "release": "Revision 1/1/2026",
-     "effective_start": "",
-     "effective_end": ""
-    },
-    {
-     "key": "cms-pfs-rvu26d",
-     "title": "",
-     "release": "RVU26D",
-     "effective_start": "",
-     "effective_end": ""
-    }
-   ],
+   "passages": 0,
+   "sources": [],
    "not_connected": [
     "NCCI procedure-to-procedure edits (AMA licence agreement not accepted)",
     "AMA CPT descriptors and guidelines (no licence)",
@@ -537,8 +522,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "91c33987e3a89e9c2766159ae7c1f0c8ae52d5de5e2c27a8a72c005e2f3bf8f6",
-   "response_sha256": "08313e510f17ab19ded07705a0f5c57bf9089aad190609b988d806d16b59cb53",
+   "request_sha256": "ac40520b1aa9296686c5808eb94320728edab765c632337bd85114d9f025938a",
+   "response_sha256": "621f4498da786c2d83f48f93c841040f1ac6a796a56eccf234b738aeb361119d",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -560,8 +545,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "c1c37479ad59c181ab8c7a101a44be479c72ccad4eeb29c3e87de131027f4adc",
-   "response_sha256": "9e520f9d0e1606c3fddacf97142bc38f00f3b3dc4ccfb088b16c5d9bf3a1680d",
+   "request_sha256": "7d886fd3528971a2b1002f601c3bdf575b1e7a0a3f936f302b214db95e6574b2",
+   "response_sha256": "3a7591140173ea2d42c6a0df5faaee315f1ce36490b2efe43c7d20a7c847c289",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -799,48 +784,7 @@
      "state": "not_verified",
      "detail": "Present in the CMS fee schedule file: not verified; Units within the practitioner MUE: not verified; Endoscopic family combination: not verified. NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified."
     },
-    "retrieval": [
-     {
-      "kind": "fact",
-      "source_key": "cms-pfs-rvu26d",
-      "release": "RVU26D",
-      "label": "status",
-      "value": "A",
-      "page": "",
-      "section": "",
-      "text": ""
-     },
-     {
-      "kind": "fact",
-      "source_key": "cms-pfs-rvu26d",
-      "release": "RVU26D",
-      "label": "mult_proc",
-      "value": "3",
-      "page": "",
-      "section": "",
-      "text": ""
-     },
-     {
-      "kind": "fact",
-      "source_key": "cms-pfs-rvu26d",
-      "release": "RVU26D",
-      "label": "endo_base",
-      "value": "45378",
-      "page": "",
-      "section": "",
-      "text": ""
-     },
-     {
-      "kind": "passage",
-      "source_key": "cms-ncci-policy-manual-2026-ch6",
-      "release": "Revision 1/1/2026",
-      "label": "pfs.endo_base",
-      "value": "",
-      "page": "VI-14",
-      "section": "Chapter VI, section C: Endoscopic Services",
-      "text": "SYNTHETIC FIXTURE TEXT, not CMS text: stands in for the rule that a surgical endoscopy includes the diagnostic endoscopy."
-     }
-    ],
+    "retrieval": [],
     "phases": {
      "astra": "independent",
      "fable": "independent"
@@ -1067,48 +1011,7 @@
      "state": "not_verified",
      "detail": "Present in the CMS fee schedule file: not verified; Units within the practitioner MUE: not verified; Endoscopic family combination: not verified. NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified."
     },
-    "retrieval": [
-     {
-      "kind": "fact",
-      "source_key": "cms-pfs-rvu26d",
-      "release": "RVU26D",
-      "label": "status",
-      "value": "A",
-      "page": "",
-      "section": "",
-      "text": ""
-     },
-     {
-      "kind": "fact",
-      "source_key": "cms-pfs-rvu26d",
-      "release": "RVU26D",
-      "label": "mult_proc",
-      "value": "3",
-      "page": "",
-      "section": "",
-      "text": ""
-     },
-     {
-      "kind": "fact",
-      "source_key": "cms-pfs-rvu26d",
-      "release": "RVU26D",
-      "label": "endo_base",
-      "value": "45378",
-      "page": "",
-      "section": "",
-      "text": ""
-     },
-     {
-      "kind": "passage",
-      "source_key": "cms-ncci-policy-manual-2026-ch6",
-      "release": "Revision 1/1/2026",
-      "label": "pfs.endo_base",
-      "value": "",
-      "page": "VI-14",
-      "section": "Chapter VI, section C: Endoscopic Services",
-      "text": "SYNTHETIC FIXTURE TEXT, not CMS text: stands in for the rule that a surgical endoscopy includes the diagnostic endoscopy."
-     }
-    ],
+    "retrieval": [],
     "phases": {
      "astra": "independent",
      "fable": "peer_review"
@@ -1271,7 +1174,7 @@
    {
     "id": "participants.summary",
     "label": "Independent participants",
-    "detail": "Astra (OpenAI, gpt-6-astra) read the document. It proposed 2 codes (45385, 45380), 2 quoting the document verbatim. In peer review, after its first reading was frozen, it took 1 position on codes (1 supports, 0 disputes, 0 cannot tell). It listed 1 additional code (45381), 0 quoting the document verbatim; a code first proposed in peer review is never counted as independent. It answered 3 open questions; an answer is read only as the passage a reviewer confirms. 1 quote it gave in peer review was not found verbatim in the document and is never evidence. Fable (Anthropic, claude-fable-5-1) read the document. It proposed 1 code (45385), 1 quoting the document verbatim. In peer review, after its first reading was frozen, it took 0 positions on codes (0 supports, 0 disputes, 0 cannot tell). It listed 1 additional code (45380), 1 quoting the document verbatim; a code first proposed in peer review is never counted as independent. It answered 1 open question; an answer is read only as the passage a reviewer confirms. A participant never decides a status and agreement never promotes a code: each code it proposes is judged by CPT Studio's own readers, with exact evidence, by the same rules as the proposal provider's, and its questions are notes that never block.",
+    "detail": "Astra (OpenAI, gpt-6-astra) read the document. It proposed 2 codes (45385, 45380), 2 quoting the document verbatim. In peer review, after its first reading was frozen, it took 1 position on codes (1 supports, 0 disputes, 0 cannot tell). It listed 1 additional code (45381), 0 quoting the document verbatim; a code first proposed in peer review is never counted as independent. It answered 3 open questions; an answer is recorded and decides nothing by itself. 1 quote it gave in peer review was not found verbatim in the document and is never evidence. Fable (Anthropic, claude-fable-5-1) read the document. It proposed 1 code (45385), 1 quoting the document verbatim. In peer review, after its first reading was frozen, it took 0 positions on codes (0 supports, 0 disputes, 0 cannot tell). It listed 1 additional code (45380), 1 quoting the document verbatim; a code first proposed in peer review is never counted as independent. It answered 1 open question; an answer is recorded and decides nothing by itself. A participant never decides a status and agreement never promotes a code: each code it proposes is judged by CPT Studio's own readers, with exact evidence, by the same rules as the proposal provider's, and its questions are notes that never block.",
     "source": "cpt-studio:harness@1",
     "status": "info"
    }
@@ -1489,84 +1392,7 @@
    "question": "Colonoscopy: confirm the furthest extent reached.",
    "reason": "The extent reached is not documented; the Colonoscopy profile requires it.",
    "state": "open",
-   "candidates": [
-    {
-     "id": "e3e26f0603f542d7",
-     "clarification_id": "e2b00000-0000-4000-8000-00000000000a",
-     "fact": "extent",
-     "value": "cecum",
-     "located_by": [
-      "astra",
-      "fable"
-     ],
-     "phase": "independent",
-     "phases": {
-      "astra": "independent",
-      "fable": "independent"
-     },
-     "runs": [
-      "e2b00000-0000-4000-8000-000000000003",
-      "e2b00000-0000-4000-8000-000000000005",
-      "e2b00000-0000-4000-8000-000000000004",
-      "e2b00000-0000-4000-8000-000000000006"
-     ],
-     "spans": [
-      {
-       "start": 232,
-       "end": 296,
-       "text": "Landmarks photographed: appendiceal orifice and ileocecal valve.",
-       "page": 1
-      }
-     ],
-     "sentences": [
-      {
-       "start": 221,
-       "end": 296,
-       "text": "Technique: Landmarks photographed: appendiceal orifice and ileocecal valve."
-      }
-     ],
-     "verified": false,
-     "why": "CPT Studio does not check what a participant's passage states, and this release offers no confirmation.",
-     "attestation": ""
-    },
-    {
-     "id": "1aea94dc880573e1",
-     "clarification_id": "e2b00000-0000-4000-8000-00000000000a",
-     "fact": "extent",
-     "value": "cecum",
-     "located_by": [
-      "astra",
-      "fable"
-     ],
-     "phase": "independent",
-     "phases": {
-      "astra": "independent",
-      "fable": "independent"
-     },
-     "runs": [
-      "e2b00000-0000-4000-8000-000000000003",
-      "e2b00000-0000-4000-8000-000000000005"
-     ],
-     "spans": [
-      {
-       "start": 335,
-       "end": 437,
-       "text": "A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology.",
-       "page": 2
-      }
-     ],
-     "sentences": [
-      {
-       "start": 325,
-       "end": 437,
-       "text": "Findings: A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology."
-      }
-     ],
-     "verified": false,
-     "why": "CPT Studio does not check what a participant's passage states, and this release offers no confirmation.",
-     "attestation": ""
-    }
-   ],
+   "candidates": [],
    "confirmation": null
   },
   {
@@ -1578,116 +1404,7 @@
    "question": "The documented colonoscopy leaves the forceps biopsy in doubt (“A 3 mm polyp in the rectum was possibly biopsied with cold forceps.”). Was a forceps biopsy performed on the date of service?",
    "reason": "The colonoscopy is documented as performed, but the document does not establish the forceps biopsy as done: “A 3 mm polyp in the rectum was possibly biopsied with cold forceps.”. The routing-era reading of the passages it cites also holds it: No documentation establishes that Colonoscopy was performed on the date of service. Read as uncertain: “A 3 mm polyp in the rectum was possibly biopsied with cold forceps.” (cue “uncertain: A 3 mm polyp in the rectum was possibly biopsied”, linked passage). Routing reads it as performed elsewhere: “Colonoscopy.” (cue “section: procedure (Procedure)”, routing).",
    "state": "open",
-   "candidates": [
-    {
-     "id": "0bdfa330787ea3f7",
-     "clarification_id": "e2b00000-0000-4000-8000-00000000000c",
-     "fact": "performed_status",
-     "value": "performed",
-     "located_by": [
-      "astra",
-      "fable"
-     ],
-     "phase": "independent",
-     "phases": {
-      "astra": "independent",
-      "fable": "independent"
-     },
-     "runs": [
-      "e2b00000-0000-4000-8000-000000000003",
-      "e2b00000-0000-4000-8000-000000000005"
-     ],
-     "spans": [
-      {
-       "start": 232,
-       "end": 296,
-       "text": "Landmarks photographed: appendiceal orifice and ileocecal valve.",
-       "page": 1
-      }
-     ],
-     "sentences": [
-      {
-       "start": 221,
-       "end": 296,
-       "text": "Technique: Landmarks photographed: appendiceal orifice and ileocecal valve."
-      }
-     ],
-     "verified": false,
-     "why": "CPT Studio does not check what a participant's passage states, and this release offers no confirmation.",
-     "attestation": ""
-    },
-    {
-     "id": "f0eac321174e011d",
-     "clarification_id": "e2b00000-0000-4000-8000-00000000000c",
-     "fact": "performed_status",
-     "value": "performed",
-     "located_by": [
-      "astra",
-      "fable"
-     ],
-     "phase": "independent",
-     "phases": {
-      "astra": "independent",
-      "fable": "independent"
-     },
-     "runs": [
-      "e2b00000-0000-4000-8000-000000000003",
-      "e2b00000-0000-4000-8000-000000000005"
-     ],
-     "spans": [
-      {
-       "start": 335,
-       "end": 437,
-       "text": "A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology.",
-       "page": 2
-      }
-     ],
-     "sentences": [
-      {
-       "start": 325,
-       "end": 437,
-       "text": "Findings: A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology."
-      }
-     ],
-     "verified": false,
-     "why": "CPT Studio does not check what a participant's passage states, and this release offers no confirmation.",
-     "attestation": ""
-    },
-    {
-     "id": "6f46ac5f60d68e37",
-     "clarification_id": "e2b00000-0000-4000-8000-00000000000c",
-     "fact": "performed_status",
-     "value": "performed",
-     "located_by": [
-      "astra"
-     ],
-     "phase": "peer_review",
-     "phases": {
-      "astra": "peer_review"
-     },
-     "runs": [
-      "e2b00000-0000-4000-8000-000000000004"
-     ],
-     "spans": [
-      {
-       "start": 438,
-       "end": 505,
-       "text": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps.",
-       "page": 2
-      }
-     ],
-     "sentences": [
-      {
-       "start": 438,
-       "end": 505,
-       "text": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps."
-      }
-     ],
-     "verified": false,
-     "why": "CPT Studio does not check what a participant's passage states, and this release offers no confirmation.",
-     "attestation": ""
-    }
-   ],
+   "candidates": [],
    "confirmation": null
   },
   {
@@ -1699,82 +1416,7 @@
    "question": "Colonoscopy: confirm the furthest extent reached.",
    "reason": "The extent reached is not documented; the Colonoscopy profile requires it.",
    "state": "open",
-   "candidates": [
-    {
-     "id": "5cf4543d51bcad68",
-     "clarification_id": "e2b00000-0000-4000-8000-00000000000d",
-     "fact": "extent",
-     "value": "cecum",
-     "located_by": [
-      "astra",
-      "fable"
-     ],
-     "phase": "independent",
-     "phases": {
-      "astra": "independent",
-      "fable": "independent"
-     },
-     "runs": [
-      "e2b00000-0000-4000-8000-000000000003",
-      "e2b00000-0000-4000-8000-000000000005"
-     ],
-     "spans": [
-      {
-       "start": 232,
-       "end": 296,
-       "text": "Landmarks photographed: appendiceal orifice and ileocecal valve.",
-       "page": 1
-      }
-     ],
-     "sentences": [
-      {
-       "start": 221,
-       "end": 296,
-       "text": "Technique: Landmarks photographed: appendiceal orifice and ileocecal valve."
-      }
-     ],
-     "verified": false,
-     "why": "CPT Studio does not check what a participant's passage states, and this release offers no confirmation.",
-     "attestation": ""
-    },
-    {
-     "id": "2e564db5d2e41647",
-     "clarification_id": "e2b00000-0000-4000-8000-00000000000d",
-     "fact": "extent",
-     "value": "cecum",
-     "located_by": [
-      "astra",
-      "fable"
-     ],
-     "phase": "independent",
-     "phases": {
-      "astra": "independent",
-      "fable": "independent"
-     },
-     "runs": [
-      "e2b00000-0000-4000-8000-000000000003",
-      "e2b00000-0000-4000-8000-000000000005"
-     ],
-     "spans": [
-      {
-       "start": 335,
-       "end": 437,
-       "text": "A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology.",
-       "page": 2
-      }
-     ],
-     "sentences": [
-      {
-       "start": 325,
-       "end": 437,
-       "text": "Findings: A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology."
-      }
-     ],
-     "verified": false,
-     "why": "CPT Studio does not check what a participant's passage states, and this release offers no confirmation.",
-     "attestation": ""
-    }
-   ],
+   "candidates": [],
    "confirmation": null
   },
   {
@@ -1786,46 +1428,7 @@
    "question": "Confirm the date of service for this encounter.",
    "reason": "Conflicting dates of service are documented (“Date of service: 2026-10-21”, “Procedure date: 2026-10-22”); every service and every dated reference check depends on it.",
    "state": "open",
-   "candidates": [
-    {
-     "id": "069d4a8ef0b4638e",
-     "clarification_id": "e2b00000-0000-4000-8000-00000000000f",
-     "fact": "service_date",
-     "value": "2026-10-21",
-     "located_by": [
-      "astra",
-      "fable"
-     ],
-     "phase": "independent",
-     "phases": {
-      "astra": "independent",
-      "fable": "independent"
-     },
-     "runs": [
-      "e2b00000-0000-4000-8000-000000000003",
-      "e2b00000-0000-4000-8000-000000000005",
-      "e2b00000-0000-4000-8000-000000000004"
-     ],
-     "spans": [
-      {
-       "start": 106,
-       "end": 133,
-       "text": "Date of service: 2026-10-21",
-       "page": 1
-      }
-     ],
-     "sentences": [
-      {
-       "start": 106,
-       "end": 133,
-       "text": "Date of service: 2026-10-21"
-      }
-     ],
-     "verified": false,
-     "why": "CPT Studio does not check what a participant's passage states, and this release offers no confirmation.",
-     "attestation": ""
-    }
-   ],
+   "candidates": [],
    "confirmation": null
   }
  ],

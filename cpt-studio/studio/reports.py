@@ -502,8 +502,10 @@ def _harness2(assessment):
     phase = review.assessment_phase(assessment)
     if phase == 0:
         return {}
-    return {'phase': phase, 'peer_review': _peer_reviews(assessment, phase),
-            'confirmed_findings': _confirmed_findings(assessment),
+    # CONFIRMED FINDINGS only while confirmations are offered (refutation round 4, d7-4; HARNESS.md 12.10 as amended):
+    # this release offers none, and the section's "no reviewer has confirmed a finding" implied a reviewer could
+    confirmed = {'confirmed_findings': _confirmed_findings(assessment)} if review.confirmations_offered() else {}
+    return {'phase': phase, 'peer_review': _peer_reviews(assessment, phase), **confirmed,
             'participant_references': _participant_reference_runs(assessment)}
 
 

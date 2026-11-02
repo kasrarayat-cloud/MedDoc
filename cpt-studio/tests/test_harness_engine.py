@@ -916,8 +916,11 @@ class PeerReviewTests(SimpleTestCase):
         self.assertEqual((result.clarifications, result.proposals[0].clarifications),
                          (alone.clarifications, alone.proposals[0].clarifications))
         summary = encounter_check(result, 'participants.summary').detail
-        self.assertIn('It answered 1 open question; an answer is read only as the passage a reviewer confirms. 1 quote '
-                      'it gave in peer review was not found verbatim in the document and is never evidence.', summary)
+        # moved by refutation round 4 (d7-5, HARNESS.md 12.10 as amended): the sentence is true whether or not
+        # confirmations are offered, where it said "an answer is read only as the passage a reviewer confirms"
+        self.assertIn('It answered 1 open question; an answer is recorded and decides nothing by itself. 1 quote it '
+                      'gave in peer review was not found verbatim in the document and is never evidence.', summary)
+        self.assertNotIn('confirm', summary)
         self.assertNotIn(OWN_WORDS, canonical_json(result).decode('utf-8'))
 
     def test_keys_and_fingerprints_are_the_same_whatever_the_order_given(self):
