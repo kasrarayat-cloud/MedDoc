@@ -302,6 +302,68 @@ class ToolArgumentShapeTests(ShapesCase):
             self.assertNotIn(value, text, value)
 
 
+class TraceReviewShapeTests(ShapesCase):
+    """falsegreen-2: the trace's peer review - its positions and its additional codes' codes and modifiers - in the
+    strict shapes (serializers._code_entry), pinned on tokens of 20 characters or fewer with no whitespace, which round
+    2's token rule served as written."""
+
+    def test_the_trace_s_peer_review_shows_codes_and_modifiers_only_in_their_shapes(self):
+        _, trace, _, _, _ = self.run_chain()
+        _, peer_run = self.astra_runs(trace)
+        review = peer_run['review']
+        self.assertEqual([(item['code'], item['position']) for item in review['positions']],
+                         [('45380', 'supports'), (length(POSITION_TOKEN), 'disputes')])
+        self.assertEqual([(item['code'], item['modifiers']) for item in review['additional_codes']],
+                         [('45380', []), (length(ADDED_TOKEN), [length(MODIFIER_TOKEN), 'XS'])])
+        text = json.dumps(trace, ensure_ascii=False)
+        self.assertEqual([value for value in WITHHELD if value in text], [])
+
+
+class ReaderQuotingTests(OfflineTestCase):
+    """falsegreen-3: a problem quotes a model-written value only in a shape that cannot carry descriptor text
+    (participants.reading._token); descriptor-like text that opens with a date or a code is named by its length - its
+    date shape is digits and date punctuation only, never 'a digit and then anything'."""
+
+    def setUp(self):
+        super().setUp()
+        self.adapter = AstraParticipant(self.tmp / 'never-read.env')
+        self.request = self.adapter.build_request(NOTE, PAGES, 'paste', None)
+
+    def test_a_first_reading_names_date_and_code_led_descriptor_text_by_its_length(self):
+        result = self.adapter.read(self.request, astra_with(empty_reading(
+            date_of_service={'value': '2026-10-21;W/LES(S)', 'evidence': []}, services=[service()],
+            codes=[code('45385;WITH-POLYP(S)'), code('45380(S)'), code('45385')],
+            not_coded=[{'service_ids': ['s1'], 'code': '2026-10-21(S)', 'reason': 'other', 'evidence': []}])))
+        self.assertFalse(result.refused, result.problems)
+        self.assertEqual(result.problems, (
+            'date_of_service a value of 19 characters is not a YYYY-MM-DD date; it was not used.',
+            'codes[0] (a value of 19 characters) is not a five-character CPT code; it is kept as given.',
+            'codes[1] (a value of 8 characters) is not a five-character CPT code; it is kept as given.',
+            'not_coded[0] (a value of 13 characters) is not a five-character CPT code; it is kept as given.'))
+
+    def test_a_peer_review_names_them_by_their_length_too(self):
+        review = peer.read(json.dumps({
+            'question_answers': [], 'references_used': [],
+            'code_positions': [{'code': '45385;WITH-POLYP(S)', 'position': 'supports', 'reason': '', 'evidence': []}],
+            'additional_codes': [code('45380(S)', service_ids=[]), code('2026-10-21;W/LES(S)', units=0)]}),
+            NOTE, provider='astra', adapter_version='synthetic@1', requested_model='gpt-6-astra',
+            returned_model='gpt-6-astra', question_ids=(), frozen_inputs=())
+        self.assertEqual(review.problems, (
+            'code_positions[0] (a value of 19 characters) is not a five-character CPT code; it is kept as given.',
+            'additional_codes[0] (a value of 8 characters) is not a five-character CPT code; it is kept as given.',
+            'additional_codes[1] (a value of 19 characters) gives 0 units, outside 1 to 99; it was dropped.'))
+        # the shapes that are quoted still are: a code, a date, a short id
+        review = peer.read(json.dumps({
+            'question_answers': [], 'references_used': [],
+            'code_positions': [{'code': value, 'position': 'supports', 'reason': '', 'evidence': []}
+                               for value in ('2026-10-21', '4538', 'G0121x')],
+            'additional_codes': []}), NOTE, provider='astra', adapter_version='synthetic@1',
+            requested_model='gpt-6-astra', returned_model='gpt-6-astra', question_ids=(), frozen_inputs=())
+        self.assertEqual(review.problems, tuple(
+            f'code_positions[{index}] ({name}) is not a five-character CPT code; it is kept as given.'
+            for index, name in enumerate(["'2026-10-21'", "'4538'", "'G0121x'"])))
+
+
 # --- the engine, pure (tests.test_harness_engine's document and helpers) ----------------------------------------------
 
 class EngineListingTests(OfflineTestCase):
