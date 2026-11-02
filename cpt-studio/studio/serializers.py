@@ -4,6 +4,7 @@ from django.conf import settings
 from . import models, participants, review
 from .gi.context import charge_date_problem, is_member_conflict
 from .gi.profiles import PROFILES, profile
+from .participants.reading import CODE as CODE_SHAPE
 from .providers.base import ProviderUnavailable
 from .types import to_jsonable
 
@@ -293,6 +294,10 @@ def _proposal_json(proposal, current, assessment, membership, clarification_ids)
         'participant_positions': review.participant_positions(proposal, assessment.participants),
         'reference_check': review.reference_check(proposal),
         'retrieval': review.proposal_retrieval(proposal, assessment.retrieval),
+        # harness@2 (HARNESS.md 11.1, 11.3, 12.6), from the engine's support record: the phase in which each participant
+        # first proposed the code (a code first proposed in peer review is never independent), and the reviewer
+        # confirmations this proposal's checks read - a confirmed fact, never a decision
+        'phases': _phases(proposal.support), 'confirmed': _confirmed_ids(proposal.support),
     }
 
 
@@ -322,11 +327,34 @@ def _assessment_json(encounter, membership):
     return data, clarifications
 
 
+def _phases(support):
+    """{participant: 'independent' | 'peer_review'} from a proposal's support record; {} when it records none."""
+    phases = (support or {}).get('phases')
+    if not isinstance(phases, dict):
+        return {}
+    return {name: phase for name, phase in phases.items()
+            if isinstance(name, str) and phase in (models.ProviderRun.INDEPENDENT, models.ProviderRun.PEER_REVIEW)}
+
+
+def _confirmed_ids(support):
+    """The ids of the FindingConfirmations a proposal's checks read (the engine's support['confirmed'])."""
+    confirmed = (support or {}).get('confirmed')
+    return [str(item) for item in confirmed if isinstance(item, str)] if isinstance(confirmed, list) else []
+
+
 def _clarification_json(clarification):
     return {'id': str(clarification.pk), 'scope': clarification.scope,
             'proposal_id': str(clarification.proposal_id) if clarification.proposal_id else None,
             'family': clarification.family, 'fact': clarification.fact, 'question': clarification.question,
             'reason': clarification.reason, 'state': clarification.state}
+
+
+def _question_json(clarification, candidates=(), confirmation=None):
+    """A clarification as _clarification_json serves it (ops/verification/test_verify_browser.cjs pins that text) with,
+    harness@2 (HARNESS.md 12.5, 12.6), the candidate answers the participants' located passages offer for it (only an
+    open question of the final assessment has any) and its confirmation, or null."""
+    return {**_clarification_json(clarification), 'candidates': list(candidates),
+            'confirmation': confirmation_json(confirmation) if confirmation is not None else None}
 
 
 def _provider_run_json(run):
@@ -338,6 +366,20 @@ def _provider_run_json(run):
             'reused_from': str(run.reused_from_id) if run.reused_from_id else None, 'error': run.error,
             'reconciled': run.reconciled_at is not None, 'created_at': _iso(run.created_at),
             'purpose': run.purpose, 'scope_items': list((run.scope or {}).get('items', []))}
+
+
+def confirmation_json(confirmation):
+    """A FindingConfirmation (HARNESS.md 11.3, 12.6): the fact a reviewer confirmed from a participant's located
+    passage, with that passage, who located it, who confirmed it and the attestation recorded - a confirmed fact,
+    never a decision on a code."""
+    reviewer = confirmation.confirmed_by
+    return {'id': str(confirmation.pk), 'clarification_id': str(confirmation.clarification_id),
+            'scope': confirmation.scope, 'fact': confirmation.fact, 'family': confirmation.family,
+            'proposal_key': confirmation.proposal_key, 'value': confirmation.value,
+            'spans': list(confirmation.spans or []), 'located_by': list(confirmation.located_by or []),
+            'runs': list(confirmation.runs or []), 'confirmed_by': reviewer.label(),
+            'confirmed_by_kind': reviewer.actor_kind, 'attestation': confirmation.attestation,
+            'created_at': _iso(confirmation.created_at), 'revision_number': confirmation.revision.number}
 
 
 def _report_json(report):
@@ -357,6 +399,7 @@ ACTIVITY_SUMMARIES = {
     'pipeline.stopped': 'Processing stopped', 'pipeline.resumed': 'Processing resumed',
     'decisions.invalidated': 'Earlier decisions invalidated by a source revision',
     'account.provisioned': 'Account provisioned',
+    'finding.confirmed': "Finding confirmed from a participant's located passage (not a decision)",
 }
 # Repair gi2 (the recovery lens): 'provider.sending' is recorded before the exchange, so it says only that the attempt
 # started, and 'provider.finished' is worded from the outcome its own row recorded (every revision records the state and
@@ -395,7 +438,8 @@ def _activity_json(event):
             'actor': actor, 'actor_kind': event.actor_kind, 'created_at': _iso(event.created_at),
             'data': {k: v for k, v in event.data.items() if k in {'status', 'method', 'state', 'action', 'code',
                                                                   'kind', 'fmt', 'usage', 'http_status', 'pages',
-                                                                  'ocr_pages', 'proposals', 'fields', 'stage'}}}
+                                                                  'ocr_pages', 'proposals', 'fields', 'stage',
+                                                                  'fact', 'effect'}}}
 
 
 def is_owner(membership):
@@ -598,16 +642,97 @@ def _reference_validation(assessment, active):
     return out
 
 
+NO_REFERENCES = {'retrieved': [], 'used': []}
+PEER_WAITING = {'waiting': WAITING_DETAIL, 'running': RUNNING_DETAIL, 'stopped': STOPPED_DETAIL}
+
+
+def _peer_progress(jobs, name):
+    """'waiting', 'running' or 'stopped' while the current chain has not finished ``name``'s peer stage (HARNESS.md
+    12.1: astra_peer, then fable_peer); None once its outcome stands or nothing will run it."""
+    order = participants.PARTICIPANTS
+    kinds = {f'{other}_peer': other for other in order}
+    own = [job for job in jobs if job.kind == f'{name}_peer']
+    if own and own[-1].state in (models.Job.QUEUED, models.Job.RUNNING):
+        return 'running' if own[-1].state == models.Job.RUNNING else 'waiting'
+    if own and own[-1].state == models.Job.CANCELLED and jobs and jobs[-1].pk == own[-1].pk:
+        return 'stopped'
+    # an earlier participant's peer stage (or this one's) is under way, and this participant's comes after it
+    ahead = [job for job in jobs if job.kind in kinds and job.state in (models.Job.QUEUED, models.Job.RUNNING)
+             and order.index(kinds[job.kind]) <= order.index(name)]
+    if ahead and (not own or own[-1].created_at < ahead[0].created_at):
+        return 'waiting'
+    return None
+
+
+def _codes_added(peer_review):
+    """The CPT codes a peer review proposed after peer review (its additional codes), each once, in order."""
+    if peer_review is None or peer_review.refused:
+        return []
+    codes = [item.code for item in peer_review.additional_codes
+             if isinstance(item.code, str) and CODE_SHAPE.fullmatch(item.code)]
+    return list(dict.fromkeys(codes))
+
+
+def _peer_detail(record):
+    """A participant's peer review (its assess #2 entry) in one plain sentence."""
+    state = record.get('peer_state')
+    if state == 'read':
+        detail = 'Answered in peer review, after its first reading was frozen; the review was used.'
+        count = int(record.get('peer_unverified_quotes') or 0)
+        if count:
+            detail += (f' {count} of its quotes {"was" if count == 1 else "were"} not found in the document, so '
+                       f'{"it is" if count == 1 else "they are"} never used as evidence.')
+        return detail
+    words = review.record_words({'state': state, 'reason': record.get('peer_reason')})
+    words = words.replace('the reading was not used', 'the review was not used', 1)
+    return 'Peer review: ' + words + '.' + (RECONCILE_FIRST if state in ('unknown', 'blocked') else '')
+
+
+def _harness2(row, assessment, jobs):
+    """The harness@2 fields of one participant row (HARNESS.md 12.6): ``peer`` - its peer review's state, sentence,
+    run, the codes it added and its unverified quotes ({} before phase 2, for Corti, or for a participant not
+    configured) - and the references its phase-1 run (``references``) and its peer-review run (``peer_references``)
+    retrieved and used, never merged with each other or with the reconciliation's (reference_validation)."""
+    out = {'peer': {}, 'references': dict(NO_REFERENCES), 'peer_references': dict(NO_REFERENCES)}
+    name = row['name']
+    if name not in participants.PARTICIPANTS:
+        return out
+    run = models.ProviderRun.objects.filter(pk=row['run_id']).first() if row['run_id'] else None
+    if run is not None and run.purpose == models.ProviderRun.INDEPENDENT:
+        out['references'] = review.participant_references(run)
+    progress = _peer_progress(jobs, name)
+    record = review.model_records(assessment).get(name) if assessment is not None else None
+    if progress is not None:
+        out['peer'] = {'state': progress, 'detail': PEER_WAITING[progress], 'run_id': None, 'codes_added': [],
+                       'unverified_quotes': 0}
+    elif record is not None and 'peer_state' in record:
+        peer_run = review.record_run(assessment, record, 'peer_run')
+        peer_review = None
+        if peer_run is not None and record.get('peer_state') == 'read':
+            peer_review, _ = review.stored_peer_review(peer_run)
+        out['peer'] = {'state': RECORD_STATES.get(record.get('peer_state'), 'unknown'), 'detail': _peer_detail(record),
+                       'run_id': str(peer_run.pk) if peer_run is not None else None,
+                       'codes_added': _codes_added(peer_review),
+                       'unverified_quotes': int(record.get('peer_unverified_quotes') or 0)}
+        if peer_run is not None:
+            out['peer_references'] = review.participant_references(peer_run, peer_review)
+    return out
+
+
 def harness_json(encounter, jobs):
     """The harness block of the encounter view (HARNESS.md 7): Corti, Astra and Fable, always in that order, each saying
     plainly whether it ran, is waiting, is not configured, failed, has an unknown outcome or was refused; then reference
-    validation, clarification and the final status. ``jobs``: the current revision's, oldest first."""
+    validation, clarification and the final status. ``jobs``: the current revision's, oldest first. harness@2 (12.6)
+    adds each row's peer review and its references, and ``phase``: 0 with no model participant, 1 before the peer
+    reviews are assessed, 2 after (read from the current assessment's record, 12.3)."""
     assessment = review.live_assessment(encounter)
     configured = participants.configured()
     active = any(job.state in (models.Job.QUEUED, models.Job.RUNNING) for job in jobs)
+    rows = ([_corti_row(encounter, assessment, jobs)]
+            + [_participant_row(encounter, assessment, jobs, name, configured) for name in participants.PARTICIPANTS])
     return {
-        'participants': [_corti_row(encounter, assessment, jobs)]
-        + [_participant_row(encounter, assessment, jobs, name, configured) for name in participants.PARTICIPANTS],
+        'participants': [{**row, **_harness2(row, assessment, jobs)} for row in rows],
+        'phase': review.assessment_phase(assessment) if assessment is not None else (1 if configured else 0),
         'reference_validation': _reference_validation(assessment, active),
         'clarification': {'open': assessment.clarifications.filter(state=models.Clarification.OPEN).count()
                           if assessment is not None else 0},
@@ -622,10 +747,16 @@ def encounter_detail(encounter, membership):
     revision = encounter.current_revision
     jobs = list(encounter.jobs.filter(revision=revision).order_by('created_at')) if revision else []
     state_run = review.state_run(encounter)
+    # harness@2 (HARNESS.md 12.5): the candidates of each open question of the final assessment, and each question's
+    # confirmation; every confirmation of the current revision is listed too, after its question has gone
+    offered = review.assessment_candidates(review.live_assessment(encounter))
+    confirmed = {c.clarification_id: c for c in reversed(models.FindingConfirmation.objects.filter(
+        clarification__in=clarifications).select_related('confirmed_by', 'revision').order_by('created_at', 'pk'))}
     return {
         **encounter_summary(encounter),
         'created_by': encounter.created_by.label(),
-        'permissions': {'can_review': membership.can_review, 'is_owner': is_owner(membership)},
+        'permissions': {'can_review': membership.can_review, 'is_owner': is_owner(membership),
+                        'can_confirm': membership.can_review},
         'harness': harness_json(encounter, jobs),
         'revision': _revision_json(revision),
         'context': {'facts': _context_facts(encounter.current_context),
@@ -643,7 +774,9 @@ def encounter_detail(encounter, membership):
         'second_review': {**second_review_status(encounter),
                           'can_request': membership.can_review},
         'assessment': assessment,
-        'clarifications': [_clarification_json(c) for c in clarifications],
+        'clarifications': [_question_json(c, offered.get(str(c.pk), ()), confirmed.get(c.pk))
+                           for c in clarifications],
+        'confirmations': [confirmation_json(c) for c in review.revision_confirmations(revision)],
         'decisions': {'history': [_decision_json(d) for d in encounter.decisions.select_related(
             'proposal', 'reviewer', 'revision').order_by('sequence')]},
         'readiness': review.readiness(encounter),
@@ -656,21 +789,52 @@ def encounter_detail(encounter, membership):
 # --- the administrative trace (HARNESS.md 7; owner only, api.trace) ---------------------------------------------------
 
 def _trace_reading(run):
-    """A participant run's full normalized reading - the quotes CPT Studio could not locate included - read as the
-    adapter version that recorded it; None for Corti's runs and for a run with no answer."""
-    from .jobs import participant_reading  # local import: jobs imports this module's peers
-
-    if run.provider not in participants.PARTICIPANTS or run.state != models.ProviderRun.SUCCEEDED:
+    """A participant's first-reading run's full normalized reading - the quotes CPT Studio could not locate included,
+    and each reference it says it used with CPT Studio's check against that run's own tool results - read as the
+    adapter version that recorded it; None for Corti's runs, a peer-review run (its ``review``) and a run with no
+    answer."""
+    if (run.provider not in participants.PARTICIPANTS or run.purpose != models.ProviderRun.INDEPENDENT
+            or run.state != models.ProviderRun.SUCCEEDED):
         return None
-    reading, problem = participant_reading(run)
+    reading, problem = review.stored_reading(run)
     if reading is None:
         return {'refused': True, 'problems': [problem], 'unverified_quotes': 0, 'date_of_service': {},
-                'services': [], 'codes': [], 'not_coded': [], 'questions': [], 'extraction_issues': []}
+                'services': [], 'codes': [], 'not_coded': [], 'questions': [], 'extraction_issues': [],
+                'references_used': []}
     data = to_jsonable(reading)
     return {'refused': data['refused'], 'problems': data['problems'], 'unverified_quotes': data['unverified_quotes'],
             'date_of_service': {'value': data['date_of_service'], 'evidence': data['date_evidence']},
             'services': data['services'], 'codes': data['codes'], 'not_coded': data['not_coded'],
-            'questions': data['questions'], 'extraction_issues': data['extraction_issues']}
+            'questions': data['questions'], 'extraction_issues': data['extraction_issues'],
+            'references_used': data['references_used']}
+
+
+def _trace_review(run):
+    """A peer-review run's PeerReview (HARNESS.md 11.1) as JSON - its answers, positions, additional codes, references
+    used (each checked against that run's own tool results), the frozen inputs it was shown, its problems - read as the
+    adapter version that recorded it; None for any other run and a run with no answer."""
+    if (run.provider not in participants.PARTICIPANTS or run.purpose != models.ProviderRun.PEER_REVIEW
+            or run.state != models.ProviderRun.SUCCEEDED):
+        return None
+    peer_review, problem = review.stored_peer_review(run)
+    if peer_review is None:
+        return {'refused': True, 'problems': [problem], 'unverified_quotes': 0, 'frozen_inputs': [], 'answers': [],
+                'positions': [], 'additional_codes': [], 'references_used': []}
+    return to_jsonable(peer_review)
+
+
+def _trace_exchanges(run):
+    """Each HTTP exchange of a participant run's tool loop (models.ProviderExchange, HARNESS.md 11.2) with the tool
+    calls CPT Studio executed for it; the results themselves are named by their sha256."""
+    return [{'turn': exchange.turn, 'state': exchange.state, 'http_status': exchange.http_status,
+             'latency_ms': exchange.latency_ms, 'usage': exchange.usage or {},
+             'request_sha256': exchange.request_sha256, 'response_sha256': exchange.response_sha256,
+             'provider_request_id': exchange.provider_request_id, 'response_id': exchange.response_id,
+             'error': exchange.error,
+             'tool_calls': [{'call_id': call.call_id, 'tool': call.tool, 'arguments': call.arguments,
+                             'refs': list(call.refs or []), 'result_sha256': call.result_sha256,
+                             'executed_at': _iso(call.executed_at)} for call in exchange.tool_calls.order_by('id')]}
+            for exchange in run.exchanges.order_by('turn')]
 
 
 def _trace_run(run):
@@ -687,13 +851,16 @@ def _trace_run(run):
             'response_bytes': len(bytes(run.response_bytes or b'')), 'created_at': _iso(run.created_at),
             'finished_at': _iso(run.finished_at), 'error': run.error,
             'reused_from': str(run.reused_from_id) if run.reused_from_id else None,
-            'reconciled': run.reconciled_at is not None, 'reading': _trace_reading(run)}
+            'reconciled': run.reconciled_at is not None, 'reading': _trace_reading(run),
+            'review': _trace_review(run), 'exchanges': _trace_exchanges(run)}
 
 
 def trace_json(encounter):
     """The owner-only trace of the current revision (HARNESS.md 7): each participant's runs - request identity,
-    endpoint, models, usage, cost, raw-response hash and its full normalized reading - then the retrieval traces and the
-    reconciliation table, which keeps proposed, reference-checked and approved apart (I4)."""
+    endpoint, models, usage, cost, raw-response hash, its exchanges and tool calls, and its full normalized reading or
+    peer review - then each assessment of the revision with its phase and the frozen phase-1 outputs it recorded
+    (12.3), the retrieval traces and the reconciliation table, which keeps proposed, reference-checked and approved
+    apart (I4)."""
     revision = encounter.current_revision
     runs = (list(encounter.provider_runs.filter(revision=revision).select_related('requested_by')
                  .order_by('created_at', 'pk')) if revision else [])
@@ -714,6 +881,18 @@ def trace_json(encounter):
         'participants': [{'name': name, 'label': label, 'vendor': vendor, 'model': model,
                           'runs': [_trace_run(run) for run in runs if review.participant_of(run) == name]}
                          for name, label, vendor, model in review.HARNESS_PARTICIPANTS],
+        'assessments': [_trace_assessment(item, encounter) for item in (
+            encounter.assessments.filter(revision=revision).order_by('created_at', 'pk') if revision else ())],
         'retrieval': assessment.retrieval if assessment is not None else [],
         'reconciliation': rows,
     }
+
+
+def _trace_assessment(assessment, encounter):
+    """One assessment of the revision: whether it is the current one, its phase, whether it is its chain's final
+    assessment, and the frozen phase-1 outputs it recorded ([[input name, sha256], ...]; identical in every entry)."""
+    frozen = next((record['frozen'] for record in review.model_records(assessment).values()
+                   if isinstance(record.get('frozen'), list)), [])
+    return {'id': str(assessment.pk), 'created_at': _iso(assessment.created_at),
+            'current': assessment.pk == encounter.current_assessment_id, 'phase': review.assessment_phase(assessment),
+            'final': review.is_final(assessment), 'frozen': frozen}
