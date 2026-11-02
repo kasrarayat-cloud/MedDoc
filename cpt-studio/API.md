@@ -282,7 +282,14 @@ Fable row gains `peer`: `{}` before phase 2 (and on Corti's row and a row not co
 `stopped` while the current chain has not finished that participant's peer stage (`astra_peer`, then `fable_peer`);
 once assess #2 is recorded, its `state` in the row vocabulary (`done`, `refused`, `failed`, `unknown`, `not_sent`,
 `blocked`, `not_configured`) with a `detail` sentence, its `run_id`, the codes the review proposed after peer review
-(`codes_added`, never independent) and its unverified quotes. The three kinds of references are never merged (11.2):
+(`codes_added`, never independent) and its unverified quotes. A final assessment of phase 1 - one that owes no peer
+stage because a member date conflict holds it, or because the participant is not configured now - serves, for each
+participant whose first reading it read, `not_sent` with why it read none ("Peer review: none is read by this
+assessment: the service date entered as encounter metadata conflicts with the document, and no peer review is sent
+while that question is open." or "Peer review: none follows this assessment: Astra is not configured on this
+installation now."), `run_id` null, whatever peer-review runs the revision holds from an earlier chain (refutation round
+2, truth-9); an assess #1 whose peer stages are owed still serves `{}`, and the page then says only that this assessment
+read no peer review. The three kinds of references are never merged (11.2):
 `references` are those of the row's first-reading run and `peer_references` those of its peer-review run - in each,
 `retrieved` lists every ref that run's own tool calls returned (a `fact:<source>:<code>:<field>` ref or a passage key,
 with the source, release and effective window its tool result stated - read by the CMS tool executor's own reader of a

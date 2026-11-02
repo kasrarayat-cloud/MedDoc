@@ -16,7 +16,10 @@ from pathlib import Path
 from unittest import mock
 
 from django.conf import settings
+from django.test import override_settings
 
+from studio import jobs
+from tests import test_harness2_api as h2
 from tests import test_harness2_pipeline as hp
 from tests.test_harness2_pipeline import BIOPSY, SNARE, TWO_EXTENTS
 from tests.test_pipeline_api import drain
@@ -206,3 +209,78 @@ class UnlistedCodesTests(R2WordingCase):
         self.assertNotIn('Codes it proposed: 45385.', text)
         fable = next(row for row in detail['harness']['participants'] if row['name'] == 'fable')
         self.assertEqual((fable['codes'], fable['unlisted_codes']), (['45385'], 1))
+
+
+# --- truth-9: a phase-1 final assessment's peer rows say why it read no peer review ----------------------------------
+
+# Why a final assessment of phase 1 read no peer review, as the row says it (the reports' PEER REVIEW says the same).
+HELD = ('Peer review: none is read by this assessment: the service date entered as encounter metadata conflicts with '
+        'the document, and no peer review is sent while that question is open.')
+NOT_RECORDED = 'No peer review is recorded for this revision'
+
+
+class PhaseOneFinalTests(R2WordingCase):
+    """truth-9 (HARNESS.md 7: each row says plainly whether its step ran): after phase 2, a member date conflict made
+    a new assess #1 the final assessment with no peer entries. Both peer rows read "Not run - No peer review is recorded
+    for this revision. Its peer-review stage: Done." and the final row "no peer review is recorded for this revision",
+    while the same payload's provider runs listed both peer reviews as succeeded. The API now serves each row's peer
+    state for such an assessment with why, and the page's own sentence says what is true: this assessment read none."""
+
+    def test_a_member_date_conflict_after_phase_two(self):
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        changed = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': '2026-10-20'})
+        self.assertEqual(changed.status_code, 201, changed.content)
+        drain()
+        detail = self.detail(encounter_id)
+        self.assertEqual((detail['harness']['phase'], detail['pipeline']['busy']), (1, False))
+        self.assertEqual(sorted((run['provider'], run['state']) for run in detail['provider_runs']
+                                if run['purpose'] == 'peer_review'), [('astra', 'succeeded'), ('fable', 'succeeded')])
+        rows = browser('["astra", "fable"].map(name => rowOf(page(), "data-peer", name)).concat([rowOf(page(), '
+                       '"data-participant", "final")])', detail)
+        for row in rows:
+            self.assertNotIn(NOT_RECORDED.lower(), row.lower())
+        for row in rows[:2]:
+            self.assertIn(HELD, row)
+        self.assertIn('Assessed from the frozen first readings; no peer review was read by this assessment.', rows[2])
+        served = {row['name']: row['peer'] for row in detail['harness']['participants']}
+        for name in ('astra', 'fable'):
+            self.assertEqual(served[name], {'state': 'not_sent', 'detail': HELD, 'run_id': None, 'codes_added': [],
+                                            'unverified_quotes': 0}, name)
+        self.assertEqual(served['corti'], {})
+
+
+@override_settings(**h2.BOTH)
+class PhaseOneFinalRowsTests(h2.Harness2Case):
+    """truth-9's other cause: an assess #1 whose participants are no longer configured owes no peer stage, so it is the
+    final assessment; its rows say why no peer review follows it. While its peer stages are owed it serves none, as
+    before (the page then says only that this assessment read none)."""
+
+    def peer(self):
+        response = self.client_for(self.reviewer).get(f'/api/encounters/{self.encounter.pk}')
+        self.assertEqual(response.status_code, 200, response.content)
+        return {row['name']: row['peer'] for row in response.json()['harness']['participants']}, response.json()
+
+    def test_no_participant_configured_now(self):
+        self.persist([self.entry(name) for name in h2.ADAPTERS])  # an assess #1 that read both first readings
+        with override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled'):
+            served, detail = self.peer()
+            self.assertTrue(jobs.owed_peer_stages(self.encounter.assessments.latest('created_at')) == [])
+        self.assertEqual(detail['harness']['phase'], 1)
+        for name, label in (('astra', 'Astra'), ('fable', 'Fable')):
+            self.assertEqual(served[name], {'state': 'not_sent', 'run_id': None, 'codes_added': [],
+                                            'unverified_quotes': 0,
+                                            'detail': f'Peer review: none follows this assessment: {label} is not '
+                                                      'configured on this installation now.'}, name)
+        rows = browser('["astra", "fable"].map(name => rowOf(page(), "data-peer", name))', detail)
+        self.assertIn('Peer review: none follows this assessment: Astra is not configured on this installation now.',
+                      rows[0])
+
+    def test_an_assess_one_whose_peer_stages_are_owed_serves_none(self):
+        self.persist([self.entry(name) for name in h2.ADAPTERS])
+        served, detail = self.peer()
+        self.assertEqual((served['astra'], served['fable']), ({}, {}))
+        rows = browser('["astra", "fable"].map(name => rowOf(page(), "data-peer", name))', detail)
+        for row in rows:
+            self.assertIn('No peer review was read by this assessment.', row)
+            self.assertNotIn(NOT_RECORDED, row)

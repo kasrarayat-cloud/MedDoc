@@ -68,7 +68,9 @@ const PARTICIPANT_STATES = {
 };
 // A participant's peer review (harness.participants[].peer, HARNESS.md 11.1, 12.6), as PARTICIPANT_STATES words a first
 // reading: the row's look, its label, the plain sentence and the words the API's own sentence must contain for the
-// plain one to be left out. not_run is the page's own, where the API serves no peer review and none will be made.
+// plain one to be left out. not_run is the page's own, where the API serves no peer review: it says only what is true
+// of the assessment shown - the revision can hold peer-review runs that assessment did not read (refutation round 2,
+// truth-9: it read "No peer review is recorded for this revision" beside them).
 const PEER_STATES = {
   waiting: [STAGE_LOOKS.queued, 'Waiting', 'Waiting: the peer reviews start once every first reading is frozen and the first assessment is made.'],
   running: [STAGE_LOOKS.running, 'In progress', 'Reviewing its peers\' frozen conclusions now.'],
@@ -80,7 +82,7 @@ const PEER_STATES = {
   not_sent: [['muted', 'info'], 'Not run', 'No peer review was sent.'],
   blocked: [['pending', 'clock'], 'Blocked', 'Not sent: an unknown outcome must be reconciled before anything is sent again.', 'reconcile'],
   not_configured: [['muted', 'info'], 'Not configured', 'Not configured on this installation.', 'not configured'],
-  not_run: [['muted', 'info'], 'Not run', 'No peer review is recorded for this revision.'],
+  not_run: [['muted', 'info'], 'Not run', 'No peer review was read by this assessment.'],
 };
 // Why a participant whose first reading was not used takes no part in peer review (HARNESS.md 11.1).
 const PEER_NOT_RUN = 'Not run: only a participant whose own first reading was used takes part in peer review, so this one never sees its peers\' conclusions.';
@@ -1592,11 +1594,12 @@ function finalRow(doc) {
   return harnessRow('final', stateName, [look, incomplete ? `${label} · coding incomplete` : label, tone], 'Final status', [said], [phaseNote(doc)]);
 }
 
-// Which assessment the review reads (harness.phase, HARNESS.md 12.3); '' for a payload without one, or Corti only.
+// Which assessment the review reads (harness.phase, HARNESS.md 12.3); '' for a payload without one, or Corti only. A
+// phase-1 assessment read no peer review, whatever runs the revision holds; each peer row says why (truth-9).
 function phaseNote(doc) {
   if (!harness2(doc)) return '';
   if (doc.harness.phase === 2) return 'Assessed after peer review: both phases reconciled from source evidence and rules, never by counting agreement.';
-  return doc.pipeline?.busy ? 'The peer reviews and the second assessment follow the first assessment.' : 'Assessed from the frozen first readings; no peer review is recorded for this revision.';
+  return doc.pipeline?.busy ? 'The peer reviews and the second assessment follow the first assessment.' : 'Assessed from the frozen first readings; no peer review was read by this assessment.';
 }
 
 // The Review participants card (HARNESS.md 7) heads the review column in every state, processing included: Corti, Astra,

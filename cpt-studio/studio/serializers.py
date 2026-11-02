@@ -743,11 +743,32 @@ def _peer_detail(record):
     return 'Peer review: ' + words + '.' + (RECONCILE_FIRST if state in ('unknown', 'blocked') else '')
 
 
+# Why a final assessment of phase 1 read no peer review, by the pipeline's own rule (jobs.owed_peer_stages; HARNESS.md
+# 12.7, the final assessment): none is owed while a member date conflict holds it, nor for a participant not configured
+# now. The reports' PEER REVIEW says the same (refutation round 2, truth-9: the page read "No peer review is recorded for
+# this revision" beside the revision's own peer-review runs).
+PEER_HELD = ('Peer review: none is read by this assessment: the service date entered as encounter metadata conflicts '
+             'with the document, and no peer review is sent while that question is open.')
+PEER_NOT_CONFIGURED = 'Peer review: none follows this assessment: {label} is not configured on this installation now.'
+PEER_NONE_READ = 'Peer review: none is read by this assessment.'
+
+
+def _no_peer_review(assessment, name):
+    """Why the final phase-1 ``assessment`` read no peer review of ``name``, whose first reading it read."""
+    if review.peer_review_held(assessment):
+        return PEER_HELD
+    if name not in participants.configured():
+        return PEER_NOT_CONFIGURED.format(label=participants.LABELS[name])
+    return PEER_NONE_READ
+
+
 def _harness2(row, assessment, jobs):
     """The harness@2 fields of one participant row (HARNESS.md 12.6): ``peer`` - its peer review's state, sentence,
     run, the codes it added and its unverified quotes ({} before phase 2, for Corti, or for a participant not
     configured) - and the references its phase-1 run (``references``) and its peer-review run (``peer_references``)
-    retrieved and used, never merged with each other or with the reconciliation's (reference_validation)."""
+    retrieved and used, never merged with each other or with the reconciliation's (reference_validation). A final
+    assessment of phase 1 serves, for each participant whose first reading it read, ``not_sent`` with why it read no
+    peer review (_no_peer_review); an assess #1 whose peer stages are owed still serves none."""
     out = {'peer': {}, 'references': dict(NO_REFERENCES), 'peer_references': dict(NO_REFERENCES)}
     name = row['name']
     if name not in participants.PARTICIPANTS:
@@ -771,6 +792,10 @@ def _harness2(row, assessment, jobs):
                        'unverified_quotes': int(record.get('peer_unverified_quotes') or 0)}
         if peer_run is not None:
             out['peer_references'] = review.participant_references(peer_run, peer_review)
+    elif (record is not None and record.get('state') == 'read' and review.assessment_phase(assessment) == 1
+          and review.is_final(assessment)):
+        out['peer'] = {'state': RECORD_STATES['not_sent'], 'detail': _no_peer_review(assessment, name), 'run_id': None,
+                       'codes_added': [], 'unverified_quotes': 0}
     return out
 
 

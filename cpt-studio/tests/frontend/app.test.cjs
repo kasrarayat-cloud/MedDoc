@@ -1606,7 +1606,7 @@ test('the Review participants card shows each participant\'s first reading, then
   }
   assert.ok(none({ state: 'done' }, { ...ready, pipeline: { ...ready.pipeline, busy: true } }).includes('<span class="status gray">Waiting</span>'));
   const failedStage = { ...ready, harness: { ...ready.harness, phase: 1 }, pipeline: { ...ready.pipeline, stages: [...ready.pipeline.stages.slice(0, 6), { kind: 'astra_peer', state: 'failed', error: 'HTTP 529 (synthetic).', finished_at: null }] } };
-  assert.ok(none({ state: 'done' }, failedStage).includes('<p>No peer review is recorded for this revision. Its peer-review stage: Failed — HTTP 529 (synthetic).</p>'));
+  assert.ok(none({ state: 'done' }, failedStage).includes('<p>No peer review was read by this assessment. Its peer-review stage: Failed — HTTP 529 (synthetic).</p>'));
   // a state the page does not know is never drawn as one it knows
   const odd = peerRowOf(render(withPeer(ready, 'astra', { state: 'exploded', detail: '' })), 'astra');
   assert.ok(odd.includes('State not recorded') && odd.includes('data-peer-state="exploded"'));
@@ -2030,4 +2030,22 @@ test('R2-WORDING truth-11: a participant row never says it proposed no code besi
   }
   // only a reading that was used lists codes at all
   assert.equal(row({ state: 'refused', codes: [], unlisted_codes: 1 }).includes('It proposed'), false);
+});
+
+test('R2-WORDING truth-9: a phase-1 assessment\'s peer rows and final row say it read no peer review, never that none is recorded', () => {
+  const final = fixture(H2_FINAL);
+  const phase1 = { ...final, harness: { ...final.harness, phase: 1 } };
+  assert.equal(app.PEER_STATES.not_run[2], 'No peer review was read by this assessment.');
+  // the API's own reason for a final phase-1 assessment (a member date conflict holds it) is the row's sentence
+  const held = 'Peer review: none is read by this assessment: the service date entered as encounter metadata conflicts with the document, and no peer review is sent while that question is open.';
+  const row = peerRowOf(render(withPeer(phase1, 'astra', { state: 'not_sent', detail: held, run_id: null, codes_added: [], unverified_quotes: 0 })), 'astra');
+  assert.ok(row.includes(`<p>${app.escapeHtml(held)}</p>`) && row.includes('data-peer-state="not_sent"'), row);
+  assert.equal(count(row, '<p>'), 1, 'said once');
+  // where the API serves none: the page says only what is true of the assessment shown, with its stage's outcome
+  const stages = [...final.pipeline.stages.slice(0, 6), { kind: 'astra_peer', state: 'succeeded', error: '', finished_at: null }];
+  const none = peerRowOf(render(withPeer({ ...phase1, pipeline: { ...phase1.pipeline, stages } }, 'astra', {}, { state: 'done' })), 'astra');
+  assert.ok(none.includes('<p>No peer review was read by this assessment. Its peer-review stage: Done.</p>'), none);
+  for (const html of [row, none, render(phase1)]) assert.equal(/recorded for this revision/.test(html), false);
+  assert.ok(harnessRow(render(phase1), 'final').includes('Assessed from the frozen first readings; no peer review was read by this assessment.'));
+  assert.ok(harnessRow(render({ ...phase1, pipeline: { ...phase1.pipeline, busy: true } }), 'final').includes('The peer reviews and the second assessment follow the first assessment.'));
 });
