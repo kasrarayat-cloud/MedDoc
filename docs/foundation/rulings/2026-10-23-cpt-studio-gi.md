@@ -1475,3 +1475,58 @@ acceptance checklist it requires (`CPT-HARNESS-CHECKLIST.md`), before the work t
 >
 > Do not declare the full harness complete while required participants or reference validation are missing. Do not stop at a plan, local preview or installation report. Deliver and verify the actual website workflow within the authorized scope.
 
+## Owner directive, 2026-11-02 — the participants' credentials are placed: check them, wire them, access-check, then install and verify live
+
+Received by session cd048041 at about 05:45Z (it took over integration and deployment from session 1bf3b49c at
+00:40Z, at the owner's choice). Verbatim:
+
+> Continue the CPT Studio harness work. Check these credential files first:
+>
+> - /etc/cpt-studio-provider-sources/anthropic.env
+> - /etc/cpt-studio-provider-sources/openai.env
+>
+> Verify they exist, contain the expected variables, and have secure ownership and permissions. Never print the keys or
+> include them in logs, reports or Git.
+>
+> Wire them through the existing installer/secret mechanism and run minimal authorized synthetic access checks for:
+> - Anthropic: claude-fable-5-1
+> - OpenAI: gpt-6-astra
+>
+> Record the actual returned model identifiers. Do not silently substitute models.
+>
+> If access passes, update the checklist and continue implementation, installation on cpt.quillmd.com, and the
+> complete live acceptance workflow under the existing authorization. Keep QuillMD and unrelated services unchanged.
+>
+> Completion requires real Corti/Astra/Fable responses, traced references, saved synthetic review, persistence after
+> reload and an actual reviewed report download. Keys working alone does not establish completion.
+>
+> Keep D3/D4 accurately recorded; do not accept new agreements or infer licensing permission. If access fails, diagnose
+> the precise error without exposing credentials, and continue independent work.
+
+### Session interpretation, 2026-11-02 (cd048041, on receipt) — recorded, not owner-ruled
+
+(a) **The files were checked before anything else, and no value was printed.** A stdlib-only checker that applies
+`studio/participants/credentials.py`'s rules ran as root in a throwaway container with no network and the directory
+bound read-only, printing metadata and booleans only (proved first on fake files: no value in its output). Result
+05:52Z: the directory is root:root 0700 with exactly the two files; each is a regular root:root 0600 file within
+32,000 bytes that parses, with its required key present and a valid header value, and no optional key.
+
+(b) **The installer's access check runs only inside the app phase of an install, and this release is not installable
+yet** (round 1's repairs are running, and a refutation pass over the finished diff is mandatory before merge). So access
+is checked now in two steps, and again formally by the install: (1) the installer's own `secrets` phase, alone, from
+the harness revision under `docs/foundation/mutations/20261102-cpt-studio-participant-credentials.md`, copies the two
+sources into `/etc/cpt-studio/` (10150:10150 0400): the existing secret mechanism, with no code installed and no
+service restarted; (2) `manage participant_access_check --participant astra` and `--participant fable` run once each from
+a separately tagged candidate image (`cpt-studio-precheck:e3c05bc007c6`, built as the image phase builds), in a
+one-shot with the installer's access-check layout (the copied file read-only at the worker's path, uid 10150, the
+installer's hardening), on a throwaway network and database (the command needs a database only for its advisory lock;
+the live database is never connected), and its output is kept only after a root helper finds no credential value in
+it. The install's `app --access-check` repeats the check on the installed revision.
+
+(c) **"Do not silently substitute models":** the requested and returned model ids are recorded exactly as the vendors
+return them; the adapters refuse any reading answered by another model (I6).
+
+(d) **D3 and D4 stay open as recorded.** The owner's remark earlier on 2026-11-02 that CPT descriptors are not needed
+is noted, not recorded as a D3 decision: it was asked about and not confirmed. No agreement is accepted and no
+licensing permission is inferred. Working keys establish checklist item 1.3 only; completion stays as the directive
+states.
