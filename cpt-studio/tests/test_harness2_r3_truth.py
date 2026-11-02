@@ -453,3 +453,124 @@ class PtpOncePerCardTests(R2WordingCase):
             residual = sum(BASE_INCLUDED in line for line in lines)
             self.assertEqual(sum(_statements(line) for line in lines), 1 + residual, lines)
         self.assertEqual(modifier_lines, 2)  # 45385 and 45380: separate lesions are documented
+
+
+# --- falsegreen-9: no partial estimate where a failed exchange reported no usage ----------------------------------
+
+class FailedExchangeCostTests(hp.Harness2Case):
+    """truth-12's rule (HARNESS.md 12.9; review._unpriced): an exchange that may have been billed - any not recorded not
+    sent - and reported no usage leaves the run with no estimate. Round 2 pinned it for an unknown exchange and for one
+    not sent; a mutant that read only 'unknown' priced exchange 1 alone as the run's ("0.0310") for an exchange that
+    FAILED (HTTP 529) with no usage, and every gate stayed green (refutation round 3, falsegreen-9)."""
+
+    def setUp(self):
+        super().setUp()
+        self.owner = _owner(self, 'owner_r3fg9')
+
+    def test_a_failed_exchange_that_reported_no_usage_leaves_the_run_unestimated(self):
+        self.adapters['astra'].first = [hp.asks('astra', hp.facts_call('call_astra_1', ['99213'])), hp.failed()]
+        encounter_id = self.create()
+        drain()
+        (run,) = self.runs_of(encounter_id, 'astra', 'independent')
+        self.assertEqual((run.state, run.sent), ('failed', True))
+        self.assertEqual([(item.turn, item.state, item.http_status, bool(item.usage))
+                          for item in run.exchanges.order_by('turn')], [(1, 'succeeded', 200, True), (2, 'failed', 529,
+                                                                                                        False)])
+        self.assertTrue(run.usage)  # exchange 1's, which pricing alone would price as the run's
+        self.assertIsNone(review.estimated_cost(run))
+        self.assertEqual(review.unpriced_exchanges(run), [(2, 'failed')])
+        trace = self.owner.get(f'/api/encounters/{encounter_id}/trace').json()
+        traced = [item['estimated_cost_usd'] for participant in trace['participants'] for item in participant['runs']
+                  if item['id'] == str(run.pk)]
+        row = next(item for item in self.owner.get(f'/api/encounters/{encounter_id}').json()['harness']['participants']
+                   if item['name'] == 'astra')
+        self.assertEqual((traced, row['run_id'], row['estimated_cost_usd']), ([None], str(run.pk), None))
+        lines = _block(_section(_txt(self.encounter(encounter_id)), 'REVIEW PARTICIPANTS'), '  - Astra · ')
+        self.assertIn('    Estimated cost: not estimated: exchange 2 (failed) reported no usage and may have been '
+                      'billed, so the cost of this run cannot be estimated from published rates', lines)
+
+
+# --- falsegreen-10: corti_relation 'second_review' and 'selected_apart' as the serializer serves them ---------------
+
+class SecondReviewRelationTests(TestCase):
+    """corti_relation 'second_review' through the real engine: Corti selects 45385; its bounded second review lists
+    45380 only as a candidate (alt2:0); Astra proposes 45380 from the biopsy passage. The engine's result is persisted as
+    the assess stage persists it and served by the real API; the page words the relation as the engine's rationale
+    does. A mutant returning 'none' here made the page say "Corti did not propose this code." beside the rationale's
+    second review, and every gate stayed green (refutation round 3, falsegreen-10)."""
+
+    def setUp(self):
+        from tests.test_harness_engine import DAY, REFERENCE, code, read, span
+
+        self.ws = f.workspace()
+        self.reviewer = f.member(self.ws, f.user('reviewer_r3fg10'))
+        self.encounter = f.encounter(self.ws, self.reviewer, title='Synthetic colonoscopy, second review')
+        revision = f.pasted_revision(self.encounter, self.reviewer, TWO_EXTENTS)
+        text = revision.text
+        second = NormalizedResponse('corti', 'test@1', (ProviderCode('candidate', 'cpt', '45380', '',
+                                                                     (span(text, BIOPSY),)),))
+        scope = {'start': text.index('Procedure: Colonoscopy'), 'end': len(text), 'items': ['the flat lesion biopsy']}
+        selected = (ProviderCode('selected', 'cpt', '45385', hp.CORTI_DISPLAY, (span(text, SNARE),)),)
+        result = assess(text=text, pages=(), context=gi_context.extract_context(text), routing=detect.route(text, DAY),
+                        normalized=NormalizedResponse('corti', 'test@1', selected), reference=REFERENCE,
+                        service_date=DAY, provider_status='succeeded',
+                        participants=[read('astra', [code(text, '45380', BIOPSY)])], second=second, second_scope=scope)
+        record = {'name': 'astra', 'state': 'read', 'run': None, 'adapter_version': 'astra-test@1',
+                  'requested_model': 'gpt-6-astra', 'returned_model': 'gpt-6-astra', 'unverified_quotes': 0,
+                  'reason': '', 'codes': [{'code': '45380', 'quote': BIOPSY}], 'not_coded': []}
+        self.assessment = review.persist_assessment(
+            encounter=self.encounter, revision=revision, context=pf.context(self.encounter, revision),
+            routing_run=pf.routing(revision), provider_run=pf.provider_run(self.encounter, revision), result=result,
+            participants=[record, jobs.not_configured_record('fable')], retrieval=[])
+
+    @override_settings(ASTRA_MODE='replay', FABLE_MODE='disabled')
+    def test_the_serializer_serves_second_review_and_the_page_words_it_as_the_rationale_does(self):
+        listed = self.assessment.proposals.get(key='alt2:0')
+        self.assertEqual((listed.code, listed.support.get('origin')), ('45380', 'second_review'))
+        client = Client()
+        client.force_login(self.reviewer)
+        detail = client.get(f'/api/encounters/{self.encounter.pk}').json()
+        [own] = [p for p in detail['assessment']['proposals'] if p['code'] == '45380' and p['bucket'] == 'selected']
+        self.assertEqual((own['support']['origin'], own['proposed_by'], own['corti_relation']),
+                         ('participant', ['astra'], 'second_review'))
+        words = "Corti's second review also listed this code without adding it as a proposal; see Alternatives."
+        self.assertTrue(own['rationale'].startswith(f'Proposed by Astra (independent participant); {words}'),
+                        own['rationale'])
+        line = browser(f'statusLine(cardOf(page(), {json.dumps(own["id"])}), "Proposed by")', detail)
+        self.assertEqual(line, f'Astra (independent reading); {words}')
+        relations = {p['key']: p['corti_relation'] for p in detail['assessment']['proposals']}
+        self.assertEqual((relations['sel:0'], relations['alt2:0']), ('proposer', 'proposer'))
+
+
+# A CPT Category II code: a five-character code the reading keeps, which the engine excludes as out of scope.
+CATEGORY_II = '3017F'
+
+
+class SelectedApartRelationTests(R2WordingCase):
+    """corti_relation 'selected_apart' through the real pipeline: Corti selects 3017F (a CPT Category II code, out of
+    this release's scope) with an exact passage, and Astra proposes it too. Corti's selection is excluded for its scope
+    - not for want of an exact passage - and Astra's own entry of the code is an alternative saying why, so the
+    serializer serves Astra's 'selected_apart': Corti selected it, and its selection is listed apart. The engine adds a
+    participant's own proposal only for a code no decidable Corti selection carries, so this - a participant's
+    alternative beside Corti's excluded selection - is where the relation is served (refutation round 3,
+    falsegreen-10)."""
+
+    def test_the_serializer_serves_selected_apart_for_a_participant_s_code_beside_corti_s_excluded_selection(self):
+        self.corti.selections = [('45385', SNARE), ('45380', BIOPSY), (CATEGORY_II, SNARE)]
+        self.adapters['astra'].first = [hp.answered('astra', hp.reading(
+            codes=[('45385', SNARE), ('45380', BIOPSY), (CATEGORY_II, SNARE)],
+            services=[('c1', 'colonoscopy', 'performed', SNARE)]))]
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        detail = self.detail(encounter_id)
+        [corti] = self.proposals(detail, CATEGORY_II, bucket='excluded')
+        [astra] = self.proposals(detail, CATEGORY_II, bucket='alternative')
+        self.assertEqual((corti['proposed_by'], corti['corti_relation'], corti['reinstatable']),
+                         (['corti'], 'proposer', False))
+        self.assertTrue(corti['exclusion_reason'].startswith('CPT Category II'), corti['exclusion_reason'])
+        self.assertEqual((self.origin(astra), astra['proposed_by'], astra['corti_relation']),
+                         ('participant', ['astra'], 'selected_apart'))
+        line = browser(f'visible(app.codeStatusLines(data.assessment.proposals.find(p => p.id === '
+                       f'{json.dumps(astra["id"])}))).split("\\n")[0]', detail)
+        self.assertEqual(line, 'Proposed by: Astra (independent reading); Corti also selected this code; its selection '
+                               'is listed apart.')
