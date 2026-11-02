@@ -945,3 +945,96 @@ change.**
   is refused there as it always was), and a request of an earlier version is never sent or replayed: the adapter, and
   the replay that builds with it, refuse another version (`verified_body`). Pricing is by model and does not change.
   Replay keys each exchange by its stored request's sha256, so it follows the new request with no change of its own.
+
+### 12.9 Refutation round 2 (2026-11-02): what changed, and where it is recorded
+
+The second refutation of the finished harness@2 head (`cdc41dfa2`, PR #1459) filed 32 findings through six lenses
+(evidence, independence, truth, sends, parity, false green); 31 were reproduced, EV2-4 was not (documented design; its
+harm was EV2-3's). One was blocking: **EV2-1**, where a status candidate was verified on a service-level passage for an
+act-level question, so 45385 went to Ready on "No polyps were seen" after one confirmation. The session lead's six
+design decisions (D1-D6) tighten what CPT Studio claims; none widens what a participant, a member or a page may do, so
+none was an owner question. Each is recorded where the contract states the rule it replaces, with the superseded wording
+kept:
+
+| decision | findings | the rule | recorded in |
+|---|---|---|---|
+| D1 | EV2-1 | a status is verified only where the readers read the question's subject - the act its code covers, or the service - with exactly that status in the passage's whole sentence (`reconcile.status_stated`, one function for candidates and the engine's confirmations; a failing stored confirmation is listed in `confirmations.ignored`); an act code held at service level is still checked on its act (R2-EV's tightening of D1) | 11.3 (amendment), 12.5 ("The status check") |
+| D2 | EV2-2, EV2-3, truth-1 | the history, plan and indication rule runs for every fact; an extent or target passage the readers read as not reached, not seen, attempted or doubted never verifies; a date of birth is never a date of service | 11.3 (amendment), 12.5 ("Every fact's check") |
+| D3 | truth-10 | candidates are served, and a confirmation accepted, only while the live assessment's revision and context are the encounter's current ones (`review.on_current_context`, `review.CONTEXT_CHANGED`, `jobs.REASSESS_CONTEXT`) | 12.5 (amendment) |
+| D4 | IR2-1, IR2-2, IR2-3 | a peer request carries no person, no member-entered value and none of the other model's free text or codes that are not short tokens (`peer.shown_reading`); its frozen sha256 still names the recorded reading | 12.4 (amendment) |
+| D5 | sends-r2-1, sends-r2-2, sends-r2-4 | a missing tool argument is JSON null; a connection whose TCP or TLS handshake never completed is not_sent; each exchange is recorded as it ends, and the stale sweep marks a run with a sent exchange as sent | 12.7 ("Recording a participant's exchanges") |
+| D6 | parity-r2-1, parity-r2-2 | I1 declares its one exception (the CMS sources' licence note, `ad025537c`); an importer-based proof pins both digests; `_same_assessment` compares what round 4 compared, plus the participants' runs (never the retrieval traces) | 9 (I1 amendment) |
+
+**Recorded here** (repairs whose agents did not own HARNESS.md; each amends the section named):
+- **truth-2 (amends 12.3):** a participant's position on a code is its frozen first reading's; a participant that first
+  proposed the code in peer review keeps that position and its detail says both ("... did not propose this code in its
+  first reading. It proposed it after peer review.").
+- **truth-3 (amends 12.6):** the reference-validation row is `done` only when an installed CMS file applied to the
+  service date (`reference_sources.applies`); otherwise `not_verified`, with 0 codes checked and a sentence saying why.
+- **truth-4 (amends 5 and 12.6):** the retrieval-failure note says what failed - CPT Studio could not record which CMS
+  facts and passages it retrieved - and that each code's checks read the CMS facts before that and stand as shown; the
+  page and report fallbacks say the same facts (`jobs.RETRIEVAL_FAILED`, `serializers.REFERENCE_FAILED`).
+- **truth-5 (amends 12.5):** what a confirmation does on the current assessment is one reading,
+  `review.confirmation_effect` (read, or not read with why), served as `current_effect` and printed by the reports.
+- **truth-12 (amends 12.7's cost bullet):** no cost estimate is shown when an exchange that may have been billed
+  reported no usage; the TXT and the trace name the exchange.
+- **truth-13 (amends 12.6 and 12.7):** a run that reused a retained answer names that run (`reused_from`) on its
+  references, in the API, the trace, the TXT and the CSV.
+- **sends-r2-3 (amends 11.2):** a tool call's references count as retrieved only when the next exchange was recorded and
+  was not `not_sent` (`review._delivered_turns`); an exchange sent with an unknown outcome counts as delivered.
+- **truth-6, truth-7 (amend 11.4):** a proposal serves `corti_relation` (`review.corti_relation`: proposer,
+  selected_without_exact_passage, selected_apart, candidate, second_review, none); "Corti did not propose this code."
+  is said only for `none`, by the page and by the engine's rationale (`_Harness._lead`, which also names a code Corti's
+  bounded second review listed as an alternative: "Corti's second review also listed this code, as an alternative; see
+  Alternatives.").
+- **truth-8 (amends 12.6):** `codes_added` holds only codes a participant first proposed in peer review
+  (`serializers.peer_code_phases`, the engine's `support['phases']`); a code repeated there is named in the detail
+  ("It listed 45385 again in peer review; it first proposed it in its independent reading."), and the reports and the
+  trace word each additional code by its `phase`.
+- **truth-9 (amends 12.6):** a final phase-1 assessment serves the peer state `not_sent` with why (a member date
+  conflict, or the participant no longer configured), and the page says no peer review was read by it.
+- **truth-11 (amends 12.6):** a participant row serves `unlisted_codes`, and the page says which codes it proposed can
+  be listed.
+- **IR2-4 (amends I9):** the page withholds the office E/M long-descriptor frame and the short-descriptor shapes too; a
+  position's located quote is an exact slice of the document and is shown as document text.
+- **FG2-5 (part 1, amends 7):** a code card states the NCCI procedure-to-procedure limit once.
+- **FG2-1, FG2-2, FG2-3, FG2-4:** tests only (a confirmation's identity binds the context, units and profile version;
+  revision 2 reads no confirmation of revision 1; what a peer request shows of Corti's units and the excluded codes; an
+  agent reviewer is said to be one everywhere).
+
+**Tests:** `tests/test_harness2_r2_{evidence,peer,truth,wording,parity}.py` and the `// refutation round 2, R2-EV`,
+`R2-TRUTH` and `R2-WORDING` blocks at the end of `tests/frontend/app.test.cjs`. Every blocking and major repair was
+mutation-proved on an export (mutation applied, the finding's own assertion failing, the file restored by sha256). I1
+holds on the merged head (`17732e91d`): `test_harness_engine_parity` and `CortiOnlyParityTests` are unchanged and pass,
+the gi4 replay against the round-4 head `80f2f2dc8` is EQUAL and the battery shows 0 movements; the full suite there is
+4,969 Django tests OK (3 skipped), ops 290, ops/verification 37, node 100/100 and 91/91.
+
+**Open, recorded (not repaired in this round):**
+- **FG2-5 part 2:** the harness@1 fixtures (`encounter-harness-ready.json`, `encounter-harness-degraded.json`,
+  `trace-harness-ready.json`, `encounter-processing.json`) are still hand-written, and `FIXTURE_LACKS` still lists what
+  they lack. Regenerated from today's serializer they become harness@2 payloads, and about 25 node tests that use them
+  as payloads served before harness@2 would have to be restructured; the user-visible half (the doubled PTP sentence)
+  is repaired. A test-fidelity gap, not a runtime one.
+- **Corti's send classification** (`providers/corti.py`): the same handshake rule as D5 is not applied to Corti, whose
+  path I1 pins.
+- **Routing's `_landmark_negations_near`** (`gi/detect.py`): `cues.NOT_REACHED_AFTER.match(text, pos, endpos)` never
+  matches, because the pattern opens with `^` and Python's `^` does not match at `pos` inside a string (verified: no
+  match at the position after "cecum" in "The cecum was not reached.", a match on the slice). So "the cecum was not
+  reached" never explains its negation word there; the extent readers themselves read the same cue on slices
+  (`sections.py`, `detect.py:3616`) and are unaffected. Its effect on routing output was not measured; a repair moves
+  Corti-only results, so it waits for a round that declares that change under I1. R2-EV's new code reads the cue on
+  slices.
+- **R2-EV residuals:** a 'performed' status can never verify on an `act_missing` hold (the readers read no act of the
+  code's kinds done, by construction: such a hold is resolved by an addendum or by rejecting the code); the inventory
+  records no spans for a service's negative mentions, so a not-performed value never verifies for a service-level
+  subject; D2's checks are candidate-side only (the endpoint can no longer create a non-status confirmation they would
+  refuse, but a stored one is read as before); a prior procedure's date in plain prose outside any history, plan or
+  indication section still verifies; an extent fails when any mention of its landmark in the passage is denied (fails
+  closed).
+- **R2-PEER residuals:** a run swept during its first exchange has nothing recorded and keeps sent=False although it may
+  have reached the vendor (unchanged from before, and Corti behaves the same; its unknown state still blocks further
+  sends, I8); the D4 change to peer request bodies means a peer answer retained before it is not reused for a new chain.
+- **R2-TRUTH residuals:** the trace reconciliation's "Proposed by:" line names no phase (the proposer's position detail
+  does); truth-12 shows no partial estimate, even for a failed exchange that reported no usage (fails closed).
+- **I1's wording:** "the only additions are new records outside that result" uses section 6's meaning of records; the
+  API and the reports also gained harness fields and sections for Corti-only encounters.

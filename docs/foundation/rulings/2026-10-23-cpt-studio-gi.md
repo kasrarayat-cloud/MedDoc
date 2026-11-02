@@ -1530,3 +1530,50 @@ return them; the adapters refuse any reading answered by another model (I6).
 is noted, not recorded as a D3 decision: it was asked about and not confirmed. No agreement is accepted and no
 licensing permission is inferred. Working keys establish checklist item 1.3 only; completion stays as the directive
 states.
+
+### Session interpretation, 2026-11-02 (cd048041, after the harness's second refutation) — recorded, not owner-ruled
+
+(a) **The second refutation of the finished harness head (`cdc41dfa2`, PR #1459, a draft throughout) filed 32 findings;
+31 were reproduced by independent verifiers, and one was blocking.** EV2-1: a performed-status candidate was verified on
+a passage about the examination for a question about an act, so after one reviewer confirmation 45385 (snare removal)
+became ready to approve on a document that says "No polyps were seen". Sixteen findings were major and fourteen minor;
+EV2-4 was not reproduced (documented design). Records: `$S4/refute-harness-r2/findings.json` (the lenses) and
+`$S4/verify-harness-r2/results.json` (the verdicts, reach, proposed repairs and evidence), where `$S4` is
+`/home/claude/cpt-studio-gi4-20261031`.
+
+(b) **Six design decisions were taken by the session, and none is an owner question.** They are D1-D6 of the repair plan
+(`$S4/verify-harness-r2/REPAIR-PLAN.md`), recorded in HARNESS.md where each replaced rule is stated and indexed in
+HARNESS.md 12.9. Each makes CPT Studio claim less or show a model less: a status is verified only where CPT Studio's own
+readers read the question's act (or service) with exactly that status in the passage's whole sentence (D1); every fact's
+passage gets the history, plan and indication rule, and a qualified passage never verifies (D2); candidates and
+confirmations only on the current revision and context (D3); a peer request carries no person, no member-entered value
+and none of the other model's free text (D4); each exchange is recorded as what happened (D5); I1 states its one
+exception and the re-persist rule compares what round 4 compared (D6). Under the four classes that reach the owner: none
+is a product decision without precedent (each brings the code back to a rule HARNESS.md already stated, or narrows that
+rule); none is an accepted-capability loss, because harness@2 has never been installed - confirmations, candidates and
+peer review do not exist on the live site, so nothing a member can do there today changes; none needs the owner's
+eyeball beyond the live walk already required; none concerns money, keys or deleting data.
+
+(c) **One tightening beyond D1, by the repair agent, accepted by the session:** a code that accounts for an act (its
+coverage profile names the act kinds it covers) is checked on that act even when its hold was raised at the service
+level, because checking it on the service would let a snare code become ready on the bare examination sentence through a
+service-level hold. Recorded in HARNESS.md 12.5. A consequence, also recorded there and in 12.9: a 'performed' status
+never verifies on a hold raised because the readers read no act of the code's kinds as done; such a hold is resolved by
+an addendum or by rejecting the code, never by one confirmation.
+
+(d) **Recorded and not repaired in this round, none an owner question:** the hand-written harness@1 fixtures (FG2-5 part
+2, a test-fidelity gap whose user-visible half is repaired); Corti's send classification (D5's rule is not applied to
+Corti, whose path I1 pins); routing's `_landmark_negations_near`, where `cues.NOT_REACHED_AFTER` is read with
+`match(text, pos)` and its `^` anchor never matches there (verified by the session on "The cecum was not reached."), so
+"the cecum was not reached" never explains its negation word in that reader. Its effect on routing output was not
+measured, and repairing it changes Corti-only results, which I1 forbids without a declared change; it is left for a
+round that declares one. The residuals of each repair are listed in HARNESS.md 12.9.
+
+(e) **Integration.** The five repairs were merged into the harness branch in the order PARITY, EV, PEER, TRUTH, WORDING.
+The test file's appended blocks and API.md's example were resolved as unions (0 lines removed from either side apart
+from each side's declared edits), and the harness@2 fixtures were regenerated from the serializer. Each repair's patches
+for files it did not own were applied. The session changed one runtime rule itself: the engine's first sentence of a
+participant's own proposal now names a code Corti's bounded second review listed, as the page does, instead of saying
+"Corti did not propose this code."; it is mutation-proved. Next: the full CI-like run and the Corti-only parity replay
+on the merged head, a push, and a focused third refutation of the round-2 repair diff before the PR is made ready (each
+round attacks the last round's repair).
