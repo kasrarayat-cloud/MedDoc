@@ -5,16 +5,36 @@
   reasons - pinned on a pipeline run whose Corti answer selects one code twice and whose assess #1 excludes one.
 - sends-r2-1: a tool call whose arguments are missing or null is recorded with JSON null arguments, and the run is
   recorded whole (succeeded, every exchange and tool call kept), never unknown with nothing of it kept.
+- sends-r2-2: a connection whose TCP connect or TLS handshake never completed wrote no byte of the request, so it is
+  not_sent - a handshake stalled past the deadline or the connect timeout, a certificate the check refuses - while a
+  request that was written and got no answer stays unknown; demonstrated against loopback servers (127.0.0.1, ephemeral
+  ports) through the real default session, with a throwaway certificate made in memory.
 
 Synthetic data only; nothing is sent. Corti is the harness@1 suite's in-process fake. Astra and Fable are the real
 replay adapters on the real tool loop with scripted answers (tests.test_harness2_pipeline), their tool calls answered by
 CPT Studio's real CMS tool executor over a synthetic reference store.
 """
+import datetime
+import ipaddress
 import json
+import os
+import socket
+import ssl
+import tempfile
+import threading
+import time
+from pathlib import Path
+from unittest import mock
+
+from django.test import SimpleTestCase
 
 from studio import models
+from studio.participants import http as participants_http
+from studio.participants import openai_astra
+from studio.participants.openai_astra import AstraParticipant
 from tests.test_harness2_pipeline import (ASTRA_READING, CPT_STUDIO, FABLE_READING, HEAD, LAND, SNARE, ColonCase,
                                           Harness2Case, answered, asks, document_sections, peer_document)
+from tests.test_participants_support import NOTE, PAGES, openai_env, write_file
 from tests.test_pipeline_api import drain
 
 # --- FG2-3: Corti's units and CPT Studio's excluded codes, as a peer request shows them -------------------------------
@@ -127,3 +147,178 @@ class NullArgumentsTests(Harness2Case):
         self.assertEqual((run.state, run.exchanges.count()), ('succeeded', 2))
         call = models.ToolCall.objects.get(exchange__run=run)
         self.assertEqual((call.arguments, call.result), (['99213'], {'error': 'The arguments are not a JSON object.'}))
+
+
+# --- sends-r2-2: a connection that was never established sent nothing -------------------------------------------------
+
+def throwaway_tls_context():
+    """A server-side TLS context with a throwaway self-signed certificate for 127.0.0.1 (synthetic, valid for one hour),
+    which the default session's certificate check refuses. Its key is made here and handed to ssl through an anonymous
+    memory file where the platform has one (never written to a disk), otherwise through a temporary directory removed at
+    once."""
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
+    key = ec.generate_private_key(ec.SECP256R1())
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'synthetic-throwaway.invalid')])
+    now = datetime.datetime.now(datetime.timezone.utc)
+    cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
+            .serial_number(x509.random_serial_number()).not_valid_before(now - datetime.timedelta(minutes=5))
+            .not_valid_after(now + datetime.timedelta(hours=1))
+            .add_extension(x509.SubjectAlternativeName([x509.IPAddress(ipaddress.ip_address('127.0.0.1'))]), False)
+            .sign(key, hashes.SHA256()))
+    pem = (key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                             serialization.NoEncryption()) + cert.public_bytes(serialization.Encoding.PEM))
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    if hasattr(os, 'memfd_create'):
+        fd = os.memfd_create('synthetic-throwaway-tls')
+        try:
+            os.write(fd, pem)
+            context.load_cert_chain(f'/proc/self/fd/{fd}')
+        finally:
+            os.close(fd)
+    else:  # pragma: no cover - a platform without memfd_create
+        with tempfile.TemporaryDirectory() as folder:
+            path = write_file(Path(folder) / 'throwaway.pem', pem)
+            context.load_cert_chain(str(path))
+    return context
+
+
+class LoopbackServer:
+    """A one-connection server on 127.0.0.1 that keeps what it received. ``mode``: 'stall' reads the client's TLS hello
+    and answers only a handshake record header whose body never comes; 'tls' completes the server side of a real TLS
+    handshake with a throwaway certificate (``context``), keeping what it decrypts; 'http-stall' reads a plain HTTP
+    request and never answers."""
+
+    def __init__(self, case, mode, context=None):
+        self.mode, self.context = mode, context
+        self.received, self.decrypted = bytearray(), bytearray()
+        self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.listener.bind(('127.0.0.1', 0))
+        self.listener.listen(1)
+        self.listener.settimeout(10)
+        self.port = self.listener.getsockname()[1]
+        self.stop = threading.Event()
+        thread = threading.Thread(target=self.run, daemon=True)
+        thread.start()
+        case.addCleanup(thread.join, 10)
+        case.addCleanup(self.stop.set)
+        case.addCleanup(self.listener.close)
+
+    def url(self, scheme='https'):
+        return f'{scheme}://127.0.0.1:{self.port}/v1/responses'
+
+    def run(self):
+        try:
+            conn, _ = self.listener.accept()
+        except OSError:
+            return
+        with conn:
+            conn.settimeout(0.2)
+            if self.mode == 'tls':
+                conn.settimeout(10)
+                try:
+                    tls = self.context.wrap_socket(conn, server_side=True)
+                    while data := tls.recv(65536):
+                        self.decrypted.extend(data)
+                except (OSError, ssl.SSLError):
+                    return  # the client refused the certificate and aborted the handshake
+                return
+            answered = False
+            while not self.stop.is_set():
+                try:
+                    data = conn.recv(65536)
+                except socket.timeout:
+                    continue
+                except OSError:
+                    return
+                if not data:
+                    return
+                self.received.extend(data)
+                if self.mode == 'stall' and not answered:
+                    conn.sendall(b'\x16\x03\x03\x00\x7a')  # a handshake record header whose body never comes
+                    answered = True
+
+    @property
+    def request_line_received(self):
+        return b'POST ' in bytes(self.received) or bool(self.decrypted)
+
+
+def closed_port():
+    probe = socket.socket()
+    probe.bind(('127.0.0.1', 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    return port
+
+
+class NeverConnectedTests(SimpleTestCase):
+    """HARNESS.md 8 and http.py's own rule: not_sent only while the request provably has not left - "a connection that
+    was never established". A watched connection hands its socket to the exchange's watch once its TCP connect and TLS
+    handshake completed, before any byte of the request is written, so one that never did sent nothing; urllib3 surfaces
+    a handshake cut by the (clamped) connect timeout as a read timeout and a refused certificate as an SSL error, which
+    were taken for failures after the request may have left (unknown): a member had to reconcile an attempt that never
+    left, and while it stood unknown every other participant was held (I8, I10) (sends-r2-2)."""
+
+    def post(self, url, *, deadline_s, connect_timeout, read_timeout=240):
+        started = time.monotonic()
+        exchange = participants_http.post(
+            openai_astra.VENDOR, participants_http.default_session, url, b'{"model":"gpt-6-astra"}',
+            {'Content-Type': 'application/json'}, deadline=started + deadline_s, connect_timeout=connect_timeout,
+            read_timeout=read_timeout, max_response_bytes=1 << 20, requested_model=openai_astra.MODEL)
+        return exchange, time.monotonic() - started
+
+    def assertNotSent(self, exchange, error):
+        self.assertEqual((exchange.outcome, exchange.sent, exchange.error, exchange.endpoint, exchange.http_status),
+                         ('not_sent', False, error, '', None))
+        self.assertEqual(exchange.requested_model, openai_astra.MODEL)
+
+    def test_a_tls_handshake_the_deadline_cuts_sent_nothing(self):
+        server = LoopbackServer(self, 'stall')
+        exchange, elapsed = self.post(server.url(), deadline_s=1.0, connect_timeout=10)
+        self.assertNotSent(exchange, 'The deadline passed before the request was sent; nothing was sent.')
+        self.assertLess(elapsed, 3)
+        self.assertEqual(bytes(server.received[:1]), b'\x16')  # the client's TLS hello reached it ...
+        self.assertFalse(server.request_line_received)  # ... and not a byte of the request
+
+    def test_a_tls_handshake_the_connect_timeout_cuts_sent_nothing(self):
+        server = LoopbackServer(self, 'stall')
+        exchange, elapsed = self.post(server.url(), deadline_s=30, connect_timeout=1.0)
+        self.assertNotSent(exchange, 'OpenAI could not be reached (ReadTimeout); nothing was sent.')
+        self.assertLess(elapsed, 5)
+        self.assertEqual(bytes(server.received[:1]), b'\x16')
+        self.assertFalse(server.request_line_received)
+
+    def test_a_certificate_the_check_refuses_sent_nothing(self):
+        server = LoopbackServer(self, 'tls', throwaway_tls_context())
+        exchange, _ = self.post(server.url(), deadline_s=30, connect_timeout=10)
+        self.assertNotSent(exchange, 'OpenAI could not be reached (SSLError); nothing was sent.')
+        self.assertEqual(bytes(server.decrypted), b'')
+
+    def test_control_a_refused_tcp_connection_stays_not_sent(self):
+        exchange, _ = self.post(f'https://127.0.0.1:{closed_port()}/v1/responses', deadline_s=30, connect_timeout=10)
+        self.assertNotSent(exchange, 'OpenAI could not be reached (ConnectionError); nothing was sent.')
+
+    def test_control_a_request_written_and_never_answered_stays_unknown(self):
+        server = LoopbackServer(self, 'http-stall')
+        exchange, elapsed = self.post(server.url('http'), deadline_s=30, connect_timeout=10, read_timeout=1.0)
+        self.assertEqual((exchange.outcome, exchange.sent), ('unknown', True))
+        self.assertIn('The request may have reached OpenAI, but no complete response was read (ReadTimeout)',
+                      exchange.error)
+        self.assertLess(elapsed, 5)
+        time.sleep(0.3)
+        self.assertTrue(server.request_line_received)  # the request was written: it may have left
+
+    def test_the_real_tool_loop_records_its_first_exchange_not_sent(self):
+        server = LoopbackServer(self, 'stall')
+        with tempfile.TemporaryDirectory() as folder:
+            credentials = write_file(Path(folder) / 'openai.env', openai_env())
+            adapter = AstraParticipant(credentials, connect_timeout=10)
+            request = adapter.build_request(NOTE, PAGES, 'paste', None)
+            with mock.patch.object(openai_astra, 'ENDPOINT', server.url()):
+                outcome = adapter.send_loop(request, deadline_s=1.0, client_request_id='synthetic-run-0001',
+                                            original_bytes=None, execute_tool=lambda name, arguments: ({}, []))
+        self.assertEqual((outcome.final.outcome, outcome.final.sent), ('not_sent', False))
+        self.assertEqual([(e.turn, e.outcome) for e in outcome.exchanges], [(1, 'not_sent')])
+        self.assertFalse(server.request_line_received)
