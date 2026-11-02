@@ -312,12 +312,12 @@ cut coding read is `unknown`, a cut token read sends no coding request (`not_sen
     or none, as a round-4 row holds), the inputs compared are exactly the round-4 head's: the result's sha256, the
     revision, the context, the routing run, the Corti run and the second-review run. With one configured in either,
     they are those and the participant runs each entry names: its name, state and run and, on assess #2 and its
-    re-assessments, its peer state and peer run. The retrieval traces are never compared, so an encounter assessed before the CMS passages were
-    imported (the installer's `passages` phase runs after `app`; a later release can add a passage file) keeps the
-    retrieval it recorded until one of those inputs changes. The harness had compared both records: such an identical
-    re-assessment recorded a second assessment with the same sha256, carried the decisions onto it and asked its
-    questions again (a second review whose Corti request failed; a Resume after the stale sweep). A record that is not a
-    list of entries is never taken for one, so it differs.
+    re-assessments, its peer state and peer run. The retrieval traces are never compared, so an encounter assessed
+    before the CMS passages were imported (the installer's `passages` phase runs after `app`; a later release can add
+    a passage file) keeps the retrieval it recorded until one of those inputs changes. The harness had compared both
+    records: such an identical re-assessment recorded a second assessment with the same sha256, carried the decisions
+    onto it and asked its questions again (a second review whose Corti request failed; a Resume after the stale sweep).
+    A record that is not a list of entries is never taken for one, so it differs.
   - **What proves I1, and what each proof cannot see.** H1 (`ops.gi4.replay`) reads the retained fixtures' reference
     sources, which keep the round-4 note; H2 (`ops.gi4.freeze`) compares the request side; H4 (`ops.gi4.battery`)
     assesses with no reference rows; the engine parity test (`tests/test_harness_engine_parity.py`) builds its sources
