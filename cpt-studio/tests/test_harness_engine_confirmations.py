@@ -67,6 +67,11 @@ VISIT_AND_SIG = (HEAD + 'Office visit and same-day procedure (fictional)\nDate o
                  'Place of service: Office\nEstablished patient seen for rectal bleeding.\n'
                  'Procedure: Flexible sigmoidoscopy. The sigmoidoscope was advanced to 50 cm. Two cold forceps biopsies '
                  'were taken.\n' + TIME + '\n')
+# An ERCP held on its cannulation: the same path serves every required fact the readers take from the document.
+STENT = 'A plastic stent was placed.'
+CONTRAST = 'Contrast filled the duct.'
+ERCP = (HEAD + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
+        'Procedure: ERCP\nThe duodenoscope was advanced to the major papilla. ' + STENT + '\n' + CONTRAST + '\n')
 
 
 def info(key, kind, release):
@@ -78,7 +83,7 @@ def info(key, kind, release):
 PFS_INFO = info('cms-pfs-rvu26d', 'cms-pfs', 'RVU26D')
 MUE_INFO = info('cms-mue-practitioner-2026q4', 'cms-mue-practitioner', '2026-Q4')
 CODES = {'45378': ('2', None), '45380': ('3', '45378'), '45385': ('3', '45378'), '45330': ('2', None),
-         '45331': ('3', '45330'), '43235': ('2', None), '43239': ('3', '43235')}
+         '45331': ('3', '45330'), '43235': ('2', None), '43239': ('3', '43235'), '43274': ('0', None)}
 PFS_ROWS = {(code, ''): {'status': 'A', 'global_days': '000', 'mult_proc': mult, 'endo_base': base, 'pctc': '0'}
             for code, (mult, base) in CODES.items()}
 PFS_ROWS[('99213', '')] = {'status': 'A', 'global_days': 'XXX', 'mult_proc': '0', 'endo_base': None, 'pctc': '0'}
@@ -214,6 +219,16 @@ class ConfirmedFactTests(SimpleTestCase):
         after = run(VISIT, (), [confirm(VISIT, TIME, fact='em_basis', family='gi.office_em', value='total time')])
         self.assertEqual(after.clarifications, ())
         self.assertIsNotNone(encounter_check(after, 'confirmations.applied'))
+
+    def test_any_other_required_fact_takes_the_confirmed_value(self):
+        before = run(ERCP, (('43274', STENT),))
+        self.assertEqual(questions(proposal(before, 'sel:0')), [('proposal', 'gi.ercp', 'cannulation')])
+        after = run(ERCP, (('43274', STENT),), [confirm(ERCP, CONTRAST, fact='cannulation', family='gi.ercp',
+                                                        key='sel:0', value='bile duct cannulated')])
+        item = proposal(after, 'sel:0')
+        self.assertEqual((item.status, questions(item)), ('ready', []))
+        self.assertIn(f'cannulation outcome = bile duct cannulated, {WORDS} (“{CONTRAST}”)',
+                      check(item, 'facts.required').detail)
 
     def test_a_confirmed_value_never_replaces_a_value_the_readers_read(self):
         documented = checks.FactState('extent', Fact('extent', 'cecum', 'document'), '')
