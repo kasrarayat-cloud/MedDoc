@@ -19,11 +19,13 @@ from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.utils import timezone
 
-from . import audit, review
+from . import audit, candidates, participants, review
 from .gi.context import charge_date_problem, is_member_conflict
 from .gi.profiles import PROFILES
 from .models import Clarification, Decision, Encounter, Membership, Proposal, ProviderRun, ReportArtifact
+from .participants.reading import CODE as CODE_SHAPE
 from .types import CONTEXT_FACTS, sha256_json
+from .validation.checks import fact_label
 
 DRAFT, REVIEWED = ReportArtifact.DRAFT, ReportArtifact.REVIEWED
 KINDS = (DRAFT, REVIEWED)
@@ -350,8 +352,10 @@ def _records(assessment):
 
 def _provider_runs(encounter, assessment):
     # a harness participant's run is read by this assessment when its Assessment.participants entry names it, and its
-    # response was not used when that entry says refused
+    # response was not used when that entry says refused; harness@2 (HARNESS.md 12.3): so is its peer-review run
     read = {record.get('run'): record.get('state') for record in _records(assessment).values() if record.get('run')}
+    read.update({record['peer_run']: record.get('peer_state') for record in _records(assessment).values()
+                 if isinstance(record.get('peer_run'), str)})
     return [{
         'id': str(run.pk), 'revision_number': run.revision.number, 'provider': run.provider,
         'mode': review.run_mode(run), 'state': run.state, 'sent': run.sent,
@@ -417,15 +421,184 @@ def _participants(assessment):
                                                                      'review participants'))
             continue
         state = record.get('state')
-        out.append(_participant_entry(
+        entry = _participant_entry(
             name, label, vendor, runs.get(record.get('run')), review.RECORD_WORDS.get(state, str(state)),
-            review.record_reason(record), record.get('unverified_quotes'), refused=state == 'refused'))
+            review.record_reason(record), record.get('unverified_quotes'), refused=state == 'refused')
+        if 'exchanges' in record:  # harness@2 (HARNESS.md 12.3): the run was a tool loop
+            entry.update(exchanges=_count(record.get('exchanges')), tool_calls=_count(record.get('tool_calls')))
+        out.append(entry)
     return out
+
+
+def _count(value):
+    return value if type(value) is int and value >= 0 else 0
 
 
 def _retrieval(assessment):
     """The reference retrieval traces the assessment recorded (Assessment.retrieval), as stored."""
     return [entry for entry in assessment.retrieval or [] if isinstance(entry, dict)]
+
+
+# --- harness@2 (HARNESS.md 11-12): peer reviews, confirmed findings, the participants' own references -----------------
+#
+# Only an assessment a model participant took part in (phase 1 or 2) carries these, so a Corti-only report - its
+# snapshot, its digest, the TXT and the CSV - is harness@1's exactly. Nothing here is a participant's own wording: a
+# question is CPT Studio's, a value is stated in CPT Studio's words (studio.candidates), a passage is the revision
+# text's own slice, re-checked, and a code, position or reference is shown only in the shape it may take. None of it
+# decides a status or approves anything (I2-I4), and the participants' references stay apart from the reconciliation's
+# REFERENCE RETRIEVAL.
+
+CONFIRMED_TITLE = 'CONFIRMED FINDINGS'
+PEER_TITLE = 'PEER REVIEW'
+REFERENCES_TITLE = 'PARTICIPANT REFERENCES'
+# CSV rows that are not proposals (format @4's encounter rows, harness@2's): ops/verify_downloads.py reads them as such.
+HARNESS2_LISTS = ('confirmed_finding', 'peer_answer', 'peer_position', 'peer_additional_code', 'participant_reference')
+REF_SHAPE = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:-]{0,199}')  # a passage key or a 'fact:<source>:<code>:<field>' ref
+FACT_TITLES = {candidates.DATE_FACT: 'Service date', candidates.STATUS_FACT: 'Performed at this encounter'}
+PHASE_WORDS = {ProviderRun.INDEPENDENT: 'independent reading', ProviderRun.PEER_REVIEW: 'peer review'}
+NO_PEER_REVIEW = 'It takes no part in peer review: its first reading was not read.'
+
+
+def _fact_title(fact):
+    return FACT_TITLES.get(fact) or fact_label(str(fact)).capitalize()
+
+
+def _located(quotes, text, index):
+    """The located spans of ``quotes`` that are exact slices of the revision text, each once, in text order, with
+    their page."""
+    spans = {}
+    for quote in quotes or ():
+        for span in getattr(quote, 'spans', ()) or ():
+            if _matches({'start': span.start, 'end': span.end, 'text': span.text}, text):
+                spans[(span.start, span.end)] = {'start': span.start, 'end': span.end, 'text': span.text,
+                                                 'page': candidates._page_of(index, span.start)}
+    return [spans[key] for key in sorted(spans)]
+
+
+def _harness2(assessment):
+    phase = review.assessment_phase(assessment)
+    if phase == 0:
+        return {}
+    return {'phase': phase, 'peer_review': _peer_reviews(assessment, phase),
+            'confirmed_findings': _confirmed_findings(assessment),
+            'participant_references': _participant_reference_runs(assessment)}
+
+
+def _peer_reviews(assessment, phase):
+    """Each configured model participant's peer review as this assessment read it (12.3): its state, run and mode, the
+    frozen inputs it was shown, and its answers, positions and additional codes with their located passages. Phase 1:
+    none recorded yet - ``owed`` says whether any is to follow (a participant's first reading was read)."""
+    records = review.model_records(assessment)
+    owed = any(record.get('state') == 'read' for record in records.values())
+    if phase != 2:
+        return {'recorded': False, 'owed': owed, 'participants': []}
+    revision = assessment.revision
+    text, index = revision.text, candidates._page_index(revision.pages)
+    out = []
+    for name in review.MODEL_PARTICIPANTS:
+        record = records.get(name)
+        if record is None or record.get('state') == 'not_configured':
+            continue
+        state = record.get('peer_state') if record.get('state') == 'read' else 'not_run'
+        entry = {'name': name, 'label': participants.LABELS[name], 'state': str(state or 'not_run'),
+                 'reason': '' if record.get('state') == 'read' else NO_PEER_REVIEW, 'run': None, 'mode': '',
+                 'unverified_quotes': _count(record.get('peer_unverified_quotes')), 'frozen': [], 'answers': [],
+                 'positions': [], 'additional_codes': []}
+        if record.get('state') == 'read' and state != 'read':
+            entry['reason'] = review.record_reason({'state': state, 'reason': record.get('peer_reason')})
+        peer_run = review.record_run(assessment, record, 'peer_run')
+        if peer_run is not None:
+            entry.update(run=str(peer_run.pk), mode=review.run_mode(peer_run))
+        if state == 'read' and peer_run is not None:
+            peer_review, problem = review.stored_peer_review(peer_run)
+            if peer_review is None or peer_review.refused or sha256_json(peer_review) != record.get('peer_sha256'):
+                entry.update(state='unreadable', reason=problem or 'Its stored answer no longer reads as recorded.')
+            else:
+                entry.update(_peer_items(assessment, peer_review, text, index))
+        out.append(entry)
+    return {'recorded': True, 'owed': owed, 'participants': out}
+
+
+def _peer_items(assessment, peer_review, text, index):
+    named = {review._uuid(answer.question_id) for answer in peer_review.answers} - {None}
+    asked = {str(item.pk): item for item in Clarification.objects.select_related('proposal').filter(
+        pk__in=named, encounter_id=assessment.encounter_id, assessment__revision_id=assessment.revision_id)}
+    answers = []
+    for answer in peer_review.answers:
+        question = asked.get(review._uuid(answer.question_id))
+        fact, family = (question.fact, question.family) if question is not None else ('', '')
+        value = candidates.canonical_value(fact, family, answer.value)[0] if answer.settled else ''
+        answers.append({'question_id': str(answer.question_id) if question is not None else '',
+                        'question': question.question if question is not None else '', 'fact': fact,
+                        'family': family, 'settled': bool(answer.settled), 'value': value,
+                        'evidence': _located(answer.evidence, text, index)})
+    positions = [{'code': item.code if CODE_SHAPE.fullmatch(str(item.code)) else '', 'position': item.position,
+                  'evidence': _located(item.evidence, text, index)} for item in peer_review.positions]
+    added = [{'code': item.code if CODE_SHAPE.fullmatch(str(item.code)) else '',
+              'units': item.units if type(item.units) is int else 0, 'evidence': _located(item.evidence, text, index)}
+             for item in peer_review.additional_codes]
+    return {'frozen': [[str(name), str(value)] for name, value in peer_review.frozen_inputs], 'answers': answers,
+            'positions': positions, 'additional_codes': added}
+
+
+def _confirmed_findings(assessment):
+    """Every reviewer-confirmed finding of the revision (FindingConfirmation, 11.3), oldest first: the fact, value and
+    passage, who located it, who confirmed it with which attestation and when, and what became of it - a service date
+    enters through the encounter context; any other fact is read by an assessment (completeness['confirmations'])."""
+    record = (assessment.completeness or {}).get('confirmations') if isinstance(assessment.completeness, dict) else {}
+    record = record if isinstance(record, dict) else {}
+    applied = {str(i) for item in record.get('applied') or [] if isinstance(item, dict) for i in item.get('ids') or []}
+    ignored = {str(item.get('id')): str(item.get('why') or '') for item in record.get('ignored') or []
+               if isinstance(item, dict)}
+    member_date = (assessment.context.user_values or {}).get('service_date')
+    text = assessment.revision.text
+    out = []
+    for item in review.revision_confirmations(assessment.revision):
+        spans = [span for span in item.spans or [] if isinstance(span, dict) and _matches(span, text)]
+        if item.fact == candidates.DATE_FACT:
+            effect = ("entered as the member's service date through the encounter context; this assessment's context "
+                      'carries it' if member_date == item.value else
+                      "entered as the member's service date through the encounter context; this assessment's context "
+                      'does not carry it (made before it, or with another member date)')
+        elif str(item.pk) in applied:
+            effect = 'read by this assessment'
+        elif str(item.pk) in ignored:
+            effect = f'not read by this assessment: {ignored[str(item.pk)]}'
+        else:
+            effect = 'not read by this assessment, which was made before it'
+        question = item.clarification
+        out.append({'id': str(item.pk), 'clarification_id': str(item.clarification_id), 'scope': item.scope,
+                    'fact': item.fact, 'family': item.family, 'proposal_key': item.proposal_key,
+                    'code': question.proposal.code if question.proposal_id else '', 'value': item.value,
+                    'spans': [{'start': span['start'], 'end': span['end'], 'text': span['text'],
+                               'page': span.get('page')} for span in spans],
+                    'unmatched': len(item.spans or []) - len(spans),
+                    'located_by': [str(name) for name in item.located_by or []],
+                    'runs': [str(run) for run in item.runs or []], 'confirmed_by': item.confirmed_by.label(),
+                    'confirmed_by_kind': item.confirmed_by.actor_kind, 'attestation': item.attestation,
+                    'created_at': _ts(item.created_at), 'effect': effect})
+    return out
+
+
+def _participant_reference_runs(assessment):
+    """What each configured model participant's runs retrieved and say they used (11.2), by run: its first reading's
+    and its peer review's, never merged with each other or with the reconciliation's retrieval."""
+    records = review.model_records(assessment)
+    out = []
+    for name in review.MODEL_PARTICIPANTS:
+        record = records.get(name)
+        if record is None or record.get('state') == 'not_configured':
+            continue
+        for field, phase in (('run', ProviderRun.INDEPENDENT), ('peer_run', ProviderRun.PEER_REVIEW)):
+            run = review.record_run(assessment, record, field)
+            if run is None:
+                continue
+            references = review.participant_references(run)
+            out.append({'name': name, 'label': participants.LABELS[name], 'phase': phase, 'run': str(run.pk),
+                        'retrieved': references['retrieved'],
+                        'used': [{'ref': item['ref'] if REF_SHAPE.fullmatch(str(item['ref'])) else '',
+                                  'retrieved': bool(item['retrieved'])} for item in references['used']]})
+    return out
 
 
 def _history(encounter, assessment):
@@ -500,6 +673,8 @@ def snapshot(encounter, kind):
         'retrieval': _retrieval(assessment),
         # an assessment recorded before the harness has no participant entry and no retrieval
         'harness': bool(assessment.participants),
+        # harness@2 (HARNESS.md 11-12), only where a model participant took part: a Corti-only snapshot is harness@1's
+        **_harness2(assessment),
     }
 
 
@@ -773,10 +948,12 @@ def _provider_section(snap):
         mode = 'REPLAY (recorded response, not live output)' if run['mode'] == 'replay' else run['mode']
         status = f' · HTTP {run["http_status"]}' if run['http_status'] else ''
         second = run.get('purpose') == 'second_review'
-        # a harness participant's own review of the revision (HARNESS.md 2); its Assessment.participants entry says
-        # whether this assessment read it and whether its response was used (_provider_runs)
-        independent = run.get('purpose') == 'independent'
-        kind = ' · bounded second review' if second else ' · independent review' if independent else ''
+        # a harness participant's own review of the revision (HARNESS.md 2), or its peer review (11.1); its
+        # Assessment.participants entry says whether this assessment read it and whether its response was used
+        # (_provider_runs)
+        independent = run.get('purpose') in ('independent', 'peer_review')
+        kind = (' · bounded second review' if second else ' · peer review' if run.get('purpose') == 'peer_review'
+                else ' · independent review' if independent else '')
         used = ''
         if run['used_by_assessment']:
             refused = (run.get('refused') if independent else
@@ -854,6 +1031,8 @@ def _participants_section(snap):
         lines.append(f'    Request id: {entry["request_id"] or "none"} · response id: {entry["response_id"] or "none"}')
         usage = json.dumps(entry['usage'], sort_keys=True, ensure_ascii=False) if entry['usage'] else 'none reported'
         lines.append(f'    Usage: {usage}' + (f' ({entry["usage_basis"]})' if entry['usage_basis'] else ''))
+        if 'exchanges' in entry:  # harness@2: its first reading was a tool loop
+            lines.append(f'    Exchanges: {entry["exchanges"]} · tool calls: {entry["tool_calls"]}')
         if entry['name'] == review.CORTI:
             lines.append('    Estimated cost: not estimated (Corti reports usage in credits, not USD)')
         elif entry['estimated_cost_usd'] is not None:
@@ -870,6 +1049,124 @@ def _participants_section(snap):
             lines.append(f'    {label}: {_indent(entry["reason"], "      ")}')
     if not snap.get('harness'):
         lines.append('  This assessment was recorded before the review participants existed: only Corti was run.')
+    return lines
+
+
+POSITION_WORDS = {'supports': 'supports', 'disputes': 'disputes', 'cannot_tell': 'cannot tell'}
+UNREAD_CODE = 'a code CPT Studio does not read'
+UNKEYED_REF = 'a reference that is not a CPT Studio reference key (not shown)'
+
+
+def _confirmed_subject(item):
+    if item['scope'] == 'encounter':
+        return 'the encounter'
+    family = _family_label(item['family']) if item['family'] else 'a service'
+    if item['scope'] == 'proposal':
+        return f'{item["code"] or "a proposal"} ({item["proposal_key"]}) · {family}'
+    return family
+
+
+def _confirmed_section(snap):
+    """Every reviewer-confirmed finding of the revision (HARNESS.md 11.3): a fact a reviewer confirmed from a
+    participant's located passage, with the attestation recorded - never a decision on a code."""
+    labels = dict(participants.LABELS)
+    lines = []
+    for item in snap.get('confirmed_findings') or []:
+        lines.append(f'  - {_fact_title(item["fact"])} = {item["value"]} · {_confirmed_subject(item)} — confirmed by '
+                     f'{_who(item["confirmed_by"], item["confirmed_by_kind"])} at {item["created_at"]}')
+        lines.append(f'    Confirmation: {item["id"]} · question {item["clarification_id"]}')
+        lines += [f'    Passage: {_indent(_evidence_line(span), "        ")}' for span in item['spans']] or [
+            '    Passage: none matches the revision text exactly']
+        if item['unmatched']:
+            lines.append(f'    ({item["unmatched"]} cited passage(s) did not match the revision text exactly and are '
+                         'not shown)')
+        lines.append('    Located by: ' + (', '.join(labels.get(name, name) for name in item['located_by']) or 'none'))
+        lines.append(f'    Attestation: {_indent(item["attestation"], "      ")}')
+        lines.append(f'    Effect: {_indent(item["effect"], "      ")}')
+    return lines or ['  None: no reviewer has confirmed a finding for this revision.']
+
+
+def _peer_state_words(entry):
+    state = entry['state']
+    if state == 'read':
+        return 'answered in peer review; the review was used'
+    if state == 'unreadable':
+        return 'answered in peer review; its stored answer could not be read as recorded'
+    if state == 'not_run' and entry['reason'] == NO_PEER_REVIEW:
+        return 'no peer review'
+    return review.RECORD_WORDS.get(state, str(state)).replace('the reading was not used', 'the review was not used')
+
+
+def _peer_evidence(spans):
+    return [f'      {_indent(_evidence_line(span), "        ")}' for span in spans]
+
+
+def _peer_section(snap):
+    """Each participant's peer review (HARNESS.md 11.1): its answers to CPT Studio's open questions (in CPT Studio's
+    words), its positions on codes and the codes it proposed after peer review, each with its located passages."""
+    data = snap.get('peer_review') or {}
+    if not data.get('recorded'):
+        return ['  - none recorded for this assessment: its peer reviews follow it (phase 1)' if data.get('owed') else
+                "  - none: no participant's first reading was read, so no peer review was owed"]
+    lines = []
+    for entry in data.get('participants') or []:
+        lines.append(f'  - {entry["label"]} · {_peer_state_words(entry)}')
+        if entry['run']:
+            replay = ' · REPLAY (recorded response, not live output)' if entry['mode'] == 'replay' else ''
+            lines.append(f'    Run: {entry["run"]}{replay}')
+        if entry['frozen']:
+            lines.append('    Frozen inputs shown: ' + ' · '.join(f'{name} {value}' for name, value in entry['frozen']))
+        for answer in entry['answers']:
+            asked = f'"{answer["question"]}"' if answer['question'] else 'a question no longer recorded'
+            fact = f' ({fact_label(answer["fact"])})' if answer['fact'] else ''
+            said = ((answer['value'] or 'a value CPT Studio cannot state in its own words') if answer['settled']
+                    else 'not settled by the document')
+            lines.append(f'    Answer to {_indent(asked, "      ")}{fact}: {said}')
+            lines += _peer_evidence(answer['evidence'])
+        for position in entry['positions']:
+            lines.append(f'    Position on {position["code"] or UNREAD_CODE}: '
+                         f'{POSITION_WORDS.get(position["position"], "no position CPT Studio reads")}')
+            lines += _peer_evidence(position['evidence'])
+        for added in entry['additional_codes']:
+            lines.append(f'    Additional code {added["code"] or UNREAD_CODE} · units {added["units"]} — proposed '
+                         'after peer review, never independent')
+            lines += _peer_evidence(added['evidence'])
+        if entry['unverified_quotes']:
+            lines.append(f'    Unverified quotes: {entry["unverified_quotes"]} (not found in the document; never used '
+                         'as evidence)')
+        if entry['reason']:
+            lines.append(f'    Reason: {_indent(entry["reason"], "      ")}')
+    return lines or ['  - none: no model participant took part']
+
+
+def _window(item):
+    if item.get('effective_start') or item.get('effective_end'):
+        return f', effective {item.get("effective_start") or "?"} to {item.get("effective_end") or "?"}'
+    return ''
+
+
+def _references_section(snap):
+    """What each participant run's own tool calls retrieved and what its answer says it used (HARNESS.md 11.2): kept
+    apart by participant and phase, and from the reconciliation's REFERENCE RETRIEVAL."""
+    lines = ["  Each participant run's own tool results (retrieved) and the references its answer says it relied on "
+             "(used, checked against that run's own results); the reconciliation's retrieval is REFERENCE RETRIEVAL."]
+    runs = snap.get('participant_references') or []
+    for run in runs:
+        lines.append(f'  - {run["label"]} · {PHASE_WORDS.get(run["phase"], run["phase"])} · run {run["run"]}')
+        for item in run['retrieved']:
+            ref = item['ref'] if REF_SHAPE.fullmatch(str(item['ref'])) else UNKEYED_REF
+            lines.append(f'    Retrieved: {ref} ({item["kind"]} · {item["source_key"] or "unknown source"}, release '
+                         f'{item["release"] or "not stated"}{_window(item)})')
+        if not run['retrieved']:
+            lines.append('    Retrieved: none')
+        for item in run['used']:
+            lines.append(f'    Used: {item["ref"] or UNKEYED_REF} — ' + (
+                'retrieved by this run' if item['retrieved'] else
+                'cited, not retrieved by this run, so never shown as retrieved'))
+        if not run['used']:
+            lines.append('    Used: none')
+    if not runs:
+        lines.append('  - none: no participant run is recorded for this assessment')
     return lines
 
 
@@ -1125,10 +1422,14 @@ def render_txt(snap) -> bytes:
     sections += [('EXCLUDED CANDIDATES', _excluded_section(snap)),
                  (ALTERNATIVES_TITLE, _alternatives_section(snap)),
                  ('CHECKS', _checks_section(snap)),
-                 ('OPEN CLARIFICATIONS', _clarifications_section(snap)),
-                 ('NOT VERIFIED', _not_verified_section(snap)),
-                 ('REVIEW PARTICIPANTS', _participants_section(snap)),
-                 ('PROVIDER USAGE', _provider_section(snap)),
+                 ('OPEN CLARIFICATIONS', _clarifications_section(snap))]
+    if 'confirmed_findings' in snap:  # harness@2, never in a Corti-only report
+        sections.append((CONFIRMED_TITLE, _confirmed_section(snap)))
+    sections += [('NOT VERIFIED', _not_verified_section(snap)),
+                 ('REVIEW PARTICIPANTS', _participants_section(snap))]
+    if 'peer_review' in snap:
+        sections += [(PEER_TITLE, _peer_section(snap)), (REFERENCES_TITLE, _references_section(snap))]
+    sections += [('PROVIDER USAGE', _provider_section(snap)),
                  ('REFERENCE SOURCES', _reference_section(snap)),
                  ('REFERENCE RETRIEVAL', _retrieval_section(snap)),
                  ('AUDIT — DECISION HISTORY', _audit_section(snap))]
@@ -1203,6 +1504,64 @@ def _encounter_rows(snap):
     return [[row[column] for column in CSV_COLUMNS] for row in rows]
 
 
+def _csv_spans(spans):
+    return ' | '.join(f'"{s["text"]}" [{s["start"]}-{s["end"]}' + (f', p{s["page"]}]' if s.get('page') else ']')
+                      for s in spans)
+
+
+def _harness2_rows(snap):
+    """harness@2's rows (HARNESS.md 12.6), none in a Corti-only report: one per confirmed finding, peer answer, peer
+    position, code proposed after peer review, and reference a participant run retrieved or used. They are not
+    proposals: ``decision`` stays empty on every one (a confirmation is no decision), ``proposed_by`` names the
+    participant (for a confirmed finding, the participants that located its passage) and ``proposal_origin`` its phase.
+    The other columns they fill: a confirmed finding's fact (``status``), value (``exclusion_reason``), passages
+    (``evidence``), reviewer, kind and time (``reviewer``, ``reviewer_kind``, ``decided_at``), attestation
+    (``evidence_support``) and ids (``checks``); a peer answer's settled or not_settled (``status``), value in CPT
+    Studio's words (``exclusion_reason``), passages and question (``checks``); a position's code, position and
+    passages; an additional code's code, units and passages; a reference's ref (``exclusion_reason``), retrieved, used
+    or cited_not_retrieved (``status``), source (``documented_service``) and kind, release and window
+    (``evidence_support``)."""
+    base = {**dict.fromkeys(CSV_COLUMNS, ''), **_identity_cells(snap)}
+    rows = []
+    for item in snap.get('confirmed_findings') or []:
+        rows.append({**base, 'item_list': 'confirmed_finding', 'code': item['code'], 'family': item['family'],
+                     'family_label': _family_label(item['family']) if item['family'] else '', 'status': item['fact'],
+                     'exclusion_reason': item['value'], 'evidence': _csv_spans(item['spans']),
+                     'proposed_by': ';'.join(item['located_by']), 'reviewer': item['confirmed_by'],
+                     'reviewer_kind': item['confirmed_by_kind'], 'decided_at': item['created_at'],
+                     'evidence_support': item['attestation'],
+                     'checks': f'confirmation={item["id"]};clarification={item["clarification_id"]};'
+                               f'scope={item["scope"]}'})
+    for entry in (snap.get('peer_review') or {}).get('participants') or []:
+        peer = {**base, 'proposed_by': entry['name'], 'proposal_origin': ProviderRun.PEER_REVIEW}
+        for answer in entry['answers']:
+            rows.append({**peer, 'item_list': 'peer_answer', 'family': answer['family'],
+                         'family_label': _family_label(answer['family']) if answer['family'] else '',
+                         'status': 'settled' if answer['settled'] else 'not_settled',
+                         'exclusion_reason': answer['value'], 'evidence': _csv_spans(answer['evidence']),
+                         'checks': f'question={answer["question_id"]};fact={answer["fact"]}'})
+        for position in entry['positions']:
+            rows.append({**peer, 'item_list': 'peer_position', 'code': position['code'],
+                         'status': str(position['position']) if position['position'] in POSITION_WORDS else '',
+                         'evidence': _csv_spans(position['evidence'])})
+        for added in entry['additional_codes']:
+            rows.append({**peer, 'item_list': 'peer_additional_code', 'code': added['code'], 'units': added['units'],
+                         'status': 'proposed_after_peer_review', 'evidence': _csv_spans(added['evidence'])})
+    for run in snap.get('participant_references') or []:
+        source = {**base, 'proposed_by': run['name'], 'proposal_origin': run['phase']}
+        for item in run['retrieved']:
+            rows.append({**source, 'item_list': 'participant_reference', 'status': 'retrieved',
+                         'exclusion_reason': item['ref'] if REF_SHAPE.fullmatch(str(item['ref'])) else '',
+                         'documented_service': item['source_key'],
+                         'evidence_support': f'{item["kind"]} · release {item["release"] or "not stated"}'
+                                             f'{_window(item)}', 'checks': f'run={run["run"]}'})
+        for item in run['used']:
+            rows.append({**source, 'item_list': 'participant_reference',
+                         'status': 'used' if item['retrieved'] else 'cited_not_retrieved',
+                         'exclusion_reason': item['ref'], 'checks': f'run={run["run"]}'})
+    return [[row[column] for column in CSV_COLUMNS] for row in rows]
+
+
 def _placeholder_row(snap):
     """A report with no proposals still says, in the file, what it is: its kind, its identity and SYNTHETIC."""
     row = {**dict.fromkeys(CSV_COLUMNS, ''), **_identity_cells(snap), 'item_list': 'none',
@@ -1217,7 +1576,7 @@ def render_csv(snap) -> bytes:
     writer.writerow([neutralise(column) for column in CSV_COLUMNS])
     order = {name: index for index, name in enumerate(LISTS)}
     rows = [_csv_row(snap, item) for item in sorted(snap['proposals'], key=lambda i: order[i['list']])]
-    for row in (rows or [_placeholder_row(snap)]) + _encounter_rows(snap):
+    for row in (rows or [_placeholder_row(snap)]) + _encounter_rows(snap) + _harness2_rows(snap):
         # Control characters are shown escaped here too (round 3, review3:5): a cited passage carrying ESC/CSI,
         # backspace or DEL must not redraw a row when the file is printed in a terminal.
         writer.writerow([neutralise(_visible(cell) if isinstance(cell, str) else cell) for cell in row])
