@@ -933,6 +933,11 @@ and 12.1-12.6 differ, this list describes the code; the earlier text is kept so 
     pays for it again (as before D5, when nothing of the loop was recorded). Settling such a run from its recorded
     exchanges would derive the loop's final record a second way (its usage basis and returned model are not recorded
     per exchange) and change the rule above, so it is not done in this round.
+  - **Amended after refutation round 4 (sends-1..3, falsegreen-1):** the access check's loop asks the same question
+    before each later exchange (`participant_access_check._should_stop`) and sends nothing more without the lock, its
+    unlock tolerating an ended session so its receipt is printed; `_finish_loop`'s fallback never records a replay sent
+    (`may_have_reached_vendor`'s rule, `UNRECORDED_REPLAY_MESSAGE`); a test has another session hold the lock when the
+    loop asks (`tests/test_harness2_r4_sends.py`, `LockedSessionTests`).
   - Tests: `tests/test_harness2_r3_sends.py` (the lock with the worker's session really ended, outside any test
     transaction; the undo and the sweep alike; a replay; the known limit as it stands), `RecordedAsItEndsTests` in
     `tests/test_harness2_r2_peer.py` (falsegreen-5) and `SentRunsOnTheDatabaseTests` in `ops/test_install_harness2.py`
