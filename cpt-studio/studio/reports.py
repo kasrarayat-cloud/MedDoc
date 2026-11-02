@@ -491,7 +491,9 @@ def _peer_reviews(assessment, phase):
     records = review.model_records(assessment)
     owed = any(record.get('state') == 'read' for record in records.values())
     if phase != 2:
-        return {'recorded': False, 'owed': owed, 'participants': []}
+        # a harness@1 assessment records no frozen phase-1 outputs (12.3): no peer review ever follows it
+        predates = not any('frozen' in record for record in records.values())
+        return {'recorded': False, 'owed': owed and not predates, 'predates': predates, 'participants': []}
     revision = assessment.revision
     text, index = revision.text, candidates._page_index(revision.pages)
     out = []
@@ -1107,6 +1109,8 @@ def _peer_section(snap):
     """Each participant's peer review (HARNESS.md 11.1): its answers to CPT Studio's open questions (in CPT Studio's
     words), its positions on codes and the codes it proposed after peer review, each with its located passages."""
     data = snap.get('peer_review') or {}
+    if data.get('predates'):
+        return ['  - none: this assessment was recorded before peer review existed']
     if not data.get('recorded'):
         return ['  - none recorded for this assessment: its peer reviews follow it (phase 1)' if data.get('owed') else
                 "  - none: no participant's first reading was read, so no peer review was owed"]

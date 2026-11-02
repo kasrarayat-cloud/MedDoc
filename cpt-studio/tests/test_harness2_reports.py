@@ -165,6 +165,14 @@ class SectionTests(Harness2Case):
         lines = section(reports.render_txt(snap).decode('utf-8'), 'CONFIRMED FINDINGS')
         self.assertTrue(lines[0].startswith('  - Service date = 2026-10-21 · the encounter — confirmed by '), lines)
 
+    def test_a_harness_1_assessment_says_it_predates_peer_review(self):
+        harness2_keys = ('reading_sha256', 'exchanges', 'tool_calls', 'frozen')
+        entries = [{key: value for key, value in self.entry(name).items() if key not in harness2_keys}
+                   for name in ('astra', 'fable')]
+        self.persist(entries)
+        self.assertEqual(section(self.txt(), 'PEER REVIEW'),
+                         ['  - none: this assessment was recorded before peer review existed'])
+
     def test_a_phase_1_report_says_the_peer_reviews_follow(self):
         self.persist([self.entry(name) for name in ('astra', 'fable')])
         text = self.txt()
