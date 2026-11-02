@@ -17,6 +17,8 @@
   code Corti listed only as a candidate, or selected with no exact passage.
 - FG2-1 (tests only): a confirmation is bound to its proposal's identity, context included - a member's new service
   date makes the next chain list it as moved.
+- FG2-2 (tests only): a new revision's assessments read no confirmation of an earlier one, and its page and draft
+  report list none.
 
 Synthetic data only; nothing is sent. Corti is the harness@1 suite's in-process fake; Astra and Fable are the real
 replay adapters on the real tool loop (tests.test_harness2_pipeline), and CPT Studio's real CMS tool executor answers
@@ -707,3 +709,60 @@ class IdentityContextTests(ConfirmationAcrossChangesCase):
             self.assertTrue(assessment.clarifications.filter(proposal__key='sel:0', fact='extent').exists())
         self.assertTrue(later[-1].clarifications.filter(proposal__key='sel:0', fact='extent',
                                                         state=models.Clarification.OPEN).exists())
+
+
+# --- FG2-2: a new revision reads and lists no confirmation of an earlier one (HARNESS.md 11.3, 12.5) ------------------
+
+ADDENDUM = 'Addendum (synthetic): the patient tolerated the procedure well.'
+CONTRADICTING = ('Addendum (synthetic): correction - the cecum was not reached; the examination ended in the '
+                 'transverse colon because of poor preparation.')
+
+
+class NewRevisionTests(ConfirmationAcrossChangesCase):
+    def to_revision_two(self, addendum):
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        confirmation, _ = self.confirm_extent(encounter_id)
+        self.assertEqual(self.snare(self.encounter(encounter_id).current_assessment),
+                         [('sel:0', 'ready', [str(confirmation.pk)])])
+        before = len(self.assessments(encounter_id))
+        response = self.post(f'/api/encounters/{encounter_id}/addenda',
+                             {'text': addendum, 'clarification_id': None, 'synthetic_attestation': 'yes'})
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+        revision = self.encounter(encounter_id).current_revision
+        first = models.SourceRevision.objects.get(encounter_id=encounter_id, number=1)
+        self.assertEqual(revision.number, 2)
+        self.assertTrue(revision.text.startswith(first.text))  # revision 1's spans are still exact slices of it
+        return encounter_id, revision, self.assessments(encounter_id)[before:]
+
+    def txt_section(self, encounter_id, title):
+        from studio import reports
+        lines = reports.render_txt(reports.snapshot(self.encounter(encounter_id), 'draft')).decode('utf-8').split('\n')
+        start = lines.index(title) + 1
+        return lines[start:lines.index('', start)]
+
+    def test_the_assessments_of_a_new_revision_read_no_earlier_confirmation(self):
+        """FG2-2 (a): jobs.confirmed_findings filters by revision, so both of revision 2's assessments hold 45385 on its
+        extent again - also against an addendum that contradicts the confirmed extent."""
+        for addendum in (ADDENDUM, CONTRADICTING):
+            with self.subTest(addendum=addendum[:40]):
+                encounter_id, revision, later = self.to_revision_two(addendum)
+                self.assertEqual(jobs.confirmed_findings(revision), ())
+                self.assertEqual([jobs.assessment_phase(a) for a in later], [1, 2])
+                for assessment in later:
+                    self.assertEqual(assessment.revision_id, revision.pk)
+                    self.assertEqual(self.snare(assessment), [('sel:0', 'needs_clarification', None)])
+                    self.assertNotIn('confirmations', assessment.completeness)
+                    self.assertNotIn('confirmations.applied', [c['id'] for c in assessment.encounter_checks])
+
+    def test_the_page_and_the_report_list_no_earlier_revision_s_confirmation(self):
+        """FG2-2 (b): review.revision_confirmations filters by revision: the new revision's detail lists none, and the
+        draft report's CONFIRMED FINDINGS says so."""
+        encounter_id, revision, _ = self.to_revision_two(ADDENDUM)
+        detail = self.detail(encounter_id)
+        self.assertEqual(detail['confirmations'], [])
+        self.assertEqual([c['confirmation'] for c in detail['clarifications']], [None] * len(detail['clarifications']))
+        self.assertEqual(review.revision_confirmations(revision), [])
+        self.assertEqual(self.txt_section(encounter_id, 'CONFIRMED FINDINGS'),
+                         ['  None: no reviewer has confirmed a finding for this revision.'])
