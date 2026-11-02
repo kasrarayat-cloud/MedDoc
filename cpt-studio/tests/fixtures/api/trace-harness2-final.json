@@ -270,7 +270,7 @@
          "refs": [
           "fact:cms-pfs-rvu26d:45385:mult_proc"
          ],
-         "result_sha256": "bdece3e5e7b84c8debf078bfc7dad1572a4972fbfd06ff401aa08cff7870bc44",
+         "result_sha256": "2e367591914bd41c4d6abed6c12abb7bf050f9f21a61ee0d987eed7fd017897d",
          "executed_at": "2026-11-01T09:00:17Z"
         }
        ]
@@ -316,8 +316,8 @@
      },
      "usage_basis": "provider_reported_tokens_summed_over_exchanges",
      "estimated_cost_usd": null,
-     "request_sha256": "dd8fc28b47633632ae43e7cebea692040b8a6c17e11d853755b6e840050ea843",
-     "response_sha256": "e4efa9b8061ac75aa8fd3dfdb30554ac0a262257a452ff08c6ae48f218bb8866",
+     "request_sha256": "5e8297e65c44b6e8b966d51b8defb2b2c237d86917c52eeed2b11cde6b88340e",
+     "response_sha256": "d99148235eec94b60a03f23fe43c6f971ce3d6509e494811e57c6bfb5229d067",
      "response_bytes": 1745,
      "created_at": "2026-11-01T09:00:28Z",
      "finished_at": "2026-11-01T09:00:17Z",
@@ -342,7 +342,7 @@
        ],
        [
         "cpt_studio",
-        "4e4014dc16a59e0095d0909e8ac88a4a81f8c5ac7a7022be009c730d97953e19"
+        "9f979e89850999be2cebe635d14bb996108ae6fa7b80672ce8519c901c3a79e9"
        ],
        [
         "fable",
@@ -495,7 +495,7 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "dd8fc28b47633632ae43e7cebea692040b8a6c17e11d853755b6e840050ea843",
+       "request_sha256": "5e8297e65c44b6e8b966d51b8defb2b2c237d86917c52eeed2b11cde6b88340e",
        "response_sha256": "54f05296d87ae9002112779b5f58493e5f292c84afba2573b534591cfe468c46",
        "provider_request_id": "req_astra_1",
        "response_id": "resp_astra_1",
@@ -513,7 +513,7 @@
          "refs": [
           "ncci-2026-ch6-c-1"
          ],
-         "result_sha256": "f9e4066e2f60df90e9d66de69264c9e23edb38b2ea679c9d1d516f0d109e4c4c",
+         "result_sha256": "ef22715942573ac1c1518637d81b7cf41a57513f61a51be8c0cfb5a55940471b",
          "executed_at": "2026-11-01T09:00:17Z"
         }
        ]
@@ -527,8 +527,8 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "dd8fc28b47633632ae43e7cebea692040b8a6c17e11d853755b6e840050ea843",
-       "response_sha256": "e4efa9b8061ac75aa8fd3dfdb30554ac0a262257a452ff08c6ae48f218bb8866",
+       "request_sha256": "5e8297e65c44b6e8b966d51b8defb2b2c237d86917c52eeed2b11cde6b88340e",
+       "response_sha256": "d99148235eec94b60a03f23fe43c6f971ce3d6509e494811e57c6bfb5229d067",
        "provider_request_id": "req_astra_2",
        "response_id": "resp_astra_2",
        "error": "",
@@ -732,8 +732,8 @@
      },
      "usage_basis": "provider_reported_tokens_summed_over_exchanges",
      "estimated_cost_usd": null,
-     "request_sha256": "1879c5fdd72eb2fb841c7d79588a990516c1829e29490a7d94d8c0b558eb3717",
-     "response_sha256": "7248d9b0580e9e30217e8b9187031b5b1294758c133fefe2cc9f34747813e012",
+     "request_sha256": "8484de40aa95a929b697096241a5909e6803d0cf43c04b910480f764b2900c58",
+     "response_sha256": "314aef04f5d7a6e906d4caa85a9d89d8d04d81a9315c18f013fb792a327481fa",
      "response_bytes": 1052,
      "created_at": "2026-11-01T09:00:29Z",
      "finished_at": "2026-11-01T09:00:17Z",
@@ -758,7 +758,7 @@
        ],
        [
         "cpt_studio",
-        "4e4014dc16a59e0095d0909e8ac88a4a81f8c5ac7a7022be009c730d97953e19"
+        "9f979e89850999be2cebe635d14bb996108ae6fa7b80672ce8519c901c3a79e9"
        ],
        [
         "fable",
@@ -836,8 +836,8 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "1879c5fdd72eb2fb841c7d79588a990516c1829e29490a7d94d8c0b558eb3717",
-       "response_sha256": "7248d9b0580e9e30217e8b9187031b5b1294758c133fefe2cc9f34747813e012",
+       "request_sha256": "8484de40aa95a929b697096241a5909e6803d0cf43c04b910480f764b2900c58",
+       "response_sha256": "314aef04f5d7a6e906d4caa85a9d89d8d04d81a9315c18f013fb792a327481fa",
        "provider_request_id": "req_fable_1",
        "response_id": "resp_fable_1",
        "error": "",
