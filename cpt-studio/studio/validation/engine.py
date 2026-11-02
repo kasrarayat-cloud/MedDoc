@@ -2777,10 +2777,11 @@ def participant_listable(code) -> bool:
     """Whether the engine reads a model participant's ``code`` at all: only in a code's shape, a CPT code's or an HCPCS
     Level II code's (participants.peer.code_shaped, the one rule by which a peer request and the owner's trace show a
     code as given; refutation round 4, the session's D9). Any other code a participant gives is counted, as the proposal
-    provider's codes that cannot be listed are, and never listed: no proposal, alternative, position, reference lookup
-    or summary names it, so it reaches neither the reconciliation, the retrieval, the page nor the reports (shapes-1:
-    'W/LES(S)' passed _listable, the proposal provider's rule of 1 to MAX_LISTED_CODE characters, and reached all of
-    them as a participant's alternative). The proposal provider's own rule is I1's and does not change."""
+    provider's codes that cannot be listed are, and never listed: no proposal, alternative, position or summary names
+    it, so it reaches neither the reconciliation, the reference retrieval (recorded for proposals only), the page nor
+    the reports (shapes-1: 'W/LES(S)' passed _listable, the proposal provider's rule of 1 to MAX_LISTED_CODE characters,
+    and reached all of them as a participant's alternative). The proposal provider's own rule is I1's and does not
+    change."""
     from studio.participants.peer import code_shaped  # local: the peer module's rule (it imports the HTTP layer)
 
     return code_shaped(code)

@@ -703,12 +703,12 @@ model participant configured the record is today's ("not configured") and there 
     reading and its peer review alike. Any other code it gives is counted in its own sentence ("It returned 1 code that
     cannot be listed: not in the shape of a CPT code (four digits, then a digit or a capital letter) or of an HCPCS
     Level II code (a capital letter, then four digits). It is not shown and never truncated.",
-    `engine.participant_unlisted_codes`), as Corti's codes that cannot be listed are, and is never a proposal, an
-    alternative or a reference lookup, so it reaches neither the reconciliation, the retrieval, the participants.summary
-    check, the page's Alternatives nor the reports (shapes-1: 'W/LES(S)', 8 characters, passed the proposal provider's
-    rule of 1 to 10 characters and reached all of them as a participant's alternative, while the trace's reading named
-    it by its length). A not-coded item or a peer-review position in no code's shape is not read either, and a
-    participant's position on Corti's own code of that very value says so (`engine.UNREAD_CODE_POSITION`,
+    `engine.participant_unlisted_codes`), as Corti's codes that cannot be listed are, and is never a proposal or an
+    alternative, so it reaches neither the reconciliation, the reference retrieval (recorded for proposals only), the
+    participants.summary check, the page's Alternatives nor the reports (shapes-1: 'W/LES(S)', 8 characters, passed the
+    proposal provider's rule of 1 to 10 characters and reached all of them as a participant's alternative, while the
+    trace's reading named it by its length). A not-coded item or a peer-review position in no code's shape is not read
+    either, and a participant's position on Corti's own code of that very value says so (`engine.UNREAD_CODE_POSITION`,
     `UNREAD_PEER_POSITION`), never that it did not propose it. Corti's own listing (`engine._listable`,
     `MAX_LISTED_CODE`) is I1's and does not change: a Corti code of up to 10 characters is still listed, excluded for
     scope, and shown as harness@1 shows it.
