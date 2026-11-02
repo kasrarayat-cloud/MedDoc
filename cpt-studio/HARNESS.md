@@ -1236,10 +1236,14 @@ an included base code, each of which the next revision asked again after an adde
 for a member's setting that conflicts with the document, which only the encounter context corrects. The refusal now says
 only what happened: "This release offers no reviewer confirmation, so nothing was recorded."
 (`review.CONFIRMATIONS_NOT_OFFERED`, also `review.confirm_finding`'s and `jobs.reassess_after_confirmation`'s, and the
-dev preview server's). The Clarification row says what the readiness rules make true (`review.readiness`,
+dev preview server's). ~~The Clarification row says what the readiness rules make true (`review.readiness`,
 `review._review_state`): an open question about the encounter holds the reviewed report; one about a code holds that
 code - it cannot be approved while the question is open - which can still be rejected, and rejecting it lifts that
-code's hold on the reviewed report; one about a documented service no code carries holds neither. Where the questions
+code's hold on the reviewed report; one about a documented service no code carries holds neither.~~ (superseded, round
+5: the row read no decision, no finality and no service a code carries - d8-1, truth-4, parity-1, truth-5.) The
+Clarification row says how many questions are open and what each is about - the encounter, a code or a documented
+service - and nothing else (the session's D11); what holds the reviewed report is readiness's to say, in
+`review.readiness`'s blockers (the page's "Still needed: ..."), and the row restates none of it. Where the questions
 served do not account for the API's count, the row says only the count. The dormant path's row no longer adds "or by a
 reviewer confirming a verified candidate answer" either. The superseded sentences above are kept so the change can be
 seen.
@@ -1382,10 +1386,10 @@ diff. Two session decisions, each narrowing what CPT Studio claims or shows:
 
 **The other repairs:**
 - **d7-3:** the refusal says only that nothing was recorded ("This release offers no reviewer confirmation, so nothing
-  was recorded."), and the clarification row says what each open question holds by the readiness rules: a question
+  was recorded."), ~~and the clarification row says what each open question holds by the readiness rules: a question
   about the encounter holds the reviewed report; a question about a code holds that code, which can still be rejected; a
-  question about a documented service no code carries holds neither. No sentence names a way a question is settled
-  (12.10).
+  question about a documented service no code carries holds neither~~ (superseded, round 5: the row says only how many
+  questions are open and what each is about, D11; 12.10). No sentence names a way a question is settled (12.10).
 - **d7-4, d7-5:** CONFIRMED FINDINGS is printed only while confirmations are offered; the engine's participants.summary
   says a peer answer "is recorded and decides nothing by itself" (12.10).
 - **truth-2 (amends 12.11 truth-2):** a first reading's code with no quote found in the document is "not proposed" there

@@ -1702,21 +1702,26 @@ function referenceRow(reference) {
   return harnessRow('reference_validation', textValue(served.state) || 'not_run', [look, label], 'Reference validation', lines, [...sources, missing.length ? `Not connected: ${missing.join('; ')}.` : '']);
 }
 
-// Questions are asked only by CPT Studio's own readers, where the documentation leaves open something that changes the
-// coding; a participant's own questions never hold the reviewed report (HARNESS.md 5). The row says what an open
-// question holds by the readiness rules (review.readiness, review._review_state; refutation round 4, d7-3, HARNESS.md
-// 12.10 as amended), and names no way it is settled - an addendum does not settle a documented conflict or an included
-// base code, and a member's own value is corrected in the encounter context: one about the encounter holds the reviewed
-// report; one about a code holds that code (it cannot be approved while the question is open), which can still be
-// rejected; one about a documented service no code carries holds neither. Where the questions served do not account for
-// the API's count, it says only the count.
+// Questions are asked only by CPT Studio's own readers and rules; a participant's own questions never hold the reviewed
+// report (HARNESS.md 5). The row only counts (refutation round 5, the session's D11; d8-1, truth-4, parity-1, truth-5;
+// HARNESS.md 12.10 as amended): how many questions are open and what each is about - the encounter (scope encounter, no
+// proposal), a code (a proposal) or a documented service (scope service, no proposal) - and nothing else. It reads no
+// decision, no finality and no service a code carries, so it never says what a question holds, whether its code can
+// still be rejected, which service no code carries, or how a question is settled: round 4's row (d7-3) said what each
+// holds by the readiness rules, and was false beside a code already rejected, a first assessment that is not final,
+// and a service 45385 carries. What holds the reviewed report is readiness's to say (review.readiness's blockers,
+// which exportStatusText draws as "Still needed: ..."), and this row restates none of it. Where the questions served
+// do not account for the API's count, it says only the count.
 function clarificationRow(doc) {
   const served = doc.harness?.clarification?.open;
   const open = Number.isInteger(served) && served >= 0 ? served : openClarifications(doc).length;
   const note = 'A participant\'s own questions never hold the reviewed report.';
   // No assessment: one is coming while a stage runs; otherwise none was made (the text could not be read, processing
-  // stopped, the outcome is unknown), and nothing asks a question until one is.
-  if (!doc.assessment && doc.pipeline?.busy) return harnessRow('clarification', 'waiting', [STAGE_LOOKS.queued, 'Waiting'], 'Clarification', ['Known once the proposals are checked: a question is asked only where the documentation leaves open something that changes the coding.']);
+  // stopped, the outcome is unknown), and nothing asks a question until one is. Waiting says only when the questions
+  // are known, no longer why one is asked (refutation round 5, D11): "only where the documentation leaves open
+  // something that changes the coding" did not fit a member's entry that conflicts with the document, or a diagnostic
+  // code asked about beside its interventions.
+  if (!doc.assessment && doc.pipeline?.busy) return harnessRow('clarification', 'waiting', [STAGE_LOOKS.queued, 'Waiting'], 'Clarification', ['Known once the proposals are checked.']);
   if (!doc.assessment) return harnessRow('clarification', 'not_run', [['muted', 'info'], 'Not asked'], 'Clarification', ['No question was asked: the proposals were not checked for this revision.']);
   if (open > 0) {
     const asked = openClarifications(doc);
@@ -1724,9 +1729,9 @@ function clarificationRow(doc) {
     const codes = asked.filter(item => item.proposal_id).length;
     const services = asked.filter(item => item.scope === 'service' && !item.proposal_id).length;
     const lines = encounter + codes + services !== open ? [`${open === 1 ? 'One question is' : `${open} questions are`} open.`] : [
-      encounter === 1 ? 'One question about the encounter is open; it holds the reviewed report.' : encounter ? `${encounter} questions about the encounter are open; each holds the reviewed report.` : '',
-      codes === 1 ? 'One question about a code is open; it holds that code, which can still be rejected.' : codes ? `${codes} questions about codes are open; each holds its code, which can still be rejected.` : '',
-      services === 1 ? 'One question about a documented service no code carries is open; it holds neither a code nor the reviewed report.' : services ? `${services} questions about documented services no code carries are open; none holds a code or the reviewed report.` : '',
+      encounter === 1 ? 'One open question is about the encounter.' : encounter ? `${encounter} open questions are about the encounter.` : '',
+      codes === 1 ? 'One open question is about a code.' : codes ? `${codes} open questions are each about a code.` : '',
+      services === 1 ? 'One open question is about a documented service.' : services ? `${services} open questions are each about a documented service.` : '',
     ];
     return harnessRow('clarification', 'open', [['pending', 'help'], `${open} open`], 'Clarification', lines, [note]);
   }

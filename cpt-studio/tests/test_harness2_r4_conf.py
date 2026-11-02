@@ -18,6 +18,9 @@ default, settings.STUDIO_OFFER_CONFIRMATIONS (a code-level False):
   Clarification row says what the readiness rules make true - checked against review.readiness and review._review_state
   on the pipeline's own cases: a question about the encounter holds the reviewed report; a question about a code holds
   that code, which can still be rejected; a question about a documented service no code carries holds neither.
+  (Superseded, round 5: the row only counts - how many questions are open and what each is about, the session's D11,
+  tests/test_harness2_r5_row.py - so the row pins below are moved to that; what each question holds is pinned on
+  review.readiness and review._review_state, which say it, as before.)
 - d7-4: the reports print CONFIRMED FINDINGS only while confirmations are offered.
 - d7-5: the engine's participants.summary says of a participant's peer answers what is true in both modes.
 - falsegreen-7 and falsegreen-4: tests/test_harness2_api.py's Harness2Case - whose rows the API tests pin and the
@@ -200,11 +203,13 @@ class EncounterQuestionTests(h2.Harness2Case):
     """The case's final assessment: the date of service (a question about the encounter) and three questions about
     its two codes."""
 
-    def test_the_clarification_row_says_what_the_readiness_rules_make_true(self):
+    def test_the_clarification_row_counts_and_the_readiness_rules_say_what_each_question_holds(self):
         detail = self.client_for(self.reviewer).get(f'/api/encounters/{self.encounter.pk}').json()
+        # moved by refutation round 5 (R5-ROW, the session's D11; renamed from "..._row_says_what_the_readiness_rules_
+        # make_true"): the row says only how many questions are open and what each is about; what each holds is the
+        # readiness rules' to say, pinned below as before
         self.assertEqual(clarification_row(page(detail)), (
-            ['One question about the encounter is open; it holds the reviewed report.',
-             '3 questions about codes are open; each holds its code, which can still be rejected.'], [NOTE]))
+            ['One open question is about the encounter.', '3 open questions are each about a code.'], [NOTE]))
         membership = membership_of(self.reviewer, self.ws)
         held = {q.proposal for q in self.final.clarifications.filter(state='open', proposal__isnull=False)}
         self.assertEqual(sorted(p.code for p in held), ['45380', '45385'])
@@ -230,8 +235,10 @@ class CodeQuestionTests(ColonCase):
         encounter = self.encounter(encounter_id)
         final = encounter.current_assessment
         detail = self.client.get(f'/api/encounters/{encounter_id}').json()
-        self.assertEqual(clarification_row(page(detail)), (
-            ['4 questions about codes are open; each holds its code, which can still be rejected.'], [NOTE]))
+        # moved by refutation round 5 (R5-ROW, the session's D11): the row says only how many questions are open and
+        # what each is about; that each holds its code, which can still be rejected, is the readiness rules', pinned
+        # below as before (and the row after the rejections in tests/test_harness2_r5_row.py)
+        self.assertEqual(clarification_row(page(detail)), (['4 open questions are each about a code.'], [NOTE]))
         membership = membership_of(self.reviewer, self.ws)
         held = {q.proposal for q in final.clarifications.filter(state='open')}
         self.assertNotIn(None, held)
@@ -271,9 +278,11 @@ class ServiceQuestionTests(PipelineCase):
         self.assertEqual([(q.scope, q.fact, q.proposal_id) for q in final.clarifications.filter(state='open')],
                          [('service', 'extent', None)])
         detail = self.client.get(f'/api/encounters/{encounter_id}').json()
-        self.assertEqual(clarification_row(page(detail)), (
-            ['One question about a documented service no code carries is open; it holds neither a code nor the '
-             'reviewed report.'], [NOTE]))
+        # moved by refutation round 5 (R5-ROW, the session's D11): the row says only how many questions are open and
+        # what each is about; that this one holds neither a code nor the reviewed report is the readiness rules', pinned
+        # below as before (and a service a code carries in tests/test_harness2_r5_row.py)
+        self.assertEqual(clarification_row(page(detail)),
+                         (['One open question is about a documented service.'], [NOTE]))
         (snare,) = final.proposals.filter(bucket='selected')
         self.assertEqual((snare.code, snare.status), ('45385', 'ready'))
         self.assertIn('approve', review.allowed_actions(snare, final, membership_of(self.reviewer, self.ws)))
