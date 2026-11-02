@@ -25,10 +25,11 @@ returns anything but (dict, list of str), and a result that is not JSON PostgreS
 {"error": <CPT Studio's own sentence>}; a result over the size limit becomes {"error": "the result is too large; ask for
 fewer codes"}, never a truncated one. An error result carries no refs: none of them reached the participant.
 
-The loop's final RawExchange is its last exchange's, with these run-level exceptions: ``usage`` is summed over the
-exchanges (summed_usage; one exchange keeps its own, with its own basis), ``latency_ms`` is the exchanges' latencies
-added up, ``sent`` says whether any exchange may have reached the vendor, ``endpoint`` is the URL any exchange called and
-``error`` says why the loop ended. The ids (vendor request id, response id, returned model) are the last exchange's.
+The loop's final RawExchange is its last exchange's - status, response, latency and ids (vendor request id, response
+id, returned model) - with these run-level exceptions: ``usage`` is summed over the exchanges (summed_usage; one exchange
+keeps its own, with its own basis); ``sent`` says whether any exchange may have reached the vendor and ``endpoint`` is
+the URL any exchange called, so a run that sent earlier exchanges never reads as unsent when its last exchange was not
+sent; and ``error`` says why the loop ended. Each exchange keeps its own latency and usage on its record.
 """
 from __future__ import annotations
 
@@ -323,10 +324,9 @@ def _misfit(tool: dict) -> str:
 def _final(raws: list, outcome: str, error: str) -> RawExchange:
     last = raws[-1]
     usage, basis = _usage(raws)
-    latencies = [raw.latency_ms for raw in raws if raw.latency_ms is not None]
     return RawExchange(outcome=outcome, sent=any(raw.sent for raw in raws), http_status=last.http_status,
                        response_bytes=last.response_bytes, response_sha256=last.response_sha256,
-                       latency_ms=round(sum(latencies), 3) if latencies else None, usage=usage, usage_basis=basis,
+                       latency_ms=last.latency_ms, usage=usage, usage_basis=basis,
                        provider_request_id=last.provider_request_id, error=error,
                        endpoint=next((raw.endpoint for raw in raws if raw.endpoint), ''),
                        requested_model=next((raw.requested_model for raw in reversed(raws) if raw.requested_model), ''),

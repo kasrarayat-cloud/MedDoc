@@ -273,8 +273,15 @@ class _LoopContract:
         def slow_answer():
             self.clock.advance(500)
             return self.ok(self.tool_answer(self.facts_call()))
-        _, session, _, _, _ = self.run_loop(slow_answer, self.ok(self.final_raw, 2))
+
+        def final_answer():
+            self.clock.advance(1.5)
+            return self.ok(self.final_raw, 2)
+        outcome, session, _, _, _ = self.run_loop(slow_answer, final_answer)
         self.assertEqual([call['timeout'] for call in session.calls], [(10, 240), (10, 40)])
+        # every exchange keeps its own latency; the run's is its last exchange's, as its response is
+        self.assertEqual([record.latency_ms for record in outcome.exchanges], [500_000.0, 1500.0])
+        self.assertEqual(outcome.final.latency_ms, 1500.0)
 
     def test_the_loop_deadline_is_never_more_than_the_configured_one(self):
         def slow_answer():
