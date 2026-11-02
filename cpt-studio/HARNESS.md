@@ -1154,6 +1154,26 @@ member loses anything they can do today, and the completion criteria of 11.5 nee
   so wherever `permissions.can_confirm` is not true; the rendering for a served `can_confirm` true is the dormant
   path's, unchanged.
 
+**Amended after refutation round 4 (the session's D8; d7-1, d7-2, truth-1): no candidate is served.** The located
+passages above were not the participants' answers. A candidate's value is CPT Studio's own inference from a
+participant's reading: a service's status, extent or anatomy paired with every evidence quote of that service
+(`candidates._reading_sources`), so "Their answer: performed" stood beside a photographed-landmarks sentence for a
+forceps-biopsy question neither first reading addressed (d7-2); and an E/M basis the dormant check's own reader read in
+the passage (`candidates._basis_stated`), which also chose the passages served, so "Their answer: time" stood beside
+"Total time of 45 minutes is not used to select the level" and beside an earlier visit's time in a history section
+(d7-1, truth-1). Rather than reword them again, the release serves none. While confirmations are not offered,
+`review.assessment_candidates` is `{}` before it reads anything, so every clarification's `candidates` is `[]` for every
+member. On the dormant path the API serves candidates only to a member who may confirm one (`permissions.can_confirm`),
+and the page draws a question's candidate block only for such a member (`candidateAnswers`), as the dormant path drew
+it. `review.located_passages`, `review.UNCHECKED_WHY` and the page's located-passage rendering (`locatedPassage`,
+`LOCATED_LABEL`, `LOCATED_NOTE`) are removed, so falsegreen-5 (located_passages' unpinned copy of the candidates' merge)
+is moot. A participant's own answers to the open questions stay in its peer review: the owner's trace shows each in its
+own words, and the reports' PEER REVIEW lists each with its value in CPT Studio's words. The bullets above (candidates
+served unchecked, their fixed why, the page's located passages and its note) are superseded, kept so the change can be
+seen. Tests: `tests/test_harness2_r4_conf.py` and the `// refutation round 4, R4-CONF` block of
+`tests/frontend/app.test.cjs`; round 3's pins (`tests/test_harness2_r3_conf.py`, `tests/test_frontend.py`, the `R3-CONF`
+block, `ops/verification/test_verify_browser.cjs`) are moved to what is now served, each saying so.
+
 **What stays, dormant, behind the setting.** The candidates' checks (`studio.candidates`, `reconcile.status_stated`),
 the engine's `_Confirmations`, `jobs.reassess_after_confirmation` and its key, a peer request's D4 confirmation reasons
 (`jobs.PEER_CONFIRMED_REASON`, `_peer_reasons`), the confirm endpoint's checks after the refusal, the reports' CONFIRMED

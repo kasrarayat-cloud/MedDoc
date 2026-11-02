@@ -105,9 +105,6 @@ HARNESS2_SCENARIOS = {  # fixture -> (the uuid prefix of its scenario, its title
 # This release offers no reviewer confirmation (HARNESS.md 12.10, refutation round 3's D7): these two are made with
 # STUDIO_OFFER_CONFIRMATIONS=True, as the dormant confirmation path serves them, for that path's rendering tests.
 HARNESS2_DORMANT = ('encounter-harness2-confirmed.json', 'encounter-harness2-dormant.json')
-# The one why a candidate this release serves carries (studio.review.UNCHECKED_WHY), written out here.
-UNCHECKED_WHY = ("CPT Studio does not check what a participant's passage states, and this release offers no "
-                 'confirmation.')
 HARNESS2_TRACE = 'trace-harness2-final.json'
 
 
@@ -401,6 +398,9 @@ class FixtureTests(SimpleTestCase):
                                      {'id', 'scope', 'proposal_id', 'family', 'fact', 'question', 'reason', 'state'})
                     self.assertTrue(final or not clarification['candidates'],
                                     'only the final assessment has candidates')
+                    # moved by refutation round 4 (HARNESS.md 12.10 as amended, the session's D8): this release serves
+                    # no candidate at all, where it served each one unchecked, verified false with one fixed why
+                    self.assertTrue(dormant or clarification['candidates'] == [], clarification['candidates'])
                     for candidate in clarification['candidates']:
                         self.assertEqual(set(candidate), CANDIDATE_KEYS)
                         self.assertEqual(candidate['clarification_id'], clarification['id'])
@@ -409,12 +409,7 @@ class FixtureTests(SimpleTestCase):
                             self.assertEqual(text[span['start']:span['end']], span['text'])
                         self.assertTrue(set(candidate['located_by']) <= {'astra', 'fable'})
                         self.assertEqual(set(candidate['phases']), set(candidate['located_by']))
-                        if not dormant:  # this release's candidate: a located passage, unchecked (HARNESS.md 12.10)
-                            self.assertEqual((candidate['verified'], candidate['why'], candidate['attestation']),
-                                             (False, UNCHECKED_WHY, ''))
-                            self.assertTrue(candidate['spans'])
-                            self.assertEqual(len(candidate['sentences']), len(candidate['spans']))
-                        elif candidate['verified']:
+                        if candidate['verified']:
                             self.assertEqual((candidate['why'], candidate['attestation']),
                                              ('', ATTESTATION.format(value=candidate['value'])))
                         else:
@@ -437,19 +432,21 @@ class FixtureTests(SimpleTestCase):
         # confirmation path's verified flags, which this pin held for the final fixture, are pinned on its own fixture
         # and by falsegreen-11: the questions are the engine's - 45385's extent, 45380's status and extent, the date -
         # where the biopsy the readers leave in doubt has no status candidate that the dormant path verifies
+        # and moved by refutation round 4 (D8): it serves none, where it served them unchecked
         self.assertEqual([(c['fact'], [x['verified'] for x in c['candidates']]) for c in final['clarifications']],
-                         [('extent', [False, False]), ('performed_status', [False, False, False]),
-                          ('extent', [False, False]), ('service_date', [False])])
+                         [('extent', []), ('performed_status', []), ('extent', []), ('service_date', [])])
         dormant = docs['encounter-harness2-dormant.json']
         self.assertEqual([(c['fact'], [x['verified'] for x in c['candidates']]) for c in dormant['clarifications']],
                          [('extent', [True, False]), ('performed_status', [False, False, False]),
                           ('extent', [True, False]), ('service_date', [True])])
-        # the same located passages either way: what the dormant path claimed about them is all that differs
+        # the same located passages either way: what the dormant path claimed about them is all that differs (moved by
+        # refutation round 4, D8: this release serves none of the passages the dormant path offers)
 
         def passages(doc):
             return sorted((c['fact'], x['value'], x['located_by'], [span['text'] for span in x['spans']])
                           for c in doc['clarifications'] for x in c['candidates'])
-        self.assertEqual(passages(final), passages(dormant))
+        self.assertEqual(passages(final), [])
+        self.assertTrue(passages(dormant))
         confirmed = docs['encounter-harness2-confirmed.json']
         [confirmation] = confirmed['confirmations']
         self.assertEqual((confirmation['fact'], confirmation['value'], confirmation['located_by'],

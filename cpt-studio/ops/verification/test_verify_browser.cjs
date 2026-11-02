@@ -2421,12 +2421,14 @@ test('readDom reads the peer-review rows and each question\'s candidates the liv
     assert.deepEqual(dom.questions.map(q => q.id).sort(), served.map(c => c.id).sort(), name);  // the encounter's card first
     assert.deepEqual(statusOf(vb.checkCandidates(enc, dom.questions)), [[`dom.candidates`, served.length ? 'pass' : 'skipped']], name);
   }
-  // this release (HARNESS.md 12.10): every question's candidates drawn unchecked, and no Confirm action anywhere
+  // this release (HARNESS.md 12.10): every question's candidates drawn unchecked, and no Confirm action anywhere - moved by
+  // refutation round 4 (12.10 as amended, the session's D8): it serves no question a candidate, the page draws no
+  // question's candidate block, and the check has nothing served to hold it to
   const release = apiFixture(H2[1]);
+  assert.ok(release.clarifications.length > 0 && release.clarifications.every(c => c.candidates.length === 0 && !c.confirmation));
   const drawn = await vb.readDom(fakePage(app.reviewView(release, app.documentLayout(release), 'codes', true)));
-  assert.ok(drawn.questions.length > 0 && drawn.questions.every(q => q.confirmable === 0 && q.candidates.length > 0));
-  assert.ok(drawn.questions.every(q => q.candidates.every(c => c.verified === false)));
-  assert.deepEqual(failures(vb.checkCandidates(release, drawn.questions)), []);
+  assert.deepEqual(drawn.questions, []);
+  assert.deepEqual(statusOf(vb.checkCandidates(release, drawn.questions)), [['dom.candidates', 'skipped']]);
   // moved by refutation round 3 (HARNESS.md 12.10): a Confirm action is drawn only for the dormant confirmation path's
   // fixture, which this part held the final fixture to
   const final = apiFixture(H2[3]);
@@ -2434,11 +2436,15 @@ test('readDom reads the peer-review rows and each question\'s candidates the liv
   const extent = final.clarifications.find(c => c.fact === 'extent');
   assert.deepEqual(dom.questions.find(q => q.id === extent.id), { id: extent.id, confirmation: '',
     candidates: extent.candidates.map(c => ({ id: c.id, verified: c.verified })), confirmable: 1 });
-  // a viewer is offered nothing, and the check holds the page to that
+  // a viewer is offered nothing, and the check holds the page to that - moved by refutation round 4 (D8): a member who
+  // may not confirm is served no candidate and the page draws none, so the check skips it; a payload that served one
+  // anyway is drawn with none either, which the check reports as candidates the page does not show
   const viewer = { ...final, permissions: { ...final.permissions, can_confirm: false } };
   const viewed = await vb.readDom(fakePage(app.reviewView(viewer, app.documentLayout(viewer), 'codes', true)));
-  assert.ok(viewed.questions.every(q => q.confirmable === 0));
-  assert.deepEqual(failures(vb.checkCandidates(viewer, viewed.questions)), []);
+  assert.deepEqual(viewed.questions, []);
+  const asServed = { ...viewer, clarifications: viewer.clarifications.map(c => ({ ...c, candidates: [] })) };
+  assert.deepEqual(statusOf(vb.checkCandidates(asServed, viewed.questions)), [['dom.candidates', 'skipped']]);
+  assert.deepEqual(failures(vb.checkCandidates(viewer, viewed.questions)), ['dom.candidates']);
   assert.deepEqual(failures(vb.checkCandidates(viewer, dom.questions)), ['dom.candidates'], 'a Confirm action the API does not allow');
   assert.deepEqual(failures(vb.checkCandidates({ ...release, clarifications: final.clarifications }, dom.questions)), ['dom.candidates'],
     'nor one this release does not offer');
@@ -2473,7 +2479,9 @@ test('checkPeerRows fails a row in another state, a missing or extra row, and sk
 });
 
 test('checkCandidates holds each question to the API\'s candidates, flags and confirmation, and skips a payload that serves none', () => {
-  const enc = apiFixture(H2[1]);
+  // moved by refutation round 4 (HARNESS.md 12.10 as amended, the session's D8): the final fixture serves no candidate, so
+  // the check is held to the dormant path's, which serves them (the final fixture is skipped below)
+  const enc = apiFixture(H2[3]);
   const shown = enc.clarifications.map(c => ({ id: c.id, confirmation: '', candidates: c.candidates.map(x => ({ id: x.id, verified: x.verified })),
     confirmable: c.candidates.filter(x => x.verified).length }));
   assert.deepEqual(statusOf(vb.checkCandidates(enc, shown)), [['dom.candidates', 'pass']]);
@@ -2491,7 +2499,7 @@ test('checkCandidates holds each question to the API\'s candidates, flags and co
   for (const [name, questions] of Object.entries(broken)) assert.deepEqual(failures(vb.checkCandidates(enc, questions)), ['dom.candidates'], name);
   // a question that is not open is not held; nothing served is skipped
   assert.deepEqual(statusOf(vb.checkCandidates({ ...enc, clarifications: enc.clarifications.map(c => ({ ...c, state: 'answered' })) }, [])), [['dom.candidates', 'skipped']]);
-  for (const name of ['encounter-harness2-peer.json', 'encounter-harness-ready.json', 'encounter-clarification.json']) {
+  for (const name of ['encounter-harness2-peer.json', 'encounter-harness2-final.json', 'encounter-harness-ready.json', 'encounter-clarification.json']) {
     assert.deepEqual(statusOf(vb.checkCandidates(apiFixture(name), [])), [['dom.candidates', 'skipped']], name);
   }
 });

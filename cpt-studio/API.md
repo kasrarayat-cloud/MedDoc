@@ -392,6 +392,16 @@ anyway is listed as recorded, and no assessment reads it (`current_effect` `not_
 code-level setting `STUDIO_OFFER_CONFIRMATIONS` (off; no environment variable or installer file changes it), kept as
 written.
 
+**Amended after refutation round 4 (the session's D8; HARNESS.md 12.10): no candidate is served.** The paragraph above
+is kept so the change can be seen. A served candidate's `value` was never a participant's answer to the question: it is
+CPT Studio's own inference from a reading - a service's status or extent paired with every quote of that service, an
+E/M basis CPT Studio's own reader read in the passage (which also chose the passages served) - and the page drew it as
+the participant's answer. Now every clarification's `candidates` is `[]` for every member while confirmations are not
+offered, and on the dormant path candidates are served only to a member who may confirm one (`permissions.can_confirm`
+true); no `why` "CPT Studio does not check what a participant's passage states, ..." is served any more. A
+participant's own answers to the open questions stay in its peer review: the owner's trace shows each in its own words,
+and the reports' PEER REVIEW lists each with its value in CPT Studio's words.
+
 Each confirmation's `current_effect` is what the current assessment made of it, in the words the reports' CONFIRMED
 FINDINGS print as "Effect:" - one reading, `review.confirmation_effect` (refutation round 2, truth-5: the page said
 every confirmation of a fact other than the date was read): `{"state": "read" | "not_read", "detail": "..."}`. A
